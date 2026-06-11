@@ -1,0 +1,16 @@
+{% extends "frm_base.html" %}
+{% block title %}Configurações — {{ MARCA_NOME }}{% endblock %}
+{% set nav_ativo = 'config' %}
+{% block topbar_title %}Configurações{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfiguracoes.css') }}" />
+{% endblock %}
+{% block content %}
+<div class="Cl_EmpresaContainer">
+  <h2>Painel de Configurações</h2>
+  <div id="config-container"></div>
+</div>
+{% endblock %}
+{% block page_js %}
+<script src="{{ url_for('config.static', filename='script/Sconfiguracoes.js') }}"></script>
+{% endblock %}

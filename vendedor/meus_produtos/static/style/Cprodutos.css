@@ -1,0 +1,66 @@
+.Prod_CampoBusca {
+  min-width: 220px;
+  flex: 1 1 220px;
+}
+
+.Prod_ColImg {
+  width: 52px;
+}
+
+.Prod_Thumb {
+  width: 40px;
+  height: 40px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid #e5e7eb;
+  display: block;
+}
+
+.Prod_Thumb--vazio {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #f3f4f6;
+  color: #9ca3af;
+  font-size: 12px;
+}
+
+.Prod_Tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.Prod_Tab {
+  padding: 8px 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+  font-weight: 600;
+}
+.Prod_Tab--ativo {
+  background: var(--marca-primary, #021f81);
+  color: #fff;
+  border-color: var(--marca-primary, #021f81);
+}
+.Prod_ListaRede {
+  max-height: 160px;
+  overflow: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 8px;
+  margin-top: 8px;
+}
+.Prod_RedeItem {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px solid #f3f4f6;
+  font-size: 12px;
+}
+.Prod_KitResumo {
+  font-size: 12px;
+  color: #5c6570;
+  margin: 8px 0;
+}

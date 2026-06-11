@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Definir senha — {{ MARCA_NOME }}</title>
+  {% include "partials/marca_favicon.html" %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='style/global_utils.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style/definir_senha.css') }}" />
+</head>
+<body class="public-body">
+  <main class="ds-wrap">
+    <div class="ds-card">
+      <p class="ds-brand"><img src="{{ marca_logo_nome_url }}" alt="{{ MARCA_NOME }}" class="auth-brand-logo" /></p>
+      <h1>Criar sua senha</h1>
+      <p class="ds-lead" id="ds-lead">
+        Quase lá! Defina uma senha segura para ativar seu acesso.
+      </p>
+
+      <p class="ds-status" id="ds-status" role="status">Validando seu link…</p>
+
+      <form
+        id="ds-form"
+        class="ds-form"
+        hidden
+        data-validar-url="{{ url_for('auth.api_validar_token') }}"
+        data-salvar-url="{{ url_for('auth.api_definir_senha') }}"
+        novalidate
+      >
+        <input type="hidden" name="token" id="field-token" />
+
+        <div class="ds-field">
+          <label for="input-senha">Nova senha</label>
+          <div class="ds-input-wrap">
+            <input
+              type="password"
+              id="input-senha"
+              name="senha"
+              autocomplete="new-password"
+              placeholder="Digite sua senha"
+              aria-describedby="ds-regras"
+            />
+            <button type="button" class="ds-toggle-vis" data-target="input-senha" aria-pressed="false">
+              Mostrar
+            </button>
+          </div>
+        </div>
+
+        <div class="ds-field">
+          <label for="input-confirmar">Confirmar senha</label>
+          <div class="ds-input-wrap">
+            <input
+              type="password"
+              id="input-confirmar"
+              name="confirmar"
+              autocomplete="new-password"
+              placeholder="Repita a senha"
+              aria-describedby="ds-regras"
+            />
+            <button type="button" class="ds-toggle-vis" data-target="input-confirmar" aria-pressed="false">
+              Mostrar
+            </button>
+          </div>
+        </div>
+
+        <div id="ds-regras" class="ds-regras" aria-live="polite"></div>
+
+        <p class="ds-msg" id="msg-senha" hidden role="alert"></p>
+
+        <button type="submit" class="ds-submit" id="btn-submit" disabled>
+          Salvar e entrar
+        </button>
+
+        <p class="ds-foot">
+          O link de ativação expira em algumas horas. Se precisar, solicite um novo e-mail.
+        </p>
+      </form>
+    </div>
+  </main>
+  <script defer src="{{ url_for('static', filename='script/definir_senha.js') }}"></script>
+</body>
+</html>

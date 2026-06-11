@@ -1,0 +1,178 @@
+/* Manual público — Integração Bling */
+
+.ajuda-bling-page .ajuda-bling-header {
+  max-width: var(--home-max, 1120px);
+  margin: 0 auto;
+  padding: 1rem 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.ajuda-bling-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem 1rem;
+  flex-wrap: wrap;
+}
+
+.ajuda-bling-main {
+  flex: 1;
+  max-width: var(--home-max, 1120px);
+  margin: 0 auto;
+  padding: 0 1.25rem 3rem;
+  width: 100%;
+}
+
+.ajuda-bling-hero {
+  padding: 2.5rem 0 2rem;
+  border-bottom: 1px solid var(--home-border, #e8ecf2);
+  margin-bottom: 2rem;
+}
+
+.ajuda-bling-hero h1 {
+  margin: 0.35rem 0 0.75rem;
+  font-size: clamp(1.65rem, 4vw, 2.15rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--home-text, #1e293b);
+  line-height: 1.2;
+}
+
+.ajuda-bling-hero .lead {
+  margin: 0;
+  max-width: 62ch;
+  font-size: 1.05rem;
+  line-height: 1.65;
+  color: var(--home-muted, #64748b);
+}
+
+.ajuda-bling-hero__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1.25rem;
+}
+
+.ajuda-bling-chip {
+  display: inline-flex;
+  padding: 0.28rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--home-accent, #021f81);
+  background: var(--home-accent-dim, rgba(2, 31, 129, 0.08));
+  border: 1px solid rgba(2, 31, 129, 0.12);
+}
+
+.ajuda-bling-doc {
+  display: flex;
+  flex-direction: column;
+  gap: 2.25rem;
+}
+
+.ajuda-bling-section h2 {
+  margin: 0 0 0.85rem;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--home-text, #1e293b);
+}
+
+.ajuda-bling-section p,
+.ajuda-bling-section li {
+  line-height: 1.65;
+  color: var(--home-muted, #64748b);
+}
+
+.ajuda-bling-section ul,
+.ajuda-bling-section ol {
+  margin: 0;
+  padding-left: 1.35rem;
+}
+
+.ajuda-bling-section li + li {
+  margin-top: 0.45rem;
+}
+
+.ajuda-bling-section a {
+  color: var(--home-accent-hover, #2c6bf3);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.ajuda-bling-note {
+  margin-top: 1rem !important;
+  padding: 0.85rem 1rem;
+  border-radius: var(--home-radius, 10px);
+  background: var(--home-surface-2, #f8f9fc);
+  border: 1px solid var(--home-border, #e8ecf2);
+  font-size: 0.92rem;
+}
+
+.ajuda-bling-steps li strong {
+  color: var(--home-text, #1e293b);
+}
+
+.ajuda-bling-table-wrap {
+  overflow-x: auto;
+  margin: 1rem 0;
+  border: 1px solid var(--home-border, #e8ecf2);
+  border-radius: var(--home-radius-lg, 14px);
+  background: var(--home-surface, #fff);
+}
+
+.ajuda-bling-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.ajuda-bling-table th,
+.ajuda-bling-table td {
+  padding: 0.75rem 1rem;
+  text-align: left;
+  border-bottom: 1px solid var(--home-border, #e8ecf2);
+}
+
+.ajuda-bling-table th {
+  background: var(--home-surface-2, #f8f9fc);
+  font-weight: 600;
+  color: var(--home-text, #1e293b);
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.ajuda-bling-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.ajuda-bling-section--contact {
+  padding: 1.5rem;
+  border-radius: var(--home-radius-lg, 14px);
+  background: linear-gradient(180deg, #f8f9fc 0%, #fff 100%);
+  border: 1px solid var(--home-border, #e8ecf2);
+}
+
+.ajuda-bling-contact {
+  list-style: none;
+  padding: 0 !important;
+  margin: 0.5rem 0 0 !important;
+}
+
+.ajuda-bling-contact li + li {
+  margin-top: 0.35rem;
+}
+
+@media (max-width: 720px) {
+  .ajuda-bling-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .ajuda-bling-nav {
+    width: 100%;
+  }
+}

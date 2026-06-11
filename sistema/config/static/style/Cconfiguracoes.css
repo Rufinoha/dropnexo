@@ -1,0 +1,70 @@
+.Cl_EmpresaContainer {
+    margin: 24px 16px;
+}
+
+.Cl_EmpresaContainer > h2 {
+    margin: 0 0 4px;
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: #021F81;
+}
+
+#config-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 18px;
+    margin-top: 16px;
+}
+
+.Cl_CardItem {
+    border: 1px solid #d8dee8;
+    border-radius: 12px;
+    background: #fff;
+    padding: 16px 16px 16px 20px;
+    box-shadow: 0 4px 14px rgba(16, 24, 40, 0.05);
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+    position: relative;
+}
+
+.Cl_CardItem:hover {
+    transform: translateY(-2px);
+    border-color: #2C6BF3;
+    box-shadow: 0 10px 20px rgba(2, 31, 129, 0.12);
+}
+
+.Cl_CardItem::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 5px;
+    border-radius: 12px 0 0 12px;
+    background: #021F81;
+}
+
+.Cl_CardItem:focus-visible {
+    outline: 2px solid #2C6BF3;
+    outline-offset: 2px;
+}
+
+.card-topo {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+.card-titulo {
+    font-size: 16px;
+    font-weight: 700;
+    color: #1f2937;
+}
+
+.card-texto {
+    margin: 0;
+    color: #4b5563;
+    font-size: 13px;
+    line-height: 1.35;
+}

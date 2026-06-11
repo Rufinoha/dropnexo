@@ -1,0 +1,93 @@
+{% set nav_ativo = nav_codigo %}
+{% extends "frm_base.html" %}
+{% block title %}Bling — Integrações — {{ MARCA_NOME }}{% endblock %}
+{% block topbar_title %}Integração Bling{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('static', filename='style/Cbling_integracao.css') }}" />
+{% endblock %}
+{% block content %}
+<div class="Cl_ContainerApoio cl-page-principal Bl_Wrap">
+  <div class="cl-page-title Bl_PageHead">
+    <div class="Bl_PageHeadMain">
+      <a href="{{ url_for('integracoes.pagina') }}" class="Bl_BackLink">
+        <i data-lucide="arrow-left"></i> Integrações
+      </a>
+      <div class="Bl_TitleRow">
+        <img src="{{ icone_bling }}" alt="" class="Bl_Logo" width="40" height="40" />
+        <div>
+          <h2>Bling ERP</h2>
+          <p class="cl-page-desc">Configuração da integração com o Bling.</p>
+        </div>
+      </div>
+    </div>
+    <div class="Bl_ConnBadge" id="bl_status_badge">Verificando…</div>
+  </div>
+
+  <section class="Bl_Card" id="bl_sec_conexao">
+    <div class="Bl_Actions">
+      <a href="{{ url_for('bling.oauth_iniciar') }}" class="cl-btn cl-btn-primary" id="bl_btn_conectar">Conectar</a>
+      <button type="button" class="cl-btn cl-btn-ghost" id="bl_btn_desconectar" hidden>Desconectar</button>
+    </div>
+  </section>
+
+  <section class="Bl_Card Bl_ContextPanel" id="bl_painel_config" hidden>
+    <h3 id="bl_titulo_modulo">Configuração</h3>
+    <input type="hidden" id="bl_contexto_ativo" value="" />
+
+    <div class="Bl_Grid2">
+      <label class="Bl_Field">
+        <span>Modo das imagens</span>
+        <select id="bl_modo_imagem">
+          <option value="link">Manter como link</option>
+          <option value="download">Baixar para o servidor</option>
+        </select>
+      </label>
+      <label class="Bl_Field">
+        <span>Fonte principal</span>
+        <select id="bl_fonte">
+          <option value="bling">Bling</option>
+          <option value="dropnexo">DropNexo</option>
+        </select>
+      </label>
+      <label class="Bl_Field">
+        <span>Produtos</span>
+        <select id="bl_produtos_modo">
+          <option value="importar">Importar</option>
+          <option value="exportar">Exportar</option>
+          <option value="atualizar">Atualizar (ambos)</option>
+        </select>
+      </label>
+      <label class="Bl_Field">
+        <span>Estoque</span>
+        <select id="bl_estoque_modo">
+          <option value="importar">Importar</option>
+          <option value="exportar">Exportar</option>
+          <option value="atualizar">Atualizar (ambos)</option>
+        </select>
+      </label>
+      <label class="Bl_Field">
+        <span>Pedidos</span>
+        <select id="bl_pedidos_modo">
+          <option value="importar">Importar</option>
+          <option value="exportar">Exportar</option>
+          <option value="atualizar">Atualizar (ambos)</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="Bl_Actions">
+      <button type="button" class="cl-btn cl-btn-secondary" id="bl_btn_salvar">Salvar</button>
+      <button type="button" class="cl-btn cl-btn-primary" id="bl_btn_sync">Sincronizar produtos</button>
+    </div>
+    <p class="Bl_Meta" id="bl_ultima_sync"></p>
+  </section>
+
+  <section class="Bl_Card" id="bl_sec_logs" hidden>
+    <h3>Últimos logs</h3>
+    <ul class="Bl_LogList" id="bl_logs"></ul>
+  </section>
+</div>
+{% endblock %}
+{% block page_js %}
+<script src="{{ url_for('static', filename='script/Sbling_integracao.js') }}"></script>
+{% endblock %}

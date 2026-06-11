@@ -1,0 +1,106 @@
+.cadastro-body {
+  min-height: 100vh;
+}
+
+.cadastro-wrap {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 2rem 1.25rem 3rem;
+}
+
+.cadastro-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.75rem 1.5rem 2rem;
+}
+
+.cadastro-header h1 {
+  margin: 0 0 0.35rem;
+  font-size: 1.5rem;
+}
+
+.cadastro-form {
+  margin-top: 1.25rem;
+}
+
+.cadastro-section {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem 1rem 0.5rem;
+  margin: 0 0 1rem;
+}
+
+.cadastro-section legend {
+  padding: 0 0.35rem;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.tipo-pessoa-opcoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+  padding-bottom: 0.5rem;
+}
+
+.tipo-pessoa-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  cursor: pointer;
+  font-size: 0.95rem;
+}
+
+.cadastro-grid {
+  display: grid;
+  gap: 0.75rem 1rem;
+}
+
+.cadastro-grid-2 {
+  grid-template-columns: 1fr 1fr;
+}
+
+.cadastro-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.9rem;
+}
+
+.cadastro-field input {
+  padding: 0.6rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--text);
+  font: inherit;
+}
+
+.cadastro-field-span2 {
+  grid-column: 1 / -1;
+}
+
+.input-com-botao {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.input-com-botao input {
+  flex: 1;
+}
+
+.cadastro-actions {
+  margin-top: 0.5rem;
+}
+
+.cadastro-footer {
+  margin-top: 1rem;
+  text-align: center;
+}
+
+@media (max-width: 600px) {
+  .cadastro-grid-2 {
+    grid-template-columns: 1fr;
+  }
+}

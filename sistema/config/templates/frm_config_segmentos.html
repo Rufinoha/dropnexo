@@ -1,0 +1,43 @@
+{% extends "frm_base.html" %}
+{% block title %}Segmentos — {{ MARCA_NOME }}{% endblock %}
+{% set nav_ativo = 'config' %}
+{% block topbar_title %}Segmentos da plataforma{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_segmentos.css') }}" />
+{% endblock %}
+{% block content %}
+<div class="Cl_ContainerApoio cl-page-principal">
+  <div class="cl-page-title">
+    <h2>Segmentos oficiais</h2>
+    <p class="cl-page-desc">Nichos fixos do DropNexo. Fornecedores apenas escolhem os que atendem; categorias são deles.</p>
+  </div>
+  <p class="CfgSeg_Aviso"><a class="Cl_BtnLink" href="{{ url_for('config.configuracoes') }}">← Voltar às Configurações</a></p>
+
+  <div class="filter-panel">
+    <div class="filter-panel-fields">
+      <div class="filter-group">
+        <label for="cfg_seg_nome">Nome</label>
+        <input type="text" id="cfg_seg_nome" placeholder="Ex.: Moda e vestuário" />
+      </div>
+      <div class="filter-group">
+        <label for="cfg_seg_slug">Slug</label>
+        <input type="text" id="cfg_seg_slug" placeholder="moda-vestuario" />
+      </div>
+      <div class="filter-group">
+        <label for="cfg_seg_ordem">Ordem</label>
+        <input type="number" id="cfg_seg_ordem" value="0" style="width:90px" />
+      </div>
+    </div>
+    <div class="filter-panel-actions">
+      <button type="button" class="Cl_BtnIncluir" id="cfg_seg_btnNovo">Novo segmento</button>
+      <button type="button" class="Cl_BtnSalvar" id="cfg_seg_btnSalvar">Salvar</button>
+    </div>
+  </div>
+  <input type="hidden" id="cfg_seg_id" value="" />
+
+  <div id="cfg_seg_lista" class="CfgSeg_Lista"></div>
+</div>
+{% endblock %}
+{% block page_js %}
+<script src="{{ url_for('config.static', filename='script/Sconfig_segmentos.js') }}"></script>
+{% endblock %}

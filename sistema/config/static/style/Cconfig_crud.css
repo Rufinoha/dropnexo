@@ -1,0 +1,42 @@
+.Cl_ConfigPage {
+  margin: 0;
+  padding: 4px 0 24px;
+}
+
+.Cl_ConfigPageHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.Cl_ConfigPageHeader h2 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #021F81;
+}
+
+.Cl_ConfigSub {
+  margin: 0 0 14px;
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.Cl_ConfigToolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-end;
+  margin: 12px 0;
+}
+
+.Cl_ConfigToolbar .Cl_FormCampo {
+  min-width: 160px;
+}
+
+.Cl_ConfigActions {
+  margin: 10px 0 14px;
+}

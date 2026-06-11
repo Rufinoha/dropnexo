@@ -1,0 +1,98 @@
+{% extends "frm_base.html" %}
+
+{% block title %}Minha conta — {{ MARCA_NOME }}{% endblock %}
+{% block topbar_title %}Minha conta{% endblock %}
+
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('perfil.static', filename='style/Cmeu_perfil.css') }}" />
+{% endblock %}
+
+{% block content %}
+<div class="Cl_ContainerApoio Cl_PainelPagina mp-page">
+
+  <nav class="mp-tabs" role="tablist" aria-label="Seções da conta">
+    <a href="?aba=perfil" class="mp-tab{% if aba_inicial == 'perfil' %} is-active{% endif %}" data-aba="perfil" role="tab">Meu perfil</a>
+    {% if abas.empresa %}
+    <a href="?aba=empresa" class="mp-tab{% if aba_inicial == 'empresa' %} is-active{% endif %}" data-aba="empresa" role="tab">Minha empresa</a>
+    {% endif %}
+    {% if abas.pagamento %}
+    <a href="?aba=pagamento" class="mp-tab{% if aba_inicial == 'pagamento' %} is-active{% endif %}" data-aba="pagamento" role="tab">Forma de pagamento</a>
+    {% endif %}
+    {% if abas.faturas %}
+    <a href="?aba=faturas" class="mp-tab{% if aba_inicial == 'faturas' %} is-active{% endif %}" data-aba="faturas" role="tab">Pagamentos</a>
+    {% endif %}
+    {% if abas.cancelar %}
+    <a href="?aba=cancelar" class="mp-tab mp-tab--danger{% if aba_inicial == 'cancelar' %} is-active{% endif %}" data-aba="cancelar" role="tab">Cancelar conta</a>
+    {% endif %}
+  </nav>
+
+  <div class="mp-tab-panels">
+    <section class="mp-tab-panel{% if aba_inicial == 'perfil' %} is-active{% endif %}" id="mp-panel-perfil" data-aba="perfil"{% if aba_inicial != 'perfil' %} hidden{% endif %}>
+      <div class="pt-page-title">
+        <h2>Meu perfil</h2>
+        <p class="pt-page-desc">Seus dados pessoais, foto e senha de acesso ao painel.</p>
+      </div>
+      {% include "partials/aba_perfil.html" %}
+    </section>
+
+    {% if abas.empresa %}
+    <section class="mp-tab-panel{% if aba_inicial == 'empresa' %} is-active{% endif %}" id="mp-panel-empresa" data-aba="empresa"{% if aba_inicial != 'empresa' %} hidden{% endif %}>
+      {% include "partials/aba_empresa.html" %}
+    </section>
+    {% endif %}
+
+    {% if abas.pagamento %}
+    <section class="mp-tab-panel{% if aba_inicial == 'pagamento' %} is-active{% endif %}" id="mp-panel-pagamento" data-aba="pagamento"{% if aba_inicial != 'pagamento' %} hidden{% endif %}>
+      {% include "partials/aba_pagamento.html" %}
+    </section>
+    {% endif %}
+
+    {% if abas.faturas %}
+    <section class="mp-tab-panel{% if aba_inicial == 'faturas' %} is-active{% endif %}" id="mp-panel-faturas" data-aba="faturas"{% if aba_inicial != 'faturas' %} hidden{% endif %}>
+      {% include "partials/aba_faturas.html" %}
+    </section>
+    {% endif %}
+
+    {% if abas.cancelar %}
+    <section class="mp-tab-panel{% if aba_inicial == 'cancelar' %} is-active{% endif %}" id="mp-panel-cancelar" data-aba="cancelar"{% if aba_inicial != 'cancelar' %} hidden{% endif %}>
+      {% include "partials/aba_cancelar.html" %}
+    </section>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block page_js %}
+<script>
+  window.OSB_MEU_PERFIL = {
+    abaInicial: "{{ aba_inicial }}",
+    apiDados: "{{ url_for('perfil.api_meu_perfil_dados') }}",
+    apiSalvar: "{{ url_for('perfil.api_meu_perfil_salvar') }}",
+    apiSenha: "{{ url_for('perfil.api_meu_perfil_trocar_senha') }}",
+    apiFotoUpload: "{{ url_for('perfil.api_meu_perfil_foto_upload') }}",
+    apiFotoDelete: "{{ url_for('perfil.api_meu_perfil_foto_remover') }}",
+    apiFotoUrl: "{{ url_for('perfil.api_meu_perfil_foto_arquivo') }}",
+    apiEmpresa: "{{ url_for('perfil.api_minha_empresa_dados') }}",
+    apiEmpresaSalvar: "{{ url_for('perfil.api_minha_empresa_salvar') }}",
+    apiEmpresaLogo: "{{ url_for('perfil.api_minha_empresa_logo') }}",
+    apiCepBase: "{{ url_for('perfil.api_minha_empresa_cep', cep='00000000') }}".replace("00000000", ""),
+    apiCobranca: "{{ url_for('perfil.api_cobranca_config') }}",
+    apiCobrancaSalvar: "{{ url_for('perfil.api_cobranca_config_salvar') }}",
+    apiFaturas: "{{ url_for('perfil.api_faturas_listar') }}",
+    apiFaturasGerar: "{{ url_for('perfil.api_faturas_gerar') }}",
+    apiCancelarIniciar: "{{ url_for('perfil.api_cancelar_conta_iniciar') }}",
+    apiCancelarConfirmar: "{{ url_for('perfil.api_cancelar_conta_confirmar') }}",
+    apiCancelarExportar: "{{ url_for('perfil.api_cancelar_conta_exportar') }}",
+    apiCancelarConcluir: "{{ url_for('perfil.api_cancelar_conta_concluir') }}",
+    fotoUrlPadrao: "{{ url_for('static', filename='imge/imguser/userpadrao.png') }}",
+    iniciaisPadrao: "{{ iniciais }}",
+    ehDev: {{ 'true' if session.get('eh_desenvolvedor') else 'false' }},
+  };
+</script>
+<script defer src="{{ url_for('perfil.static', filename='script/Smeu_perfil_tabs.js') }}"></script>
+<script defer src="{{ url_for('perfil.static', filename='script/Smeu_perfil.js') }}"></script>
+<script defer src="{{ url_for('perfil.static', filename='script/Sempresa.js') }}"></script>
+<script defer src="{{ url_for('perfil.static', filename='script/Scobranca.js') }}"></script>
+<script defer src="{{ url_for('perfil.static', filename='script/Sfaturas.js') }}"></script>
+<script defer src="{{ url_for('perfil.static', filename='script/Scancelar_conta.js') }}"></script>
+{% endblock %}

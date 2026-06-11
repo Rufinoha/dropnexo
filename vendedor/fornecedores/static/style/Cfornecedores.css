@@ -1,0 +1,257 @@
+.Forn_CampoBusca {
+  min-width: 220px;
+  flex: 1 1 280px;
+}
+
+.fg-content .filter-group.Forn_CampoBusca {
+  flex: 1 1 280px;
+  min-width: 200px;
+}
+
+.Forn_ColImg {
+  width: 52px;
+}
+
+.Forn_Thumb {
+  width: 40px;
+  height: 40px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid #e5e7eb;
+  display: block;
+}
+
+.Forn_Thumb--vazio {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #f3f4f6;
+  color: #9ca3af;
+  font-size: 12px;
+}
+
+.Forn_Local {
+  display: block;
+  font-size: 11px;
+  color: #6b7280;
+  font-weight: 400;
+}
+
+.Forn_Preco,
+.Forn_PrecoPromo {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.Forn_PrecoPromo {
+  color: #166534;
+  font-weight: 600;
+}
+
+.Forn_PrecoAntigo {
+  font-size: 11px;
+  color: #9ca3af;
+  text-decoration: line-through;
+  margin-left: 4px;
+}
+
+.Forn_SalvoIcon {
+  opacity: 0.85;
+  cursor: default;
+  pointer-events: none;
+}
+
+.Forn_ApoioTabs {
+  padding-top: 8px;
+}
+
+.Forn_TabNav {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.Forn_Tab {
+  border: none;
+  background: transparent;
+  padding: 10px 14px;
+  font-weight: 600;
+  color: #6b7280;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+
+.Forn_Tab.is-active {
+  color: #021f81;
+  border-bottom-color: #2c6bf3;
+}
+
+.Forn_Tab:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.Forn_TabPanel[hidden] {
+  display: none !important;
+}
+
+.Forn_CnpjRow {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.Forn_RegrasLista {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.Forn_RegraItem {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  padding: 12px;
+  background: #f9fafb;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+}
+
+.Forn_GridCards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.Forn_Card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 1rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+}
+
+.Forn_Card.is-pending {
+  border-color: #fbbf24;
+  background: #fffbeb;
+}
+
+.Forn_Card.is-active {
+  border-color: #34d399;
+  background: #ecfdf5;
+}
+
+.Forn_Card.is-denied {
+  opacity: 0.85;
+  background: #f8fafc;
+}
+
+.Forn_CardNome {
+  margin: 0;
+  font-size: 1.05rem;
+  color: var(--marca-primary, #021f81);
+}
+
+.Forn_CardChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.Forn_Chip {
+  font-size: 0.72rem;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  background: var(--marca-light, #e8f0ff);
+  color: #334155;
+}
+
+.Forn_Chip--muted {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.Forn_CardStatus {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #b45309;
+}
+
+.Forn_Card.is-active .Forn_CardStatus {
+  color: #047857;
+}
+
+.Forn_CardAcoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.35rem;
+}
+
+/* hidden + display:flex no mesmo elemento: o flex vencia e o modal abria sozinho */
+.Forn_Modal[hidden] {
+  display: none !important;
+}
+
+.Forn_Modal:not([hidden]) {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.Forn_ModalInner {
+  background: #fff;
+  border-radius: 12px;
+  max-width: 900px;
+  width: 100%;
+  max-height: 85vh;
+  overflow: auto;
+  padding: 1rem;
+}
+
+.Forn_ModalHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.Forn_GridProdutos {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.75rem;
+}
+
+.Forn_ProdCard {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.Forn_ProdCard img {
+  width: 100%;
+  height: 90px;
+  object-fit: cover;
+  border-radius: 6px;
+}
+
+.Forn_MsgVazio {
+  text-align: center;
+  color: #64748b;
+  padding: 2rem;
+}

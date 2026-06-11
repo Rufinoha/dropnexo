@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>Produto — {{ MARCA_NOME }}</title>
+  {% include "partials/marca_favicon.html" %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='style/global_utils.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_crud.css') }}" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.snow.css" />
+  <link rel="stylesheet" href="{{ url_for('fn_catalogo.static', filename='style/Ccatalogo_apoio.css') }}?v=7" />
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+</head>
+<body class="Cat_ApoioBody">
+  <input type="hidden" id="id" value="" />
+
+  <div class="Cl_ContainerApoio Cat_ApoioWrap">
+    <header class="Cat_Head">
+      <div class="Cl_FormCampo Cat_HeadNome">
+        <label for="nome">Nome *</label>
+        <input type="text" id="nome" placeholder="Nome do produto" />
+      </div>
+      <div class="Cat_HeadGrid">
+        <div class="Cl_FormCampo">
+          <label for="sku">SKU</label>
+          <input type="text" id="sku" />
+        </div>
+        <div class="Cl_FormCampo">
+          <label for="formato">Formato</label>
+          <select id="formato">
+            <option value="S" selected>Simples</option>
+            <option value="E">Com Variações</option>
+          </select>
+        </div>
+        <div class="Cl_FormCampo">
+          <label for="preco">Preço de venda (R$)</label>
+          <input type="number" id="preco" step="0.01" min="0" />
+        </div>
+        <div class="Cl_FormCampo">
+          <label for="unidade">Unidade</label>
+          <input type="text" id="unidade" list="lista_unidades" placeholder="UN" />
+          <datalist id="lista_unidades"></datalist>
+        </div>
+        <div class="Cl_FormCampo">
+          <label for="condicao">Condição</label>
+          <select id="condicao">
+            <option value="" selected>Não especificado</option>
+            <option value="NOVO">Novo</option>
+            <option value="USADO">Usado</option>
+            <option value="RECONDICIONADO">Recondicionado</option>
+          </select>
+        </div>
+        <div class="Cl_FormCampo Cat_HeadSituacao">
+          <label class="Cl_Switch Cat_SwitchHead">
+            <input type="checkbox" id="ativo" checked />
+            <span class="Cl_SwitchSlider"></span>
+            <span>Ativado</span>
+          </label>
+        </div>
+      </div>
+    </header>
+
+    <div class="Cat_TabShell">
+      <nav class="Cat_TabNav" role="tablist">
+        <button type="button" class="Cat_Tab is-active" data-tab="caracteristicas">Características</button>
+        <button type="button" class="Cat_Tab" data-tab="imagens">Imagens</button>
+        <button type="button" class="Cat_Tab" data-tab="estoque">Estoque</button>
+        <button type="button" class="Cat_Tab" data-tab="fornecedor">Fornecedor</button>
+        <button type="button" class="Cat_Tab" data-tab="tributacao">Tributação</button>
+        <button type="button" class="Cat_Tab" data-tab="variacoes" id="tabVariacoes" hidden>Variações</button>
+      </nav>
+
+      <section class="Cat_TabPanel is-active" data-panel="caracteristicas">
+        <div class="Cl_FormCampo Cat_DescricaoCampo">
+          <div class="Cat_DescEditorWrap">
+            <div class="Cat_DescEditorLabelRow">
+              <label for="descricaoEditor">Descrição</label>
+              <div class="Cat_DescEditorActions">
+                <button type="button" id="btnDescCopyHtml" class="Cat_DescActionBtn" hidden title="Copiar HTML para outro sistema">
+                  Copiar HTML
+                </button>
+                <button type="button" id="btnDescModeToggle" class="Cat_DescActionBtn Cat_DescActionBtn--primary" title="Alternar entre editor visual e código HTML">
+                  Ver código HTML
+                </button>
+              </div>
+            </div>
+
+            <div id="descricaoVisualPane" class="Cat_DescVisualPane Cat_DescToolbarWrap">
+              <div id="descricaoEditor" class="Cat_DescQuill"></div>
+            </div>
+
+            <div id="descricaoHtmlPane" class="Cat_DescHtmlPane" hidden>
+              <p class="Cat_DescHtmlHint">Cole HTML de outro sistema à esquerda — a pré-visualização atualiza em tempo real. Volte ao editor visual quando quiser continuar formatando.</p>
+              <div class="Cat_DescHtmlSplit">
+                <div class="Cat_DescHtmlCode">
+                  <div class="Cat_DescPaneHead">Código HTML</div>
+                  <textarea id="descricaoHtml" spellcheck="false" placeholder="&lt;p&gt;Sua descrição em HTML…&lt;/p&gt;"></textarea>
+                </div>
+                <div class="Cat_DescHtmlPreview">
+                  <div class="Cat_DescPaneHead">Pré-visualização</div>
+                  <div id="descricaoPreview" class="Cat_DescPreviewBody"></div>
+                </div>
+              </div>
+            </div>
+
+            <input type="hidden" id="descricao" value="" />
+          </div>
+        </div>
+        <div class="Cat_Grid4">
+          <div class="Cl_FormCampo">
+            <label for="marca">Marca</label>
+            <input type="text" id="marca" />
+          </div>
+          <div class="Cl_FormCampo">
+            <label for="peso_liquido_kg">Peso líquido (kg)</label>
+            <input type="number" id="peso_liquido_kg" step="0.001" min="0" />
+          </div>
+          <div class="Cl_FormCampo">
+            <label for="peso_bruto_kg">Peso bruto c/ embalagem (kg)</label>
+            <input type="number" id="peso_bruto_kg" step="0.001" min="0" />
+          </div>
+          <div class="Cl_FormCampo">
+            <label for="largura_cm">Largura (cm)</label>
+            <input type="number" id="largura_cm" step="0.01" min="0" />
+          </div>
+          <div class="Cl_FormCampo">
+            <label for="altura_cm">Altura (cm)</label>
+            <input type="number" id="altura_cm" step="0.01" min="0" />
+          </div>
+          <div class="Cl_FormCampo">
+            <label for="profundidade_cm">Comprimento (cm)</label>
+            <input type="number" id="profundidade_cm" step="0.01" min="0" />
+          </div>
+          <div class="Cl_FormCampo">
+            <label for="itens_por_caixa">Itens por caixa</label>
+            <input type="number" id="itens_por_caixa" min="1" step="1" value="1" />
+          </div>
+          <div class="Cl_FormCampo">
+            <label for="gtin">GTIN/EAN</label>
+            <input type="text" id="gtin" />
+          </div>
+        </div>
+        <div class="Cl_FormCampo Cat_CatCampo">
+          <label for="id_categoria">Categoria</label>
+          <select id="id_categoria"></select>
+        </div>
+      </section>
+
+      <section class="Cat_TabPanel" data-panel="imagens" hidden>
+        <div class="Cat_ImgModo">
+          <span class="Cat_ImgModoLabel">Adicionar imagem por:</span>
+          <label class="Cat_ImgModoOpt"><input type="radio" name="img_modo" value="link" checked /> Link</label>
+          <label class="Cat_ImgModoOpt"><input type="radio" name="img_modo" value="upload" /> Upload</label>
+          <span class="Cat_ImagemHint" id="imgContador">0 / 10 imagens</span>
+        </div>
+        <div id="painelImgLink" class="Cat_ImgAddRow">
+          <div class="Cl_FormCampo">
+            <label for="img_link_url">URL da imagem</label>
+            <input type="url" id="img_link_url" placeholder="https://..." />
+          </div>
+          <button type="button" class="Cl_BtnIncluir" id="btnImgLink">Incluir</button>
+        </div>
+        <div id="painelImgUpload" class="Cat_ImgAddRow" hidden>
+          <div class="Cl_FormCampo">
+            <label for="arquivo_imagem">Arquivo</label>
+            <input type="file" id="arquivo_imagem" accept="image/png,image/jpeg,image/webp" />
+            <p class="Cat_ImagemHint">PNG, JPG ou WEBP — máx. 2 MB por arquivo.</p>
+          </div>
+          <button type="button" class="Cl_BtnIncluir" id="btnImgUpload">Enviar</button>
+        </div>
+        <p class="Cat_ImagemHint" id="avisoImgSalvar">Salve o produto antes de incluir imagens.</p>
+        <p class="Cat_ImagemHint" id="avisoImgOrdem" hidden>Arraste os cards para definir a ordem (principal, 2ª, 3ª…).</p>
+        <div id="galeria_imagens" class="Cat_Galeria"></div>
+        <input type="hidden" id="imagem_caminho" value="" />
+        <input type="hidden" id="imagem_url" value="" />
+      </section>
+
+      <section class="Cat_TabPanel" data-panel="estoque" hidden>
+        <p class="Cat_ImagemHint">Quantidade disponível para venda (produto simples). Em produtos com variações, o estoque é por SKU na aba Variações.</p>
+        <div id="painelEstoqueSimples" class="Cat_EstoqueBox">
+          <div class="Cl_FormCampo">
+            <label for="quantidade">Quantidade</label>
+            <input type="number" id="quantidade" min="0" step="1" value="0" />
+          </div>
+        </div>
+        <p id="avisoEstoqueVariacao" class="Cat_ImagemHint" hidden>O estoque deste produto é controlado em cada variação.</p>
+      </section>
+
+      <section class="Cat_TabPanel" data-panel="fornecedor" hidden>
+        <div class="Cat_Placeholder">
+          <p>Vínculo com fornecedores e depósitos de expedição será configurado em breve.</p>
+        </div>
+      </section>
+
+      <section class="Cat_TabPanel" data-panel="tributacao" hidden>
+        <div class="Cat_Placeholder">
+          <p>Campos de tributação (NCM, origem, etc.) serão adicionados em breve.</p>
+        </div>
+      </section>
+
+      <section class="Cat_TabPanel" data-panel="variacoes" hidden>
+        <p class="Cat_ImagemHint">Adicione atributos (Cor, Tamanho…) — os SKUs são gerados automaticamente. Use um modelo pré-cadastrado em <strong>Fornecedor → Variações</strong>.</p>
+        <div id="painel_variantes" style="display:none;">
+          <div class="Cat_VarPresetRow">
+            <div class="Cl_FormCampo">
+              <label for="preset_variacao">Modelo pré-cadastrado</label>
+              <select id="preset_variacao"><option value="">(selecione um modelo)</option></select>
+            </div>
+            <button type="button" class="Cl_BtnIncluir" id="btnAplicarPreset">Aplicar modelo</button>
+          </div>
+          <div class="Cat_VarAttrBox">
+            <h4 class="Cat_VarAttrTitulo">Nova variação</h4>
+            <div class="Cat_Grid2">
+              <div class="Cl_FormCampo">
+                <label for="attr_nome">Nome do atributo</label>
+                <input type="text" id="attr_nome" placeholder="Cor" />
+              </div>
+              <div class="Cl_FormCampo">
+                <label for="attr_valores">Opções (vírgula)</label>
+                <input type="text" id="attr_valores" placeholder="Azul, Verde, Vermelho" />
+              </div>
+            </div>
+            <div class="Cat_VarAttrAcoes">
+              <button type="button" class="Cl_BtnIncluir" id="btnAdicionarVariacao">Adicionar variação</button>
+            </div>
+            <div id="lista_atributos" class="Cat_VarAttrTags"></div>
+          </div>
+          <div class="Cat_VarListaHead">
+            <span class="Cat_VarListaTitulo">Variações cadastradas</span>
+            <button type="button" class="Cl_BtnLink" id="btnNovaVariante">+ Nova variante manual</button>
+          </div>
+          <div class="Cat_VarTabelaScroll">
+            <div class="Cl_TabelaPrincipal Cat_VarTabela">
+              <table>
+                <thead><tr><th>SKU</th><th>Variante</th><th>Atributos</th><th>Preço</th><th>Estoque</th><th>Pai</th><th class="Cl_TableActions">Ações</th></tr></thead>
+                <tbody id="lista_variantes"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <p id="avisoVariacoes" class="Cat_ImagemHint">Selecione <strong>Com Variações</strong> e salve o produto para habilitar.</p>
+      </section>
+    </div>
+  </div>
+
+  <footer class="Cat_FooterBar">
+    <label class="Cl_Switch">
+      <input type="checkbox" id="publicado" />
+      <span class="Cl_SwitchSlider"></span>
+      <span>Publicado na rede</span>
+    </label>
+    <div class="Cat_FooterBtns">
+      <button type="button" class="Cl_BtnSalvar" id="btnSalvar">Salvar</button>
+      <button type="button" class="Cl_BtnExcluir" id="btnExcluir">Excluir</button>
+    </div>
+  </footer>
+
+  <script src="{{ url_for('static', filename='script/global_utils.js') }}"></script>
+  <script src="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.js"></script>
+  <script src="{{ url_for('fn_catalogo.static', filename='script/Scatalogo_descricao_editor.js') }}?v=1"></script>
+  <script src="{{ url_for('fn_catalogo.static', filename='script/Scatalogo_apoio.js') }}?v=8"></script>
+</body>
+</html>

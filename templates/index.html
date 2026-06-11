@@ -1,0 +1,29 @@
+{% extends "frm_base.html" %}
+{% block title %}Dashboard — {{ MARCA_NOME }}{% endblock %}
+{% set nav_ativo = 'inicio' %}
+{% block topbar_title %}Dashboard{% endblock %}
+{% block content %}
+<section class="fg-page-hero">
+  <h2>Olá, {{ session.get('nome', '') }}!</h2>
+  <p>
+    Conta <strong>{{ session.get('tenant_nome', '') }}</strong>
+    · perfil
+    <strong>{% if tipo_negocio == 'fornecedor' %}Fornecedor{% else %}Vendedor{% endif %}</strong>
+    · plano {{ session.get('tenant_plano', 'starter') }}
+  </p>
+</section>
+
+<div class="Cl_ContainerApoio Cl_PainelPagina">
+  <p style="margin:0 0 1rem;color:#5c6570;">
+    Bem-vindo ao DropNexo. Os módulos de catálogo, fornecedores e integrações serão liberados em breve.
+  </p>
+  <div class="fg-shortcuts" style="display:flex;flex-wrap:wrap;gap:10px;">
+    {% if tipo_negocio == 'fornecedor' %}
+    <a class="Cl_botaoprimario" style="text-decoration:none;display:inline-block;" href="{{ url_for('fn_catalogo.pagina') }}">Catálogos</a>
+    {% else %}
+    <a class="Cl_botaoprimario" style="text-decoration:none;display:inline-block;" href="{{ url_for('vd_fornecedores.pagina') }}">Buscar fornecedores</a>
+    <a class="Cl_botaosecundario" style="text-decoration:none;display:inline-block;margin-left:8px;" href="{{ url_for('vd_meus_produtos.pagina') }}">Meus produtos</a>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

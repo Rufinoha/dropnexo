@@ -1,0 +1,45 @@
+{% extends "frm_base.html" %}
+{% block title %}Perfis de acesso — {{ MARCA_NOME }}{% endblock %}
+{% set nav_ativo = 'config' %}
+{% block topbar_title %}Perfil de Usuário{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_crud.css') }}" />
+{% endblock %}
+{% block content %}
+<div class="Cl_ConfigPage">
+  <div class="Cl_ConfigPageHeader">
+    <h2>Perfis de acesso</h2>
+    <a class="Cl_BtnLink" href="{{ url_for('config.configuracoes') }}">Voltar às Configurações</a>
+  </div>
+  <p class="Cl_ConfigSub">Defina quais itens do menu cada perfil pode ver na sidebar.</p>
+
+  <div class="Cl_ConfigToolbar">
+    <div class="Cl_FormCampo">
+      <label for="ob_filtroBusca">Buscar perfil</label>
+      <input type="text" id="ob_filtroBusca" placeholder="Nome ou código" />
+    </div>
+    <button type="button" class="Cl_botaoFiltro" id="ob_btnFiltrar">Filtrar</button>
+    <button type="button" class="Cl_BtnCancelar" id="ob_btnLimpar">Limpar</button>
+  </div>
+
+  <div class="Cl_TabelaPrincipal">
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Código</th>
+          <th>Nome</th>
+          <th>Nível</th>
+          <th class="Cl_TableActions">Ações</th>
+        </tr>
+      </thead>
+      <tbody id="ob_listaPerfis">
+        <tr><td colspan="5">Carregando…</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+{% block page_js %}
+<script src="{{ url_for('config.static', filename='script/Sconfig_perfis.js') }}"></script>
+{% endblock %}

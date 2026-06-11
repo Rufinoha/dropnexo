@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>Importar catálogo — {{ MARCA_NOME }}</title>
+  {% include "partials/marca_favicon.html" %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='style/global_utils.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_crud.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('fn_catalogo.static', filename='style/Ccatalogos.css') }}" />
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+</head>
+<body>
+  <div class="Cl_Header Cl_ApoioHeader">
+    <div class="Cl_Logo">
+      <img src="{{ marca_logo_nome_url }}" alt="{{ MARCA_NOME }}" />
+    </div>
+    <div class="Cl_Titulo"><h1>Importar CSV</h1></div>
+  </div>
+
+  <div class="Cl_ContainerApoio">
+    <p style="margin:0 0 12px;color:#5c6570;">
+      Colunas: <code>sku;nome;descricao;preco;preco_promocional;quantidade;categoria;unidade;publicado;ativo</code>
+      (separador <strong>;</strong> ou <strong>,</strong>). Máximo 500 linhas.
+    </p>
+    <p style="margin:0 0 16px;">
+      <a href="/catalogos/importar/modelo" class="Cl_BtnLink" download>Baixar modelo CSV</a>
+    </p>
+    <div class="Cl_FormCampo">
+      <label for="arquivo_csv">Arquivo CSV</label>
+      <input type="file" id="arquivo_csv" accept=".csv,text/csv" />
+    </div>
+    <pre id="resultado_import" class="Cat_ImportResult" hidden></pre>
+  </div>
+
+  <div class="Cl_BotoesApoio">
+    <button type="button" class="Cl_BtnSalvar" id="btnImportar">Importar</button>
+  </div>
+
+  <script src="{{ url_for('static', filename='script/global_utils.js') }}"></script>
+  <script src="{{ url_for('fn_catalogo.static', filename='script/Scatalogo_importar.js') }}"></script>
+</body>
+</html>

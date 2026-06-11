@@ -1,0 +1,46 @@
+{% extends "frm_base.html" %}
+{% block title %}Precificação — {{ MARCA_NOME }}{% endblock %}
+{% block topbar_title %}Precificação{% endblock %}
+{% block content %}
+<div class="cl-page-principal" style="padding:1rem;max-width:520px;">
+  <p class="cl-page-desc">Preço do fornecedor não muda aqui. Defina percentuais aplicados sobre o valor de origem em Meus vd_meus_produtos.</p>
+  <label>Escopo</label>
+  <select id="escopo" style="width:100%;padding:8px;margin:6px 0 12px">
+    <option value="global">Geral (todo o catálogo ativado)</option>
+    <option value="segmento">Por segmento</option>
+  </select>
+  <select id="id_segmento" hidden style="width:100%;padding:8px;margin-bottom:12px"></select>
+  <label>% Marketplace</label><input id="pct_marketplace" type="number" step="0.01" value="0" style="width:100%;padding:8px;margin:4px 0 12px"/>
+  <label>% Impostos</label><input id="pct_impostos" type="number" step="0.01" value="0" style="width:100%;padding:8px;margin:4px 0 12px"/>
+  <label>% Taxas</label><input id="pct_taxas" type="number" step="0.01" value="0" style="width:100%;padding:8px;margin:4px 0 12px"/>
+  <label>% Margem de lucro</label><input id="pct_margem_lucro" type="number" step="0.01" value="30" style="width:100%;padding:8px;margin:4px 0 12px"/>
+  <button type="button" id="aplicar" class="Cl_BtnPrincipal">Salvar e aplicar</button>
+</div>
+{% endblock %}
+{% block page_js %}
+<script>
+(async function(){
+  const r = await fetch("/vendedor/precificacao/dados",{credentials:"same-origin"});
+  const j = await r.json();
+  const sel = document.getElementById("id_segmento");
+  (j.segmentos||[]).forEach(s=>{ const o=document.createElement("option"); o.value=s.id; o.textContent=s.nome; sel.appendChild(o); });
+  const esc = document.getElementById("escopo");
+  esc.onchange = ()=>{ sel.hidden = esc.value!=="segmento"; };
+  const g = (j.regras||[]).find(x=>x.escopo==="global");
+  if(g){ ["pct_marketplace","pct_impostos","pct_taxas","pct_margem_lucro"].forEach(k=>{ const el=document.getElementById(k); if(el) el.value=g[k]; }); }
+  document.getElementById("aplicar").onclick = async ()=>{
+    const body = {
+      escopo: esc.value,
+      id_segmento: esc.value==="segmento"? sel.value : null,
+      pct_marketplace: +document.getElementById("pct_marketplace").value,
+      pct_impostos: +document.getElementById("pct_impostos").value,
+      pct_taxas: +document.getElementById("pct_taxas").value,
+      pct_margem_lucro: +document.getElementById("pct_margem_lucro").value,
+      aplicar_agora: true
+    };
+    const r2 = await fetch("/vendedor/precificacao/salvar",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+    const j2 = await r2.json(); alert(j2.message);
+  };
+})();
+</script>
+{% endblock %}

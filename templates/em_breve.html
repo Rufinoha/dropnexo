@@ -1,0 +1,24 @@
+{% extends "frm_base.html" %}
+{% block title %}{{ titulo_pagina }} — {{ MARCA_NOME }}{% endblock %}
+{% block topbar_title %}{{ titulo_pagina }}{% endblock %}
+{% block content %}
+<section class="fg-page-hero">
+  <h2>{{ titulo_pagina }}</h2>
+  <p>{{ descricao }}</p>
+</section>
+<div class="Cl_ContainerApoio Cl_PainelPagina">
+  <p style="margin:0 0 1rem;color:#5c6570;">
+    Esta área será disponibilizada em uma próxima versão. Quer priorizar este módulo ou sugerir melhorias? Fale conosco:
+  </p>
+  <ul style="margin:0 0 1.25rem;padding-left:1.2rem;line-height:1.7;">
+    {% if CONTATO_EMAIL %}
+    <li>E-mail: <a href="mailto:{{ CONTATO_EMAIL }}">{{ CONTATO_EMAIL }}</a></li>
+    {% endif %}
+    {% if CONTATO_WHATSAPP %}
+    <li>WhatsApp: <a href="https://wa.me/{{ CONTATO_WHATSAPP }}" target="_blank" rel="noopener">{{ CONTATO_WHATSAPP }}</a></li>
+    {% endif %}
+    <li>Site: <a href="https://dropnexo.com.br" target="_blank" rel="noopener">dropnexo.com.br</a></li>
+  </ul>
+  <a href="{{ url_for('dashboard.index') }}" class="Cl_botaoprimario" style="display:inline-block;text-decoration:none;">Voltar ao início</a>
+</div>
+{% endblock %}

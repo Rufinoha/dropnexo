@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="DropNexo — marketplace B2B que conecta fornecedores e vendedores em dropshipping e distribuição digital." />
+  <title>DropNexo — Conectar fornecedores e vendedores</title>
+  {% include "partials/marca_favicon.html" %}
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style/global_utils.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style/home.css') }}" />
+  {% include "partials/gtag_analytics.html" %}
+</head>
+<body class="public-body home-page">
+  <header class="public-header" id="topo">
+    <a class="logo logo--img" href="#topo">
+      <img src="{{ marca_logo_nome_url }}" alt="{{ MARCA_NOME }}" height="32" />
+    </a>
+    <button type="button" class="home-nav-toggle" id="home-nav-toggle" aria-expanded="false" aria-controls="home-nav">
+      <span class="sr-only">Menu</span>
+      <span aria-hidden="true"></span><span aria-hidden="true"></span><span aria-hidden="true"></span>
+    </button>
+    <nav class="home-nav" id="home-nav" aria-label="Principal">
+      <a class="nav-link" href="#cadastro">Cadastre-se</a>
+      <a class="nav-link" href="#como-funciona">Como funciona</a>
+      <a class="nav-link" href="#planos">Planos</a>
+      <a class="btn btn-ghost" href="{{ url_login }}">Entrar</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="home-hero" aria-labelledby="hero-title">
+      <div class="home-hero__copy">
+        <p class="home-kicker">H74 HUB · Distribuição digital B2B</p>
+        <h1 id="hero-title">O elo entre quem fabrica e quem vende — sem estoque preso</h1>
+        <p class="lead">
+          {{ MARCA_SLOGAN }}. Publique catálogos, encontre fornecedores confiáveis e opere dropshipping em uma rede pensada para escalar.
+        </p>
+        <div class="hero-actions">
+          <a class="btn btn-primary btn-lg" href="{{ url_login }}">Entrar no painel</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="home-section home-cadastro-duplo" id="cadastro" aria-labelledby="cadastro-title">
+      <div class="home-section__head">
+        <p class="home-kicker">Comece agora</p>
+        <h2 id="cadastro-title">Escolha como você quer participar da rede</h2>
+        <p class="home-section__lead">
+          O cadastro é <strong>separado por perfil</strong>. Informe na etapa seguinte se você atua como fornecedor ou vendedor.
+          Após enviar o formulário, você recebe um <strong>e-mail para criar sua senha</strong> e ativar a conta.
+        </p>
+      </div>
+
+      <div class="home-perfis-grid">
+        <article class="home-perfil-card home-perfil-card--fornecedor">
+          <div class="home-perfil-card__badge">Fornecedor</div>
+          <h3>Quero disponibilizar produtos</h3>
+          <p>Publique catálogo, políticas comerciais e conecte-se a vendedores que revendem sem estoque próprio.</p>
+          <ul>
+            <li>Perfil empresarial e catálogo</li>
+            <li>Importação CSV / XLSX / XML</li>
+            <li>Visibilidade na rede DropNexo</li>
+          </ul>
+          <a class="btn btn-primary btn-block" href="{{ url_cadastro_fornecedor }}">Cadastrar como fornecedor</a>
+        </article>
+
+        <article class="home-perfil-card home-perfil-card--vendedor">
+          <div class="home-perfil-card__badge">Vendedor</div>
+          <h3>Quero vender sem estoque</h3>
+          <p>Busque fornecedores, favorite produtos e prepare sua operação de dropshipping em um só lugar.</p>
+          <ul>
+            <li>Busca de fornecedores e SKUs</li>
+            <li>Favoritos e importação</li>
+            <li>Integrações (em breve)</li>
+          </ul>
+          <a class="btn btn-primary btn-block" href="{{ url_cadastro_vendedor }}">Cadastrar como vendedor</a>
+        </article>
+      </div>
+
+      <p class="home-cadastro-nota muted">
+        Já possui conta? <a href="{{ url_login }}">Fazer login</a>.
+        Um mesmo e-mail pode vincular mais de uma empresa depois de ativado.
+      </p>
+    </section>
+
+    <section class="home-section" id="como-funciona" aria-labelledby="steps-title">
+      <div class="home-section__head">
+        <p class="home-kicker">Como funciona</p>
+        <h2 id="steps-title">Ativação em três passos</h2>
+      </div>
+      <div class="home-flow" role="list">
+        <article class="home-flow__step" role="listitem">
+          <div class="home-flow__node" aria-hidden="true"><span>1</span></div>
+          <h3>Escolha o perfil</h3>
+          <p>Fornecedor ou vendedor — cada jornada com campos adequados ao seu negócio.</p>
+        </article>
+        <article class="home-flow__step" role="listitem">
+          <div class="home-flow__node" aria-hidden="true"><span>2</span></div>
+          <h3>Confirme por e-mail</h3>
+          <p>Receba o link seguro para definir sua senha e ativar a conta.</p>
+        </article>
+        <article class="home-flow__step" role="listitem">
+          <div class="home-flow__node" aria-hidden="true"><span>3</span></div>
+          <h3>Entre no painel</h3>
+          <p>Acesse o DropNexo e explore catálogos, fornecedores e integrações conforme liberarmos os módulos.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="home-section" id="planos" aria-labelledby="planos-title">
+      <div class="home-section__head">
+        <p class="home-kicker">Planos</p>
+        <h2 id="planos-title">Comece no Starter</h2>
+        <p class="home-section__lead">Evolua conforme sua operação crescer.</p>
+      </div>
+      <div class="home-plans">
+        {% for plano in planos %}
+        <article class="home-plan-card">
+          <h3>{{ plano.nome }}</h3>
+          <p class="home-plan-price">
+            {% if plano.preco_mensal == 0 %}Grátis{% else %}R$ {{ plano.preco_mensal }}/mês{% endif %}
+          </p>
+          <p class="muted">{{ plano.destaque }}</p>
+        </article>
+        {% endfor %}
+      </div>
+    </section>
+  </main>
+
+  <footer class="home-footer">
+    <p>© {{ MARCA_NOME }} · {{ MARCA_FAMILIA }} · <a href="https://dropnexo.com.br">dropnexo.com.br</a></p>
+  </footer>
+
+  <script>
+    (function () {
+      const toggle = document.getElementById("home-nav-toggle");
+      const nav = document.getElementById("home-nav");
+      if (toggle && nav) {
+        toggle.addEventListener("click", () => {
+          const open = nav.classList.toggle("is-open");
+          toggle.setAttribute("aria-expanded", open ? "true" : "false");
+        });
+      }
+    })();
+  </script>
+</body>
+</html>

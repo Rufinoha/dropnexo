@@ -1,0 +1,190 @@
+.FnVar_Page .cl-page-actions {
+  margin-bottom: 16px;
+}
+
+.FnVar_Grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+.FnVar_Card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 16px;
+  cursor: pointer;
+  transition: box-shadow 0.15s, border-color 0.15s;
+}
+
+.FnVar_Card:hover {
+  border-color: var(--marca-hover, #2c6bf3);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
+}
+
+.FnVar_CardTitulo {
+  margin: 0 0 8px;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--marca-primary, #021f81);
+}
+
+.FnVar_CardDesc {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.FnVar_CardTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.FnVar_Tag {
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #3730a3;
+}
+
+.FnVar_Vazio {
+  text-align: center;
+  padding: 40px 20px;
+  color: #64748b;
+  border: 1px dashed #cbd5e1;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.FnVar_Modal {
+  position: fixed;
+  inset: 0;
+  z-index: 12000;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.FnVar_Modal[hidden] {
+  display: none !important;
+}
+
+.FnVar_ModalDialog {
+  width: min(560px, 100%);
+  max-height: 90vh;
+  overflow: auto;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.2);
+}
+
+.FnVar_ModalHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.FnVar_ModalHead h3 {
+  margin: 0;
+  font-size: 1.05rem;
+  color: var(--marca-primary, #021f81);
+}
+
+.FnVar_ModalClose {
+  border: none;
+  background: transparent;
+  font-size: 22px;
+  cursor: pointer;
+  color: #64748b;
+}
+
+.FnVar_ModalBody {
+  padding: 16px 18px;
+}
+
+.FnVar_ModalBody .Cl_FormCampo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.FnVar_ModalBody .Cl_FormCampo label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.FnVar_ModalBody input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #d1d9e6;
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 14px;
+}
+
+.FnVar_AttrSecao {
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.FnVar_AttrHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  font-weight: 700;
+  color: #334155;
+}
+
+.FnVar_AttrRow {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr auto;
+  gap: 8px;
+  margin-bottom: 8px;
+  align-items: end;
+}
+
+.FnVar_AttrRow input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #d1d9e6;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+}
+
+.FnVar_AttrRm {
+  border: none;
+  background: #fee2e2;
+  color: #b91c1c;
+  width: 32px;
+  height: 36px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+.FnVar_Hint {
+  font-size: 11px;
+  color: #64748b;
+  margin: 8px 0 0;
+}
+
+.FnVar_ModalFoot {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  padding: 12px 18px;
+  border-top: 1px solid #e5e7eb;
+  margin: 0;
+  width: 100%;
+}

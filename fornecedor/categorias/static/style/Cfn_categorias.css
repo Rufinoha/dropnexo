@@ -1,0 +1,315 @@
+.FnCat_Page { padding-bottom: 1.5rem; }
+
+
+
+.FnCat_Layout {
+
+  display: grid;
+
+  grid-template-columns: minmax(200px, 260px) 1fr;
+
+  gap: 1rem;
+
+  margin-top: 1rem;
+
+  min-height: 420px;
+
+}
+
+
+
+@media (max-width: 768px) {
+
+  .FnCat_Layout { grid-template-columns: 1fr; }
+
+}
+
+
+
+.FnCat_Segmentos,
+
+.FnCat_ArvorePanel {
+
+  background: #fff;
+
+  border: 1px solid #e2e8f0;
+
+  border-radius: 12px;
+
+  padding: 1rem;
+
+  min-width: 0;
+
+}
+
+
+
+.FnCat_PanelTitulo {
+
+  margin: 0 0 0.75rem;
+
+  font-size: 0.95rem;
+
+  font-weight: 700;
+
+  color: var(--marca-primary, #021f81);
+
+}
+
+
+
+.FnCat_Hint {
+
+  font-size: 0.82rem;
+
+  color: #64748b;
+
+  margin: 0;
+
+}
+
+
+
+.FnCat_SegLista {
+
+  display: flex;
+
+  flex-direction: column;
+
+  gap: 0.35rem;
+
+}
+
+
+
+.FnCat_SegBtn {
+
+  text-align: left;
+
+  border: 1px solid #e2e8f0;
+
+  background: #f8fafc;
+
+  border-radius: 8px;
+
+  padding: 0.55rem 0.65rem;
+
+  font: inherit;
+
+  font-size: 0.88rem;
+
+  cursor: pointer;
+
+  transition: all 0.12s;
+
+}
+
+
+
+.FnCat_SegBtn:hover {
+
+  border-color: var(--marca-hover, #2c6bf3);
+
+}
+
+
+
+.FnCat_SegBtn.is-active {
+
+  background: var(--marca-primary, #021f81);
+
+  border-color: var(--marca-primary, #021f81);
+
+  color: #fff;
+
+}
+
+
+
+.FnCat_ArvoreHead {
+
+  display: flex;
+
+  flex-wrap: wrap;
+
+  justify-content: space-between;
+
+  align-items: flex-start;
+
+  gap: 0.75rem;
+
+  margin-bottom: 1rem;
+
+}
+
+
+
+/* Árvore: ver Cfn_categorias_tree.css */
+
+
+
+.FnCat_Vazio {
+
+  text-align: center;
+
+  padding: 2rem;
+
+  color: #64748b;
+
+  border: 2px dashed #e2e8f0;
+
+  border-radius: 10px;
+
+}
+
+
+
+.FnCat_Modal[hidden] { display: none !important; }
+
+
+
+.FnCat_Modal:not([hidden]) {
+
+  position: fixed;
+
+  inset: 0;
+
+  z-index: 220;
+
+  display: flex;
+
+  align-items: center;
+
+  justify-content: center;
+
+  padding: 1rem;
+
+  background: rgba(15, 23, 42, 0.45);
+
+}
+
+
+
+.FnCat_ModalInner {
+
+  background: #fff;
+
+  border-radius: 12px;
+
+  width: 100%;
+
+  max-width: 420px;
+
+  padding: 1rem 1.15rem;
+
+}
+
+
+
+.FnCat_ModalHead {
+
+  display: flex;
+
+  justify-content: space-between;
+
+  align-items: center;
+
+  margin-bottom: 0.75rem;
+
+}
+
+
+
+.FnCat_ModalHead h3 {
+
+  margin: 0;
+
+  color: var(--marca-primary, #021f81);
+
+}
+
+
+
+.FnCat_ModalClose {
+
+  border: none;
+
+  background: #f1f5f9;
+
+  width: 2rem;
+
+  height: 2rem;
+
+  border-radius: 8px;
+
+  font-size: 1.25rem;
+
+  cursor: pointer;
+
+}
+
+
+
+.FnCat_Ctx {
+
+  font-size: 0.85rem;
+
+  color: #64748b;
+
+  margin: 0 0 0.75rem;
+
+}
+
+
+
+.FnCat_Field {
+
+  margin-bottom: 0.75rem;
+
+}
+
+
+
+.FnCat_Field label {
+
+  display: block;
+
+  font-size: 0.8rem;
+
+  font-weight: 600;
+
+  margin-bottom: 0.3rem;
+
+}
+
+
+
+.FnCat_Field input {
+
+  width: 100%;
+
+  box-sizing: border-box;
+
+  height: 40px;
+
+  padding: 0 0.65rem;
+
+  border: 1px solid #d6dee6;
+
+  border-radius: 8px;
+
+  font: inherit;
+
+}
+
+
+
+.FnCat_ModalFoot.Cl_BotoesApoio {
+
+  margin: 0.5rem 0 0;
+
+  width: 100%;
+
+}
+
+

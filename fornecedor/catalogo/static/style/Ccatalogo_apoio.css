@@ -1,0 +1,895 @@
+/* ========================================================================= */
+/* Catálogo — formulário de produto (modal apoio)                            */
+/* ========================================================================= */
+
+html:has(.Cat_ApoioBody),
+html:has(.Cat_ApoioBody) body {
+  height: 100%;
+  overflow: hidden;
+}
+
+.Cat_ApoioBody {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  min-height: 0;
+  background: #f0f3f9;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+/* Remove “caixa dentro da caixa” do container global */
+.Cat_ApoioWrap.Cl_ContainerApoio {
+  margin: 0;
+  padding: 18px 22px 10px;
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+
+.Cat_Head {
+  flex: 0 0 auto;
+}
+
+/* ---- Campos: label SEMPRE acima do input ---- */
+.Cat_ApoioWrap .Cl_FormCampo {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+}
+
+.Cat_ApoioWrap .Cl_FormCampo > label:not(.Cl_Switch) {
+  display: block;
+  order: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  margin: 0;
+  line-height: 1.35;
+  letter-spacing: 0.01em;
+}
+
+.Cat_ApoioWrap .Cl_FormCampo input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+.Cat_ApoioWrap .Cl_FormCampo select,
+.Cat_ApoioWrap .Cl_FormCampo textarea {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #d1d9e6;
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 14px;
+  color: #1e293b;
+  background: #fff;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  margin: 0;
+}
+
+.Cat_ApoioWrap .Cl_FormCampo input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+.Cat_ApoioWrap .Cl_FormCampo select {
+  height: 40px;
+}
+
+.Cat_ApoioWrap .Cl_FormCampo input:focus,
+.Cat_ApoioWrap .Cl_FormCampo select:focus,
+.Cat_ApoioWrap .Cl_FormCampo textarea:focus {
+  outline: none;
+  border-color: var(--marca-hover, #2c6bf3);
+  box-shadow: 0 0 0 3px rgba(44, 107, 243, 0.14);
+}
+
+.Cat_ApoioWrap .Cl_FormCampo textarea {
+  min-height: 130px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.Cat_ApoioWrap .Cl_FormCampo input[type="file"] {
+  width: 100%;
+  padding: 8px;
+  font-size: 13px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+/* ---- Cabeçalho do produto ---- */
+.Cat_ApoioWrap > .Cat_Head {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 18px 20px 16px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+}
+
+.Cat_HeadNome {
+  margin-bottom: 14px;
+}
+
+.Cat_HeadNome input {
+  font-size: 15px;
+  font-weight: 600;
+  height: 44px !important;
+}
+
+.Cat_HeadGrid {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr 1fr 0.65fr 1fr 0.85fr;
+  gap: 14px 16px;
+  align-items: end;
+}
+
+.Cat_HeadSituacao {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.Cat_HeadSituacao::before {
+  content: "Situação";
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.Cat_SwitchHead {
+  margin: 0;
+  height: 40px;
+  align-items: center;
+}
+
+.Cat_SwitchHead .Cl_SwitchSlider {
+  flex-shrink: 0;
+}
+
+/* ---- Abas ---- */
+.Cat_TabShell {
+  margin-top: 16px;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.Cat_TabNav {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 4px;
+  padding: 6px 6px 0;
+  margin: 0;
+  background: #e8edf5;
+  border: 1px solid #dde3ee;
+  border-bottom: none;
+  border-radius: 12px 12px 0 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  flex: 0 0 auto;
+}
+
+.Cat_Tab {
+  flex: 0 0 auto;
+  border: none;
+  background: transparent;
+  padding: 11px 18px;
+  font-weight: 600;
+  font-size: 13px;
+  color: #64748b;
+  cursor: pointer;
+  border-radius: 8px 8px 0 0;
+  margin-bottom: 0;
+  transition: color 0.15s, background 0.15s;
+  white-space: nowrap;
+  position: relative;
+}
+
+.Cat_Tab:hover {
+  color: var(--marca-primary, #021f81);
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.Cat_Tab.is-active {
+  color: var(--marca-primary, #021f81);
+  background: #fff;
+  box-shadow: 0 -1px 0 #fff;
+}
+
+.Cat_Tab.is-active::after {
+  content: "";
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 0;
+  height: 3px;
+  border-radius: 3px 3px 0 0;
+  background: linear-gradient(90deg, var(--marca-primary, #021f81), var(--marca-hover, #2c6bf3));
+}
+
+.Cat_TabPanel {
+  background: #fff;
+  border: 1px solid #dde3ee;
+  border-top: none;
+  border-radius: 0 0 12px 12px;
+  padding: 20px 22px 22px;
+  min-height: 0;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+.Cat_TabPanel[hidden] {
+  display: none !important;
+}
+
+/* ---- Grids internos ---- */
+.Cat_Grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px 16px;
+}
+
+.Cat_Grid3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px 16px;
+}
+
+.Cat_Grid4 {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px 16px;
+  margin-top: 16px;
+}
+
+/* ---- Editor rico da descrição ---- */
+.Cat_DescricaoCampo {
+  width: 100%;
+  margin-bottom: 0;
+  overflow: visible;
+}
+
+.Cat_DescEditorWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+
+.Cat_DescEditorLabelRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.Cat_DescEditorLabelRow > label {
+  margin: 0 !important;
+}
+
+.Cat_DescEditorActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.Cat_DescActionBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s;
+}
+
+.Cat_DescActionBtn:hover {
+  background: var(--marca-light, #e8f0ff);
+  border-color: var(--marca-border, #e4d4ff);
+  color: var(--marca-primary, #021f81);
+}
+
+.Cat_DescActionBtn--primary {
+  color: var(--marca-primary, #021f81);
+  background: linear-gradient(135deg, rgba(2, 31, 129, 0.06), rgba(44, 107, 243, 0.1));
+  border-color: var(--marca-border, #c7d9ff);
+}
+
+.Cat_DescActionBtn--primary:hover {
+  box-shadow: 0 2px 8px rgba(2, 31, 129, 0.12);
+}
+
+.Cat_DescVisualPane {
+  position: relative;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.Cat_DescVisualPane:focus-within {
+  border-color: var(--marca-hover, #2c6bf3);
+  box-shadow: 0 0 0 3px rgba(44, 107, 243, 0.14);
+}
+
+.Cat_DescQuill {
+  min-height: 180px;
+}
+
+.Cat_DescVisualPane .ql-toolbar.ql-snow {
+  border: none;
+  border-bottom: 1px solid #e8eef5;
+  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  padding: 10px 12px;
+  font-family: inherit;
+}
+
+.Cat_DescVisualPane .ql-container.ql-snow {
+  border: none;
+  font-family: inherit;
+  font-size: 14px;
+}
+
+.Cat_DescVisualPane .ql-editor {
+  min-height: 160px;
+  line-height: 1.6;
+  color: #1e293b;
+  padding: 14px 16px 18px;
+}
+
+.Cat_DescVisualPane .ql-editor.ql-blank::before {
+  color: #94a3b8;
+  font-style: normal;
+}
+
+.Cat_DescVisualPane .ql-snow .ql-stroke {
+  stroke: #64748b;
+}
+
+.Cat_DescVisualPane .ql-snow .ql-fill {
+  fill: #64748b;
+}
+
+.Cat_DescVisualPane .ql-snow .ql-picker-label:hover,
+.Cat_DescVisualPane .ql-snow button:hover .ql-stroke,
+.Cat_DescVisualPane .ql-snow button.ql-active .ql-stroke,
+.Cat_DescVisualPane .ql-snow .ql-picker-label.ql-active .ql-stroke {
+  stroke: var(--marca-primary, #021f81);
+}
+
+.Cat_DescVisualPane .ql-snow button:hover .ql-fill,
+.Cat_DescVisualPane .ql-snow button.ql-active .ql-fill {
+  fill: var(--marca-primary, #021f81);
+}
+
+.Cat_DescVisualPane .ql-snow button.ql-active,
+.Cat_DescVisualPane .ql-snow .ql-picker-label.ql-active {
+  color: var(--marca-primary, #021f81);
+}
+
+.Cat_DescToolbarExtra {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #64748b;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.Cat_DescToolbarExtra:hover {
+  background: var(--marca-light, #e8f0ff);
+  color: var(--marca-primary, #021f81);
+}
+
+.Cat_DescCharsPopover {
+  position: absolute;
+  z-index: 30;
+  right: 12px;
+  top: 52px;
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  gap: 4px;
+  padding: 10px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+  max-width: calc(100% - 24px);
+}
+
+.Cat_DescCharBtn {
+  width: 32px;
+  height: 32px;
+  border: 1px solid #e8eef5;
+  border-radius: 6px;
+  background: #f8fafc;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.Cat_DescCharBtn:hover {
+  background: var(--marca-light, #e8f0ff);
+  border-color: var(--marca-border, #c7d9ff);
+}
+
+.Cat_DescHtmlHint {
+  margin: 0;
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.45;
+}
+
+.Cat_DescHtmlSplit {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  min-height: 220px;
+}
+
+.Cat_DescHtmlCode,
+.Cat_DescHtmlPreview {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+}
+
+.Cat_DescPaneHead {
+  flex: 0 0 auto;
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--marca-primary, #021f81);
+  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  border-bottom: 1px solid #e8eef5;
+}
+
+.Cat_DescHtmlCode textarea {
+  flex: 1;
+  width: 100% !important;
+  min-height: 180px !important;
+  margin: 0 !important;
+  padding: 12px 14px !important;
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  resize: vertical;
+  font-family: "Cascadia Code", "Consolas", "Monaco", monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  color: #0f172a;
+  background: #fbfdff;
+}
+
+.Cat_DescHtmlCode textarea:focus {
+  outline: none;
+  background: #fff;
+}
+
+.Cat_DescPreviewBody {
+  flex: 1;
+  min-height: 180px;
+  padding: 14px 16px;
+  overflow: auto;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #1e293b;
+  background: #fff;
+}
+
+.Cat_DescPreviewBody p {
+  margin: 0 0 0.75em;
+}
+
+.Cat_DescPreviewBody ul,
+.Cat_DescPreviewBody ol {
+  margin: 0 0 0.75em;
+  padding-left: 1.4em;
+}
+
+.Cat_DescPreviewEmpty {
+  color: #94a3b8 !important;
+  font-size: 13px;
+  font-style: italic;
+}
+
+@media (max-width: 720px) {
+  .Cat_DescHtmlSplit {
+    grid-template-columns: 1fr;
+  }
+}
+
+.Cat_CatCampo {
+  margin-top: 16px;
+}
+
+/* ---- Rodapé fixo ---- */
+.Cat_FooterBar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 22px;
+  background: #fff;
+  border-top: 1px solid #e2e8f0;
+  box-shadow: 0 -4px 12px rgba(15, 23, 42, 0.05);
+}
+
+.Cat_FooterBar .Cl_Switch {
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.Cat_FooterBtns {
+  display: flex;
+  gap: 10px;
+  margin-left: auto;
+}
+
+.Cat_ApoioBody > .Cl_BotoesApoio {
+  display: none;
+}
+
+.Cat_FooterBtns .Cl_BtnSalvar,
+.Cat_FooterBtns .Cl_BtnExcluir {
+  min-width: 110px;
+}
+
+/* ---- Placeholders e hints ---- */
+.Cat_Placeholder {
+  padding: 48px 24px;
+  text-align: center;
+  color: #64748b;
+  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  border-radius: 10px;
+  border: 1px dashed #cbd5e1;
+  font-size: 14px;
+}
+
+.Cat_ImagemHint {
+  font-size: 12px;
+  color: #64748b;
+  margin: 6px 0 0;
+  line-height: 1.45;
+}
+
+.Cat_EstoqueBox {
+  margin-top: 12px;
+}
+
+.Cat_EstoqueBox .Cl_FormCampo {
+  max-width: 200px;
+}
+
+/* ---- Imagens ---- */
+.Cat_ImgModo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  background: #f8fafc;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+}
+
+.Cat_ImgModoLabel {
+  font-weight: 600;
+  font-size: 13px;
+  color: #334155;
+}
+
+.Cat_ImgModoOpt {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #475569;
+  cursor: pointer;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.Cat_ImgModoOpt:has(input:checked) {
+  background: #fff;
+  border-color: #c7d2fe;
+  color: var(--marca-primary, #021f81);
+}
+
+.Cat_ImgModoOpt.is-locked {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.Cat_ImgModoOpt.is-locked:has(input:checked) {
+  opacity: 1;
+}
+
+.Cat_ImgAddRow {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 14px;
+  align-items: end;
+  margin-bottom: 14px;
+}
+
+.Cat_ImgAddRow .Cl_BtnIncluir {
+  height: 40px;
+  align-self: end;
+}
+
+.Cat_Galeria {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  gap: 14px;
+  margin-top: 10px;
+}
+
+.Cat_GaleriaItem {
+  position: relative;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #f8fafc;
+  transition: box-shadow 0.15s;
+}
+
+.Cat_GaleriaItem:hover {
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+}
+
+.Cat_GaleriaItem.is-draggable {
+  cursor: grab;
+}
+
+.Cat_GaleriaItem.is-dragging {
+  opacity: 0.55;
+  cursor: grabbing;
+}
+
+.Cat_GaleriaItem.is-dragover {
+  outline: 2px dashed var(--marca-hover, #2c6bf3);
+  outline-offset: 2px;
+}
+
+.Cat_GaleriaItem img {
+  width: 100%;
+  height: 118px;
+  object-fit: cover;
+  display: block;
+}
+
+.Cat_GaleriaMeta {
+  padding: 8px 10px;
+  font-size: 11px;
+  color: #64748b;
+  line-height: 1.4;
+}
+
+.Cat_GaleriaRm {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(15, 23, 42, 0.72);
+  color: #fff;
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.Cat_GaleriaOrdem {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  background: var(--marca-primary, #021f81);
+  color: #fff;
+  padding: 3px 7px;
+  border-radius: 5px;
+  z-index: 1;
+}
+
+.Cat_VarTabelaScroll {
+  width: 100%;
+  margin-top: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+  overflow-x: auto;
+}
+
+.Cat_VarTabelaScroll .Cat_VarTabela {
+  margin-top: 0;
+  width: 100%;
+  border: none;
+  border-radius: 0;
+  overflow: visible;
+}
+
+.Cat_VarTabelaScroll .Cat_VarTabela table {
+  width: 100%;
+  table-layout: auto;
+}
+
+.Cat_VarTabelaScroll .Cat_VarTabela th,
+.Cat_VarTabelaScroll .Cat_VarTabela td {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+/* ---- Variações ---- */
+.Cat_VarPresetRow {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 14px;
+  align-items: end;
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  background: linear-gradient(180deg, #f0f4ff 0%, #f8fafc 100%);
+  border: 1px solid #c7d2fe;
+  border-radius: 10px;
+}
+
+.Cat_VarPresetRow .Cl_BtnIncluir {
+  height: 40px;
+  align-self: end;
+}
+
+.Cat_VarAttrBox {
+  margin: 0 0 18px;
+  padding: 16px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+
+.Cat_VarAttrTitulo {
+  margin: 0 0 12px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--marca-primary, #021f81);
+}
+
+.Cat_VarAttrAcoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.Cat_VarAttrTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.Cat_VarTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  background: #e0e7ff;
+  color: #1e3a8a;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.Cat_VarTagRm {
+  border: none;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0;
+}
+
+.Cat_VarListaHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.Cat_VarListaTitulo {
+  font-weight: 700;
+  font-size: 14px;
+  color: #334155;
+}
+
+.Cat_VarTabela {
+  margin-top: 0;
+  font-size: 12px;
+  width: 100%;
+}
+
+/* ---- Switch ativado (verde no header) ---- */
+.Cat_ApoioWrap .Cl_Switch input:checked + .Cl_SwitchSlider {
+  background: #16a34a;
+  box-shadow: inset 0 0 0 1px #15803d;
+}
+
+/* ---- Responsivo ---- */
+@media (max-width: 1200px) {
+  .Cat_HeadGrid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .Cat_Grid4 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 720px) {
+  .Cat_ApoioWrap.Cl_ContainerApoio {
+    padding: 12px 14px 8px;
+  }
+  .Cat_HeadGrid,
+  .Cat_Grid2,
+  .Cat_Grid3,
+  .Cat_Grid4,
+  .Cat_CatRow,
+  .Cat_ImgAddRow {
+    grid-template-columns: 1fr;
+  }
+  .Cat_FooterBar {
+    flex-wrap: wrap;
+    padding: 12px 14px;
+  }
+  .Cat_FooterBtns {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}

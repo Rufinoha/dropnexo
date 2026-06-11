@@ -1,0 +1,43 @@
+<div class="pt-page-title">
+  <h2>Forma de pagamento</h2>
+  <p class="pt-page-desc">Plano e preferências de cobrança da sua assinatura.</p>
+</div>
+
+<section class="mp-card mp-cobranca-resumo" id="cob-resumo">
+  <h3 class="mp-sec-title">Informações de cobrança</h3>
+  <dl class="mp-cobranca-grid">
+    <div><dt>Plano atual</dt><dd id="cob-plano">—</dd></div>
+    <div><dt>Valor</dt><dd id="cob-valor">—</dd></div>
+    <div><dt>Periodicidade</dt><dd id="cob-periodo">—</dd></div>
+    <div><dt>Início da cobrança</dt><dd id="cob-inicio">—</dd></div>
+  </dl>
+</section>
+
+<section class="mp-card">
+  <h3 class="mp-sec-title mp-sec-title--accent">Formas de pagamento</h3>
+  <form id="form-cobranca" class="mp-form mp-form-compact">
+    <div class="mp-g12">
+      <div class="filter-group mp-c5">
+        <label for="cob-forma">Forma de pagamento <span class="ch-req">*</span></label>
+        <select id="cob-forma" required>
+          <option value="boleto">Boleto bancário</option>
+          <option value="pix" disabled>PIX (em breve)</option>
+          <option value="cartao" disabled>Cartão (em breve)</option>
+        </select>
+      </div>
+      <div class="filter-group mp-c2">
+        <label for="cob-dia">Dia vencimento <span class="ch-req">*</span></label>
+        <select id="cob-dia" required class="mp-input-dia"></select>
+      </div>
+      <div class="filter-group mp-c5">
+        <label for="cob-email">E-mail do boleto</label>
+        <input type="email" id="cob-email" maxlength="255" placeholder="contato@empresa.com.br" />
+      </div>
+    </div>
+    <div class="mp-aviso" id="cob-aviso" hidden></div>
+    <p class="ch-field-hint mp-efi-hint" id="cob-efi-status"></p>
+    <div class="mp-form-actions">
+      <button type="submit" class="mp-btn mp-btn--primary">Salvar preferências</button>
+    </div>
+  </form>
+</section>

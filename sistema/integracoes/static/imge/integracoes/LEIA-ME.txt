@@ -1,0 +1,20 @@
+Ícones das integrações
+======================
+
+Coloque aqui os logos oficiais em PNG (fundo transparente, ~128×128 px).
+
+Nome do arquivo = slug da integração:
+
+  mercado-livre.png    amazon.png           magazine-luiza.png
+  shopee.png           americanas.png       casas-bahia.png
+  tray.png             loja-integrada.png   nuvemshop.png
+  beezoo.png           bagy.png
+  melhor-envio.png     correios.png         frenet.png
+  bling.png            olist.png            conta-azul.png
+
+Ordem de carregamento na tela:
+  1) tenta .png
+  2) se não existir, usa .svg (placeholder com iniciais)
+  3) se falhar, mostra iniciais coloridas no card
+
+Os arquivos .svg atuais são placeholders — substitua pelos PNGs quando tiver os logos.

@@ -1,0 +1,31 @@
+# Segredos e ambiente local
+.env
+.env.*
+!.env.example
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+
+# Uploads de tenant (dados locais)
+upload/**
+!upload/.gitkeep
+
+# Certificados
+*.p12
+
+# IDE / ferramentas locais
+.cursor/
+.vscode/
+*.log
+
+# Subprojeto legado
+OLD/HUBSUPPORT/.git/
+
+# Documentação interna (__doc/) — versionada no repositório

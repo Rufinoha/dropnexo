@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>Variante — {{ MARCA_NOME }}</title>
+  {% include "partials/marca_favicon.html" %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='style/global_utils.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_crud.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('fn_catalogo.static', filename='style/Ccatalogo_apoio.css') }}" />
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+</head>
+<body>
+  <div class="Cl_Header Cl_ApoioHeader">
+    <div class="Cl_Logo"><img src="{{ marca_logo_nome_url }}" alt="{{ MARCA_NOME }}" /></div>
+    <div class="Cl_Titulo"><h1 id="titulo_variante">Variante</h1></div>
+  </div>
+
+  <input type="hidden" id="id_variante" value="" />
+  <input type="hidden" id="id_produto" value="" />
+
+  <div class="Cl_ContainerApoio Cat_ApoioWrap">
+    <label class="Cl_Switch Cat_HerdaPai">
+      <input type="checkbox" id="herda_pai" checked />
+      <span class="Cl_SwitchSlider"></span>
+      <span>Utilizar informações do produto pai</span>
+    </label>
+    <p class="Cat_ImagemHint" id="hint_herda">Preço, peso, GTIN e imagem seguem o cadastro do pai.</p>
+
+    <nav class="Cat_TabNav">
+      <button type="button" class="Cat_Tab is-active" data-tab="ident">Identificação</button>
+      <button type="button" class="Cat_Tab" data-tab="precos">Preços</button>
+      <button type="button" class="Cat_Tab" data-tab="logistica">Logística</button>
+      <button type="button" class="Cat_Tab" data-tab="midia">Mídia</button>
+    </nav>
+
+    <section class="Cat_TabPanel is-active" data-panel="ident">
+      <div class="Cat_Grid2">
+        <div class="Cl_FormCampo"><label for="nome_exibicao">Nome da variante *</label><input type="text" id="nome_exibicao" /></div>
+        <div class="Cl_FormCampo"><label for="sku">SKU *</label><input type="text" id="sku" /></div>
+      </div>
+      <div class="Cl_FormCampo"><label for="rotulo_attr">Atributos</label><input type="text" id="rotulo_attr" readonly /></div>
+      <label class="Cl_Switch" style="margin-top:8px;">
+        <input type="checkbox" id="ativo" checked />
+        <span class="Cl_SwitchSlider"></span><span>Ativo</span>
+      </label>
+    </section>
+
+    <section class="Cat_TabPanel" data-panel="precos" hidden>
+      <div class="Cat_Grid3">
+        <div class="Cl_FormCampo"><label for="preco">Preço venda (R$)</label><input type="number" id="preco" step="0.01" min="0" /></div>
+        <div class="Cl_FormCampo"><label for="preco_promocional">Promoção (R$)</label><input type="number" id="preco_promocional" step="0.01" min="0" /></div>
+        <div class="Cl_FormCampo"><label for="preco_custo">Custo (R$)</label><input type="number" id="preco_custo" step="0.01" min="0" /></div>
+      </div>
+    </section>
+
+    <section class="Cat_TabPanel" data-panel="logistica" hidden>
+      <div class="Cat_Grid3">
+        <div class="Cl_FormCampo"><label for="peso_liquido_kg">Peso líquido (kg)</label><input type="number" id="peso_liquido_kg" step="0.001" min="0" /></div>
+        <div class="Cl_FormCampo"><label for="peso_bruto_kg">Peso bruto (kg)</label><input type="number" id="peso_bruto_kg" step="0.001" min="0" /></div>
+        <div class="Cl_FormCampo"><label for="quantidade">Estoque</label><input type="number" id="quantidade" min="0" step="1" /></div>
+      </div>
+      <div class="Cat_Grid3">
+        <div class="Cl_FormCampo"><label for="altura_cm">Altura (cm)</label><input type="number" id="altura_cm" step="0.01" min="0" /></div>
+        <div class="Cl_FormCampo"><label for="largura_cm">Largura (cm)</label><input type="number" id="largura_cm" step="0.01" min="0" /></div>
+        <div class="Cl_FormCampo"><label for="profundidade_cm">Profundidade (cm)</label><input type="number" id="profundidade_cm" step="0.01" min="0" /></div>
+      </div>
+      <div class="Cat_Grid2">
+        <div class="Cl_FormCampo"><label for="gtin">GTIN/EAN</label><input type="text" id="gtin" /></div>
+        <div class="Cl_FormCampo"><label for="ncm">NCM</label><input type="text" id="ncm" /></div>
+      </div>
+    </section>
+
+    <section class="Cat_TabPanel" data-panel="midia" hidden>
+      <div class="Cat_ImagemRow">
+        <img id="preview_imagem" class="Cat_ImagemPreview" alt="" hidden />
+        <div class="Cat_ImagemAcoes">
+          <label for="imagem_url">URL da imagem</label>
+          <input type="url" id="imagem_url" placeholder="https://..." />
+          <input type="hidden" id="imagem_caminho" value="" />
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="Cl_BotoesApoio">
+    <button type="button" class="Cl_BtnSalvar" id="btnSalvar">Salvar</button>
+    <button type="button" class="Cl_BtnExcluir" id="btnExcluir">Excluir</button>
+  </div>
+
+  <script src="{{ url_for('static', filename='script/global_utils.js') }}"></script>
+  <script src="{{ url_for('fn_catalogo.static', filename='script/Scatalogo_variante_apoio.js') }}"></script>
+</body>
+</html>

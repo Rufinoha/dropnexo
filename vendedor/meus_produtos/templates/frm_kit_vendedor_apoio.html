@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>Kit — {{ MARCA_NOME }}</title>
+  {% include "partials/marca_favicon.html" %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='style/global_utils.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_crud.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('vd_meus_produtos.static', filename='style/Cvd_meus_produtos.css') }}" />
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+</head>
+<body>
+  <div class="Cl_Header Cl_ApoioHeader">
+    <div class="Cl_Logo"><img src="{{ marca_logo_nome_url }}" alt="{{ MARCA_NOME }}" /></div>
+    <div class="Cl_Titulo"><h1>Montar kit</h1></div>
+  </div>
+  <div class="Cl_ContainerApoio">
+    <p class="Cl_ConfigSub">Combine produtos da rede (fornecedores) no kit que você revende — sem depender do fornecedor montar.</p>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;">
+      <div class="Cl_FormCampo" style="flex:1;min-width:200px;">
+        <label for="nome">Nome do kit *</label>
+        <input type="text" id="nome" />
+      </div>
+      <div class="Cl_FormCampo" style="min-width:120px;">
+        <label for="preco_venda">Preço venda (R$)</label>
+        <input type="number" id="preco_venda" step="0.01" min="0" />
+      </div>
+    </div>
+    <label class="Cl_Switch" style="margin:10px 0;">
+      <input type="checkbox" id="usar_preco_sugerido" checked />
+      <span class="Cl_SwitchSlider"></span>
+      <span>Usar preço sugerido (soma dos itens)</span>
+    </label>
+    <p id="kit_resumo" class="Prod_KitResumo"></p>
+    <div class="Cl_FormCampo">
+      <label for="descricao">Descrição</label>
+      <textarea id="descricao" rows="2"></textarea>
+    </div>
+    <h3 style="margin:16px 0 8px;font-size:14px;">Itens do kit</h3>
+    <div class="Cl_ConfigToolbar">
+      <div class="Cl_FormCampo Prod_CampoBusca">
+        <label for="busca_rede">Buscar na rede</label>
+        <input type="text" id="busca_rede" placeholder="Produto, SKU, fornecedor" />
+      </div>
+      <button type="button" class="Cl_botaoFiltro" id="btnBuscarRede">Buscar</button>
+    </div>
+    <div id="lista_rede" class="Prod_ListaRede"></div>
+    <table class="Cl_TabelaPrincipal" style="margin-top:12px;">
+      <thead><tr><th>Item</th><th>Qtd</th><th></th></tr></thead>
+      <tbody id="itens_kit"><tr><td colspan="3">Nenhum item. Busque produtos acima.</td></tr></tbody>
+    </table>
+  </div>
+  <div class="Cl_BotoesApoio">
+    <button type="button" class="Cl_BtnSalvar" id="btnSalvar">Salvar kit</button>
+    <button type="button" class="Cl_BtnExcluir" id="btnExcluir" style="display:none">Excluir</button>
+  </div>
+  <script src="{{ url_for('static', filename='script/global_utils.js') }}"></script>
+  <script src="{{ url_for('vd_meus_produtos.static', filename='script/Skit_vendedor.js') }}"></script>
+</body>
+</html>

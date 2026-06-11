@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Entrar — {{ MARCA_NOME }}</title>
+  {% include "partials/marca_favicon.html" %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='style/global_utils.css') }}" />
+  <script defer src="{{ url_for('static', filename='script/global_utils.js') }}"></script>
+</head>
+<body class="public-body">
+  <main class="auth-card-wrap">
+    <div class="auth-card">
+      <p class="auth-brand"><img src="{{ marca_logo_nome_url }}" alt="{{ MARCA_NOME }}" class="auth-brand-logo" /></p>
+      <h1>Entrar</h1>
+      <p class="muted">Painel do tenant — <a href="{{ url_for('public.home') }}">voltar ao site</a></p>
+      <form id="form-login" class="stack">
+        <label>E-mail
+          <input type="email" name="email" required autocomplete="username" />
+        </label>
+        <label>Senha
+          <input type="password" name="senha" required autocomplete="current-password" />
+        </label>
+        <p class="form-msg" id="msg-login" hidden></p>
+        <button type="submit" class="btn btn-primary btn-block">Entrar</button>
+      </form>
+      <p class="small muted">
+        Novo por aqui?
+        <a href="{{ url_for('cadastro.pagina_cadastro', tipo='fornecedor') }}">Fornecedor</a>
+        ·
+        <a href="{{ url_for('cadastro.pagina_cadastro', tipo='vendedor') }}">Vendedor</a>
+      </p>
+    </div>
+  </main>
+  <script>
+    document.getElementById("form-login").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const msg = document.getElementById("msg-login");
+      msg.hidden = true;
+      const fd = new FormData(e.target);
+      const body = { email: fd.get("email"), senha: fd.get("senha") };
+      const r = await fetch("{{ url_for('auth.api_login') }}", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Accept": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const j = await r.json();
+      if (j.success) {
+        window.location.href = j.redirect;
+        return;
+      }
+      msg.textContent = j.message || "Falha no login.";
+      msg.className = "form-msg is-error";
+      msg.hidden = false;
+    });
+  </script>
+</body>
+</html>

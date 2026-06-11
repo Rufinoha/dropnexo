@@ -1,0 +1,38 @@
+<div class="pt-page-title">
+  <h2>Cancelar conta</h2>
+  <p class="pt-page-desc">Você pode cancelar sua conta DropNexo em 3 etapas.</p>
+</div>
+
+<div class="mp-cancel-steps">
+  <div class="mp-cancel-step is-active" id="can-step-1">
+    <div class="mp-cancel-icon" aria-hidden="true">⚠</div>
+    <h3>Etapa 01 — Veja o que acontece ao cancelar sua conta</h3>
+    <p>Ao cancelar, você perderá o acesso ao painel e aos dados operacionais vinculados a esta conta. O cancelamento é <strong>irreversível</strong> pelo autoatendimento.</p>
+    <p>Na etapa final você poderá baixar um resumo (usuários, produtos, faturas) antes de concluir.</p>
+    <button type="button" class="Cl_botaoprimario" id="can-btn-prosseguir">OK, desejo prosseguir</button>
+  </div>
+
+  <div class="mp-cancel-step" id="can-step-2" hidden>
+    <h3>Etapa 02 — Confirmação</h3>
+    <div class="filter-group">
+      <label for="can-motivo">Motivo do cancelamento <span class="ch-req">*</span></label>
+      <textarea id="can-motivo" rows="4" maxlength="2000" placeholder="Conte brevemente o motivo…"></textarea>
+    </div>
+    <label class="mp-check-block">
+      <input type="checkbox" id="can-entendi" />
+      Entendi que não poderei recuperar a conta após a conclusão.
+    </label>
+    <button type="button" class="Cl_botaoprimario" id="can-btn-confirmar" disabled>Continuar</button>
+  </div>
+
+  <div class="mp-cancel-step" id="can-step-3" hidden>
+    <h3>Etapa 03 — Exportação e cancelamento definitivo</h3>
+    <p>Baixe seus dados antes de concluir:</p>
+    <button type="button" class="Cl_botaoFiltro" id="can-btn-exportar">Baixar resumo (JSON)</button>
+    <label class="mp-check-block">
+      <input type="checkbox" id="can-final" />
+      Confirmo o cancelamento definitivo da conta <strong>{{ session.get('tenant_nome', '') }}</strong>.
+    </label>
+    <button type="button" class="Cl_botaoprimario mp-btn-danger" id="can-btn-concluir" disabled>Cancelar conta definitivamente</button>
+  </div>
+</div>

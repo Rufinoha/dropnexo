@@ -1,0 +1,27 @@
+<div class="pt-page-title mp-faturas-head">
+  <div>
+    <h2>Pagamentos</h2>
+    <p class="pt-page-desc">Histórico de faturas emitidas e status de cada cobrança.</p>
+  </div>
+  <button type="button" class="Cl_botaoFiltro" id="fat-btn-gerar" hidden>Gerar cobrança do mês</button>
+</div>
+
+<section class="mp-card">
+  <div class="mp-table-wrap">
+    <table class="mp-table" id="fat-tabela">
+      <thead>
+        <tr>
+          <th>Referência</th>
+          <th>Valor</th>
+          <th>Vencimento</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="fat-corpo">
+        <tr><td colspan="5" class="mp-empty">Carregando…</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="mp-paginacao" id="fat-paginacao" hidden></div>
+</section>

@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+
+<html lang="pt-BR">
+
+<head>
+
+  <meta charset="UTF-8" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <title>Fornecedor — {{ MARCA_NOME }}</title>
+
+  {% include "partials/marca_favicon.html" %}
+
+  <link rel="stylesheet" href="{{ url_for('static', filename='style/global_utils.css') }}" />
+
+  <link rel="stylesheet" href="{{ url_for('vd_fornecedores.static', filename='style/Cfornecedor_apoio.css') }}" />
+
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+</head>
+
+<body class="Forn_ApoioBody">
+
+  <div class="Cl_Header Cl_ApoioHeader" aria-hidden="true">
+
+    <div class="Cl_Logo"><img src="{{ marca_logo_nome_url }}" alt="" /></div>
+
+    <div class="Cl_Titulo"><h1>Fornecedor</h1></div>
+
+  </div>
+
+
+
+  <input type="hidden" id="id" value="" />
+
+
+
+  <div class="Forn_ApoioShell">
+
+    <header class="Forn_ApoioHero">
+
+      <div class="Forn_ApoioHeroText">
+
+        <span class="Forn_ApoioKicker">Parceiro DropNexo</span>
+
+        <h1 id="forn_titulo_pagina">Cadastro de fornecedor</h1>
+
+        <p class="Forn_ApoioHeroDesc">
+
+          Cadastro corporativo para operação B2B na rede. Consulta oficial de CNPJ e configuração de expedição para cálculo de frete.
+
+        </p>
+
+      </div>
+
+      <div class="Forn_ApoioHeroBrand">
+
+        <img src="{{ marca_logo_nome_url }}" alt="{{ MARCA_NOME }}" />
+
+      </div>
+
+    </header>
+
+
+
+    <nav class="Forn_Stepper" role="tablist" aria-label="Etapas do cadastro">
+
+      <button type="button" class="Forn_Step is-active" data-tab="pj" id="stepPj">
+
+        <span class="Forn_StepNum">1</span>
+
+        <span class="Forn_StepLabel"><strong>Dados da empresa</strong><span>CNPJ e identificação</span></span>
+
+      </button>
+
+      <button type="button" class="Forn_Step" data-tab="depositos" id="tabBtnDepositos" disabled>
+
+        <span class="Forn_StepNum">2</span>
+
+        <span class="Forn_StepLabel"><strong>Depósitos</strong><span>Expedição e remetente</span></span>
+
+      </button>
+
+      <button type="button" class="Forn_Step" data-tab="regras" id="tabBtnRegras" disabled>
+
+        <span class="Forn_StepNum">3</span>
+
+        <span class="Forn_StepLabel"><strong>Regras</strong><span>Política comercial</span></span>
+
+      </button>
+
+    </nav>
+
+
+
+    <main class="Forn_ApoioMain">
+
+      <!-- Etapa 1 — PJ -->
+
+      <section class="Forn_TabPanel is-active" data-panel="pj">
+
+        <div class="Forn_SectionCard">
+
+          <div class="Forn_SectionHead">
+
+            <h2>Identificação jurídica</h2>
+
+            <p>Informe o CNPJ para carregar razão social e situação cadastral. O endereço de expedição é cadastrado na etapa de depósitos.</p>
+
+          </div>
+
+
+
+          <div class="Forn_CnpjCard">
+
+            <label for="documento">CNPJ da empresa</label>
+
+            <div class="Forn_CnpjRow">
+
+              <input type="text" id="documento" maxlength="18" placeholder="00.000.000/0000-00" autocomplete="off" />
+
+              <button type="button" class="Forn_BtnBuscarCnpj" id="btnBuscarCnpj">Consultar Receita</button>
+
+            </div>
+
+            <p class="Forn_CnpjHint">Dados obtidos via base pública. Campos de endereço fiscal não são exigidos nesta etapa.</p>
+
+          </div>
+
+
+
+          <div class="Forn_FormGrid">
+
+            <div class="Forn_Field Forn_Field--full">
+
+              <label for="razao_social">Razão social <span class="Forn_Req">*</span></label>
+
+              <input type="text" id="razao_social" placeholder="Razão social conforme Receita Federal" />
+
+            </div>
+
+            <div class="Forn_Field">
+
+              <label for="nome_fantasia">Nome fantasia</label>
+
+              <input type="text" id="nome_fantasia" placeholder="Marca comercial" />
+
+            </div>
+
+            <div class="Forn_Field">
+
+              <label for="nome">Nome na rede DropNexo <span class="Forn_Req">*</span></label>
+
+              <input type="text" id="nome" placeholder="Como vendedores verão o parceiro" />
+
+            </div>
+
+            <div class="Forn_Field">
+
+              <label for="situacao_cadastral">Situação cadastral</label>
+
+              <input type="text" id="situacao_cadastral" readonly tabindex="-1" />
+
+            </div>
+
+            <div class="Forn_Field">
+
+              <label for="cnae_principal">CNAE principal</label>
+
+              <input type="text" id="cnae_principal" readonly tabindex="-1" />
+
+            </div>
+
+            <div class="Forn_Field">
+
+              <label for="inscricao_estadual">Inscrição estadual</label>
+
+              <input type="text" id="inscricao_estadual" placeholder="IE" />
+
+            </div>
+
+            <div class="Forn_Field">
+
+              <label for="telefone_comercial">Telefone comercial</label>
+
+              <input type="text" id="telefone_comercial" placeholder="(00) 00000-0000" />
+
+            </div>
+
+            <div class="Forn_Field Forn_Field--full">
+
+              <label for="email_comercial">E-mail comercial</label>
+
+              <input type="email" id="email_comercial" placeholder="contato@empresa.com.br" />
+
+            </div>
+
+          </div>
+
+
+
+          <div class="Forn_StatusCard">
+
+            <div>
+
+              <strong>Ativo na plataforma</strong>
+
+              <span>Fornecedores inativos não aparecem na rede de vd_meus_produtos.</span>
+
+            </div>
+
+            <label class="Forn_Switch" title="Ativo na plataforma">
+
+              <input type="checkbox" id="ativo" checked />
+
+              <span class="Forn_SwitchTrack" aria-hidden="true"></span>
+
+            </label>
+
+          </div>
+
+        </div>
+
+      </section>
+
+
+
+      <!-- Etapa 2 — Depósitos -->
+
+      <section class="Forn_TabPanel" data-panel="depositos" hidden>
+
+        <div class="Forn_SectionCard">
+
+          <div class="Forn_SectionHead">
+
+            <h2>Depósitos de expedição</h2>
+
+            <p>Cadastre um ou mais pontos de saída. Cada depósito usa um CEP exclusivo e define o remetente para frete e etiquetas.</p>
+
+          </div>
+
+
+
+          <div class="Forn_SplitLayout">
+
+            <div class="Forn_DepFormCard" id="formDeposito">
+
+              <h3>Novo depósito</h3>
+
+              <input type="hidden" id="dep_id" value="" />
+
+              <div class="Forn_FormGrid">
+
+                <div class="Forn_Field">
+
+                  <label for="dep_cep">CEP <span class="Forn_Req">*</span></label>
+
+                  <input type="text" id="dep_cep" maxlength="9" placeholder="00000-000" />
+
+                </div>
+
+                <div class="Forn_Field" style="display:flex;align-items:flex-end;">
+
+                  <button type="button" class="Forn_BtnSecondary" id="btnBuscarCepDep" style="width:100%;height:44px;">Buscar endereço</button>
+
+                </div>
+
+                <div class="Forn_Field Forn_Field--full">
+
+                  <label for="dep_nome">Nome do depósito</label>
+
+                  <input type="text" id="dep_nome" placeholder="Ex.: Centro de distribuição SP" />
+
+                </div>
+
+                <div class="Forn_Field Forn_Field--full">
+
+                  <label for="dep_logradouro">Logradouro <span class="Forn_Req">*</span></label>
+
+                  <input type="text" id="dep_logradouro" />
+
+                </div>
+
+                <div class="Forn_Field">
+
+                  <label for="dep_numero">Número</label>
+
+                  <input type="text" id="dep_numero" placeholder="S/N" />
+
+                </div>
+
+                <div class="Forn_Field">
+
+                  <label for="dep_complemento">Complemento</label>
+
+                  <input type="text" id="dep_complemento" />
+
+                </div>
+
+                <div class="Forn_Field">
+
+                  <label for="dep_bairro">Bairro</label>
+
+                  <input type="text" id="dep_bairro" />
+
+                </div>
+
+                <div class="Forn_Field">
+
+                  <label for="dep_cidade">Cidade</label>
+
+                  <input type="text" id="dep_cidade" />
+
+                </div>
+
+                <div class="Forn_Field">
+
+                  <label for="dep_uf">UF</label>
+
+                  <input type="text" id="dep_uf" maxlength="2" placeholder="SP" />
+
+                </div>
+
+                <div class="Forn_Field Forn_Field--full">
+
+                  <label for="dep_remetente_nome">Nome do remetente</label>
+
+                  <input type="text" id="dep_remetente_nome" />
+
+                </div>
+
+                <div class="Forn_Field Forn_Field--full">
+
+                  <label for="dep_remetente_documento">CNPJ do remetente</label>
+
+                  <input type="text" id="dep_remetente_documento" />
+
+                </div>
+
+              </div>
+
+              <label class="Forn_Switch" style="margin-top:14px;display:inline-flex;gap:10px;align-items:center;">
+
+                <input type="checkbox" id="dep_principal" />
+
+                <span class="Forn_SwitchTrack"></span>
+
+                <span style="font-size:13px;font-weight:600;color:#334155;">Depósito principal</span>
+
+              </label>
+
+              <button type="button" class="Forn_BtnSalvarDep" id="btnSalvarDeposito">Salvar depósito</button>
+
+            </div>
+
+
+
+            <div class="Forn_DepTableWrap">
+
+              <div class="Cl_TabelaPrincipal">
+
+                <table>
+
+                  <thead>
+
+                    <tr>
+
+                      <th>Depósito</th>
+
+                      <th>CEP</th>
+
+                      <th>Local</th>
+
+                      <th>Principal</th>
+
+                      <th class="col-acoes Cl_TableActions">Ações</th>
+
+                    </tr>
+
+                  </thead>
+
+                  <tbody id="lista_depositos">
+
+                    <tr><td colspan="5" class="Forn_DepEmpty">Nenhum depósito cadastrado.</td></tr>
+
+                  </tbody>
+
+                </table>
+
+              </div>
+
+            </div>
+
+          </div>
+
+        </div>
+
+      </section>
+
+
+
+      <!-- Etapa 3 — Regras -->
+
+      <section class="Forn_TabPanel" data-panel="regras" hidden>
+
+        <div class="Forn_SectionCard">
+
+          <div class="Forn_SectionHead">
+
+            <h2>Regras comerciais</h2>
+
+            <p>Transparência para vendedores da rede: prazos, devolução (CDC), frete de retorno e pedido mínimo.</p>
+
+          </div>
+
+          <div id="lista_regras" class="Forn_RegrasLista"></div>
+
+        </div>
+
+      </section>
+
+    </main>
+
+
+
+    <footer class="Forn_ApoioFooter">
+
+      <p class="Forn_ApoioFooterHint" id="forn_footer_hint">Salve os dados da empresa para liberar depósitos e regras comerciais.</p>
+
+      <button type="button" class="Forn_BtnSalvarPrincipal" id="btnSalvar">Salvar fornecedor</button>
+
+    </footer>
+
+  </div>
+
+
+
+  <div class="Cl_BotoesApoio" aria-hidden="true">
+
+    <button type="button" id="btnSalvarLegacy">Salvar</button>
+
+  </div>
+
+
+
+  <script src="{{ url_for('static', filename='script/global_utils.js') }}"></script>
+
+  <script src="{{ url_for('vd_fornecedores.static', filename='script/Sfornecedor_apoio.js') }}"></script>
+
+</body>
+
+</html>
+

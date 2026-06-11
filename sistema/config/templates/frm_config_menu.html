@@ -1,0 +1,66 @@
+{% extends "frm_base.html" %}
+{% block title %}Itens de menu — {{ MARCA_NOME }}{% endblock %}
+{% set nav_ativo = 'config' %}
+{% block topbar_title %}Itens de Menu{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_crud.css') }}" />
+{% endblock %}
+{% block content %}
+<div class="Cl_ConfigPage">
+  <div class="Cl_ConfigPageHeader">
+    <h2>Gestão de menus</h2>
+    <a class="Cl_BtnLink" href="{{ url_for('config.configuracoes') }}">Voltar às Configurações</a>
+  </div>
+  <p class="Cl_ConfigSub">Módulos, menus principais (pai) e submenus — substituem o menu fixo da sidebar.</p>
+
+  <div class="Cl_ConfigToolbar">
+    <div class="Cl_FormCampo">
+      <label for="ob_filtroNome">Nome</label>
+      <input type="text" id="ob_filtroNome" placeholder="Filtrar por nome" />
+    </div>
+    <div class="Cl_FormCampo">
+      <label for="ob_filtroMenuPai">Menu pai</label>
+      <select id="ob_filtroMenuPai"><option value="">Todos</option></select>
+    </div>
+    <div class="Cl_FormCampo">
+      <label for="ob_filtroModulo">Módulo</label>
+      <select id="ob_filtroModulo"><option value="">Todos</option></select>
+    </div>
+    <button type="button" class="Cl_botaoFiltro" id="ob_btnFiltrar">Filtrar</button>
+    <button type="button" class="Cl_BtnCancelar" id="ob_btnlimparFiltro">Limpar</button>
+  </div>
+
+  <div class="Cl_ConfigActions">
+    <button type="button" class="Cl_BtnIncluir" id="ob_btnIncluir">Novo menu</button>
+  </div>
+
+  <div class="Cl_TabelaPrincipal" id="content-area-Menu">
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Nome</th>
+          <th>Descrição</th>
+          <th>Seq.</th>
+          <th>Pai</th>
+          <th>Data page</th>
+          <th>Módulo</th>
+          <th class="Cl_TableActions">Ações</th>
+        </tr>
+      </thead>
+      <tbody id="ob_listaMenus"><tr><td colspan="8">Carregando…</td></tr></tbody>
+    </table>
+  </div>
+
+  <div class="Cl_Paginacao">
+    <button type="button" class="Cl_direcao" id="ob_btnPrimeiro" disabled>Primeiro</button>
+    <button type="button" class="Cl_direcao" id="ob_btnAnterior" disabled>Anterior</button>
+    <span>Página <span id="ob_paginaAtual">1</span> de <span id="ob_totalPaginas">1</span></span>
+    <button type="button" class="Cl_direcao" id="ob_btnProximo" disabled>Próximo</button>
+    <button type="button" class="Cl_direcao" id="ob_btnUltimo" disabled>Último</button>
+  </div>
+</div>
+{% endblock %}
+{% block page_js %}
+<script src="{{ url_for('config.static', filename='script/Sconfig_menu.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,206 @@
+/* Árvore: coluna de guia alinhada à 1ª letra por nível */
+
+.FnCatTree-wrap {
+  position: relative;
+  overflow: hidden;
+  --fn-guia: 0.5rem;
+  --fn-step: 1.35rem;
+  --fn-gap: 0.35rem;
+  --fn-tree-linha: #d1d9e6;
+  --fn-juncao: 0.1rem;
+}
+
+.FnCatTree-top {
+  margin-bottom: 0.5rem;
+  position: relative;
+}
+
+.FnCatTree-top .Cl_BtnIncluir {
+  font-size: 0.84rem;
+}
+
+.FnCatTree-top::after {
+  content: "";
+  position: absolute;
+  left: var(--fn-guia);
+  bottom: -0.35rem;
+  height: 0.35rem;
+  border-left: 1px solid var(--fn-tree-linha);
+  pointer-events: none;
+}
+
+.FnCatTree {
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.FnCatTree > ul,
+.FnCatTree-children {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.FnCatTree-children[data-depth="1"] {
+  margin-left: calc(var(--fn-guia) + var(--fn-step));
+}
+
+.FnCatTree-children[data-depth="2"] {
+  margin-left: calc(var(--fn-guia) + 2 * var(--fn-step));
+}
+
+.FnCatTree-children {
+  position: relative;
+}
+
+/* Tronco entre irmãos (altura só deste ul) */
+.FnCatTree-children::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  border-left: 1px solid var(--fn-tree-linha);
+  pointer-events: none;
+}
+
+.FnCatTree-item {
+  margin: 1px 0;
+  position: relative;
+}
+
+.FnCatTree-row {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.45rem 0.5rem 0.45rem var(--fn-guia);
+  border-radius: 6px;
+  cursor: default;
+  position: relative;
+}
+
+.FnCatTree-children > .FnCatTree-item > .FnCatTree-row {
+  padding-left: var(--fn-gap);
+}
+
+.FnCatTree-row--pai {
+  cursor: pointer;
+}
+
+.FnCatTree-row--pai:hover .FnCatTree-nome {
+  color: var(--marca-primary, #021f81);
+}
+
+/* Coluna do tronco = 1ª letra */
+.FnCatTree-guide {
+  position: absolute;
+  left: var(--fn-guia);
+  top: 0;
+  bottom: 0;
+  width: 0;
+  pointer-events: none;
+}
+
+.FnCatTree-children > .FnCatTree-item > .FnCatTree-row .FnCatTree-guide {
+  left: 0;
+}
+
+.FnCatTree-nome {
+  position: relative;
+  display: inline-block;
+  flex: 0 1 auto;
+  min-width: 0;
+  color: #1e293b;
+  padding-bottom: var(--fn-juncao);
+}
+
+/* Ramo horizontal: tronco → 1ª letra (abaixo do texto) */
+.FnCatTree-nome::before {
+  content: "";
+  position: absolute;
+  left: calc(-1 * var(--fn-gap));
+  bottom: 0;
+  width: var(--fn-gap);
+  border-top: 1px solid var(--fn-tree-linha);
+  pointer-events: none;
+}
+
+/* Nível 1: um tronco entre irmãos (só no guide, recortado pelo wrap) */
+.FnCatTree > ul.FnCatTree-raiz > .FnCatTree-item:not(:last-child) > .FnCatTree-row .FnCatTree-guide::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 100%;
+  bottom: -3000px;
+  border-left: 1px solid var(--fn-tree-linha);
+  pointer-events: none;
+}
+
+/* Pai → filhos: ligação curta até o ul */
+.FnCatTree-item:has(> .FnCatTree-children) > .FnCatTree-row .FnCatTree-guide::after {
+  bottom: auto;
+  height: 0.4rem;
+}
+
+.FnCatTree > ul.FnCatTree-raiz > .FnCatTree-item:not(:last-child):has(> .FnCatTree-children) > .FnCatTree-row .FnCatTree-guide::after {
+  bottom: -3000px;
+  height: auto;
+}
+
+/* Última folha: corta tronco do ul abaixo do ramo */
+.FnCatTree-children > .FnCatTree-item:last-child:not(:has(> .FnCatTree-children)) > .FnCatTree-row::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: calc(100% - var(--fn-juncao) - 1px);
+  bottom: -200px;
+  width: 4px;
+  background: #fff;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.FnCatTree-row:hover {
+  background: #f1f5f9;
+}
+
+.FnCatTree-item[data-level="1"] > .FnCatTree-row .FnCatTree-nome {
+  font-weight: 600;
+}
+
+.FnCatTree-qtd {
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  color: #94a3b8;
+  min-width: 3.5rem;
+  text-align: right;
+  margin-left: auto;
+}
+
+.FnCatTree-acoes {
+  display: none;
+  flex-shrink: 0;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+}
+
+.FnCatTree-row:hover .FnCatTree-acoes {
+  display: flex;
+}
+
+.FnCatTree-acoes button {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--marca-primary, #021f81);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.FnCatTree-acoes button:hover {
+  text-decoration: underline;
+}
+
+.FnCatTree-children[hidden] {
+  display: none;
+}

@@ -1,0 +1,197 @@
+.nv-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  z-index: 9998;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.25s ease, visibility 0.25s ease;
+}
+.nv-overlay.open {
+  opacity: 1;
+  visibility: visible;
+}
+
+.nv-painel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 400px;
+  max-width: 92vw;
+  height: 100vh;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.15);
+  transform: translateX(100%);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.nv-painel.open {
+  transform: translateX(0);
+}
+
+.nv-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 22px;
+  background: #021f81;
+  color: #fff;
+  flex-shrink: 0;
+}
+.nv-header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.nv-header h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+.nv-badge-header {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: 12px;
+  background: #e74c3c;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+.nv-badge-header:empty {
+  display: none;
+}
+.nv-btn-fechar {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.8);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+}
+.nv-btn-fechar:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+.nv-btn-fechar svg {
+  width: 20px;
+  height: 20px;
+}
+
+.nv-acoes {
+  display: flex;
+  justify-content: flex-end;
+  padding: 10px 22px;
+  border-bottom: 1px solid #eef2f7;
+}
+.nv-btn-lidas {
+  background: none;
+  border: 1px solid #d8dee8;
+  color: #64748b;
+  font-size: 12px;
+  padding: 5px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.nv-btn-lidas:hover {
+  border-color: #2c6bf3;
+  color: #021f81;
+}
+
+.nv-lista {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 16px;
+}
+.nv-card {
+  display: flex;
+  gap: 12px;
+  padding: 14px 16px;
+  margin-bottom: 8px;
+  border-radius: 8px;
+  background: #f9fafb;
+  border-left: 3px solid transparent;
+}
+.nv-card.nv-nao-lida {
+  background: #e8f0ff;
+  border-left-color: #2c6bf3;
+}
+.nv-card-icone {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #021f81;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 700;
+}
+.nv-card-modulo {
+  font-size: 13px;
+  font-weight: 700;
+  color: #021f81;
+  margin-bottom: 4px;
+}
+.nv-card-desc {
+  font-size: 13px;
+  color: #334155;
+  line-height: 1.45;
+}
+.nv-card-data {
+  font-size: 11px;
+  color: #64748b;
+  margin-top: 6px;
+}
+.nv-vazio {
+  text-align: center;
+  padding: 48px 16px;
+  color: #64748b;
+}
+
+.fg-btn-novidades {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid #e8ecf2;
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+  color: #021f81;
+}
+.fg-btn-novidades:hover {
+  border-color: #2c6bf3;
+  background: #e8f0ff;
+}
+.fg-novidades-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 10px;
+  background: #dc2626;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+}
+.fg-novidades-badge--pulse {
+  animation: fgNovPulse 1.5s ease infinite;
+}
+@keyframes fgNovPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+}

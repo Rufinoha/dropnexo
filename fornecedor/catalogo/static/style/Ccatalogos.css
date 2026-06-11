@@ -1,0 +1,197 @@
+.Cat_ColImg {
+  width: 56px;
+  text-align: center;
+}
+
+.Cat_Thumb {
+  width: 44px;
+  height: 44px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.Cat_Thumb--vazio {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: #94a3b8;
+  background: #f8fafc;
+}
+
+.Cat_VarNome {
+  font-weight: 600;
+}
+
+.Cat_VarPai {
+  margin-top: 2px;
+  font-size: 0.82rem;
+}
+
+.filter-group--switch {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 88px;
+}
+
+.filter-group-switch-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.Cat_FiltroSwitch {
+  margin: 0;
+}
+
+.Cat_Preco {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.Cat_BadgePub {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.Cat_BadgePub--sim {
+  background: #dcfce7;
+  color: #166534;
+}
+.Cat_BadgePub--nao {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+.Cat_ImagemBloco label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.Cat_ImagemRow {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.Cat_ImagemPreview {
+  width: 96px;
+  height: 96px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+}
+
+.Cat_ImagemAcoes {
+  flex: 1;
+  min-width: 200px;
+}
+
+.Cat_ImagemHint {
+  font-size: 11px;
+  color: #6b7280;
+  margin: 4px 0 0;
+}
+
+.Cat_ImportResult {
+  margin-top: 16px;
+  padding: 12px;
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 12px;
+  max-height: 200px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+/* Lista agrupada: pai + variantes */
+.Cat_RowPai td {
+  background: #fafbfc;
+  border-top: 1px solid #e8ecf1;
+}
+
+.Cat_RowVar td {
+  background: #fff;
+  font-size: 0.92rem;
+}
+
+.Cat_RowVar--ultima td {
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.Cat_ColTree {
+  width: 7rem;
+  padding-left: 0.35rem !important;
+}
+
+.Cat_TreeCell {
+  display: inline-block;
+  padding-left: 0.35rem;
+  border-left: 2px solid #cbd5e1;
+}
+
+.Cat_TreeCell--var {
+  margin-left: 1.1rem;
+  border-left-color: #22c55e;
+  padding-left: 0.5rem;
+}
+
+.Cat_BadgeSimples {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  background: #e0e7ff;
+  color: #1e3a8a;
+}
+
+.Cat_BadgeVar {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  background: #dcfce7;
+  color: #166534;
+}
+
+.Cat_BadgeVarItem {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.Cat_BadgeHerda {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.Cat_BadgePropria {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.Cat_Muted {
+  color: #64748b;
+  font-size: 0.88rem;
+}

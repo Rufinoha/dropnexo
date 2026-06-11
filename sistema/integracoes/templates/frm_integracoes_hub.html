@@ -1,0 +1,39 @@
+{% set nav_ativo = nav_codigo %}
+{% extends "frm_base.html" %}
+{% block title %}Integrações — {{ MARCA_NOME }}{% endblock %}
+{% block topbar_title %}Integrações{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('static', filename='style/Cintegracoes_hub.css') }}" />
+{% endblock %}
+{% block content %}
+<div class="Cl_ContainerApoio cl-page-principal FnInt_Wrap">
+  <div class="cl-page-title">
+    <h2>Integrações</h2>
+    <p class="cl-page-desc">Conecte marketplaces, lojas virtuais, fretes e ERPs ao seu catálogo DropNexo.</p>
+  </div>
+
+  <div class="FnInt_Page" id="fn_int_page">
+    <aside class="FnInt_SubSidebar" aria-label="Categorias de integração">
+      <nav class="FnInt_SubNav" id="fn_int_subnav"></nav>
+    </aside>
+
+    <section class="FnInt_Main">
+      <header class="FnInt_Header">
+        <h3 class="FnInt_Titulo" id="fn_int_titulo">Integrações</h3>
+        <p class="FnInt_Subtitulo" id="fn_int_subtitulo">Conecte marketplaces, lojas, fretes e ERPs.</p>
+      </header>
+
+      <div class="FnInt_Grid" id="fn_int_grid" role="list"></div>
+    </section>
+  </div>
+</div>
+
+<div class="FnInt_Overlay" id="fn_int_overlay" hidden aria-hidden="true">
+  <div class="FnInt_ConnectDialog" id="fn_int_connect_dialog" role="dialog" aria-modal="true" aria-labelledby="fn_int_dialog_title" hidden></div>
+</div>
+
+<script id="fn_int_catalogo" type="application/json">{{ categorias_json|safe }}</script>
+{% endblock %}
+{% block page_js %}
+<script src="{{ url_for('static', filename='script/Sintegracoes_hub.js') }}"></script>
+{% endblock %}

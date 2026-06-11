@@ -1,0 +1,18 @@
+.CfgSeg_Aviso { margin-bottom: 1rem; }
+.CfgSeg_Lista {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+.CfgSeg_Card {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 0.85rem 1rem;
+  background: #fff;
+}
+.CfgSeg_Card.is-off { opacity: 0.6; }
+.CfgSeg_CardHead { display: flex; flex-direction: column; gap: 0.2rem; }
+.CfgSeg_CardHead code { font-size: 0.75rem; color: #64748b; }
+.CfgSeg_Meta { font-size: 0.8rem; color: #64748b; margin: 0.5rem 0; }
+.CfgSeg_Acoes { display: flex; gap: 0.5rem; }

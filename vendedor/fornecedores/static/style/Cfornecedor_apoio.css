@@ -1,0 +1,614 @@
+/* DropNexo — Cadastro de fornecedor (apoio / modal) — layout enterprise */
+
+.Forn_ApoioBody {
+  margin: 0;
+  min-height: 100vh;
+  background: linear-gradient(165deg, #f0f4ff 0%, #f8fafc 42%, #ffffff 100%);
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  color: #0f172a;
+  -webkit-font-smoothing: antialiased;
+}
+
+.Forn_ApoioBody .Cl_Header {
+  display: none !important;
+}
+
+.Forn_ApoioShell {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 0 0 88px;
+  min-height: 100vh;
+  box-sizing: border-box;
+}
+
+/* —— Hero —— */
+.Forn_ApoioHero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 28px 32px 24px;
+  background: linear-gradient(135deg, #021f81 0%, #1a3a9e 55%, #2c6bf3 100%);
+  color: #fff;
+  border-radius: 0 0 20px 20px;
+  box-shadow: 0 12px 40px rgba(2, 31, 129, 0.22);
+}
+
+.Forn_ApoioKicker {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0.85;
+  margin-bottom: 8px;
+}
+
+.Forn_ApoioHero h1 {
+  margin: 0 0 8px;
+  font-size: 1.65rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.Forn_ApoioHeroDesc {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.55;
+  opacity: 0.92;
+  max-width: 520px;
+}
+
+.Forn_ApoioHeroBrand img {
+  height: 40px;
+  width: auto;
+  filter: brightness(0) invert(1);
+  opacity: 0.95;
+}
+
+/* —— Stepper —— */
+.Forn_Stepper {
+  display: flex;
+  gap: 0;
+  margin: -18px 24px 0;
+  padding: 0 8px;
+  position: relative;
+  z-index: 2;
+}
+
+.Forn_Step {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  margin: 0 4px;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
+  cursor: pointer;
+  transition: border-color 0.2s, box-shadow 0.2s, opacity 0.2s;
+  border: none;
+  font: inherit;
+  text-align: left;
+  color: inherit;
+}
+
+.Forn_Step:first-child {
+  margin-left: 0;
+}
+
+.Forn_Step:last-child {
+  margin-right: 0;
+}
+
+.Forn_Step:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.Forn_StepNum {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 800;
+  background: #e8f0ff;
+  color: #021f81;
+}
+
+.Forn_Step.is-active .Forn_StepNum {
+  background: #021f81;
+  color: #fff;
+}
+
+.Forn_Step.is-done .Forn_StepNum {
+  background: #166534;
+  color: #fff;
+}
+
+.Forn_StepLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.Forn_StepLabel strong {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.Forn_StepLabel span {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.Forn_Step.is-active {
+  border: 2px solid #2c6bf3;
+  box-shadow: 0 8px 24px rgba(44, 107, 243, 0.15);
+}
+
+/* —— Main —— */
+.Forn_ApoioMain {
+  padding: 24px 28px 0;
+}
+
+.Forn_SectionCard {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 24px 28px;
+  margin-bottom: 20px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+}
+
+.Forn_SectionHead {
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.Forn_SectionHead h2 {
+  margin: 0 0 6px;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #021f81;
+}
+
+.Forn_SectionHead p {
+  margin: 0;
+  font-size: 13px;
+  color: #64748b;
+  line-height: 1.5;
+}
+
+/* CNPJ highlight */
+.Forn_CnpjCard {
+  background: linear-gradient(180deg, #f8fbff 0%, #fff 100%);
+  border: 1px solid #c7d9fe;
+  border-radius: 14px;
+  padding: 20px 22px;
+  margin-bottom: 24px;
+}
+
+.Forn_CnpjCard label {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #475569;
+  margin-bottom: 8px;
+}
+
+.Forn_CnpjRow {
+  display: flex;
+  gap: 12px;
+  align-items: stretch;
+}
+
+.Forn_CnpjRow input {
+  flex: 1;
+  min-width: 0;
+}
+
+.Forn_BtnBuscarCnpj {
+  flex-shrink: 0;
+  align-self: stretch;
+  padding: 0 22px;
+  background: #021f81;
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.15s, box-shadow 0.2s;
+  white-space: nowrap;
+}
+
+.Forn_BtnBuscarCnpj:hover {
+  background: #2c6bf3;
+  box-shadow: 0 8px 20px rgba(44, 107, 243, 0.35);
+  transform: translateY(-1px);
+}
+
+.Forn_CnpjHint {
+  margin: 12px 0 0;
+  font-size: 12px;
+  color: #64748b;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  line-height: 1.45;
+}
+
+.Forn_CnpjHint::before {
+  content: "ℹ";
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #e8f0ff;
+  color: #021f81;
+  font-size: 11px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Form grid */
+.Forn_FormGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 18px 20px;
+}
+
+.Forn_FormGrid--3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.Forn_FormGrid .Forn_Field--full {
+  grid-column: 1 / -1;
+}
+
+.Forn_Field label {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  color: #334155;
+  margin-bottom: 6px;
+}
+
+.Forn_Field label .Forn_Req {
+  color: #dc2626;
+  margin-left: 2px;
+}
+
+.Forn_Field input,
+.Forn_Field select,
+.Forn_Field textarea {
+  width: 100%;
+  box-sizing: border-box;
+  height: 44px;
+  padding: 0 14px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  font-size: 14px;
+  color: #0f172a;
+  background: #fff;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.Forn_Field input:focus,
+.Forn_Field select:focus,
+.Forn_Field textarea:focus {
+  outline: none;
+  border-color: #2c6bf3;
+  box-shadow: 0 0 0 3px rgba(44, 107, 243, 0.18);
+}
+
+.Forn_Field input[readonly] {
+  background: #f8fafc;
+  color: #475569;
+  border-color: #e2e8f0;
+}
+
+.Forn_Field textarea {
+  height: auto;
+  min-height: 88px;
+  padding: 12px 14px;
+  resize: vertical;
+}
+
+/* Status toggle card */
+.Forn_StatusCard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 8px;
+  padding: 16px 18px;
+  background: #f8fafc;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+}
+
+.Forn_StatusCard strong {
+  display: block;
+  font-size: 14px;
+  color: #0f172a;
+  margin-bottom: 4px;
+}
+
+.Forn_StatusCard span {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.Forn_Switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.Forn_Switch input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.Forn_SwitchTrack {
+  width: 48px;
+  height: 26px;
+  background: #cbd5e1;
+  border-radius: 999px;
+  transition: background 0.2s;
+  position: relative;
+}
+
+.Forn_SwitchTrack::after {
+  content: "";
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  left: 2px;
+  top: 2px;
+  background: #fff;
+  border-radius: 50%;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+  transition: transform 0.2s;
+}
+
+.Forn_Switch input:checked + .Forn_SwitchTrack {
+  background: #021f81;
+}
+
+.Forn_Switch input:checked + .Forn_SwitchTrack::after {
+  transform: translateX(22px);
+}
+
+/* Depósitos — formulário lateral */
+.Forn_SplitLayout {
+  display: grid;
+  grid-template-columns: 1fr 1.1fr;
+  gap: 24px;
+  align-items: start;
+}
+
+@media (max-width: 800px) {
+  .Forn_FormGrid,
+  .Forn_FormGrid--3,
+  .Forn_SplitLayout {
+    grid-template-columns: 1fr;
+  }
+  .Forn_ApoioHero {
+    flex-direction: column;
+    padding: 22px 20px;
+  }
+  .Forn_Stepper {
+    flex-direction: column;
+    margin: 12px 16px 0;
+  }
+  .Forn_Step {
+    margin: 4px 0;
+  }
+}
+
+.Forn_DepFormCard {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 20px;
+}
+
+.Forn_DepFormCard h3 {
+  margin: 0 0 16px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #021f81;
+}
+
+.Forn_BtnSecondary {
+  height: 40px;
+  padding: 0 16px;
+  background: #fff;
+  color: #021f81;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.Forn_BtnSecondary:hover {
+  background: #e8f0ff;
+  border-color: #2c6bf3;
+}
+
+.Forn_BtnSalvarDep {
+  width: 100%;
+  margin-top: 16px;
+  height: 44px;
+  background: #021f81;
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.Forn_BtnSalvarDep:hover {
+  background: #2c6bf3;
+}
+
+.Forn_DepTableWrap {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.Forn_DepTableWrap .Cl_TabelaPrincipal {
+  margin: 0;
+  box-shadow: none;
+}
+
+.Forn_DepTableWrap table {
+  font-size: 13px;
+}
+
+.Forn_DepEmpty {
+  padding: 32px 20px;
+  text-align: center;
+  color: #64748b;
+  font-size: 13px;
+}
+
+/* Regras */
+.Forn_RegrasLista {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.Forn_RegraCard {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 20px;
+  align-items: center;
+  padding: 18px 20px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  transition: border-color 0.15s;
+}
+
+.Forn_RegraCard:hover {
+  border-color: #c7d9fe;
+}
+
+.Forn_RegraCard h4 {
+  margin: 0 0 4px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.Forn_RegraCard p {
+  margin: 0;
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.45;
+}
+
+.Forn_RegraCard input,
+.Forn_RegraCard select,
+.Forn_RegraCard textarea {
+  min-width: 120px;
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.Forn_RegraCard textarea {
+  height: auto;
+  min-height: 72px;
+  padding: 10px 12px;
+}
+
+.Forn_TabPanel[hidden] {
+  display: none !important;
+}
+
+/* Footer fixo */
+.Forn_ApoioBody .Cl_BotoesApoio {
+  display: none !important;
+}
+
+.Forn_ApoioFooter {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 28px;
+  background: rgba(255, 255, 255, 0.96);
+  border-top: 1px solid #e2e8f0;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 -8px 30px rgba(15, 23, 42, 0.08);
+}
+
+.Forn_ApoioFooterHint {
+  margin: 0;
+  font-size: 12px;
+  color: #64748b;
+  max-width: 420px;
+  line-height: 1.4;
+}
+
+.Forn_BtnSalvarPrincipal {
+  min-width: 200px;
+  height: 48px;
+  padding: 0 28px;
+  background: linear-gradient(135deg, #021f81 0%, #2c6bf3 100%);
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  letter-spacing: 0.02em;
+  box-shadow: 0 10px 28px rgba(2, 31, 129, 0.28);
+  transition: transform 0.15s, box-shadow 0.2s;
+}
+
+.Forn_BtnSalvarPrincipal:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 32px rgba(44, 107, 243, 0.35);
+}
+
+.Forn_BtnSalvarPrincipal:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}

@@ -1,0 +1,282 @@
+/* Depósitos — módulo fornecedor */
+.FnDep_Page {
+  padding-bottom: 1.5rem;
+}
+
+.FnDep_Header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.FnDep_HeaderText h2 {
+  margin: 0 0 0.35rem;
+  color: var(--marca-primary, #021f81);
+}
+
+.FnDep_BtnIncluir {
+  white-space: nowrap;
+}
+
+.FnDep_Grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+}
+
+.FnDep_Card {
+  position: relative;
+  background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 1.1rem 1.15rem 1rem;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.12s;
+  box-shadow: 0 2px 10px rgba(2, 31, 129, 0.06);
+}
+
+.FnDep_Card:hover {
+  border-color: var(--marca-hover, #2c6bf3);
+  box-shadow: 0 8px 24px rgba(44, 107, 243, 0.12);
+  transform: translateY(-2px);
+}
+
+.FnDep_Card:focus-visible {
+  outline: 2px solid var(--marca-hover, #2c6bf3);
+  outline-offset: 2px;
+}
+
+.FnDep_Card.is-principal {
+  border-color: #34d399;
+  background: linear-gradient(145deg, #ecfdf5 0%, #ffffff 55%);
+}
+
+.FnDep_CardBadge {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  background: #d1fae5;
+  color: #047857;
+}
+
+.FnDep_CardNome {
+  margin: 0 0 0.35rem;
+  font-size: 1.08rem;
+  font-weight: 700;
+  color: #0f172a;
+  padding-right: 4.5rem;
+}
+
+.FnDep_CardCep {
+  font-size: 0.8rem;
+  color: #64748b;
+  margin: 0 0 0.5rem;
+}
+
+.FnDep_CardEndereco {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  color: #334155;
+}
+
+.FnDep_CardHint {
+  margin: 0.65rem 0 0;
+  font-size: 0.72rem;
+  color: #94a3b8;
+}
+
+.FnDep_Vazio {
+  text-align: center;
+  padding: 3rem 1.5rem;
+  border: 2px dashed #e2e8f0;
+  border-radius: 14px;
+  background: #f8fafc;
+}
+
+.FnDep_VazioIco {
+  font-size: 2.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.FnDep_VazioHint {
+  font-size: 0.9rem;
+  color: #64748b;
+}
+
+/* Modal */
+.FnDep_Modal[hidden] {
+  display: none !important;
+}
+
+.FnDep_Modal:not([hidden]) {
+  position: fixed;
+  inset: 0;
+  z-index: 220;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(15, 23, 42, 0.5);
+  backdrop-filter: blur(2px);
+}
+
+.FnDep_ModalInner {
+  width: 100%;
+  max-width: 560px;
+  max-height: 92vh;
+  overflow: auto;
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 24px 48px rgba(15, 23, 42, 0.2);
+}
+
+.FnDep_ModalHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1.25rem 1.35rem 0.75rem;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.FnDep_ModalHead h3 {
+  margin: 0;
+  font-size: 1.15rem;
+  color: var(--marca-primary, #021f81);
+}
+
+.FnDep_ModalSub {
+  margin: 0.25rem 0 0;
+  font-size: 0.85rem;
+  color: #64748b;
+}
+
+.FnDep_ModalClose {
+  border: none;
+  background: #f1f5f9;
+  color: #475569;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 8px;
+  font-size: 1.35rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.FnDep_ModalClose:hover {
+  background: #e2e8f0;
+}
+
+.FnDep_Form {
+  padding: 0 1.35rem 1.25rem;
+}
+
+.FnDep_Secao {
+  margin-top: 1rem;
+}
+
+.FnDep_Secao h4 {
+  margin: 0 0 0.65rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #64748b;
+}
+
+.FnDep_CepRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.65rem;
+}
+
+.FnDep_Field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  flex: 1;
+  min-width: 140px;
+}
+
+.FnDep_Field--cep {
+  max-width: 200px;
+}
+
+.FnDep_Field--uf {
+  max-width: 72px;
+}
+
+.FnDep_Field--full {
+  grid-column: 1 / -1;
+}
+
+.FnDep_Field label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #334155;
+}
+
+.FnDep_Opcional {
+  font-weight: 400;
+  color: #94a3b8;
+}
+
+.FnDep_Field input {
+  height: 40px;
+  padding: 0 0.65rem;
+  border: 1px solid #d6dee6;
+  border-radius: 10px;
+  font: inherit;
+  font-size: 0.95rem;
+}
+
+.FnDep_Field input:focus {
+  outline: none;
+  border-color: var(--marca-hover, #2c6bf3);
+  box-shadow: 0 0 0 3px rgba(44, 107, 243, 0.15);
+}
+
+.FnDep_FieldGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.FnDep_Check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.85rem;
+  font-size: 0.88rem;
+  color: #475569;
+  cursor: pointer;
+}
+
+/* Rodapé do modal — mesmas classes de botão que frm_*_apoio (global_utils.css) */
+.FnDep_ModalFoot.Cl_BotoesApoio {
+  margin: 1.25rem 0 0;
+  padding-top: 1rem;
+  border-top: 1px solid #f1f5f9;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+@media (max-width: 520px) {
+  .FnDep_FieldGrid {
+    grid-template-columns: 1fr;
+  }
+  .FnDep_Field--cep {
+    max-width: none;
+  }
+}

@@ -1,0 +1,72 @@
+{% extends "frm_base.html" %}
+{% block title %}Categorias — {{ MARCA_NOME }}{% endblock %}
+{% set nav_ativo = 'fn_categorias' %}
+{% block topbar_title %}Categorias{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('fn_depositos.static', filename='style/Cfn_categorias.css') }}?v=8" />
+<link rel="stylesheet" href="{{ url_for('fn_depositos.static', filename='style/Cfn_categorias_tree.css') }}?v=8" />
+{% endblock %}
+{% block content %}
+<div class="Cl_ContainerApoio cl-page-principal FnCat_Page">
+  <div class="cl-page-title">
+    <h2>Categorias</h2>
+    <p class="cl-page-desc">
+      Segmento em <a href="{{ url_for('fn_segmentos.segmentos') }}">Segmentos</a> —
+      até 3 níveis de categorias.
+    </p>
+  </div>
+
+  <div class="FnCat_Layout">
+    <aside class="FnCat_Segmentos" aria-label="Segmentos ativos">
+      <h3 class="FnCat_PanelTitulo">Segmentos</h3>
+      <div id="fn_cat_seg_lista" class="FnCat_SegLista"></div>
+      <p id="fn_cat_seg_vazio" class="FnCat_Hint" hidden>
+        Nenhum segmento ativo. <a href="{{ url_for('fn_segmentos.segmentos') }}">Ative em Segmentos</a>.
+      </p>
+    </aside>
+
+    <main class="FnCat_ArvorePanel">
+      <h3 id="fn_cat_seg_titulo" class="FnCat_PanelTitulo">Selecione um segmento</h3>
+
+      <div class="FnCatTree-wrap">
+        <div class="FnCatTree-top">
+          <button type="button" class="Cl_BtnIncluir" id="fn_cat_btn_raiz" disabled>+ Categoria nível 1</button>
+        </div>
+        <div id="fn_cat_arvore" class="FnCatTree" aria-live="polite"></div>
+      </div>
+      <p id="fn_cat_arvore_vazio" class="FnCat_Vazio" hidden>Nenhuma categoria. Crie a primeira acima.</p>
+    </main>
+  </div>
+</div>
+
+<div id="fn_cat_modal" class="FnCat_Modal" hidden aria-hidden="true" role="dialog">
+  <div class="FnCat_ModalInner">
+    <header class="FnCat_ModalHead">
+      <h3 id="fn_cat_modal_titulo">Categoria</h3>
+      <button type="button" class="FnCat_ModalClose" id="fn_cat_modal_fechar" aria-label="Fechar">×</button>
+    </header>
+    <form id="fn_cat_form" class="FnCat_Form">
+      <input type="hidden" id="fn_cat_id" value="" />
+      <input type="hidden" id="fn_cat_parent_id" value="" />
+      <p id="fn_cat_ctx" class="FnCat_Ctx"></p>
+      <div class="FnCat_Field">
+        <label for="fn_cat_nome">Nome</label>
+        <input type="text" id="fn_cat_nome" maxlength="120" required />
+      </div>
+      <div class="FnCat_Field">
+        <label for="fn_cat_ordem">Ordem</label>
+        <input type="number" id="fn_cat_ordem" value="0" style="width:100px" />
+      </div>
+      <div class="Cl_BotoesApoio FnCat_ModalFoot">
+        <button type="submit" class="Cl_BtnSalvar" id="fn_cat_btn_salvar">Salvar</button>
+        <button type="button" class="Cl_BtnCancelar" id="fn_cat_btn_cancelar">Cancelar</button>
+        <button type="button" class="Cl_BtnExcluir" id="fn_cat_btn_excluir" hidden>Excluir</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+{% block page_js %}
+<script>window.FN_CAT_SEG_INICIAL = {{ id_segmento_inicial|tojson }};</script>
+<script src="{{ url_for('fn_depositos.static', filename='script/Sfn_categorias.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,76 @@
+<div class="mp-grid" id="mp-painel-perfil">
+
+  <section class="mp-card mp-card-foto">
+    <div class="mp-foto-wrap" id="mp-foto-wrap">
+      <img id="mp-foto" class="mp-foto-img" alt="Sua foto" src="{{ url_for('static', filename='imge/imguser/userpadrao.png') }}" />
+      <span id="mp-iniciais" class="mp-foto-iniciais" aria-hidden="true" hidden>{{ iniciais }}</span>
+    </div>
+    <div class="mp-foto-acoes">
+      <label for="mp-input-foto" class="Cl_botaoFiltro mp-btn-foto">Alterar foto</label>
+      <input type="file" id="mp-input-foto" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp" hidden />
+      <button type="button" class="Cl_botaoFiltro" id="mp-btn-remover-foto" hidden>Remover</button>
+    </div>
+    <p class="ch-field-hint mp-foto-hint">PNG, JPG ou WEBP — até 2 MB.</p>
+  </section>
+
+  <div class="mp-col-direita">
+    <section class="mp-card">
+      <h3 class="mp-sec-title">Dados pessoais</h3>
+      <form id="form-perfil" class="mp-form">
+        <div class="filter-group">
+          <label for="mp-nome">Nome completo <span class="ch-req">*</span></label>
+          <input type="text" id="mp-nome" maxlength="255" required autocomplete="name" />
+        </div>
+        <div class="filter-group">
+          <label for="mp-email">E-mail</label>
+          <input type="email" id="mp-email" readonly disabled class="mp-readonly" />
+          <span class="ch-field-hint">O e-mail de login não pode ser alterado aqui.</span>
+        </div>
+        <div class="filter-group">
+          <label for="mp-whatsapp">WhatsApp</label>
+          <input type="text" id="mp-whatsapp" maxlength="20" placeholder="(11) 99999-9999" />
+        </div>
+        <div class="mp-form-actions">
+          <button type="submit" class="Cl_botaoprimario" id="mp-btn-salvar">Salvar dados</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="mp-card mp-card-meta">
+      <h3 class="mp-sec-title">Conta e acesso</h3>
+      <dl class="mp-meta-list">
+        <dt>Empresa</dt><dd id="mp-tenant">—</dd>
+        <dt>Papel</dt><dd id="mp-papel">—</dd>
+        <dt>Plano</dt><dd id="mp-plano">—</dd>
+        <dt>Último acesso</dt><dd id="mp-ultimo-acesso">—</dd>
+      </dl>
+    </section>
+
+    <section class="mp-card">
+      <button type="button" class="mp-senha-toggle" id="mp-btn-toggle-senha" aria-expanded="false">
+        <span>Alterar senha</span>
+        <span class="mp-senha-chevron" aria-hidden="true">▼</span>
+      </button>
+      <div class="mp-senha-panel" id="mp-senha-panel" hidden>
+        <form id="form-senha" class="mp-form">
+          <div class="filter-group">
+            <label for="mp-senha-atual">Senha atual</label>
+            <input type="password" id="mp-senha-atual" autocomplete="current-password" />
+          </div>
+          <div class="filter-group">
+            <label for="mp-senha-nova">Nova senha</label>
+            <input type="password" id="mp-senha-nova" autocomplete="new-password" />
+          </div>
+          <div class="filter-group">
+            <label for="mp-senha-confirma">Confirmar nova senha</label>
+            <input type="password" id="mp-senha-confirma" autocomplete="new-password" />
+          </div>
+          <ul class="mp-regras-senha" id="mp-regras-senha"></ul>
+          <div class="mp-form-actions">
+            <button type="submit" class="Cl_botaoprimario">Atualizar senha</button>
+          </div>
+        </form>
+      </div>
+    </section>
+  </div>
+</div>

@@ -1,0 +1,74 @@
+{% extends "frm_base.html" %}
+{% block title %}Meus produtos — {{ MARCA_NOME }}{% endblock %}
+{% set nav_ativo = 'produtos' %}
+{% block topbar_title %}Meus produtos{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_crud.css') }}" />
+<link rel="stylesheet" href="{{ url_for('vd_meus_produtos.static', filename='style/Cprodutos.css') }}" />
+{% endblock %}
+{% block content %}
+<div class="Cl_ConfigPage">
+  <div class="Cl_ConfigPageHeader">
+    <h2>Meus produtos</h2>
+    <p class="Cl_ConfigSub">Salve itens da <a href="{{ url_for('vd_fornecedores.pagina') }}">rede</a> ou <strong>monte kits</strong> combinando produtos de fornecedores.</p>
+  </div>
+
+  <div class="Prod_Tabs">
+    <button type="button" class="Prod_Tab Prod_Tab--ativo" data-tab="salvos">Salvos</button>
+    <button type="button" class="Prod_Tab" data-tab="kits">Meus kits</button>
+  </div>
+
+  <div id="painel_salvos">
+    <div class="Cl_ConfigToolbar">
+      <div class="Cl_FormCampo Prod_CampoBusca">
+        <label for="ob_filtroBusca">Busca</label>
+        <input type="text" id="ob_filtroBusca" placeholder="Produto, SKU ou fornecedor" />
+      </div>
+      <button type="button" class="Cl_botaoFiltro" id="ob_btnFiltrar">Filtrar</button>
+    </div>
+    <div class="Cl_TabelaPrincipal">
+      <table>
+        <thead>
+          <tr>
+            <th class="Prod_ColImg"></th>
+            <th>Fornecedor</th>
+            <th>SKU</th>
+            <th>Produto</th>
+            <th>Preço</th>
+            <th>Estoque</th>
+            <th class="Cl_TableActions">Ações</th>
+          </tr>
+        </thead>
+        <tbody id="ob_listaProdutos"><tr><td colspan="7">Carregando…</td></tr></tbody>
+      </table>
+    </div>
+    <div class="Cl_Paginacao">
+      <button type="button" class="Cl_direcao" id="ob_btnAnterior" disabled>Anterior</button>
+      <span>Página <span id="ob_paginaAtual">1</span> de <span id="ob_totalPaginas">1</span></span>
+      <button type="button" class="Cl_direcao" id="ob_btnProximo" disabled>Próximo</button>
+    </div>
+  </div>
+
+  <div id="painel_kits" hidden>
+    <div class="Cl_ConfigActions">
+      <button type="button" class="Cl_BtnIncluir" id="ob_btnNovoKit">Novo kit</button>
+    </div>
+    <div class="Cl_TabelaPrincipal">
+      <table>
+        <thead>
+          <tr>
+            <th>Kit</th>
+            <th>Itens</th>
+            <th>Preço</th>
+            <th class="Cl_TableActions">Ações</th>
+          </tr>
+        </thead>
+        <tbody id="ob_listaKits"><tr><td colspan="4">Carregando…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block page_js %}
+<script src="{{ url_for('vd_meus_produtos.static', filename='script/Smeus_produtos.js') }}"></script>
+{% endblock %}

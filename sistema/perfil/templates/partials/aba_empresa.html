@@ -1,0 +1,216 @@
+<div class="pt-page-title">
+  <h2>Dados da empresa</h2>
+  <p class="pt-page-desc">Informações cadastrais da sua conta DropNexo.</p>
+</div>
+
+<form id="form-empresa" class="mp-form mp-form-compact mp-form-empresa">
+
+  <section class="mp-card mp-brand-card">
+    <div class="mp-brand-layout">
+      <div class="mp-brand-logo-col">
+        <span class="mp-brand-label">Logotipo</span>
+        <div class="mp-logo-frame" id="emp-logo-frame">
+          <img id="emp-logo" class="mp-logo-img" alt="Logotipo da empresa" hidden />
+          <span id="emp-logo-placeholder" class="mp-logo-ph">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="11" r="1.5"/><path d="M21 16l-5-5-4 4-2-2-5 5"/></svg>
+            <span>Sem logotipo</span>
+          </span>
+        </div>
+        <label for="emp-logo-input" class="mp-btn mp-btn--ghost mp-btn--sm">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+          Alterar imagem
+        </label>
+        <input type="file" id="emp-logo-input" accept="image/png,image/jpeg,image/webp" hidden />
+        <p class="mp-logo-hint">PNG, JPG ou WEBP · até 2 MB<br>Ideal: 120×56 px</p>
+      </div>
+      <div class="mp-brand-fields">
+        <div class="mp-g12">
+          <div class="filter-group mp-c8">
+            <label for="emp-nome">Nome / exibição <span class="ch-req">*</span></label>
+            <input type="text" id="emp-nome" required maxlength="120" />
+          </div>
+          <div class="filter-group mp-c4">
+            <label for="emp-fantasia">Nome fantasia</label>
+            <input type="text" id="emp-fantasia" maxlength="255" />
+          </div>
+          <div class="filter-group mp-c3">
+            <label for="emp-tipo-pessoa">Tipo</label>
+            <select id="emp-tipo-pessoa" disabled class="mp-readonly">
+              <option value="J">Pessoa Jurídica</option>
+              <option value="F">Pessoa Física</option>
+            </select>
+          </div>
+          <div class="filter-group mp-c4">
+            <label for="emp-documento">CPF / CNPJ</label>
+            <input type="text" id="emp-documento" readonly class="mp-readonly" />
+          </div>
+          <div class="filter-group mp-c5">
+            <label for="emp-razao">Razão social / nome completo <span class="ch-req">*</span></label>
+            <input type="text" id="emp-razao" required maxlength="255" />
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="mp-card">
+    <h3 class="mp-sec-title">Dados fiscais e segmento</h3>
+    <div class="mp-g12">
+      <div class="filter-group mp-c3">
+        <label for="emp-ie">Inscrição estadual</label>
+        <input type="text" id="emp-ie" maxlength="20" />
+      </div>
+      <div class="filter-group mp-c2 mp-check-cell">
+        <label class="mp-check-pill"><input type="checkbox" id="emp-ie-isento" /> Isento IE</label>
+      </div>
+      <div class="filter-group mp-c3">
+        <label for="emp-im">Inscrição municipal</label>
+        <input type="text" id="emp-im" maxlength="20" />
+      </div>
+      <div class="filter-group mp-c2">
+        <label for="emp-cnae">CNAE</label>
+        <input type="text" id="emp-cnae" maxlength="20" />
+      </div>
+      <div class="filter-group mp-c3">
+        <label for="emp-atividade">Atividade principal</label>
+        <select id="emp-atividade">
+          <option value="">Selecione</option>
+          <option value="comercio">Comércio</option>
+          <option value="industria">Indústria</option>
+          <option value="servicos">Serviços</option>
+          <option value="ecommerce">E-commerce</option>
+        </select>
+      </div>
+      <div class="filter-group mp-c4">
+        <label for="emp-regime">Regime tributário <span class="ch-req">*</span></label>
+        <select id="emp-regime" required>
+          <option value="">Selecione</option>
+          <option value="simples">Simples Nacional</option>
+          <option value="presumido">Lucro Presumido</option>
+          <option value="real">Lucro Real</option>
+          <option value="mei">MEI</option>
+        </select>
+      </div>
+      <div class="filter-group mp-c3">
+        <label for="emp-porte">Porte</label>
+        <select id="emp-porte">
+          <option value="">Selecione</option>
+          <option value="mei">MEI</option>
+          <option value="me">Microempresa</option>
+          <option value="epp">EPP</option>
+          <option value="medio">Médio porte</option>
+          <option value="grande">Grande porte</option>
+        </select>
+      </div>
+      <div class="filter-group mp-c12">
+        <span class="mp-label-block">Segmentos de atuação</span>
+        <div class="mp-check-row">
+          <label class="mp-check-pill"><input type="checkbox" id="emp-seg-comercio" /> Comércio</label>
+          <label class="mp-check-pill"><input type="checkbox" id="emp-seg-ecommerce" /> E-commerce</label>
+          <label class="mp-check-pill"><input type="checkbox" id="emp-seg-industria" /> Indústria</label>
+          <label class="mp-check-pill"><input type="checkbox" id="emp-seg-servicos" /> Serviços</label>
+        </div>
+      </div>
+      <div class="filter-group mp-c5">
+        <label for="emp-faturamento">Faturamento (último ano)</label>
+        <select id="emp-faturamento">
+          <option value="">Selecione</option>
+          <option value="ate_81k">Até R$ 81 mil</option>
+          <option value="81k_360k">R$ 81 mil a R$ 360 mil</option>
+          <option value="360k_4_8m">R$ 360 mil a R$ 4,8 mi</option>
+          <option value="4_8m_300m">R$ 4,8 mi a R$ 300 mi</option>
+          <option value="acima_300m">Acima de R$ 300 mi</option>
+        </select>
+      </div>
+      <div class="filter-group mp-c4">
+        <label for="emp-funcionarios">Funcionários</label>
+        <select id="emp-funcionarios">
+          <option value="">Selecione</option>
+          <option value="0">Somente eu</option>
+          <option value="1_5">1 a 5</option>
+          <option value="6_20">6 a 20</option>
+          <option value="21_50">21 a 50</option>
+          <option value="51_mais">51+</option>
+        </select>
+      </div>
+    </div>
+  </section>
+
+  <div class="mp-two-cols">
+    <section class="mp-card">
+      <h3 class="mp-sec-title">Endereço</h3>
+      <div class="mp-g12">
+        <div class="filter-group mp-c4">
+          <label for="emp-cep">CEP <span class="ch-req">*</span></label>
+          <div class="mp-input-btn">
+            <input type="text" id="emp-cep" maxlength="9" required class="mp-input-cep" placeholder="00000-000" />
+            <button type="button" class="mp-btn mp-btn--icon" id="emp-btn-cep" title="Buscar CEP" aria-label="Buscar CEP">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="filter-group mp-c2">
+          <label for="emp-uf">UF <span class="ch-req">*</span></label>
+          <input type="text" id="emp-uf" maxlength="2" required class="mp-input-uf" />
+        </div>
+        <div class="filter-group mp-c6">
+          <label for="emp-cidade">Cidade <span class="ch-req">*</span></label>
+          <input type="text" id="emp-cidade" required maxlength="120" />
+        </div>
+        <div class="filter-group mp-c5">
+          <label for="emp-bairro">Bairro</label>
+          <input type="text" id="emp-bairro" maxlength="120" />
+        </div>
+        <div class="filter-group mp-c7">
+          <label for="emp-logradouro">Endereço</label>
+          <input type="text" id="emp-logradouro" maxlength="255" />
+        </div>
+        <div class="filter-group mp-c2">
+          <label for="emp-numero">Nº <span class="ch-req">*</span></label>
+          <input type="text" id="emp-numero" required maxlength="20" />
+        </div>
+        <div class="filter-group mp-c3">
+          <label for="emp-complemento">Complemento</label>
+          <input type="text" id="emp-complemento" maxlength="120" />
+        </div>
+      </div>
+    </section>
+
+    <section class="mp-card">
+      <h3 class="mp-sec-title">Contato</h3>
+      <div class="mp-g12">
+        <div class="filter-group mp-c12">
+          <label for="emp-contato">Pessoas de contato</label>
+          <input type="text" id="emp-contato" maxlength="255" />
+        </div>
+        <div class="filter-group mp-c5">
+          <label for="emp-telefone">Telefone</label>
+          <input type="tel" id="emp-telefone" maxlength="20" class="mp-input-tel" placeholder="(11) 3333-3333" />
+        </div>
+        <div class="filter-group mp-c5">
+          <label for="emp-celular">Celular</label>
+          <input type="tel" id="emp-celular" maxlength="20" class="mp-input-tel" placeholder="(11) 99999-9999" />
+        </div>
+        <div class="filter-group mp-c12">
+          <label for="emp-email">E-mail comercial</label>
+          <input type="email" id="emp-email" maxlength="255" />
+        </div>
+        <div class="filter-group mp-c12">
+          <label for="emp-site">Site</label>
+          <input type="url" id="emp-site" maxlength="255" placeholder="https://" />
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <section class="mp-card">
+    <h3 class="mp-sec-title">Inscrições ST (substitutos tributários)</h3>
+    <div id="emp-st-lista" class="mp-st-lista"></div>
+    <button type="button" class="mp-btn mp-btn--ghost mp-btn--sm" id="emp-st-add">+ Adicionar inscrição</button>
+  </section>
+
+  <div class="mp-form-actions mp-form-actions--foot">
+    <button type="submit" class="mp-btn mp-btn--primary">Salvar alterações</button>
+    <button type="button" class="mp-btn mp-btn--ghost" id="emp-btn-cancelar">Descartar</button>
+  </div>
+</form>

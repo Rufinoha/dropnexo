@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% block title %}{{ MARCA_NOME }}{% endblock %}</title>
+  {% include "partials/marca_favicon.html" %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='style/global_utils.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style/app_shell.css') }}" />
+  {% if session.get('id_usuario') %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='style/Cnovidades.css') }}" />
+  {% endif %}
+  {% block head_extra %}{% endblock %}
+  <script defer src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <script defer src="{{ url_for('static', filename='script/global_utils.js') }}"></script>
+  <script defer src="{{ url_for('static', filename='script/app_shell.js') }}"></script>
+</head>
+<body class="fg-app">
+  {% set nome_usuario = session.get('nome', 'Usuário') %}
+  {% set partes = nome_usuario.split() %}
+  {% if partes|length >= 2 %}
+    {% set iniciais = (partes[0][0:1] ~ partes[-1][0:1])|upper %}
+  {% elif partes|length == 1 and partes[0] %}
+    {% set iniciais = partes[0][0:2]|upper %}
+  {% else %}
+    {% set iniciais = 'DN' %}
+  {% endif %}
+
+  {% if session.get('id_usuario') %}
+  <script>
+    window.OSB_SHELL = {
+      apiFotoUsuario: "{{ url_for('perfil.api_meu_perfil_foto_arquivo') }}",
+      fotoUrlPadrao: "{{ url_for('static', filename='imge/imguser/userpadrao.png') }}",
+      iniciaisUsuario: "{{ iniciais }}",
+      apiTenants: "{{ url_for('auth.api_listar_tenants') }}",
+      apiTrocarTenant: "{{ url_for('auth.api_trocar_tenant') }}",
+      apiTrocarModulo: "{{ url_for('auth.api_trocar_modulo') }}",
+      moduloAtivo: {{ modulo_ativo|tojson }},
+      idTenantAtual: {{ session.get('id_tenant')|tojson }},
+      ehDesenvolvedor: {{ session.get('eh_desenvolvedor')|tojson }},
+      urlDashboard: "{{ url_for('dashboard.index') }}",
+    };
+  </script>
+  {% endif %}
+
+  <div class="fg-shell">
+    <aside class="fg-sidebar" id="fg-sidebar">
+      <div class="fg-sidebar-brand">
+        <img src="{{ marca_logo_nome_url }}" alt="{{ MARCA_NOME }}" class="fg-brand-logo fg-brand-logo--full" />
+        <img src="{{ marca_favicon_url }}" alt="" class="fg-brand-logo fg-brand-logo--icon" aria-hidden="true" />
+      </div>
+
+      {% if modulos_nav and modulos_nav|length > 0 %}
+      <div class="fg-sidebar-modulo">
+        <span class="fg-sidebar-modulo-label">Módulo</span>
+        {% if exibir_seletor_modulo %}
+        <div class="fg-modulo-switcher" id="fg-modulo-switcher">
+          <button type="button" class="fg-modulo-trigger" id="fg-modulo-trigger" aria-expanded="false" aria-haspopup="listbox">
+            <span class="fg-modulo-trigger-ico" aria-hidden="true"></span>
+            <span class="fg-modulo-trigger-label" id="fg-modulo-trigger-label">{{ modulo_ativo_rotulo }}</span>
+            <svg class="fg-modulo-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          <ul class="fg-modulo-dropdown" id="fg-modulo-dropdown" role="listbox" hidden>
+            {% for m in modulos_nav %}
+            <li>
+              <button type="button" role="option" data-modulo="{{ m.codigo }}"{% if m.codigo == modulo_ativo %} aria-selected="true"{% endif %}>{{ m.rotulo }}</button>
+            </li>
+            {% endfor %}
+          </ul>
+        </div>
+        {% else %}
+        <div class="fg-modulo-pill">{{ modulo_ativo_rotulo }}</div>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      <div class="fg-sidebar-search">
+        <span class="fg-sidebar-nav-label">Navegação</span>
+        <input type="search" id="fg-nav-search" placeholder="Buscar no menu…" autocomplete="off" />
+      </div>
+
+      <nav class="fg-sidebar-nav" aria-label="Menu principal">
+        {% for item in menu_sidebar %}
+        <a href="{{ item.url }}" class="fg-nav-item{% if nav_ativo == item.nav_codigo %} is-active{% endif %}">
+          <svg class="fg-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">{{ item.icone_svg|safe }}</svg>
+          <span class="fg-nav-label">{{ item.nome }}</span>
+        </a>
+        {% else %}
+        <a href="{{ url_for('dashboard.index') }}" class="fg-nav-item{% if nav_ativo == 'inicio' %} is-active{% endif %}">
+          <svg class="fg-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+          <span class="fg-nav-label">Dashboard</span>
+        </a>
+        {% endfor %}
+      </nav>
+
+      <div class="fg-sidebar-foot">
+        <span class="fg-tenant-pill" title="{{ session.get('tenant_nome', '') }}">{{ session.get('tenant_nome', '') }}</span>
+        <button type="button" class="fg-btn-collapse" id="fg-btn-collapse" aria-label="Recolher menu">«</button>
+      </div>
+    </aside>
+
+    <div class="fg-main">
+      <header class="fg-topbar">
+        <div class="fg-topbar-left">
+          <h1 class="fg-topbar-title">{% block topbar_title %}Painel{% endblock %}</h1>
+          {% block topbar_sub %}{% endblock %}
+        </div>
+        <div class="fg-topbar-right">
+          <button type="button" class="fg-btn-novidades" id="fg_btnNovidades" title="Novidades" aria-label="Abrir novidades">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+              <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+            </svg>
+            <span id="fg_novidadesBadge" class="fg-novidades-badge" hidden aria-hidden="true"></span>
+          </button>
+          <div class="fg-tenant-switcher{% if session.get('eh_desenvolvedor') %} fg-tenant-switcher--dev{% endif %}" id="fg-tenant-switcher">
+            <button type="button" class="fg-tenant-chip" id="fg-tenant-trigger" aria-expanded="false" aria-haspopup="listbox" aria-controls="fg-tenant-dropdown" title="{% if session.get('eh_desenvolvedor') %}Fornecedor ativo (DEV){% else %}Trocar conta{% endif %}">
+              {% if session.get('eh_desenvolvedor') %}<span class="fg-tenant-chip-prefix">DEV</span>{% endif %}
+              <span class="fg-tenant-chip-label" id="fg-tenant-chip-label">{{ session.get('tenant_nome', '') }}</span>
+              <svg class="fg-tenant-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+            </button>
+            <div class="fg-tenant-dropdown" id="fg-tenant-dropdown" role="listbox" aria-label="{% if session.get('eh_desenvolvedor') %}Fornecedores disponíveis{% else %}Contas disponíveis{% endif %}" hidden>
+              <p class="fg-tenant-dropdown-title">{% if session.get('eh_desenvolvedor') %}Fornecedor ativo{% else %}Suas contas{% endif %}</p>
+              {% if session.get('eh_desenvolvedor') %}
+              <input type="search" class="fg-tenant-search" id="fg-tenant-search" placeholder="Buscar fornecedor…" autocomplete="off" aria-label="Buscar fornecedor" />
+              {% endif %}
+              <ul class="fg-tenant-list" id="fg-tenant-list"></ul>
+              <p class="fg-tenant-dropdown-hint" id="fg-tenant-hint" hidden>Carregando…</p>
+            </div>
+          </div>
+          <div class="fg-user-menu">
+            <button type="button" class="fg-user-trigger" id="fg-user-trigger" aria-expanded="false" aria-haspopup="true">
+              <span class="fg-avatar" id="fg-avatar" data-iniciais="{{ iniciais }}" aria-hidden="true">{{ iniciais }}</span>
+              <span class="fg-user-name">{{ nome_usuario }}</span>
+            </button>
+            <button type="button" class="fg-btn-kebab" id="fg-btn-kebab" aria-label="Abrir menu" aria-haspopup="true">⋮</button>
+            <div class="fg-user-dropdown" id="fg-user-dropdown" role="menu" aria-hidden="true">
+              <a href="{{ url_for('perfil.meu_perfil') }}" class="fg-menu-item" role="menuitem">
+                <span class="fg-menu-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg></span>
+                <span>Meu Perfil</span>
+              </a>
+              <a href="{{ url_for('planos.meu_plano') }}" class="fg-menu-item" role="menuitem">
+                <span class="fg-menu-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg></span>
+                <span>Meu Plano</span>
+              </a>
+              {% if pode_config_plataforma %}
+              <a href="{{ url_for('config.configuracoes') }}" class="fg-menu-item" role="menuitem">
+                <span class="fg-menu-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2"/></svg></span>
+                <span>Configurações</span>
+              </a>
+              {% endif %}
+              <div class="fg-menu-divider" role="separator"></div>
+              <button type="button" class="fg-menu-item fg-menu-sair" id="fg-btn-logout" role="menuitem"
+                data-logout-url="{{ url_for('auth.api_logout') }}"
+                data-home-url="{{ url_for('public.home') }}">
+                <span class="fg-menu-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></span>
+                <span>Sair</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main class="fg-content">
+        {% block content %}{% endblock %}
+        <footer class="fg-page-footer">© {{ MARCA_NOME }} · {{ MARCA_FAMILIA }}</footer>
+      </main>
+    </div>
+  </div>
+  {% block page_js %}{% endblock %}
+  {% if session.get('id_usuario') %}
+  <script defer src="{{ url_for('static', filename='script/Cnovidades.js') }}"></script>
+  {% endif %}
+</body>
+</html>

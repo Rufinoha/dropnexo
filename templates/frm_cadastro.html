@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Cadastro {{ titulo_tipo }} — {{ MARCA_NOME }}</title>
+  {% include "partials/marca_favicon.html" %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='style/global_utils.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style/Ccadastro.css') }}" />
+  <script defer src="{{ url_for('static', filename='script/global_utils.js') }}"></script>
+</head>
+<body class="public-body cadastro-body">
+  <main class="cadastro-wrap">
+    <div class="cadastro-card">
+      <header class="cadastro-header">
+        <p class="auth-brand"><img src="{{ marca_logo_nome_url }}" alt="{{ MARCA_NOME }}" class="auth-brand-logo" /></p>
+        <h1>Cadastro — {{ titulo_tipo }}</h1>
+        <p class="muted">
+          Plano <strong>Starter</strong> após confirmar o e-mail.
+          <a href="{{ url_for('public.home') }}#cadastro">Trocar perfil</a>
+          · <a href="{{ url_for('public.home') }}">Voltar</a>
+        </p>
+      </header>
+
+      <form id="form-cadastro" class="cadastro-form" novalidate>
+        <input type="hidden" name="tipo_negocio" id="tipo_negocio" value="{{ tipo_negocio }}" />
+
+        <fieldset class="cadastro-section cadastro-section--destaque">
+          <legend>Perfil na plataforma</legend>
+          <p class="hint" style="margin:0 0 12px;">
+            Você está se cadastrando como <strong>{{ titulo_tipo }}</strong>.
+            Este perfil define como sua conta aparece na rede DropNexo.
+          </p>
+        </fieldset>
+
+        <fieldset class="cadastro-section">
+          <legend>Tipo de conta (PF / PJ)</legend>
+          <div class="tipo-pessoa-opcoes">
+            <label class="tipo-pessoa-label">
+              <input type="radio" name="tipo_pessoa" value="F" checked />
+              <span>Pessoa física</span>
+            </label>
+            <label class="tipo-pessoa-label">
+              <input type="radio" name="tipo_pessoa" value="J" />
+              <span>Pessoa jurídica</span>
+            </label>
+          </div>
+        </fieldset>
+
+        <fieldset class="cadastro-section">
+          <legend id="legend-conta">Dados da conta</legend>
+          <div class="cadastro-grid cadastro-grid-2">
+            <label class="cadastro-field cadastro-field-span2">
+              <span id="lbl-documento">CPF</span>
+              <input type="text" name="documento" id="documento" required maxlength="18" autocomplete="off" />
+            </label>
+            <label class="cadastro-field cadastro-field-span2">
+              <span id="lbl-nome-completo">Nome completo</span>
+              <input type="text" name="nome_completo" required maxlength="255" />
+            </label>
+            <label class="cadastro-field cadastro-field-span2">
+              <span id="lbl-nome-conta">Nome no sistema (apelido / fantasia)</span>
+              <input type="text" name="nome" required maxlength="120" />
+            </label>
+            <label class="cadastro-field cadastro-field-span2">
+              <span>Identificador da conta (slug)</span>
+              <input type="text" name="slug" required pattern="[a-z0-9][a-z0-9\-]*[a-z0-9]|[a-z0-9]{2,}"
+                title="Letras minúsculas, números e hífen. Ex.: minha-loja" placeholder="minha-loja" />
+              <span class="hint">URL interna · ex.: <code>minha-loja.dropnexo.com.br</code> (futuro)</span>
+            </label>
+          </div>
+        </fieldset>
+
+        <fieldset class="cadastro-section">
+          <legend>Responsável (dono)</legend>
+          <div class="cadastro-grid cadastro-grid-2">
+            <label class="cadastro-field cadastro-field-span2">
+              <span>Seu nome</span>
+              <input type="text" name="nome_usuario" required maxlength="255" />
+            </label>
+            <label class="cadastro-field">
+              <span>E-mail (login)</span>
+              <input type="email" name="email" required autocomplete="email" />
+            </label>
+            <label class="cadastro-field">
+              <span>WhatsApp</span>
+              <input type="tel" name="whatsapp" required maxlength="16" placeholder="(11) 99999-9999" />
+            </label>
+          </div>
+        </fieldset>
+
+        <fieldset class="cadastro-section">
+          <legend>Endereço</legend>
+          <div class="cadastro-grid cadastro-grid-2">
+            <label class="cadastro-field">
+              <span>CEP</span>
+              <div class="input-com-botao">
+                <input type="text" name="cep" id="cep" required maxlength="9" />
+                <button type="button" class="btn btn-secondary" id="btn-buscar-cep">Buscar</button>
+              </div>
+            </label>
+            <label class="cadastro-field cadastro-field-span2">
+              <span>Logradouro</span>
+              <input type="text" name="logradouro" id="logradouro" required maxlength="255" />
+            </label>
+            <label class="cadastro-field">
+              <span>Número</span>
+              <input type="text" name="numero" required maxlength="20" />
+            </label>
+            <label class="cadastro-field">
+              <span>Complemento</span>
+              <input type="text" name="complemento" maxlength="120" />
+            </label>
+            <label class="cadastro-field">
+              <span>Bairro</span>
+              <input type="text" name="bairro" id="bairro" required maxlength="120" />
+            </label>
+            <label class="cadastro-field">
+              <span>Cidade</span>
+              <input type="text" name="cidade" id="cidade" required maxlength="120" />
+            </label>
+            <label class="cadastro-field">
+              <span>UF</span>
+              <input type="text" name="uf" id="uf" required maxlength="2" />
+            </label>
+          </div>
+        </fieldset>
+
+        <p class="form-msg" id="msg-cad" hidden></p>
+        <div class="cadastro-actions">
+          <button type="submit" class="btn btn-primary btn-block" id="btn-cadastrar">Cadastrar e receber e-mail</button>
+        </div>
+        <p class="small muted cadastro-footer">Já tem conta? <a href="{{ url_for('auth.pagina_login') }}">Entrar</a></p>
+      </form>
+    </div>
+  </main>
+  <script>
+    window.OSB_CADASTRO_API = "{{ url_for('cadastro.api_cadastro_novo') }}";
+  </script>
+  <script src="{{ url_for('static', filename='script/Scadastro.js') }}"></script>
+</body>
+</html>

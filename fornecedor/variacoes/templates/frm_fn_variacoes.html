@@ -1,0 +1,63 @@
+{% extends "frm_base.html" %}
+{% block title %}Variações — {{ MARCA_NOME }}{% endblock %}
+{% set nav_ativo = 'fn_variacoes' %}
+{% block topbar_title %}Modelos de variação{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('fn_depositos.static', filename='style/Cfn_variacoes.css') }}" />
+{% endblock %}
+{% block content %}
+<div class="Cl_ContainerApoio cl-page-principal FnVar_Page">
+  <div class="cl-page-title">
+    <h2>Variações</h2>
+    <p class="cl-page-desc">
+      Cadastre modelos reutilizáveis (ex.: Cor + Tamanho). Ao criar um produto com variações,
+      aplique um modelo para gerar os SKUs automaticamente.
+    </p>
+  </div>
+
+  <div class="cl-page-actions">
+    <button type="button" class="Cl_BtnIncluir" id="fn_var_btnNovo">Novo modelo</button>
+  </div>
+
+  <div id="fn_var_grid" class="FnVar_Grid"></div>
+  <div id="fn_var_vazio" class="FnVar_Vazio" hidden>
+    <p>Nenhum modelo cadastrado. Clique em <strong>Novo modelo</strong> para criar o primeiro.</p>
+  </div>
+</div>
+
+<div id="fn_var_modal" class="FnVar_Modal" hidden aria-hidden="true">
+  <div class="FnVar_ModalDialog" role="dialog" aria-labelledby="fn_var_modalTitulo">
+    <div class="FnVar_ModalHead">
+      <h3 id="fn_var_modalTitulo">Novo modelo</h3>
+      <button type="button" class="FnVar_ModalClose" id="fn_var_btnFechar" aria-label="Fechar">×</button>
+    </div>
+    <div class="FnVar_ModalBody">
+      <input type="hidden" id="fn_var_id" />
+      <div class="Cl_FormCampo">
+        <label for="fn_var_nome">Nome do modelo *</label>
+        <input type="text" id="fn_var_nome" placeholder="Ex.: Roupas — Cor e Tamanho" />
+      </div>
+      <div class="Cl_FormCampo">
+        <label for="fn_var_descricao">Descrição (opcional)</label>
+        <input type="text" id="fn_var_descricao" placeholder="Uso interno" />
+      </div>
+      <div class="FnVar_AttrSecao">
+        <div class="FnVar_AttrHead">
+          <span>Atributos</span>
+          <button type="button" class="Cl_BtnLink" id="fn_var_btnAddAttr">+ Atributo</button>
+        </div>
+        <div id="fn_var_attrs" class="FnVar_AttrLista"></div>
+        <p class="FnVar_Hint">Informe o nome (ex. Cor) e as opções separadas por vírgula (ex. Azul, Verde, Vermelho).</p>
+      </div>
+    </div>
+    <div class="FnVar_ModalFoot Cl_BotoesApoio">
+      <button type="button" class="Cl_BtnSalvar" id="fn_var_btnSalvar">Salvar</button>
+      <button type="button" class="Cl_BtnCancelar" id="fn_var_btnCancelar">Cancelar</button>
+      <button type="button" class="Cl_BtnExcluir" id="fn_var_btnExcluir" hidden>Excluir</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block page_js %}
+<script src="{{ url_for('fn_depositos.static', filename='script/Sfn_variacoes.js') }}"></script>
+{% endblock %}
