@@ -83,10 +83,11 @@ def main() -> int:
         print("  ↻ Token renovado via refresh_token")
         return novo
 
-    print("Iniciando homologação Bling (5 passos, ~8–10s)...")
+    print("Iniciando homologação Bling (5 passos, máx. ~10s)...")
     resultado = executar_homologacao(
         access,
         refresh_token_fn=refresh_fn if refresh else None,
+        verbose=args.debug,
     )
 
     for p in resultado.passos:
