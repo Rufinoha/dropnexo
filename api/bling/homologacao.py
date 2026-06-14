@@ -55,6 +55,11 @@ def _extrair_erro(body: Any, texto: str) -> str:
         err = body.get("error")
         if isinstance(err, dict):
             partes = [str(err[k]) for k in ("message", "description", "type") if err.get(k)]
+            fields = err.get("fields")
+            if isinstance(fields, list) and fields:
+                for f in fields:
+                    if isinstance(f, dict):
+                        partes.append(f"{f.get('element', '?')}: {f.get('msg', f)}")
             if partes:
                 return " — ".join(partes)
         if body.get("message"):
@@ -69,21 +74,13 @@ def _header_homolog(r: requests.Response) -> str | None:
     return None
 
 
-def _campos_produto(dados: dict) -> dict[str, Any]:
-    """Campos aceitos na homologação (nome, preco, codigo)."""
-    preco = dados.get("preco")
+def _payload_homolog(dados: dict) -> dict[str, Any]:
+    """Body do POST/PUT: conteúdo de `data` do GET (sem wrapper), conforme doc Bling."""
+    payload = {k: v for k, v in dados.items() if k not in ("id",)}
+    preco = payload.get("preco")
     if preco is not None:
-        preco = float(preco)
-    return {
-        "nome": dados.get("nome"),
-        "preco": preco,
-        "codigo": dados.get("codigo"),
-    }
-
-
-def _body_api(dados: dict) -> dict[str, Any]:
-    """API v3 do Bling espera payload dentro de `data`."""
-    return {"data": dados}
+        payload["preco"] = float(preco)
+    return payload
 
 
 def _request_homolog(
@@ -191,17 +188,42 @@ def executar_homologacao(
             registrar(1, "GET", BLING_HOMOLOG_BASE, r1, False, "Resposta sem data", str(body1)[:300])
             return ResultadoHomologacao(False, passos, time.monotonic() - inicio, "Passo 1: JSON sem campo data.")
 
-        produto = _campos_produto(dados)
-        registrar(1, "GET", BLING_HOMOLOG_BASE, r1, True, "Dados obtidos", f"codigo={produto.get('codigo')}")
+        if not homolog_hash:
+            registrar(
+                1,
+                "GET",
+                BLING_HOMOLOG_BASE,
+                r1,
+                False,
+                "Header de homologação ausente",
+                f"Resposta GET sem {HEADER_HOMOLOG}",
+            )
+            return ResultadoHomologacao(
+                False,
+                passos,
+                time.monotonic() - inicio,
+                f"Passo 1: resposta sem header {HEADER_HOMOLOG}.",
+            )
+
+        produto = _payload_homolog(dados)
+        registrar(
+            1,
+            "GET",
+            BLING_HOMOLOG_BASE,
+            r1,
+            True,
+            "Dados obtidos",
+            f"codigo={produto.get('codigo')} hash={homolog_hash[:12]}...",
+        )
         aguardar()
 
-        # 2 — POST criar produto
+        # 2 — POST criar produto (body plano = conteúdo de data do GET)
         r2, homolog_hash = _request_homolog(
             metodo="POST",
             url=BLING_HOMOLOG_BASE,
             access_token=token_holder["access_token"],
             homolog_hash=homolog_hash,
-            json_body=_body_api(produto),
+            json_body=produto,
             refresh_token_fn=refresh_token_fn,
             token_holder=token_holder,
         )
@@ -211,7 +233,10 @@ def executar_homologacao(
             body2 = {}
         if r2.status_code >= 400:
             msg = _extrair_erro(body2, r2.text)
-            registrar(2, "POST", BLING_HOMOLOG_BASE, r2, False, "Falha ao criar produto", msg)
+            detalhe = msg
+            if body2:
+                detalhe = f"{msg} | body={str(body2)[:400]}"
+            registrar(2, "POST", BLING_HOMOLOG_BASE, r2, False, "Falha ao criar produto", detalhe)
             return ResultadoHomologacao(False, passos, time.monotonic() - inicio, f"Passo 2 falhou: {msg}")
 
         criado = body2.get("data") if isinstance(body2.get("data"), dict) else {}
@@ -223,15 +248,17 @@ def executar_homologacao(
         registrar(2, "POST", BLING_HOMOLOG_BASE, r2, True, "Produto criado", f"id={produto_id}")
         aguardar()
 
-        # 3 — PUT alterar nome para "Copo"
+        # 3 — PUT alterar nome/descrição para "Copo" (doc: descricao; exemplo: nome)
         url_put = f"{BLING_HOMOLOG_BASE}/{produto_id}"
         payload_put = {**produto, "nome": "Copo"}
+        if "descricao" in produto:
+            payload_put["descricao"] = "Copo"
         r3, homolog_hash = _request_homolog(
             metodo="PUT",
             url=url_put,
             access_token=token_holder["access_token"],
             homolog_hash=homolog_hash,
-            json_body=_body_api(payload_put),
+            json_body=payload_put,
             refresh_token_fn=refresh_token_fn,
             token_holder=token_holder,
         )
@@ -254,7 +281,7 @@ def executar_homologacao(
             url=url_patch,
             access_token=token_holder["access_token"],
             homolog_hash=homolog_hash,
-            json_body=_body_api({"situacao": "I"}),
+            json_body={"situacao": "I"},
             refresh_token_fn=refresh_token_fn,
             token_holder=token_holder,
         )

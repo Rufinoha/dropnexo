@@ -50,6 +50,7 @@ def main() -> int:
     parser.add_argument("--tenant-id", type=int, help="ID do tenant com Bling conectado")
     parser.add_argument("--access-token", help="Access token OAuth (alternativa ao tenant)")
     parser.add_argument("--refresh-token", help="Refresh token (recomendado para passo de renovação)")
+    parser.add_argument("--debug", action="store_true", help="Exibe payload GET e respostas de erro completas")
     args = parser.parse_args()
 
     if not bling_configurado():
