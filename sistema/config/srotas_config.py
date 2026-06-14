@@ -399,7 +399,7 @@ def config_novidades_salvar():
                     (b.get("resumo") or "").strip(),
                     (b.get("conteudo") or "").strip(),
                     int(b.get("ordem") or 0),
-                    _normalizar_bool(b.get("ativo"), True),
+                    normalizar_bool(b.get("ativo"), True),
                     _id,
                 ),
             )
@@ -414,7 +414,7 @@ def config_novidades_salvar():
                     (b.get("resumo") or "").strip(),
                     (b.get("conteudo") or "").strip(),
                     int(b.get("ordem") or 0),
-                    _normalizar_bool(b.get("ativo"), True),
+                    normalizar_bool(b.get("ativo"), True),
                 ),
             )
         conn.commit()
@@ -581,9 +581,9 @@ def config_menu_salvar():
             (b.get("tipo_abrir") or "Mesma Janela").strip(),
             b.get("sequencia"),
             b.get("parent_id"),
-            _normalizar_bool(b.get("status"), True),
+            normalizar_bool(b.get("status"), True),
             (b.get("obs") or "").strip(),
-            _normalizar_bool(b.get("pai"), False),
+            normalizar_bool(b.get("pai"), False),
             b.get("id_modulo"),
             (b.get("nav_codigo") or "").strip() or None,
         )
