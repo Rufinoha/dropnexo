@@ -9,7 +9,8 @@ import requests
 
 BLING_HOMOLOG_BASE = "https://api.bling.com.br/Api/v3/homologacao/produtos"
 HEADER_HOMOLOG = "x-bling-homologacao"
-INTERVALO_SEG = 2.0
+# Bling exige no mínimo 2 s entre requisições; margem evita falha por arredondamento do relógio.
+INTERVALO_MIN_SEG = 2.05
 
 
 @dataclass
@@ -67,6 +68,21 @@ def _extrair_erro(body: Any, texto: str) -> str:
     return texto[:500] if texto else "Erro desconhecido"
 
 
+def _eh_erro_timing(body: Any) -> bool:
+    if not isinstance(body, dict):
+        return False
+    err = body.get("error")
+    if not isinstance(err, dict):
+        return False
+    fields = err.get("fields")
+    if not isinstance(fields, list):
+        return False
+    for f in fields:
+        if isinstance(f, dict) and "tempo limite" in str(f.get("msg", "")).lower():
+            return True
+    return False
+
+
 def _header_homolog(r: requests.Response) -> str | None:
     for key, value in r.headers.items():
         if key.lower() == HEADER_HOMOLOG.lower():
@@ -83,6 +99,15 @@ def _payload_homolog(dados: dict) -> dict[str, Any]:
     return payload
 
 
+def _aguardar_intervalo(desde: float | None, intervalo_min: float) -> None:
+    """Aguarda até completar o intervalo mínimo desde a resposta HTTP anterior."""
+    if desde is None or intervalo_min <= 0:
+        return
+    falta = intervalo_min - (time.monotonic() - desde)
+    if falta > 0:
+        time.sleep(falta)
+
+
 def _request_homolog(
     *,
     metodo: str,
@@ -92,7 +117,7 @@ def _request_homolog(
     json_body: dict | None,
     refresh_token_fn: Callable[[], str] | None,
     token_holder: dict[str, str],
-) -> tuple[requests.Response, str | None]:
+) -> tuple[requests.Response, str | None, float]:
     headers = {
         "Authorization": f"Bearer {token_holder['access_token']}",
         "Accept": "application/json",
@@ -120,24 +145,27 @@ def _request_homolog(
             timeout=15,
         )
 
+    recebido_em = time.monotonic()
     novo_hash = _header_homolog(r)
-    return r, novo_hash
+    return r, novo_hash, recebido_em
 
 
 def executar_homologacao(
     access_token: str,
     *,
     refresh_token_fn: Callable[[], str] | None = None,
-    intervalo_seg: float = INTERVALO_SEG,
+    intervalo_min_seg: float = INTERVALO_MIN_SEG,
 ) -> ResultadoHomologacao:
     """
     Executa os 5 passos exigidos pelo Bling na aba Homologação → Execução.
 
     Cada resposta devolve o header x-bling-homologacao, repassado na requisição seguinte.
+    Entre cada passo aguarda no mínimo 2 s desde a resposta anterior (regra Bling).
     """
     inicio = time.monotonic()
     passos: list[PassoHomologacao] = []
     homolog_hash: str | None = None
+    ultima_resposta_em: float | None = None
     token_holder = {"access_token": access_token}
     produto_id: int | str | None = None
 
@@ -154,25 +182,44 @@ def executar_homologacao(
             )
         )
 
-    def aguardar() -> None:
-        if intervalo_seg > 0:
-            time.sleep(intervalo_seg)
+    def chamar(
+        ordem: int,
+        metodo: str,
+        url: str,
+        json_body: dict | None = None,
+        *,
+        retentar_timing: bool = True,
+    ) -> tuple[requests.Response, str | None, float, dict]:
+        nonlocal homolog_hash, ultima_resposta_em
+        _aguardar_intervalo(ultima_resposta_em, intervalo_min_seg)
+
+        for tentativa in (1, 2):
+            r, homolog_hash, recebido_em = _request_homolog(
+                metodo=metodo,
+                url=url,
+                access_token=token_holder["access_token"],
+                homolog_hash=homolog_hash,
+                json_body=json_body,
+                refresh_token_fn=refresh_token_fn,
+                token_holder=token_holder,
+            )
+            try:
+                body = r.json()
+            except Exception:
+                body = {}
+
+            if r.status_code < 400 or not (retentar_timing and tentativa == 1 and _eh_erro_timing(body)):
+                ultima_resposta_em = recebido_em
+                return r, homolog_hash, recebido_em, body
+
+            _aguardar_intervalo(recebido_em, intervalo_min_seg)
+
+        ultima_resposta_em = recebido_em
+        return r, homolog_hash, recebido_em, body
 
     try:
         # 1 — GET dados
-        r1, homolog_hash = _request_homolog(
-            metodo="GET",
-            url=BLING_HOMOLOG_BASE,
-            access_token=token_holder["access_token"],
-            homolog_hash=homolog_hash,
-            json_body=None,
-            refresh_token_fn=refresh_token_fn,
-            token_holder=token_holder,
-        )
-        try:
-            body1 = r1.json()
-        except Exception:
-            body1 = {}
+        r1, homolog_hash, _, body1 = chamar(1, "GET", BLING_HOMOLOG_BASE, retentar_timing=False)
         if r1.status_code >= 400:
             msg = _extrair_erro(body1, r1.text)
             registrar(1, "GET", BLING_HOMOLOG_BASE, r1, False, "Falha ao obter dados", msg)
@@ -215,27 +262,12 @@ def executar_homologacao(
             "Dados obtidos",
             f"codigo={produto.get('codigo')} hash={homolog_hash[:12]}...",
         )
-        aguardar()
 
-        # 2 — POST criar produto (body plano = conteúdo de data do GET)
-        r2, homolog_hash = _request_homolog(
-            metodo="POST",
-            url=BLING_HOMOLOG_BASE,
-            access_token=token_holder["access_token"],
-            homolog_hash=homolog_hash,
-            json_body=produto,
-            refresh_token_fn=refresh_token_fn,
-            token_holder=token_holder,
-        )
-        try:
-            body2 = r2.json()
-        except Exception:
-            body2 = {}
+        # 2 — POST criar produto
+        r2, homolog_hash, _, body2 = chamar(2, "POST", BLING_HOMOLOG_BASE, produto)
         if r2.status_code >= 400:
             msg = _extrair_erro(body2, r2.text)
-            detalhe = msg
-            if body2:
-                detalhe = f"{msg} | body={str(body2)[:400]}"
+            detalhe = f"{msg} | body={str(body2)[:400]}" if body2 else msg
             registrar(2, "POST", BLING_HOMOLOG_BASE, r2, False, "Falha ao criar produto", detalhe)
             return ResultadoHomologacao(False, passos, time.monotonic() - inicio, f"Passo 2 falhou: {msg}")
 
@@ -246,73 +278,34 @@ def executar_homologacao(
             return ResultadoHomologacao(False, passos, time.monotonic() - inicio, "Passo 2: produto criado sem id.")
 
         registrar(2, "POST", BLING_HOMOLOG_BASE, r2, True, "Produto criado", f"id={produto_id}")
-        aguardar()
 
-        # 3 — PUT alterar nome/descrição para "Copo" (doc: descricao; exemplo: nome)
+        # 3 — PUT alterar nome para "Copo"
         url_put = f"{BLING_HOMOLOG_BASE}/{produto_id}"
         payload_put = {**produto, "nome": "Copo"}
         if "descricao" in produto:
             payload_put["descricao"] = "Copo"
-        r3, homolog_hash = _request_homolog(
-            metodo="PUT",
-            url=url_put,
-            access_token=token_holder["access_token"],
-            homolog_hash=homolog_hash,
-            json_body=payload_put,
-            refresh_token_fn=refresh_token_fn,
-            token_holder=token_holder,
-        )
+        r3, homolog_hash, _, body3 = chamar(3, "PUT", url_put, payload_put)
         if r3.status_code >= 400:
-            try:
-                body3 = r3.json()
-            except Exception:
-                body3 = {}
             msg = _extrair_erro(body3, r3.text)
             registrar(3, "PUT", url_put, r3, False, "Falha ao atualizar produto", msg)
             return ResultadoHomologacao(False, passos, time.monotonic() - inicio, f"Passo 3 falhou: {msg}")
 
         registrar(3, "PUT", url_put, r3, True, "Produto atualizado (nome=Copo)")
-        aguardar()
 
         # 4 — PATCH situação inativa
         url_patch = f"{BLING_HOMOLOG_BASE}/{produto_id}/situacoes"
-        r4, homolog_hash = _request_homolog(
-            metodo="PATCH",
-            url=url_patch,
-            access_token=token_holder["access_token"],
-            homolog_hash=homolog_hash,
-            json_body={"situacao": "I"},
-            refresh_token_fn=refresh_token_fn,
-            token_holder=token_holder,
-        )
+        r4, homolog_hash, _, body4 = chamar(4, "PATCH", url_patch, {"situacao": "I"})
         if r4.status_code >= 400:
-            try:
-                body4 = r4.json()
-            except Exception:
-                body4 = {}
             msg = _extrair_erro(body4, r4.text)
             registrar(4, "PATCH", url_patch, r4, False, "Falha ao alterar situação", msg)
             return ResultadoHomologacao(False, passos, time.monotonic() - inicio, f"Passo 4 falhou: {msg}")
 
         registrar(4, "PATCH", url_patch, r4, True, "Situação alterada (I)")
-        aguardar()
 
         # 5 — DELETE
         url_del = f"{BLING_HOMOLOG_BASE}/{produto_id}"
-        r5, _ = _request_homolog(
-            metodo="DELETE",
-            url=url_del,
-            access_token=token_holder["access_token"],
-            homolog_hash=homolog_hash,
-            json_body=None,
-            refresh_token_fn=refresh_token_fn,
-            token_holder=token_holder,
-        )
+        r5, _, _, body5 = chamar(5, "DELETE", url_del)
         if r5.status_code >= 400:
-            try:
-                body5 = r5.json()
-            except Exception:
-                body5 = {}
             msg = _extrair_erro(body5, r5.text)
             registrar(5, "DELETE", url_del, r5, False, "Falha ao excluir produto", msg)
             return ResultadoHomologacao(False, passos, time.monotonic() - inicio, f"Passo 5 falhou: {msg}")
