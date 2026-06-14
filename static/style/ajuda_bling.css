@@ -149,6 +149,27 @@
   border-bottom: none;
 }
 
+.ajuda-bling-faq {
+  margin: 0;
+}
+
+.ajuda-bling-faq dt {
+  margin: 1rem 0 0.35rem;
+  font-weight: 600;
+  color: var(--home-text, #1e293b);
+}
+
+.ajuda-bling-faq dt:first-child {
+  margin-top: 0;
+}
+
+.ajuda-bling-faq dd {
+  margin: 0 0 0.5rem;
+  padding-left: 0;
+  color: var(--home-muted, #64748b);
+  line-height: 1.6;
+}
+
 .ajuda-bling-section--contact {
   padding: 1.5rem;
   border-radius: var(--home-radius-lg, 14px);

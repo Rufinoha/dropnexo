@@ -12,11 +12,15 @@ from api.bling.cliente import (
     bling_configurado,
     gerar_state_oauth,
     redirect_uri_oauth,
+    renovar_access_token,
     trocar_code_por_tokens,
     url_autorizacao,
+    _salvar_tokens,
 )
 from api.bling.config_padrao import aplicar_defaults_conexao, garantir_config_contexto
+from api.bling.homologacao import executar_homologacao
 from api.bling.sync_produtos import importar_produtos
+from api.bling.tokens import descriptografar_token
 from global_utils import Var_ConectarBanco, agora_utc, login_obrigatorio, usuario_tem_permissao
 from srotas_plataforma import garantir_modulo_sessao, rotulo_modulo
 
@@ -264,6 +268,60 @@ def salvar_config():
         )
         conn.commit()
         return jsonify(success=True, message="Configuração salva.")
+    finally:
+        conn.close()
+
+
+@bling_bp.post("/api/integracoes/bling/homologacao/executar")
+@login_obrigatorio()
+def homologacao_executar():
+    """Executa o fluxo de homologação exigido pelo Bling (5 passos API)."""
+    if not session.get("eh_desenvolvedor"):
+        return jsonify(success=False, message="Somente desenvolvedor."), 403
+    if not _pode_integracoes():
+        return jsonify(success=False, message="Sem permissão."), 403
+    if not bling_configurado():
+        return jsonify(success=False, message="Credenciais Bling não configuradas."), 400
+
+    id_tenant = session.get("id_tenant")
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT status, access_token_enc, refresh_token_enc
+            FROM tbl_integracao_bling WHERE id_tenant = %s
+            """,
+            (id_tenant,),
+        )
+        row = cur.fetchone()
+        if not row or row[0] != "conectado":
+            return jsonify(success=False, message="Conecte o Bling antes de executar a homologação."), 400
+
+        from api.bling.cliente import renovar_access_token
+
+        access = descriptografar_token(row[1])
+        refresh = descriptografar_token(row[2]) if row[2] else None
+        refresh_holder = {"token": refresh}
+
+        def refresh_fn() -> str:
+            rt = refresh_holder["token"]
+            if not rt:
+                raise RuntimeError("Refresh token ausente. Reconecte o Bling.")
+            payload = renovar_access_token(rt)
+            refresh_holder["token"] = payload.get("refresh_token") or rt
+            _salvar_tokens(cur, int(id_tenant), payload)
+            conn.commit()
+            return payload["access_token"]
+
+        resultado = executar_homologacao(
+            access,
+            refresh_token_fn=refresh_fn if refresh else None,
+        )
+        return jsonify(success=resultado.sucesso, message=resultado.mensagem, dados=resultado.to_dict())
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 500
     finally:
         conn.close()
 

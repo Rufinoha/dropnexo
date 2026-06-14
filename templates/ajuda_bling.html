@@ -21,7 +21,9 @@
     </a>
     <nav class="home-nav ajuda-bling-nav" aria-label="Manual">
       <a class="nav-link" href="#requisitos">Requisitos</a>
-      <a class="nav-link" href="#conectar">Como conectar</a>
+      <a class="nav-link" href="#conectar">Conectar</a>
+      <a class="nav-link" href="#sync">Sincronizar</a>
+      <a class="nav-link" href="#faq">FAQ</a>
       <a class="nav-link" href="#suporte">Suporte</a>
       <a class="btn btn-ghost" href="{{ url_login }}">Entrar</a>
     </nav>
@@ -115,6 +117,29 @@
         <p>Os padrões podem ser ajustados na tela de configuração da integração. A sincronização manual de produtos está disponível após a conexão.</p>
       </section>
 
+      <section id="sync" class="ajuda-bling-section">
+        <h2>Sincronizar produtos</h2>
+        <ol class="ajuda-bling-steps">
+          <li>Com a conta Bling conectada, abra <strong>Integrações → ERP → Bling</strong> (ou clique no card Bling se já estiver conectado).</li>
+          <li>Revise as opções de <strong>produtos</strong> e <strong>imagens</strong> conforme seu perfil.</li>
+          <li>Clique em <strong>Sincronizar produtos</strong> para importar ou atualizar o catálogo.</li>
+          <li>Aguarde o processamento. Produtos importados aparecem no catálogo do {{ MARCA_NOME }}.</li>
+        </ol>
+        <p class="ajuda-bling-note">
+          <strong>SKU obrigatório:</strong> produtos sem SKU no Bling não são sincronizados.
+          Imagens podem ser sincronizadas por link ou download local (limite de 3 MB por imagem na importação).
+        </p>
+      </section>
+
+      <section id="desconectar" class="ajuda-bling-section">
+        <h2>Desconectar ou revogar acesso</h2>
+        <ul>
+          <li>No {{ MARCA_NOME }}: abra a configuração da integração Bling e use <strong>Desconectar</strong>.</li>
+          <li>No Bling: acesse <strong>Central de Extensões → Minhas instalações</strong>, localize <strong>DropNexo</strong> e desinstale ou reautentique.</li>
+        </ul>
+        <p>Ao revogar, os tokens de acesso são invalidados e será necessário autorizar novamente para reconectar.</p>
+      </section>
+
       <section id="escopos" class="ajuda-bling-section">
         <h2>Escopos utilizados</h2>
         <p>O aplicativo solicita apenas permissões necessárias para as operações configuradas, por exemplo:</p>
@@ -124,6 +149,26 @@
           <li>Categorias de produtos</li>
           <li>Estoques e pedidos de venda (conforme módulos habilitados)</li>
         </ul>
+      </section>
+
+      <section id="faq" class="ajuda-bling-section">
+        <h2>Perguntas frequentes</h2>
+        <dl class="ajuda-bling-faq">
+          <dt>Preciso instalar o app na Central de Extensões do Bling?</dt>
+          <dd>Não obrigatoriamente. Você pode conectar diretamente pelo painel do {{ MARCA_NOME }}. Ambos os fluxos usam OAuth 2.0.</dd>
+
+          <dt>Fornecedor e vendedor usam a mesma integração?</dt>
+          <dd>Sim. Cada empresa conecta a <strong>própria</strong> conta Bling. O comportamento padrão de sync varia conforme o perfil (fornecedor ou vendedor).</dd>
+
+          <dt>Por que um produto não sincronizou?</dt>
+          <dd>Verifique se o produto possui <strong>SKU</strong> cadastrado no Bling e se os escopos de produtos foram autorizados.</dd>
+
+          <dt>Estoque e pedidos já funcionam?</dt>
+          <dd>A configuração já está disponível. Sincronização automática de estoque e pedidos está em evolução conforme o roadmap do {{ MARCA_NOME }}.</dd>
+
+          <dt>Minha senha do Bling fica salva no DropNexo?</dt>
+          <dd>Não. Utilizamos OAuth — você autoriza o acesso na tela do Bling e armazenamos apenas tokens criptografados.</dd>
+        </dl>
       </section>
 
       <section id="seguranca" class="ajuda-bling-section">
