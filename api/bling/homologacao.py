@@ -150,6 +150,11 @@ def _request_homolog(
     return r, novo_hash, recebido_em
 
 
+def _atualizar_hash(atual: str | None, novo: str | None) -> str | None:
+    """Mantém o hash anterior se a resposta não trouxer um novo."""
+    return novo if novo else atual
+
+
 def executar_homologacao(
     access_token: str,
     *,
@@ -193,16 +198,21 @@ def executar_homologacao(
         nonlocal homolog_hash, ultima_resposta_em
         _aguardar_intervalo(ultima_resposta_em, intervalo_min_seg)
 
+        if ordem > 1 and not homolog_hash:
+            raise RuntimeError(f"Passo {ordem}: header {HEADER_HOMOLOG} ausente antes da requisição.")
+
         for tentativa in (1, 2):
-            r, homolog_hash, recebido_em = _request_homolog(
+            hash_envio = homolog_hash
+            r, novo_hash, recebido_em = _request_homolog(
                 metodo=metodo,
                 url=url,
                 access_token=token_holder["access_token"],
-                homolog_hash=homolog_hash,
+                homolog_hash=hash_envio,
                 json_body=json_body,
                 refresh_token_fn=refresh_token_fn,
                 token_holder=token_holder,
             )
+            homolog_hash = _atualizar_hash(hash_envio, novo_hash)
             try:
                 body = r.json()
             except Exception:
@@ -320,6 +330,13 @@ def executar_homologacao(
             f"Homologação concluída em {duracao:.1f}s. Valide no painel Bling.",
         )
 
+    except RuntimeError as e:
+        return ResultadoHomologacao(
+            False,
+            passos,
+            time.monotonic() - inicio,
+            str(e),
+        )
     except requests.RequestException as e:
         return ResultadoHomologacao(
             False,
