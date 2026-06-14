@@ -37,6 +37,8 @@ def ajuda_bling():
 
 
 # --- srotas_auth ---
+import logging
+
 import bcrypt
 from flask import Blueprint, jsonify, redirect, render_template, request, session, url_for
 
@@ -46,9 +48,12 @@ from global_utils import (
     agora_utc,
     aplicar_permissoes_na_sessao,
     gerar_hmac_token,
+    is_modo_producao,
     login_obrigatorio,
     validar_politica_senha,
 )
+
+_log_auth = logging.getLogger(__name__)
 
 
 def _aplicar_tenant_na_sessao(
@@ -194,6 +199,13 @@ def api_login():
         )
         conn.commit()
         return jsonify(success=True, redirect=url_for("dashboard.index"))
+    except Exception as e:
+        _log_auth.exception("api_login falhou")
+        if is_modo_producao():
+            msg = "Erro interno no servidor. Verifique banco de dados e logs (dropnexo.service)."
+        else:
+            msg = str(e) or "Erro interno no login."
+        return jsonify(success=False, message=msg), 500
     finally:
         try:
             if cur:

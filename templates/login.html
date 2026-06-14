@@ -44,7 +44,17 @@
         headers: { "Content-Type": "application/json", "Accept": "application/json" },
         body: JSON.stringify(body),
       });
-      const j = await r.json();
+      let j;
+      try {
+        j = await r.json();
+      } catch {
+        msg.textContent = r.status >= 500
+          ? "Servidor indisponível (erro " + r.status + "). Tente novamente ou contate o suporte."
+          : "Resposta inválida do servidor.";
+        msg.className = "form-msg is-error";
+        msg.hidden = false;
+        return;
+      }
       if (j.success) {
         window.location.href = j.redirect;
         return;
