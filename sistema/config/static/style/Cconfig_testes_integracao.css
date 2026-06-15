@@ -1,0 +1,192 @@
+.Ti_HubWrap .Ti_HubDesc,
+.Ti_HubWrap .Ti_BackLink {
+  margin: 0 0 12px;
+}
+
+.Ti_HubWrap .Ti_HubDesc {
+  color: #4b5563;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+#ti-hub-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 18px;
+  margin-top: 8px;
+}
+
+.Ti_HubLogo {
+  border-radius: 6px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.Ti_BlingWrap {
+  max-width: 960px;
+}
+
+.Ti_PageHead {
+  margin-bottom: 16px;
+}
+
+.Ti_BackLinkInline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #2C6BF3;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  margin-bottom: 10px;
+}
+
+.Ti_BackLinkInline:hover {
+  text-decoration: underline;
+}
+
+.Ti_TitleRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.Ti_Logo {
+  border-radius: 8px;
+  object-fit: contain;
+}
+
+.Ti_Card {
+  border: 1px solid #d8dee8;
+  border-radius: 12px;
+  background: #fff;
+  padding: 18px 20px;
+  margin-bottom: 16px;
+  box-shadow: 0 4px 14px rgba(16, 24, 40, 0.05);
+}
+
+.Ti_Card h3 {
+  margin: 0 0 12px;
+  font-size: 1rem;
+  color: #021F81;
+}
+
+.Ti_BadgeRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.Ti_Badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  background: #e5e7eb;
+  color: #374151;
+}
+
+.Ti_Badge.is-ok {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.Ti_Badge.is-erro {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.Ti_Badge.is-off {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.Ti_StatusMsg {
+  margin: 0 0 8px;
+  color: #374151;
+  font-size: 14px;
+}
+
+.Ti_Hint {
+  margin: 0;
+  color: #6b7280;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.Ti_Hint a {
+  color: #2C6BF3;
+}
+
+.Ti_Actions {
+  margin-top: 14px;
+}
+
+.Ti_Resumo {
+  margin: 0 0 6px;
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.Ti_Resumo.is-ok {
+  color: #166534;
+}
+
+.Ti_Resumo.is-erro {
+  color: #991b1b;
+}
+
+.Ti_Duracao {
+  margin: 0 0 12px;
+  color: #6b7280;
+  font-size: 13px;
+}
+
+.Ti_TabelaWrap {
+  overflow-x: auto;
+}
+
+.Ti_TabelaPassos {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.Ti_TabelaPassos th,
+.Ti_TabelaPassos td {
+  padding: 8px 10px;
+  border-bottom: 1px solid #e5e7eb;
+  text-align: left;
+  vertical-align: top;
+}
+
+.Ti_TabelaPassos th {
+  color: #374151;
+  font-weight: 600;
+  background: #f9fafb;
+}
+
+.Ti_TabelaPassos tr.is-ok td:nth-child(3) {
+  color: #166534;
+  font-weight: 600;
+}
+
+.Ti_TabelaPassos tr.is-erro td:nth-child(3) {
+  color: #991b1b;
+  font-weight: 600;
+}
+
+.Ti_TabelaPassos .ti-detalhe {
+  color: #6b7280;
+  max-width: 280px;
+  word-break: break-word;
+}
+
+.Ti_TabelaPassos code {
+  font-size: 12px;
+  background: #f3f4f6;
+  padding: 2px 6px;
+  border-radius: 4px;
+}

@@ -1,0 +1,71 @@
+{% extends "frm_base.html" %}
+{% block title %}Teste Bling — {{ MARCA_NOME }}{% endblock %}
+{% set nav_ativo = 'config' %}
+{% block topbar_title %}Homologação Bling{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_testes_integracao.css') }}" />
+{% endblock %}
+{% block content %}
+<div class="Cl_ContainerApoio cl-page-principal Ti_BlingWrap">
+  <div class="cl-page-title Ti_PageHead">
+    <div class="Ti_PageHeadMain">
+      <a href="{{ url_for('config.testes_integracao_pagina') }}" class="Ti_BackLinkInline">
+        <i data-lucide="arrow-left"></i> Testes de integração
+      </a>
+      <div class="Ti_TitleRow">
+        <img src="{{ icone_bling }}" alt="" class="Ti_Logo" width="40" height="40" />
+        <div>
+          <h2>Bling ERP</h2>
+          <p class="cl-page-desc">Fluxo de homologação API v3 — 5 passos em produtos (GET → POST → PUT → PATCH → DELETE).</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <section class="Ti_Card">
+    <h3>Pré-requisitos</h3>
+    <div class="Ti_BadgeRow">
+      <span class="Ti_Badge" id="ti_bl_badge_app">Verificando…</span>
+      <span class="Ti_Badge" id="ti_bl_badge_conn">Verificando…</span>
+    </div>
+    <p class="Ti_StatusMsg" id="ti_bl_status_msg"></p>
+    <p class="Ti_Hint">
+      Painel Bling:
+      <a href="https://developer.bling.com.br/homologacao" target="_blank" rel="noopener noreferrer">developer.bling.com.br/homologacao</a>
+      · Conexão OAuth:
+      <a href="{{ url_for('integracoes.pagina_bling') }}">Integrações → Bling</a>
+    </p>
+  </section>
+
+  <section class="Ti_Card">
+    <h3>Executar teste</h3>
+    <p class="Ti_Hint">O teste usa a conta Bling conectada ao tenant atual. Reexecute sempre que alterar a integração ou antes de reenviar homologação.</p>
+    <div class="Ti_Actions">
+      <button type="button" class="Cl_BtnSalvar" id="ti_bl_btn_testar" disabled>Executar homologação</button>
+    </div>
+  </section>
+
+  <section class="Ti_Card" id="ti_bl_resultado" hidden>
+    <h3>Resultado</h3>
+    <p class="Ti_Resumo" id="ti_bl_resumo"></p>
+    <p class="Ti_Duracao" id="ti_bl_duracao"></p>
+    <div class="Ti_TabelaWrap">
+      <table class="Ti_TabelaPassos">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Método</th>
+            <th>HTTP</th>
+            <th>Resumo</th>
+            <th>Detalhe</th>
+          </tr>
+        </thead>
+        <tbody id="ti_bl_passos"></tbody>
+      </table>
+    </div>
+  </section>
+</div>
+{% endblock %}
+{% block page_js %}
+<script src="{{ url_for('config.static', filename='script/Sconfig_teste_bling.js') }}"></script>
+{% endblock %}

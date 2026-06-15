@@ -6,7 +6,7 @@ from __future__ import annotations
 from flask import Blueprint, render_template, url_for
 
 from global_utils import INTEGRACOES_CANAIS_PREVISAO, obter_base_url
-from sistema.planos.srotas_planos import catalogo_planos
+from sistema.planos.srotas_planos import catalogo_planos_home, landing_perfil
 
 public_bp = Blueprint("public", __name__)
 
@@ -15,13 +15,52 @@ public_bp = Blueprint("public", __name__)
 
 @public_bp.get("/")
 def home():
+    planos_home = catalogo_planos_home()
     return render_template(
         "home.html",
-        planos=catalogo_planos(),
+        url_home=url_for("public.home"),
         integracoes_previsao=INTEGRACOES_CANAIS_PREVISAO,
         url_login=url_for("auth.pagina_login"),
         url_cadastro_fornecedor=url_for("cadastro.pagina_cadastro", tipo="fornecedor"),
         url_cadastro_vendedor=url_for("cadastro.pagina_cadastro", tipo="vendedor"),
+        url_para_vendedores=url_for("public.para_vendedores"),
+        url_para_fornecedores=url_for("public.para_fornecedores"),
+    )
+
+
+@public_bp.get("/para-vendedores")
+def para_vendedores():
+    planos_home = catalogo_planos_home()
+    return render_template(
+        "landing_perfil.html",
+        landing=landing_perfil("vendedor"),
+        planos=planos_home["vendedor"],
+        url_home=url_for("public.home"),
+        url_login=url_for("auth.pagina_login"),
+        url_cadastro=url_for("cadastro.pagina_cadastro", tipo="vendedor"),
+        url_para_vendedores=url_for("public.para_vendedores"),
+        url_para_fornecedores=url_for("public.para_fornecedores"),
+        url_outro_perfil=url_for("public.para_fornecedores"),
+        outro_perfil_label="Para fornecedores",
+        canonical_url=f"{obter_base_url().rstrip('/')}/para-vendedores",
+    )
+
+
+@public_bp.get("/para-fornecedores")
+def para_fornecedores():
+    planos_home = catalogo_planos_home()
+    return render_template(
+        "landing_perfil.html",
+        landing=landing_perfil("fornecedor"),
+        planos=planos_home["fornecedor"],
+        url_home=url_for("public.home"),
+        url_login=url_for("auth.pagina_login"),
+        url_cadastro=url_for("cadastro.pagina_cadastro", tipo="fornecedor"),
+        url_para_vendedores=url_for("public.para_vendedores"),
+        url_para_fornecedores=url_for("public.para_fornecedores"),
+        url_outro_perfil=url_for("public.para_vendedores"),
+        outro_perfil_label="Para vendedores",
+        canonical_url=f"{obter_base_url().rstrip('/')}/para-fornecedores",
     )
 
 

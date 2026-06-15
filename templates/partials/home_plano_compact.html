@@ -1,0 +1,36 @@
+{% macro render_plano_compact(plano, url_cadastro) %}
+<article class="home-plan-compact{% if plano.featured %} is-featured{% endif %}">
+  {% if plano.tag %}
+  <span class="home-plan-compact__tag">{{ plano.tag }}</span>
+  {% endif %}
+  <h4 class="home-plan-compact__name">{{ plano.nome }}</h4>
+  <p class="home-plan-compact__price">
+    {% if plano.preco_mensal == 0 %}
+    <span>Grátis</span>
+    {% else %}
+    <span>R$ {{ plano.preco_mensal|int }}</span><small>/mês</small>
+    {% endif %}
+  </p>
+  <ul class="home-plan-compact__limits">
+    {% for lim in plano.limites %}
+    <li><strong>{{ lim.valor }}</strong> {{ lim.rotulo }}</li>
+    {% endfor %}
+  </ul>
+  <p class="home-plan-compact__hint">
+    {% if plano.cta_gratis %}
+    Manual na plataforma · sem integração
+    {% else %}
+    Integrações Bling, ERP e lojas
+    {% endif %}
+  </p>
+  <a
+    class="btn {% if plano.featured %}btn-primary{% else %}btn-secondary{% endif %} btn-block"
+    href="{{ url_cadastro }}"
+  >
+    {% if plano.cta_gratis %}Começar grátis{% else %}Criar conta{% endif %}
+  </a>
+  {% if plano.cta_gratis %}
+  <span class="home-plan-compact__note">Sem cartão</span>
+  {% endif %}
+</article>
+{% endmacro %}

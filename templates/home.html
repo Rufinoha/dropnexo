@@ -3,148 +3,223 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="description" content="DropNexo — marketplace B2B que conecta fornecedores e vendedores em dropshipping e distribuição digital." />
-  <title>DropNexo — Conectar fornecedores e vendedores</title>
+  <meta name="description" content="DropNexo — plataforma B2B de dropshipping nacional. Fornecedores e vendedores conectados. 0% de comissão sobre vendas. Comece grátis, sem cartão." />
+  <title>DropNexo — Dropshipping B2B entre fornecedores e vendedores</title>
   {% include "partials/marca_favicon.html" %}
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="{{ url_for('static', filename='style/global_utils.css') }}" />
-  <link rel="stylesheet" href="{{ url_for('static', filename='style/home.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style/public.css') }}" />
   {% include "partials/gtag_analytics.html" %}
 </head>
-<body class="public-body home-page">
-  <header class="public-header" id="topo">
-    <a class="logo logo--img" href="#topo">
-      <img src="{{ marca_logo_nome_url }}" alt="{{ MARCA_NOME }}" height="32" />
-    </a>
-    <button type="button" class="home-nav-toggle" id="home-nav-toggle" aria-expanded="false" aria-controls="home-nav">
-      <span class="sr-only">Menu</span>
-      <span aria-hidden="true"></span><span aria-hidden="true"></span><span aria-hidden="true"></span>
-    </button>
-    <nav class="home-nav" id="home-nav" aria-label="Principal">
-      <a class="nav-link" href="#cadastro">Cadastre-se</a>
-      <a class="nav-link" href="#como-funciona">Como funciona</a>
-      <a class="nav-link" href="#planos">Planos</a>
-      <a class="btn btn-ghost" href="{{ url_login }}">Entrar</a>
-    </nav>
-  </header>
+<body class="public-site public-site--home">
+  {% include "partials/public_header.html" %}
 
   <main>
-    <section class="home-hero" aria-labelledby="hero-title">
-      <div class="home-hero__copy">
-        <p class="home-kicker">H74 HUB · Distribuição digital B2B</p>
-        <h1 id="hero-title">O elo entre quem fabrica e quem vende — sem estoque preso</h1>
-        <p class="lead">
-          {{ MARCA_SLOGAN }}. Publique catálogos, encontre fornecedores confiáveis e opere dropshipping em uma rede pensada para escalar.
+    <section class="pub-hero" aria-labelledby="hero-title">
+      <div class="pub-hero__inner">
+        <div class="pub-hero__split">
+          <div class="pub-hero__copy">
+            <p class="pub-hero__eyebrow">Dropshipping B2B nacional · 0% comissão</p>
+            <h1 id="hero-title">Fornecedor envia.<br>Vendedor revende.<br>Sem estoque no meio.</h1>
+            <p class="pub-hero__sub">
+              Plataforma que conecta <strong>quem tem produto</strong> a <strong>quem vende online</strong> —
+              o fornecedor despacha direto ao cliente; o vendedor opera sem armazenar nada.
+            </p>
+          </div>
+          <div class="pub-hero__banner-wrap">
+            <img
+              class="pub-hero__banner"
+              src="{{ url_for('static', filename='imge/banner_home.png') }}"
+              alt="Ilustração do fluxo dropshipping DropNexo: fornecedor envia, vendedor revende sem estoque"
+              width="1629"
+              height="965"
+              decoding="async"
+              fetchpriority="high"
+            />
+          </div>
+        </div>
+
+        {% include "partials/hero_dropship_flow.html" %}
+      </div>
+    </section>
+
+    <section class="pub-paths" id="comecar" aria-label="Escolha seu perfil">
+      <article class="pub-path pub-path--vendedor">
+        <div class="pub-path__icon" aria-hidden="true">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4H6z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 01-8 0"/>
+          </svg>
+        </div>
+        <p class="pub-path__label">Vendedor</p>
+        <h2>Quero vender sem estoque</h2>
+        <p>Encontre fornecedores nacionais, ative produtos na sua vitrine e opere pedidos em um só lugar.</p>
+        <ul>
+          <li>Busca e parceria com aprovação</li>
+          <li>Seu preço, suas fotos, seu catálogo</li>
+          <li>Plano grátis para começar</li>
+        </ul>
+        <div class="pub-path__actions">
+          <a class="pub-btn pub-btn--primary pub-btn--block" href="{{ url_cadastro_vendedor }}">Criar conta grátis</a>
+          <a class="pub-btn pub-btn--ghost pub-btn--block" href="{{ url_para_vendedores }}">Ver planos e detalhes</a>
+        </div>
+        <p class="pub-path__note">Sem cartão de crédito</p>
+      </article>
+
+      <article class="pub-path pub-path--fornecedor">
+        <div class="pub-path__icon" aria-hidden="true">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><path d="M9 22V12h6v10"/>
+          </svg>
+        </div>
+        <p class="pub-path__label">Fornecedor</p>
+        <h2>Quero ampliar meus canais</h2>
+        <p>Disponibilize catálogo para revendedores dropshipping e receba pedidos com controle total.</p>
+        <ul>
+          <li>Você aprova quem revende</li>
+          <li>Seu produto permanece mestre</li>
+          <li>Integração Bling nos planos pagos</li>
+        </ul>
+        <div class="pub-path__actions">
+          <a class="pub-btn pub-btn--primary pub-btn--block" href="{{ url_cadastro_fornecedor }}">Criar conta grátis</a>
+          <a class="pub-btn pub-btn--ghost pub-btn--block" href="{{ url_para_fornecedores }}">Ver planos e detalhes</a>
+        </div>
+        <p class="pub-path__note">Sem cartão de crédito</p>
+      </article>
+    </section>
+
+    <div class="pub-trust">
+      <div class="pub-trust__inner">
+        <span class="pub-trust__item">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>
+          0% de comissão sobre vendas
+        </span>
+        <span class="pub-trust__item">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>
+          Explorar grátis · sem cartão
+        </span>
+        <span class="pub-trust__item">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>
+          Integrações no plano pago
+        </span>
+      </div>
+    </div>
+
+    <section class="pub-journey" id="como-funciona" aria-labelledby="journey-title">
+      <div class="pub-journey__bg" aria-hidden="true"></div>
+      <div class="pub-section pub-journey__content">
+        <div class="pub-section__head">
+          <p class="pub-kicker">Como funciona</p>
+          <h2 id="journey-title">Da escolha do perfil à primeira operação</h2>
+          <p>Menos de cinco minutos para criar a conta. Você confirma por e-mail e já entra no painel.</p>
+        </div>
+
+        <div class="pub-journey__track">
+          <div class="pub-journey__rail" aria-hidden="true">
+            <span class="pub-journey__rail-fill"></span>
+          </div>
+
+          <article class="pub-journey__card">
+            <div class="pub-journey__card-top">
+              <span class="pub-journey__index">01</span>
+              <span class="pub-journey__icon pub-journey__icon--profile" aria-hidden="true">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/>
+                </svg>
+              </span>
+            </div>
+            <h3>Escolha seu perfil</h3>
+            <p>Cadastro separado: cada negócio com formulário e menus próprios.</p>
+            <div class="pub-journey__tags">
+              <span class="pub-journey__tag pub-journey__tag--v">Vendedor</span>
+              <span class="pub-journey__tag pub-journey__tag--f">Fornecedor</span>
+            </div>
+          </article>
+
+          <article class="pub-journey__card">
+            <div class="pub-journey__card-top">
+              <span class="pub-journey__index">02</span>
+              <span class="pub-journey__icon pub-journey__icon--mail" aria-hidden="true">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M4 4h16v16H4z"/><path d="M22 6l-10 7L2 6"/>
+                </svg>
+              </span>
+            </div>
+            <h3>Confirme por e-mail</h3>
+            <p>Receba um link seguro, crie sua senha e ative a conta na hora.</p>
+            <div class="pub-journey__meta">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              Ativação protegida
+            </div>
+          </article>
+
+          <article class="pub-journey__card pub-journey__card--highlight">
+            <div class="pub-journey__card-top">
+              <span class="pub-journey__index">03</span>
+              <span class="pub-journey__icon pub-journey__icon--panel" aria-hidden="true">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/>
+                </svg>
+              </span>
+            </div>
+            <h3>Entre no painel</h3>
+            <p>Conecte parceiros, publique ou revenda — upgrade de plano só quando fizer sentido.</p>
+            <ul class="pub-journey__outcomes">
+              <li><strong>Fornecedor</strong> publica catálogo</li>
+              <li><strong>Vendedor</strong> ativa produtos</li>
+            </ul>
+          </article>
+        </div>
+
+        <p class="pub-journey__footnote">
+          Mesmo e-mail pode vincular mais de uma empresa depois ·
+          <a href="{{ url_login }}">Já tenho conta</a>
         </p>
-        <div class="hero-actions">
-          <a class="btn btn-primary btn-lg" href="{{ url_login }}">Entrar no painel</a>
+      </div>
+    </section>
+
+    <section class="pub-bridge">
+      <div class="pub-section pub-section--tight">
+        <div class="pub-bridge__grid">
+          <div>
+            <p class="pub-kicker">Modelo DropNexo</p>
+            <h2>Marketplace B2B, não loja genérica</h2>
+            <p style="color: var(--pub-muted); font-size: 0.95rem; line-height: 1.6; margin: 0;">
+              O fornecedor controla catálogo e estoque. O vendedor monta vitrine própria.
+              A plataforma conecta os dois — cobrança por volume de pedidos, nunca sobre faturamento.
+            </p>
+            <ul class="pub-bridge__list">
+              <li>Parceria com aprovação bilateral</li>
+              <li>Pedidos rastreáveis entre tenant fornecedor e vendedor</li>
+              <li>ERP e marketplaces quando você escalar (planos pagos)</li>
+            </ul>
+          </div>
+          <div class="pub-bridge__visual">
+            <span>Fluxo simplificado</span>
+            <strong>Fornecedor → DropNexo → Vendedor → Cliente final</strong>
+            <p style="margin: 1rem 0 0; font-size: 0.85rem; color: var(--pub-muted);">
+              Sem estoque preso no vendedor. Sem comissão escondida na margem.
+            </p>
+          </div>
         </div>
       </div>
     </section>
 
-    <section class="home-section home-cadastro-duplo" id="cadastro" aria-labelledby="cadastro-title">
-      <div class="home-section__head">
-        <p class="home-kicker">Comece agora</p>
-        <h2 id="cadastro-title">Escolha como você quer participar da rede</h2>
-        <p class="home-section__lead">
-          O cadastro é <strong>separado por perfil</strong>. Informe na etapa seguinte se você atua como fornecedor ou vendedor.
-          Após enviar o formulário, você recebe um <strong>e-mail para criar sua senha</strong> e ativar a conta.
-        </p>
-      </div>
-
-      <div class="home-perfis-grid">
-        <article class="home-perfil-card home-perfil-card--fornecedor">
-          <div class="home-perfil-card__badge">Fornecedor</div>
-          <h3>Quero disponibilizar produtos</h3>
-          <p>Publique catálogo, políticas comerciais e conecte-se a vendedores que revendem sem estoque próprio.</p>
-          <ul>
-            <li>Perfil empresarial e catálogo</li>
-            <li>Importação CSV / XLSX / XML</li>
-            <li>Visibilidade na rede DropNexo</li>
-          </ul>
-          <a class="btn btn-primary btn-block" href="{{ url_cadastro_fornecedor }}">Cadastrar como fornecedor</a>
-        </article>
-
-        <article class="home-perfil-card home-perfil-card--vendedor">
-          <div class="home-perfil-card__badge">Vendedor</div>
-          <h3>Quero vender sem estoque</h3>
-          <p>Busque fornecedores, favorite produtos e prepare sua operação de dropshipping em um só lugar.</p>
-          <ul>
-            <li>Busca de fornecedores e SKUs</li>
-            <li>Favoritos e importação</li>
-            <li>Integrações (em breve)</li>
-          </ul>
-          <a class="btn btn-primary btn-block" href="{{ url_cadastro_vendedor }}">Cadastrar como vendedor</a>
-        </article>
-      </div>
-
-      <p class="home-cadastro-nota muted">
-        Já possui conta? <a href="{{ url_login }}">Fazer login</a>.
-        Um mesmo e-mail pode vincular mais de uma empresa depois de ativado.
-      </p>
-    </section>
-
-    <section class="home-section" id="como-funciona" aria-labelledby="steps-title">
-      <div class="home-section__head">
-        <p class="home-kicker">Como funciona</p>
-        <h2 id="steps-title">Ativação em três passos</h2>
-      </div>
-      <div class="home-flow" role="list">
-        <article class="home-flow__step" role="listitem">
-          <div class="home-flow__node" aria-hidden="true"><span>1</span></div>
-          <h3>Escolha o perfil</h3>
-          <p>Fornecedor ou vendedor — cada jornada com campos adequados ao seu negócio.</p>
-        </article>
-        <article class="home-flow__step" role="listitem">
-          <div class="home-flow__node" aria-hidden="true"><span>2</span></div>
-          <h3>Confirme por e-mail</h3>
-          <p>Receba o link seguro para definir sua senha e ativar a conta.</p>
-        </article>
-        <article class="home-flow__step" role="listitem">
-          <div class="home-flow__node" aria-hidden="true"><span>3</span></div>
-          <h3>Entre no painel</h3>
-          <p>Acesse o DropNexo e explore catálogos, fornecedores e integrações conforme liberarmos os módulos.</p>
-        </article>
-      </div>
-    </section>
-
-    <section class="home-section" id="planos" aria-labelledby="planos-title">
-      <div class="home-section__head">
-        <p class="home-kicker">Planos</p>
-        <h2 id="planos-title">Comece no Starter</h2>
-        <p class="home-section__lead">Evolua conforme sua operação crescer.</p>
-      </div>
-      <div class="home-plans">
-        {% for plano in planos %}
-        <article class="home-plan-card">
-          <h3>{{ plano.nome }}</h3>
-          <p class="home-plan-price">
-            {% if plano.preco_mensal == 0 %}Grátis{% else %}R$ {{ plano.preco_mensal }}/mês{% endif %}
-          </p>
-          <p class="muted">{{ plano.destaque }}</p>
-        </article>
-        {% endfor %}
+    <section class="pub-cta-band">
+      <h2>Qual é o seu perfil?</h2>
+      <p>Planos completos, FAQ e integrações estão nas páginas dedicadas a cada jornada.</p>
+      <div class="pub-cta-band__links">
+        <a class="pub-btn pub-btn--white pub-btn--lg" href="{{ url_para_vendedores }}">Sou vendedor</a>
+        <a class="pub-btn pub-btn--ghost pub-btn--lg" href="{{ url_para_fornecedores }}" style="color: #fff !important; border-color: rgba(255,255,255,0.35) !important; background: transparent !important;">Sou fornecedor</a>
       </div>
     </section>
   </main>
 
-  <footer class="home-footer">
+  <footer class="pub-footer">
     <p>© {{ MARCA_NOME }} · {{ MARCA_FAMILIA }} · <a href="https://dropnexo.com.br">dropnexo.com.br</a></p>
+    <p style="margin-top: 0.35rem;">Já tem conta? <a href="{{ url_login }}">Entrar</a></p>
   </footer>
 
-  <script>
-    (function () {
-      const toggle = document.getElementById("home-nav-toggle");
-      const nav = document.getElementById("home-nav");
-      if (toggle && nav) {
-        toggle.addEventListener("click", () => {
-          const open = nav.classList.toggle("is-open");
-          toggle.setAttribute("aria-expanded", open ? "true" : "false");
-        });
-      }
-    })();
-  </script>
+  <script src="{{ url_for('static', filename='script/public.js') }}"></script>
 </body>
 </html>

@@ -1,0 +1,47 @@
+{% macro render_plano(plano, url_cadastro) %}
+<article class="home-plan{% if plano.featured %} is-featured{% endif %}">
+  {% if plano.tag %}
+  <div class="home-plan__tag">{{ plano.tag }}</div>
+  {% endif %}
+  <div class="home-plan__body">
+    <div class="home-plan__header">
+      <h4 class="home-plan__name">{{ plano.nome }}</h4>
+      <p class="home-plan__price">
+        {% if plano.preco_mensal == 0 %}
+        <span class="home-plan__value">Grátis</span>
+        {% else %}
+        <span class="home-plan__value">R$ {{ plano.preco_mensal|int if plano.preco_mensal == plano.preco_mensal|int else plano.preco_mensal }}</span>
+        <span class="home-plan__period">/mês</span>
+        {% endif %}
+      </p>
+      {% if plano.destaque %}
+      <p class="home-plan__destaque muted">{{ plano.destaque }}</p>
+      {% endif %}
+    </div>
+    <ul class="home-plan__limits">
+      {% for lim in plano.limites %}
+      <li><span>{{ lim.valor }}</span><span>{{ lim.rotulo }}</span></li>
+      {% endfor %}
+    </ul>
+    <ul class="home-plan__checks">
+      {% for rec in plano.recursos %}
+      <li class="{% if rec.on %}is-on{% else %}is-off{% endif %}">
+        {{ rec.icon|safe }}
+        <span>
+          {{ rec.label }}
+          {% if rec.sub %}<em>{{ rec.sub }}</em>{% endif %}
+        </span>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  <div class="home-plan__cta">
+    <a class="btn {% if plano.featured %}btn-primary{% else %}btn-ghost{% endif %} btn-block" href="{{ url_cadastro }}">
+      {% if plano.cta_gratis %}Começar grátis{% else %}Criar conta{% endif %}
+    </a>
+    <p class="home-plan__cta-note">
+      {% if plano.cta_gratis %}Sem cartão de crédito{% else %}Comece no Explorar e faça upgrade no painel{% endif %}
+    </p>
+  </div>
+</article>
+{% endmacro %}

@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="{{ landing.meta_description }}" />
+  <title>{{ landing.page_title }}</title>
+  <link rel="canonical" href="{{ canonical_url }}" />
+  {% include "partials/marca_favicon.html" %}
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style/public.css') }}" />
+  {% include "partials/gtag_analytics.html" %}
+</head>
+<body class="public-site">
+  {% include "partials/public_header.html" %}
+
+  <main>
+    <section class="pub-landing-hero pub-landing-hero--{{ landing.segment_mod }}">
+      <div class="pub-landing-hero__inner">
+        <div>
+          <p class="pub-kicker">{{ landing.segment_label }} · DropNexo</p>
+          <h1>{{ landing.h1 }}</h1>
+          <p class="lead">{{ landing.lead }}</p>
+          <div class="pub-landing-hero__actions">
+            <a class="pub-btn pub-btn--primary pub-btn--lg" href="{{ url_cadastro }}">Começar grátis</a>
+            <a class="pub-btn pub-btn--ghost pub-btn--lg" href="#planos">Ver planos</a>
+          </div>
+          <p style="margin: 0.85rem 0 0; font-size: 0.8rem; color: var(--pub-muted);">Sem cartão de crédito no plano Explorar</p>
+        </div>
+        <div class="pub-landing-hero__card">
+          <h3>Por que {{ landing.segment_label|lower }} escolhe o DropNexo</h3>
+          <ul class="pub-benefit-list">
+            {% for item in landing.beneficios %}
+            <li>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+              {{ item }}
+            </li>
+            {% endfor %}
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    {% from "partials/pricing_card.html" import render_pricing_card %}
+
+    <section class="pub-section" id="planos" style="padding-top: 2rem;">
+      <div class="pub-section__head">
+        <p class="pub-kicker">Planos</p>
+        <h2>0% de comissão sobre vendas</h2>
+        <p>Mensalidade conforme pedidos e conexões na rede. Integrações (Bling, ERP, lojas) a partir do primeiro plano pago.</p>
+      </div>
+      <div class="pub-pricing">
+        {% for plano in planos %}
+        {{ render_pricing_card(plano, url_cadastro) }}
+        {% endfor %}
+      </div>
+      <p class="pub-pricing-note">
+        Pedidos acima do limite: excedente por pedido · Plano Enterprise sob consulta
+      </p>
+    </section>
+
+    <section class="pub-section pub-section--tight" id="faq">
+      <div class="pub-section__head">
+        <p class="pub-kicker">Dúvidas</p>
+        <h2>Perguntas frequentes</h2>
+      </div>
+      <div class="pub-faq">
+        {% for pergunta, resposta in landing.faq %}
+        <details>
+          <summary>{{ pergunta }}</summary>
+          <p>{{ resposta }}</p>
+        </details>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section class="pub-cta-band">
+      <h2>Pronto para começar?</h2>
+      <p>Cadastro em minutos. Confirme por e-mail e acesse o painel.</p>
+      <a class="pub-btn pub-btn--white pub-btn--lg" href="{{ url_cadastro }}">Criar conta grátis — sem cartão</a>
+    </section>
+  </main>
+
+  <footer class="pub-footer">
+    <p>© {{ MARCA_NOME }} · <a href="{{ url_home }}">Início</a> · <a href="{{ url_outro_perfil }}">{{ outro_perfil_label }}</a></p>
+  </footer>
+
+  <script src="{{ url_for('static', filename='script/public.js') }}"></script>
+</body>
+</html>

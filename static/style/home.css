@@ -576,11 +576,68 @@
 }
 
 /* —— planos (botão DENTRO do card) —— */
+.home-page .home-plans-block {
+  margin-bottom: 2.5rem;
+}
+
+.home-page .home-plans-block:last-of-type {
+  margin-bottom: 1rem;
+}
+
+.home-page .home-plans-block__head {
+  margin-bottom: 1.15rem;
+}
+
+.home-page .home-plans-block__badge {
+  display: inline-block;
+  margin-bottom: 0.45rem;
+  padding: 0.22rem 0.65rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.home-page .home-plans-block__badge--vendedor {
+  color: #1e40af;
+  background: #dbeafe;
+}
+
+.home-page .home-plans-block__badge--fornecedor {
+  color: #166534;
+  background: #dcfce7;
+}
+
+.home-page .home-plans-block__title {
+  margin: 0 0 0.35rem;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.home-page .home-plans-block__desc {
+  margin: 0;
+  max-width: 52ch;
+  font-size: 0.9rem;
+  color: var(--home-muted);
+  line-height: 1.45;
+}
+
 .home-page .home-plans {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 1rem;
   align-items: stretch;
+}
+
+.home-page .home-plans--quad {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.home-page .home-plan__destaque {
+  margin: 0.45rem 0 0;
+  font-size: 0.78rem;
+  line-height: 1.35;
 }
 
 .home-page .home-plan {
@@ -963,8 +1020,9 @@
     border-bottom: none;
   }
 
-  .home-page .home-plans {
-    grid-template-columns: 1fr;
+  .home-page .home-plans,
+  .home-page .home-plans--quad {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .home-page .home-matrix__row {
@@ -998,6 +1056,11 @@
   .home-page .home-nav .btn {
     width: 100%;
     justify-content: center;
+  }
+
+  .home-page .home-plans,
+  .home-page .home-plans--quad {
+    grid-template-columns: 1fr;
   }
 
   .home-page .public-header {
@@ -1111,6 +1174,301 @@
 
 @media (max-width: 768px) {
   .home-page .home-perfis-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* —— Comece agora: perfil + planos (fundido) —— */
+.home-page .home-start {
+  padding-top: clamp(2rem, 4vw, 3rem);
+  padding-bottom: clamp(2rem, 4vw, 3rem);
+}
+
+.home-page .home-segment {
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+  max-width: 520px;
+  margin: 0 auto 1.75rem;
+  padding: 0.35rem;
+  border-radius: 999px;
+  border: 1px solid var(--home-border);
+  background: var(--home-surface-2);
+}
+
+.home-page .home-segment__tab {
+  flex: 1;
+  border: none;
+  border-radius: 999px;
+  padding: 0.65rem 1rem;
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--home-muted);
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+}
+
+.home-page .home-segment__tab.is-active,
+.home-page .home-segment__tab[aria-selected="true"] {
+  color: var(--home-text);
+  background: var(--home-surface);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+}
+
+.home-page .home-start__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 22rem) minmax(0, 1fr);
+  gap: clamp(1.25rem, 3vw, 2rem);
+  align-items: start;
+  max-width: var(--home-max);
+  margin: 0 auto;
+}
+
+.home-page .home-start__intro h3 {
+  margin: 0.5rem 0 0.65rem;
+  font-size: 1.2rem;
+  line-height: 1.3;
+  letter-spacing: -0.02em;
+}
+
+.home-page .home-start__intro > p {
+  margin: 0 0 1rem;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  color: var(--home-muted);
+}
+
+.home-page .home-start__badge {
+  display: inline-block;
+  padding: 0.25rem 0.65rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.home-page .home-start__badge--vendedor {
+  color: #1e40af;
+  background: #dbeafe;
+}
+
+.home-page .home-start__badge--fornecedor {
+  color: #166534;
+  background: #dcfce7;
+}
+
+.home-page .home-start__list {
+  margin: 0 0 1rem;
+  padding-left: 1.15rem;
+  font-size: 0.88rem;
+  line-height: 1.55;
+  color: var(--home-text);
+}
+
+.home-page .home-start__more {
+  display: inline-block;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--home-accent-hover);
+  text-decoration: none;
+}
+
+.home-page .home-start__more:hover {
+  text-decoration: underline;
+}
+
+.home-page .home-start__plans {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+
+.home-page .home-plan-compact {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 1rem 1rem 0.85rem;
+  border-radius: var(--home-radius-lg);
+  border: 1px solid var(--home-border);
+  background: var(--home-bg);
+  min-height: 100%;
+}
+
+.home-page .home-plan-compact.is-featured {
+  border-color: #c4b5fd;
+  box-shadow: 0 0 0 1px rgba(123, 44, 255, 0.15);
+  background: var(--home-surface);
+}
+
+.home-page .home-plan-compact__tag {
+  position: absolute;
+  top: 0;
+  right: 0.75rem;
+  transform: translateY(-50%);
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: #fff;
+  background: linear-gradient(90deg, #7b2cff, #6922e6);
+}
+
+.home-page .home-plan-compact__name {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.home-page .home-plan-compact__price {
+  margin: 0.35rem 0 0.65rem;
+  display: flex;
+  align-items: baseline;
+  gap: 0.15rem;
+}
+
+.home-page .home-plan-compact__price span {
+  font-size: 1.45rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.home-page .home-plan-compact__price small {
+  font-size: 0.78rem;
+  color: var(--home-muted);
+  font-weight: 500;
+}
+
+.home-page .home-plan-compact__limits {
+  list-style: none;
+  margin: 0 0 0.65rem;
+  padding: 0;
+  font-size: 0.78rem;
+  color: var(--home-muted);
+  line-height: 1.45;
+}
+
+.home-page .home-plan-compact__limits strong {
+  color: var(--home-text);
+  font-weight: 700;
+}
+
+.home-page .home-plan-compact__hint {
+  margin: 0 0 0.75rem;
+  font-size: 0.72rem;
+  color: var(--home-muted);
+  line-height: 1.35;
+  flex: 1;
+}
+
+.home-page .home-plan-compact__note {
+  display: block;
+  margin-top: 0.4rem;
+  font-size: 0.68rem;
+  text-align: center;
+  color: var(--home-muted);
+}
+
+.home-page .home-plan-compact .btn-block {
+  font-size: 0.82rem;
+  min-height: 2.35rem;
+}
+
+.home-page .home-strip__link {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+}
+
+.home-page .home-strip__link:hover .home-strip__metric {
+  color: var(--home-accent-hover);
+}
+
+/* —— Landing perfil (/para-vendedores, /para-fornecedores) —— */
+.home-page.landing-perfil .landing-hero {
+  max-width: var(--home-max);
+  margin: 0 auto;
+  padding: clamp(2.5rem, 5vw, 3.5rem) clamp(1rem, 3vw, 1.75rem) 1.5rem;
+}
+
+.home-page.landing-perfil .landing-hero h1 {
+  margin: 0 0 1rem;
+  max-width: 18ch;
+  font-size: clamp(1.65rem, 4vw, 2.35rem);
+  line-height: 1.12;
+  letter-spacing: -0.03em;
+}
+
+.home-page.landing-perfil--vendedor .landing-hero {
+  border-bottom: 3px solid #dbeafe;
+}
+
+.home-page.landing-perfil--fornecedor .landing-hero {
+  border-bottom: 3px solid #dcfce7;
+}
+
+.home-page .landing-benefits {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  max-width: var(--home-max);
+  margin: 0 auto;
+}
+
+.home-page .landing-benefits__item {
+  padding: 0.85rem 1rem;
+  border-radius: var(--home-radius);
+  border: 1px solid var(--home-border);
+  background: var(--home-surface);
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.home-page .home-plans--landing {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  max-width: var(--home-max);
+  margin: 0 auto;
+}
+
+.home-page .home-section--alt > .home-plans--landing,
+.home-page .home-section--alt > .home-footnote {
+  max-width: var(--home-max);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+@media (max-width: 1024px) {
+  .home-page .home-start__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .home-page .home-plans--landing {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .home-page .home-segment {
+    flex-direction: column;
+    border-radius: var(--home-radius-lg);
+    max-width: none;
+  }
+
+  .home-page .home-segment__tab {
+    width: 100%;
+  }
+
+  .home-page .home-start__plans {
+    grid-template-columns: 1fr;
+  }
+
+  .home-page .landing-benefits {
+    grid-template-columns: 1fr;
+  }
+
+  .home-page .home-plans--landing {
     grid-template-columns: 1fr;
   }
 }

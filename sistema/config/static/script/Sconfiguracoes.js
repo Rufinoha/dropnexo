@@ -16,6 +16,12 @@
       iconeTech: "configuracoes",
     },
     {
+      titulo: "Testes de integração",
+      texto: "Homologação e validação técnica de ERPs e APIs antes de solicitar aprovação nos parceiros.",
+      rota: "/configuracoes/testes-integracao",
+      iconeTech: "checklist",
+    },
+    {
       titulo: "Usuários",
       texto: "Gerencie contas e permissões do sistema.",
       rota: "/configuracoes/usuarios",

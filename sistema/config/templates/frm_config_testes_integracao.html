@@ -1,0 +1,22 @@
+{% extends "frm_base.html" %}
+{% block title %}Testes de integração — {{ MARCA_NOME }}{% endblock %}
+{% set nav_ativo = 'config' %}
+{% block topbar_title %}Testes de integração{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfiguracoes.css') }}" />
+<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_testes_integracao.css') }}" />
+{% endblock %}
+{% block content %}
+<div class="Cl_EmpresaContainer Ti_HubWrap">
+  <p class="Ti_BackLink"><a class="Cl_BtnLink" href="{{ url_for('config.configuracoes') }}">← Voltar às Configurações</a></p>
+  <h2>Testes de integração</h2>
+  <p class="Ti_HubDesc">Valide fluxos técnicos exigidos pelos parceiros antes de enviar para homologação oficial.</p>
+  <div id="ti-hub-container"></div>
+</div>
+<script>
+  window.CFG_TESTES = { blingIcon: {{ icone_bling | tojson }} };
+</script>
+{% endblock %}
+{% block page_js %}
+<script src="{{ url_for('config.static', filename='script/Sconfig_testes_integracao.js') }}"></script>
+{% endblock %}

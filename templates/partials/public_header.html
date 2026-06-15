@@ -1,0 +1,22 @@
+<header class="pub-header" id="topo">
+  <div class="pub-header__inner">
+    <a class="pub-header__logo" href="{{ url_home|default('#topo') }}">
+      <img src="{{ marca_logo_nome_url }}" alt="{{ MARCA_NOME }}" height="30" />
+    </a>
+    <button type="button" class="pub-menu-btn" id="pub-menu-btn" aria-expanded="false" aria-controls="pub-nav">
+      <span class="sr-only">Menu</span>
+      <span aria-hidden="true"></span><span aria-hidden="true"></span><span aria-hidden="true"></span>
+    </button>
+    <nav class="pub-nav" id="pub-nav" aria-label="Principal">
+      {% if url_para_vendedores is defined %}
+      <a href="{{ url_para_vendedores }}">Vendedores</a>
+      {% endif %}
+      {% if url_para_fornecedores is defined %}
+      <a href="{{ url_para_fornecedores }}">Fornecedores</a>
+      {% endif %}
+      {% if url_login is defined %}
+      <a class="pub-nav__cta" href="{{ url_login }}">Entrar</a>
+      {% endif %}
+    </nav>
+  </div>
+</header>

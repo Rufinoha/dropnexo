@@ -1,0 +1,34 @@
+{% macro render_pricing_card(plano, url_cadastro) %}
+<article class="pub-price-card{% if plano.featured %} is-featured{% endif %}">
+  {% if plano.tag %}
+  <span class="pub-price-card__tag">{{ plano.tag }}</span>
+  {% endif %}
+  <h3>{{ plano.nome }}</h3>
+  <p class="pub-price-card__amount">
+    {% if plano.preco_mensal == 0 %}
+    Grátis
+    {% else %}
+    R$ {{ plano.preco_mensal|int }}<small>/mês</small>
+    {% endif %}
+  </p>
+  {% if plano.destaque %}
+  <p class="pub-price-card__desc">{{ plano.destaque }}</p>
+  {% endif %}
+  <ul class="pub-price-card__metrics">
+    {% for lim in plano.limites %}
+    <li><span>{{ lim.rotulo }}</span><strong>{{ lim.valor }}</strong></li>
+    {% endfor %}
+  </ul>
+  <ul class="pub-price-card__feat">
+    {% for rec in plano.recursos %}
+    <li class="{% if rec.on %}is-yes{% else %}is-no{% endif %}">{{ rec.label }}</li>
+    {% endfor %}
+  </ul>
+  <a class="pub-btn {% if plano.featured %}pub-btn--primary{% else %}pub-btn--ghost{% endif %} pub-btn--block" href="{{ url_cadastro }}">
+    {% if plano.cta_gratis %}Começar grátis{% else %}Criar conta{% endif %}
+  </a>
+  {% if plano.cta_gratis %}
+  <p class="pub-price-card__note">Sem cartão de crédito</p>
+  {% endif %}
+</article>
+{% endmacro %}

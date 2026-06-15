@@ -56,6 +56,33 @@ def configuracoes():
     return render_template("frm_configuracoes.html", nav_ativo="config")
 
 
+TESTES_INTEGRACAO_PREFIX = "/configuracoes/testes-integracao"
+
+
+@config_bp.get(TESTES_INTEGRACAO_PREFIX)
+@login_obrigatorio()
+def testes_integracao_pagina():
+    if not session.get("eh_desenvolvedor"):
+        return redirect(url_for("dashboard.index"))
+    return render_template(
+        "frm_config_testes_integracao.html",
+        nav_ativo="config",
+        icone_bling=url_for("integracoes.static", filename="imge/integracoes/bling.svg"),
+    )
+
+
+@config_bp.get(f"{TESTES_INTEGRACAO_PREFIX}/bling")
+@login_obrigatorio()
+def teste_integracao_bling_pagina():
+    if not session.get("eh_desenvolvedor"):
+        return redirect(url_for("dashboard.index"))
+    return render_template(
+        "frm_config_teste_bling.html",
+        nav_ativo="config",
+        icone_bling=url_for("integracoes.static", filename="imge/integracoes/bling.svg"),
+    )
+
+
 @config_bp.get("/configuracoes/fornecedores-plataforma")
 @login_obrigatorio()
 def fornecedores_plataforma():
