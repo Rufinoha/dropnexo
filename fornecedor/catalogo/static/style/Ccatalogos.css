@@ -1,6 +1,67 @@
+.Cat_ColExpand {
+  width: 2.25rem;
+  padding: 0 !important;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.Cat_ExpandSpacer {
+  display: inline-block;
+  width: 1.75rem;
+  height: 1.75rem;
+}
+
+.Cat_ExpandSpacer--var {
+  width: 1rem;
+}
+
+.Cat_ExpandBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #fff;
+  color: #475569;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, transform 0.15s;
+}
+
+.Cat_ExpandBtn:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+  color: #1e293b;
+}
+
+.Cat_ExpandBtn svg {
+  transition: transform 0.15s ease;
+}
+
+.Cat_ExpandBtn.is-open svg {
+  transform: rotate(90deg);
+}
+
 .Cat_ColImg {
   width: 56px;
   text-align: center;
+}
+
+.Cat_ColNome {
+  min-width: 12rem;
+}
+
+.Cat_ColSku {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.84rem;
+  color: #475569;
+}
+
+.Cat_ColEstoque {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 
 .Cat_Thumb {
@@ -22,13 +83,59 @@
   background: #f8fafc;
 }
 
-.Cat_VarNome {
-  font-weight: 600;
+.Cat_PaiCell {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
 }
 
-.Cat_VarPai {
-  margin-top: 2px;
-  font-size: 0.82rem;
+.Cat_PaiNome {
+  font-size: 0.95rem;
+  color: #0f172a;
+}
+
+.Cat_VarCell {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  padding-left: 0.85rem;
+  border-left: 3px solid #22c55e;
+  margin-left: 0.15rem;
+}
+
+.Cat_VarNome {
+  font-weight: 500;
+  color: #334155;
+}
+
+.Cat_VarAttrs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.Cat_AttrChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #166534;
+}
+
+.Cat_AttrChip__k {
+  font-weight: 600;
+  opacity: 0.85;
+}
+
+.Cat_EstoqueTotal {
+  font-weight: 600;
+  color: #0f172a;
 }
 
 .filter-group--switch {
@@ -116,34 +223,37 @@
 
 /* Lista agrupada: pai + variantes */
 .Cat_RowPai td {
-  background: #fafbfc;
-  border-top: 1px solid #e8ecf1;
+  background: #f8fafc;
+  border-top: 1px solid #e2e8f0;
+  vertical-align: middle;
+}
+
+.Cat_RowPai--com-var td {
+  background: #eef2ff;
+  border-top: 1px solid #c7d2fe;
+}
+
+.Cat_RowPai--com-var.Cat_RowPai--aberto td {
+  border-bottom: none;
+}
+
+.Cat_RowPai--com-var.Cat_RowPai--recolhido td {
+  border-bottom: 1px solid #c7d2fe;
 }
 
 .Cat_RowVar td {
   background: #fff;
   font-size: 0.92rem;
+  border-top: 1px dashed #e2e8f0;
+}
+
+.Cat_RowVar--first td {
+  border-top: none;
+  box-shadow: inset 0 3px 0 -2px #c7d2fe;
 }
 
 .Cat_RowVar--ultima td {
-  border-bottom: 1px solid #e2e8f0;
-}
-
-.Cat_ColTree {
-  width: 7rem;
-  padding-left: 0.35rem !important;
-}
-
-.Cat_TreeCell {
-  display: inline-block;
-  padding-left: 0.35rem;
-  border-left: 2px solid #cbd5e1;
-}
-
-.Cat_TreeCell--var {
-  margin-left: 1.1rem;
-  border-left-color: #22c55e;
-  padding-left: 0.5rem;
+  border-bottom: 2px solid #e2e8f0;
 }
 
 .Cat_BadgeSimples {
@@ -167,31 +277,31 @@
 }
 
 .Cat_BadgeVarItem {
-  font-size: 11px;
-  color: #64748b;
-}
-
-.Cat_BadgeHerda {
   display: inline-block;
-  padding: 2px 6px;
+  padding: 2px 7px;
   border-radius: 4px;
   font-size: 10px;
-  font-weight: 600;
-  background: #f1f5f9;
-  color: #475569;
-}
-
-.Cat_BadgePropria {
-  display: inline-block;
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 10px;
-  font-weight: 600;
-  background: #fef3c7;
-  color: #92400e;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  background: #ecfdf5;
+  color: #047857;
 }
 
 .Cat_Muted {
   color: #64748b;
   font-size: 0.88rem;
+}
+
+.Cat_ViewActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.Cat_ViewHint {
+  font-size: 0.82rem;
+  color: #64748b;
+  margin-right: 0.25rem;
 }

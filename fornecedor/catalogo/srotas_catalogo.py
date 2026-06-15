@@ -920,10 +920,16 @@ def _catalogo_montar_linhas_pai(
 ) -> list[dict]:
     linhas: list[dict] = []
     for p in dados:
+        vars_p = variantes_por_produto.get(p["id"], [])
+        if somente_ativos:
+            vars_p = [v for v in vars_p if v.get("ativo")]
+        estoque_total = (
+            sum(int(v.get("estoque") or 0) for v in vars_p)
+            if p["formato"] == "E"
+            else int(p.get("estoque") or 0)
+        )
+
         if expandir_variantes and p["formato"] == "E":
-            vars_p = variantes_por_produto.get(p["id"], [])
-            if somente_ativos:
-                vars_p = [v for v in vars_p if v.get("ativo")]
             if not vars_p:
                 continue
             linhas.append(
@@ -939,7 +945,8 @@ def _catalogo_montar_linhas_pai(
                     "preco_min": p["preco_min"],
                     "preco_max": p["preco_max"],
                     "estoque": None,
-                    "qtd_variantes": p["qtd_variantes"],
+                    "estoque_total": estoque_total,
+                    "qtd_variantes": len(vars_p),
                     "ativo": p["ativo"],
                     "imagem_url": p["imagem_url"],
                 }
@@ -953,12 +960,14 @@ def _catalogo_montar_linhas_pai(
                         "sku": v["sku"],
                         "nome": v["nome_exibicao"],
                         "produto_pai": p["nome"],
+                        "atributos": v.get("atributos") or {},
                         "unidade": p["unidade"],
                         "formato": "E",
                         "preco": v["preco"],
                         "estoque": v["estoque"],
                         "ativo": v["ativo"],
                         "ultima_variante": i == len(vars_p) - 1,
+                        "primeira_variante": i == 0,
                         "imagem_url": v.get("imagem_url") or p["imagem_url"],
                     }
                 )
@@ -977,7 +986,8 @@ def _catalogo_montar_linhas_pai(
                 "preco_min": p["preco_min"],
                 "preco_max": p["preco_max"],
                 "estoque": p["estoque"] if p["formato"] != "E" else None,
-                "qtd_variantes": p["qtd_variantes"],
+                "estoque_total": estoque_total,
+                "qtd_variantes": len(vars_p) if p["formato"] == "E" else int(p.get("qtd_variantes") or 0),
                 "ativo": p["ativo"],
                 "imagem_url": p["imagem_url"],
             }

@@ -8,7 +8,7 @@
 
 {% block head_extra %}
 
-<link rel="stylesheet" href="{{ url_for('fn_catalogo.static', filename='style/Ccatalogos.css') }}?v=2" />
+<link rel="stylesheet" href="{{ url_for('fn_catalogo.static', filename='style/Ccatalogos.css') }}?v=3" />
 
 {% endblock %}
 
@@ -94,12 +94,12 @@
 
 
 
-  <div class="cl-page-actions">
-
+  <div class="cl-page-actions Cat_ViewActions">
     <button type="button" class="Cl_botaoprimario" id="ob_btnIncluir">Novo produto</button>
-
     <button type="button" class="Cl_botaoFiltro" id="ob_btnImportar">Importar CSV</button>
-
+    <span class="Cat_ViewHint">Variações:</span>
+    <button type="button" class="Cl_botaoFiltro" id="ob_btnExpandirTodos">Expandir todos</button>
+    <button type="button" class="Cl_botaoFiltro" id="ob_btnRecolherTodos">Recolher todos</button>
   </div>
 
 
@@ -111,6 +111,8 @@
       <thead>
 
         <tr>
+
+          <th class="Cat_ColExpand" aria-label="Expandir"></th>
 
           <th class="Cat_ColImg">Imagem</th>
 
@@ -132,7 +134,7 @@
 
       <tbody id="ob_listaProdutos">
 
-        <tr><td colspan="7">Carregando…</td></tr>
+        <tr><td colspan="8">Carregando…</td></tr>
 
       </tbody>
 
@@ -164,7 +166,7 @@
 
 {% block page_js %}
 
-<script src="{{ url_for('fn_catalogo.static', filename='script/Scatalogos.js') }}?v=2"></script>
+<script src="{{ url_for('fn_catalogo.static', filename='script/Scatalogos.js') }}?v=3"></script>
 
 {% endblock %}
 
