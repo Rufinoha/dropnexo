@@ -690,8 +690,9 @@ def api_minha_empresa_salvar():
 
     nome = (dados.get("nome") or "").strip()
     nome_completo = (dados.get("nome_completo") or "").strip()
+    nome_fantasia = nome or (dados.get("nome_fantasia") or "").strip() or None
     if len(nome) < 2 or len(nome_completo) < 2:
-        return jsonify(success=False, message="Informe nome e razão social / nome completo."), 400
+        return jsonify(success=False, message="Informe o apelido e a razão social."), 400
 
     cep = _so_digitos(dados.get("cep") or "")
     uf = (dados.get("uf") or "").strip().upper()
@@ -731,7 +732,7 @@ def api_minha_empresa_salvar():
                 nome,
                 nome_completo,
                 (dados.get("razao_social") or "").strip() or None,
-                (dados.get("nome_fantasia") or "").strip() or None,
+                nome_fantasia,
                 (dados.get("inscricao_estadual") or "").strip() or None,
                 (dados.get("inscricao_municipal") or "").strip() or None,
                 bool(dados.get("ie_isento")),

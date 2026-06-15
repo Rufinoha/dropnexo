@@ -53,8 +53,7 @@
 
   function preencher(d) {
     dadosOriginais = d;
-    el("emp-nome").value = d.nome || "";
-    el("emp-fantasia").value = d.nome_fantasia || "";
+    el("emp-nome").value = d.nome || d.nome_fantasia || "";
     el("emp-tipo-pessoa").value = d.tipo_pessoa || "J";
     el("emp-documento").value = d.documento || "";
     el("emp-razao").value = d.nome_completo || d.razao_social || "";
@@ -127,11 +126,12 @@
 
   async function salvar(ev) {
     ev.preventDefault();
+    const apelido = el("emp-nome").value.trim();
     const body = {
-      nome: el("emp-nome").value.trim(),
+      nome: apelido,
       nome_completo: el("emp-razao").value.trim(),
       razao_social: el("emp-razao").value.trim(),
-      nome_fantasia: el("emp-fantasia").value.trim(),
+      nome_fantasia: apelido,
       inscricao_estadual: el("emp-ie").value.trim(),
       inscricao_municipal: el("emp-im").value.trim(),
       ie_isento: el("emp-ie-isento").checked,

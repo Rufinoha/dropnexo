@@ -25,13 +25,9 @@
       </div>
       <div class="mp-brand-fields">
         <div class="mp-g12">
-          <div class="filter-group mp-c8">
-            <label for="emp-nome">Nome / exibição <span class="ch-req">*</span></label>
+          <div class="filter-group mp-c12">
+            <label for="emp-nome">Apelido — nome de exibição ou fantasia <span class="ch-req">*</span></label>
             <input type="text" id="emp-nome" required maxlength="120" />
-          </div>
-          <div class="filter-group mp-c4">
-            <label for="emp-fantasia">Nome fantasia</label>
-            <input type="text" id="emp-fantasia" maxlength="255" />
           </div>
           <div class="filter-group mp-c3">
             <label for="emp-tipo-pessoa">Tipo</label>
@@ -45,7 +41,15 @@
             <input type="text" id="emp-documento" readonly class="mp-readonly" />
           </div>
           <div class="filter-group mp-c5">
-            <label for="emp-razao">Razão social / nome completo <span class="ch-req">*</span></label>
+            <label for="emp-razao" class="mp-label-with-tip">
+              <span class="mp-tip" tabindex="0">
+                <span class="mp-tip__icon" aria-hidden="true">?</span>
+                <span class="mp-tip__bubble" role="tooltip">
+                  Informe exatamente o nome cadastrado na Receita Federal. Esse dado será usado na emissão de documentos fiscais, como notas fiscais.
+                </span>
+              </span>
+              <span class="mp-label-text">Razão social <span class="ch-req">*</span></span>
+            </label>
             <input type="text" id="emp-razao" required maxlength="255" />
           </div>
         </div>
