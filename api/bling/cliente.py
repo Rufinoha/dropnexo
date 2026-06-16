@@ -205,15 +205,41 @@ def api_request(
     return body
 
 
-def listar_produtos(id_tenant: int, *, pagina: int = 1, limite: int = 100) -> list[dict]:
+def listar_produtos(
+    id_tenant: int,
+    *,
+    pagina: int = 1,
+    limite: int = 100,
+    id_categoria: str | None = None,
+) -> list[dict]:
+    params: dict[str, Any] = {"pagina": pagina, "limite": limite, "criterio": 1}
+    if id_categoria:
+        params["idCategoria"] = id_categoria
     resp = api_request(
         id_tenant,
         "GET",
         "/produtos",
-        params={"pagina": pagina, "limite": limite, "criterio": 1},
+        params=params,
     )
     data = resp.get("data") or []
     return data if isinstance(data, list) else []
+
+
+def listar_categorias_produtos(id_tenant: int, *, pagina: int = 1, limite: int = 100) -> list[dict]:
+    resp = api_request(
+        id_tenant,
+        "GET",
+        "/categorias/produtos",
+        params={"pagina": pagina, "limite": limite},
+    )
+    data = resp.get("data") or []
+    return data if isinstance(data, list) else []
+
+
+def obter_categoria_produto(id_tenant: int, id_bling: int | str) -> dict:
+    resp = api_request(id_tenant, "GET", f"/categorias/produtos/{id_bling}")
+    data = resp.get("data") or {}
+    return data if isinstance(data, dict) else {}
 
 
 def obter_produto(id_tenant: int, id_bling: int | str) -> dict:

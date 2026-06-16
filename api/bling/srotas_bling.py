@@ -25,6 +25,7 @@ from api.bling.manual_conteudo import (
     MANUAL_BLING_PASSOS,
     MANUAL_IMAGENS_PERMITIDAS,
 )
+from api.bling.sync_categorias import listar_categorias_bling_flat
 from api.bling.sync_produtos import importar_produtos
 from api.bling.tokens import descriptografar_token
 from global_utils import Var_ConectarBanco, agora_utc, login_obrigatorio, obter_url_site_publico, usuario_tem_permissao
@@ -402,6 +403,11 @@ def sync_produtos():
     if contexto not in ("fornecedor", "vendedor"):
         return jsonify(success=False, message="Contexto inválido."), 400
 
+    id_categoria_bling = (body.get("id_categoria_bling") or "").strip() or None
+    incluir_subcategorias = body.get("incluir_subcategorias", True)
+    if isinstance(incluir_subcategorias, str):
+        incluir_subcategorias = incluir_subcategorias.lower() in ("1", "true", "sim", "yes")
+
     id_tenant = session.get("id_tenant")
     conn = Var_ConectarBanco()
     try:
@@ -414,7 +420,13 @@ def sync_produtos():
         if not row or row[0] != "conectado":
             return jsonify(success=False, message="Conecte o Bling antes de sincronizar."), 400
 
-        resultado = importar_produtos(cur, int(id_tenant), contexto)
+        resultado = importar_produtos(
+            cur,
+            int(id_tenant),
+            contexto,
+            id_categoria_bling=id_categoria_bling,
+            incluir_subcategorias=bool(incluir_subcategorias),
+        )
         conn.commit()
         return jsonify(success=True, message=resultado["resumo"], dados=resultado)
     except ValueError as e:
@@ -425,6 +437,34 @@ def sync_produtos():
         return jsonify(success=False, message=str(e)), 500
     finally:
         conn.close()
+
+
+@bling_bp.get("/api/integracoes/bling/categorias")
+@login_obrigatorio()
+def api_categorias_bling():
+    """Lista categorias de produtos do Bling (árvore) para importação seletiva."""
+    if not _pode_integracoes():
+        return jsonify(success=False, message="Sem permissão."), 403
+
+    id_tenant = session.get("id_tenant")
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT status FROM tbl_integracao_bling WHERE id_tenant = %s",
+            (id_tenant,),
+        )
+        row = cur.fetchone()
+        if not row or row[0] != "conectado":
+            return jsonify(success=False, message="Conecte o Bling antes de listar categorias."), 400
+    finally:
+        conn.close()
+
+    try:
+        categorias = listar_categorias_bling_flat(int(id_tenant))
+        return jsonify(success=True, categorias=categorias)
+    except Exception as e:
+        return jsonify(success=False, message=str(e)), 500
 
 
 @bling_bp.get("/api/produto-imagem/arquivo")

@@ -217,8 +217,10 @@ MANUAL_BLING_BOTOES_FORNECEDOR = [
     {
         "nome": "Sincronizar produtos",
         "efeito": (
-            "Executa a importação/atualização manual do catálogo conforme o modo <strong>Produtos</strong> "
-            "(funciona com <em>Importar</em> ou <em>Atualizar (ambos)</em>). "
+            "Com modo <strong>Produtos</strong> em <em>Importar</em> ou <em>Atualizar</em>, "
+            "use <strong>Importar todos</strong> ou escolha uma <strong>categoria do Bling</strong> "
+            "e clique em <strong>Importar categoria</strong>. "
+            "As categorias são cadastradas automaticamente no DropNexo. "
             "O resultado aparece em <strong>Últimos logs</strong>."
         ),
     },

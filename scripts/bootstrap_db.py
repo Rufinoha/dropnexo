@@ -191,6 +191,7 @@ def main():
             "019_tenant_empresa_completo.sql",
             "020_planos_cobranca_faturas.sql",
             "021_integracao_bling.sql",
+            "023_integracao_bling_categoria_map.sql",
         ):
             executar_sql_arquivo(conn, sql_dir / nome)
         seed_usuario_dev(conn)

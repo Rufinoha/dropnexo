@@ -6,6 +6,11 @@ from typing import Any
 
 from api.bling.cliente import listar_produtos, obter_produto
 from api.bling.imagens import aplicar_imagens_produto, extrair_urls_imagem_bling
+from api.bling.sync_categorias import (
+    extrair_id_categoria_produto,
+    garantir_categoria_bling,
+    ids_categoria_bling_com_descendentes,
+)
 from global_utils import agora_utc
 
 
@@ -124,6 +129,7 @@ def _salvar_produto(
     id_tenant: int,
     produto: dict,
     id_produto_existente: int | None,
+    id_categoria: int | None = None,
 ) -> int:
     sku = (produto.get("codigo") or "").strip()
     nome = (produto.get("nome") or sku or "Produto Bling").strip()
@@ -142,7 +148,8 @@ def _salvar_produto(
             """
             UPDATE tbl_produto SET
                 nome = %s, descricao = %s, sku = %s, preco = %s, preco_custo = %s,
-                unidade = %s, gtin = %s, ncm = %s, ativo = %s, atualizado_em = %s
+                unidade = %s, gtin = %s, ncm = %s, ativo = %s,
+                id_categoria = COALESCE(%s, id_categoria), atualizado_em = %s
             WHERE id = %s AND id_tenant = %s
             RETURNING id
             """,
@@ -156,6 +163,7 @@ def _salvar_produto(
                 gtin,
                 ncm,
                 ativo,
+                id_categoria,
                 agora,
                 id_produto_existente,
                 id_tenant,
@@ -166,14 +174,15 @@ def _salvar_produto(
         cur.execute(
             """
             INSERT INTO tbl_produto (
-                id_tenant, nome, descricao, sku, preco, preco_custo, unidade,
+                id_tenant, id_categoria, nome, descricao, sku, preco, preco_custo, unidade,
                 gtin, ncm, ativo, publicado, formato, tipo, atualizado_em
             ) VALUES (
-                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, FALSE, 'S', 'P', %s
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, FALSE, 'S', 'P', %s
             ) RETURNING id
             """,
             (
                 id_tenant,
+                id_categoria,
                 nome,
                 descricao or None,
                 sku,
@@ -200,10 +209,123 @@ def _salvar_produto(
     return int(prod_id)
 
 
+def _processar_item_produto(
+    cur,
+    *,
+    id_tenant: int,
+    contexto: str,
+    cfg: dict,
+    item: dict,
+    cache_categorias: dict[str, dict],
+    categorias_sincronizadas: set[str],
+    ids_categoria_filtro: set[str] | None,
+) -> tuple[str, int | None]:
+    """Retorna ('importado'|'atualizado'|'ignorado', prod_id ou None)."""
+    id_bling = str(item.get("id") or "")
+    sku_lista = (item.get("codigo") or "").strip()
+    if not sku_lista:
+        raise ValueError("SKU obrigatório.")
+
+    detalhe = obter_produto(id_tenant, id_bling) if id_bling else item
+    sku = (detalhe.get("codigo") or sku_lista).strip()
+    if not sku:
+        raise ValueError("SKU obrigatório.")
+
+    id_cat_bling = extrair_id_categoria_produto(detalhe)
+    if ids_categoria_filtro is not None:
+        if not id_cat_bling or id_cat_bling not in ids_categoria_filtro:
+            return "ignorado_filtro", None
+
+    id_categoria_drop = None
+    if id_cat_bling:
+        id_categoria_drop = garantir_categoria_bling(
+            cur,
+            id_tenant,
+            contexto,
+            id_cat_bling,
+            cache_api=cache_categorias,
+        )
+        categorias_sincronizadas.add(id_cat_bling)
+
+    id_existente, _ = _buscar_mapa(cur, id_tenant, contexto, id_bling)
+    if not id_existente:
+        cur.execute(
+            "SELECT id FROM tbl_produto WHERE id_tenant = %s AND sku = %s",
+            (id_tenant, sku),
+        )
+        row = cur.fetchone()
+        if row:
+            id_existente = int(row[0])
+
+    criando = id_existente is None
+    prod_id = _salvar_produto(
+        cur,
+        id_tenant=id_tenant,
+        produto=detalhe,
+        id_produto_existente=id_existente,
+        id_categoria=id_categoria_drop,
+    )
+
+    urls = extrair_urls_imagem_bling(detalhe)
+    if urls:
+        aplicar_imagens_produto(
+            cur,
+            id_tenant=id_tenant,
+            id_produto=prod_id,
+            sku=sku,
+            urls=urls,
+            modo_imagem=cfg["modo_imagem"],
+        )
+
+    _upsert_mapa(
+        cur,
+        id_tenant,
+        contexto,
+        id_bling,
+        prod_id,
+        sku,
+        {"nome": detalhe.get("nome"), "urls_imagem": urls, "id_categoria_bling": id_cat_bling},
+    )
+    return ("importado" if criando else "atualizado"), prod_id
+
+
+def _iterar_listas_produtos(
+    id_tenant: int,
+    *,
+    ids_categoria_api: list[str | None],
+) -> list[dict]:
+    """Busca produtos paginados; uma ou várias consultas por categoria Bling."""
+    vistos: set[str] = set()
+    acumulado: list[dict] = []
+    for id_cat in ids_categoria_api:
+        pagina = 1
+        while True:
+            lista = listar_produtos(
+                id_tenant,
+                pagina=pagina,
+                limite=100,
+                id_categoria=id_cat,
+            )
+            if not lista:
+                break
+            for item in lista:
+                bid = str(item.get("id") or "")
+                if bid and bid not in vistos:
+                    vistos.add(bid)
+                    acumulado.append(item)
+            if len(lista) < 100:
+                break
+            pagina += 1
+    return acumulado
+
+
 def importar_produtos(
     cur,
     id_tenant: int,
     contexto: str,
+    *,
+    id_categoria_bling: str | None = None,
+    incluir_subcategorias: bool = True,
 ) -> dict[str, Any]:
     cfg = _garantir_config(cur, id_tenant, contexto)
     modo = cfg["produtos_modo"]
@@ -214,79 +336,58 @@ def importar_produtos(
     atualizados = 0
     ignorados = 0
     erros: list[str] = []
+    categorias_sincronizadas: set[str] = set()
+    cache_categorias: dict[str, dict] = {}
 
-    pagina = 1
-    while True:
-        lista = listar_produtos(id_tenant, pagina=pagina, limite=100)
-        if not lista:
-            break
+    ids_filtro: set[str] | None = None
+    ids_categoria_api: list[str | None] = [None]
 
-        for item in lista:
-            id_bling = str(item.get("id") or "")
-            sku_lista = (item.get("codigo") or "").strip()
-            try:
-                if not sku_lista:
-                    ignorados += 1
-                    erros.append(f"Bling #{id_bling}: SKU obrigatório.")
-                    continue
+    if id_categoria_bling:
+        id_categoria_bling = str(id_categoria_bling).strip()
+        garantir_categoria_bling(
+            cur,
+            id_tenant,
+            contexto,
+            id_categoria_bling,
+            cache_api=cache_categorias,
+        )
+        categorias_sincronizadas.add(id_categoria_bling)
 
-                detalhe = obter_produto(id_tenant, id_bling) if id_bling else item
-                sku = (detalhe.get("codigo") or sku_lista).strip()
-                if not sku:
-                    ignorados += 1
-                    erros.append(f"Bling #{id_bling}: SKU obrigatório.")
-                    continue
+        if incluir_subcategorias:
+            ids_filtro = ids_categoria_bling_com_descendentes(
+                id_tenant,
+                id_categoria_bling,
+                incluir_subcategorias=True,
+            )
+            ids_categoria_api = sorted(ids_filtro)
+        else:
+            ids_filtro = {id_categoria_bling}
+            ids_categoria_api = [id_categoria_bling]
 
-                id_existente, _ = _buscar_mapa(cur, id_tenant, contexto, id_bling)
-                if not id_existente:
-                    cur.execute(
-                        "SELECT id FROM tbl_produto WHERE id_tenant = %s AND sku = %s",
-                        (id_tenant, sku),
-                    )
-                    row = cur.fetchone()
-                    if row:
-                        id_existente = int(row[0])
+    itens = _iterar_listas_produtos(id_tenant, ids_categoria_api=ids_categoria_api)
 
-                criando = id_existente is None
-                prod_id = _salvar_produto(
-                    cur,
-                    id_tenant=id_tenant,
-                    produto=detalhe,
-                    id_produto_existente=id_existente,
-                )
-
-                urls = extrair_urls_imagem_bling(detalhe)
-                if urls:
-                    aplicar_imagens_produto(
-                        cur,
-                        id_tenant=id_tenant,
-                        id_produto=prod_id,
-                        sku=sku,
-                        urls=urls,
-                        modo_imagem=cfg["modo_imagem"],
-                    )
-
-                _upsert_mapa(
-                    cur,
-                    id_tenant,
-                    contexto,
-                    id_bling,
-                    prod_id,
-                    sku,
-                    {"nome": detalhe.get("nome"), "urls_imagem": urls},
-                )
-
-                if criando:
-                    importados += 1
-                else:
-                    atualizados += 1
-            except Exception as e:
+    for item in itens:
+        id_bling = str(item.get("id") or "")
+        try:
+            resultado, _ = _processar_item_produto(
+                cur,
+                id_tenant=id_tenant,
+                contexto=contexto,
+                cfg=cfg,
+                item=item,
+                cache_categorias=cache_categorias,
+                categorias_sincronizadas=categorias_sincronizadas,
+                ids_categoria_filtro=ids_filtro,
+            )
+            if resultado == "importado":
+                importados += 1
+            elif resultado == "atualizado":
+                atualizados += 1
+            elif resultado == "ignorado_filtro":
                 ignorados += 1
-                erros.append(f"Bling #{id_bling or '?'}: {e}")
-
-        if len(lista) < 100:
-            break
-        pagina += 1
+        except Exception as e:
+            ignorados += 1
+            erros.append(f"Bling #{id_bling or '?'}: {e}")
 
     cur.execute(
         """
@@ -297,7 +398,12 @@ def importar_produtos(
         (agora_utc(), agora_utc(), id_tenant, contexto),
     )
 
-    resumo = f"Importados: {importados}, atualizados: {atualizados}, ignorados: {ignorados}"
+    cat_n = len(categorias_sincronizadas)
+    escopo = "todos" if not id_categoria_bling else f"categoria {id_categoria_bling}"
+    resumo = (
+        f"Importados: {importados}, atualizados: {atualizados}, ignorados: {ignorados}"
+        f" · categorias: {cat_n} · escopo: {escopo}"
+    )
     status = "erro" if erros and importados + atualizados == 0 else ("aviso" if erros else "ok")
     _registrar_log(cur, id_tenant, contexto, status, resumo, "\n".join(erros[:50]))
 
@@ -305,6 +411,7 @@ def importar_produtos(
         "importados": importados,
         "atualizados": atualizados,
         "ignorados": ignorados,
+        "categorias": cat_n,
         "erros": erros[:20],
         "resumo": resumo,
     }

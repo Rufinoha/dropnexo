@@ -102,10 +102,82 @@
   color: #94a3b8;
 }
 
+.Bl_Actions--config {
+  margin-bottom: 0.25rem;
+}
+
+.Bl_ImportPanel {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e5e7eb;
+}
+
+.Bl_ImportTitle {
+  margin: 0 0 0.35rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.Bl_ImportDivider {
+  margin: 0.85rem 0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #94a3b8;
+  text-align: center;
+}
+
+.Bl_ImportCat {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem 0.85rem;
+  align-items: flex-end;
+}
+
+.Bl_Field--grow {
+  flex: 1 1 220px;
+  min-width: 200px;
+}
+
+.Bl_Check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.84rem;
+  color: #475569;
+  padding-bottom: 0.45rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.Bl_Check input {
+  width: 1rem;
+  height: 1rem;
+  accent-color: #7b2cff;
+}
+
 .Bl_Actions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
+  align-items: center;
+}
+
+.Bl_Actions .Cl_botaoprimario,
+.Bl_Actions .Cl_BtnSalvar,
+.Bl_Actions .Cl_BtnCancelar {
+  font-family: inherit;
+  line-height: 1.2;
+}
+
+.Bl_Actions a.Cl_botaoprimario {
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
 }
 
 .Bl_Grid2 {
