@@ -1434,7 +1434,9 @@ def catalogos_salvar():
                     profundidade_cm=%s, prazo_envio_dias=%s, moq=%s,
                     marca=%s, grupo=%s, valor_atacado=%s, valor_dropshipping=%s,
                     reposicao_estoque=%s, dimensao_caixa_cm=%s, peso_gramas=%s,
-                    id_deposito_expedicao=%s, atualizado_em=%s
+                    id_deposito_expedicao=%s,
+                    origem = CASE WHEN origem IN ('arquivo', 'integracao') THEN 'editado' ELSE origem END,
+                    atualizado_em=%s
                 WHERE id=%s AND id_tenant=%s
                 RETURNING id
                 """,
@@ -1908,7 +1910,9 @@ def catalogos_imagem_upload():
 @login_obrigatorio()
 @exigir_permissao(codigo="catalogos.editar")
 def catalogos_importar_pagina():
-    return render_template("frm_catalogo_importar.html")
+    from flask import redirect
+
+    return redirect("/fornecedor/importacao")
 
 
 @fn_catalogo_bp.get("/catalogos/importar/modelo")

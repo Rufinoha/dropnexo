@@ -246,3 +246,10 @@ def obter_produto(id_tenant: int, id_bling: int | str) -> dict:
     resp = api_request(id_tenant, "GET", f"/produtos/{id_bling}")
     data = resp.get("data") or {}
     return data if isinstance(data, dict) else {}
+
+
+def obter_variacoes_produto(id_tenant: int, id_pai: int | str) -> dict:
+    """Retorna produto pai com lista de variações (Bling API v3)."""
+    resp = api_request(id_tenant, "GET", f"/produtos/variacoes/{id_pai}")
+    data = resp.get("data") or {}
+    return data if isinstance(data, dict) else {}

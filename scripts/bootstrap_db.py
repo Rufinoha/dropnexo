@@ -195,6 +195,8 @@ def main():
             "024_segmentos_marketplace.sql",
             "025_segmentos_textos_utf8.sql",
             "026_remover_menu_segmentos.sql",
+            "027_importacao_lote.sql",
+            "028_ocultar_menu_importacao.sql",
         ):
             executar_sql_arquivo(conn, sql_dir / nome)
         seed_usuario_dev(conn)

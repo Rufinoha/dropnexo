@@ -66,6 +66,14 @@ UPDATE tbl_menu SET nome_menu = 'Catálogos', descricao = 'Gestão de catálogos
     id_modulo = (SELECT id FROM tbl_menu_modulo WHERE modulo = 'Operacional' LIMIT 1), contexto_modulo = 'fornecedor'
 WHERE nav_codigo = 'catalogos';
 
+-- fn_importacao (modal no catalogo — sem menu lateral)
+INSERT INTO tbl_menu (nome_menu, descricao, data_page, icone, tipo_abrir, ordem, parent_id, pai, status, obs, id_modulo, nav_codigo, contexto_modulo)
+SELECT 'Importacao', 'Importar catalogo por arquivo ou integracao', '/fornecedor/importacao', 'upload', 'Mesma Janela', 31, NULL, TRUE, FALSE, 'Abrir via Catalogos > Importar (modal)',
+       (SELECT id FROM tbl_menu_modulo WHERE modulo = 'Operacional' LIMIT 1), 'fn_importacao', 'fornecedor'
+WHERE NOT EXISTS (SELECT 1 FROM tbl_menu WHERE nav_codigo = 'fn_importacao');
+UPDATE tbl_menu SET status = FALSE, obs = 'Abrir via Catalogos > Importar (modal)'
+WHERE nav_codigo = 'fn_importacao';
+
 -- vd_catalogo
 INSERT INTO tbl_menu (nome_menu, descricao, data_page, icone, tipo_abrir, ordem, parent_id, pai, status, obs, id_modulo, nav_codigo, contexto_modulo)
 SELECT 'Catálogo', 'Produtos dos fornecedores aprovados', '/vendedor/catalogo', 'package', 'Mesma Janela', 30, NULL, TRUE, TRUE, NULL, NULL, 'vd_catalogo', 'vendedor'

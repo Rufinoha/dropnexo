@@ -1,0 +1,141 @@
+{% extends "frm_base.html" %}
+
+{% block title %}Importação — {{ MARCA_NOME }}{% endblock %}
+
+{% set nav_ativo = 'fn_importacao' %}
+
+{% block topbar_title %}Importação{% endblock %}
+
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('fn_importacao.static', filename='style/Cimportacao.css') }}?v=1" />
+{% endblock %}
+
+{% block content %}
+<div class="Cl_ContainerApoio Cl_PainelPagina imp-page">
+
+  <div class="cl-page-title imp-page-head">
+    <div>
+      <h2>Importação de catálogo</h2>
+      <p class="cl-page-desc">Arquivo CSV, integração Bling ou consulta de lotes anteriores.</p>
+    </div>
+  </div>
+
+  <section class="imp-tabs" role="tablist">
+    <button type="button" class="imp-tab ativa" data-tab="nova">Nova importação</button>
+    <button type="button" class="imp-tab" data-tab="resultados">Resultados</button>
+    <button type="button" class="imp-tab" data-tab="manutencao">Manutenção</button>
+  </section>
+
+  <!-- Nova importação -->
+  <section class="imp-pane ativa" id="impPaneNova">
+    <div class="imp-grid-origens">
+      <article class="imp-card-origem" id="impCardArquivo">
+        <h3>Arquivo</h3>
+        <p>Importe produtos a partir de CSV (.csv).</p>
+        <div class="imp-field">
+          <label for="impArquivo">Arquivo</label>
+          <input type="file" id="impArquivo" accept=".csv,text/csv" />
+        </div>
+        <div class="imp-field">
+          <label for="impLayout">Layout</label>
+          <select id="impLayout"></select>
+        </div>
+        <div class="imp-field">
+          <label for="impNomeLote">Nome do lote (opcional)</label>
+          <input type="text" id="impNomeLote" placeholder="Ex.: Catálogo março" maxlength="120" />
+        </div>
+        <button type="button" class="Cl_botaoprimario" id="impBtnArquivo">Importar arquivo</button>
+      </article>
+
+      <article class="imp-card-origem" id="impCardIntegracao" hidden>
+        <h3>Integração — Bling</h3>
+        <p>Sincronize produtos da conta Bling conectada.</p>
+        <div class="imp-field">
+          <label>Escopo</label>
+          <div class="imp-radio-row">
+            <label><input type="radio" name="imp_bling_modo" value="todos" checked /> Todos os produtos</label>
+            <label><input type="radio" name="imp_bling_modo" value="categorias" /> Por categorias</label>
+          </div>
+        </div>
+        <div class="imp-field" id="impBlingCatsWrap" hidden>
+          <label for="impBlingCats">Categorias Bling</label>
+          <select id="impBlingCats" multiple size="6"></select>
+          <label class="imp-check"><input type="checkbox" id="impBlingSub" checked /> Incluir subcategorias</label>
+        </div>
+        <button type="button" class="Cl_botaoprimario" id="impBtnBling">Importar do Bling</button>
+      </article>
+    </div>
+    <p class="imp-hint" id="impIntegracaoOff" hidden>
+      Conecte o Bling em <a href="/integracoes">Integrações</a> para habilitar importação via API.
+    </p>
+  </section>
+
+  <!-- Resultados -->
+  <section class="imp-pane" id="impPaneResultados" hidden>
+    <div class="imp-cards">
+      <div class="imp-stat"><span class="imp-stat-label">Número</span><strong id="impResNumero">—</strong></div>
+      <div class="imp-stat"><span class="imp-stat-label">Origem</span><strong id="impResOrigem">—</strong></div>
+      <div class="imp-stat"><span class="imp-stat-label">Inseridos</span><strong id="impResInseridos">—</strong></div>
+      <div class="imp-stat"><span class="imp-stat-label">Atualizados</span><strong id="impResAtualizados">—</strong></div>
+      <div class="imp-stat"><span class="imp-stat-label">Erros</span><strong id="impResErros">—</strong></div>
+    </div>
+    <p class="imp-last" id="impResObs">Nenhuma importação recente.</p>
+    <div class="Cl_TabelaPrincipal imp-erros-wrap" id="impErrosWrap" hidden>
+      <h4>Registros com erro</h4>
+      <table>
+        <thead>
+          <tr>
+            <th>Linha / Ref.</th>
+            <th>Nome</th>
+            <th>SKU</th>
+            <th>Motivo</th>
+          </tr>
+        </thead>
+        <tbody id="impTblErros"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Manutenção -->
+  <section class="imp-pane" id="impPaneManutencao" hidden>
+    <div class="filter-panel">
+      <div class="filter-panel-fields">
+        <div class="filter-group">
+          <label for="impFiltroDe">De</label>
+          <input type="date" id="impFiltroDe" />
+        </div>
+        <div class="filter-group">
+          <label for="impFiltroAte">Até</label>
+          <input type="date" id="impFiltroAte" />
+        </div>
+        <div class="filter-panel-actions">
+          <button type="button" class="Cl_botaoFiltro" id="impBtnFiltrar">Filtrar</button>
+          <button type="button" class="btn-secundario" id="impBtnLimpar">Limpar</button>
+        </div>
+      </div>
+    </div>
+    <div class="Cl_TabelaPrincipal">
+      <table>
+        <thead>
+          <tr>
+            <th>Número</th>
+            <th>Origem</th>
+            <th>Arquivo / descrição</th>
+            <th>Data</th>
+            <th>Inseridos</th>
+            <th>Erros</th>
+            <th>Status</th>
+            <th>Ações</th>
+          </tr>
+        </thead>
+        <tbody id="impTblLotes"></tbody>
+      </table>
+    </div>
+  </section>
+
+</div>
+{% endblock %}
+
+{% block page_js %}
+<script src="{{ url_for('fn_importacao.static', filename='script/Simportacao.js') }}?v=1"></script>
+{% endblock %}

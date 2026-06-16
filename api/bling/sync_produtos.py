@@ -4,12 +4,20 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from api.bling.cliente import listar_produtos, obter_produto
+from api.bling.cliente import listar_produtos, obter_produto, obter_variacoes_produto
 from api.bling.imagens import aplicar_imagens_produto, extrair_urls_imagem_bling
 from api.bling.sync_categorias import (
     extrair_id_categoria_produto,
     garantir_categoria_bling,
     ids_categoria_bling_com_descendentes,
+)
+from fornecedor.importacao.servico_importacao import (
+    MODULO_CATALOGO,
+    ORIGEM_INTEGRACAO,
+    STATUS_CONCLUIDO,
+    STATUS_ERRO,
+    finalizar_lote,
+    registrar_erro_lote,
 )
 from global_utils import agora_utc
 
@@ -61,6 +69,108 @@ def _registrar_log(cur, id_tenant: int, contexto: str, status: str, resumo: str,
         """,
         (id_tenant, contexto, status, resumo, detalhe[:4000]),
     )
+
+
+def _registrar_falha(
+    falhas: list[dict[str, str]],
+    *,
+    id_bling: str,
+    nome: str,
+    sku: str,
+    motivo: str,
+    tipo: str = "produto",
+) -> None:
+    falhas.append(
+        {
+            "id_bling": id_bling or "?",
+            "nome": (nome or "").strip() or "—",
+            "sku": (sku or "").strip(),
+            "motivo": motivo.strip(),
+            "tipo": tipo,
+        }
+    )
+
+
+def _formato_bling(produto: dict) -> str:
+    return str(produto.get("formato") or "S").upper()[:1] or "S"
+
+
+def _id_pai_bling(produto: dict) -> str | None:
+    pai = produto.get("produtoPai") or produto.get("idProdutoPai")
+    if isinstance(pai, dict):
+        pid = str(pai.get("id") or "").strip()
+    else:
+        pid = str(pai or "").strip()
+    return pid or None
+
+
+def _extrair_lista_variacoes(dados: dict | list | None) -> list[dict]:
+    if not dados:
+        return []
+    if isinstance(dados, list):
+        return [v for v in dados if isinstance(v, dict)]
+    if isinstance(dados.get("variacoes"), list):
+        return [v for v in dados["variacoes"] if isinstance(v, dict)]
+    inner = dados.get("data")
+    if isinstance(inner, dict) and isinstance(inner.get("variacoes"), list):
+        return [v for v in inner["variacoes"] if isinstance(v, dict)]
+    return []
+
+
+def _validar_grupo_variacoes(variacoes: list[dict]) -> list[str]:
+    problemas: list[str] = []
+    if not variacoes:
+        problemas.append("Nenhuma variação encontrada na API Bling.")
+        return problemas
+    for var in variacoes:
+        vid = str(var.get("id") or "?")
+        nome = (var.get("nome") or var.get("descricao") or "").strip()
+        sku = (var.get("codigo") or "").strip()
+        if not sku:
+            rotulo = nome or f"ID {vid}"
+            problemas.append(f"variação «{rotulo}» (#{vid}) sem SKU")
+    return problemas
+
+
+def _sku_pai_de_variacoes(pai: dict, variacoes: list[dict]) -> str:
+    sku_pai = (pai.get("codigo") or "").strip()
+    if sku_pai:
+        return sku_pai
+    for var in variacoes:
+        sku = (var.get("codigo") or "").strip()
+        if sku:
+            return sku
+    return ""
+
+
+def _preparar_jobs_importacao(itens: list[dict]) -> list[dict]:
+    """Agrupa produtos pai (E) e evita importar variações (V) isoladamente."""
+    jobs_grupo: dict[str, dict] = {}
+    jobs_simples: list[dict] = []
+
+    for item in itens:
+        id_bling = str(item.get("id") or "")
+        if not id_bling:
+            continue
+        fmt = _formato_bling(item)
+        if fmt == "E":
+            jobs_grupo[id_bling] = {"tipo": "grupo", "id_bling": id_bling, "item": item}
+        elif fmt == "V":
+            pai_id = _id_pai_bling(item)
+            if pai_id:
+                if pai_id not in jobs_grupo:
+                    jobs_grupo[pai_id] = {"tipo": "grupo", "id_bling": pai_id, "item": None}
+            else:
+                jobs_simples.append({"tipo": "simples", "id_bling": id_bling, "item": item})
+        else:
+            jobs_simples.append({"tipo": "simples", "id_bling": id_bling, "item": item})
+
+    return list(jobs_grupo.values()) + jobs_simples
+
+
+def _limpar_variantes(cur, id_produto: int) -> None:
+    cur.execute("UPDATE tbl_produto SET id_variante_padrao = NULL WHERE id = %s", (id_produto,))
+    cur.execute("DELETE FROM tbl_produto_variante WHERE id_produto = %s", (id_produto,))
 
 
 def _buscar_mapa(cur, id_tenant: int, contexto: str, id_bling: str) -> tuple[int | None, str | None]:
@@ -144,6 +254,7 @@ def _salvar_produto(
     produto: dict,
     id_produto_existente: int | None,
     id_categoria: int | None = None,
+    id_importacao_lote: int | None = None,
 ) -> int:
     sku = (produto.get("codigo") or "").strip()
     nome = (produto.get("nome") or sku or "Produto Bling").strip()
@@ -189,9 +300,9 @@ def _salvar_produto(
             """
             INSERT INTO tbl_produto (
                 id_tenant, id_categoria, nome, descricao, sku, preco, preco_custo, unidade,
-                gtin, ncm, ativo, publicado, formato, tipo, atualizado_em
+                gtin, ncm, ativo, publicado, formato, tipo, origem, id_importacao_lote, atualizado_em
             ) VALUES (
-                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, FALSE, 'S', 'P', %s
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, FALSE, 'S', 'P', %s, %s, %s
             ) RETURNING id
             """,
             (
@@ -206,6 +317,8 @@ def _salvar_produto(
                 gtin,
                 ncm,
                 ativo,
+                ORIGEM_INTEGRACAO if id_importacao_lote else "manual",
+                id_importacao_lote,
                 agora,
             ),
         )
@@ -223,6 +336,119 @@ def _salvar_produto(
     return int(prod_id)
 
 
+def _inserir_variante_bling(cur, id_produto: int, var: dict, ordem: int) -> int:
+    sku = (var.get("codigo") or "").strip()
+    nome = (var.get("nome") or sku or "Variação").strip()
+    preco = float(var.get("preco") or 0)
+    preco_custo = var.get("precoCusto")
+    preco_custo = float(preco_custo) if preco_custo not in (None, "") else None
+    ativo = _produto_ativo(var)
+    agora = agora_utc()
+    cur.execute(
+        """
+        INSERT INTO tbl_produto_variante (
+            id_produto, sku, nome_exibicao, preco, preco_custo, ativo, ordem, atualizado_em
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id
+        """,
+        (id_produto, sku, nome, preco, preco_custo, ativo, ordem, agora),
+    )
+    vid = int(cur.fetchone()[0])
+    cur.execute(
+        """
+        INSERT INTO tbl_produto_variante_estoque (id_variante, quantidade, atualizado_em)
+        VALUES (%s, 0, %s) ON CONFLICT (id_variante) DO NOTHING
+        """,
+        (vid, agora),
+    )
+    return vid
+
+
+def _salvar_produto_grupo_variacoes(
+    cur,
+    *,
+    id_tenant: int,
+    pai: dict,
+    variacoes: list[dict],
+    id_produto_existente: int | None,
+    id_categoria: int | None = None,
+    id_importacao_lote: int | None = None,
+) -> int:
+    sku_raiz = _sku_pai_de_variacoes(pai, variacoes)
+    nome = (pai.get("nome") or sku_raiz or "Produto Bling").strip()
+    descricao = _montar_descricao(pai)
+    unidade = (pai.get("unidade") or "UN").strip()[:10] or "UN"
+    gtin = (pai.get("gtin") or pai.get("ean") or "")[:20] or None
+    ncm = (pai.get("ncm") or "")[:10] or None
+    ativo = _produto_ativo(pai)
+    agora = agora_utc()
+
+    if id_produto_existente:
+        cur.execute(
+            """
+            UPDATE tbl_produto SET
+                nome = %s, descricao = %s, sku = %s, unidade = %s, gtin = %s, ncm = %s,
+                ativo = %s, formato = 'E',
+                id_categoria = COALESCE(%s, id_categoria), atualizado_em = %s
+            WHERE id = %s AND id_tenant = %s
+            RETURNING id
+            """,
+            (
+                nome,
+                descricao or None,
+                sku_raiz or None,
+                unidade,
+                gtin,
+                ncm,
+                ativo,
+                id_categoria,
+                agora,
+                id_produto_existente,
+                id_tenant,
+            ),
+        )
+        prod_id = int(cur.fetchone()[0])
+        _limpar_variantes(cur, prod_id)
+    else:
+        cur.execute(
+            """
+            INSERT INTO tbl_produto (
+                id_tenant, id_categoria, nome, descricao, sku, preco, unidade,
+                gtin, ncm, ativo, publicado, formato, tipo, origem, id_importacao_lote, atualizado_em
+            ) VALUES (
+                %s, %s, %s, %s, %s, 0, %s, %s, %s, %s, FALSE, 'E', 'P', %s, %s, %s
+            ) RETURNING id
+            """,
+            (
+                id_tenant,
+                id_categoria,
+                nome,
+                descricao or None,
+                sku_raiz or None,
+                unidade,
+                gtin,
+                ncm,
+                ativo,
+                ORIGEM_INTEGRACAO if id_importacao_lote else "manual",
+                id_importacao_lote,
+                agora,
+            ),
+        )
+        prod_id = int(cur.fetchone()[0])
+
+    primeira_vid: int | None = None
+    for ordem, var in enumerate(variacoes):
+        vid = _inserir_variante_bling(cur, prod_id, var, ordem)
+        if primeira_vid is None:
+            primeira_vid = vid
+
+    if primeira_vid:
+        cur.execute(
+            "UPDATE tbl_produto SET id_variante_padrao = %s, formato = 'E' WHERE id = %s",
+            (primeira_vid, prod_id),
+        )
+    return prod_id
+
+
 def _processar_item_produto(
     cur,
     *,
@@ -233,8 +459,8 @@ def _processar_item_produto(
     cache_categorias: dict[str, dict],
     categorias_sincronizadas: set[str],
     ids_categoria_filtro: set[str] | None,
+    id_importacao_lote: int | None = None,
 ) -> tuple[str, int | None]:
-    """Retorna ('importado'|'atualizado'|'ignorado', prod_id ou None)."""
     id_bling = str(item.get("id") or "")
     sku_lista = (item.get("codigo") or "").strip()
     if not sku_lista:
@@ -278,6 +504,7 @@ def _processar_item_produto(
         produto=detalhe,
         id_produto_existente=id_existente,
         id_categoria=id_categoria_drop,
+        id_importacao_lote=id_importacao_lote if criando else None,
     )
 
     urls = extrair_urls_imagem_bling(detalhe)
@@ -300,6 +527,124 @@ def _processar_item_produto(
         sku,
         {"nome": detalhe.get("nome"), "urls_imagem": urls, "id_categoria_bling": id_cat_bling},
     )
+    return ("importado" if criando else "atualizado"), prod_id
+
+
+def _processar_grupo_variacoes(
+    cur,
+    *,
+    id_tenant: int,
+    contexto: str,
+    cfg: dict,
+    job: dict,
+    cache_categorias: dict[str, dict],
+    categorias_sincronizadas: set[str],
+    ids_categoria_filtro: set[str] | None,
+    id_importacao_lote: int | None = None,
+) -> tuple[str, int | None]:
+    """Importa produto pai + todas as variações em uma única unidade (tudo ou nada)."""
+    id_bling_pai = str(job.get("id_bling") or "")
+    item_lista = job.get("item") or {}
+    detalhe_pai = obter_produto(id_tenant, id_bling_pai) if id_bling_pai else item_lista
+    if not detalhe_pai:
+        raise ValueError("Produto pai não encontrado na API Bling.")
+
+    vars_resp = obter_variacoes_produto(id_tenant, id_bling_pai)
+    variacoes = _extrair_lista_variacoes(vars_resp)
+    if not variacoes:
+        variacoes = _extrair_lista_variacoes(detalhe_pai)
+
+    problemas = _validar_grupo_variacoes(variacoes)
+    if problemas:
+        raise ValueError(
+            "Nenhuma variação importada (regra tudo ou nada): " + "; ".join(problemas)
+        )
+
+    id_cat_bling = extrair_id_categoria_produto(detalhe_pai)
+    if ids_categoria_filtro is not None:
+        if not id_cat_bling or id_cat_bling not in ids_categoria_filtro:
+            return "ignorado_filtro", None
+
+    id_categoria_drop = None
+    if id_cat_bling:
+        id_categoria_drop = garantir_categoria_bling(
+            cur,
+            id_tenant,
+            contexto,
+            id_cat_bling,
+            cache_api=cache_categorias,
+        )
+        categorias_sincronizadas.add(id_cat_bling)
+
+    id_existente, _ = _buscar_mapa(cur, id_tenant, contexto, id_bling_pai)
+    if not id_existente:
+        sku_raiz = _sku_pai_de_variacoes(detalhe_pai, variacoes)
+        if sku_raiz:
+            cur.execute(
+                "SELECT id FROM tbl_produto WHERE id_tenant = %s AND sku = %s",
+                (id_tenant, sku_raiz),
+            )
+            row = cur.fetchone()
+            if row:
+                id_existente = int(row[0])
+
+    criando = id_existente is None
+    prod_id = _salvar_produto_grupo_variacoes(
+        cur,
+        id_tenant=id_tenant,
+        pai=detalhe_pai,
+        variacoes=variacoes,
+        id_produto_existente=id_existente,
+        id_categoria=id_categoria_drop,
+        id_importacao_lote=id_importacao_lote if criando else None,
+    )
+
+    urls = extrair_urls_imagem_bling(detalhe_pai)
+    sku_mapa = _sku_pai_de_variacoes(detalhe_pai, variacoes)
+    if urls:
+        aplicar_imagens_produto(
+            cur,
+            id_tenant=id_tenant,
+            id_produto=prod_id,
+            sku=sku_mapa or f"bling-{id_bling_pai}",
+            urls=urls,
+            modo_imagem=cfg["modo_imagem"],
+        )
+
+    _upsert_mapa(
+        cur,
+        id_tenant,
+        contexto,
+        id_bling_pai,
+        prod_id,
+        sku_mapa,
+        {
+            "nome": detalhe_pai.get("nome"),
+            "formato": "E",
+            "qtd_variacoes": len(variacoes),
+            "urls_imagem": urls,
+            "id_categoria_bling": id_cat_bling,
+        },
+    )
+    for var in variacoes:
+        var_id = str(var.get("id") or "")
+        if not var_id:
+            continue
+        var_sku = (var.get("codigo") or "").strip()
+        _upsert_mapa(
+            cur,
+            id_tenant,
+            contexto,
+            var_id,
+            prod_id,
+            var_sku,
+            {
+                "nome": var.get("nome"),
+                "formato": "V",
+                "id_pai_bling": id_bling_pai,
+            },
+        )
+
     return ("importado" if criando else "atualizado"), prod_id
 
 
@@ -341,6 +686,8 @@ def importar_produtos(
     id_categoria_bling: str | None = None,
     ids_categorias_bling: list[str] | None = None,
     incluir_subcategorias: bool = True,
+    id_importacao_lote: int | None = None,
+    id_usuario: int | None = None,
 ) -> dict[str, Any]:
     cfg = _garantir_config(cur, id_tenant, contexto)
     modo = cfg["produtos_modo"]
@@ -350,7 +697,7 @@ def importar_produtos(
     importados = 0
     atualizados = 0
     ignorados = 0
-    erros: list[str] = []
+    falhas: list[dict[str, str]] = []
     categorias_sincronizadas: set[str] = set()
     cache_categorias: dict[str, dict] = {}
 
@@ -394,21 +741,40 @@ def importar_produtos(
         ids_categoria_api = sorted(set(ids_categoria_api))
 
     itens = _iterar_listas_produtos(id_tenant, ids_categoria_api=ids_categoria_api)
+    jobs = _preparar_jobs_importacao(itens)
 
-    for item in itens:
-        id_bling = str(item.get("id") or "")
+    for job in jobs:
+        id_bling = str(job.get("id_bling") or "")
+        item = job.get("item") or {}
+        nome_ref = (item.get("nome") or "").strip()
+        sku_ref = (item.get("codigo") or "").strip()
+        tipo_job = job.get("tipo") or "simples"
         _savepoint(cur, _SAVEPOINT_PRODUTO)
         try:
-            resultado, _ = _processar_item_produto(
-                cur,
-                id_tenant=id_tenant,
-                contexto=contexto,
-                cfg=cfg,
-                item=item,
-                cache_categorias=cache_categorias,
-                categorias_sincronizadas=categorias_sincronizadas,
-                ids_categoria_filtro=ids_filtro,
-            )
+            if tipo_job == "grupo":
+                resultado, _ = _processar_grupo_variacoes(
+                    cur,
+                    id_tenant=id_tenant,
+                    contexto=contexto,
+                    cfg=cfg,
+                    job=job,
+                    cache_categorias=cache_categorias,
+                    categorias_sincronizadas=categorias_sincronizadas,
+                    ids_categoria_filtro=ids_filtro,
+                    id_importacao_lote=id_importacao_lote,
+                )
+            else:
+                resultado, _ = _processar_item_produto(
+                    cur,
+                    id_tenant=id_tenant,
+                    contexto=contexto,
+                    cfg=cfg,
+                    item=item,
+                    cache_categorias=cache_categorias,
+                    categorias_sincronizadas=categorias_sincronizadas,
+                    ids_categoria_filtro=ids_filtro,
+                    id_importacao_lote=id_importacao_lote,
+                )
             _release_savepoint(cur, _SAVEPOINT_PRODUTO)
             if resultado == "importado":
                 importados += 1
@@ -418,8 +784,32 @@ def importar_produtos(
                 ignorados += 1
         except Exception as e:
             _rollback_savepoint(cur, _SAVEPOINT_PRODUTO)
-            ignorados += 1
-            erros.append(f"Bling #{id_bling or '?'}: {e}")
+            if tipo_job == "grupo" and not nome_ref:
+                try:
+                    pai = obter_produto(id_tenant, id_bling)
+                    nome_ref = (pai.get("nome") or "").strip()
+                    sku_ref = (pai.get("codigo") or "").strip()
+                except Exception:
+                    pass
+            _registrar_falha(
+                falhas,
+                id_bling=id_bling,
+                nome=nome_ref,
+                sku=sku_ref,
+                motivo=str(e),
+                tipo="grupo_variacoes" if tipo_job == "grupo" else "produto",
+            )
+            if id_importacao_lote:
+                registrar_erro_lote(
+                    cur,
+                    id_tenant=id_tenant,
+                    id_lote=id_importacao_lote,
+                    modulo=MODULO_CATALOGO,
+                    ref_externa=id_bling,
+                    nome_registro=nome_ref,
+                    sku_registro=sku_ref,
+                    mensagem=str(e),
+                )
 
     cur.execute(
         """
@@ -437,16 +827,38 @@ def importar_produtos(
         escopo = "todos"
     resumo = (
         f"Importados: {importados}, atualizados: {atualizados}, ignorados: {ignorados}"
-        f" · categorias: {cat_n} · escopo: {escopo}"
+        f", falhas: {len(falhas)} · categorias: {cat_n} · escopo: {escopo}"
     )
-    status = "erro" if erros and importados + atualizados == 0 else ("aviso" if erros else "ok")
-    _registrar_log(cur, id_tenant, contexto, status, resumo, "\n".join(erros[:50]))
+    if falhas:
+        status = "erro" if importados + atualizados == 0 else "aviso"
+    else:
+        status = "ok"
+    detalhe_log = json.dumps({"falhas": falhas[:80]}, ensure_ascii=False)
+    _registrar_log(cur, id_tenant, contexto, status, resumo, detalhe_log)
 
+    if id_importacao_lote:
+        lote_status = STATUS_ERRO if importados + atualizados == 0 else STATUS_CONCLUIDO
+        finalizar_lote(
+            cur,
+            id_importacao_lote,
+            status=lote_status,
+            total_linhas=len(jobs),
+            total_importadas=importados,
+            total_atualizadas=atualizados,
+            total_rejeitadas=len(falhas),
+            meta={"contexto": contexto, "escopo": escopo, "id_usuario": id_usuario},
+        )
+
+    erros_txt = [f"Bling #{f['id_bling']}: {f['motivo']}" for f in falhas]
     return {
         "importados": importados,
         "atualizados": atualizados,
         "ignorados": ignorados,
+        "falhas": falhas,
+        "total_falhas": len(falhas),
         "categorias": cat_n,
-        "erros": erros[:20],
+        "erros": erros_txt[:50],
+        "status": status,
         "resumo": resumo,
+        "id_importacao_lote": id_importacao_lote,
     }

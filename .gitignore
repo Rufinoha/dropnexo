@@ -24,8 +24,9 @@ upload/**
 .cursor/
 .vscode/
 *.log
-
-# Subprojeto legado
-OLD/HUBSUPPORT/.git/
+# Legado local — manter no disco, nunca versionar
+old/
+OLD/
+!OLD/HUBSUPPORT/.git/
 
 # Documentação interna (__doc/) — versionada no repositório

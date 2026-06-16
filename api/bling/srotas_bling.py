@@ -431,6 +431,25 @@ def sync_produtos():
         if not row or row[0] != "conectado":
             return jsonify(success=False, message="Conecte o Bling antes de sincronizar."), 400
 
+        from fornecedor.importacao.servico_importacao import (
+            MODULO_CATALOGO,
+            ORIGEM_INTEGRACAO,
+            criar_lote,
+        )
+
+        id_usuario = session.get("id_usuario")
+        id_lote, numero = criar_lote(
+            cur,
+            id_tenant=int(id_tenant),
+            modulo=MODULO_CATALOGO,
+            origem=ORIGEM_INTEGRACAO,
+            id_usuario=int(id_usuario) if id_usuario else None,
+            provedor="bling",
+            nome_lote=f"Bling — {contexto}",
+            meta={"contexto": contexto},
+        )
+        conn.commit()
+
         resultado = importar_produtos(
             cur,
             int(id_tenant),
@@ -438,11 +457,20 @@ def sync_produtos():
             id_categoria_bling=id_categoria_bling,
             ids_categorias_bling=ids_categorias_bling,
             incluir_subcategorias=bool(incluir_subcategorias),
+            id_importacao_lote=id_lote,
+            id_usuario=int(id_usuario) if id_usuario else None,
         )
         conn.commit()
-        if resultado.get("erros") and not resultado.get("importados") and not resultado.get("atualizados"):
-            return jsonify(success=False, message=resultado["erros"][0], dados=resultado), 400
-        return jsonify(success=True, message=resultado["resumo"], dados=resultado)
+        status = resultado.get("status") or "ok"
+        total_falhas = int(resultado.get("total_falhas") or 0)
+        if status == "erro":
+            msg = f"Importação {numero}: nenhum produto importado. {total_falhas} com falha."
+        elif status == "aviso":
+            msg = f"Importação {numero}: {total_falhas} produto(s) não importado(s)."
+        else:
+            msg = f"Importação {numero} concluída."
+        resultado["numero"] = numero
+        return jsonify(success=True, message=msg, dados=resultado)
     except ValueError as e:
         conn.rollback()
         return jsonify(success=False, message=str(e)), 400

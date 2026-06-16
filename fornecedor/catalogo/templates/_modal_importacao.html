@@ -1,0 +1,178 @@
+{# Modal de importação — padrão BARACAT, embutido na tela de catálogo #}
+<div id="impModal" class="imp-modal" aria-hidden="true" data-modulo="catalogo_produto">
+  <div class="imp-backdrop" data-acao="fechar"></div>
+  <div class="imp-dialog" role="dialog" aria-modal="true" aria-label="Importação">
+    <div class="imp-header">
+      <div class="imp-title">
+        <h2>Importação</h2>
+        <span class="imp-sub" id="impSubtitulo">Catálogo de produtos</span>
+      </div>
+      <button type="button" class="imp-btn-close" data-acao="fechar" aria-label="Fechar">✕</button>
+    </div>
+
+    <div class="imp-body">
+      <section class="imp-tabs" role="tablist">
+        <button type="button" class="imp-tab" data-tab="bling" id="impTabBling" hidden>Bling</button>
+        <button type="button" class="imp-tab ativa" data-tab="nova" id="impTabNova">Arquivo</button>
+        <button type="button" class="imp-tab" data-tab="manutencao">Manutenção</button>
+      </section>
+
+      <section class="imp-content">
+        <div class="filter-panel" id="impPaneBling">
+          <div class="imp-bling-status" id="impBlingStatus">
+            <span class="imp-pulse" aria-hidden="true"></span>
+            <div class="imp-bling-status-text">
+              <strong id="impBlingStatusTitulo">Conectado ao Bling</strong>
+              <span class="imp-hint" id="impBlingStatusSub">Sincronização ativa</span>
+            </div>
+          </div>
+
+          <section class="imp-bling-block">
+            <h3 class="imp-bling-block-title">Importar produtos</h3>
+            <div class="imp-form imp-form-bling">
+              <div class="imp-row imp-row-bling">
+                <div class="imp-field imp-field-grow">
+                  <label>Escopo</label>
+                  <div class="imp-radio-row">
+                    <label><input type="radio" name="imp_bling_modo" value="todos" checked /> Todos os produtos</label>
+                    <label><input type="radio" name="imp_bling_modo" value="categorias" /> Por categorias</label>
+                  </div>
+                  <div id="impBlingCatsWrap" hidden>
+                    <select id="impBlingCats" multiple size="5"></select>
+                    <label class="imp-check"><input type="checkbox" id="impBlingSub" checked /> Incluir subcategorias</label>
+                  </div>
+                  <div class="imp-hint imp-hint-spacer">&nbsp;</div>
+                </div>
+                <div class="imp-actions">
+                  <button type="button" class="Cl_botaoprimario" id="impBtnBling">Importar</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="imp-cards" id="impCardsBling">
+              <div class="imp-card">
+                <div class="imp-card-title">Total processado</div>
+                <div class="imp-card-value" id="impBlingResTotal">—</div>
+              </div>
+              <div class="imp-card">
+                <div class="imp-card-title">Inseridos</div>
+                <div class="imp-card-value" id="impBlingResInseridas">—</div>
+              </div>
+              <div class="imp-card imp-card-click" data-card="erros" data-scope="bling">
+                <div class="imp-card-title">Com erros</div>
+                <div class="imp-card-value" id="impBlingResErros">—</div>
+              </div>
+              <div class="imp-card imp-card-click" data-card="lote" data-scope="bling">
+                <div class="imp-card-title">Lote</div>
+                <div class="imp-card-value" id="impBlingResLote">—</div>
+              </div>
+            </div>
+            <div class="imp-last" id="impBlingResObs">Nenhuma importação via Bling ainda.</div>
+          </section>
+
+          <section class="imp-bling-block">
+            <h3 class="imp-bling-block-title">Sincronizar estoque</h3>
+            <div class="imp-form imp-form-estoque">
+              <label class="imp-toggle">
+                <input type="checkbox" id="impEstoqueBaixaPedido" />
+                <span>Baixar estoque no Bling a cada pedido confirmado</span>
+              </label>
+              <label class="imp-toggle">
+                <input type="checkbox" id="impEstoqueImportarBling" />
+                <span>Buscar alterações de estoque no Bling</span>
+              </label>
+              <div class="imp-field imp-field-inline" id="impEstoquePollingWrap" hidden>
+                <label for="impEstoquePolling">Consultar a cada</label>
+                <select id="impEstoquePolling">
+                  <option value="15">15 minutos</option>
+                  <option value="30" selected>30 minutos</option>
+                  <option value="60">60 minutos</option>
+                </select>
+              </div>
+              <p class="imp-hint">
+                O Bling não envia webhook de estoque em tempo real; quando ativo, consultamos periodicamente.
+              </p>
+              <div class="imp-estoque-footer">
+                <span class="imp-hint" id="impEstoqueUltimaSync"></span>
+                <button type="button" class="Cl_botaoprimario" id="impBtnSalvarEstoque">Salvar</button>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <div class="filter-panel ativa" id="impPaneNova">
+          <section class="imp-form">
+            <div class="imp-row">
+              <div class="imp-field">
+                <label for="impArquivo">Arquivo</label>
+                <input type="file" id="impArquivo" accept=".csv,text/csv" />
+                <div class="imp-hint">Arquivo .csv (separador ; ou ,)</div>
+              </div>
+              <div class="imp-field">
+                <label for="impLayout">Layout</label>
+                <select id="impLayout"></select>
+                <div class="imp-hint imp-hint-spacer">&nbsp;</div>
+              </div>
+              <div class="imp-actions">
+                <button type="button" class="Cl_botaoprimario" id="impBtnArquivo">Importar</button>
+              </div>
+            </div>
+          </section>
+
+          <div class="imp-cards" id="impCards">
+            <div class="imp-card">
+              <div class="imp-card-title">Total processado</div>
+              <div class="imp-card-value" id="impResTotal">—</div>
+            </div>
+            <div class="imp-card">
+              <div class="imp-card-title">Inseridos</div>
+              <div class="imp-card-value" id="impResInseridas">—</div>
+            </div>
+            <div class="imp-card imp-card-click" data-card="erros" data-scope="arquivo">
+              <div class="imp-card-title">Com erros</div>
+              <div class="imp-card-value" id="impResErros">—</div>
+            </div>
+            <div class="imp-card imp-card-click" data-card="lote" data-scope="arquivo">
+              <div class="imp-card-title">Lote</div>
+              <div class="imp-card-value" id="impResLote">—</div>
+            </div>
+          </div>
+          <div class="imp-last" id="impResObs">Nenhuma importação registrada ainda.</div>
+        </div>
+
+        <div class="filter-panel" id="impPaneManutencao">
+          <div class="filter-panel-fields">
+            <div class="filter-group">
+              <label for="impFiltroDe">De</label>
+              <input type="date" id="impFiltroDe" />
+            </div>
+            <div class="filter-group">
+              <label for="impFiltroAte">Até</label>
+              <input type="date" id="impFiltroAte" />
+            </div>
+            <div class="filter-panel-actions">
+              <button type="button" class="Cl_botaoFiltro" id="impBtnFiltrar">Filtrar</button>
+              <button type="button" class="btn-secundario" id="impBtnLimpar">Limpar filtro</button>
+            </div>
+          </div>
+          <div class="Cl_TabelaPrincipal imp-table-wrap">
+            <table class="imp-table">
+              <thead>
+                <tr>
+                  <th>Lote</th>
+                  <th>Origem</th>
+                  <th>Arquivo</th>
+                  <th>Data</th>
+                  <th>Inseridos</th>
+                  <th>Erros</th>
+                  <th>Ações</th>
+                </tr>
+              </thead>
+              <tbody id="impTblLotes"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
