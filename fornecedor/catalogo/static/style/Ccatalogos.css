@@ -5,6 +5,79 @@
   vertical-align: middle;
 }
 
+.Cat_PageHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem 1.25rem;
+}
+
+.Cat_PageHeadText {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+.Cat_PageHeadActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  justify-content: flex-end;
+  flex: 0 1 auto;
+}
+
+.Cat_BlingSwal {
+  text-align: left;
+  font-size: 0.9rem;
+}
+
+.Cat_BlingOpt {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 0.65rem;
+  cursor: pointer;
+  color: #1e293b;
+}
+
+.Cat_BlingCats {
+  margin: 0.5rem 0 0.75rem;
+}
+
+.Cat_BlingCatsLabel {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #64748b;
+  margin-bottom: 0.35rem;
+}
+
+.Cat_BlingMulti {
+  width: 100%;
+  min-height: 9rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 0.35rem;
+  font-size: 0.85rem;
+}
+
+.Cat_BlingSub {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 0 0.5rem;
+  font-size: 0.85rem;
+  color: #475569;
+  cursor: pointer;
+}
+
+.Cat_BlingHint {
+  margin: 0.5rem 0 0;
+  font-size: 0.78rem;
+  color: #94a3b8;
+}
+
 .Cat_ExpandSpacer {
   display: inline-block;
   width: 1.75rem;
@@ -154,6 +227,39 @@
 
 .Cat_FiltroSwitch {
   margin: 0;
+  cursor: pointer;
+  gap: 10px;
+}
+
+.Cat_FiltroSwitch .filter-group-switch-label {
+  cursor: pointer;
+}
+
+.Cat_FiltroResumo {
+  margin: 0 0 0.65rem;
+  font-size: 0.8rem;
+  color: #64748b;
+}
+
+.Cat_BadgeInativo {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+}
+
+.Cat_RowInativo td {
+  opacity: 0.72;
+}
+
+.Cat_RowInativo.Cat_RowPai td {
+  background: #fef2f2;
 }
 
 .Cat_Preco {
@@ -291,17 +397,4 @@
 .Cat_Muted {
   color: #64748b;
   font-size: 0.88rem;
-}
-
-.Cat_ViewActions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  align-items: center;
-}
-
-.Cat_ViewHint {
-  font-size: 0.82rem;
-  color: #64748b;
-  margin-right: 0.25rem;
 }

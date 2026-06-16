@@ -7,157 +7,93 @@
 {% block topbar_title %}Catálogos{% endblock %}
 
 {% block head_extra %}
-
-<link rel="stylesheet" href="{{ url_for('fn_catalogo.static', filename='style/Ccatalogos.css') }}?v=3" />
-
+<link rel="stylesheet" href="{{ url_for('fn_catalogo.static', filename='style/Ccatalogos.css') }}?v=6" />
 {% endblock %}
 
 {% block content %}
 
 <div class="Cl_ContainerApoio Cl_PainelPagina cl-page-principal">
 
-
-
-  <div class="cl-page-title">
-
-    <h2>Meu catálogo</h2>
-
-    <p class="cl-page-desc">Cadastre produtos, preços e estoque para vendedores da rede encontrarem.</p>
-
+  <div class="cl-page-title Cat_PageHead">
+    <div class="Cat_PageHeadText">
+      <h2>Meu catálogo</h2>
+      <p class="cl-page-desc">Cadastre produtos, preços e estoque para vendedores da rede encontrarem.</p>
+    </div>
+    <div class="Cat_PageHeadActions">
+      <button type="button" class="Cl_botaoprimario" id="ob_btnIncluir">Novo produto</button>
+      <button type="button" class="Cl_botaoFiltro" id="ob_btnImportar">Importar CSV</button>
+      {% if bling_conectado %}
+      <button type="button" class="Cl_botaoFiltro" id="ob_btnImportarBling">Importar Bling</button>
+      {% endif %}
+    </div>
   </div>
-
-
 
   <div class="filter-panel">
-
     <div class="filter-panel-fields">
-
       <div class="filter-group">
-
         <label for="ob_filtroBusca">Busca</label>
-
         <input type="text" id="ob_filtroBusca" placeholder="Nome ou SKU" autocomplete="off" />
-
       </div>
-
       <div class="filter-group">
-
         <label for="ob_filtroCategoria">Categoria</label>
-
         <select id="ob_filtroCategoria"><option value="">Todas</option></select>
-
       </div>
-
       <div class="filter-group">
-
         <label for="ob_filtroTipo">Tipo</label>
-
         <select id="ob_filtroTipo">
-
           <option value="">Todos</option>
-
           <option value="simples">Produto Simples</option>
-
           <option value="com_variacoes">Produto Com Variações</option>
-
           <option value="somente_variacoes">Somente as Variações</option>
-
         </select>
-
       </div>
-
       <div class="filter-group filter-group--switch">
-
-        <span class="filter-group-switch-label">Ativos</span>
-
         <label class="Cl_Switch Cat_FiltroSwitch" for="ob_filtroAtivos">
-
+          <span class="filter-group-switch-label">Somente ativos</span>
           <input type="checkbox" id="ob_filtroAtivos" checked />
-
           <span class="Cl_SwitchSlider"></span>
-
         </label>
-
       </div>
-
     </div>
-
     <div class="filter-panel-actions">
-
       <button type="button" class="Cl_botaoFiltro" id="ob_btnFiltrar">Filtrar</button>
-
       <button type="button" class="Cl_botaoFiltro" id="ob_btnLimpar">Limpar</button>
-
     </div>
-
   </div>
 
-
-
-  <div class="cl-page-actions Cat_ViewActions">
-    <button type="button" class="Cl_botaoprimario" id="ob_btnIncluir">Novo produto</button>
-    <button type="button" class="Cl_botaoFiltro" id="ob_btnImportar">Importar CSV</button>
-    <span class="Cat_ViewHint">Variações:</span>
-    <button type="button" class="Cl_botaoFiltro" id="ob_btnExpandirTodos">Expandir todos</button>
-    <button type="button" class="Cl_botaoFiltro" id="ob_btnRecolherTodos">Recolher todos</button>
-  </div>
-
-
+  <p class="Cat_FiltroResumo" id="ob_filtroResumo" hidden></p>
 
   <div class="Cl_TabelaPrincipal" id="content-area-Principal">
-
     <table>
-
       <thead>
-
         <tr>
-
-          <th class="Cat_ColExpand" aria-label="Expandir"></th>
-
+          <th class="Cat_ColExpand">
+            <button type="button" class="Cat_ExpandBtn" id="ob_btnToggleExpandTodos" aria-label="Expandir todos" aria-expanded="false" title="Expandir todos" hidden>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
+            </button>
+          </th>
           <th class="Cat_ColImg">Imagem</th>
-
           <th>Nome / produto</th>
-
           <th>Código / SKU</th>
-
           <th>Unidade</th>
-
           <th>Preço venda</th>
-
           <th>Estoque</th>
-
           <th class="col-acoes Cl_TableActions">Ações</th>
-
         </tr>
-
       </thead>
-
       <tbody id="ob_listaProdutos">
-
         <tr><td colspan="8">Carregando…</td></tr>
-
       </tbody>
-
     </table>
-
   </div>
 
-
-
   <div class="Cl_Paginacao">
-
     <button type="button" class="Cl_direcao" id="ob_btnPrimeiro" disabled>Primeiro</button>
-
     <button type="button" class="Cl_direcao" id="ob_btnAnterior" disabled>Anterior</button>
-
     <span>Página <strong id="ob_paginaAtual">1</strong> de <strong id="ob_totalPaginas">1</strong>
-
       (<span id="ob_totalRegistros">0</span> registros)</span>
-
     <button type="button" class="Cl_direcao" id="ob_btnProximo" disabled>Próximo</button>
-
     <button type="button" class="Cl_direcao" id="ob_btnUltimo" disabled>Último</button>
-
   </div>
 
 </div>
@@ -165,9 +101,8 @@
 {% endblock %}
 
 {% block page_js %}
-
-<script src="{{ url_for('fn_catalogo.static', filename='script/Scatalogos.js') }}?v=3"></script>
-
+<script>
+  window.CAT_BLING_CONECTADO = {{ 'true' if bling_conectado else 'false' }};
+</script>
+<script src="{{ url_for('fn_catalogo.static', filename='script/Scatalogos.js') }}?v=6"></script>
 {% endblock %}
-
-

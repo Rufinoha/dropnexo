@@ -212,16 +212,14 @@ MANUAL_BLING_CONFIG_FORNECEDOR = [
 MANUAL_BLING_BOTOES_FORNECEDOR = [
     {
         "nome": "Salvar",
-        "efeito": "Grava todas as opções acima para o perfil <strong>fornecedor</strong> da sua empresa.",
+        "efeito": "Grava todas as opções acima para o perfil ativo (<strong>fornecedor</strong> ou <strong>vendedor</strong>).",
     },
     {
-        "nome": "Sincronizar produtos",
+        "nome": "Importar produtos (catálogo)",
         "efeito": (
-            "Com modo <strong>Produtos</strong> em <em>Importar</em> ou <em>Atualizar</em>, "
-            "use <strong>Importar todos</strong> ou escolha uma <strong>categoria do Bling</strong> "
-            "e clique em <strong>Importar categoria</strong>. "
-            "As categorias são cadastradas automaticamente no DropNexo. "
-            "O resultado aparece em <strong>Últimos logs</strong>."
+            "A importação manual fica em <strong>Catálogos → Meu catálogo → Importar Bling</strong> "
+            "(visível só com integração conectada e modo <em>Produtos</em> em Importar ou Atualizar). "
+            "Lá você pode importar tudo ou escolher categorias do Bling."
         ),
     },
 ]

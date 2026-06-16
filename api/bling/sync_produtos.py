@@ -325,6 +325,7 @@ def importar_produtos(
     contexto: str,
     *,
     id_categoria_bling: str | None = None,
+    ids_categorias_bling: list[str] | None = None,
     incluir_subcategorias: bool = True,
 ) -> dict[str, Any]:
     cfg = _garantir_config(cur, id_tenant, contexto)
@@ -342,27 +343,35 @@ def importar_produtos(
     ids_filtro: set[str] | None = None
     ids_categoria_api: list[str | None] = [None]
 
-    if id_categoria_bling:
-        id_categoria_bling = str(id_categoria_bling).strip()
-        garantir_categoria_bling(
-            cur,
-            id_tenant,
-            contexto,
-            id_categoria_bling,
-            cache_api=cache_categorias,
-        )
-        categorias_sincronizadas.add(id_categoria_bling)
+    raizes: list[str] = []
+    if ids_categorias_bling:
+        raizes = [str(c).strip() for c in ids_categorias_bling if str(c or "").strip()]
+    elif id_categoria_bling:
+        raizes = [str(id_categoria_bling).strip()]
 
-        if incluir_subcategorias:
-            ids_filtro = ids_categoria_bling_com_descendentes(
+    if raizes:
+        ids_filtro = set()
+        ids_categoria_api = []
+        for cat_id in raizes:
+            garantir_categoria_bling(
+                cur,
                 id_tenant,
-                id_categoria_bling,
-                incluir_subcategorias=True,
+                contexto,
+                cat_id,
+                cache_api=cache_categorias,
             )
-            ids_categoria_api = sorted(ids_filtro)
-        else:
-            ids_filtro = {id_categoria_bling}
-            ids_categoria_api = [id_categoria_bling]
+            categorias_sincronizadas.add(cat_id)
+            if incluir_subcategorias:
+                ids_cat = ids_categoria_bling_com_descendentes(
+                    id_tenant,
+                    cat_id,
+                    incluir_subcategorias=True,
+                )
+            else:
+                ids_cat = {cat_id}
+            ids_filtro |= ids_cat
+            ids_categoria_api.extend(ids_cat)
+        ids_categoria_api = sorted(set(ids_categoria_api))
 
     itens = _iterar_listas_produtos(id_tenant, ids_categoria_api=ids_categoria_api)
 
@@ -399,7 +408,10 @@ def importar_produtos(
     )
 
     cat_n = len(categorias_sincronizadas)
-    escopo = "todos" if not id_categoria_bling else f"categoria {id_categoria_bling}"
+    if raizes:
+        escopo = f"categorias ({len(raizes)} selecionada(s))"
+    else:
+        escopo = "todos"
     resumo = (
         f"Importados: {importados}, atualizados: {atualizados}, ignorados: {ignorados}"
         f" · categorias: {cat_n} · escopo: {escopo}"

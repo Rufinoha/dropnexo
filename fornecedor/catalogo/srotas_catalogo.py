@@ -908,7 +908,25 @@ def _sincronizar_imagem_principal(cur, id_produto: int) -> None:
 @exigir_modulo("fornecedor")
 @exigir_permissao(codigo="catalogos.ver")
 def pagina():
-    return render_template("frm_catalogos.html", nav_ativo="catalogos")
+    id_tenant = session.get("id_tenant")
+    bling_conectado = False
+    if id_tenant:
+        conn = Var_ConectarBanco()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT status FROM tbl_integracao_bling WHERE id_tenant = %s",
+                (id_tenant,),
+            )
+            row = cur.fetchone()
+            bling_conectado = bool(row and row[0] == "conectado")
+        finally:
+            conn.close()
+    return render_template(
+        "frm_catalogos.html",
+        nav_ativo="catalogos",
+        bling_conectado=bling_conectado,
+    )
 
 
 def _catalogo_montar_linhas_pai(
@@ -1105,6 +1123,7 @@ def catalogos_dados():
             where.append("p.ativo = TRUE")
 
         where_sql = " AND ".join(where)
+        filtro_var_ativo = " AND v.ativo" if somente_ativos else ""
         cur.execute(
             f"""
             SELECT COUNT(*) FROM tbl_produto p WHERE {where_sql}
@@ -1117,9 +1136,9 @@ def catalogos_dados():
             SELECT p.id, p.sku, p.nome, p.formato, p.publicado, p.ativo,
                    COALESCE(p.unidade, 'UN'),
                    c.nome AS categoria,
-                   (SELECT COUNT(*) FROM tbl_produto_variante v WHERE v.id_produto = p.id AND v.ativo),
-                   (SELECT COALESCE(MIN(v.preco), 0) FROM tbl_produto_variante v WHERE v.id_produto = p.id AND v.ativo),
-                   (SELECT COALESCE(MAX(v.preco), 0) FROM tbl_produto_variante v WHERE v.id_produto = p.id AND v.ativo),
+                   (SELECT COUNT(*) FROM tbl_produto_variante v WHERE v.id_produto = p.id{filtro_var_ativo}),
+                   (SELECT COALESCE(MIN(v.preco), 0) FROM tbl_produto_variante v WHERE v.id_produto = p.id{filtro_var_ativo}),
+                   (SELECT COALESCE(MAX(v.preco), 0) FROM tbl_produto_variante v WHERE v.id_produto = p.id{filtro_var_ativo}),
                    (SELECT COALESCE(SUM(e2.quantidade), 0) FROM tbl_produto_variante v2
                     LEFT JOIN tbl_produto_variante_estoque e2 ON e2.id_variante = v2.id
                     WHERE v2.id_produto = p.id),
@@ -1158,13 +1177,17 @@ def catalogos_dados():
         if expandir_variantes:
             ids_var = [p["id"] for p in dados if p["formato"] == "E"]
             if ids_var:
+                var_clause = "v.id_produto = ANY(%s)"
+                var_params: list = [ids_var]
+                if somente_ativos:
+                    var_clause += " AND v.ativo = TRUE"
                 cur.execute(
                     f"""
                     {SQL_VARIANTE_LISTA}
-                    WHERE v.id_produto = ANY(%s)
+                    WHERE {var_clause}
                     ORDER BY v.id_produto, v.ordem, v.nome_exibicao
                     """,
-                    (ids_var,),
+                    tuple(var_params),
                 )
                 for row in cur.fetchall():
                     v = variante_dict(row)

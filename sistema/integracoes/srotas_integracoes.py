@@ -42,15 +42,33 @@ def pagina():
     return render_pagina_integracoes(nav_codigo="integracoes", icones_base_url=_icones_base_url())
 
 
+def _bling_conectado(id_tenant: int | None) -> bool:
+    if not id_tenant:
+        return False
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT status FROM tbl_integracao_bling WHERE id_tenant = %s",
+            (id_tenant,),
+        )
+        row = cur.fetchone()
+        return bool(row and row[0] == "conectado")
+    finally:
+        conn.close()
+
+
 @integracoes_bp.get("/integracoes/bling")
 @login_obrigatorio()
 def pagina_bling():
     if not _pode_ver_integracoes():
         return redirect(url_for("dashboard.index"))
+    bling_conectado = _bling_conectado(session.get("id_tenant"))
     return render_template(
         "frm_bling_integracao.html",
         nav_codigo="integracoes",
         icone_bling=url_icone_integracao("bling", icones_base_url=_icones_base_url()),
+        bling_conectado=bling_conectado,
     )
 
 

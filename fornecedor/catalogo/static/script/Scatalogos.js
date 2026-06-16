@@ -12,12 +12,13 @@
     filtroCategoria: document.getElementById("ob_filtroCategoria"),
     filtroTipo: document.getElementById("ob_filtroTipo"),
     filtroAtivos: document.getElementById("ob_filtroAtivos"),
+    filtroResumo: document.getElementById("ob_filtroResumo"),
     btnFiltrar: document.getElementById("ob_btnFiltrar"),
     btnLimpar: document.getElementById("ob_btnLimpar"),
     btnIncluir: document.getElementById("ob_btnIncluir"),
     btnImportar: document.getElementById("ob_btnImportar"),
-    btnExpandirTodos: document.getElementById("ob_btnExpandirTodos"),
-    btnRecolherTodos: document.getElementById("ob_btnRecolherTodos"),
+    btnImportarBling: document.getElementById("ob_btnImportarBling"),
+    btnToggleExpandTodos: document.getElementById("ob_btnToggleExpandTodos"),
     tbody: document.getElementById("ob_listaProdutos"),
     paginaAtual: document.getElementById("ob_paginaAtual"),
     totalPaginas: document.getElementById("ob_totalPaginas"),
@@ -95,20 +96,25 @@
       .join("");
   }
 
+  function badgeInativo(ativo) {
+    return ativo === false ? '<span class="Cat_BadgeInativo">Inativo</span>' : "";
+  }
+
   function renderNomePai(l) {
     const badge =
       l.formato === "E"
         ? `<span class="Cat_BadgeVar">${Number(l.qtd_variantes || 0)} variações</span>`
         : `<span class="Cat_BadgeSimples">Simples</span>`;
-    return `<div class="Cat_PaiCell"><strong class="Cat_PaiNome">${escapeHtml(l.nome)}</strong>${badge}</div>`;
+    return `<div class="Cat_PaiCell"><strong class="Cat_PaiNome">${escapeHtml(l.nome)}</strong>${badge}${badgeInativo(l.ativo)}</div>`;
   }
 
   function renderNomeVar(l) {
     const chips = renderAtributos(l.atributos);
+    const inativo = badgeInativo(l.ativo);
     if (chips) {
-      return `<div class="Cat_VarCell"><span class="Cat_BadgeVarItem">Variação</span><div class="Cat_VarAttrs">${chips}</div></div>`;
+      return `<div class="Cat_VarCell"><span class="Cat_BadgeVarItem">Variação</span>${inativo}<div class="Cat_VarAttrs">${chips}</div></div>`;
     }
-    return `<div class="Cat_VarCell"><span class="Cat_BadgeVarItem">Variação</span><span class="Cat_VarNome">${escapeHtml(l.nome)}</span></div>`;
+    return `<div class="Cat_VarCell"><span class="Cat_BadgeVarItem">Variação</span>${inativo}<span class="Cat_VarNome">${escapeHtml(l.nome)}</span></div>`;
   }
 
   function renderExpand(l) {
@@ -178,6 +184,7 @@
     const aberto = isPaiVar && !recolhidos.has(l.id);
     const rowCls = [
       isVar ? "Cat_RowVar" : "Cat_RowPai",
+      l.ativo === false ? "Cat_RowInativo" : "",
       isVar && l.primeira_variante ? "Cat_RowVar--first" : "",
       isVar && l.ultima_variante ? "Cat_RowVar--ultima" : "",
       isPaiVar ? "Cat_RowPai--com-var" : "",
@@ -216,13 +223,28 @@
     const linhas = linhasVisiveis();
     if (!linhas.length) {
       el.tbody.innerHTML = '<tr><td colspan="8">Nenhum produto encontrado.</td></tr>';
+      atualizarBtnExpandTodos();
       renderPaginacao();
       return;
     }
     const u = util();
     el.tbody.innerHTML = linhas.map((l) => renderLinha(l, u)).join("");
     window.lucide?.createIcons?.();
+    atualizarBtnExpandTodos();
     renderPaginacao();
+  }
+
+  function atualizarResumoFiltro(total) {
+    const elResumo = el.filtroResumo;
+    if (!elResumo) return;
+    const somenteAtivos = !!el.filtroAtivos?.checked;
+    const qtd = Number(total || 0);
+    if (somenteAtivos) {
+      elResumo.textContent = `${qtd} produto(s) — somente ativos`;
+    } else {
+      elResumo.textContent = `${qtd} produto(s) — ativos e inativos`;
+    }
+    elResumo.hidden = false;
   }
 
   async function carregar() {
@@ -231,6 +253,7 @@
     if (!r.ok || !j.success) throw new Error(j.message || "Erro ao carregar.");
     totalPaginas = j.total_paginas || 1;
     totalRegistros = j.total || 0;
+    atualizarResumoFiltro(totalRegistros);
     if (paginaAtual > totalPaginas) {
       paginaAtual = totalPaginas;
       return carregar();
@@ -258,6 +281,30 @@
   function recolherTodos() {
     idsPaisComVariacoes(linhasCompletas).forEach((id) => recolhidos.add(id));
     renderTabela();
+  }
+
+  function atualizarBtnExpandTodos() {
+    const btn = el.btnToggleExpandTodos;
+    if (!btn) return;
+    const ids = idsPaisComVariacoes(linhasCompletas);
+    if (!ids.length) {
+      btn.hidden = true;
+      return;
+    }
+    btn.hidden = false;
+    const algumAberto = ids.some((id) => !recolhidos.has(id));
+    btn.classList.toggle("is-open", algumAberto);
+    btn.setAttribute("aria-expanded", algumAberto ? "true" : "false");
+    const label = algumAberto ? "Recolher todos" : "Expandir todos";
+    btn.title = label;
+    btn.setAttribute("aria-label", label);
+  }
+
+  function toggleExpandTodos() {
+    const ids = idsPaisComVariacoes(linhasCompletas);
+    if (!ids.length) return;
+    if (ids.some((id) => !recolhidos.has(id))) recolherTodos();
+    else expandirTodos();
   }
 
   function abrirApoio(id) {
@@ -314,12 +361,7 @@
     paginaAtual = 1;
     carregar().catch((e) => Swal.fire("Erro", e.message, "error"));
   });
-  el.filtroAtivos?.addEventListener("change", () => {
-    paginaAtual = 1;
-    carregar().catch((e) => Swal.fire("Erro", e.message, "error"));
-  });
-  el.btnExpandirTodos?.addEventListener("click", expandirTodos);
-  el.btnRecolherTodos?.addEventListener("click", recolherTodos);
+  el.btnToggleExpandTodos?.addEventListener("click", toggleExpandTodos);
   el.btnIncluir?.addEventListener("click", () => abrirApoio(null));
   el.btnImportar?.addEventListener("click", () => {
     window.GlobalUtils?.abrirJanelaApoioModal({
@@ -330,6 +372,132 @@
       nivel: 1,
     });
   });
+
+  async function carregarCategoriasBling() {
+    const r = await fetch("/api/integracoes/bling/categorias");
+    const j = await r.json();
+    if (!r.ok || !j.success) throw new Error(j.message || "Erro ao listar categorias do Bling.");
+    return j.categorias || [];
+  }
+
+  async function abrirImportBling() {
+    let categorias = [];
+    try {
+      categorias = await carregarCategoriasBling();
+    } catch (e) {
+      await Swal.fire("Erro", e.message, "error");
+      return;
+    }
+
+    const optionsHtml = categorias.length
+      ? categorias
+          .map(
+            (c) =>
+              `<option value="${escapeHtml(c.id)}">${escapeHtml(c.label || c.nome || c.id)}</option>`
+          )
+          .join("")
+      : '<option value="" disabled>Nenhuma categoria no Bling</option>';
+
+    const html = `
+      <div class="Cat_BlingSwal">
+        <label class="Cat_BlingOpt"><input type="radio" name="cat_bling_modo" value="todos" checked> Importar todos os produtos</label>
+        <label class="Cat_BlingOpt"><input type="radio" name="cat_bling_modo" value="categorias"> Importar por categoria</label>
+        <div id="cat_bling_cats_wrap" class="Cat_BlingCats" hidden>
+          <span class="Cat_BlingCatsLabel">Selecione uma ou mais categorias (Ctrl+clique)</span>
+          <select id="cat_bling_cats" class="Cat_BlingMulti" multiple size="8">${optionsHtml}</select>
+        </div>
+        <label class="Cat_BlingSub" id="cat_bling_sub_wrap" hidden>
+          <input type="checkbox" id="cat_bling_sub" checked> Incluir subcategorias
+        </label>
+        <p class="Cat_BlingHint">As categorias do Bling serão cadastradas automaticamente no DropNexo.</p>
+      </div>`;
+
+    const result = await Swal.fire({
+      title: "Importar do Bling",
+      html,
+      width: 520,
+      showCancelButton: true,
+      confirmButtonText: "Importar",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#021F81",
+      focusConfirm: false,
+      didOpen: () => {
+        const popup = Swal.getPopup();
+        if (!popup) return;
+        const toggle = () => {
+          const porCat =
+            popup.querySelector('input[name="cat_bling_modo"]:checked')?.value === "categorias";
+          const wrap = popup.querySelector("#cat_bling_cats_wrap");
+          const subWrap = popup.querySelector("#cat_bling_sub_wrap");
+          if (wrap) wrap.hidden = !porCat;
+          if (subWrap) subWrap.hidden = !porCat;
+        };
+        popup.querySelectorAll('input[name="cat_bling_modo"]').forEach((r) => {
+          r.addEventListener("change", toggle);
+        });
+      },
+      preConfirm: () => {
+        const popup = Swal.getPopup();
+        if (!popup) return false;
+        const modo = popup.querySelector('input[name="cat_bling_modo"]:checked')?.value || "todos";
+        if (modo === "todos") {
+          return { modo: "todos", ids: [], incluir_sub: true };
+        }
+        const sel = popup.querySelector("#cat_bling_cats");
+        const ids = Array.from(sel?.selectedOptions || [])
+          .map((o) => o.value)
+          .filter(Boolean);
+        if (!ids.length) {
+          Swal.showValidationMessage("Selecione ao menos uma categoria.");
+          return false;
+        }
+        return {
+          modo: "categorias",
+          ids,
+          incluir_sub: popup.querySelector("#cat_bling_sub")?.checked !== false,
+        };
+      },
+    });
+
+    if (!result.isConfirmed || !result.value) return;
+
+    const body = {};
+    if (result.value.modo === "categorias") {
+      body.ids_categorias_bling = result.value.ids;
+      body.incluir_subcategorias = result.value.incluir_sub;
+    }
+
+    try {
+      Swal.fire({ title: "Importando…", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+      const r = await fetch("/api/integracoes/bling/sync/produtos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const j = await r.json();
+      Swal.close();
+      if (!r.ok || !j.success) throw new Error(j.message || "Falha na importação.");
+      const dados = j.dados || {};
+      const erros = (dados.erros || []).slice(0, 5).join("\n");
+      await Swal.fire({
+        icon: erros ? "warning" : "success",
+        title: "Importação concluída",
+        text: j.message + (erros ? `\n\n${erros}` : ""),
+        confirmButtonColor: "#021F81",
+      });
+      await carregar();
+    } catch (e) {
+      Swal.close();
+      await Swal.fire("Erro", e.message, "error");
+    }
+  }
+
+  if (window.CAT_BLING_CONECTADO && el.btnImportarBling) {
+    el.btnImportarBling.addEventListener("click", () => {
+      abrirImportBling();
+    });
+  }
+
   el.btnPrimeiro?.addEventListener("click", () => {
     paginaAtual = 1;
     carregar();

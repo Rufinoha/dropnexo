@@ -109,6 +109,11 @@ def _pode_integracoes() -> bool:
     )
 
 
+def _pode_bling_sync() -> bool:
+    """Integrações ou edição de catálogo (importar do Bling na lista de produtos)."""
+    return _pode_integracoes() or usuario_tem_permissao("catalogos.editar")
+
+
 def _config_dict(row) -> dict:
     return {
         "contexto": row[0],
@@ -395,7 +400,7 @@ def homologacao_executar():
 @bling_bp.post("/api/integracoes/bling/sync/produtos")
 @login_obrigatorio()
 def sync_produtos():
-    if not _pode_integracoes():
+    if not _pode_bling_sync():
         return jsonify(success=False, message="Sem permissão."), 403
 
     body = request.get_json(silent=True) or {}
@@ -404,6 +409,12 @@ def sync_produtos():
         return jsonify(success=False, message="Contexto inválido."), 400
 
     id_categoria_bling = (body.get("id_categoria_bling") or "").strip() or None
+    raw_ids = body.get("ids_categorias_bling")
+    ids_categorias_bling: list[str] | None = None
+    if isinstance(raw_ids, list):
+        ids_categorias_bling = [str(c).strip() for c in raw_ids if str(c or "").strip()]
+    elif raw_ids:
+        ids_categorias_bling = [str(raw_ids).strip()]
     incluir_subcategorias = body.get("incluir_subcategorias", True)
     if isinstance(incluir_subcategorias, str):
         incluir_subcategorias = incluir_subcategorias.lower() in ("1", "true", "sim", "yes")
@@ -425,6 +436,7 @@ def sync_produtos():
             int(id_tenant),
             contexto,
             id_categoria_bling=id_categoria_bling,
+            ids_categorias_bling=ids_categorias_bling,
             incluir_subcategorias=bool(incluir_subcategorias),
         )
         conn.commit()
@@ -443,7 +455,7 @@ def sync_produtos():
 @login_obrigatorio()
 def api_categorias_bling():
     """Lista categorias de produtos do Bling (árvore) para importação seletiva."""
-    if not _pode_integracoes():
+    if not _pode_bling_sync():
         return jsonify(success=False, message="Sem permissão."), 403
 
     id_tenant = session.get("id_tenant")
