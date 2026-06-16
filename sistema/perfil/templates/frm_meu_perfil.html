@@ -5,6 +5,7 @@
 
 {% block head_extra %}
 <link rel="stylesheet" href="{{ url_for('perfil.static', filename='style/Cmeu_perfil.css') }}" />
+<link rel="stylesheet" href="{{ url_for('static', filename='style/Csegmentos_nichos.css') }}" />
 {% endblock %}
 
 {% block content %}
@@ -89,6 +90,7 @@
     ehDev: {{ 'true' if session.get('eh_desenvolvedor') else 'false' }},
   };
 </script>
+<script defer src="{{ url_for('static', filename='script/Ssegmentos_nichos.js') }}"></script>
 <script defer src="{{ url_for('perfil.static', filename='script/Smeu_perfil_tabs.js') }}"></script>
 <script defer src="{{ url_for('perfil.static', filename='script/Smeu_perfil.js') }}"></script>
 <script defer src="{{ url_for('perfil.static', filename='script/Sempresa.js') }}"></script>

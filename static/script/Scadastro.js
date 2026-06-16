@@ -3,6 +3,8 @@
   if (!form) return;
 
   const apiUrl = window.OSB_CADASTRO_API || "/api/cadastro/novo";
+  const apiSegmentos = window.OSB_CADASTRO_SEGMENTOS_API || "/api/cadastro/segmentos";
+  const tipoNegocioCadastro = (window.OSB_CADASTRO_TIPO || "").toLowerCase();
   const msgEl = document.getElementById("msg-cad");
   const inpDoc = document.getElementById("documento");
   const inpCep = document.getElementById("cep");
@@ -132,6 +134,14 @@
     e.preventDefault();
     msgEl.hidden = true;
 
+    const boxSeg = document.getElementById("cad-segmentos-nichos");
+    if (tipoNegocioCadastro === "fornecedor" && boxSeg && window.SegNichos) {
+      if (!SegNichos.validarMinimo(boxSeg, "Selecione ao menos um segmento (nicho) em que sua empresa atua.")) {
+        mostrarMsg("Selecione ao menos um segmento (nicho) em que sua empresa atua.", false);
+        return;
+      }
+    }
+
     const fd = new FormData(form);
     const tipo = tipoAtual();
     const tipoNegocio = (document.getElementById("tipo_negocio")?.value || "").trim();
@@ -153,6 +163,9 @@
       cidade: String(fd.get("cidade") || "").trim(),
       uf: String(fd.get("uf") || "").trim().toUpperCase(),
     };
+    if (tipoNegocioCadastro === "fornecedor" && boxSeg && window.SegNichos) {
+      body.ids_segmentos_nichos = SegNichos.idsSelecionados(boxSeg);
+    }
 
     const btn = document.getElementById("btn-cadastrar");
     btn.disabled = true;
@@ -184,4 +197,21 @@
   });
 
   aplicarTipoPessoa();
+
+  async function carregarSegmentosCadastro() {
+    const box = document.getElementById("cad-segmentos-nichos");
+    if (!box || tipoNegocioCadastro !== "fornecedor" || !window.SegNichos) return;
+    try {
+      const r = await fetch(apiSegmentos, { headers: { Accept: "application/json" } });
+      const j = await r.json();
+      if (j.success && j.segmentos) {
+        SegNichos.render(box, j.segmentos, []);
+        SegNichos.bind(box);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  carregarSegmentosCadastro();
 })();

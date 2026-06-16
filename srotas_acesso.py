@@ -620,6 +620,7 @@ from global_utils import (
     obter_base_url,
     valida_email,
 )
+from fornecedor.segmentos.servico_segmentos import listar_segmentos_plataforma, salvar_segmentos_fornecedor
 
 cadastro_bp = Blueprint("cadastro", __name__)
 
@@ -724,6 +725,17 @@ def pagina_cadastro():
     )
 
 
+@cadastro_bp.get("/api/cadastro/segmentos")
+def api_cadastro_segmentos():
+    """Lista segmentos marketplace para o formulário de cadastro (público)."""
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        return jsonify(success=True, segmentos=listar_segmentos_plataforma(cur))
+    finally:
+        conn.close()
+
+
 @cadastro_bp.post("/api/cadastro/novo")
 def api_cadastro_novo():
     dados = request.get_json(silent=True) or {}
@@ -770,6 +782,14 @@ def api_cadastro_novo():
         return jsonify(success=False, message="Preencha o endereço completo."), 400
     if not _valida_uf(uf):
         return jsonify(success=False, message="UF inválida."), 400
+
+    ids_segmentos_nichos = dados.get("ids_segmentos_nichos") or []
+    if tipo_negocio == "fornecedor":
+        if not isinstance(ids_segmentos_nichos, list) or not ids_segmentos_nichos:
+            return jsonify(
+                success=False,
+                message="Selecione ao menos um segmento (nicho) em que sua empresa atua.",
+            ), 400
 
     conn = None
     cur = None
@@ -822,6 +842,15 @@ def api_cadastro_novo():
             ),
         )
         id_tenant = cur.fetchone()[0]
+
+        if tipo_negocio == "fornecedor":
+            ids_parsed: list[int] = []
+            for x in ids_segmentos_nichos:
+                try:
+                    ids_parsed.append(int(x))
+                except (TypeError, ValueError):
+                    continue
+            salvar_segmentos_fornecedor(cur, id_tenant, ids_parsed, exigir_minimo=True)
 
         if row_usuario:
             id_usuario, usuario_ativo, senha_hash, token_ativacao = row_usuario

@@ -68,7 +68,7 @@ def categorias():
         "frm_fn_categorias.html",
         nav_ativo="fn_categorias",
         id_segmento_inicial=id_seg,
-        url_segmentos=url_for("fn_segmentos.segmentos"),
+        url_segmentos=url_for("perfil.meu_perfil", aba="empresa"),
     )
 
 @fn_categorias_bp.get("/fornecedor/categorias/segmentos")
@@ -161,7 +161,7 @@ def salvar():
     try:
         cur = conn.cursor()
         if not _segmento_ativo(cur, id_tenant, id_segmento):
-            return jsonify(success=False, message="Ative o segmento em Segmentos antes."), 403
+            return jsonify(success=False, message="Ative o segmento em Minha empresa antes."), 403
 
         if parent_id:
             cur.execute(

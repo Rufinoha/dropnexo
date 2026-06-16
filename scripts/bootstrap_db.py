@@ -192,6 +192,9 @@ def main():
             "020_planos_cobranca_faturas.sql",
             "021_integracao_bling.sql",
             "023_integracao_bling_categoria_map.sql",
+            "024_segmentos_marketplace.sql",
+            "025_segmentos_textos_utf8.sql",
+            "026_remover_menu_segmentos.sql",
         ):
             executar_sql_arquivo(conn, sql_dir / nome)
         seed_usuario_dev(conn)

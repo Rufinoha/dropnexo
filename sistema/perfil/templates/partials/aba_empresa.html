@@ -57,8 +57,18 @@
     </div>
   </section>
 
+  <section class="mp-card" id="emp-sec-nichos" hidden>
+    <h3 class="mp-sec-title">Segmentos do marketplace <span class="ch-req">*</span></h3>
+    <p class="SegNichos_Hint">
+      Escolha os nichos em que sua empresa atua. Isso define filtros, categorias e visibilidade para lojistas.
+      Clique em <strong>?</strong> para ver exemplos de cada segmento.
+    </p>
+    <div id="emp-segmentos-nichos" class="SegNichos_Grid"></div>
+    <p id="emp-seg-erro" class="SegNichos_Erro" hidden></p>
+  </section>
+
   <section class="mp-card">
-    <h3 class="mp-sec-title">Dados fiscais e segmento</h3>
+    <h3 class="mp-sec-title">Dados fiscais e atividade</h3>
     <div class="mp-g12">
       <div class="filter-group mp-c3">
         <label for="emp-ie">Inscrição estadual</label>
@@ -107,7 +117,7 @@
         </select>
       </div>
       <div class="filter-group mp-c12">
-        <span class="mp-label-block">Segmentos de atuação</span>
+        <span class="mp-label-block">Tipos de atividade (fiscal)</span>
         <div class="mp-check-row">
           <label class="mp-check-pill"><input type="checkbox" id="emp-seg-comercio" /> Comércio</label>
           <label class="mp-check-pill"><input type="checkbox" id="emp-seg-ecommerce" /> E-commerce</label>

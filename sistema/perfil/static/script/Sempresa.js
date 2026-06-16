@@ -6,6 +6,7 @@
 
   const cfg = window.OSB_MEU_PERFIL || {};
   let dadosOriginais = null;
+  let exigeNichos = false;
 
   function el(id) {
     return document.getElementById(id);
@@ -51,6 +52,20 @@
     return out;
   }
 
+  function renderSegmentosNichos(d) {
+    const sec = el("emp-sec-nichos");
+    const box = el("emp-segmentos-nichos");
+    if (!sec || !box || !window.SegNichos) return;
+    const tipo = (d.tipo_negocio || "").toLowerCase();
+    exigeNichos = tipo === "fornecedor" || tipo === "hibrido";
+    sec.hidden = !exigeNichos;
+    if (!exigeNichos) return;
+    const segs = d.segmentos_nichos || [];
+    const ids = d.ids_segmentos_nichos || [];
+    SegNichos.render(box, segs, ids);
+    SegNichos.bind(box);
+  }
+
   function preencher(d) {
     dadosOriginais = d;
     el("emp-nome").value = d.nome || d.nome_fantasia || "";
@@ -94,6 +109,7 @@
       img.hidden = true;
       ph.hidden = false;
     }
+    renderSegmentosNichos(d);
   }
 
   async function carregar() {
@@ -126,6 +142,14 @@
 
   async function salvar(ev) {
     ev.preventDefault();
+    const boxSeg = el("emp-segmentos-nichos");
+    if (exigeNichos && boxSeg && window.SegNichos) {
+      const err = el("emp-seg-erro");
+      if (!SegNichos.validarMinimo(boxSeg, "Selecione ao menos um segmento (nicho) em que sua empresa atua.")) {
+        if (err) err.hidden = false;
+        return;
+      }
+    }
     const apelido = el("emp-nome").value.trim();
     const body = {
       nome: apelido,
@@ -159,6 +183,9 @@
       site: el("emp-site").value.trim(),
       inscricoes_st: coletarSt(),
     };
+    if (exigeNichos && boxSeg && window.SegNichos) {
+      body.ids_segmentos_nichos = SegNichos.idsSelecionados(boxSeg);
+    }
     try {
       const r = await fetch(cfg.apiEmpresaSalvar, {
         method: "PUT",

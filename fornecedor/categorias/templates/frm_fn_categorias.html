@@ -11,7 +11,7 @@
   <div class="cl-page-title">
     <h2>Categorias</h2>
     <p class="cl-page-desc">
-      Segmento em <a href="{{ url_for('fn_segmentos.segmentos') }}">Segmentos</a> —
+      Segmento em <a href="{{ url_for('perfil.meu_perfil', aba='empresa') }}">Minha empresa</a> —
       até 3 níveis de categorias.
     </p>
   </div>
@@ -21,7 +21,7 @@
       <h3 class="FnCat_PanelTitulo">Segmentos</h3>
       <div id="fn_cat_seg_lista" class="FnCat_SegLista"></div>
       <p id="fn_cat_seg_vazio" class="FnCat_Hint" hidden>
-        Nenhum segmento ativo. <a href="{{ url_for('fn_segmentos.segmentos') }}">Ative em Segmentos</a>.
+        Nenhum segmento ativo. <a href="{{ url_for('perfil.meu_perfil', aba='empresa') }}">Ative em Minha empresa</a>.
       </p>
     </aside>
 

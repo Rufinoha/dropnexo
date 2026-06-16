@@ -18,6 +18,12 @@ from global_utils import (
     valida_email,
     validar_politica_senha,
 )
+from fornecedor.segmentos.servico_segmentos import (
+    ids_segmentos_fornecedor,
+    listar_segmentos_plataforma,
+    salvar_segmentos_fornecedor,
+    tenant_exige_segmentos_nichos,
+)
 
 
 _MOD_DIR = Path(__file__).resolve().parent
@@ -291,6 +297,7 @@ def _tenant_row_para_dict(row, inscricoes: list) -> dict:
         "site": row[30] or "",
         "logo_url": _url_logo_tenant(row[31]),
         "plano": row[32],
+        "tipo_negocio": row[33] or "",
         "inscricoes_st": inscricoes,
     }
 
@@ -305,7 +312,7 @@ def _carregar_tenant_empresa(cur, id_tenant: int) -> dict | None:
                segmento_servicos, faturamento_ultimo_ano, quantidade_funcionarios,
                cep, logradouro, numero, complemento, bairro, cidade, uf,
                pessoas_contato, telefone_comercial, celular_comercial, email_comercial,
-               site, logo_caminho, plano
+               site, logo_caminho, plano, tipo_negocio
         FROM tbl_tenant WHERE id = %s
         """,
         (id_tenant,),
@@ -672,6 +679,9 @@ def api_minha_empresa_dados():
         dados = _carregar_tenant_empresa(cur, id_tenant)
         if not dados:
             return jsonify(success=False, message="Empresa não encontrada."), 404
+        if tenant_exige_segmentos_nichos(dados.get("tipo_negocio")):
+            dados["ids_segmentos_nichos"] = ids_segmentos_fornecedor(cur, id_tenant)
+            dados["segmentos_nichos"] = listar_segmentos_plataforma(cur, id_tenant)
         return jsonify(success=True, dados=dados)
     except Exception as e:
         return jsonify(success=False, message=str(e)), 500
@@ -772,6 +782,20 @@ def api_minha_empresa_salvar():
                     "INSERT INTO tbl_tenant_inscricao_st (id_tenant, uf, inscricao_estadual) VALUES (%s,%s,%s)",
                     (id_tenant, iuf, ie),
                 )
+        cur.execute("SELECT tipo_negocio FROM tbl_tenant WHERE id = %s", (id_tenant,))
+        tipo_row = cur.fetchone()
+        tipo_neg = tipo_row[0] if tipo_row else ""
+        if tenant_exige_segmentos_nichos(tipo_neg):
+            ids_nichos = dados.get("ids_segmentos_nichos") or []
+            if not isinstance(ids_nichos, list):
+                ids_nichos = []
+            ids_parsed: list[int] = []
+            for x in ids_nichos:
+                try:
+                    ids_parsed.append(int(x))
+                except (TypeError, ValueError):
+                    continue
+            salvar_segmentos_fornecedor(cur, id_tenant, ids_parsed, exigir_minimo=True)
         conn.commit()
         session["tenant_nome"] = nome
         return jsonify(success=True, message="Dados da empresa salvos.")

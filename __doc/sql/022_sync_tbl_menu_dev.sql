@@ -22,12 +22,12 @@ UPDATE tbl_menu SET nome_menu = 'Depósitos', descricao = 'Filiais de expediçã
     tipo_abrir = 'Mesma Janela', ordem = 15, parent_id = NULL, pai = TRUE, status = TRUE, obs = NULL, id_modulo = NULL, contexto_modulo = 'fornecedor'
 WHERE nav_codigo = 'fn_depositos';
 
--- fn_segmentos
+-- fn_segmentos (descontinuado — nichos em Minha empresa)
 INSERT INTO tbl_menu (nome_menu, descricao, data_page, icone, tipo_abrir, ordem, parent_id, pai, status, obs, id_modulo, nav_codigo, contexto_modulo)
-SELECT 'Segmentos', 'Nichos e categorias', '/fornecedor/segmentos', 'layers', 'Mesma Janela', 20, NULL, TRUE, TRUE, NULL, NULL, 'fn_segmentos', 'fornecedor'
+SELECT 'Segmentos', 'Movido para Minha empresa', '/meu-perfil?aba=empresa', 'layers', 'Mesma Janela', 20, NULL, TRUE, FALSE, 'Descontinuado', NULL, 'fn_segmentos', 'fornecedor'
 WHERE NOT EXISTS (SELECT 1 FROM tbl_menu WHERE nav_codigo = 'fn_segmentos');
-UPDATE tbl_menu SET nome_menu = 'Segmentos', descricao = 'Nichos e categorias', data_page = '/fornecedor/segmentos', icone = 'layers',
-    tipo_abrir = 'Mesma Janela', ordem = 20, parent_id = NULL, pai = TRUE, status = TRUE, obs = NULL, id_modulo = NULL, contexto_modulo = 'fornecedor'
+UPDATE tbl_menu SET nome_menu = 'Segmentos', descricao = 'Movido para Minha empresa', data_page = '/meu-perfil?aba=empresa', icone = 'layers',
+    tipo_abrir = 'Mesma Janela', ordem = 20, parent_id = NULL, pai = TRUE, status = FALSE, obs = 'Descontinuado', id_modulo = NULL, contexto_modulo = 'fornecedor'
 WHERE nav_codigo = 'fn_segmentos';
 
 -- fn_categorias

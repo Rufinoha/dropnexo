@@ -82,7 +82,7 @@ def resolver_url_menu(data_page: str) -> str:
         "/integracoes": "integracoes.pagina",
         "/configuracoes": "config.configuracoes",
         "/fornecedor/depositos": "fn_depositos.depositos",
-        "/fornecedor/segmentos": "fn_segmentos.segmentos",
+        "/meu-perfil": "perfil.meu_perfil",
         "/fornecedor/categorias": "fn_categorias.categorias",
         "/fornecedor/variacoes": "fn_variacoes.variacoes",
         "/fornecedor/vendedores": "fn_vendedores.vendedores",
