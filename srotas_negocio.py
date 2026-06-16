@@ -5,7 +5,19 @@ import json
 from decimal import Decimal
 from typing import Any
 
-from flask import render_template, session
+from flask import render_template, session, url_for
+
+from pathlib import Path
+
+_RAIZ_PROJETO = Path(__file__).resolve().parent
+_ICONES_API_DIR = _RAIZ_PROJETO / "static" / "imge" / "icone_api"
+
+# slug da integração → arquivo em static/imge/icone_api/
+ICONES_API_ARQUIVOS: dict[str, str] = {
+    "bling": "icone_bling.png",
+    "olist": "icone_olist.png",
+    "conta-azul": "icone_contaazul.png",
+}
 
 # ── Categorias (fornecedor) ───────────────────────────────────────────
 
@@ -275,6 +287,26 @@ CATEGORIAS_INTEGRACOES = [
 ]
 
 
+def _arquivo_icone_api(slug: str) -> str | None:
+    """Resolve PNG em static/imge/icone_api/ (mapa explícito ou convenção icone_{slug}.png)."""
+    nome = ICONES_API_ARQUIVOS.get(slug)
+    if nome and (_ICONES_API_DIR / nome).is_file():
+        return nome
+    conv = f"icone_{slug.replace('-', '')}.png"
+    if (_ICONES_API_DIR / conv).is_file():
+        return conv
+    return None
+
+
+def url_icone_integracao(slug: str, *, icones_base_url: str = "") -> str:
+    """URL do ícone da integração (prioriza static/imge/icone_api/)."""
+    arquivo = _arquivo_icone_api(slug)
+    if arquivo:
+        return url_for("static", filename=f"imge/icone_api/{arquivo}")
+    base = icones_base_url if icones_base_url.endswith("/") else f"{icones_base_url}/"
+    return f"{base}{slug}.png"
+
+
 def catalogo_com_urls(icones_base_url: str) -> list[dict]:
     base = icones_base_url if icones_base_url.endswith("/") else icones_base_url + "/"
     out = []
@@ -283,8 +315,16 @@ def catalogo_com_urls(icones_base_url: str) -> list[dict]:
         itens = []
         for item in cat["itens"]:
             i = dict(item)
-            i["icone_png"] = f"{base}{item['slug']}.png"
-            i["icone_svg"] = f"{base}{item['slug']}.svg"
+            slug = item["slug"]
+            arquivo_api = _arquivo_icone_api(slug)
+            if arquivo_api:
+                url_png = url_for("static", filename=f"imge/icone_api/{arquivo_api}")
+                i["icone_png"] = url_png
+                i["icone_svg"] = f"{base}{slug}.svg"
+                i["icone_custom"] = True
+            else:
+                i["icone_png"] = f"{base}{slug}.png"
+                i["icone_svg"] = f"{base}{slug}.svg"
             itens.append(i)
         c["itens"] = itens
         out.append(c)

@@ -38,6 +38,19 @@
   padding: 4px;
 }
 
+.Bl_ManualLink {
+  margin-left: 0.35rem;
+  font-size: 0.86rem;
+  font-weight: 500;
+  color: #021f81;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.Bl_ManualLink:hover {
+  color: #2c6bf3;
+}
+
 .Bl_ConnBadge {
   padding: 0.35rem 0.75rem;
   border-radius: 999px;

@@ -64,17 +64,6 @@ def para_fornecedores():
     )
 
 
-@public_bp.get("/ajuda/bling")
-def ajuda_bling():
-    base = obter_base_url().rstrip("/")
-    return render_template(
-        "ajuda_bling.html",
-        url_home=url_for("public.home"),
-        url_login=url_for("auth.pagina_login"),
-        url_login_abs=f"{base}/login",
-    )
-
-
 # --- srotas_auth ---
 import logging
 

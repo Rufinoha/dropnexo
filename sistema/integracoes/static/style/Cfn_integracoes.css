@@ -160,6 +160,15 @@
   overflow: hidden;
   position: relative;
   border: 1px solid #e8ecf2;
+  background: #fff;
+}
+
+.FnInt_CardIcon.is-fallback {
+  background: var(--int-cor, #475569);
+}
+
+.FnInt_CardIcon:not(.is-fallback) {
+  background: #fff !important;
 }
 
 .FnInt_CardIcon img {

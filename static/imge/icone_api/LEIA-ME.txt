@@ -1,0 +1,16 @@
+Ícones das integrações (hub)
+============================
+
+Coloque aqui os logos em PNG (fundo transparente, ~128×128 px).
+
+Nomenclatura:
+  icone_bling.png
+  icone_olist.png
+  icone_contaazul.png
+
+Ou pela convenção automática:
+  icone_{slug sem hífen}.png
+  Ex.: slug "mercado-livre" → icone_mercadolivre.png
+
+O hub tenta este diretório primeiro; se não achar, usa o placeholder
+em sistema/integracoes/static/imge/integracoes/ (.svg com iniciais).

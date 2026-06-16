@@ -51,6 +51,12 @@ def registrar_templates_modulos(app):
                 if tpl_dir.is_dir():
                     loaders.append(FileSystemLoader(str(tpl_dir.resolve())))
 
+    api_base = raiz_projeto / "api"
+    if api_base.is_dir():
+        for tpl_dir in api_base.rglob("templates"):
+            if tpl_dir.is_dir():
+                loaders.append(FileSystemLoader(str(tpl_dir.resolve())))
+
     tpl_app = raiz_projeto / "templates"
     if tpl_app.is_dir():
         loaders.append(FileSystemLoader(str(tpl_app.resolve())))
@@ -121,6 +127,15 @@ def obter_base_url() -> str:
 
     porta = (os.getenv("PORTA") or "5260").strip()
     return f"http://127.0.0.1:{porta}"
+
+
+def obter_url_site_publico() -> str:
+    """
+    URL do site em produção — manuais, rodapés e links para o cliente.
+    Independente de MODO_PRODUCAO (em dev o manual ainda aponta para o site real).
+    """
+    base = (os.getenv("BASE_PROD") or "https://dropnexo.com.br").strip().rstrip("/")
+    return base
 
 
 def Var_ConectarBanco():

@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Passo a passo para conectar o Bling ERP ao DropNexo — OAuth, autorização e sincronização de produtos." />
+  <title>Como conectar o Bling · {{ MARCA_NOME }}</title>
+  {% include "partials/marca_favicon.html" %}
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style/global_utils.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style/home.css') }}" />
+  <link rel="stylesheet" href="{{ css_url }}" />
+  {% include "partials/gtag_analytics.html" %}
+</head>
+<body class="public-body home-page ajuda-bling-page">
+  <header class="public-header ajuda-bling-header">
+    <a class="logo logo--img" href="{{ url_home }}">
+      <img src="{{ marca_logo_nome_url }}" alt="{{ MARCA_NOME }}" height="32" />
+    </a>
+    <nav class="home-nav ajuda-bling-nav" aria-label="Manual Bling">
+      <a class="nav-link" href="#passos">Passo a passo</a>
+      <a class="nav-link" href="#config-fornecedor">Config. fornecedor</a>
+      <a class="nav-link" href="#requisitos">Requisitos</a>
+      <a class="nav-link" href="#faq">Dúvidas</a>
+      <a class="btn btn-ghost" href="{{ url_login }}">Entrar</a>
+    </nav>
+  </header>
+
+  <main class="ajuda-bling-main">
+    <header class="ajuda-bling-hero">
+      <p class="home-kicker">Integração oficial · Bling API v3</p>
+      <h1>Como conectar o Bling ao {{ MARCA_NOME }}</h1>
+      <p class="lead">
+        Siga os <strong>5 passos</strong> abaixo para autorizar sua conta Bling com segurança (OAuth 2.0)
+        e começar a sincronizar produtos, estoque e pedidos.
+      </p>
+      <div class="ajuda-bling-hero__meta">
+        <span class="ajuda-bling-chip">Sem compartilhar senha</span>
+        <span class="ajuda-bling-chip">Multi-tenant</span>
+        <span class="ajuda-bling-chip">Fornecedor e vendedor</span>
+      </div>
+    </header>
+
+    <article class="ajuda-bling-doc">
+      <section id="passos" class="ajuda-bling-section">
+        <h2>Passo a passo</h2>
+        <p class="ajuda-bling-intro">
+          A integração com o Bling exige um <strong>plano pago</strong> (Profissional ou superior).
+          Se ainda não tem conta, cadastre-se como
+          <a href="{{ url_cadastro_fornecedor }}">fornecedor</a> ou
+          <a href="{{ url_cadastro_vendedor }}">vendedor</a> e contrate o plano em <strong>Meu plano</strong>.
+          Já é cliente? Acesse <a href="{{ url_login_publico }}">{{ url_login_publico }}</a>,
+          faça login na sua empresa e siga as telas na ordem:
+        </p>
+
+        <ol class="ajuda-bling-guia">
+          {% for passo in passos %}
+          <li class="ajuda-bling-passo">
+            <div class="ajuda-bling-passo__head">
+              <span class="ajuda-bling-passo__num">{{ loop.index }}</span>
+              <h3>{{ passo.titulo }}</h3>
+            </div>
+            <p class="ajuda-bling-passo__texto">{{ passo.texto|safe }}</p>
+            <figure class="ajuda-bling-fig">
+              <img
+                src="{{ passo.img_url }}"
+                alt="Passo {{ loop.index }} — {{ passo.titulo }}"
+                loading="lazy"
+                decoding="async"
+              />
+              <figcaption>Passo {{ loop.index }} de {{ passos|length }}</figcaption>
+            </figure>
+          </li>
+          {% endfor %}
+        </ol>
+      </section>
+
+      <section id="config-fornecedor" class="ajuda-bling-section">
+        <h2>Configuração — Fornecedor</h2>
+        <p class="ajuda-bling-intro">
+          Após conectar (passo 5), revise cada campo abaixo antes de clicar em <strong>Salvar</strong>.
+          Os valores padrão já vêm pré-preenchidos para o perfil <strong>fornecedor</strong>.
+        </p>
+
+        {% for item in config_fornecedor %}
+        <article class="ajuda-bling-cfg">
+          <header class="ajuda-bling-cfg__head">
+            <h3>{{ item.campo }}</h3>
+            <span class="ajuda-bling-cfg__padrao">Padrão: {{ item.padrao }}</span>
+          </header>
+          <p class="ajuda-bling-cfg__desc">{{ item.descricao }}</p>
+
+          <div class="ajuda-bling-opcoes">
+            {% for op in item.opcoes %}
+            <div class="ajuda-bling-opcao">
+              <h4>{{ op.nome }}</h4>
+              <p>{{ op.efeito|safe }}</p>
+            </div>
+            {% endfor %}
+          </div>
+
+          {% if item.nota %}
+          <p class="ajuda-bling-note">{{ item.nota }}</p>
+          {% endif %}
+        </article>
+        {% endfor %}
+
+        <h3 class="ajuda-bling-subtitulo">Botões da tela</h3>
+        <ul class="ajuda-bling-botoes">
+          {% for btn in botoes_fornecedor %}
+          <li>
+            <strong>{{ btn.nome }}</strong> — {{ btn.efeito|safe }}
+          </li>
+          {% endfor %}
+        </ul>
+      </section>
+
+      <section id="requisitos" class="ajuda-bling-section">
+        <h2>Requisitos</h2>
+        <ul>
+          <li>Conta ativa no <strong>{{ MARCA_NOME }}</strong> (perfil fornecedor ou vendedor).</li>
+          <li><strong>Plano pago</strong> ativo (Profissional ou Enterprise) — integrações não estão no plano gratuito Starter.</li>
+          <li>Conta <strong>Bling</strong> com permissão para autorizar aplicativos.</li>
+          <li>Produtos com <strong>SKU</strong> cadastrado no Bling para sincronização de catálogo.</li>
+        </ul>
+      </section>
+
+      <section id="faq" class="ajuda-bling-section">
+        <h2>Dúvidas frequentes</h2>
+        <dl class="ajuda-bling-faq">
+          <dt>O DropNexo guarda minha senha do Bling?</dt>
+          <dd>Não. A conexão usa OAuth — você autoriza na tela do Bling e armazenamos apenas tokens criptografados.</dd>
+
+          <dt>Preciso instalar o app na Central de Extensões do Bling?</dt>
+          <dd>Não obrigatoriamente. Você pode conectar diretamente pelo painel do {{ MARCA_NOME }} em Integrações → ERP → Bling.</dd>
+
+          <dt>Por que um produto não sincronizou?</dt>
+          <dd>Verifique se o produto possui <strong>SKU</strong> no Bling e se os escopos de produtos foram autorizados.</dd>
+        </dl>
+      </section>
+
+      <section class="ajuda-bling-section ajuda-bling-section--contact">
+        <h2>Precisa de ajuda?</h2>
+        <ul class="ajuda-bling-contact">
+          {% if CONTATO_EMAIL %}
+          <li>E-mail: <a href="mailto:{{ CONTATO_EMAIL }}">{{ CONTATO_EMAIL }}</a></li>
+          {% endif %}
+          {% if CONTATO_WHATSAPP %}
+          <li>WhatsApp: <a href="https://wa.me/{{ CONTATO_WHATSAPP }}" target="_blank" rel="noopener">{{ CONTATO_WHATSAPP }}</a></li>
+          {% endif %}
+          <li>Site: <a href="https://dropnexo.com.br" target="_blank" rel="noopener">dropnexo.com.br</a></li>
+        </ul>
+      </section>
+    </article>
+  </main>
+
+  <footer class="home-footer">
+    <p>© {{ MARCA_NOME }} · {{ MARCA_FAMILIA }} · <a href="{{ url_home }}">dropnexo.com.br</a></p>
+  </footer>
+</body>
+</html>

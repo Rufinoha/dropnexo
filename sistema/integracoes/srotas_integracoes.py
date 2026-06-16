@@ -4,7 +4,7 @@ from flask import Blueprint, jsonify, redirect, render_template, session, url_fo
 
 from global_utils import Var_ConectarBanco, login_obrigatorio, usuario_tem_permissao
 from srotas_plataforma import garantir_modulo_sessao
-from srotas_negocio import catalogo_com_urls, render_pagina_integracoes
+from srotas_negocio import catalogo_com_urls, render_pagina_integracoes, url_icone_integracao
 
 _MOD_DIR = Path(__file__).resolve().parent
 
@@ -50,7 +50,7 @@ def pagina_bling():
     return render_template(
         "frm_bling_integracao.html",
         nav_codigo="integracoes",
-        icone_bling=url_for("integracoes.static", filename="imge/integracoes/bling.svg"),
+        icone_bling=url_icone_integracao("bling", icones_base_url=_icones_base_url()),
     )
 
 

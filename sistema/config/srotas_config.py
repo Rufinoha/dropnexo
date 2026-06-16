@@ -10,6 +10,7 @@ from global_utils import (
     login_obrigatorio,
     usuario_tem_permissao,
 )
+from srotas_negocio import url_icone_integracao
 from srotas_plataforma import (
     carregar_usuario_apoio,
     inativar_usuario_tenant,
@@ -67,7 +68,7 @@ def testes_integracao_pagina():
     return render_template(
         "frm_config_testes_integracao.html",
         nav_ativo="config",
-        icone_bling=url_for("integracoes.static", filename="imge/integracoes/bling.svg"),
+        icone_bling=url_icone_integracao("bling"),
     )
 
 
@@ -79,7 +80,7 @@ def teste_integracao_bling_pagina():
     return render_template(
         "frm_config_teste_bling.html",
         nav_ativo="config",
-        icone_bling=url_for("integracoes.static", filename="imge/integracoes/bling.svg"),
+        icone_bling=url_icone_integracao("bling"),
     )
 
 

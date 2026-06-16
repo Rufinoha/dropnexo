@@ -6,7 +6,7 @@ import mimetypes
 import os
 from pathlib import Path
 
-from flask import Blueprint, jsonify, redirect, request, send_file, session, url_for
+from flask import Blueprint, abort, jsonify, redirect, render_template, request, send_file, session, url_for
 
 from api.bling.cliente import (
     bling_configurado,
@@ -19,12 +19,27 @@ from api.bling.cliente import (
 )
 from api.bling.config_padrao import aplicar_defaults_conexao, garantir_config_contexto
 from api.bling.homologacao import executar_homologacao
+from api.bling.manual_conteudo import (
+    MANUAL_BLING_BOTOES_FORNECEDOR,
+    MANUAL_BLING_CONFIG_FORNECEDOR,
+    MANUAL_BLING_PASSOS,
+    MANUAL_IMAGENS_PERMITIDAS,
+)
 from api.bling.sync_produtos import importar_produtos
 from api.bling.tokens import descriptografar_token
-from global_utils import Var_ConectarBanco, agora_utc, login_obrigatorio, usuario_tem_permissao
+from global_utils import Var_ConectarBanco, agora_utc, login_obrigatorio, obter_url_site_publico, usuario_tem_permissao
 from srotas_plataforma import garantir_modulo_sessao, rotulo_modulo
 
-bling_bp = Blueprint("bling", __name__)
+_MOD_BLING = Path(__file__).resolve().parent
+
+bling_bp = Blueprint(
+    "bling",
+    __name__,
+    root_path=str(_MOD_BLING),
+    template_folder="templates",
+    static_folder="static",
+    static_url_path="/static/api/bling",
+)
 
 
 def init_app(app):
@@ -33,6 +48,56 @@ def init_app(app):
 
 def _raiz_projeto() -> Path:
     return Path(__file__).resolve().parents[2]
+
+
+def _urls_manual_publico(base: str) -> dict[str, str]:
+    return {
+        "url_login": f"{base}/login",
+        "url_cadastro_fornecedor": f"{base}/cadastro?tipo=fornecedor",
+        "url_cadastro_vendedor": f"{base}/cadastro?tipo=vendedor",
+        "url_home": f"{base}/",
+    }
+
+
+def _passos_manual_com_urls(base: str) -> list[dict]:
+    urls = _urls_manual_publico(base)
+    passos = []
+    for p in MANUAL_BLING_PASSOS:
+        item = {**p, "img_url": url_for("bling.ajuda_bling_imagem", nome=p["img"])}
+        if "{" in item.get("texto", ""):
+            item["texto"] = item["texto"].format(**urls)
+        passos.append(item)
+    return passos
+
+
+@bling_bp.get("/ajuda/bling")
+def ajuda_bling():
+    """Manual público — conexão OAuth com o Bling."""
+    base = obter_url_site_publico()
+    urls = _urls_manual_publico(base)
+    return render_template(
+        "ajuda_bling.html",
+        passos=_passos_manual_com_urls(base),
+        config_fornecedor=MANUAL_BLING_CONFIG_FORNECEDOR,
+        botoes_fornecedor=MANUAL_BLING_BOTOES_FORNECEDOR,
+        url_home=url_for("public.home"),
+        url_login=url_for("auth.pagina_login"),
+        url_login_publico=urls["url_login"],
+        url_cadastro_fornecedor=urls["url_cadastro_fornecedor"],
+        url_cadastro_vendedor=urls["url_cadastro_vendedor"],
+        css_url=url_for("bling.static", filename="style/ajuda_bling.css"),
+    )
+
+
+@bling_bp.get("/ajuda/bling/imagens/<path:nome>")
+def ajuda_bling_imagem(nome: str):
+    if nome not in MANUAL_IMAGENS_PERMITIDAS:
+        abort(404)
+    arquivo = _MOD_BLING / "manual" / nome
+    if not arquivo.is_file():
+        abort(404)
+    mime, _ = mimetypes.guess_type(str(arquivo))
+    return send_file(arquivo, mimetype=mime or "image/jpeg", max_age=86400)
 
 
 def _pode_integracoes() -> bool:

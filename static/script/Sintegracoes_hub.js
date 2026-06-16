@@ -114,6 +114,9 @@
           <i data-lucide="shield-check"></i>
           Redirecionamento seguro para autorizar o acesso.
         </p>
+        <p class="FnInt_ConnectDialog__manual">
+          <a href="/ajuda/bling" target="_blank" rel="noopener noreferrer">Como conectar? Ver manual passo a passo</a>
+        </p>
       </div>`;
   }
 
@@ -149,8 +152,8 @@
     return `
       <div class="FnInt_CardWrap${conectado ? " is-connected" : ""}${picked ? " is-picked" : ""}" data-slug="${slug}" role="listitem">
         <button type="button" class="FnInt_Card" data-slug="${slug}" data-nome="${item.nome}" data-ativa="${ativa ? "1" : "0"}" data-conectado="${conectado ? "1" : "0"}">
-          <div class="FnInt_CardIcon is-fallback" style="background:${item.cor || "#475569"}">
-            <img src="${item.icone_png}" alt="" loading="lazy"
+          <div class="FnInt_CardIcon" style="--int-cor:${item.cor || "#475569"}">
+            <img src="${item.icone_png}" alt="" loading="eager" decoding="async"
               onload="this.parentElement.classList.remove('is-fallback')"
               onerror="this.onerror=null;this.src='${item.icone_svg}';this.addEventListener('error',()=>{this.parentElement.classList.add('is-fallback')},{once:true})" />
             <span class="FnInt_CardFallback">${item.iniciais || item.nome.slice(0, 2).toUpperCase()}</span>

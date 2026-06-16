@@ -381,6 +381,23 @@ body.FnInt-modal-open {
   flex-shrink: 0;
 }
 
+.FnInt_ConnectDialog__manual {
+  margin: 0.65rem 0 0;
+  font-size: 0.8rem;
+  text-align: center;
+}
+
+.FnInt_ConnectDialog__manual a {
+  color: #021f81;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.FnInt_ConnectDialog__manual a:hover {
+  color: #2c6bf3;
+}
+
 .FnInt_CardPanel {
   width: 100%;
 }
@@ -425,6 +442,15 @@ body.FnInt-modal-open {
   overflow: hidden;
   position: relative;
   border: 1px solid #e8ecf2;
+  background: #fff;
+}
+
+.FnInt_CardIcon.is-fallback {
+  background: var(--int-cor, #475569);
+}
+
+.FnInt_CardIcon:not(.is-fallback) {
+  background: #fff !important;
 }
 
 .FnInt_CardIcon img {

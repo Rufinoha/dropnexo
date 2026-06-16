@@ -41,8 +41,8 @@
     const cor = item.cor || "#475569";
     return `
       <button type="button" class="FnInt_Card" data-slug="${item.slug}" data-nome="${item.nome}" role="listitem">
-        <div class="FnInt_CardIcon is-fallback" style="background:${cor}">
-          <img src="${item.icone_png}" alt="" loading="lazy"
+        <div class="FnInt_CardIcon" style="--int-cor:${cor}">
+          <img src="${item.icone_png}" alt="" loading="eager" decoding="async"
             onload="this.parentElement.classList.remove('is-fallback')"
             onerror="this.onerror=null;this.src='${item.icone_svg}';this.addEventListener('error',()=>{this.parentElement.classList.add('is-fallback')},{once:true})" />
           <span class="FnInt_CardFallback">${item.iniciais || item.nome.slice(0, 2).toUpperCase()}</span>
