@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Layout de importação</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style/global_utils.css') }}">
+  <link rel="stylesheet" href="{{ url_for('fn_importacao.static', filename='style/Cimportacao.css') }}?v=4">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+</head>
+<body class="imp-layout-apoio-body">
+  <div class="imp-layout-apoio">
+    <input type="hidden" id="impLayId" />
+    <div class="imp-layout-apoio-card">
+      <div class="imp-layout-apoio-grid">
+        <div class="imp-field">
+          <label for="impLayNome">Nome do layout *</label>
+          <input id="impLayNome" type="text" maxlength="120" placeholder="Ex.: Catálogo CSV personalizado" />
+        </div>
+        <div class="imp-field">
+          <label for="impLayDesc">Descrição</label>
+          <input id="impLayDesc" type="text" placeholder="Opcional" />
+        </div>
+        <div class="imp-layout-apoio-switches">
+          <div class="Cl_SwitchGroup">
+            <span class="Cl_SwitchLabel">Ativo</span>
+            <label class="Cl_Switch">
+              <input type="checkbox" id="impLayAtivo" checked />
+              <span class="Cl_SwitchSlider"></span>
+            </label>
+          </div>
+          <div class="Cl_SwitchGroup">
+            <span class="Cl_SwitchLabel">Padrão</span>
+            <label class="Cl_Switch">
+              <input type="checkbox" id="impLayPadrao" />
+              <span class="Cl_SwitchSlider"></span>
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="imp-layout-apoio-card">
+      <div class="imp-layout-apoio-toolbar">
+        <input id="impLayFiltro" type="search" placeholder="Filtrar campo…" />
+        <button type="button" class="Cl_botaoFiltro" id="impLayBtnCampos">Carregar campos</button>
+      </div>
+      <div class="Cl_TabelaPrincipal imp-table-wrap">
+        <table class="imp-table">
+          <thead>
+            <tr>
+              <th>Ordem</th>
+              <th>Campo interno</th>
+              <th>Coluna no CSV</th>
+              <th>Obrigatório</th>
+            </tr>
+          </thead>
+          <tbody id="impLayTblCampos">
+            <tr><td colspan="4">Carregue os campos ou abra um layout existente.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="imp-hint">Use o nome exato da coluna no arquivo CSV (ex.: <strong>preco_promocional</strong>).</p>
+    </div>
+
+    <div class="imp-layout-apoio-footer">
+      <span class="imp-hint" id="impLayInfo">—</span>
+      <div class="imp-layout-apoio-actions">
+        <button type="button" class="Cl_botaoprimario" id="impLayBtnSalvar">Salvar</button>
+        <button type="button" class="Cl_BtnCancelar" id="impLayBtnCancelar">Cancelar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="{{ url_for('static', filename='script/global_utils.js') }}"></script>
+  <script src="{{ url_for('fn_importacao.static', filename='script/Simportacao_layout.js') }}?v=4"></script>
+</body>
+</html>

@@ -325,6 +325,7 @@
   align-items: center;
   gap: 10px;
   padding: 16px 14px;
+  margin-top: 4px;
   margin-bottom: 14px;
   border-radius: 14px;
   border: 1px solid rgba(28, 46, 60, 0.1);
@@ -454,7 +455,8 @@
 .imp-sync-card {
   display: flex;
   gap: 10px;
-  align-items: flex-start;
+  align-items: center;
+  justify-content: space-between;
   padding: 12px;
   border: 1px solid rgba(28, 46, 60, 0.12);
   border-radius: 12px;
@@ -462,6 +464,10 @@
   cursor: pointer;
   transition: border-color 160ms ease, box-shadow 160ms ease;
 }
+
+.imp-sync-card .Cl_Switch { flex-shrink: 0; }
+
+.imp-cat-sub-switch { margin-top: 8px; }
 
 .imp-sync-card:hover { border-color: rgba(2, 31, 129, 0.25); }
 
@@ -499,6 +505,87 @@
 }
 
 .imp-sync-hint { margin: 0 0 10px; }
+
+.imp-btn-novo-layout { margin-top: 10px; }
+.imp-layout-rule { margin: 8px 0 10px; }
+
+/* --- Apoio layout (modal nível 2) --- */
+.imp-layout-apoio-body {
+  margin: 0;
+  background: #f5f6f6;
+  font-family: inherit;
+}
+
+.imp-layout-apoio {
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.imp-layout-apoio-card {
+  background: #fff;
+  border: 1px solid rgba(28, 46, 60, 0.12);
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.imp-layout-apoio-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.imp-layout-apoio-switches {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding-top: 18px;
+}
+
+.imp-layout-apoio-toolbar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.imp-layout-apoio-toolbar input {
+  flex: 1;
+  min-width: 160px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid #d6dee6;
+  padding: 0 10px;
+}
+
+.imp-layout-input-sm {
+  width: 72px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid #d6dee6;
+  padding: 0 8px;
+  font-size: 13px;
+}
+
+.imp-layout-input-grow { width: 100%; min-width: 120px; }
+
+.imp-layout-apoio-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.imp-layout-apoio-actions { display: flex; gap: 8px; }
+
+.imp-table .col-acoes { white-space: nowrap; width: 1%; }
+
+@media (max-width: 980px) {
+  .imp-layout-apoio-grid { grid-template-columns: 1fr; }
+}
 
 .imp-tabs {
   display: flex;

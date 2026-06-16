@@ -5,6 +5,7 @@
   window.__DN_IMPORT_MODAL__ = true;
 
   const BASE = "/fornecedor/importacao";
+  const MODULO = "catalogo_produto";
   const qs = (s, r = document) => r.querySelector(s);
   const qsa = (s, r = document) => Array.from(r.querySelectorAll(s));
 
@@ -41,6 +42,20 @@
       .replace(/>/g, "&gt;");
   }
 
+  function icoHtml(nome) {
+    if (window.Util?.gerarIconeTech) return Util.gerarIconeTech(nome);
+    return "";
+  }
+
+  function aplicarIcones(root = document) {
+    if (!window.Util?.gerarIconeTech) return;
+    qsa(".Cl_BtnAcao[data-ico]", root).forEach((btn) => {
+      if (btn.dataset.icoLoaded) return;
+      Util.gerarIconeTech({ dest: btn, nome: btn.dataset.ico });
+      btn.dataset.icoLoaded = "1";
+    });
+  }
+
   function isoHoje() {
     return new Date().toISOString().slice(0, 10);
   }
@@ -69,7 +84,9 @@
     qs("#impPaneBling")?.classList.toggle("ativa", tab === "bling");
     qs("#impPaneNova")?.classList.toggle("ativa", tab === "nova");
     qs("#impPaneManutencao")?.classList.toggle("ativa", tab === "manutencao");
+    qs("#impPaneLayout")?.classList.toggle("ativa", tab === "layout");
     if (tab === "manutencao") carregarLotes();
+    if (tab === "layout") carregarLayoutsTabela();
   }
 
   function setCards(scope, d = {}) {
@@ -481,12 +498,13 @@
           <td>${data}</td>
           <td style="text-align:center">${l.total_importadas ?? 0}</td>
           <td style="text-align:center">${l.total_rejeitadas ?? 0}</td>
-          <td>
-            ${cfg.pode_editar ? `<button type="button" class="imp-btn-link imp-btn-danger" data-del="${l.id}">Excluir</button>` : "—"}
+          <td class="col-acoes Cl_TableActions">
+            ${cfg.pode_editar ? `<button type="button" class="Cl_BtnAcao" data-del="${l.id}" data-ico="excluir" title="Excluir lote"></button>` : "—"}
           </td>
         </tr>`;
       })
       .join("");
+    aplicarIcones(tbody);
   }
 
   async function verLote(id, origem) {
@@ -517,6 +535,146 @@
     await carregarCards("arquivo", null);
     if (cfg.bling_conectado) await carregarCards("bling", null);
     window.dispatchEvent(new CustomEvent("catalogo:importacao-concluida"));
+  }
+
+  async function recarregarLayoutSelect() {
+    const r = await fetch(`${BASE}/dados`, { credentials: "include" });
+    const j = await r.json();
+    if (!r.ok || !j.success) return;
+    cfg.layouts = j.layouts || [];
+    const sel = qs("#impLayout");
+    if (sel) {
+      sel.innerHTML = (j.layouts || [])
+        .map((l) => `<option value="${l.id}">${esc(l.nome)}${l.padrao ? " (padrão)" : ""}</option>`)
+        .join("");
+    }
+  }
+
+  function abrirApoioLayout(id = null) {
+    if (!window.GlobalUtils?.abrirJanelaApoioModal) {
+      Swal.fire("Erro", "Modal institucional não disponível.", "error");
+      return;
+    }
+    const isNovo = id == null;
+    GlobalUtils.abrirJanelaApoioModal({
+      rota: isNovo ? `${BASE}/layout/incluir` : `${BASE}/layout/editar`,
+      titulo: isNovo ? "Novo layout de importação" : "Editar layout de importação",
+      largura: 920,
+      altura: "auto",
+      nivel: 2,
+      id: isNovo ? undefined : id,
+    });
+  }
+
+  function renderTabelaLayouts(rows) {
+    const tbody = qs("#impTblLayouts");
+    if (!tbody) return;
+    const dados = Array.isArray(rows) ? rows : [];
+    if (!dados.length) {
+      tbody.innerHTML = `<tr><td colspan="6">Nenhum layout.</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = dados
+      .map((l) => {
+        const padraoBtn = l.padrao
+          ? ""
+          : `<button type="button" class="Cl_BtnAcao" data-acao="set-padrao" data-id="${l.id}" data-ico="padrao" title="Definir como padrão"></button>`;
+        return `<tr>
+          <td>${l.id ?? "—"}</td>
+          <td>${esc(l.nome || l.nome_layout || "—")}</td>
+          <td>${esc(l.descricao || "—")}</td>
+          <td>${l.padrao ? "Sim" : "Não"}</td>
+          <td>${l.ativo ? "Ativo" : "Inativo"}</td>
+          <td class="col-acoes Cl_TableActions">
+            <button type="button" class="Cl_BtnAcao" data-acao="edit-layout" data-id="${l.id}" data-ico="editar" title="Editar layout"></button>
+            ${padraoBtn}
+            ${cfg.pode_editar ? `<button type="button" class="Cl_BtnAcao" data-acao="del-layout" data-id="${l.id}" data-ico="excluir" title="Excluir layout"></button>` : ""}
+          </td>
+        </tr>`;
+      })
+      .join("");
+    aplicarIcones(tbody);
+  }
+
+  async function carregarLayoutsTabela() {
+    const nome = (qs("#impLayoutFiltroNome")?.value || "").trim();
+    const status = qs("#impLayoutFiltroStatus")?.value || "";
+    const padrao = qs("#impLayoutFiltroPadrao")?.value || "";
+    const params = new URLSearchParams({ modulo: MODULO });
+    if (nome) params.set("nome", nome);
+    if (status) params.set("status", status);
+    if (padrao) params.set("padrao", padrao);
+    const r = await fetch(`${BASE}/layout/dados?${params}`, { credentials: "include" });
+    const j = await r.json();
+    if (!r.ok || !j.success) {
+      renderTabelaLayouts([]);
+      return;
+    }
+    renderTabelaLayouts(j.dados || []);
+  }
+
+  async function definirLayoutPadrao(id) {
+    const ok = await Swal.fire({
+      icon: "question",
+      title: "Definir padrão?",
+      text: "Este layout passará a ser o padrão do catálogo.",
+      showCancelButton: true,
+      confirmButtonText: "Confirmar",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#021F81",
+    });
+    if (!ok.isConfirmed) return;
+    const r = await fetch(`${BASE}/layout/padrao`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, modulo: MODULO }),
+      credentials: "include",
+    });
+    const j = await r.json();
+    if (!r.ok || !j.success) throw new Error(j.message || "Falha ao definir padrão.");
+    await carregarLayoutsTabela();
+    await recarregarLayoutSelect();
+    await Swal.fire({ icon: "success", title: "Concluído", text: j.message, timer: 1400, showConfirmButton: false });
+  }
+
+  async function excluirLayout(id) {
+    const ok = await Swal.fire({
+      icon: "warning",
+      title: "Excluir layout?",
+      showCancelButton: true,
+      confirmButtonColor: "#b42318",
+      confirmButtonText: "Excluir",
+      cancelButtonText: "Cancelar",
+    });
+    if (!ok.isConfirmed) return;
+    const r = await fetch(`${BASE}/layout/${id}?modulo=${encodeURIComponent(MODULO)}`, {
+      method: "DELETE",
+      credentials: "include",
+    });
+    const j = await r.json();
+    if (!r.ok || !j.success) throw new Error(j.message || "Falha ao excluir layout.");
+    await carregarLayoutsTabela();
+    await recarregarLayoutSelect();
+    await Swal.fire({ icon: "success", title: "Excluído", text: j.message, timer: 1400, showConfirmButton: false });
+  }
+
+  function bindLayoutTab() {
+    qs("#impBtnLayoutFiltrar")?.addEventListener("click", carregarLayoutsTabela);
+    qs("#impBtnLayoutLimpar")?.addEventListener("click", () => {
+      qs("#impLayoutFiltroNome").value = "";
+      qs("#impLayoutFiltroStatus").value = "";
+      qs("#impLayoutFiltroPadrao").value = "";
+      carregarLayoutsTabela();
+    });
+    qs("#impBtnNovoLayout")?.addEventListener("click", () => abrirApoioLayout(null));
+    qs("#impTblLayouts")?.addEventListener("click", (ev) => {
+      const btn = ev.target.closest("[data-acao]");
+      if (!btn) return;
+      const id = Number(btn.dataset.id);
+      if (btn.dataset.acao === "edit-layout") abrirApoioLayout(id);
+      if (btn.dataset.acao === "del-layout") excluirLayout(id).catch((e) => Swal.fire("Erro", e.message, "error"));
+      if (btn.dataset.acao === "set-padrao") definirLayoutPadrao(id).catch((e) => Swal.fire("Erro", e.message, "error"));
+    });
   }
 
   function bindCardsInteracao() {
@@ -556,6 +714,14 @@
       atualizarAnimacaoEstoque();
     });
     bindCatPicker();
+    bindLayoutTab();
+    window.addEventListener("message", async (event) => {
+      if (event.origin !== window.location.origin) return;
+      if (event.data?.grupo === "import_layout_atualizar") {
+        await carregarLayoutsTabela();
+        await recarregarLayoutSelect();
+      }
+    });
     qs("#impTblLotes")?.addEventListener("click", (ev) => {
       const ver = ev.target.closest("[data-ver]");
       const del = ev.target.closest("[data-del]");

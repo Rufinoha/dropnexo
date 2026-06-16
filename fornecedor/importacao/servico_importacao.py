@@ -435,6 +435,260 @@ def listar_layouts(cur, id_tenant: int, modulo: str = MODULO_CATALOGO) -> list[d
     ]
 
 
+MAX_LAYOUTS_POR_MODULO = 3
+
+CAMPOS_BASE_CATALOGO = [
+    {"campo_interno": "sku", "obrigatorio": False, "ordem": 1},
+    {"campo_interno": "nome", "obrigatorio": True, "ordem": 2},
+    {"campo_interno": "descricao", "obrigatorio": False, "ordem": 3},
+    {"campo_interno": "preco", "obrigatorio": False, "ordem": 4},
+    {"campo_interno": "preco_promocional", "obrigatorio": False, "ordem": 5},
+    {"campo_interno": "quantidade", "obrigatorio": False, "ordem": 6},
+    {"campo_interno": "categoria", "obrigatorio": False, "ordem": 7},
+    {"campo_interno": "unidade", "obrigatorio": False, "ordem": 8},
+    {"campo_interno": "publicado", "obrigatorio": False, "ordem": 9},
+    {"campo_interno": "ativo", "obrigatorio": False, "ordem": 10},
+]
+
+
+def campos_base_layout(modulo: str = MODULO_CATALOGO) -> list[dict]:
+    if modulo == MODULO_CATALOGO:
+        return [dict(c) for c in CAMPOS_BASE_CATALOGO]
+    return []
+
+
+def listar_layouts_admin(
+    cur,
+    id_tenant: int,
+    modulo: str = MODULO_CATALOGO,
+    *,
+    nome: str | None = None,
+    status: str | None = None,
+    padrao: str | None = None,
+) -> list[dict]:
+    garantir_layout_padrao_csv(cur, id_tenant)
+    filtros = ["id_tenant = %s", "modulo = %s"]
+    params: list[Any] = [id_tenant, modulo]
+    if nome:
+        filtros.append("nome ILIKE %s")
+        params.append(f"%{nome}%")
+    st = (status or "").strip().lower()
+    if st == "ativo":
+        filtros.append("ativo = TRUE")
+    elif st == "inativo":
+        filtros.append("ativo = FALSE")
+    pd = (padrao or "").strip().lower()
+    if pd in ("sim", "s", "1", "true"):
+        filtros.append("padrao = TRUE")
+    elif pd in ("nao", "não", "n", "0", "false"):
+        filtros.append("padrao = FALSE")
+    cur.execute(
+        f"""
+        SELECT id, nome, descricao, ativo, padrao, tipo_arquivo
+        FROM tbl_importacao_layout
+        WHERE {" AND ".join(filtros)}
+        ORDER BY padrao DESC, nome
+        """,
+        tuple(params),
+    )
+    return [
+        {
+            "id": r[0],
+            "nome": r[1],
+            "nome_layout": r[1],
+            "descricao": r[2],
+            "ativo": r[3],
+            "padrao": r[4],
+            "tipo_arquivo": r[5],
+        }
+        for r in cur.fetchall()
+    ]
+
+
+def obter_layout_detalhe(cur, id_tenant: int, id_layout: int, modulo: str = MODULO_CATALOGO) -> dict | None:
+    cur.execute(
+        """
+        SELECT id, nome, descricao, ativo, padrao, modulo, tipo_arquivo
+        FROM tbl_importacao_layout
+        WHERE id = %s AND id_tenant = %s AND modulo = %s
+        """,
+        (id_layout, id_tenant, modulo),
+    )
+    row = cur.fetchone()
+    if not row:
+        return None
+    layout = {
+        "id": row[0],
+        "nome": row[1],
+        "nome_layout": row[1],
+        "descricao": row[2],
+        "ativo": row[3],
+        "padrao": row[4],
+        "modulo": row[5],
+        "tipo_arquivo": row[6],
+    }
+    cur.execute(
+        """
+        SELECT id, campo_interno, coluna_arquivo, obrigatorio, ordem
+        FROM tbl_importacao_layout_campo
+        WHERE id_layout = %s
+        ORDER BY ordem, id
+        """,
+        (id_layout,),
+    )
+    layout["campos"] = [
+        {
+            "id": r[0],
+            "campo_interno": r[1],
+            "coluna_arquivo": r[2],
+            "obrigatorio": r[3],
+            "ordem": r[4],
+        }
+        for r in cur.fetchall()
+    ]
+    return layout
+
+
+def _contar_layouts(cur, id_tenant: int, modulo: str) -> int:
+    cur.execute(
+        "SELECT COUNT(*) FROM tbl_importacao_layout WHERE id_tenant = %s AND modulo = %s",
+        (id_tenant, modulo),
+    )
+    return int(cur.fetchone()[0] or 0)
+
+
+def salvar_layout_importacao(cur, id_tenant: int, payload: dict) -> int:
+    modulo = (payload.get("modulo") or MODULO_CATALOGO).strip()
+    nome = (payload.get("nome") or payload.get("nome_layout") or "").strip()
+    if not nome:
+        raise ValueError("Nome do layout é obrigatório.")
+    descricao = (payload.get("descricao") or "").strip() or None
+    ativo = bool(payload.get("ativo", True))
+    padrao = bool(payload.get("padrao", False))
+    campos = payload.get("campos") if isinstance(payload.get("campos"), list) else []
+    layout_id = payload.get("id")
+
+    if padrao:
+        cur.execute(
+            "UPDATE tbl_importacao_layout SET padrao = FALSE WHERE id_tenant = %s AND modulo = %s",
+            (id_tenant, modulo),
+        )
+
+    if layout_id:
+        id_layout = int(layout_id)
+        cur.execute(
+            """
+            SELECT id FROM tbl_importacao_layout
+            WHERE id = %s AND id_tenant = %s AND modulo = %s
+            """,
+            (id_layout, id_tenant, modulo),
+        )
+        if not cur.fetchone():
+            raise ValueError("Layout não encontrado.")
+        cur.execute(
+            """
+            UPDATE tbl_importacao_layout
+            SET nome = %s, descricao = %s, ativo = %s, padrao = %s
+            WHERE id = %s AND id_tenant = %s
+            """,
+            (nome, descricao, ativo, padrao, id_layout, id_tenant),
+        )
+        cur.execute("DELETE FROM tbl_importacao_layout_campo WHERE id_layout = %s", (id_layout,))
+    else:
+        if _contar_layouts(cur, id_tenant, modulo) >= MAX_LAYOUTS_POR_MODULO:
+            raise ValueError(f"Máximo de {MAX_LAYOUTS_POR_MODULO} layouts por módulo.")
+        cur.execute(
+            """
+            INSERT INTO tbl_importacao_layout (
+                id_tenant, modulo, nome, descricao, ativo, padrao, tipo_arquivo
+            ) VALUES (%s, %s, %s, %s, %s, %s, 'csv')
+            RETURNING id
+            """,
+            (id_tenant, modulo, nome, descricao, ativo, padrao),
+        )
+        id_layout = int(cur.fetchone()[0])
+
+    ordem_auto = 1
+    for c in campos:
+        campo = (c.get("campo_interno") or "").strip()
+        if not campo:
+            continue
+        coluna = (c.get("coluna_arquivo") or campo).strip()
+        obrig = bool(c.get("obrigatorio", False))
+        try:
+            ordem = int(c.get("ordem") or ordem_auto)
+        except (TypeError, ValueError):
+            ordem = ordem_auto
+        cur.execute(
+            """
+            INSERT INTO tbl_importacao_layout_campo (
+                id_layout, campo_interno, coluna_arquivo, obrigatorio, ordem
+            ) VALUES (%s, %s, %s, %s, %s)
+            """,
+            (id_layout, campo, coluna, obrig, ordem),
+        )
+        ordem_auto += 1
+
+    return id_layout
+
+
+def excluir_layout_importacao(cur, id_tenant: int, id_layout: int, modulo: str = MODULO_CATALOGO) -> None:
+    cur.execute(
+        """
+        SELECT padrao FROM tbl_importacao_layout
+        WHERE id = %s AND id_tenant = %s AND modulo = %s
+        """,
+        (id_layout, id_tenant, modulo),
+    )
+    row = cur.fetchone()
+    if not row:
+        raise ValueError("Layout não encontrado.")
+    cur.execute(
+        "SELECT COUNT(*) FROM tbl_importacao_layout WHERE id_tenant = %s AND modulo = %s",
+        (id_tenant, modulo),
+    )
+    total = int(cur.fetchone()[0] or 0)
+    if total <= 1:
+        raise ValueError("Não é possível excluir o único layout do módulo.")
+    cur.execute("DELETE FROM tbl_importacao_layout_campo WHERE id_layout = %s", (id_layout,))
+    cur.execute(
+        "DELETE FROM tbl_importacao_layout WHERE id = %s AND id_tenant = %s AND modulo = %s",
+        (id_layout, id_tenant, modulo),
+    )
+    if row[0]:
+        cur.execute(
+            """
+            UPDATE tbl_importacao_layout SET padrao = TRUE
+            WHERE id = (
+                SELECT id FROM tbl_importacao_layout
+                WHERE id_tenant = %s AND modulo = %s
+                ORDER BY id LIMIT 1
+            )
+            """,
+            (id_tenant, modulo),
+        )
+
+
+def definir_layout_padrao(cur, id_tenant: int, id_layout: int, modulo: str = MODULO_CATALOGO) -> None:
+    cur.execute(
+        """
+        SELECT id FROM tbl_importacao_layout
+        WHERE id = %s AND id_tenant = %s AND modulo = %s
+        """,
+        (id_layout, id_tenant, modulo),
+    )
+    if not cur.fetchone():
+        raise ValueError("Layout não encontrado.")
+    cur.execute(
+        "UPDATE tbl_importacao_layout SET padrao = FALSE WHERE id_tenant = %s AND modulo = %s",
+        (id_tenant, modulo),
+    )
+    cur.execute(
+        "UPDATE tbl_importacao_layout SET padrao = TRUE WHERE id = %s AND id_tenant = %s",
+        (id_layout, id_tenant),
+    )
+
+
 def rotulo_origem(origem: str) -> str:
     return {
         ORIGEM_MANUAL: "Manual",

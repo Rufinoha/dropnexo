@@ -15,6 +15,7 @@
         <button type="button" class="imp-tab" data-tab="bling" id="impTabBling" hidden>Bling</button>
         <button type="button" class="imp-tab ativa" data-tab="nova" id="impTabNova">Arquivo</button>
         <button type="button" class="imp-tab" data-tab="manutencao">Manutenção</button>
+        <button type="button" class="imp-tab" data-tab="layout">Layout</button>
       </section>
 
       <section class="imp-content">
@@ -50,7 +51,13 @@
                       </div>
                     </div>
                     <div class="imp-cat-chips" id="impCatChips"></div>
-                    <label class="imp-check"><input type="checkbox" id="impBlingSub" checked /> Incluir subcategorias</label>
+                    <div class="Cl_SwitchGroup imp-cat-sub-switch">
+                      <span class="Cl_SwitchLabel">Incluir subcategorias</span>
+                      <label class="Cl_Switch">
+                        <input type="checkbox" id="impBlingSub" checked />
+                        <span class="Cl_SwitchSlider"></span>
+                      </label>
+                    </div>
                   </div>
                   <div class="imp-hint imp-hint-spacer">&nbsp;</div>
                 </div>
@@ -85,6 +92,36 @@
 
           <section class="imp-bling-block imp-bling-block--sync">
             <h3 class="imp-bling-block-title">Sincronizar estoque</h3>
+            <div class="imp-sync-grid">
+              <label class="imp-sync-card">
+                <span class="imp-sync-card-body">
+                  <strong>Buscar no Bling</strong>
+                  <small>Atualiza o estoque local consultando alterações no ERP.</small>
+                </span>
+                <span class="Cl_Switch">
+                  <input type="checkbox" id="impEstoqueImportarBling" />
+                  <span class="Cl_SwitchSlider"></span>
+                </span>
+              </label>
+              <label class="imp-sync-card">
+                <span class="imp-sync-card-body">
+                  <strong>Baixa em pedidos</strong>
+                  <small>Envia a quantidade vendida para o Bling quando o pedido for confirmado.</small>
+                </span>
+                <span class="Cl_Switch">
+                  <input type="checkbox" id="impEstoqueBaixaPedido" />
+                  <span class="Cl_SwitchSlider"></span>
+                </span>
+              </label>
+            </div>
+            <div class="imp-sync-polling" id="impEstoquePollingWrap" hidden>
+              <label for="impEstoquePolling">Consultar a cada</label>
+              <select id="impEstoquePolling">
+                <option value="15">15 minutos</option>
+                <option value="30" selected>30 minutos</option>
+                <option value="60">60 minutos</option>
+              </select>
+            </div>
             <div class="imp-sync-visual inativo" id="impSyncVisual" aria-hidden="true">
               <div class="imp-sync-node imp-sync-node--dn">
                 <div class="imp-sync-icon" aria-hidden="true">
@@ -108,30 +145,6 @@
                 <strong>Bling</strong>
                 <span>ERP</span>
               </div>
-            </div>
-            <div class="imp-sync-grid">
-              <label class="imp-sync-card">
-                <input type="checkbox" id="impEstoqueBaixaPedido" />
-                <span class="imp-sync-card-body">
-                  <strong>Baixa em pedidos</strong>
-                  <small>Envia a quantidade vendida para o Bling quando o pedido for confirmado.</small>
-                </span>
-              </label>
-              <label class="imp-sync-card">
-                <input type="checkbox" id="impEstoqueImportarBling" />
-                <span class="imp-sync-card-body">
-                  <strong>Buscar no Bling</strong>
-                  <small>Atualiza o estoque local consultando alterações no ERP.</small>
-                </span>
-              </label>
-            </div>
-            <div class="imp-sync-polling" id="impEstoquePollingWrap" hidden>
-              <label for="impEstoquePolling">Consultar a cada</label>
-              <select id="impEstoquePolling">
-                <option value="15">15 minutos</option>
-                <option value="30" selected>30 minutos</option>
-                <option value="60">60 minutos</option>
-              </select>
             </div>
             <p class="imp-hint imp-sync-hint">
               O Bling não envia webhook de estoque em tempo real; a busca usa consulta periódica.
@@ -210,10 +223,56 @@
                   <th>Data</th>
                   <th>Inseridos</th>
                   <th>Erros</th>
-                  <th>Ações</th>
+                  <th class="col-acoes Cl_TableActions">Ações</th>
                 </tr>
               </thead>
               <tbody id="impTblLotes"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="filter-panel" id="impPaneLayout">
+          <div class="filter-panel-fields">
+            <div class="filter-group">
+              <label for="impLayoutFiltroNome">Nome</label>
+              <input type="text" id="impLayoutFiltroNome" placeholder="Filtrar por nome…" />
+            </div>
+            <div class="filter-group">
+              <label for="impLayoutFiltroStatus">Status</label>
+              <select id="impLayoutFiltroStatus">
+                <option value="">Todos</option>
+                <option value="ativo">Ativo</option>
+                <option value="inativo">Inativo</option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <label for="impLayoutFiltroPadrao">Padrão</label>
+              <select id="impLayoutFiltroPadrao">
+                <option value="">Todos</option>
+                <option value="sim">Sim</option>
+                <option value="nao">Não</option>
+              </select>
+            </div>
+            <div class="filter-panel-actions">
+              <button type="button" class="Cl_botaoFiltro" id="impBtnLayoutFiltrar">Filtrar</button>
+              <button type="button" class="btn-secundario" id="impBtnLayoutLimpar">Limpar filtro</button>
+            </div>
+          </div>
+          <button type="button" class="Cl_BtnIncluir imp-btn-novo-layout" id="impBtnNovoLayout">+ Novo layout</button>
+          <p class="imp-hint imp-layout-rule">Regra: no máximo <strong>3 layouts</strong> por módulo (ativos ou não).</p>
+          <div class="Cl_TabelaPrincipal imp-table-wrap">
+            <table class="imp-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Layout</th>
+                  <th>Descrição</th>
+                  <th>Padrão</th>
+                  <th>Status</th>
+                  <th class="col-acoes Cl_TableActions">Ações</th>
+                </tr>
+              </thead>
+              <tbody id="impTblLayouts"></tbody>
             </table>
           </div>
         </div>

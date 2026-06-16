@@ -15,17 +15,23 @@ from fornecedor.importacao.servico_importacao import (
     ORIGEM_INTEGRACAO,
     STATUS_CONCLUIDO,
     STATUS_ERRO,
+    campos_base_layout,
     criar_lote,
+    definir_layout_padrao,
+    excluir_layout_importacao,
     excluir_lote,
     finalizar_lote,
     garantir_layout_padrao_csv,
     listar_erros_lote,
     listar_layouts,
+    listar_layouts_admin,
     listar_lotes,
+    obter_layout_detalhe,
     obter_lote,
     obter_cards_importacao,
     registrar_erro_lote,
     rotulo_origem,
+    salvar_layout_importacao,
     ultimo_lote,
 )
 from global_utils import (
@@ -568,6 +574,144 @@ def importacao_arquivo():
     except Exception as e:
         conn.rollback()
         return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
+@fn_importacao_bp.get("/fornecedor/importacao/layout/incluir")
+@login_obrigatorio()
+@exigir_permissao(codigo="catalogos.ver")
+def importacao_layout_incluir():
+    return render_template("frm_importacao_layout.html")
+
+
+@fn_importacao_bp.get("/fornecedor/importacao/layout/editar")
+@login_obrigatorio()
+@exigir_permissao(codigo="catalogos.ver")
+def importacao_layout_editar():
+    return render_template("frm_importacao_layout.html")
+
+
+@fn_importacao_bp.get("/fornecedor/importacao/layout/campos_base")
+@login_obrigatorio()
+@exigir_permissao(codigo="catalogos.ver")
+def importacao_layout_campos_base():
+    modulo = (request.args.get("modulo") or MODULO_CATALOGO).strip()
+    dados = campos_base_layout(modulo)
+    if not dados:
+        return jsonify(success=False, message="Módulo sem campos base configurados."), 400
+    return jsonify(success=True, dados=dados)
+
+
+@fn_importacao_bp.get("/fornecedor/importacao/layout/dados")
+@login_obrigatorio()
+@exigir_permissao(codigo="catalogos.ver")
+def importacao_layout_dados():
+    id_tenant = int(session.get("id_tenant"))
+    modulo = (request.args.get("modulo") or MODULO_CATALOGO).strip()
+    nome = (request.args.get("nome") or "").strip() or None
+    status = (request.args.get("status") or "").strip() or None
+    padrao = (request.args.get("padrao") or "").strip() or None
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        dados = listar_layouts_admin(
+            cur, id_tenant, modulo, nome=nome, status=status, padrao=padrao
+        )
+        conn.commit()
+        return jsonify(success=True, dados=dados)
+    finally:
+        conn.close()
+
+
+@fn_importacao_bp.get("/fornecedor/importacao/layout/apoio")
+@login_obrigatorio()
+@exigir_permissao(codigo="catalogos.ver")
+def importacao_layout_apoio():
+    id_tenant = int(session.get("id_tenant"))
+    modulo = (request.args.get("modulo") or MODULO_CATALOGO).strip()
+    id_layout = request.args.get("id", type=int)
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        if id_layout:
+            layout = obter_layout_detalhe(cur, id_tenant, id_layout, modulo)
+            if not layout:
+                return jsonify(success=False, message="Layout não encontrado."), 404
+            return jsonify(success=True, dados={"layout": layout, "campos": layout.get("campos") or []})
+        dados = listar_layouts(cur, id_tenant, modulo)
+        return jsonify(success=True, dados=dados)
+    finally:
+        conn.close()
+
+
+@fn_importacao_bp.post("/fornecedor/importacao/layout/salvar")
+@login_obrigatorio()
+@exigir_permissao(codigo="fn_importacao.editar")
+def importacao_layout_salvar():
+    if (resp := _exigir_escrita()) is not None:
+        return resp
+    body = request.get_json(silent=True) or {}
+    body.setdefault("modulo", MODULO_CATALOGO)
+    id_tenant = int(session.get("id_tenant"))
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        id_layout = salvar_layout_importacao(cur, id_tenant, body)
+        conn.commit()
+        return jsonify(success=True, message="Layout salvo.", id=id_layout)
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 400
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
+@fn_importacao_bp.delete("/fornecedor/importacao/layout/<int:id_layout>")
+@login_obrigatorio()
+@exigir_permissao(codigo="fn_importacao.editar")
+def importacao_layout_excluir(id_layout: int):
+    if (resp := _exigir_escrita()) is not None:
+        return resp
+    modulo = (request.args.get("modulo") or MODULO_CATALOGO).strip()
+    id_tenant = int(session.get("id_tenant"))
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        excluir_layout_importacao(cur, id_tenant, id_layout, modulo)
+        conn.commit()
+        return jsonify(success=True, message="Layout excluído.")
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 400
+    finally:
+        conn.close()
+
+
+@fn_importacao_bp.post("/fornecedor/importacao/layout/padrao")
+@login_obrigatorio()
+@exigir_permissao(codigo="fn_importacao.editar")
+def importacao_layout_padrao():
+    if (resp := _exigir_escrita()) is not None:
+        return resp
+    body = request.get_json(silent=True) or {}
+    id_layout = body.get("id")
+    modulo = (body.get("modulo") or MODULO_CATALOGO).strip()
+    if not id_layout:
+        return jsonify(success=False, message="Informe o layout."), 400
+    id_tenant = int(session.get("id_tenant"))
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        definir_layout_padrao(cur, id_tenant, int(id_layout), modulo)
+        conn.commit()
+        return jsonify(success=True, message="Layout definido como padrão.")
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 400
     finally:
         conn.close()
 
