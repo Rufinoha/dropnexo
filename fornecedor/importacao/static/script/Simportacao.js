@@ -30,6 +30,9 @@
   let cfg = { bling_conectado: false, layouts: [], pode_editar: false, bling_config: null };
   let loteSelecionado = { arquivo: null, bling: null };
   let tabAtiva = "nova";
+  let blingCategorias = [];
+  const blingCatsSel = new Set();
+  let catPickerAberto = false;
 
   function esc(s) {
     return String(s ?? "")
@@ -153,6 +156,22 @@
       ? `Última sync de estoque: ${new Date(ult).toLocaleString("pt-BR")}`
       : "Nenhuma sincronização de estoque registrada ainda.";
     atualizarStatusBling();
+    atualizarAnimacaoEstoque();
+  }
+
+  function atualizarAnimacaoEstoque() {
+    const visual = qs("#impSyncVisual");
+    if (!visual) return;
+
+    const baixa = qs("#impEstoqueBaixaPedido")?.checked === true;
+    const importar = qs("#impEstoqueImportarBling")?.checked === true;
+    const ativo = baixa || importar;
+
+    visual.classList.toggle("inativo", !ativo);
+    visual.classList.toggle("sync-out", baixa);
+    visual.classList.toggle("sync-in", importar);
+    visual.classList.toggle("sync-both", baixa && importar);
+    visual.setAttribute("aria-hidden", ativo ? "false" : "true");
   }
 
   function toggleEstoquePolling() {
@@ -185,31 +204,130 @@
   }
 
   async function carregarCategoriasBling() {
-    const sel = qs("#impBlingCats");
-    if (!sel) return;
     try {
       const r = await fetch("/api/integracoes/bling/categorias", { credentials: "include" });
       const j = await r.json();
       if (!j.success) return;
-      const flat = [];
+      blingCategorias = [];
       function walk(nodes, depth) {
         (nodes || j.categorias || []).forEach((n) => {
-          flat.push({ id: n.id, nome: n.label || n.nome || n.id, depth });
+          blingCategorias.push({
+            id: String(n.id),
+            nome: n.label || n.nome || String(n.id),
+            depth,
+          });
           if (n.filhos?.length) walk(n.filhos, depth + 1);
         });
       }
       walk(j.categorias || j.dados || [], 0);
-      sel.innerHTML = flat
-        .map((c) => `<option value="${c.id}">${"&nbsp;".repeat(c.depth * 2)}${esc(c.nome)}</option>`)
-        .join("");
+      renderCatList();
+      renderCatChips();
+      atualizarCatTrigger();
     } catch {
       /* ignore */
     }
   }
 
+  function renderCatList(filtro = "") {
+    const list = qs("#impCatList");
+    if (!list) return;
+    const termo = filtro.trim().toLowerCase();
+    const itens = blingCategorias.filter((c) => !termo || c.nome.toLowerCase().includes(termo));
+    if (!itens.length) {
+      list.innerHTML = `<div class="imp-cat-empty">${termo ? "Nenhuma categoria encontrada." : "Sem categorias no Bling."}</div>`;
+      return;
+    }
+    list.innerHTML = itens
+      .map((c) => {
+        const pad = c.depth > 0 ? `padding-left:${8 + c.depth * 14}px` : "";
+        const checked = blingCatsSel.has(c.id) ? "checked" : "";
+        const ativa = blingCatsSel.has(c.id) ? " ativa" : "";
+        return `<label class="imp-cat-item${ativa}" style="${pad}" data-id="${esc(c.id)}">
+          <input type="checkbox" value="${esc(c.id)}" ${checked} />
+          <span>${esc(c.nome)}</span>
+        </label>`;
+      })
+      .join("");
+  }
+
+  function renderCatChips() {
+    const wrap = qs("#impCatChips");
+    if (!wrap) return;
+    if (!blingCatsSel.size) {
+      wrap.innerHTML = "";
+      return;
+    }
+    const map = new Map(blingCategorias.map((c) => [c.id, c.nome]));
+    wrap.innerHTML = Array.from(blingCatsSel)
+      .map(
+        (id) => `<span class="imp-cat-chip">${esc(map.get(id) || id)}
+          <button type="button" data-rm-cat="${esc(id)}" aria-label="Remover">×</button></span>`
+      )
+      .join("");
+  }
+
+  function atualizarCatTrigger() {
+    const txt = qs("#impCatTriggerText");
+    if (!txt) return;
+    const n = blingCatsSel.size;
+    txt.textContent = n
+      ? `${n} categoria${n > 1 ? "s" : ""} selecionada${n > 1 ? "s" : ""}`
+      : "Selecione as categorias…";
+  }
+
+  function toggleCat(id, on) {
+    if (on) blingCatsSel.add(String(id));
+    else blingCatsSel.delete(String(id));
+    renderCatList(qs("#impCatSearch")?.value || "");
+    renderCatChips();
+    atualizarCatTrigger();
+  }
+
+  function fecharCatPicker() {
+    catPickerAberto = false;
+    qs("#impCatPanel")?.setAttribute("hidden", "");
+    qs("#impCatTrigger")?.setAttribute("aria-expanded", "false");
+  }
+
+  function abrirCatPicker() {
+    catPickerAberto = true;
+    qs("#impCatPanel")?.removeAttribute("hidden");
+    qs("#impCatTrigger")?.setAttribute("aria-expanded", "true");
+    qs("#impCatSearch")?.focus();
+  }
+
+  function getSelectedCatIds() {
+    return Array.from(blingCatsSel);
+  }
+
+  function bindCatPicker() {
+    qs("#impCatTrigger")?.addEventListener("click", () => {
+      if (catPickerAberto) fecharCatPicker();
+      else abrirCatPicker();
+    });
+    qs("#impCatSearch")?.addEventListener("input", (ev) => {
+      renderCatList(ev.target.value || "");
+    });
+    qs("#impCatList")?.addEventListener("change", (ev) => {
+      const cb = ev.target.closest('input[type="checkbox"]');
+      if (!cb) return;
+      toggleCat(cb.value, cb.checked);
+    });
+    qs("#impCatChips")?.addEventListener("click", (ev) => {
+      const btn = ev.target.closest("[data-rm-cat]");
+      if (btn) toggleCat(btn.dataset.rmCat, false);
+    });
+    document.addEventListener("click", (ev) => {
+      if (!catPickerAberto) return;
+      if (ev.target.closest("#impCatPicker")) return;
+      fecharCatPicker();
+    });
+  }
+
   function toggleBlingCats() {
     const porCat = qs('input[name="imp_bling_modo"]:checked')?.value === "categorias";
     qs("#impBlingCatsWrap").hidden = !porCat;
+    if (!porCat) fecharCatPicker();
   }
 
   async function importarArquivo() {
@@ -246,9 +364,7 @@
     const modo = qs('input[name="imp_bling_modo"]:checked')?.value || "todos";
     const body = { contexto: "fornecedor" };
     if (modo === "categorias") {
-      const ids = Array.from(qs("#impBlingCats")?.selectedOptions || [])
-        .map((o) => o.value)
-        .filter(Boolean);
+      const ids = getSelectedCatIds();
       if (!ids.length) {
         await Swal.fire({ icon: "warning", title: "Atenção", text: "Selecione ao menos uma categoria." });
         return;
@@ -433,8 +549,13 @@
     qs("#impEstoqueImportarBling")?.addEventListener("change", () => {
       toggleEstoquePolling();
       atualizarStatusBling();
+      atualizarAnimacaoEstoque();
     });
-    qs("#impEstoqueBaixaPedido")?.addEventListener("change", atualizarStatusBling);
+    qs("#impEstoqueBaixaPedido")?.addEventListener("change", () => {
+      atualizarStatusBling();
+      atualizarAnimacaoEstoque();
+    });
+    bindCatPicker();
     qs("#impTblLotes")?.addEventListener("click", (ev) => {
       const ver = ev.target.closest("[data-ver]");
       const del = ev.target.closest("[data-del]");
