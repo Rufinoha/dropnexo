@@ -13,6 +13,20 @@ from api.bling.sync_categorias import (
 )
 from global_utils import agora_utc
 
+_SAVEPOINT_PRODUTO = "bling_sync_produto"
+
+
+def _savepoint(cur, nome: str) -> None:
+    cur.execute(f"SAVEPOINT {nome}")
+
+
+def _rollback_savepoint(cur, nome: str) -> None:
+    cur.execute(f"ROLLBACK TO SAVEPOINT {nome}")
+
+
+def _release_savepoint(cur, nome: str) -> None:
+    cur.execute(f"RELEASE SAVEPOINT {nome}")
+
 
 def _garantir_config(cur, id_tenant: int, contexto: str) -> dict:
     cur.execute(
@@ -353,13 +367,19 @@ def importar_produtos(
         ids_filtro = set()
         ids_categoria_api = []
         for cat_id in raizes:
-            garantir_categoria_bling(
-                cur,
-                id_tenant,
-                contexto,
-                cat_id,
-                cache_api=cache_categorias,
-            )
+            _savepoint(cur, _SAVEPOINT_PRODUTO)
+            try:
+                garantir_categoria_bling(
+                    cur,
+                    id_tenant,
+                    contexto,
+                    cat_id,
+                    cache_api=cache_categorias,
+                )
+                _release_savepoint(cur, _SAVEPOINT_PRODUTO)
+            except Exception as e:
+                _rollback_savepoint(cur, _SAVEPOINT_PRODUTO)
+                raise ValueError(f"Categoria Bling #{cat_id}: {e}") from e
             categorias_sincronizadas.add(cat_id)
             if incluir_subcategorias:
                 ids_cat = ids_categoria_bling_com_descendentes(
@@ -377,6 +397,7 @@ def importar_produtos(
 
     for item in itens:
         id_bling = str(item.get("id") or "")
+        _savepoint(cur, _SAVEPOINT_PRODUTO)
         try:
             resultado, _ = _processar_item_produto(
                 cur,
@@ -388,6 +409,7 @@ def importar_produtos(
                 categorias_sincronizadas=categorias_sincronizadas,
                 ids_categoria_filtro=ids_filtro,
             )
+            _release_savepoint(cur, _SAVEPOINT_PRODUTO)
             if resultado == "importado":
                 importados += 1
             elif resultado == "atualizado":
@@ -395,6 +417,7 @@ def importar_produtos(
             elif resultado == "ignorado_filtro":
                 ignorados += 1
         except Exception as e:
+            _rollback_savepoint(cur, _SAVEPOINT_PRODUTO)
             ignorados += 1
             erros.append(f"Bling #{id_bling or '?'}: {e}")
 

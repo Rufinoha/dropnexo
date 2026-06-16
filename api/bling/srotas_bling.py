@@ -440,13 +440,21 @@ def sync_produtos():
             incluir_subcategorias=bool(incluir_subcategorias),
         )
         conn.commit()
+        if resultado.get("erros") and not resultado.get("importados") and not resultado.get("atualizados"):
+            return jsonify(success=False, message=resultado["erros"][0], dados=resultado), 400
         return jsonify(success=True, message=resultado["resumo"], dados=resultado)
     except ValueError as e:
         conn.rollback()
         return jsonify(success=False, message=str(e)), 400
     except Exception as e:
         conn.rollback()
-        return jsonify(success=False, message=str(e)), 500
+        msg = str(e)
+        if "transaction is aborted" in msg.lower():
+            msg = (
+                "Falha no banco durante a importação. "
+                "Verifique se a migration 023_integracao_bling_categoria_map.sql foi aplicada em produção."
+            )
+        return jsonify(success=False, message=msg), 500
     finally:
         conn.close()
 

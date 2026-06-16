@@ -3,7 +3,7 @@
 {% set nav_ativo = 'fn_segmentos' %}
 {% block topbar_title %}Segmentos que atendo{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('fn_depositos.static', filename='style/Cfn_segmentos.css') }}" />
+<link rel="stylesheet" href="{{ url_for('fn_segmentos.static', filename='style/Cfn_segmentos.css') }}" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal FnSeg_Page">
@@ -32,5 +32,5 @@
 {% endblock %}
 {% block page_js %}
 <script>window.FN_SEG_URL_CATEGORIAS = {{ url_for('fn_categorias.categorias')|tojson }};</script>
-<script src="{{ url_for('fn_depositos.static', filename='script/Sfn_segmentos.js') }}"></script>
+<script src="{{ url_for('fn_segmentos.static', filename='script/Sfn_segmentos.js') }}"></script>
 {% endblock %}

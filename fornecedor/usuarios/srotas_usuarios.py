@@ -24,8 +24,9 @@ def init_app(app):
 
 
 def _exigir_fornecedor_tenant():
-    
-    return _chk()
+    if session.get("tenant_tipo_negocio") in ("fornecedor", "hibrido") or session.get("eh_desenvolvedor"):
+        return None
+    return jsonify(success=False, message="Conta não é fornecedor."), 403
 
 
 def _exigir_escrita():
