@@ -28,6 +28,8 @@
     '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>';
   const ICON_DOTS =
     '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>';
+  const ICON_CHEV =
+    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>';
 
   let segmentos = [];
   let idSegmentoAtual = null;
@@ -113,6 +115,22 @@
     row.className = "FnCatTree-row";
 
     row.appendChild(gripEl());
+
+    if (temFilhos) {
+      const chev = document.createElement("button");
+      chev.type = "button";
+      chev.className = "FnCatTree-chevron" + (aberto ? " is-open" : "");
+      chev.innerHTML = ICON_CHEV;
+      chev.dataset.toggleId = String(n.id);
+      chev.setAttribute("aria-label", (aberto ? "Recolher " : "Expandir ") + (n.nome || "categoria"));
+      chev.setAttribute("aria-expanded", aberto ? "true" : "false");
+      row.appendChild(chev);
+    } else {
+      const sp = document.createElement("span");
+      sp.className = "FnCatTree-chevronSpacer";
+      sp.setAttribute("aria-hidden", "true");
+      row.appendChild(sp);
+    }
 
     const icon = document.createElement("span");
     icon.className = "FnCatTree-icon";
@@ -379,6 +397,13 @@
     });
   }
 
+  function toggleNo(id) {
+    const f = fechados();
+    if (f.has(id)) f.delete(id);
+    else f.add(id);
+    renderArvore();
+  }
+
   segLista.addEventListener("click", (e) => {
     const btn = e.target.closest(".FnCat_SegBtn");
     if (!btn) return;
@@ -389,6 +414,14 @@
   btnRaizEmpty?.addEventListener("click", abrirNovaRaiz);
 
   arvoreEl.addEventListener("click", (e) => {
+    const chev = e.target.closest(".FnCatTree-chevron[data-toggle-id]");
+    if (chev) {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleNo(+chev.dataset.toggleId);
+      return;
+    }
+
     const menuBtn = e.target.closest(".FnCatTree-menu[data-menu-id]");
     if (!menuBtn) return;
     e.stopPropagation();

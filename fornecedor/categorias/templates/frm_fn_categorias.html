@@ -4,7 +4,7 @@
 {% block topbar_title %}Categorias{% endblock %}
 {% block head_extra %}
 <link rel="stylesheet" href="{{ url_for('fn_categorias.static', filename='style/Cfn_categorias.css') }}?v=11" />
-<link rel="stylesheet" href="{{ url_for('fn_categorias.static', filename='style/Cfn_categorias_tree.css') }}?v=10" />
+<link rel="stylesheet" href="{{ url_for('fn_categorias.static', filename='style/Cfn_categorias_tree.css') }}?v=11" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal FnCat_Page">
@@ -140,5 +140,5 @@
 {% endblock %}
 {% block page_js %}
 <script>window.FN_CAT_SEG_INICIAL = {{ id_segmento_inicial|tojson }};</script>
-<script src="{{ url_for('fn_categorias.static', filename='script/Sfn_categorias.js') }}?v=11"></script>
+<script src="{{ url_for('fn_categorias.static', filename='script/Sfn_categorias.js') }}?v=12"></script>
 {% endblock %}
