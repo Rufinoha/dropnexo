@@ -10,9 +10,11 @@ from flask import Blueprint, abort, jsonify, redirect, render_template, request,
 
 from api.bling.cliente import (
     bling_configurado,
+    carregar_tokens_armazenados,
     gerar_state_oauth,
     redirect_uri_oauth,
     renovar_access_token,
+    revogar_tokens_bling,
     trocar_code_por_tokens,
     url_autorizacao,
     _salvar_tokens,
@@ -258,6 +260,11 @@ def desconectar():
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
+        tokens = carregar_tokens_armazenados(cur, int(id_tenant))
+        revogacao = revogar_tokens_bling(
+            access_token=tokens.get("access_token") or None,
+            refresh_token=tokens.get("refresh_token") or None,
+        )
         cur.execute(
             """
             UPDATE tbl_integracao_bling SET
@@ -272,7 +279,27 @@ def desconectar():
             (agora_utc(), id_tenant),
         )
         conn.commit()
-        return jsonify(success=True, message="Bling desconectado.")
+
+        if revogacao.get("revogado_bling"):
+            msg = "Bling desconectado. Autorização revogada no Bling."
+        elif not (tokens.get("refresh_token") or tokens.get("access_token")):
+            msg = (
+                "Bling desconectado no DropNexo. "
+                "Não havia tokens salvos; se ainda aparecer em Minhas instalações no Bling, "
+                "use Desinstalar aplicativo lá."
+            )
+        else:
+            msg = (
+                "Bling desconectado no DropNexo. "
+                "Não foi possível confirmar a revogação no Bling; "
+                "se ainda aparecer instalado, desinstale em Minhas instalações."
+            )
+
+        return jsonify(
+            success=True,
+            message=msg,
+            revogacao_bling=bool(revogacao.get("revogado_bling")),
+        )
     finally:
         conn.close()
 

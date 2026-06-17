@@ -108,6 +108,92 @@ def renovar_access_token(refresh_token: str) -> dict[str, Any]:
     )
 
 
+def _post_revoke(body: dict[str, str]) -> tuple[bool, str]:
+    """POST /oauth/revoke. Retorna (sucesso, detalhe)."""
+    if not bling_configurado():
+        return False, "bling_nao_configurado"
+    try:
+        r = requests.post(
+            f"{BLING_AUTH_BASE}/oauth/revoke",
+            headers=_headers_token(),
+            data=body,
+            timeout=BLING_OAUTH_TIMEOUT,
+        )
+    except requests.Timeout:
+        return False, "timeout"
+    except requests.RequestException as exc:
+        return False, f"rede:{exc}"
+
+    if r.status_code in (200, 204):
+        return True, "ok"
+    # Token já inválido / revogado — objetivo alcançado
+    if r.status_code in (400, 401, 404):
+        return True, f"ja_invalido_{r.status_code}"
+    return False, f"http_{r.status_code}:{(r.text or '')[:120]}"
+
+
+def revogar_tokens_bling(
+    *,
+    access_token: str | None = None,
+    refresh_token: str | None = None,
+) -> dict[str, Any]:
+    """
+    Revoga tokens no Bling (best-effort).
+    Preferência: refresh_token (invalida renovação) + access_token.
+    """
+    resultado: dict[str, Any] = {"revogado_bling": False, "detalhes": []}
+    if not bling_configurado():
+        resultado["detalhes"].append("bling_nao_configurado")
+        return resultado
+
+    refresh = (refresh_token or "").strip()
+    access = (access_token or "").strip()
+    if not refresh and not access:
+        resultado["detalhes"].append("sem_tokens_locais")
+        return resultado
+
+    # Revogação ampla (equivalente a desinstalar / revogar usuário no app Bling)
+    if refresh:
+        ok, det = _post_revoke(
+            {
+                "token": refresh,
+                "revoke_action": "logout",
+                "revoke_target": "user",
+            }
+        )
+        resultado["detalhes"].append(f"revoke_user:{det}")
+        if ok:
+            resultado["revogado_bling"] = True
+
+    for label, tok in (("refresh_token", refresh), ("access_token", access)):
+        if not tok:
+            continue
+        ok, det = _post_revoke({"token": tok})
+        resultado["detalhes"].append(f"{label}:{det}")
+        if ok:
+            resultado["revogado_bling"] = True
+
+    return resultado
+
+
+def carregar_tokens_armazenados(cur, id_tenant: int) -> dict[str, str]:
+    """Lê tokens criptografados do tenant (independente de status conectado)."""
+    cur.execute(
+        """
+        SELECT access_token_enc, refresh_token_enc
+        FROM tbl_integracao_bling WHERE id_tenant = %s
+        """,
+        (id_tenant,),
+    )
+    row = cur.fetchone()
+    if not row:
+        return {"access_token": "", "refresh_token": ""}
+    return {
+        "access_token": descriptografar_token(row[0]),
+        "refresh_token": descriptografar_token(row[1]),
+    }
+
+
 def _salvar_tokens(cur, id_tenant: int, payload: dict[str, Any]) -> None:
     expires_in = int(payload.get("expires_in") or 3600)
     expires_em = datetime.now(timezone.utc) + timedelta(seconds=max(60, expires_in - 60))
