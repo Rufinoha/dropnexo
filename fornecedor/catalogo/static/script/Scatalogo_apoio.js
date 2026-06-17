@@ -90,8 +90,6 @@
     return el.formato?.value === "E" ? "E" : "S";
   }
 
-  const BASE = "/catalogos";
-  const CONDICOES = new Set(["", "NOVO", "USADO", "RECONDICIONADO"]);
   let integradoBling = false;
   let estoqueDepositos = [];
   let valorDropManual = false;
