@@ -1775,6 +1775,8 @@ const MAP = {
   empresa: "building-2",
   enviar: "upload",
   estoque: "boxes",
+  etiqueta: "tag",
+  etiquetas: "tag",
   excluir: "trash-2",
   favorecidos: "users",
   financeiro: "wallet",

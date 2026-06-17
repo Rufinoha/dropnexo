@@ -6,6 +6,7 @@
   let galeriaImagens = [];
   let imgDragIdx = null;
   let tipoGaleria = null;
+  let regrasAtributo = [];
 
   const el = {
     id: document.getElementById("id"),
@@ -49,6 +50,12 @@
     imgContador: document.getElementById("imgContador"),
     avisoImgSalvar: document.getElementById("avisoImgSalvar"),
     avisoImgOrdem: document.getElementById("avisoImgOrdem"),
+    painelImgAtributo: document.getElementById("painelImgAtributo"),
+    img_attr_nome: document.getElementById("img_attr_nome"),
+    img_attr_valor: document.getElementById("img_attr_valor"),
+    img_attr_imagem: document.getElementById("img_attr_imagem"),
+    btnImgAtributo: document.getElementById("btnImgAtributo"),
+    lista_img_atributo: document.getElementById("lista_img_atributo"),
     imagem_caminho: document.getElementById("imagem_caminho"),
     imagem_url: document.getElementById("imagem_url"),
     tabVariacoes: document.getElementById("tabVariacoes"),
@@ -370,6 +377,49 @@
     return galeriaImagens.length > 1 && galeriaImagens.every((i) => i.id);
   }
 
+  function rotuloOrigem(origem) {
+    const map = {
+      bling_interna: "Bling",
+      bling_externa: "Link ext.",
+      manual_url: "URL",
+      manual_upload: "Upload",
+    };
+    return map[origem] || "";
+  }
+
+  function renderRegrasAtributo() {
+    if (!el.painelImgAtributo) return;
+    const comVar = formatoAtual() === "E" && idProduto && galeriaImagens.length > 0;
+    el.painelImgAtributo.hidden = !comVar;
+    if (!comVar) return;
+
+    if (el.img_attr_nome) {
+      const nomes = [...new Set(atributosProduto.map((a) => a.nome).filter(Boolean))];
+      el.img_attr_nome.innerHTML = nomes.map((n) => `<option value="${n}">${n}</option>`).join("");
+    }
+    if (el.img_attr_imagem) {
+      el.img_attr_imagem.innerHTML = galeriaImagens
+        .filter((i) => i.id)
+        .map(
+          (img, idx) =>
+            `<option value="${img.id}">Imagem ${idx + 1}${img.principal ? " (principal)" : ""}</option>`
+        )
+        .join("");
+    }
+    if (el.lista_img_atributo) {
+      if (!regrasAtributo.length) {
+        el.lista_img_atributo.innerHTML = '<li class="Cat_ImagemHint">Nenhuma regra cadastrada.</li>';
+        return;
+      }
+      el.lista_img_atributo.innerHTML = regrasAtributo
+        .map(
+          (r) =>
+            `<li><img src="${r.url || ""}" alt="" /><span><strong>${r.nome_atributo}</strong> = ${r.valor}</span></li>`
+        )
+        .join("");
+    }
+  }
+
   function renderGaleria() {
     if (!el.galeria_imagens) return;
     if (el.imgContador) el.imgContador.textContent = `${galeriaImagens.length} / ${MAX_IMAGENS} imagens`;
@@ -388,7 +438,7 @@
         <button type="button" class="Cat_GaleriaRm" data-id="${img.id ?? ""}" data-idx="${idx}" title="Remover">×</button>
         <img src="${img.url || ""}" alt="" loading="lazy" draggable="false" />
         <div class="Cat_GaleriaMeta">
-          <div><strong>${(img.extensao || "—").toUpperCase()}</strong></div>
+          <div><strong>${(img.extensao || "—").toUpperCase()}</strong>${rotuloOrigem(img.origem) ? ` · ${rotuloOrigem(img.origem)}` : ""}</div>
           <div>${formatarTamanho(img.tamanho_bytes)}</div>
         </div>
       </div>`
@@ -423,6 +473,7 @@
       });
     }
     syncAvisoImagens();
+    renderRegrasAtributo();
   }
 
   async function reordenarImagensLocal(from, to) {
@@ -454,8 +505,37 @@
     const j = await r.json();
     if (!r.ok || !j.success) return;
     galeriaImagens = j.imagens || [];
-    tipoGaleria = j.tipo_galeria || null;
+    tipoGaleria = j.imagem_modo || j.tipo_galeria || null;
+    regrasAtributo = j.regras_atributo || [];
+    if (tipoGaleria) {
+      const radio = document.querySelector(`input[name="img_modo"][value="${tipoGaleria}"]`);
+      if (radio) radio.checked = true;
+    }
     renderGaleria();
+  }
+
+  async function associarImagemAtributo() {
+    if (!idProduto) throw new Error("Salve o produto antes.");
+    const nome = (el.img_attr_nome?.value || "").trim();
+    const valor = (el.img_attr_valor?.value || "").trim();
+    const idImagem = Number(el.img_attr_imagem?.value || 0);
+    if (!nome || !valor || !idImagem) throw new Error("Preencha atributo, valor e imagem.");
+    const r = await fetch(`${BASE}/imagens/atributo`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id_produto: idProduto,
+        nome_atributo: nome,
+        valor,
+        id_imagem: idImagem,
+      }),
+    });
+    const j = await r.json();
+    if (!r.ok || !j.success) throw new Error(j.message || "Erro.");
+    regrasAtributo = j.regras || [];
+    if (el.img_attr_valor) el.img_attr_valor.value = "";
+    renderRegrasAtributo();
+    await Swal.fire("Sucesso", j.message, "success");
   }
 
   function syncAvisoImagens() {
@@ -564,6 +644,7 @@
     const j = await r.json();
     if (!r.ok || !j.success) return;
     atributosProduto = j.atributos || [];
+    renderRegrasAtributo();
     renderAtributos();
     const u = util();
     const rows = (j.variantes || []).filter((v) => Object.keys(v.atributos || {}).length > 0);
@@ -862,6 +943,9 @@
   el.btnAplicarPreset?.addEventListener("click", () => aplicarPreset().catch((e) => Swal.fire("Erro", e.message, "error")));
   el.btnImgLink?.addEventListener("click", () => incluirLink().catch((e) => Swal.fire("Erro", e.message, "error")));
   el.btnImgUpload?.addEventListener("click", () => enviarUpload().catch((e) => Swal.fire("Erro", e.message, "error")));
+  el.btnImgAtributo?.addEventListener("click", () =>
+    associarImagemAtributo().catch((e) => Swal.fire("Erro", e.message, "error"))
+  );
   el.lista_atributos?.addEventListener("click", (ev) => {
     const btn = ev.target.closest(".Cat_VarTagRm");
     if (!btn) return;

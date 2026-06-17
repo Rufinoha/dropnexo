@@ -153,7 +153,7 @@
       { acao: "categoria", icon: "categorias", title: "Associar categoria" },
       { acao: "exportar", icon: "download", title: "Exportar lista" },
       { acao: "estoque", icon: "estoque", title: "Sincronizar estoque agora" },
-      { acao: "etiquetas", icon: "anexo", title: "Imprimir etiquetas" },
+      { acao: "etiquetas", icon: "etiquetas", title: "Imprimir etiquetas" },
     ];
     acoes.forEach((a) => {
       const btn = document.createElement("button");

@@ -16,8 +16,15 @@
   display: inline-flex; width: 36px; height: 36px; align-items: center; justify-content: center;
   border-radius: 10px; background: #e8f0ff; color: #021f81; font-weight: 800; margin-bottom: 10px;
 }
-.FnPar_ApoioBody { margin: 0; background: #f5f6f6; }
-.FnPar_Apoio { padding: 16px; }
+.FnPar_ApoioBody { margin: 0; background: #fff; min-height: 0; }
+.FnPar_ApoioBody .Cl_ContainerApoio.FnPar_Apoio {
+  margin: 0;
+  padding: 14px 16px 16px;
+  box-shadow: none;
+  border-radius: 0;
+  background: transparent;
+}
+.FnPar_Apoio { padding: 0; }
 .FnPar_Intro { font-size: 13px; color: #4e5048; margin: 0 0 16px; line-height: 1.45; }
 .FnPar_ModoBar {
   display: inline-flex;
@@ -52,11 +59,39 @@
 }
 .FnPar_Secao h3 { margin: 0 0 12px; font-size: 14px; color: #1c2e3c; }
 .FnPar_GridForm { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 12px; }
-.FnPar_CatAdd { display: grid; grid-template-columns: 1.4fr repeat(3, 0.7fr) auto; gap: 10px; align-items: end; margin-bottom: 12px; }
-.FnPar_Hint { font-size: 11px; color: #8a939e; display: block; margin-top: 4px; }
-.FnPar_TblWrap { margin-top: 8px; }
-.FnPar_Footer { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding-top: 8px; }
+.FnPar_CatAdd { margin-bottom: 12px; }
+.FnPar_CatGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.FnPar_CatActions { display: flex; justify-content: flex-start; }
+.FnPar_CatAdd .Cl_FormCampo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.FnPar_CatAdd .Cl_FormCampo label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+}
+.FnPar_CatAdd .Cl_FormCampo input,
+.FnPar_CatAdd .Cl_FormCampo select {
+  width: 100%;
+  box-sizing: border-box;
+  height: 40px;
+  border: 1px solid #d1d9e6;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 14px;
+}
+.FnPar_TblWrap { margin-top: 8px; max-height: 200px; overflow: auto; }
+.FnPar_Footer { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding-top: 4px; margin-top: 4px; }
 .FnPar_BtnAplicar { min-width: 160px; }
+.FnPar_Hint { font-size: 11px; color: #8a939e; display: block; margin-top: 4px; }
 @media (max-width: 900px) {
-  .FnPar_GridForm, .FnPar_CatAdd { grid-template-columns: 1fr; }
+  .FnPar_GridForm, .FnPar_CatGrid { grid-template-columns: 1fr; }
 }

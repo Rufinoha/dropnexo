@@ -94,6 +94,7 @@ def _f(row, idx, default=None):
 
 
 def variante_dict(row, *, incluir_produto: bool = False) -> dict[str, Any]:
+    caminho_img = row[8] or ""
     d = {
         "id": row[0],
         "id_produto": row[1],
@@ -103,8 +104,8 @@ def variante_dict(row, *, incluir_produto: bool = False) -> dict[str, Any]:
         "preco_promocional": float(row[5]) if row[5] is not None else None,
         "preco_custo": float(row[6]) if row[6] is not None else None,
         "atributos": row[7] if isinstance(row[7], dict) else (json.loads(row[7]) if row[7] else {}),
-        "imagem_url": url_imagem_produto(row[8]),
-        "imagem_caminho": row[8] or "",
+        "imagem_url": url_exibicao(caminho_img),
+        "imagem_caminho": caminho_img,
         "ativo": bool(row[9]),
         "ordem": int(row[10] or 0),
         "estoque": int(row[11] or 0) if len(row) > 11 else 0,
@@ -118,6 +119,7 @@ def variante_dict(row, *, incluir_produto: bool = False) -> dict[str, Any]:
         d["profundidade_cm"] = float(_f(row, 17)) if _f(row, 17) is not None else None
         d["gtin"] = _f(row, 18) or ""
         d["ncm"] = _f(row, 19) or ""
+        d["id_imagem_principal"] = int(_f(row, 20)) if _f(row, 20) else None
     if incluir_produto and len(row) > 12:
         d["produto_nome"] = row[12]
         d["fornecedor_nome"] = row[13] if len(row) > 13 else ""
@@ -127,12 +129,15 @@ def variante_dict(row, *, incluir_produto: bool = False) -> dict[str, Any]:
 
 SQL_VARIANTE_LISTA = """
     SELECT v.id, v.id_produto, v.sku, v.nome_exibicao, v.preco, v.preco_promocional,
-           v.preco_custo, v.atributos, v.imagem_url, v.ativo, v.ordem,
+           v.preco_custo, v.atributos,
+           COALESCE(img.caminho, v.imagem_url) AS imagem_efetiva,
+           v.ativo, v.ordem,
            COALESCE(e.quantidade, 0),
            v.herda_pai, v.peso_liquido_kg, v.peso_bruto_kg, v.altura_cm, v.largura_cm,
-           v.profundidade_cm, v.gtin, v.ncm
+           v.profundidade_cm, v.gtin, v.ncm, v.id_imagem_principal
     FROM tbl_produto_variante v
     LEFT JOIN tbl_produto_variante_estoque e ON e.id_variante = v.id
+    LEFT JOIN tbl_produto_imagem img ON img.id = v.id_imagem_principal
 """
 
 
@@ -177,8 +182,9 @@ def merge_variante_exibicao(variante: dict[str, Any], pai: dict[str, Any]) -> di
     ):
         if out.get(k) in (None, "", 0) and pai.get(k) not in (None, ""):
             out[k] = pai[k]
-    if not (out.get("imagem_caminho") or out.get("imagem_url")) and pai.get("imagem_url"):
-        out["imagem_url"] = url_imagem_produto(pai["imagem_url"])
+    if pai.get("imagem_url"):
+        out["imagem_url"] = url_exibicao(pai["imagem_url"])
+        out["imagem_caminho"] = pai["imagem_url"]
     return out
 
 
@@ -664,6 +670,17 @@ from fornecedor.catalogo.servico_estoque_deposito import (
     listar_estoque_por_deposito,
     sincronizar_estoque_produtos_bling,
 )
+from fornecedor.catalogo.servico_imagens import (
+    classificar_origem_manual,
+    exigir_modo_compativel,
+    listar_regras_atributo_imagem,
+    obter_imagem_modo,
+    salvar_regra_atributo_imagem,
+    sincronizar_cache_variante,
+    sincronizar_imagem_principal_produto,
+    url_exibicao,
+    validar_id_imagem_produto,
+)
 from fornecedor.parametros.servico_precificacao import (
     aplicar_valor_drop_produto_e_variantes,
     salvar_valor_drop_manual,
@@ -834,6 +851,9 @@ def _tipo_de_caminho(caminho: str | None) -> str:
 
 def _imagem_dict_row(row) -> dict:
     caminho = row[1] or ""
+    origem = row[4] if len(row) > 4 and row[4] else _tipo_de_caminho(caminho)
+    if origem in ("link", "upload"):
+        origem = "manual_url" if origem == "link" else "manual_upload"
     tamanho = _tamanho_imagem_disco(caminho)
     return {
         "id": row[0],
@@ -842,37 +862,18 @@ def _imagem_dict_row(row) -> dict:
         "ordem": row[2],
         "principal": bool(row[3]),
         "tipo": _tipo_de_caminho(caminho),
+        "origem": origem,
         "extensao": _extensao_de_caminho(caminho),
         "tamanho_bytes": tamanho,
     }
 
 
-def _tipo_galeria_existente(cur, id_produto: int) -> str | None:
-    cur.execute(
-        """
-        SELECT caminho FROM tbl_produto_imagem
-        WHERE id_produto = %s AND id_variante IS NULL
-        ORDER BY ordem ASC, id ASC
-        """,
-        (id_produto,),
-    )
-    rows = cur.fetchall()
-    if rows:
-        tipos = {_tipo_de_caminho(r[0]) for r in rows}
-        return tipos.pop() if len(tipos) == 1 else None
-    cur.execute("SELECT imagem_url FROM tbl_produto WHERE id = %s", (id_produto,))
-    row = cur.fetchone()
-    if row and row[0]:
-        return _tipo_de_caminho(row[0])
-    return None
-
-
 def _exigir_tipo_imagem_compativel(cur, id_produto: int, tipo: str) -> None:
-    atual = _tipo_galeria_existente(cur, id_produto)
-    if atual and atual != tipo:
-        raise ValueError(
-            "Não é possível misturar link e upload. Exclua todas as imagens para trocar o modo."
-        )
+    exigir_modo_compativel(cur, id_produto, tipo)
+
+
+def _tipo_galeria_existente(cur, id_produto: int) -> str | None:
+    return obter_imagem_modo(cur, id_produto)
 
 
 def _migrar_imagem_legada(cur, id_produto: int) -> None:
@@ -887,29 +888,18 @@ def _migrar_imagem_legada(cur, id_produto: int) -> None:
     if row and row[0]:
         cur.execute(
             """
-            INSERT INTO tbl_produto_imagem (id_produto, caminho, ordem, principal)
-            VALUES (%s, %s, 0, TRUE)
+            INSERT INTO tbl_produto_imagem (id_produto, caminho, ordem, principal, origem)
+            VALUES (%s, %s, 0, TRUE, %s)
             """,
-            (id_produto, row[0]),
+            (id_produto, row[0], classificar_origem_manual(row[0])),
         )
 
 
 def _sincronizar_imagem_principal(cur, id_produto: int) -> None:
-    cur.execute(
-        """
-        SELECT caminho FROM tbl_produto_imagem
-        WHERE id_produto = %s AND id_variante IS NULL
-        ORDER BY ordem ASC, id ASC
-        LIMIT 1
-        """,
-        (id_produto,),
-    )
-    row = cur.fetchone()
-    caminho = row[0] if row else None
-    cur.execute(
-        "UPDATE tbl_produto SET imagem_url = %s, atualizado_em = %s WHERE id = %s",
-        (caminho, agora_utc(), id_produto),
-    )
+    sincronizar_imagem_principal_produto(cur, id_produto)
+    cur.execute("SELECT id FROM tbl_produto_variante WHERE id_produto = %s", (id_produto,))
+    for row in cur.fetchall():
+        sincronizar_cache_variante(cur, int(row[0]))
 
 
 @fn_catalogo_bp.get("/catalogos")
@@ -1843,7 +1833,7 @@ def catalogos_imagens_lista():
             return jsonify(success=False, message="Produto não encontrado."), 404
         cur.execute(
             """
-            SELECT id, caminho, ordem, principal
+            SELECT id, caminho, ordem, principal, origem
             FROM tbl_produto_imagem
             WHERE id_produto = %s AND id_variante IS NULL
             ORDER BY ordem ASC, id ASC
@@ -1878,6 +1868,8 @@ def catalogos_imagens_lista():
             imagens=imagens,
             total=len(imagens),
             tipo_galeria=_tipo_galeria_existente(cur, id_produto),
+            imagem_modo=obter_imagem_modo(cur, id_produto),
+            regras_atributo=listar_regras_atributo_imagem(cur, id_produto),
         )
     finally:
         conn.close()
@@ -1918,11 +1910,11 @@ def catalogos_imagens_link():
         principal = ordem == 0
         cur.execute(
             """
-            INSERT INTO tbl_produto_imagem (id_produto, caminho, ordem, principal)
-            VALUES (%s, %s, %s, %s)
-            RETURNING id, caminho, ordem, principal
+            INSERT INTO tbl_produto_imagem (id_produto, caminho, ordem, principal, origem)
+            VALUES (%s, %s, %s, %s, %s)
+            RETURNING id, caminho, ordem, principal, origem
             """,
-            (id_produto, url, ordem, principal),
+            (id_produto, url, ordem, principal, "manual_url"),
         )
         row = cur.fetchone()
         _sincronizar_imagem_principal(cur, id_produto)
@@ -1972,8 +1964,8 @@ def catalogos_imagens_upload():
             return jsonify(success=False, message="Máximo de 10 imagens por produto."), 400
         cur.execute(
             """
-            INSERT INTO tbl_produto_imagem (id_produto, caminho, ordem, principal)
-            VALUES (%s, '', 999, FALSE)
+            INSERT INTO tbl_produto_imagem (id_produto, caminho, ordem, principal, origem)
+            VALUES (%s, '', 999, FALSE, 'manual_upload')
             RETURNING id
             """,
             (id_produto,),
@@ -1992,9 +1984,9 @@ def catalogos_imagens_upload():
         cur.execute(
             """
             UPDATE tbl_produto_imagem
-            SET caminho = %s, ordem = %s, principal = %s
+            SET caminho = %s, ordem = %s, principal = %s, origem = 'manual_upload'
             WHERE id = %s
-            RETURNING id, caminho, ordem, principal
+            RETURNING id, caminho, ordem, principal, origem
             """,
             (caminho_db, ordem, principal, id_img),
         )
@@ -2061,6 +2053,49 @@ def catalogos_imagens_ordenar():
         conn.close()
 
 
+@fn_catalogo_bp.post("/catalogos/imagens/atributo")
+@login_obrigatorio()
+@exigir_permissao(codigo="catalogos.editar")
+def catalogos_imagens_atributo():
+    if (resp := _exigir_catalogo_escrita()) is not None:
+        return resp
+    body = request.get_json(silent=True) or {}
+    id_produto = int(body.get("id_produto") or 0)
+    id_imagem = int(body.get("id_imagem") or 0)
+    nome_atributo = (body.get("nome_atributo") or "").strip()
+    valor = (body.get("valor") or "").strip()
+    if not id_produto or not id_imagem or not nome_atributo or not valor:
+        return jsonify(success=False, message="Informe produto, atributo, valor e imagem."), 400
+    id_tenant = session.get("id_tenant")
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT id FROM tbl_produto WHERE id = %s AND id_tenant = %s",
+            (id_produto, id_tenant),
+        )
+        if not cur.fetchone():
+            return jsonify(success=False, message="Produto não encontrado."), 404
+        salvar_regra_atributo_imagem(
+            cur,
+            id_produto=id_produto,
+            nome_atributo=nome_atributo,
+            valor=valor,
+            id_imagem=id_imagem,
+        )
+        conn.commit()
+        return jsonify(
+            success=True,
+            message="Imagem associada ao atributo.",
+            regras=listar_regras_atributo_imagem(cur, id_produto),
+        )
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 400
+    finally:
+        conn.close()
+
+
 @fn_catalogo_bp.post("/catalogos/imagens/remover")
 @login_obrigatorio()
 @exigir_permissao(codigo="catalogos.editar")
@@ -2096,6 +2131,14 @@ def catalogos_imagens_remover():
             cur.execute(
                 "DELETE FROM tbl_produto_imagem WHERE id = %s AND id_produto = %s",
                 (id_imagem, id_produto),
+            )
+            cur.execute(
+                """
+                UPDATE tbl_produto_variante
+                SET id_imagem_principal = NULL, atualizado_em = %s
+                WHERE id_imagem_principal = %s
+                """,
+                (agora_utc(), id_imagem),
             )
         elif _normalizar_bool(body.get("limpar_principal")):
             cur.execute("SELECT imagem_url FROM tbl_produto WHERE id = %s", (id_produto,))
@@ -2561,7 +2604,6 @@ def variantes_salvar():
             atributos = {}
         quantidade = max(0, int(body.get("quantidade") or 0))
         ativo = str(body.get("ativo", "true")).lower() in ("1", "true", "t", "yes", "sim")
-        herda_pai = str(body.get("herda_pai", "true")).lower() in ("1", "true", "t", "yes", "sim")
         vid = body.get("id")
 
         peso_liq = body.get("peso_liquido_kg")
@@ -2576,7 +2618,22 @@ def variantes_salvar():
         prof = _parse_decimal(prof) if prof not in (None, "") else None
         gtin = (body.get("gtin") or "").strip() or None
         ncm = (body.get("ncm") or "").strip() or None
-        imagem_url = (body.get("imagem_url") or body.get("imagem_caminho") or "").strip() or None
+        herda_pai = str(body.get("herda_pai", "true")).lower() in ("1", "true", "t", "yes", "sim")
+        id_imagem_principal = body.get("id_imagem_principal")
+        if id_imagem_principal in (None, "", 0, "0"):
+            id_imagem_principal = None
+        else:
+            id_imagem_principal = int(id_imagem_principal)
+
+        if herda_pai:
+            id_imagem_principal = None
+            imagem_url = None
+        elif id_imagem_principal:
+            if not validar_id_imagem_produto(cur, id_imagem_principal, id_produto):
+                return jsonify(success=False, message="Imagem inválida para este produto."), 400
+            imagem_url = None
+        else:
+            imagem_url = (body.get("imagem_url") or body.get("imagem_caminho") or "").strip() or None
 
         if sku:
             exigir_sku_unico_tenant(
@@ -2601,7 +2658,7 @@ def variantes_salvar():
                 """
                 UPDATE tbl_produto_variante SET
                     sku=%s, nome_exibicao=%s, preco=%s, preco_promocional=%s, preco_custo=%s,
-                    atributos=%s, imagem_url=%s, ativo=%s, ordem=%s, herda_pai=%s,
+                    atributos=%s, imagem_url=%s, id_imagem_principal=%s, ativo=%s, ordem=%s, herda_pai=%s,
                     peso_liquido_kg=%s, peso_bruto_kg=%s, altura_cm=%s, largura_cm=%s,
                     profundidade_cm=%s, gtin=%s, ncm=%s, atualizado_em=%s
                 WHERE id=%s AND id_produto=%s
@@ -2615,6 +2672,7 @@ def variantes_salvar():
                     pc,
                     json.dumps(atributos),
                     imagem_url,
+                    id_imagem_principal,
                     ativo,
                     int(body.get("ordem") or 0),
                     herda_pai,
@@ -2633,15 +2691,16 @@ def variantes_salvar():
             if not cur.fetchone():
                 return jsonify(success=False, message="Variante não encontrada."), 404
             variant_id = int(vid)
+            sincronizar_cache_variante(cur, variant_id)
         else:
             cur.execute(
                 """
                 INSERT INTO tbl_produto_variante (
                     id_produto, sku, nome_exibicao, preco, preco_promocional, preco_custo,
-                    atributos, imagem_url, ativo, ordem, herda_pai,
+                    atributos, imagem_url, id_imagem_principal, ativo, ordem, herda_pai,
                     peso_liquido_kg, peso_bruto_kg, altura_cm, largura_cm, profundidade_cm,
                     gtin, ncm, atualizado_em
-                ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 RETURNING id
                 """,
                 (
@@ -2653,6 +2712,7 @@ def variantes_salvar():
                     pc,
                     json.dumps(atributos),
                     imagem_url,
+                    id_imagem_principal,
                     ativo,
                     int(body.get("ordem") or 0),
                     herda_pai,
@@ -2667,6 +2727,7 @@ def variantes_salvar():
                 ),
             )
             variant_id = cur.fetchone()[0]
+            sincronizar_cache_variante(cur, variant_id)
             if row_p[0] == "E":
                 pass
             else:

@@ -8,7 +8,7 @@
         rota: "/fornecedor/parametros/precificacao",
         titulo: "Precificação",
         largura: 920,
-        altura: "auto",
+        altura: 540,
         nivel: 2,
       });
     }

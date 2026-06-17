@@ -920,3 +920,89 @@ html:has(.Cat_ApoioBody) body {
   border-radius: 4px;
   margin-left: 4px;
 }
+
+.Cat_GaleriaPick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.Cat_GaleriaPickItem {
+  border: 2px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 6px;
+  background: #fff;
+  cursor: pointer;
+  width: 96px;
+  text-align: center;
+}
+
+.Cat_GaleriaPickItem.is-selected {
+  border-color: var(--marca-primary, #021f81);
+  box-shadow: 0 0 0 2px rgba(2, 31, 129, 0.15);
+}
+
+.Cat_GaleriaPickItem img {
+  width: 80px;
+  height: 80px;
+  object-fit: cover;
+  border-radius: 6px;
+  display: block;
+  margin: 0 auto 4px;
+}
+
+.Cat_GaleriaPickItem span {
+  font-size: 10px;
+  color: #64748b;
+}
+
+.Cat_ImgAttrWrap {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.Cat_ImgAttrTitulo {
+  margin: 0 0 6px;
+  font-size: 14px;
+}
+
+.Cat_ImgAttrForm {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-end;
+  margin-bottom: 10px;
+}
+
+.Cat_ImgAttrForm select,
+.Cat_ImgAttrForm input {
+  min-width: 120px;
+}
+
+.Cat_ImgAttrLista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.Cat_ImgAttrLista li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.Cat_ImgAttrLista img {
+  width: 40px;
+  height: 40px;
+  object-fit: cover;
+  border-radius: 6px;
+}

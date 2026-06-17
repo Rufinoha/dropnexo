@@ -71,14 +71,12 @@
     </section>
 
     <section class="Cat_TabPanel" data-panel="midia" hidden>
-      <div class="Cat_ImagemRow">
-        <img id="preview_imagem" class="Cat_ImagemPreview" alt="" hidden />
-        <div class="Cat_ImagemAcoes">
-          <label for="imagem_url">URL da imagem</label>
-          <input type="url" id="imagem_url" placeholder="https://..." />
-          <input type="hidden" id="imagem_caminho" value="" />
-        </div>
-      </div>
+      <p class="Cat_ImagemHint" id="hint_imagem_variante">
+        Escolha a imagem padrão desta variante na galeria do produto pai (sem novo upload).
+      </p>
+      <div id="galeria_variante_pick" class="Cat_Galeria Cat_GaleriaPick"></div>
+      <input type="hidden" id="id_imagem_principal" value="" />
+      <img id="preview_imagem" class="Cat_ImagemPreview" alt="" hidden />
     </section>
   </div>
 
@@ -88,6 +86,6 @@
   </div>
 
   <script src="{{ url_for('static', filename='script/global_utils.js') }}"></script>
-  <script src="{{ url_for('fn_catalogo.static', filename='script/Scatalogo_variante_apoio.js') }}"></script>
+  <script src="{{ url_for('fn_catalogo.static', filename='script/Scatalogo_variante_apoio.js') }}?v=2"></script>
 </body>
 </html>

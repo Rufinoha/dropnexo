@@ -795,7 +795,7 @@ def _processar_grupo_variacoes(
         id_importacao_lote=id_importacao_lote if criando else None,
     )
 
-    urls = extrair_urls_imagem_bling(detalhe_pai)
+    urls = extrair_urls_imagem_bling(detalhe_pai, variacoes=variacoes)
     sku_mapa = _sku_pai_de_variacoes(detalhe_pai, variacoes)
     if urls:
         aplicar_imagens_produto(
@@ -805,6 +805,7 @@ def _processar_grupo_variacoes(
             sku=sku_mapa or f"bling-{id_bling_pai}",
             urls=urls,
             modo_imagem=cfg["modo_imagem"],
+            variacoes_bling=variacoes,
         )
 
     _upsert_mapa(
