@@ -33,33 +33,38 @@
             <div class="imp-form imp-form-bling">
               <div class="imp-row imp-row-bling">
                 <div class="imp-field imp-field-grow">
-                  <label>Escopo</label>
-                  <div class="imp-radio-row">
-                    <label><input type="radio" name="imp_bling_modo" value="todos" checked /> Todos os produtos</label>
-                    <label><input type="radio" name="imp_bling_modo" value="categorias" /> Por categorias</label>
-                  </div>
-                  <div id="impBlingCatsWrap" class="imp-cat-wrap" hidden>
-                    <label class="imp-cat-label" for="impCatTrigger">Categorias do Bling</label>
-                    <div class="imp-cat-picker" id="impCatPicker">
-                      <button type="button" class="imp-cat-trigger" id="impCatTrigger" aria-expanded="false">
-                        <span class="imp-cat-trigger-text" id="impCatTriggerText">Selecione as categorias…</span>
-                        <span class="imp-cat-trigger-caret" aria-hidden="true"></span>
-                      </button>
-                      <div class="imp-cat-panel" id="impCatPanel" hidden>
-                        <input type="search" class="imp-cat-search" id="impCatSearch" placeholder="Buscar categoria…" autocomplete="off" />
-                        <div class="imp-cat-list" id="impCatList" role="listbox" aria-multiselectable="true"></div>
+                  <div class="imp-bling-scope-row">
+                    <div class="imp-bling-scope-col">
+                      <label>Escopo</label>
+                      <div class="imp-radio-row">
+                        <label><input type="radio" name="imp_bling_modo" value="todos" checked /> Todos os produtos</label>
+                        <label><input type="radio" name="imp_bling_modo" value="categorias" /> Por categorias</label>
                       </div>
                     </div>
-                    <div class="imp-cat-chips" id="impCatChips"></div>
-                    <div class="Cl_SwitchGroup imp-cat-sub-switch">
-                      <span class="Cl_SwitchLabel">Incluir subcategorias</span>
-                      <label class="Cl_Switch">
-                        <input type="checkbox" id="impBlingSub" checked />
-                        <span class="Cl_SwitchSlider"></span>
-                      </label>
+                    <div id="impBlingCatsWrap" class="imp-cat-wrap imp-cat-wrap--side" hidden>
+                      <label class="imp-cat-label" for="impCatTrigger">Categorias do Bling</label>
+                      <div class="imp-cat-inline-row">
+                        <div class="imp-cat-picker" id="impCatPicker">
+                          <button type="button" class="imp-cat-trigger" id="impCatTrigger" aria-expanded="false">
+                            <span class="imp-cat-trigger-text" id="impCatTriggerText">Selecione as categorias…</span>
+                            <span class="imp-cat-trigger-caret" aria-hidden="true"></span>
+                          </button>
+                          <div class="imp-cat-panel" id="impCatPanel" hidden>
+                            <input type="search" class="imp-cat-search" id="impCatSearch" placeholder="Buscar categoria…" autocomplete="off" />
+                            <div class="imp-cat-list" id="impCatList" role="listbox" aria-multiselectable="true"></div>
+                          </div>
+                        </div>
+                        <div class="Cl_SwitchGroup imp-cat-sub-switch">
+                          <span class="Cl_SwitchLabel">Incluir subcategorias</span>
+                          <label class="Cl_Switch">
+                            <input type="checkbox" id="impBlingSub" checked />
+                            <span class="Cl_SwitchSlider"></span>
+                          </label>
+                        </div>
+                      </div>
+                      <div class="imp-cat-chips" id="impCatChips"></div>
                     </div>
                   </div>
-                  <div class="imp-hint imp-hint-spacer">&nbsp;</div>
                 </div>
                 <div class="imp-actions">
                   <button type="button" class="Cl_botaoprimario" id="impBtnBling">Importar</button>
@@ -198,23 +203,25 @@
           <div class="imp-last" id="impResObs">Nenhuma importação registrada ainda.</div>
         </div>
 
-        <div class="filter-panel" id="impPaneManutencao">
-          <div class="filter-panel-fields">
-            <div class="filter-group">
-              <label for="impFiltroDe">De</label>
-              <input type="date" id="impFiltroDe" />
-            </div>
-            <div class="filter-group">
-              <label for="impFiltroAte">Até</label>
-              <input type="date" id="impFiltroAte" />
-            </div>
-            <div class="filter-panel-actions">
-              <button type="button" class="Cl_botaoFiltro" id="impBtnFiltrar">Filtrar</button>
-              <button type="button" class="btn-secundario" id="impBtnLimpar">Limpar filtro</button>
+        <div class="imp-pane-tab" id="impPaneManutencao">
+          <div class="filter-panel imp-filter-only">
+            <div class="filter-panel-fields">
+              <div class="filter-group">
+                <label for="impFiltroDe">De</label>
+                <input type="date" id="impFiltroDe" />
+              </div>
+              <div class="filter-group">
+                <label for="impFiltroAte">Até</label>
+                <input type="date" id="impFiltroAte" />
+              </div>
+              <div class="filter-panel-actions">
+                <button type="button" class="Cl_botaoFiltro" id="impBtnFiltrar">Filtrar</button>
+                <button type="button" class="btn-secundario" id="impBtnLimpar">Limpar filtro</button>
+              </div>
             </div>
           </div>
           <div class="Cl_TabelaPrincipal imp-table-wrap">
-            <table class="imp-table">
+            <table class="imp-table imp-table--lotes">
               <thead>
                 <tr>
                   <th>Lote</th>
@@ -231,37 +238,39 @@
           </div>
         </div>
 
-        <div class="filter-panel" id="impPaneLayout">
-          <div class="filter-panel-fields">
-            <div class="filter-group">
-              <label for="impLayoutFiltroNome">Nome</label>
-              <input type="text" id="impLayoutFiltroNome" placeholder="Filtrar por nome…" />
-            </div>
-            <div class="filter-group">
-              <label for="impLayoutFiltroStatus">Status</label>
-              <select id="impLayoutFiltroStatus">
-                <option value="">Todos</option>
-                <option value="ativo">Ativo</option>
-                <option value="inativo">Inativo</option>
-              </select>
-            </div>
-            <div class="filter-group">
-              <label for="impLayoutFiltroPadrao">Padrão</label>
-              <select id="impLayoutFiltroPadrao">
-                <option value="">Todos</option>
-                <option value="sim">Sim</option>
-                <option value="nao">Não</option>
-              </select>
-            </div>
-            <div class="filter-panel-actions">
-              <button type="button" class="Cl_botaoFiltro" id="impBtnLayoutFiltrar">Filtrar</button>
-              <button type="button" class="btn-secundario" id="impBtnLayoutLimpar">Limpar filtro</button>
+        <div class="imp-pane-tab" id="impPaneLayout">
+          <div class="filter-panel imp-filter-only">
+            <div class="filter-panel-fields">
+              <div class="filter-group">
+                <label for="impLayoutFiltroNome">Nome</label>
+                <input type="text" id="impLayoutFiltroNome" placeholder="Filtrar por nome…" />
+              </div>
+              <div class="filter-group">
+                <label for="impLayoutFiltroStatus">Status</label>
+                <select id="impLayoutFiltroStatus">
+                  <option value="">Todos</option>
+                  <option value="ativo">Ativo</option>
+                  <option value="inativo">Inativo</option>
+                </select>
+              </div>
+              <div class="filter-group">
+                <label for="impLayoutFiltroPadrao">Padrão</label>
+                <select id="impLayoutFiltroPadrao">
+                  <option value="">Todos</option>
+                  <option value="sim">Sim</option>
+                  <option value="nao">Não</option>
+                </select>
+              </div>
+              <div class="filter-panel-actions">
+                <button type="button" class="Cl_botaoFiltro" id="impBtnLayoutFiltrar">Filtrar</button>
+                <button type="button" class="btn-secundario" id="impBtnLayoutLimpar">Limpar filtro</button>
+              </div>
             </div>
           </div>
           <button type="button" class="Cl_BtnIncluir imp-btn-novo-layout" id="impBtnNovoLayout">+ Novo layout</button>
           <p class="imp-hint imp-layout-rule">Regra: no máximo <strong>3 layouts</strong> por módulo (ativos ou não).</p>
           <div class="Cl_TabelaPrincipal imp-table-wrap">
-            <table class="imp-table">
+            <table class="imp-table imp-table--layouts">
               <thead>
                 <tr>
                   <th>ID</th>

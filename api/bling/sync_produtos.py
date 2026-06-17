@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import traceback
 from typing import Any
 
 from api.bling.cliente import listar_produtos, obter_produto, obter_variacoes_produto
@@ -11,6 +12,7 @@ from api.bling.sync_categorias import (
     garantir_categoria_bling,
     ids_categoria_bling_com_descendentes,
 )
+from fornecedor.importacao.erro_traducao import montar_payload_erro
 from fornecedor.importacao.servico_importacao import (
     MODULO_CATALOGO,
     ORIGEM_INTEGRACAO,
@@ -58,6 +60,51 @@ def _garantir_config(cur, id_tenant: int, contexto: str) -> dict:
     )
     row = cur.fetchone()
     return {"fonte_principal": row[0], "modo_imagem": row[1], "produtos_modo": row[2]}
+
+
+def _fetch_returning_id(cur, *, contexto: str) -> int:
+    row = cur.fetchone()
+    if not row or row[0] is None:
+        raise ValueError(contexto)
+    return int(row[0])
+
+
+def _produto_local_existe(cur, id_tenant: int, id_produto: int | None) -> int | None:
+    """Retorna o id se o produto ainda existe no tenant; None se foi excluído ou inválido."""
+    if not id_produto:
+        return None
+    cur.execute(
+        "SELECT id FROM tbl_produto WHERE id = %s AND id_tenant = %s",
+        (id_produto, id_tenant),
+    )
+    row = cur.fetchone()
+    return int(row[0]) if row else None
+
+
+def _resolver_produto_existente(
+    cur,
+    id_tenant: int,
+    *,
+    id_mapa: int | None,
+    sku: str,
+) -> int | None:
+    """
+    Define qual produto local atualizar.
+    Se o vínculo Bling apontar para produto excluído, ignora o mapa e tenta pelo SKU;
+    se não achar nada, retorna None (será criado um produto novo).
+    """
+    id_produto = _produto_local_existe(cur, id_tenant, id_mapa)
+    if id_produto:
+        return id_produto
+    sku = (sku or "").strip()
+    if not sku:
+        return None
+    cur.execute(
+        "SELECT id FROM tbl_produto WHERE id_tenant = %s AND sku = %s",
+        (id_tenant, sku),
+    )
+    row = cur.fetchone()
+    return int(row[0]) if row else None
 
 
 def _registrar_log(cur, id_tenant: int, contexto: str, status: str, resumo: str, detalhe: str = "") -> None:
@@ -219,7 +266,10 @@ def _garantir_variante_padrao(cur, id_produto: int, id_tenant: int, nome: str) -
         """,
         (id_produto, nome or "Padrão", agora_utc()),
     )
-    vid = cur.fetchone()[0]
+    vid = _fetch_returning_id(
+        cur,
+        contexto="Falha ao criar variante padrão do produto.",
+    )
     cur.execute(
         "UPDATE tbl_produto SET id_variante_padrao = %s, formato = COALESCE(formato, 'S') WHERE id = %s",
         (vid, id_produto),
@@ -294,8 +344,13 @@ def _salvar_produto(
                 id_tenant,
             ),
         )
-        prod_id = cur.fetchone()[0]
-    else:
+        row = cur.fetchone()
+        if row and row[0]:
+            prod_id = int(row[0])
+        else:
+            id_produto_existente = None
+
+    if not id_produto_existente:
         cur.execute(
             """
             INSERT INTO tbl_produto (
@@ -322,7 +377,7 @@ def _salvar_produto(
                 agora,
             ),
         )
-        prod_id = cur.fetchone()[0]
+        prod_id = _fetch_returning_id(cur, contexto="Falha ao inserir produto.")
 
     vid = _garantir_variante_padrao(cur, prod_id, id_tenant, nome)
     cur.execute(
@@ -352,7 +407,7 @@ def _inserir_variante_bling(cur, id_produto: int, var: dict, ordem: int) -> int:
         """,
         (id_produto, sku, nome, preco, preco_custo, ativo, ordem, agora),
     )
-    vid = int(cur.fetchone()[0])
+    vid = _fetch_returning_id(cur, contexto="Falha ao inserir variação do produto.")
     cur.execute(
         """
         INSERT INTO tbl_produto_variante_estoque (id_variante, quantidade, atualizado_em)
@@ -406,9 +461,14 @@ def _salvar_produto_grupo_variacoes(
                 id_tenant,
             ),
         )
-        prod_id = int(cur.fetchone()[0])
-        _limpar_variantes(cur, prod_id)
-    else:
+        row = cur.fetchone()
+        if row and row[0]:
+            prod_id = int(row[0])
+            _limpar_variantes(cur, prod_id)
+        else:
+            id_produto_existente = None
+
+    if not id_produto_existente:
         cur.execute(
             """
             INSERT INTO tbl_produto (
@@ -433,7 +493,7 @@ def _salvar_produto_grupo_variacoes(
                 agora,
             ),
         )
-        prod_id = int(cur.fetchone()[0])
+        prod_id = _fetch_returning_id(cur, contexto="Falha ao inserir produto com variações.")
 
     primeira_vid: int | None = None
     for ordem, var in enumerate(variacoes):
@@ -487,15 +547,8 @@ def _processar_item_produto(
         )
         categorias_sincronizadas.add(id_cat_bling)
 
-    id_existente, _ = _buscar_mapa(cur, id_tenant, contexto, id_bling)
-    if not id_existente:
-        cur.execute(
-            "SELECT id FROM tbl_produto WHERE id_tenant = %s AND sku = %s",
-            (id_tenant, sku),
-        )
-        row = cur.fetchone()
-        if row:
-            id_existente = int(row[0])
+    id_mapa, _ = _buscar_mapa(cur, id_tenant, contexto, id_bling)
+    id_existente = _resolver_produto_existente(cur, id_tenant, id_mapa=id_mapa, sku=sku)
 
     criando = id_existente is None
     prod_id = _salvar_produto(
@@ -576,17 +629,9 @@ def _processar_grupo_variacoes(
         )
         categorias_sincronizadas.add(id_cat_bling)
 
-    id_existente, _ = _buscar_mapa(cur, id_tenant, contexto, id_bling_pai)
-    if not id_existente:
-        sku_raiz = _sku_pai_de_variacoes(detalhe_pai, variacoes)
-        if sku_raiz:
-            cur.execute(
-                "SELECT id FROM tbl_produto WHERE id_tenant = %s AND sku = %s",
-                (id_tenant, sku_raiz),
-            )
-            row = cur.fetchone()
-            if row:
-                id_existente = int(row[0])
+    id_mapa, _ = _buscar_mapa(cur, id_tenant, contexto, id_bling_pai)
+    sku_raiz = _sku_pai_de_variacoes(detalhe_pai, variacoes)
+    id_existente = _resolver_produto_existente(cur, id_tenant, id_mapa=id_mapa, sku=sku_raiz)
 
     criando = id_existente is None
     prod_id = _salvar_produto_grupo_variacoes(
@@ -791,12 +836,36 @@ def importar_produtos(
                     sku_ref = (pai.get("codigo") or "").strip()
                 except Exception:
                     pass
+            motivo_tecnico = str(e)
+            extra: dict[str, Any] = {
+                "tipo_job": tipo_job,
+                "id_bling": id_bling,
+                "contexto_integracao": contexto,
+            }
+            if tipo_job == "grupo":
+                extra["job"] = {
+                    k: job.get(k)
+                    for k in ("id_bling", "tipo")
+                    if job.get(k) is not None
+                }
+            elif item:
+                extra["bling_resumo"] = {
+                    k: item.get(k)
+                    for k in ("id", "codigo", "nome", "formato", "situacao", "preco")
+                    if item.get(k) is not None
+                }
+            payload_erro = montar_payload_erro(
+                mensagem_tecnica=motivo_tecnico,
+                origem="bling",
+                extra=extra,
+                traceback_txt=traceback.format_exc(),
+            )
             _registrar_falha(
                 falhas,
                 id_bling=id_bling,
                 nome=nome_ref,
                 sku=sku_ref,
-                motivo=str(e),
+                motivo=motivo_tecnico,
                 tipo="grupo_variacoes" if tipo_job == "grupo" else "produto",
             )
             if id_importacao_lote:
@@ -808,7 +877,9 @@ def importar_produtos(
                     ref_externa=id_bling,
                     nome_registro=nome_ref,
                     sku_registro=sku_ref,
-                    mensagem=str(e),
+                    mensagem=motivo_tecnico,
+                    payload=payload_erro,
+                    origem="bling",
                 )
 
     cur.execute(

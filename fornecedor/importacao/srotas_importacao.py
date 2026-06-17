@@ -4,11 +4,13 @@ from __future__ import annotations
 import csv
 import io
 import json
+import traceback
 from pathlib import Path
 
 from flask import Blueprint, jsonify, redirect, render_template, request, session, url_for
 
 from api.bling.sync_produtos import importar_produtos
+from fornecedor.importacao.erro_traducao import montar_payload_erro
 from fornecedor.importacao.servico_importacao import (
     MODULO_CATALOGO,
     ORIGEM_ARQUIVO,
@@ -536,6 +538,15 @@ def importacao_arquivo():
                     pass  # origem/lote já definidos no INSERT
             except Exception as ex:
                 rejeitadas += 1
+                payload_erro = montar_payload_erro(
+                    mensagem_tecnica=str(ex),
+                    origem="arquivo",
+                    extra={
+                        "linha_arquivo": num,
+                        "linha": {k: row.get(mapa[k]) for k in mapa if mapa.get(k)},
+                    },
+                    traceback_txt=traceback.format_exc(),
+                )
                 registrar_erro_lote(
                     cur,
                     id_tenant=id_tenant,
@@ -545,6 +556,8 @@ def importacao_arquivo():
                     nome_registro=nome,
                     sku_registro=sku or "",
                     mensagem=str(ex),
+                    payload=payload_erro,
+                    origem="arquivo",
                 )
 
         status = STATUS_ERRO if inseridos + atualizados == 0 else STATUS_CONCLUIDO

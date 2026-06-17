@@ -5,6 +5,10 @@ import json
 from datetime import datetime
 from typing import Any
 
+from fornecedor.importacao.erro_traducao import (
+    enriquecer_erro,
+    traduzir_mensagem_erro,
+)
 from global_utils import agora_utc
 
 MODULO_CATALOGO = "catalogo_produto"
@@ -94,7 +98,21 @@ def registrar_erro_lote(
     sku_registro: str | None = None,
     campo: str | None = None,
     payload: dict | None = None,
+    origem: str | None = None,
 ) -> None:
+    pl = dict(payload or {})
+    tecnica = (pl.get("mensagem_tecnica") or mensagem or "").strip()
+    if "mensagem_tecnica" not in pl:
+        pl["mensagem_tecnica"] = tecnica
+    if origem and "origem" not in pl:
+        pl["origem"] = origem
+    if linha_arquivo is not None and "linha_arquivo" not in pl:
+        pl["linha_arquivo"] = linha_arquivo
+    if ref_externa and "id_bling" not in pl and origem == "bling":
+        pl["id_bling"] = ref_externa
+
+    msg_amigavel = traduzir_mensagem_erro(campo, tecnica, pl, pl.get("origem"))
+
     cur.execute(
         """
         INSERT INTO tbl_importacao_erro (
@@ -111,8 +129,8 @@ def registrar_erro_lote(
             nome_registro,
             sku_registro,
             campo,
-            mensagem,
-            json.dumps(payload or {}),
+            msg_amigavel,
+            json.dumps(pl),
         ),
     )
 
@@ -245,7 +263,7 @@ def listar_erros_lote(cur, id_tenant: int, id_lote: int, limite: int = 500) -> l
     cur.execute(
         """
         SELECT id, linha_arquivo, ref_externa, nome_registro, sku_registro,
-               campo, mensagem, corrigido, criado_em
+               campo, mensagem, payload, corrigido, criado_em
         FROM tbl_importacao_erro
         WHERE id_tenant = %s AND id_importacao_lote = %s
         ORDER BY COALESCE(linha_arquivo, 999999), id
@@ -255,18 +273,25 @@ def listar_erros_lote(cur, id_tenant: int, id_lote: int, limite: int = 500) -> l
     )
     rows = []
     for r in cur.fetchall():
+        payload_raw = r[7]
+        if isinstance(payload_raw, str):
+            try:
+                payload_raw = json.loads(payload_raw)
+            except Exception:
+                payload_raw = {}
         rows.append(
-            {
-                "id": r[0],
-                "linha_arquivo": r[1],
-                "ref_externa": r[2],
-                "nome": r[3],
-                "sku": r[4],
-                "campo": r[5],
-                "mensagem": r[6],
-                "corrigido": r[7],
-                "criado_em": r[8].isoformat() if r[8] else None,
-            }
+            enriquecer_erro(
+                id=r[0],
+                linha_arquivo=r[1],
+                ref_externa=r[2],
+                nome=r[3],
+                sku=r[4],
+                campo=r[5],
+                mensagem=r[6],
+                payload=payload_raw or {},
+                corrigido=r[8],
+                criado_em=r[9].isoformat() if r[9] else None,
+            )
         )
     return rows
 

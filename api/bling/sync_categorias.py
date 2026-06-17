@@ -47,7 +47,9 @@ def _upsert_mapa_categoria(
 
 
 def _id_pai_bling(cat: dict) -> str | None:
-    pai = cat.get("categoriaPai") or {}
+    pai = cat.get("categoriaPai")
+    if not isinstance(pai, dict):
+        return None
     pid = str(pai.get("id") or "").strip()
     if not pid or pid == "0":
         return None
