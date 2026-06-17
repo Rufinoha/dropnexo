@@ -6,9 +6,13 @@
   let dadosPai = null;
   let atributosCache = {};
   let galeriaPai = [];
-  let idImagemSelecionada = null;
+  let imagensVariante = [];
+  let imgDragCtx = null;
   let integradoBling = false;
   let estoqueDepositos = [];
+
+  let descricaoPropria = "";
+  let valorDropManual = false;
 
   const el = {
     id_variante: document.getElementById("id_variante"),
@@ -16,16 +20,25 @@
     titulo: document.getElementById("titulo_variante"),
     herda_pai: document.getElementById("herda_pai"),
     hint_herda: document.getElementById("hint_herda"),
+    painel_imagens_herda: document.getElementById("painel_imagens_herda"),
+    painel_imagens_split: document.getElementById("painel_imagens_split"),
     hint_imagem_variante: document.getElementById("hint_imagem_variante"),
-    galeria_variante_pick: document.getElementById("galeria_variante_pick"),
-    id_imagem_principal: document.getElementById("id_imagem_principal"),
+    galeria_variante_sel: document.getElementById("galeria_variante_sel"),
+    galeria_pai_fonte: document.getElementById("galeria_pai_fonte"),
     nome_exibicao: document.getElementById("nome_exibicao"),
     sku: document.getElementById("sku"),
-    rotulo_attr: document.getElementById("rotulo_attr"),
+    descricao: document.getElementById("descricao"),
+    hint_descricao_herda: document.getElementById("hint_descricao_herda"),
+    hint_atributos: document.getElementById("hint_atributos"),
     ativo: document.getElementById("ativo"),
     preco: document.getElementById("preco"),
+    valor_drop: document.getElementById("valor_drop"),
     preco_promocional: document.getElementById("preco_promocional"),
-    preco_custo: document.getElementById("preco_custo"),
+    promocao_validade: document.getElementById("promocao_validade"),
+    promocao_ate_zerar_estoque: document.getElementById("promocao_ate_zerar_estoque"),
+    campoPromoData: document.getElementById("campoPromoData"),
+    hintPromoStatus: document.getElementById("hintPromoStatus"),
+    hintValorDropVar: document.getElementById("hintValorDropVar"),
     peso_liquido_kg: document.getElementById("peso_liquido_kg"),
     peso_bruto_kg: document.getElementById("peso_bruto_kg"),
     altura_cm: document.getElementById("altura_cm"),
@@ -34,8 +47,7 @@
     gtin: document.getElementById("gtin"),
     ncm: document.getElementById("ncm"),
     quantidade: document.getElementById("quantidade"),
-    preview_imagem: document.getElementById("preview_imagem"),
-    tblEstoqueDepositosVar: document.getElementById("tblEstoqueDepositosVar"),
+    tblEstoqueDepositosVar: document.getElementById("gridEstoqueDepositosVar"),
     btnSalvar: document.getElementById("btnSalvar"),
     btnExcluir: document.getElementById("btnExcluir"),
   };
@@ -43,7 +55,7 @@
 
   const BASE = "/catalogos";
   const camposHerdaveis = document.querySelectorAll(
-    "#preco, #preco_promocional, #preco_custo, #peso_liquido_kg, #peso_bruto_kg, #altura_cm, #largura_cm, #profundidade_cm, #gtin, #ncm"
+    "#preco, #valor_drop, #preco_promocional, #promocao_validade, #peso_liquido_kg, #peso_bruto_kg, #altura_cm, #largura_cm, #profundidade_cm, #gtin, #ncm"
   );
 
   function ativarTab(cod) {
@@ -71,6 +83,52 @@
     }
   }
 
+  function escHtml(s) {
+    return String(s ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function localDeposito(d) {
+    const cidade = (d.cidade || "").trim();
+    const uf = (d.uf || "").trim();
+    if (cidade && uf) return `${cidade} · ${uf}`;
+    return cidade || uf || "—";
+  }
+
+  function cardDepositoHtml(d) {
+    const badges = [
+      d.principal ? '<span class="Cat_EstoqueDepCardBadge">Principal</span>' : "",
+      d.vinculado_bling ? '<span class="Cat_EstoqueTag">Bling</span>' : "",
+    ]
+      .filter(Boolean)
+      .join("");
+    const qtd = Number(d.quantidade) || 0;
+    return `<article class="Cat_EstoqueDepCard${qtd > 0 ? " has-stock" : ""}" data-dep="${d.id_deposito}" title="Duplo clique para detalhes">
+      <div class="Cat_EstoqueDepCardHead">
+        <h4 class="Cat_EstoqueDepCardNome">${escHtml(d.nome)}</h4>
+        ${badges ? `<div class="Cat_EstoqueDepCardBadges">${badges}</div>` : ""}
+      </div>
+      <p class="Cat_EstoqueDepCardLoc">${escHtml(localDeposito(d))}</p>
+      <div class="Cat_EstoqueDepCardSaldo">
+        <span class="Cat_EstoqueDepCardSaldoLbl">Saldo em estoque</span>
+        <strong class="Cat_EstoqueDepCardSaldoVal">${qtd}</strong>
+      </div>
+      <footer class="Cat_EstoqueDepCardFoot">Atualizado ${fmtData(d.atualizado_em)}</footer>
+    </article>`;
+  }
+
+  function renderEstoqueCards() {
+    if (!el.tblEstoqueDepositosVar) return;
+    if (!estoqueDepositos.length) {
+      el.tblEstoqueDepositosVar.innerHTML =
+        '<p class="Cat_EstoqueDepEmpty">Nenhum depósito cadastrado. Cadastre em Fornecedor → Depósitos.</p>';
+      return;
+    }
+    el.tblEstoqueDepositosVar.innerHTML = estoqueDepositos.map(cardDepositoHtml).join("");
+  }
+
   async function carregarEstoqueDepositos() {
     if (!idVariante || !el.tblEstoqueDepositosVar) return;
     const r = await fetch(
@@ -81,20 +139,7 @@
     if (!r.ok || !j.success) throw new Error(j.message || "Erro ao carregar estoque.");
     integradoBling = !!j.integrado_bling;
     estoqueDepositos = j.depositos || [];
-    if (!estoqueDepositos.length) {
-      el.tblEstoqueDepositosVar.innerHTML =
-        `<tr><td colspan="3">Nenhum depósito cadastrado. Cadastre em Fornecedor → Depósitos.</td></tr>`;
-      return;
-    }
-    el.tblEstoqueDepositosVar.innerHTML = estoqueDepositos
-      .map(
-        (d) => `<tr data-dep="${d.id_deposito}">
-          <td>${d.nome}${d.vinculado_bling ? ' <span class="Cat_EstoqueTag">Bling</span>' : ""}</td>
-          <td class="Cat_EstoqueSaldo" title="Duplo clique para editar">${d.quantidade}</td>
-          <td>${fmtData(d.atualizado_em)}</td>
-        </tr>`
-      )
-      .join("");
+    renderEstoqueCards();
     const total = estoqueDepositos.reduce((s, d) => s + (d.quantidade || 0), 0);
     if (el.quantidade) el.quantidade.value = String(total);
   }
@@ -123,13 +168,26 @@
         sincronizarBling = s.isConfirmed;
       }
     }
+    const badges = [
+      dep?.principal ? '<span class="Cat_EstoqueDepCardBadge">Principal</span>' : "",
+      dep?.vinculado_bling ? '<span class="Cat_EstoqueTag">Bling</span>' : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
     const r = await Swal.fire({
-      title: `Saldo — ${dep?.nome || "Depósito"}`,
+      title: dep?.nome || "Depósito",
+      html: `<div class="Cat_EstoqueModal">
+        <p class="Cat_EstoqueModalLoc">${escHtml(localDeposito(dep || {}))}</p>
+        ${badges ? `<p style="margin:0 0 8px">${badges}</p>` : ""}
+        <p class="Cat_EstoqueModalHint">Saldo atual: <strong>${saldoAtual}</strong> · ${fmtData(dep?.atualizado_em)}</p>
+      </div>`,
       input: "number",
+      inputLabel: "Novo saldo",
       inputValue: saldoAtual,
       inputAttributes: { min: 0, step: 1 },
       showCancelButton: true,
       confirmButtonText: "Salvar",
+      cancelButtonText: "Cancelar",
     });
     if (!r.isConfirmed || r.value === undefined || r.value === "") return;
     const qtd = Math.max(0, parseInt(r.value, 10) || 0);
@@ -147,19 +205,317 @@
     });
     const j = await resp.json();
     if (!resp.ok || !j.success) throw new Error(j.message || "Erro ao salvar saldo.");
-    await Swal.fire({ icon: "success", title: "Salvo", text: j.message, timer: 2200, showConfirmButton: false });
+    if (j.dados?.promocao_encerrada) {
+      el.preco_promocional.value = "";
+      if (el.promocao_validade) el.promocao_validade.value = "";
+      if (el.promocao_ate_zerar_estoque) el.promocao_ate_zerar_estoque.checked = false;
+      syncPromoUi();
+      await Swal.fire({
+        icon: "info",
+        title: "Promoção encerrada",
+        text: "O estoque zerou ou foi reposto — a promoção desta variante foi removida.",
+        timer: 3200,
+        showConfirmButton: false,
+      });
+    } else {
+      await Swal.fire({ icon: "success", title: "Salvo", text: j.message, timer: 2200, showConfirmButton: false });
+    }
     await carregarEstoqueDepositos();
   }
 
   el.tblEstoqueDepositosVar?.addEventListener("dblclick", (ev) => {
-    const cell = ev.target.closest(".Cat_EstoqueSaldo");
-    if (!cell || !idVariante) return;
-    const row = cell.closest("tr");
-    const idDep = parseInt(row?.dataset?.dep || "0", 10);
+    const card = ev.target.closest(".Cat_EstoqueDepCard");
+    if (!card || !idVariante) return;
+    const idDep = parseInt(card.dataset.dep || "0", 10);
     if (!idDep) return;
-    const atual = parseInt(cell.textContent || "0", 10) || 0;
-    editarSaldoDeposito(idDep, atual).catch((e) => Swal.fire("Erro", e.message, "error"));
+    const dep = estoqueDepositos.find((d) => d.id_deposito === idDep);
+    editarSaldoDeposito(idDep, dep?.quantidade ?? 0).catch((e) => Swal.fire("Erro", e.message, "error"));
   });
+
+  function rotuloOrdem(idx) {
+    if (idx === 0) return "PRINCIPAL";
+    return `${idx + 1}ª`;
+  }
+
+  function idsVarianteSet() {
+    return new Set(imagensVariante.map((i) => Number(i.id)));
+  }
+
+  function imagensPaiDisponiveis() {
+    const usados = idsVarianteSet();
+    return galeriaPai.filter((i) => i.id && !usados.has(Number(i.id)));
+  }
+
+  function abrirModalImagem(img, idx) {
+    if (!img?.url) return;
+    const titulo = idx !== undefined && idx !== null ? rotuloOrdem(idx) : "Imagem";
+    Swal.fire({
+      title: titulo,
+      imageUrl: img.url,
+      imageAlt: "Imagem do produto",
+      showConfirmButton: false,
+      showCloseButton: true,
+      width: "auto",
+      padding: "1rem",
+      background: "#fff",
+    });
+  }
+
+  function cardImagemHtml(img, idx, lado) {
+    const ordem =
+      lado === "variante" && idx !== null && idx !== undefined
+        ? `<span class="Cat_GaleriaSplitOrdem${idx === 0 ? " is-principal" : ""}">${rotuloOrdem(idx)}</span>`
+        : "";
+    return `<div class="Cat_GaleriaSplitItem" draggable="true" data-lado="${lado}" data-id="${img.id}" data-idx="${idx ?? ""}">
+      ${ordem}
+      <img src="${img.url || ""}" alt="" loading="lazy" draggable="false" />
+    </div>`;
+  }
+
+  function reordenarVariante(from, to) {
+    if (from === to || from < 0 || to < 0) return;
+    const arr = imagensVariante.slice();
+    const [moved] = arr.splice(from, 1);
+    if (!moved) return;
+    arr.splice(to, 0, moved);
+    imagensVariante = arr;
+    renderSplitImagens();
+  }
+
+  function adicionarImagemVariante(idImg, toIdx) {
+    const id = Number(idImg);
+    if (!id || idsVarianteSet().has(id)) return;
+    const img = galeriaPai.find((i) => Number(i.id) === id);
+    if (!img) return;
+    const arr = imagensVariante.slice();
+    const pos = Math.min(Math.max(0, toIdx ?? arr.length), arr.length);
+    arr.splice(pos, 0, img);
+    imagensVariante = arr;
+    renderSplitImagens();
+  }
+
+  function removerImagemVariante(idImg) {
+    const id = Number(idImg);
+    imagensVariante = imagensVariante.filter((i) => Number(i.id) !== id);
+    renderSplitImagens();
+  }
+
+  function wirePainelDrag(panel, lado) {
+    if (!panel) return;
+    panel.addEventListener("dragover", (ev) => {
+      ev.preventDefault();
+      ev.dataTransfer.dropEffect = "move";
+    });
+    panel.addEventListener("drop", (ev) => {
+      if (ev.target.closest(".Cat_GaleriaSplitItem")) return;
+      ev.preventDefault();
+      const ctx = imgDragCtx || {
+        lado: ev.dataTransfer.getData("lado"),
+        id: Number(ev.dataTransfer.getData("id")),
+        idx: Number(ev.dataTransfer.getData("idx")),
+      };
+      if (lado === "variante" && ctx.lado === "pai" && ctx.id) {
+        adicionarImagemVariante(ctx.id, imagensVariante.length);
+      } else if (lado === "pai" && ctx.lado === "variante" && ctx.id) {
+        removerImagemVariante(ctx.id);
+      }
+    });
+  }
+
+  function wireItensDrag(container) {
+    if (!container) return;
+    container.querySelectorAll(".Cat_GaleriaSplitItem").forEach((item) => {
+      item.addEventListener("dragstart", (ev) => {
+        imgDragCtx = {
+          lado: item.dataset.lado,
+          id: Number(item.dataset.id),
+          idx: Number(item.dataset.idx),
+        };
+        item.classList.add("is-dragging");
+        ev.dataTransfer.effectAllowed = "move";
+        try {
+          ev.dataTransfer.setData("lado", imgDragCtx.lado);
+          ev.dataTransfer.setData("id", String(imgDragCtx.id));
+          ev.dataTransfer.setData("idx", String(imgDragCtx.idx));
+        } catch {
+          /* ignore */
+        }
+      });
+      item.addEventListener("dragend", () => {
+        item.classList.remove("is-dragging");
+        imgDragCtx = null;
+        document.querySelectorAll(".Cat_GaleriaSplitItem").forEach((n) => n.classList.remove("is-dragover"));
+      });
+      item.addEventListener("dragover", (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.dataTransfer.dropEffect = "move";
+        item.classList.add("is-dragover");
+      });
+      item.addEventListener("dragleave", () => item.classList.remove("is-dragover"));
+      item.addEventListener("drop", (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        item.classList.remove("is-dragover");
+        const ctx = imgDragCtx || {
+          lado: ev.dataTransfer.getData("lado"),
+          id: Number(ev.dataTransfer.getData("id")),
+          idx: Number(ev.dataTransfer.getData("idx")),
+        };
+        const toIdx = Number(item.dataset.idx);
+        const toLado = item.dataset.lado;
+        if (toLado === "variante") {
+          if (ctx.lado === "pai") adicionarImagemVariante(ctx.id, toIdx);
+          else if (ctx.lado === "variante" && !Number.isNaN(ctx.idx)) reordenarVariante(ctx.idx, toIdx);
+        } else if (toLado === "pai" && ctx.lado === "variante") {
+          removerImagemVariante(ctx.id);
+        }
+      });
+      item.addEventListener("dblclick", () => {
+        const lado = item.dataset.lado;
+        const id = Number(item.dataset.id);
+        if (lado === "variante") {
+          const idx = Number(item.dataset.idx);
+          const img = imagensVariante[idx];
+          abrirModalImagem(img, idx);
+        } else {
+          const img = galeriaPai.find((i) => Number(i.id) === id);
+          abrirModalImagem(img);
+        }
+      });
+    });
+  }
+
+  function renderSplitImagens() {
+    if (!el.galeria_variante_sel || !el.galeria_pai_fonte) return;
+    if (!galeriaPai.length) {
+      el.galeria_variante_sel.innerHTML = "";
+      el.galeria_pai_fonte.innerHTML =
+        '<p class="Cat_ImagemHint" style="grid-column:1/-1">Nenhuma imagem na galeria do pai.</p>';
+      el.galeria_variante_sel.classList.add("is-empty");
+      el.galeria_pai_fonte.classList.remove("is-empty");
+      return;
+    }
+    el.galeria_variante_sel.classList.toggle("is-empty", !imagensVariante.length);
+    el.galeria_variante_sel.innerHTML = imagensVariante
+      .map((img, idx) => cardImagemHtml(img, idx, "variante"))
+      .join("");
+    const disp = imagensPaiDisponiveis();
+    el.galeria_pai_fonte.classList.toggle("is-empty", !disp.length);
+    el.galeria_pai_fonte.innerHTML = disp.map((img) => cardImagemHtml(img, null, "pai")).join("");
+    wireItensDrag(el.galeria_variante_sel);
+    wireItensDrag(el.galeria_pai_fonte);
+  }
+
+  wirePainelDrag(el.galeria_variante_sel, "variante");
+  wirePainelDrag(el.galeria_pai_fonte, "pai");
+
+  function syncValorDropUi() {
+    if (!el.valor_drop) return;
+    el.valor_drop.classList.toggle("is-manual", valorDropManual);
+    if (el.hintValorDropVar) {
+      el.hintValorDropVar.textContent = valorDropManual
+        ? "Valor ajustado manualmente. Ao aplicar a precificação novamente, será recalculado pelas regras."
+        : "Calculado em Parâmetros → Precificação. Duplo clique para ajustar.";
+    }
+  }
+
+  async function editarValorDrop() {
+    if (!idVariante) {
+      await Swal.fire("Atenção", "Salve a variante antes de alterar o valor Drop.", "warning");
+      return;
+    }
+    if (el.herda_pai?.checked) {
+      await Swal.fire("Atenção", "Desmarque «Utilizar informações do produto pai» para editar o valor Drop desta variante.", "warning");
+      return;
+    }
+    const atual = parseFloat(el.valor_drop?.value || "0") || 0;
+    const aviso = await Swal.fire({
+      icon: "info",
+      title: "Valor Drop manual",
+      html:
+        "Este valor é oferecido aos vendedores na rede.<br><br>" +
+        "<strong>Atenção:</strong> ao aplicar a precificação novamente em Parâmetros, " +
+        "este valor pode ser substituído pelo cálculo das regras.",
+      showCancelButton: true,
+      confirmButtonText: "Continuar",
+      cancelButtonText: "Cancelar",
+    });
+    if (!aviso.isConfirmed) return;
+    const r = await Swal.fire({
+      title: "Valor Drop (R$)",
+      input: "number",
+      inputValue: atual,
+      inputAttributes: { min: 0, step: 0.01 },
+      showCancelButton: true,
+      confirmButtonText: "Salvar",
+    });
+    if (!r.isConfirmed || r.value === undefined || r.value === "") return;
+    const vd = Math.max(0, parseFloat(r.value) || 0);
+    const resp = await fetch(`${BASE}/variantes/valor-drop/salvar`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ id_variante: idVariante, valor_drop: vd }),
+    });
+    const j = await resp.json();
+    if (!resp.ok || !j.success) throw new Error(j.message || "Erro ao salvar.");
+    el.valor_drop.value = j.valor_drop ?? vd;
+    valorDropManual = true;
+    syncValorDropUi();
+    await Swal.fire({ icon: "success", title: "Salvo", text: j.message, timer: 2000, showConfirmButton: false });
+  }
+
+  function syncPromoUi() {
+    const ateZerar = !!el.promocao_ate_zerar_estoque?.checked;
+    if (el.campoPromoData) el.campoPromoData.hidden = ateZerar;
+    if (el.promocao_validade) {
+      el.promocao_validade.disabled = ateZerar || !!el.herda_pai?.checked;
+      if (ateZerar) el.promocao_validade.value = "";
+    }
+    const temPromo = (parseFloat(el.preco_promocional?.value || "0") || 0) > 0;
+    if (!el.hintPromoStatus) return;
+    if (!temPromo) {
+      el.hintPromoStatus.hidden = true;
+      return;
+    }
+    el.hintPromoStatus.hidden = false;
+    if (ateZerar) {
+      const est = parseInt(el.quantidade?.value || "0", 10) || 0;
+      el.hintPromoStatus.textContent =
+        est > 0
+          ? `Promoção ativa enquanto houver estoque (${est} un.).`
+          : "Promoção inativa — estoque zerado.";
+      el.hintPromoStatus.className = est > 0 ? "Cat_ImagemHint is-ativa" : "Cat_ImagemHint is-inativa";
+    } else if (el.promocao_validade?.value) {
+      el.hintPromoStatus.textContent = `Promoção válida até ${el.promocao_validade.value.split("-").reverse().join("/")}.`;
+      el.hintPromoStatus.className = "Cat_ImagemHint is-ativa";
+    } else {
+      el.hintPromoStatus.textContent = "Informe a data de vencimento ou marque «Até zerar o estoque».";
+      el.hintPromoStatus.className = "Cat_ImagemHint is-inativa";
+    }
+  }
+
+  function syncDescricaoUi(h) {
+    if (!el.descricao) return;
+    const paiDesc = (dadosPai?.descricao || "").trim();
+    if (h) {
+      if (!descricaoPropria && el.descricao.value.trim() && el.descricao.value.trim() !== paiDesc) {
+        descricaoPropria = el.descricao.value.trim();
+      }
+      el.descricao.value = paiDesc || el.descricao.value || "";
+      el.descricao.disabled = true;
+      el.descricao.classList.add("Cat_CampoHerdado");
+      if (el.hint_descricao_herda) el.hint_descricao_herda.hidden = false;
+    } else {
+      el.descricao.disabled = false;
+      el.descricao.classList.remove("Cat_CampoHerdado");
+      if (!el.descricao.value.trim()) {
+        el.descricao.value = descricaoPropria || paiDesc;
+      }
+      if (el.hint_descricao_herda) el.hint_descricao_herda.hidden = true;
+    }
+  }
 
   function syncHerdaUi() {
     const h = !!el.herda_pai?.checked;
@@ -167,31 +523,18 @@
       inp.disabled = h;
       inp.classList.toggle("Cat_CampoHerdado", h);
     });
+    syncDescricaoUi(h);
+    syncValorDropUi();
+    syncPromoUi();
     if (el.hint_herda) {
       el.hint_herda.textContent = h
-        ? "Preço, peso e GTIN seguem o cadastro do pai. A imagem usa a principal do pai."
-        : "Esta variante usa valores próprios (independentes do pai).";
+        ? "Valor, valor Drop, promoção, peso, GTIN, descrição e imagens seguem o cadastro do pai."
+        : "Esta variante usa valores, descrição e imagens próprios.";
     }
-    if (el.hint_imagem_variante) {
-      el.hint_imagem_variante.hidden = h;
-    }
-    if (el.galeria_variante_pick) {
-      el.galeria_variante_pick.hidden = h;
-    }
-    if (h) {
-      idImagemSelecionada = null;
-      if (el.id_imagem_principal) el.id_imagem_principal.value = "";
-      const princ = galeriaPai.find((i) => i.principal) || galeriaPai[0];
-      if (el.preview_imagem && princ?.url) {
-        el.preview_imagem.src = princ.url;
-        el.preview_imagem.hidden = false;
-      } else if (el.preview_imagem && dadosPai?.imagem_url) {
-        el.preview_imagem.src = dadosPai.imagem_url;
-        el.preview_imagem.hidden = false;
-      }
-    } else {
-      renderGaleriaPick();
-    }
+    if (el.painel_imagens_herda) el.painel_imagens_herda.hidden = !h;
+    if (el.painel_imagens_split) el.painel_imagens_split.hidden = h;
+    if (el.promocao_ate_zerar_estoque) el.promocao_ate_zerar_estoque.disabled = h;
+    if (!h) renderSplitImagens();
   }
 
   function rotuloAttr(atributos) {
@@ -199,42 +542,6 @@
     return Object.entries(atributos)
       .map(([k, v]) => `${k}: ${v}`)
       .join(" · ");
-  }
-
-  function renderGaleriaPick() {
-    if (!el.galeria_variante_pick) return;
-    if (!galeriaPai.length) {
-      el.galeria_variante_pick.innerHTML =
-        '<p class="Cat_ImagemHint">Nenhuma imagem na galeria do pai. Cadastre na aba Imagens do produto.</p>';
-      return;
-    }
-    el.galeria_variante_pick.innerHTML = galeriaPai
-      .map(
-        (img) => `<button type="button" class="Cat_GaleriaPickItem${
-          Number(img.id) === Number(idImagemSelecionada) ? " is-selected" : ""
-        }" data-id="${img.id}">
-        <img src="${img.url || ""}" alt="" loading="lazy" />
-        <span>${img.principal ? "Principal" : `#${(img.ordem || 0) + 1}`}</span>
-      </button>`
-      )
-      .join("");
-    el.galeria_variante_pick.querySelectorAll(".Cat_GaleriaPickItem").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        idImagemSelecionada = Number(btn.dataset.id);
-        if (el.id_imagem_principal) el.id_imagem_principal.value = String(idImagemSelecionada);
-        const img = galeriaPai.find((i) => Number(i.id) === idImagemSelecionada);
-        if (el.preview_imagem && img?.url) {
-          el.preview_imagem.src = img.url;
-          el.preview_imagem.hidden = false;
-        }
-        renderGaleriaPick();
-      });
-    });
-    const sel = galeriaPai.find((i) => Number(i.id) === Number(idImagemSelecionada));
-    if (el.preview_imagem && sel?.url) {
-      el.preview_imagem.src = sel.url;
-      el.preview_imagem.hidden = false;
-    }
   }
 
   async function carregarGaleriaPai() {
@@ -255,12 +562,23 @@
     el.herda_pai.checked = d.herda_pai !== false;
     el.nome_exibicao.value = d.nome_exibicao || "";
     el.sku.value = d.sku || "";
-    if (el.rotulo_attr) el.rotulo_attr.value = rotuloAttr(d.atributos);
     atributosCache = d.atributos || {};
+    descricaoPropria = (d.descricao_propria || "").trim();
+    if (el.descricao) {
+      el.descricao.value = (d.descricao || pai?.descricao || "").trim();
+    }
+    if (el.hint_atributos) {
+      const attrTxt = rotuloAttr(d.atributos);
+      el.hint_atributos.textContent = attrTxt ? `Variação: ${attrTxt}` : "";
+      el.hint_atributos.hidden = !attrTxt;
+    }
     el.ativo.checked = !!d.ativo;
     el.preco.value = d.preco ?? "";
+    if (el.valor_drop) el.valor_drop.value = d.valor_drop ?? "";
+    valorDropManual = !!d.valor_drop_manual;
     el.preco_promocional.value = d.preco_promocional ?? "";
-    el.preco_custo.value = d.preco_custo ?? "";
+    if (el.promocao_validade) el.promocao_validade.value = d.promocao_validade || "";
+    if (el.promocao_ate_zerar_estoque) el.promocao_ate_zerar_estoque.checked = !!d.promocao_ate_zerar_estoque;
     el.peso_liquido_kg.value = d.peso_liquido_kg ?? "";
     el.peso_bruto_kg.value = d.peso_bruto_kg ?? "";
     el.altura_cm.value = d.altura_cm ?? "";
@@ -269,10 +587,10 @@
     el.gtin.value = d.gtin || "";
     el.ncm.value = d.ncm || "";
     el.quantidade.value = d.estoque ?? 0;
-    idImagemSelecionada = d.id_imagem_principal || null;
-    if (el.id_imagem_principal) {
-      el.id_imagem_principal.value = idImagemSelecionada ? String(idImagemSelecionada) : "";
+    if (Array.isArray(d.imagens_pai) && d.imagens_pai.length) {
+      galeriaPai = d.imagens_pai;
     }
+    imagensVariante = Array.isArray(d.imagens_selecionadas) ? d.imagens_selecionadas.slice() : [];
     syncHerdaUi();
   }
 
@@ -285,9 +603,11 @@
     });
     const j = await r.json();
     if (!r.ok || !j.success) throw new Error(j.message || "Erro ao carregar.");
-    await carregarGaleriaPai();
+    if (!j.dados?.imagens_pai?.length) await carregarGaleriaPai();
+    else galeriaPai = j.dados.imagens_pai;
     preencher(j.dados, j.pai);
     await carregarEstoqueDepositos().catch(() => {});
+    syncPromoUi();
   }
 
   async function salvar() {
@@ -296,11 +616,15 @@
       id_produto: idProduto,
       nome_exibicao: (el.nome_exibicao.value || "").trim(),
       sku: (el.sku.value || "").trim(),
+      descricao: el.herda_pai?.checked
+        ? ""
+        : (el.descricao?.value || dadosPai?.descricao || "").trim(),
       ativo: !!el.ativo.checked,
       herda_pai: !!el.herda_pai.checked,
       preco: el.preco.value,
       preco_promocional: el.preco_promocional.value,
-      preco_custo: el.preco_custo.value,
+      promocao_validade: el.promocao_ate_zerar_estoque?.checked ? "" : el.promocao_validade?.value || "",
+      promocao_ate_zerar_estoque: !!el.promocao_ate_zerar_estoque?.checked,
       peso_liquido_kg: el.peso_liquido_kg.value,
       peso_bruto_kg: el.peso_bruto_kg.value,
       altura_cm: el.altura_cm.value,
@@ -309,7 +633,8 @@
       gtin: (el.gtin.value || "").trim(),
       ncm: (el.ncm.value || "").trim(),
       quantidade: el.quantidade.value,
-      id_imagem_principal: el.herda_pai?.checked ? null : idImagemSelecionada,
+      ids_imagens: el.herda_pai?.checked ? [] : imagensVariante.map((i) => i.id).filter(Boolean),
+      id_imagem_principal: el.herda_pai?.checked ? null : imagensVariante[0]?.id || null,
       atributos: atributosCache,
     };
     const r = await fetch(`${BASE}/variantes/salvar`, {
@@ -347,6 +672,12 @@
   }
 
   el.herda_pai?.addEventListener("change", syncHerdaUi);
+  el.promocao_ate_zerar_estoque?.addEventListener("change", syncPromoUi);
+  el.preco_promocional?.addEventListener("input", syncPromoUi);
+  el.promocao_validade?.addEventListener("change", syncPromoUi);
+  el.valor_drop?.addEventListener("dblclick", () => {
+    editarValorDrop().catch((e) => Swal.fire("Erro", e.message, "error"));
+  });
   el.btnSalvar?.addEventListener("click", () => salvar().catch((e) => Swal.fire("Erro", e.message, "error")));
   el.btnExcluir?.addEventListener("click", () => excluir().catch((e) => Swal.fire("Erro", e.message, "error")));
 

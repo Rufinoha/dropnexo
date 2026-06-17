@@ -256,6 +256,14 @@ html:has(.Cat_ApoioBody) body {
   margin-top: 16px;
 }
 
+.Cat_OrigemFiscalCampo {
+  grid-column: 1 / -1;
+}
+
+.Cat_OrigemFiscalCampo select {
+  width: 100%;
+}
+
 /* ---- Editor rico da descrição ---- */
 .Cat_DescricaoCampo {
   width: 100%;
@@ -656,6 +664,10 @@ html:has(.Cat_ApoioBody) body {
   margin-bottom: 14px;
 }
 
+.Cat_ImgAddRow[hidden] {
+  display: none !important;
+}
+
 .Cat_ImgAddRow .Cl_BtnIncluir {
   height: 40px;
   align-self: end;
@@ -772,6 +784,33 @@ html:has(.Cat_ApoioBody) body {
 }
 
 /* ---- Variações ---- */
+.Cat_VarHint {
+  margin-bottom: 10px;
+}
+
+.Cat_VarAttrLinha {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) minmax(160px, 1.4fr) auto;
+  gap: 10px 12px;
+  align-items: end;
+  margin-bottom: 10px;
+}
+
+.Cat_VarAttrLinha .Cl_BtnIncluir {
+  height: 40px;
+  white-space: nowrap;
+  padding-left: 16px;
+  padding-right: 16px;
+}
+
+.Cat_VarAttrTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+  min-height: 0;
+}
+
 .Cat_VarPresetRow {
   display: grid;
   grid-template-columns: 1fr auto;
@@ -885,7 +924,8 @@ html:has(.Cat_ApoioBody) body {
   .Cat_Grid3,
   .Cat_Grid4,
   .Cat_CatRow,
-  .Cat_ImgAddRow {
+  .Cat_ImgAddRow,
+  .Cat_VarAttrLinha {
     grid-template-columns: 1fr;
   }
   .Cat_FooterBar {
@@ -906,9 +946,258 @@ html:has(.Cat_ApoioBody) body {
   border-color: #f59e0b;
   background: #fffbeb;
 }
-.Cat_ValorDropCampo .Cat_ImagemHint { margin-top: 2px; }
+
+.Cat_PrecosVarGrid {
+  margin-bottom: 16px;
+}
+
+.Cat_PromoBox {
+  border: 1px solid rgba(28, 46, 60, 0.1);
+  border-radius: 12px;
+  padding: 14px 16px;
+  background: #f8fafc;
+}
+
+.Cat_PromoTitulo {
+  margin: 0 0 6px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #1c2e3c;
+}
+
+.Cat_PromoAteZerar {
+  margin-top: 12px;
+  align-items: flex-start;
+}
+
+.Cat_PromoAteZerar span:last-child {
+  font-size: 13px;
+  line-height: 1.4;
+  color: #475569;
+}
+
+#hintPromoStatus.is-ativa {
+  color: #059669;
+}
+
+#hintPromoStatus.is-inativa {
+  color: #94a3b8;
+}
+
+.Cat_LabelComTip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.Cat_Tip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  cursor: help;
+  vertical-align: middle;
+}
+
+.Cat_TipIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  color: #475569;
+  background: #e2e8f0;
+  transition: background 0.15s, color 0.15s;
+}
+
+.Cat_Tip:hover .Cat_TipIcon,
+.Cat_Tip:focus-visible .Cat_TipIcon {
+  color: #fff;
+  background: var(--marca-primary, #021f81);
+  outline: none;
+}
+
+.Cat_TipBubble {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 6px);
+  z-index: 30;
+  width: max-content;
+  max-width: 220px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.45;
+  color: #f8fafc;
+  background: #1e293b;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.22);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateX(-50%) translateY(4px);
+  transition: opacity 0.15s, transform 0.15s, visibility 0.15s;
+  pointer-events: none;
+  text-align: left;
+}
+
+.Cat_TipBubble::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  margin-left: -5px;
+  border: 5px solid transparent;
+  border-top-color: #1e293b;
+}
+
+.Cat_Tip:hover .Cat_TipBubble,
+.Cat_Tip:focus-visible .Cat_TipBubble {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+}
 
 .Cat_EstoqueDepTbl table { width: 100%; }
+
+.Cat_EstoqueDepGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 14px;
+  margin-top: 10px;
+}
+
+.Cat_EstoqueDepCard {
+  position: relative;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 14px 14px 12px;
+  background: linear-gradient(160deg, #ffffff 0%, #f8fafc 100%);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.12s;
+}
+
+.Cat_EstoqueDepCard:hover {
+  border-color: #c7d2fe;
+  box-shadow: 0 6px 18px rgba(2, 31, 129, 0.1);
+  transform: translateY(-1px);
+}
+
+.Cat_EstoqueDepCard.has-stock {
+  border-color: #bbf7d0;
+  background: linear-gradient(160deg, #ffffff 0%, #f0fdf4 100%);
+}
+
+.Cat_EstoqueDepCardHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.Cat_EstoqueDepCardNome {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.3;
+}
+
+.Cat_EstoqueDepCardBadges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: flex-end;
+}
+
+.Cat_EstoqueDepCardBadge {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #7c3aed;
+  background: #ede9fe;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.Cat_EstoqueDepCardLoc {
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.Cat_EstoqueDepCardLoc strong {
+  color: #475569;
+  font-weight: 600;
+}
+
+.Cat_EstoqueDepCardSaldo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #f1f5f9;
+  margin-bottom: 10px;
+}
+
+.Cat_EstoqueDepCard.has-stock .Cat_EstoqueDepCardSaldo {
+  background: #dcfce7;
+}
+
+.Cat_EstoqueDepCardSaldoLbl {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #64748b;
+}
+
+.Cat_EstoqueDepCardSaldoVal {
+  font-size: 28px;
+  font-weight: 800;
+  color: #021f81;
+  line-height: 1;
+}
+
+.Cat_EstoqueDepCard.has-stock .Cat_EstoqueDepCardSaldoVal {
+  color: #15803d;
+}
+
+.Cat_EstoqueDepCardFoot {
+  font-size: 10px;
+  color: #94a3b8;
+}
+
+.Cat_EstoqueDepEmpty {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 28px 16px;
+  color: #64748b;
+  font-size: 13px;
+  border: 2px dashed #e2e8f0;
+  border-radius: 12px;
+}
+
+.Cat_EstoqueModalLoc {
+  margin: 0 0 8px;
+  font-size: 14px;
+  color: #475569;
+}
+
+.Cat_EstoqueModalHint {
+  margin: 0;
+  font-size: 12px;
+  color: #94a3b8;
+}
+
 .Cat_EstoqueSaldo {
   cursor: pointer;
   font-weight: 600;
@@ -959,6 +1248,95 @@ html:has(.Cat_ApoioBody) body {
 .Cat_GaleriaPickItem span {
   font-size: 10px;
   color: #64748b;
+}
+
+.Cat_ImgSplitCols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 10px;
+}
+
+.Cat_ImgPanel {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 12px;
+  background: #f8fafc;
+  min-height: 200px;
+}
+
+.Cat_ImgPanelTitulo {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.Cat_GaleriaSplitGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  min-height: 120px;
+}
+
+.Cat_GaleriaSplitGrid.is-empty::after {
+  content: "Arraste imagens aqui";
+  grid-column: 1 / -1;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 12px;
+  padding: 24px 8px;
+  border: 2px dashed #cbd5e1;
+  border-radius: 10px;
+}
+
+.Cat_GaleriaSplitItem {
+  position: relative;
+  border: 2px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 4px;
+  background: #fff;
+  cursor: grab;
+}
+
+.Cat_GaleriaSplitItem:active {
+  cursor: grabbing;
+}
+
+.Cat_GaleriaSplitItem.is-dragging {
+  opacity: 0.45;
+}
+
+.Cat_GaleriaSplitItem.is-dragover {
+  border-color: var(--marca-primary, #021f81);
+  box-shadow: 0 0 0 2px rgba(2, 31, 129, 0.2);
+}
+
+.Cat_GaleriaSplitItem img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 6px;
+  display: block;
+  pointer-events: none;
+}
+
+.Cat_GaleriaSplitOrdem {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  font-size: 9px;
+  font-weight: 700;
+  color: #fff;
+  background: rgba(2, 31, 129, 0.85);
+  padding: 2px 5px;
+  border-radius: 4px;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.Cat_GaleriaSplitOrdem.is-principal {
+  background: var(--marca-primary, #021f81);
 }
 
 .Cat_ImgAttrWrap {

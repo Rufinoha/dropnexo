@@ -481,8 +481,8 @@
     window.GlobalUtils?.abrirJanelaApoioModal({
       rota: `${BASE}/variante/editar?id_variante=${idVar}&id_produto=${idProduto}`,
       titulo: "Detalhes da variação",
-      largura: 880,
-      altura: 580,
+      largura: 920,
+      altura: 640,
       nivel: 2,
       id: idVar,
     });

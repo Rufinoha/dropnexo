@@ -337,18 +337,24 @@ def vincular_imagens_variantes_bling(
         urls = extrair_urls_fn(var)
         if not urls:
             continue
-        id_img = _resolver_id_imagem_por_url(mapa_url_id, urls[0])
-        if not id_img:
+        ids_img: list[int] = []
+        for url in urls:
+            id_img = _resolver_id_imagem_por_url(mapa_url_id, url)
+            if id_img and id_img not in ids_img:
+                ids_img.append(id_img)
+        if not ids_img:
             continue
-        cur.execute(
-            """
-            UPDATE tbl_produto_variante
-            SET id_imagem_principal = %s, herda_pai = FALSE, atualizado_em = %s
-            WHERE id = %s
-            """,
-            (id_img, agora_utc(), vid),
+        salvar_imagens_variante(
+            cur,
+            id_variante=vid,
+            id_produto=id_produto,
+            ids_imagens=ids_img,
+            herda_pai=False,
         )
-        sincronizar_cache_variante(cur, vid)
+        cur.execute(
+            "UPDATE tbl_produto_variante SET herda_pai = FALSE, atualizado_em = %s WHERE id = %s",
+            (agora_utc(), vid),
+        )
 
     aplicar_regras_atributo_imagem(cur, id_produto)
 
@@ -495,6 +501,125 @@ def listar_regras_atributo_imagem(cur, id_produto: int) -> list[dict]:
             }
         )
     return out
+
+
+def listar_ids_imagens_variante(cur, id_variante: int) -> list[int]:
+    cur.execute(
+        """
+        SELECT id_imagem FROM tbl_produto_variante_imagem
+        WHERE id_variante = %s
+        ORDER BY ordem ASC, id_imagem ASC
+        """,
+        (id_variante,),
+    )
+    ids = [int(r[0]) for r in cur.fetchall()]
+    if ids:
+        return ids
+    cur.execute(
+        "SELECT id_imagem_principal FROM tbl_produto_variante WHERE id = %s",
+        (id_variante,),
+    )
+    row = cur.fetchone()
+    if row and row[0]:
+        return [int(row[0])]
+    return []
+
+
+def _imagem_galeria_dict(cur, row) -> dict:
+    caminho = row[1] or ""
+    return {
+        "id": int(row[0]),
+        "caminho": caminho,
+        "url": url_exibicao(caminho),
+        "ordem": int(row[2] or 0),
+        "principal": bool(row[3]),
+        "origem": row[4] if len(row) > 4 else "manual_upload",
+    }
+
+
+def listar_imagens_galeria_pai(cur, id_produto: int) -> list[dict]:
+    cur.execute(
+        """
+        SELECT id, caminho, ordem, principal, origem
+        FROM tbl_produto_imagem
+        WHERE id_produto = %s AND id_variante IS NULL
+        ORDER BY ordem ASC, id ASC
+        """,
+        (id_produto,),
+    )
+    return [_imagem_galeria_dict(cur, r) for r in cur.fetchall()]
+
+
+def listar_imagens_variante_selecionadas(cur, id_variante: int, id_produto: int) -> list[dict]:
+    ids = listar_ids_imagens_variante(cur, id_variante)
+    if not ids:
+        return []
+    cur.execute(
+        """
+        SELECT id, caminho, ordem, principal, origem
+        FROM tbl_produto_imagem
+        WHERE id_produto = %s AND id_variante IS NULL AND id = ANY(%s)
+        """,
+        (id_produto, ids),
+    )
+    por_id = {int(r[0]): _imagem_galeria_dict(cur, r) for r in cur.fetchall()}
+    return [por_id[i] for i in ids if i in por_id]
+
+
+def salvar_imagens_variante(
+    cur,
+    *,
+    id_variante: int,
+    id_produto: int,
+    ids_imagens: list[int] | None,
+    herda_pai: bool,
+) -> None:
+    cur.execute("DELETE FROM tbl_produto_variante_imagem WHERE id_variante = %s", (id_variante,))
+    if herda_pai:
+        cur.execute(
+            """
+            UPDATE tbl_produto_variante
+            SET id_imagem_principal = NULL, imagem_url = NULL, atualizado_em = %s
+            WHERE id = %s
+            """,
+            (agora_utc(), id_variante),
+        )
+        sincronizar_cache_variante(cur, id_variante)
+        return
+
+    vistos: set[int] = set()
+    limpos: list[int] = []
+    for raw in ids_imagens or []:
+        try:
+            id_img = int(raw)
+        except (TypeError, ValueError):
+            continue
+        if id_img in vistos:
+            continue
+        if not validar_id_imagem_produto(cur, id_img, id_produto):
+            continue
+        vistos.add(id_img)
+        limpos.append(id_img)
+
+    for ordem, id_img in enumerate(limpos):
+        cur.execute(
+            """
+            INSERT INTO tbl_produto_variante_imagem (id_variante, id_imagem, ordem)
+            VALUES (%s, %s, %s)
+            """,
+            (id_variante, id_img, ordem),
+        )
+
+    id_principal = limpos[0] if limpos else None
+    cur.execute(
+        """
+        UPDATE tbl_produto_variante
+        SET id_imagem_principal = %s, imagem_url = NULL, atualizado_em = %s
+        WHERE id = %s
+        """,
+        (id_principal, agora_utc(), id_variante),
+    )
+    sincronizar_cache_variante(cur, id_variante)
 
 
 def validar_id_imagem_produto(cur, id_imagem: int, id_produto: int) -> bool:

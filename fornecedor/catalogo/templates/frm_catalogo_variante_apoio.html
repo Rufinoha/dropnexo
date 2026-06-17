@@ -24,7 +24,7 @@
       <span class="Cl_SwitchSlider"></span>
       <span>Utilizar informações do produto pai</span>
     </label>
-    <p class="Cat_ImagemHint" id="hint_herda">Preço, peso, GTIN e imagem seguem o cadastro do pai.</p>
+    <p class="Cat_ImagemHint" id="hint_herda">Preço, peso, GTIN, imagem e descrição seguem o cadastro do pai quando marcado.</p>
 
     <nav class="Cat_TabNav">
       <button type="button" class="Cat_Tab is-active" data-tab="ident">Identificação</button>
@@ -39,7 +39,12 @@
         <div class="Cl_FormCampo"><label for="nome_exibicao">Nome da variante *</label><input type="text" id="nome_exibicao" /></div>
         <div class="Cl_FormCampo"><label for="sku">SKU *</label><input type="text" id="sku" /></div>
       </div>
-      <div class="Cl_FormCampo"><label for="rotulo_attr">Atributos</label><input type="text" id="rotulo_attr" readonly /></div>
+      <div class="Cl_FormCampo">
+        <label for="descricao">Descrição</label>
+        <textarea id="descricao" rows="6" placeholder="Descrição desta variação (herda do pai se marcado acima)"></textarea>
+        <p class="Cat_ImagemHint" id="hint_descricao_herda" hidden>Usando a descrição do produto pai.</p>
+      </div>
+      <p class="Cat_ImagemHint" id="hint_atributos" hidden></p>
       <label class="Cl_Switch" style="margin-top:8px;">
         <input type="checkbox" id="ativo" checked />
         <span class="Cl_SwitchSlider"></span><span>Ativo</span>
@@ -47,10 +52,45 @@
     </section>
 
     <section class="Cat_TabPanel" data-panel="precos" hidden>
-      <div class="Cat_Grid3">
-        <div class="Cl_FormCampo"><label for="preco">Preço venda (R$)</label><input type="number" id="preco" step="0.01" min="0" /></div>
-        <div class="Cl_FormCampo"><label for="preco_promocional">Promoção (R$)</label><input type="number" id="preco_promocional" step="0.01" min="0" /></div>
-        <div class="Cl_FormCampo"><label for="preco_custo">Custo (R$)</label><input type="number" id="preco_custo" step="0.01" min="0" /></div>
+      <div class="Cat_Grid2 Cat_PrecosVarGrid">
+        <div class="Cl_FormCampo">
+          <label for="preco">Valor (R$)</label>
+          <input type="number" id="preco" step="0.01" min="0" />
+          <p class="Cat_ImagemHint">Preço de referência do produto (ex.: importado do Bling).</p>
+        </div>
+        <div class="Cl_FormCampo Cat_ValorDropCampo">
+          <label for="valor_drop" class="Cat_LabelComTip">
+            Valor Drop (R$)
+            <span class="Cat_Tip" tabindex="0">
+              <span class="Cat_TipIcon" aria-hidden="true">?</span>
+              <span class="Cat_TipBubble" id="hintValorDropVar" role="tooltip">
+                Calculado em Parâmetros → Precificação. Duplo clique para ajustar.
+              </span>
+            </span>
+          </label>
+          <input type="number" id="valor_drop" class="Cat_ValorDropInput" step="0.01" min="0" readonly
+            title="Duplo clique para editar manualmente" />
+        </div>
+      </div>
+      <div class="Cat_PromoBox">
+        <h3 class="Cat_PromoTitulo">Promoção Drop</h3>
+        <p class="Cat_ImagemHint">Valor promocional oferecido aos vendedores por tempo limitado ou enquanto houver estoque.</p>
+        <div class="Cat_Grid2">
+          <div class="Cl_FormCampo">
+            <label for="preco_promocional">Valor promocional (R$)</label>
+            <input type="number" id="preco_promocional" step="0.01" min="0" />
+          </div>
+          <div class="Cl_FormCampo" id="campoPromoData">
+            <label for="promocao_validade">Válida até</label>
+            <input type="date" id="promocao_validade" />
+          </div>
+        </div>
+        <label class="Cl_Switch Cat_PromoAteZerar">
+          <input type="checkbox" id="promocao_ate_zerar_estoque" />
+          <span class="Cl_SwitchSlider"></span>
+          <span>Até zerar o estoque (encerra ao esgotar ou ao repor estoque)</span>
+        </label>
+        <p class="Cat_ImagemHint" id="hintPromoStatus" hidden></p>
       </div>
     </section>
 
@@ -71,30 +111,32 @@
     </section>
 
     <section class="Cat_TabPanel" data-panel="midia" hidden>
-      <p class="Cat_ImagemHint" id="hint_imagem_variante">
-        Escolha a imagem padrão desta variante na galeria do produto pai (sem novo upload).
+      <p class="Cat_ImagemHint" id="painel_imagens_herda" hidden>
+        Esta variante utiliza a galeria do produto pai (imagem principal do pai).
       </p>
-      <div id="galeria_variante_pick" class="Cat_Galeria Cat_GaleriaPick"></div>
-      <input type="hidden" id="id_imagem_principal" value="" />
-      <img id="preview_imagem" class="Cat_ImagemPreview" alt="" hidden />
+      <div id="painel_imagens_split" hidden>
+        <p class="Cat_ImagemHint" id="hint_imagem_variante">
+          Arraste da galeria do pai (direita) para esta variante (esquerda). A 1ª foto é a principal.
+          Duplo clique para ampliar.
+        </p>
+        <div class="Cat_ImgSplitCols">
+          <div class="Cat_ImgPanel">
+            <h3 class="Cat_ImgPanelTitulo">Esta variante</h3>
+            <div id="galeria_variante_sel" class="Cat_GaleriaSplitGrid" data-lado="variante"></div>
+          </div>
+          <div class="Cat_ImgPanel">
+            <h3 class="Cat_ImgPanelTitulo">Galeria do pai</h3>
+            <div id="galeria_pai_fonte" class="Cat_GaleriaSplitGrid" data-lado="pai"></div>
+          </div>
+        </div>
+      </div>
     </section>
 
     <section class="Cat_TabPanel" data-panel="estoque" hidden>
       <p class="Cat_ImagemHint" id="avisoEstoqueDepositoVar">
-        Estoque por depósito desta variação (SKU). Duplo clique no saldo para editar.
+        Estoque por depósito desta variação. Duplo clique no card para ver detalhes e editar o saldo.
       </p>
-      <div class="Cl_TabelaPrincipal Cat_EstoqueDepTbl">
-        <table>
-          <thead>
-            <tr>
-              <th>Depósito</th>
-              <th>Saldo atual</th>
-              <th>Última atualização</th>
-            </tr>
-          </thead>
-          <tbody id="tblEstoqueDepositosVar"></tbody>
-        </table>
-      </div>
+      <div id="gridEstoqueDepositosVar" class="Cat_EstoqueDepGrid"></div>
       <input type="hidden" id="quantidade" value="0" />
     </section>
   </div>
@@ -105,6 +147,6 @@
   </div>
 
   <script src="{{ url_for('static', filename='script/global_utils.js') }}"></script>
-  <script src="{{ url_for('fn_catalogo.static', filename='script/Scatalogo_variante_apoio.js') }}?v=3"></script>
+  <script src="{{ url_for('fn_catalogo.static', filename='script/Scatalogo_variante_apoio.js') }}?v=7"></script>
 </body>
 </html>

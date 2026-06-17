@@ -110,7 +110,8 @@ def listar_estoque_por_deposito(
     garantir_linhas_estoque_depositos(cur, id_tenant, id_variante)
     cur.execute(
         """
-        SELECT ped.id_deposito, d.nome, ped.quantidade, ped.atualizado_em,
+        SELECT ped.id_deposito, d.nome, d.cidade, d.uf, d.principal,
+               ped.quantidade, ped.atualizado_em,
                dm.id_bling_deposito, dm.nome_bling
         FROM tbl_produto_estoque_deposito ped
         JOIN tbl_deposito_expedicao d ON d.id = ped.id_deposito
@@ -127,11 +128,14 @@ def listar_estoque_por_deposito(
             {
                 "id_deposito": r[0],
                 "nome": r[1],
-                "quantidade": int(r[2] or 0),
-                "atualizado_em": r[3].isoformat() if r[3] else None,
-                "id_bling_deposito": r[4],
-                "nome_bling": r[5],
-                "vinculado_bling": bool(r[4]),
+                "cidade": r[2] or "",
+                "uf": r[3] or "",
+                "principal": bool(r[4]),
+                "quantidade": int(r[5] or 0),
+                "atualizado_em": r[6].isoformat() if r[6] else None,
+                "id_bling_deposito": r[7],
+                "nome_bling": r[8],
+                "vinculado_bling": bool(r[7]),
             }
         )
     integrado = produto_integrado_bling(cur, id_tenant, id_produto)
@@ -159,7 +163,8 @@ def _listar_estoque_variante(
     garantir_linhas_estoque_depositos(cur, id_tenant, id_variante)
     cur.execute(
         """
-        SELECT ped.id_deposito, d.nome, ped.quantidade, ped.atualizado_em,
+        SELECT ped.id_deposito, d.nome, d.cidade, d.uf, d.principal,
+               ped.quantidade, ped.atualizado_em,
                dm.id_bling_deposito, dm.nome_bling
         FROM tbl_produto_estoque_deposito ped
         JOIN tbl_deposito_expedicao d ON d.id = ped.id_deposito
@@ -176,11 +181,14 @@ def _listar_estoque_variante(
             {
                 "id_deposito": r[0],
                 "nome": r[1],
-                "quantidade": int(r[2] or 0),
-                "atualizado_em": r[3].isoformat() if r[3] else None,
-                "id_bling_deposito": r[4],
-                "nome_bling": r[5],
-                "vinculado_bling": bool(r[4]),
+                "cidade": r[2] or "",
+                "uf": r[3] or "",
+                "principal": bool(r[4]),
+                "quantidade": int(r[5] or 0),
+                "atualizado_em": r[6].isoformat() if r[6] else None,
+                "id_bling_deposito": r[7],
+                "nome_bling": r[8],
+                "vinculado_bling": bool(r[7]),
             }
         )
     integrado = produto_integrado_bling(cur, id_tenant, id_produto)
@@ -272,6 +280,12 @@ def atualizar_saldo_deposito(
         raise ValueError("Depósito inválido.")
 
     garantir_linhas_estoque_depositos(cur, id_tenant, id_variante)
+    cur.execute(
+        "SELECT COALESCE(quantidade, 0) FROM tbl_produto_variante_estoque WHERE id_variante = %s",
+        (id_variante,),
+    )
+    row_est = cur.fetchone()
+    total_antes = int(row_est[0] or 0) if row_est else 0
     agora = agora_utc()
     cur.execute(
         """
@@ -283,6 +297,10 @@ def atualizar_saldo_deposito(
         (id_variante, id_deposito, quantidade, agora),
     )
     total = sincronizar_total_variante(cur, id_variante)
+
+    from fornecedor.catalogo.servico_promocao_variante import reagir_estoque_promocao
+
+    promo_encerrada = reagir_estoque_promocao(cur, id_variante, total_antes, total)
 
     bling_ok = False
     bling_msg = None
@@ -304,6 +322,7 @@ def atualizar_saldo_deposito(
     return {
         "quantidade": quantidade,
         "total_variante": total,
+        "promocao_encerrada": promo_encerrada,
         "integrado_bling": integrado,
         "bling_sincronizado": bling_ok,
         "bling_mensagem": bling_msg,

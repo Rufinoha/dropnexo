@@ -66,20 +66,30 @@
   gap: 12px;
   margin-bottom: 12px;
 }
-.FnPar_CatActions { display: flex; justify-content: flex-start; }
-.FnPar_CatAdd .Cl_FormCampo {
+
+/* Campos: label sempre acima do input */
+.FnPar_Apoio .Cl_FormCampo {
   display: flex;
   flex-direction: column;
+  align-items: stretch;
   gap: 6px;
   min-width: 0;
+  margin: 0;
 }
-.FnPar_CatAdd .Cl_FormCampo label {
+
+.FnPar_Apoio .Cl_FormCampo > label:not(.Cl_Switch) {
+  display: block;
+  order: 0;
   font-size: 12px;
   font-weight: 600;
   color: #475569;
+  margin: 0;
+  line-height: 1.35;
 }
-.FnPar_CatAdd .Cl_FormCampo input,
-.FnPar_CatAdd .Cl_FormCampo select {
+
+.FnPar_Apoio .Cl_FormCampo input:not([type="checkbox"]):not([type="radio"]),
+.FnPar_Apoio .Cl_FormCampo select {
+  display: block;
   width: 100%;
   box-sizing: border-box;
   height: 40px;
@@ -87,10 +97,46 @@
   border-radius: 8px;
   padding: 8px 10px;
   font-size: 14px;
+  color: #1e293b;
+  background: #fff;
+  margin: 0;
 }
+
+.FnPar_Apoio .Cl_FormCampo input:focus,
+.FnPar_Apoio .Cl_FormCampo select:focus {
+  outline: none;
+  border-color: var(--marca-hover, #021f81);
+  box-shadow: 0 0 0 3px rgba(2, 31, 129, 0.12);
+}
+
+.FnPar_Apoio .Cl_FormCampo .FnPar_Hint {
+  margin-top: 0;
+}
+
+.FnPar_SecaoActions,
+.FnPar_CatActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 4px;
+}
+
 .FnPar_TblWrap { margin-top: 8px; max-height: 200px; overflow: auto; }
-.FnPar_Footer { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding-top: 4px; margin-top: 4px; }
-.FnPar_BtnAplicar { min-width: 160px; }
+.FnPar_Footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding-top: 4px;
+  margin-top: 4px;
+}
+.FnPar_Footer .FnPar_Hint {
+  margin: 0;
+  margin-right: auto;
+  flex: 1 1 200px;
+}
+.FnPar_BtnAplicar { min-width: 160px; flex-shrink: 0; }
 .FnPar_Hint { font-size: 11px; color: #8a939e; display: block; margin-top: 4px; }
 @media (max-width: 900px) {
   .FnPar_GridForm, .FnPar_CatGrid { grid-template-columns: 1fr; }

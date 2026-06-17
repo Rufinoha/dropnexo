@@ -495,6 +495,35 @@ def _atributos_de_variacao_bling(var: dict) -> dict:
     return out
 
 
+def _valores_atributos_texto(atributos: dict) -> str:
+    if not isinstance(atributos, dict):
+        return ""
+    return " ".join(str(v).strip() for v in atributos.values() if str(v or "").strip())
+
+
+def _descricao_composta_pai(pai_desc: str, atributos: dict) -> str:
+    base = (pai_desc or "").strip()
+    sufixo = _valores_atributos_texto(atributos)
+    if not sufixo:
+        return base
+    if not base:
+        return sufixo
+    return f"{base} {sufixo}"
+
+
+def _descricao_variante_bling(cur, id_produto: int, var: dict, atributos: dict) -> tuple[str, bool]:
+    """Retorna (descricao, herda_pai) — nunca vazio na exibição; usa Bling, senão pai + atributos."""
+    campos = extrair_campos_produto_bling(var)
+    importada = (campos.get("descricao") or "").strip()
+    cur.execute("SELECT descricao FROM tbl_produto WHERE id = %s", (id_produto,))
+    row = cur.fetchone()
+    pai_desc = (row[0] or "").strip() if row else ""
+    if importada:
+        return importada, False
+    composta = _descricao_composta_pai(pai_desc, atributos) or pai_desc
+    return composta, True
+
+
 def _inserir_variante_bling(cur, id_produto: int, var: dict, ordem: int) -> int:
     campos = extrair_campos_produto_bling(var)
     sku = campos.get("sku") or ""
@@ -503,14 +532,15 @@ def _inserir_variante_bling(cur, id_produto: int, var: dict, ordem: int) -> int:
     preco_custo = campos.get("preco_custo")
     ativo = campos.get("ativo", True)
     atributos = _atributos_de_variacao_bling(var)
+    descricao, herda_pai = _descricao_variante_bling(cur, id_produto, var, atributos)
     agora = agora_utc()
     cur.execute(
         """
         INSERT INTO tbl_produto_variante (
             id_produto, sku, nome_exibicao, preco, preco_custo, ativo, ordem,
-            atributos, gtin, ncm, peso_liquido_kg, peso_bruto_kg, altura_cm, largura_cm, profundidade_cm,
+            atributos, descricao, herda_pai, gtin, ncm, peso_liquido_kg, peso_bruto_kg, altura_cm, largura_cm, profundidade_cm,
             atualizado_em
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id
         """,
         (
             id_produto,
@@ -521,6 +551,8 @@ def _inserir_variante_bling(cur, id_produto: int, var: dict, ordem: int) -> int:
             ativo,
             ordem,
             json.dumps(atributos, ensure_ascii=False),
+            descricao if not herda_pai else None,
+            herda_pai,
             campos.get("gtin"),
             campos.get("ncm"),
             campos.get("peso_liquido_kg"),

@@ -203,6 +203,9 @@ def main():
             "032_valor_drop_manual.sql",
             "033_precificacao_modo.sql",
             "034_imagens_galeria_variante.sql",
+            "035_variante_imagens.sql",
+            "036_variante_descricao.sql",
+            "037_variante_precos_promocao.sql",
         ):
             executar_sql_arquivo(conn, sql_dir / nome)
         seed_usuario_dev(conn)

@@ -186,7 +186,16 @@ def aplicar_valor_drop_variante(
     *,
     preco: float | None = None,
     id_categoria: int | None = None,
+    forcar: bool = False,
 ) -> bool:
+    if not forcar:
+        cur.execute(
+            "SELECT COALESCE(valor_drop_manual, FALSE) FROM tbl_produto_variante WHERE id = %s",
+            (id_variante,),
+        )
+        row_m = cur.fetchone()
+        if row_m and row_m[0]:
+            return False
     if preco is None or id_categoria is None:
         cur.execute(
             """
@@ -205,7 +214,7 @@ def aplicar_valor_drop_variante(
         return False
     cur.execute(
         """
-        UPDATE tbl_produto_variante SET valor_drop = %s, atualizado_em = %s
+        UPDATE tbl_produto_variante SET valor_drop = %s, valor_drop_manual = FALSE, atualizado_em = %s
         WHERE id = %s
         """,
         (vd, agora_utc(), id_variante),
@@ -348,6 +357,31 @@ def salvar_valor_drop_manual(
     return vd
 
 
+def salvar_valor_drop_manual_variante(
+    cur,
+    id_tenant: int,
+    id_variante: int,
+    valor_drop: float,
+) -> float:
+    vd = round(max(0.0, float(valor_drop or 0)), 2)
+    agora = agora_utc()
+    cur.execute(
+        """
+        UPDATE tbl_produto_variante v SET
+            valor_drop = %s,
+            valor_drop_manual = TRUE,
+            atualizado_em = %s
+        FROM tbl_produto p
+        WHERE v.id = %s AND p.id = v.id_produto AND p.id_tenant = %s
+        RETURNING v.id
+        """,
+        (vd, agora, id_variante, id_tenant),
+    )
+    if not cur.fetchone():
+        raise ValueError("Variante não encontrada.")
+    return vd
+
+
 def aplicar_precificacao_catalogo(
     cur,
     id_tenant: int,
@@ -413,6 +447,12 @@ def aplicar_precificacao_catalogo(
         (id_tenant,),
     )
     for vid, preco, id_cat in cur.fetchall():
+        cur.execute(
+            "SELECT COALESCE(valor_drop_manual, FALSE) FROM tbl_produto_variante WHERE id = %s",
+            (vid,),
+        )
+        if cur.fetchone()[0]:
+            continue
         regra = buscar_regra_fornecedor(cur, id_tenant, id_cat)
         if not regra:
             continue
@@ -424,7 +464,8 @@ def aplicar_precificacao_catalogo(
         )
         cur.execute(
             """
-            UPDATE tbl_produto_variante SET valor_drop = %s, atualizado_em = %s
+            UPDATE tbl_produto_variante SET
+                valor_drop = %s, valor_drop_manual = FALSE, atualizado_em = %s
             WHERE id = %s
             """,
             (vd, agora, vid),

@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='style/global_utils.css') }}" />
   <link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_crud.css') }}" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.snow.css" />
-  <link rel="stylesheet" href="{{ url_for('fn_catalogo.static', filename='style/Ccatalogo_apoio.css') }}?v=7" />
+  <link rel="stylesheet" href="{{ url_for('fn_catalogo.static', filename='style/Ccatalogo_apoio.css') }}?v=8" />
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </head>
 <body class="Cat_ApoioBody">
@@ -36,10 +36,17 @@
           <input type="number" id="preco" step="0.01" min="0" />
         </div>
         <div class="Cl_FormCampo Cat_ValorDropCampo">
-          <label for="valor_drop">Valor Drop (R$)</label>
+          <label for="valor_drop" class="Cat_LabelComTip">
+            Valor Drop (R$)
+            <span class="Cat_Tip" tabindex="0">
+              <span class="Cat_TipIcon" aria-hidden="true">?</span>
+              <span class="Cat_TipBubble" id="hintValorDrop" role="tooltip">
+                Calculado em Parâmetros → Precificação. Duplo clique para ajustar.
+              </span>
+            </span>
+          </label>
           <input type="number" id="valor_drop" class="Cat_ValorDropInput" step="0.01" min="0" readonly
             title="Duplo clique para editar manualmente" />
-          <span class="Cat_ImagemHint" id="hintValorDrop">Calculado em Parâmetros → Precificação. Duplo clique para ajustar.</span>
         </div>
         <div class="Cl_FormCampo">
           <label for="preco_custo">Preço de custo (R$)</label>
@@ -193,19 +200,8 @@
           Vincule depósitos Bling ↔ DropNexo em <strong>Integrações → Bling</strong> para importar saldos automaticamente.
         </p>
         <div id="painelEstoqueDepositos" class="Cat_EstoqueDepWrap" hidden>
-          <div class="Cl_TabelaPrincipal Cat_EstoqueDepTbl">
-            <table>
-              <thead>
-                <tr>
-                  <th>Depósito</th>
-                  <th>Saldo atual</th>
-                  <th>Última atualização</th>
-                </tr>
-              </thead>
-              <tbody id="tblEstoqueDepositos"></tbody>
-            </table>
-          </div>
-          <p class="Cat_ImagemHint">Dê duplo clique no saldo para alterar. Produtos integrados podem sincronizar com o Bling.</p>
+          <div id="gridEstoqueDepositos" class="Cat_EstoqueDepGrid"></div>
+          <p class="Cat_ImagemHint">Duplo clique no card para ver detalhes e editar o saldo.</p>
         </div>
         <input type="hidden" id="quantidade" value="0" />
       </section>
@@ -226,9 +222,20 @@
             <label for="cest">CEST</label>
             <input type="text" id="cest" maxlength="10" />
           </div>
-          <div class="Cl_FormCampo">
+          <div class="Cl_FormCampo Cat_OrigemFiscalCampo">
             <label for="origem_fiscal">Origem fiscal</label>
-            <input type="text" id="origem_fiscal" maxlength="4" placeholder="0–8" />
+            <select id="origem_fiscal">
+              <option value="">(selecione)</option>
+              <option value="0">0 - Nacional, exceto as indicadas nos códigos 3, 4, 5 e 8</option>
+              <option value="1">1 - Estrangeira - Importação direta, exceto a indicada no código 6</option>
+              <option value="2">2 - Estrangeira - Adquirida no mercado interno, exceto a indicada no código 7</option>
+              <option value="3">3 - Nacional, mercadoria ou bem com Conteúdo de Importação superior a 40% e inferior ou igual a 70%</option>
+              <option value="4">4 - Nacional, cuja produção tenha sido feita em conformidade com os processos produtivos básicos de que tratam as legislações citadas nos Ajustes</option>
+              <option value="5">5 - Nacional, mercadoria ou bem com Conteúdo de Importação inferior ou igual a 40%</option>
+              <option value="6">6 - Estrangeira - Importação direta, sem similar nacional, constante em lista da CAMEX</option>
+              <option value="7">7 - Estrangeira - Adquirida no mercado interno, sem similar nacional, constante em lista da CAMEX</option>
+              <option value="8">8 - Nacional, mercadoria ou bem com Conteúdo de Importação superior a 70%</option>
+            </select>
           </div>
           <div class="Cl_FormCampo">
             <label for="volumes">Volumes</label>
@@ -249,32 +256,21 @@
       </section>
 
       <section class="Cat_TabPanel" data-panel="variacoes" hidden>
-        <p class="Cat_ImagemHint">Adicione atributos (Cor, Tamanho…) — os SKUs são gerados automaticamente. Use um modelo pré-cadastrado em <strong>Fornecedor → Variações</strong>.</p>
+        <p class="Cat_ImagemHint Cat_VarHint">Atributo + opções — se o nome existir em um modelo (<strong>Fornecedor → Variações</strong>), as opções são preenchidas. Digite o nome do modelo e clique em Adicionar para aplicar o modelo inteiro.</p>
         <div id="painel_variantes" style="display:none;">
-          <div class="Cat_VarPresetRow">
+          <div class="Cat_VarAttrLinha">
             <div class="Cl_FormCampo">
-              <label for="preset_variacao">Modelo pré-cadastrado</label>
-              <select id="preset_variacao"><option value="">(selecione um modelo)</option></select>
+              <label for="attr_nome">Atributo</label>
+              <input type="text" id="attr_nome" list="attr_nome_sugestoes" placeholder="Cor ou nome do modelo" autocomplete="off" />
+              <datalist id="attr_nome_sugestoes"></datalist>
             </div>
-            <button type="button" class="Cl_BtnIncluir" id="btnAplicarPreset">Aplicar modelo</button>
+            <div class="Cl_FormCampo">
+              <label for="attr_valores">Opções (vírgula)</label>
+              <input type="text" id="attr_valores" placeholder="Azul, Verde, Vermelho" />
+            </div>
+            <button type="button" class="Cl_BtnIncluir" id="btnAdicionarVariacao">Adicionar</button>
           </div>
-          <div class="Cat_VarAttrBox">
-            <h4 class="Cat_VarAttrTitulo">Nova variação</h4>
-            <div class="Cat_Grid2">
-              <div class="Cl_FormCampo">
-                <label for="attr_nome">Nome do atributo</label>
-                <input type="text" id="attr_nome" placeholder="Cor" />
-              </div>
-              <div class="Cl_FormCampo">
-                <label for="attr_valores">Opções (vírgula)</label>
-                <input type="text" id="attr_valores" placeholder="Azul, Verde, Vermelho" />
-              </div>
-            </div>
-            <div class="Cat_VarAttrAcoes">
-              <button type="button" class="Cl_BtnIncluir" id="btnAdicionarVariacao">Adicionar variação</button>
-            </div>
-            <div id="lista_atributos" class="Cat_VarAttrTags"></div>
-          </div>
+          <div id="lista_atributos" class="Cat_VarAttrTags"></div>
           <div class="Cat_VarListaHead">
             <span class="Cat_VarListaTitulo">Variações cadastradas</span>
             <button type="button" class="Cl_BtnLink" id="btnNovaVariante">+ Nova variante manual</button>
@@ -308,6 +304,6 @@
   <script src="{{ url_for('static', filename='script/global_utils.js') }}"></script>
   <script src="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.js"></script>
   <script src="{{ url_for('fn_catalogo.static', filename='script/Scatalogo_descricao_editor.js') }}?v=1"></script>
-  <script src="{{ url_for('fn_catalogo.static', filename='script/Scatalogo_apoio.js') }}?v=14"></script>
+  <script src="{{ url_for('fn_catalogo.static', filename='script/Scatalogo_apoio.js') }}?v=19"></script>
 </body>
 </html>

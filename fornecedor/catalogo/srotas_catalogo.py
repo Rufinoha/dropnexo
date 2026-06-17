@@ -120,6 +120,13 @@ def variante_dict(row, *, incluir_produto: bool = False) -> dict[str, Any]:
         d["gtin"] = _f(row, 18) or ""
         d["ncm"] = _f(row, 19) or ""
         d["id_imagem_principal"] = int(_f(row, 20)) if _f(row, 20) else None
+        d["descricao"] = (_f(row, 21) or "") if len(row) > 21 else ""
+        d["descricao_propria"] = d["descricao"]
+        d["valor_drop"] = float(_f(row, 22)) if _f(row, 22) is not None else None
+        d["valor_drop_manual"] = bool(_f(row, 23, False))
+        pv = _f(row, 24)
+        d["promocao_validade"] = pv.isoformat() if hasattr(pv, "isoformat") else (str(pv)[:10] if pv else None)
+        d["promocao_ate_zerar_estoque"] = bool(_f(row, 25, False))
     if incluir_produto and len(row) > 12:
         d["produto_nome"] = row[12]
         d["fornecedor_nome"] = row[13] if len(row) > 13 else ""
@@ -134,7 +141,9 @@ SQL_VARIANTE_LISTA = """
            v.ativo, v.ordem,
            COALESCE(e.quantidade, 0),
            v.herda_pai, v.peso_liquido_kg, v.peso_bruto_kg, v.altura_cm, v.largura_cm,
-           v.profundidade_cm, v.gtin, v.ncm, v.id_imagem_principal
+           v.profundidade_cm, v.gtin, v.ncm, v.id_imagem_principal, v.descricao,
+           v.valor_drop, COALESCE(v.valor_drop_manual, FALSE), v.promocao_validade,
+           v.promocao_ate_zerar_estoque
     FROM tbl_produto_variante v
     LEFT JOIN tbl_produto_variante_estoque e ON e.id_variante = v.id
     LEFT JOIN tbl_produto_imagem img ON img.id = v.id_imagem_principal
@@ -142,13 +151,16 @@ SQL_VARIANTE_LISTA = """
 
 
 def produto_pai_dict(row) -> dict[str, Any]:
+    promo = row[5]
+    if promo is None and len(row) > 17 and row[17] is not None:
+        promo = row[17]
     return {
         "id": row[0],
         "sku": row[1] or "",
         "nome": row[2],
         "descricao": row[3] or "",
         "preco": float(row[4] or 0),
-        "preco_promocional": float(row[5]) if row[5] is not None else None,
+        "preco_promocional": float(promo) if promo is not None else None,
         "preco_custo": float(row[6]) if row[6] is not None else None,
         "gtin": row[7] or "",
         "ncm": row[8] or "",
@@ -160,6 +172,9 @@ def produto_pai_dict(row) -> dict[str, Any]:
         "imagem_url": row[14] or "",
         "referencia": row[15] or "",
         "formato": row[16] or "S",
+        "valor_dropshipping": float(row[17]) if len(row) > 17 and row[17] is not None else None,
+        "valor_drop": float(row[18]) if len(row) > 18 and row[18] is not None else None,
+        "valor_drop_manual": bool(row[19]) if len(row) > 19 else False,
     }
 
 
@@ -172,6 +187,7 @@ def merge_variante_exibicao(variante: dict[str, Any], pai: dict[str, Any]) -> di
         "preco",
         "preco_promocional",
         "preco_custo",
+        "valor_drop",
         "gtin",
         "ncm",
         "peso_liquido_kg",
@@ -182,6 +198,10 @@ def merge_variante_exibicao(variante: dict[str, Any], pai: dict[str, Any]) -> di
     ):
         if out.get(k) in (None, "", 0) and pai.get(k) not in (None, ""):
             out[k] = pai[k]
+    if out.get("valor_drop_manual") is not True and pai.get("valor_drop_manual"):
+        out["valor_drop_manual"] = pai.get("valor_drop_manual")
+    if pai.get("preco_promocional") and out.get("preco_promocional") in (None, ""):
+        out["preco_promocional"] = pai.get("preco_promocional")
     if pai.get("imagem_url"):
         out["imagem_url"] = url_exibicao(pai["imagem_url"])
         out["imagem_caminho"] = pai["imagem_url"]
@@ -218,6 +238,43 @@ def descricao_variante(pai_descricao: str, atributos: dict) -> str:
     if not base:
         return sufixo
     return f"{base} {sufixo}"
+
+
+def descricao_efetiva_variante(
+    descricao_variante_db: str | None,
+    *,
+    herda_pai: bool,
+    pai_descricao: str,
+    atributos: dict | None = None,
+) -> str:
+    """Descrição exibida: pai se herda; senão própria ou fallback pai + atributos."""
+    pai = (pai_descricao or "").strip()
+    if herda_pai:
+        return pai
+    propria = (descricao_variante_db or "").strip()
+    if propria:
+        return propria
+    return descricao_variante(pai, atributos or {}) or pai
+
+
+def normalizar_descricao_variante_salvar(
+    descricao_body: str | None,
+    *,
+    herda_pai: bool,
+    pai_descricao: str,
+    atributos: dict | None = None,
+    sanitizar_fn=None,
+) -> str | None:
+    """Persistência: NULL se herda pai; senão nunca vazio (fallback pai/atributos)."""
+    if herda_pai:
+        return None
+    pai = (pai_descricao or "").strip()
+    txt = (descricao_body or "").strip()
+    if not txt:
+        txt = descricao_variante(pai, atributos or {}) or pai
+    if sanitizar_fn:
+        txt = sanitizar_fn(txt)
+    return txt or pai or None
 
 
 def sku_raiz_produto(sku: str | None, id_produto: int, referencia: str | None = None) -> str:
@@ -624,12 +681,13 @@ def gerar_variantes_produto(cur, id_produto: int, id_tenant: int) -> int:
         )
         skus_usados.add(sku_var)
         nome_var = nome_exibicao_variante(pai_nome, atributos)
+        desc_var = None
         cur.execute(
             """
             INSERT INTO tbl_produto_variante (
                 id_produto, sku, nome_exibicao, preco, preco_promocional, preco_custo,
-                atributos, ativo, ordem, herda_pai, atualizado_em
-            ) VALUES (%s,%s,%s,%s,%s,%s,%s,TRUE,%s,TRUE,%s)
+                atributos, descricao, ativo, ordem, herda_pai, atualizado_em
+            ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,TRUE,%s,TRUE,%s)
             RETURNING id
             """,
             (
@@ -640,6 +698,7 @@ def gerar_variantes_produto(cur, id_produto: int, id_tenant: int) -> int:
                 pai[4],
                 pai[5],
                 json.dumps(atributos, ensure_ascii=False),
+                desc_var,
                 ordem,
                 agora_utc(),
             ),
@@ -693,17 +752,23 @@ from fornecedor.catalogo.servico_estoque_deposito import (
 from fornecedor.catalogo.servico_imagens import (
     classificar_origem_manual,
     exigir_modo_compativel,
+    listar_imagens_galeria_pai,
+    listar_imagens_variante_selecionadas,
     listar_regras_atributo_imagem,
     obter_imagem_modo,
+    salvar_imagens_variante,
     salvar_regra_atributo_imagem,
     sincronizar_cache_variante,
     sincronizar_imagem_principal_produto,
     url_exibicao,
     validar_id_imagem_produto,
 )
+from fornecedor.catalogo.servico_promocao_variante import promocao_variante_ativa
 from fornecedor.parametros.servico_precificacao import (
     aplicar_valor_drop_produto_e_variantes,
+    aplicar_valor_drop_variante,
     salvar_valor_drop_manual,
+    salvar_valor_drop_manual_variante,
 )
 
 
@@ -2623,6 +2688,42 @@ def variantes_lista():
         conn.close()
 
 
+@fn_catalogo_bp.post("/catalogos/variantes/valor-drop/salvar")
+@login_obrigatorio()
+@exigir_permissao(codigo="catalogos.editar")
+def catalogos_variante_valor_drop_salvar():
+    if (resp := _exigir_catalogo_escrita()) is not None:
+        return resp
+    body = request.get_json(silent=True) or {}
+    try:
+        id_variante = int(body.get("id_variante") or body.get("id") or 0)
+        valor_drop = float(body.get("valor_drop") or 0)
+    except (TypeError, ValueError):
+        return jsonify(success=False, message="Valor inválido."), 400
+    if not id_variante:
+        return jsonify(success=False, message="Variante não informada."), 400
+    id_tenant = session.get("id_tenant")
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        vd = salvar_valor_drop_manual_variante(cur, id_tenant, id_variante, valor_drop)
+        conn.commit()
+        return jsonify(
+            success=True,
+            message="Valor Drop da variante atualizado manualmente.",
+            valor_drop=vd,
+            valor_drop_manual=True,
+        )
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 400
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
 @fn_catalogo_bp.post("/catalogos/variantes/salvar")
 @login_obrigatorio()
 @exigir_permissao(codigo="catalogos.editar")
@@ -2648,8 +2749,23 @@ def variantes_salvar():
         preco = _parse_decimal(body.get("preco"))
         promo = body.get("preco_promocional")
         preco_promo = _parse_decimal(promo) if promo not in (None, "") else None
-        preco_custo = body.get("preco_custo")
-        pc = _parse_decimal(preco_custo) if preco_custo not in (None, "") else None
+        promocao_ate_zerar = str(body.get("promocao_ate_zerar_estoque", "false")).lower() in (
+            "1",
+            "true",
+            "t",
+            "yes",
+            "sim",
+        )
+        promocao_validade = (body.get("promocao_validade") or "").strip() or None
+        if promocao_ate_zerar:
+            promocao_validade = None
+        elif promocao_validade:
+            promocao_validade = promocao_validade[:10]
+        else:
+            promocao_validade = None
+        if preco_promo is None:
+            promocao_validade = None
+            promocao_ate_zerar = False
         atributos = body.get("atributos")
         if atributos is None:
             atributos = {}
@@ -2705,13 +2821,28 @@ def variantes_salvar():
                         if isinstance(row_atr[0], dict)
                         else (json.loads(row_atr[0]) if row_atr[0] else {})
                     )
+
+        cur.execute("SELECT descricao FROM tbl_produto WHERE id = %s", (id_produto,))
+        row_desc_pai = cur.fetchone()
+        pai_descricao = (row_desc_pai[0] or "").strip() if row_desc_pai else ""
+        descricao_salvar = normalizar_descricao_variante_salvar(
+            body.get("descricao"),
+            herda_pai=herda_pai,
+            pai_descricao=pai_descricao,
+            atributos=atributos if isinstance(atributos, dict) else {},
+            sanitizar_fn=_sanitizar_descricao_html,
+        )
+
+        if vid:
             cur.execute(
                 """
                 UPDATE tbl_produto_variante SET
-                    sku=%s, nome_exibicao=%s, preco=%s, preco_promocional=%s, preco_custo=%s,
-                    atributos=%s, imagem_url=%s, id_imagem_principal=%s, ativo=%s, ordem=%s, herda_pai=%s,
+                    sku=%s, nome_exibicao=%s, preco=%s, preco_promocional=%s,
+                    atributos=%s, descricao=%s, imagem_url=%s, id_imagem_principal=%s, ativo=%s, ordem=%s, herda_pai=%s,
                     peso_liquido_kg=%s, peso_bruto_kg=%s, altura_cm=%s, largura_cm=%s,
-                    profundidade_cm=%s, gtin=%s, ncm=%s, atualizado_em=%s
+                    profundidade_cm=%s, gtin=%s, ncm=%s,
+                    promocao_validade=%s, promocao_ate_zerar_estoque=%s,
+                    atualizado_em=%s
                 WHERE id=%s AND id_produto=%s
                 RETURNING id
                 """,
@@ -2720,8 +2851,8 @@ def variantes_salvar():
                     nome,
                     preco,
                     preco_promo,
-                    pc,
                     json.dumps(atributos),
+                    descricao_salvar,
                     imagem_url,
                     id_imagem_principal,
                     ativo,
@@ -2734,6 +2865,8 @@ def variantes_salvar():
                     prof,
                     gtin,
                     ncm,
+                    promocao_validade,
+                    promocao_ate_zerar,
                     agora_utc(),
                     vid,
                     id_produto,
@@ -2742,16 +2875,15 @@ def variantes_salvar():
             if not cur.fetchone():
                 return jsonify(success=False, message="Variante não encontrada."), 404
             variant_id = int(vid)
-            sincronizar_cache_variante(cur, variant_id)
         else:
             cur.execute(
                 """
                 INSERT INTO tbl_produto_variante (
-                    id_produto, sku, nome_exibicao, preco, preco_promocional, preco_custo,
-                    atributos, imagem_url, id_imagem_principal, ativo, ordem, herda_pai,
+                    id_produto, sku, nome_exibicao, preco, preco_promocional,
+                    atributos, descricao, imagem_url, id_imagem_principal, ativo, ordem, herda_pai,
                     peso_liquido_kg, peso_bruto_kg, altura_cm, largura_cm, profundidade_cm,
-                    gtin, ncm, atualizado_em
-                ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                    gtin, ncm, promocao_validade, promocao_ate_zerar_estoque, atualizado_em
+                ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 RETURNING id
                 """,
                 (
@@ -2760,8 +2892,8 @@ def variantes_salvar():
                     nome,
                     preco,
                     preco_promo,
-                    pc,
                     json.dumps(atributos),
+                    descricao_salvar,
                     imagem_url,
                     id_imagem_principal,
                     ativo,
@@ -2774,11 +2906,12 @@ def variantes_salvar():
                     prof,
                     gtin,
                     ncm,
+                    promocao_validade,
+                    promocao_ate_zerar,
                     agora_utc(),
                 ),
             )
             variant_id = cur.fetchone()[0]
-            sincronizar_cache_variante(cur, variant_id)
             if row_p[0] == "E":
                 pass
             else:
@@ -2786,6 +2919,17 @@ def variantes_salvar():
                     "UPDATE tbl_produto SET formato = 'E', id_variante_padrao = COALESCE(id_variante_padrao, %s) WHERE id = %s",
                     (variant_id, id_produto),
                 )
+
+        ids_imagens = body.get("ids_imagens")
+        if not isinstance(ids_imagens, list):
+            ids_imagens = [id_imagem_principal] if id_imagem_principal else []
+        salvar_imagens_variante(
+            cur,
+            id_variante=variant_id,
+            id_produto=id_produto,
+            ids_imagens=ids_imagens,
+            herda_pai=herda_pai,
+        )
 
         cur.execute(
             """
@@ -2797,6 +2941,7 @@ def variantes_salvar():
         )
         garantir_variante_padrao(cur, id_produto, id_tenant)
         sync_pai_de_variante_padrao(cur, id_produto)
+        aplicar_valor_drop_variante(cur, id_tenant, variant_id)
         conn.commit()
         return jsonify(success=True, message="Variante salva.", id=variant_id)
     except ValueError as e:
@@ -3129,16 +3274,33 @@ def variante_apoio():
         if not row:
             return jsonify(success=False, message="Variante não encontrada."), 404
         variante = variante_dict(row)
+        id_prod = int(variante["id_produto"])
+        variante["imagens_selecionadas"] = listar_imagens_variante_selecionadas(cur, vid, id_prod)
+        variante["imagens_pai"] = listar_imagens_galeria_pai(cur, id_prod)
         cur.execute(
             """
             SELECT id, sku, nome, descricao, preco, preco_promocional, preco_custo,
                    gtin, ncm, peso_liquido_kg, peso_bruto_kg, altura_cm, largura_cm,
-                   profundidade_cm, imagem_url, referencia, formato
+                   profundidade_cm, imagem_url, referencia, formato,
+                   valor_dropshipping, valor_drop, COALESCE(valor_drop_manual, FALSE)
             FROM tbl_produto WHERE id = %s
             """,
             (variante["id_produto"],),
         )
         pai = produto_pai_dict(cur.fetchone())
+        variante["descricao"] = descricao_efetiva_variante(
+            variante.get("descricao_propria"),
+            herda_pai=variante.get("herda_pai", True),
+            pai_descricao=pai.get("descricao", ""),
+            atributos=variante.get("atributos"),
+        )
+        variante = merge_variante_exibicao(variante, pai)
+        variante["promocao_ativa"] = promocao_variante_ativa(
+            preco_promocional=variante.get("preco_promocional"),
+            promocao_validade=variante.get("promocao_validade"),
+            promocao_ate_zerar_estoque=variante.get("promocao_ate_zerar_estoque"),
+            estoque=variante.get("estoque", 0),
+        )
         return jsonify(success=True, dados=variante, pai=pai)
     finally:
         conn.close()

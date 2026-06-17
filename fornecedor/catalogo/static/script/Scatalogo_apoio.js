@@ -3,6 +3,8 @@
   let idProduto = null;
   let nivelModal = 1;
   let atributosProduto = [];
+  let presetsCache = [];
+  let valoresAttrAuto = false;
   let galeriaImagens = [];
   let imgDragIdx = null;
   let tipoGaleria = null;
@@ -57,14 +59,13 @@
     lista_variantes: document.getElementById("lista_variantes"),
     btnNovaVariante: document.getElementById("btnNovaVariante"),
     btnAdicionarVariacao: document.getElementById("btnAdicionarVariacao"),
-    btnAplicarPreset: document.getElementById("btnAplicarPreset"),
-    preset_variacao: document.getElementById("preset_variacao"),
     attr_nome: document.getElementById("attr_nome"),
     attr_valores: document.getElementById("attr_valores"),
+    attr_nome_sugestoes: document.getElementById("attr_nome_sugestoes"),
     lista_atributos: document.getElementById("lista_atributos"),
     avisoVariacoes: document.getElementById("avisoVariacoes"),
     painelEstoqueDepositos: document.getElementById("painelEstoqueDepositos"),
-    tblEstoqueDepositos: document.getElementById("tblEstoqueDepositos"),
+    tblEstoqueDepositos: document.getElementById("gridEstoqueDepositos"),
     avisoEstoqueCadastro: document.getElementById("avisoEstoqueCadastro"),
     avisoEstoqueDeposito: document.getElementById("avisoEstoqueDeposito"),
     btnSalvar: document.getElementById("btnSalvar"),
@@ -165,6 +166,52 @@
     if (!comVariacao && idProduto) carregarEstoqueDepositos().catch(() => {});
   }
 
+  function escHtml(s) {
+    return String(s ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function localDeposito(d) {
+    const cidade = (d.cidade || "").trim();
+    const uf = (d.uf || "").trim();
+    if (cidade && uf) return `${cidade} · ${uf}`;
+    return cidade || uf || "—";
+  }
+
+  function cardDepositoHtml(d) {
+    const badges = [
+      d.principal ? '<span class="Cat_EstoqueDepCardBadge">Principal</span>' : "",
+      d.vinculado_bling ? '<span class="Cat_EstoqueTag">Bling</span>' : "",
+    ]
+      .filter(Boolean)
+      .join("");
+    const qtd = Number(d.quantidade) || 0;
+    return `<article class="Cat_EstoqueDepCard${qtd > 0 ? " has-stock" : ""}" data-dep="${d.id_deposito}" title="Duplo clique para detalhes">
+      <div class="Cat_EstoqueDepCardHead">
+        <h4 class="Cat_EstoqueDepCardNome">${escHtml(d.nome)}</h4>
+        ${badges ? `<div class="Cat_EstoqueDepCardBadges">${badges}</div>` : ""}
+      </div>
+      <p class="Cat_EstoqueDepCardLoc">${escHtml(localDeposito(d))}</p>
+      <div class="Cat_EstoqueDepCardSaldo">
+        <span class="Cat_EstoqueDepCardSaldoLbl">Saldo em estoque</span>
+        <strong class="Cat_EstoqueDepCardSaldoVal">${qtd}</strong>
+      </div>
+      <footer class="Cat_EstoqueDepCardFoot">Atualizado ${fmtData(d.atualizado_em)}</footer>
+    </article>`;
+  }
+
+  function renderEstoqueCards() {
+    if (!el.tblEstoqueDepositos) return;
+    if (!estoqueDepositos.length) {
+      el.tblEstoqueDepositos.innerHTML =
+        '<p class="Cat_EstoqueDepEmpty">Nenhum depósito cadastrado. Cadastre em Fornecedor → Depósitos.</p>';
+      return;
+    }
+    el.tblEstoqueDepositos.innerHTML = estoqueDepositos.map(cardDepositoHtml).join("");
+  }
+
   async function carregarEstoqueDepositos() {
     if (!idProduto || !el.tblEstoqueDepositos) return;
     const r = await fetch(`${BASE}/estoque/depositos?id_produto=${idProduto}`, { credentials: "include" });
@@ -172,25 +219,12 @@
     if (!r.ok || !j.success) throw new Error(j.message || "Erro ao carregar estoque.");
     integradoBling = !!j.integrado_bling;
     estoqueDepositos = j.depositos || [];
-    if (!estoqueDepositos.length) {
-      el.tblEstoqueDepositos.innerHTML =
-        `<tr><td colspan="3">Nenhum depósito cadastrado. Cadastre em Fornecedor → Depósitos.</td></tr>`;
-      return;
-    }
-    el.tblEstoqueDepositos.innerHTML = estoqueDepositos
-      .map(
-        (d) => `<tr data-dep="${d.id_deposito}">
-          <td>${d.nome}${d.vinculado_bling ? ' <span class="Cat_EstoqueTag">Bling</span>' : ""}</td>
-          <td class="Cat_EstoqueSaldo" title="Duplo clique para editar">${d.quantidade}</td>
-          <td>${fmtData(d.atualizado_em)}</td>
-        </tr>`
-      )
-      .join("");
+    renderEstoqueCards();
   }
 
   async function editarSaldoDeposito(idDeposito, saldoAtual) {
     const dep = estoqueDepositos.find((d) => d.id_deposito === idDeposito);
-  let sincronizarBling = false;
+    let sincronizarBling = false;
     if (integradoBling) {
       const c = await Swal.fire({
         icon: "warning",
@@ -213,13 +247,26 @@
         sincronizarBling = s.isConfirmed;
       }
     }
+    const badges = [
+      dep?.principal ? '<span class="Cat_EstoqueDepCardBadge">Principal</span>' : "",
+      dep?.vinculado_bling ? '<span class="Cat_EstoqueTag">Bling</span>' : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
     const r = await Swal.fire({
-      title: `Saldo — ${dep?.nome || "Depósito"}`,
+      title: dep?.nome || "Depósito",
+      html: `<div class="Cat_EstoqueModal">
+        <p class="Cat_EstoqueModalLoc">${escHtml(localDeposito(dep || {}))}</p>
+        ${badges ? `<p style="margin:0 0 8px">${badges}</p>` : ""}
+        <p class="Cat_EstoqueModalHint">Saldo atual: <strong>${saldoAtual}</strong> · ${fmtData(dep?.atualizado_em)}</p>
+      </div>`,
       input: "number",
+      inputLabel: "Novo saldo",
       inputValue: saldoAtual,
       inputAttributes: { min: 0, step: 1 },
       showCancelButton: true,
       confirmButtonText: "Salvar",
+      cancelButtonText: "Cancelar",
     });
     if (!r.isConfirmed || r.value === undefined || r.value === "") return;
     const qtd = Math.max(0, parseInt(r.value, 10) || 0);
@@ -245,13 +292,12 @@
   }
 
   el.tblEstoqueDepositos?.addEventListener("dblclick", (ev) => {
-    const cell = ev.target.closest(".Cat_EstoqueSaldo");
-    if (!cell || !idProduto) return;
-    const row = cell.closest("tr");
-    const idDep = parseInt(row?.dataset?.dep || "0", 10);
+    const card = ev.target.closest(".Cat_EstoqueDepCard");
+    if (!card || !idProduto) return;
+    const idDep = parseInt(card.dataset.dep || "0", 10);
     if (!idDep) return;
-    const atual = parseInt(cell.textContent || "0", 10) || 0;
-    editarSaldoDeposito(idDep, atual).catch((e) => Swal.fire("Erro", e.message, "error"));
+    const dep = estoqueDepositos.find((d) => d.id_deposito === idDep);
+    editarSaldoDeposito(idDep, dep?.quantidade ?? 0).catch((e) => Swal.fire("Erro", e.message, "error"));
   });
 
   function syncFormatoUi() {
@@ -276,20 +322,86 @@
     }
   }
 
+  function indexarPresets(presets) {
+    const porAtributo = new Map();
+    const porModelo = new Map();
+    (presets || []).forEach((p) => {
+      const nomeModelo = (p.nome || "").trim();
+      if (nomeModelo) porModelo.set(nomeModelo.toLowerCase(), p);
+      (p.atributos || []).forEach((a) => {
+        const nome = (a.nome || "").trim();
+        if (!nome) return;
+        const key = nome.toLowerCase();
+        if (!porAtributo.has(key)) porAtributo.set(key, { nome, valores: new Set() });
+        const bucket = porAtributo.get(key);
+        (a.valores || []).forEach((v) => {
+          const t = String(v || "").trim();
+          if (t) bucket.valores.add(t);
+        });
+      });
+    });
+    return { porAtributo, porModelo };
+  }
+
+  function preencherSugestoesAttr() {
+    if (!el.attr_nome_sugestoes) return;
+    const nomes = new Set();
+    presetsCache.forEach((p) => {
+      if (p.nome) nomes.add(p.nome);
+      (p.atributos || []).forEach((a) => {
+        if (a.nome) nomes.add(a.nome);
+      });
+    });
+    atributosProduto.forEach((a) => {
+      if (a.nome) nomes.add(a.nome);
+    });
+    el.attr_nome_sugestoes.innerHTML = "";
+    [...nomes]
+      .sort((a, b) => a.localeCompare(b, "pt-BR"))
+      .forEach((n) => {
+        const o = document.createElement("option");
+        o.value = n;
+        el.attr_nome_sugestoes.appendChild(o);
+      });
+  }
+
+  function aplicarSugestaoAttrNome() {
+    const raw = (el.attr_nome?.value || "").trim();
+    if (!raw) return;
+    const { porAtributo, porModelo } = indexarPresets(presetsCache);
+    const low = raw.toLowerCase();
+
+    if (porModelo.has(low)) {
+      if (el.attr_valores && (!el.attr_valores.value.trim() || valoresAttrAuto)) {
+        const preset = porModelo.get(low);
+        const resumo = (preset.atributos || [])
+          .map((a) => `${a.nome}: ${(a.valores || []).join(", ")}`)
+          .join(" · ");
+        el.attr_valores.value = "";
+        el.attr_valores.placeholder = resumo
+          ? `Modelo completo — clique Adicionar (${resumo})`
+          : "Modelo completo — clique Adicionar";
+        valoresAttrAuto = true;
+      }
+      return;
+    }
+
+    const attr = porAtributo.get(low);
+    if (!attr || !el.attr_valores) return;
+    if (el.attr_valores.value.trim() && !valoresAttrAuto) return;
+    const vals = [...attr.valores].filter(Boolean);
+    if (!vals.length) return;
+    el.attr_valores.value = vals.join(", ");
+    el.attr_valores.placeholder = "Azul, Verde, Vermelho";
+    valoresAttrAuto = true;
+  }
+
   async function carregarPresets() {
-    if (!el.preset_variacao) return;
     const r = await fetch(`${BASE}/variantes/presets`);
     const j = await r.json();
     if (!r.ok || !j.success) return;
-    const v = el.preset_variacao.value;
-    el.preset_variacao.innerHTML = '<option value="">(selecione um modelo)</option>';
-    (j.presets || []).forEach((p) => {
-      const o = document.createElement("option");
-      o.value = String(p.id);
-      o.textContent = p.nome;
-      el.preset_variacao.appendChild(o);
-    });
-    el.preset_variacao.value = v;
+    presetsCache = j.presets || [];
+    preencherSugestoesAttr();
   }
 
   function ativarTab(cod) {
@@ -334,13 +446,14 @@
       if (locked && tipo && r.value === tipo) r.checked = true;
     });
     const modo = document.querySelector('input[name="img_modo"]:checked')?.value || "link";
-    if (el.painelImgLink) el.painelImgLink.hidden = modo !== "link";
-    if (el.painelImgUpload) el.painelImgUpload.hidden = modo !== "upload";
+    const cheio = galeriaImagens.length >= MAX_IMAGENS;
+    const podeIncluir = !!idProduto && !cheio;
+    if (el.painelImgLink) el.painelImgLink.hidden = !podeIncluir || modo !== "link";
+    if (el.painelImgUpload) el.painelImgUpload.hidden = !podeIncluir || modo !== "upload";
   }
 
   document.querySelectorAll('input[name="img_modo"]').forEach((r) => {
     r.addEventListener("change", () => {
-      if (galeriaImagens.length) return;
       syncModoImagem();
     });
   });
@@ -495,6 +608,7 @@
     const desabilitado = !idProduto || cheio;
     if (el.btnImgLink) el.btnImgLink.disabled = desabilitado || modo !== "link";
     if (el.btnImgUpload) el.btnImgUpload.disabled = desabilitado || modo !== "upload";
+    syncModoImagem();
   }
 
   async function incluirLink() {
@@ -594,6 +708,7 @@
     if (!r.ok || !j.success) return;
     atributosProduto = j.atributos || [];
     renderAtributos();
+    preencherSugestoesAttr();
     const u = util();
     const rows = j.variantes || [];
     if (!rows.length) {
@@ -623,8 +738,8 @@
     window.GlobalUtils?.abrirJanelaApoioModal({
       rota: `${BASE}/variante/editar?id_variante=${idVar}&id_produto=${idProduto}`,
       titulo: "Detalhes da variação",
-      largura: 880,
-      altura: 580,
+      largura: 920,
+      altura: 640,
       nivel: 2,
       id: idVar,
     });
@@ -646,10 +761,38 @@
     return c.isConfirmed;
   }
 
+  async function aplicarPresetById(idPreset) {
+    if (!(await confirmarRegenerarVariacoes("aplicar este modelo"))) return;
+    const r = await fetch(`${BASE}/variantes/aplicar-preset`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id_produto: idProduto, id_preset: Number(idPreset) }),
+    });
+    const j = await r.json();
+    if (!r.ok || !j.success) throw new Error(j.message || "Erro.");
+    if (el.formato) el.formato.value = "E";
+    syncFormatoUi();
+    await Swal.fire("Sucesso", j.message, "success");
+    await carregarVariantes();
+  }
+
   async function adicionarVariacao() {
     const nome = (el.attr_nome?.value || "").trim();
     const raw = (el.attr_valores?.value || "").trim();
-    if (!nome || !raw) throw new Error("Informe nome e opções do atributo.");
+    if (!nome) throw new Error("Informe o nome do atributo.");
+    const { porModelo } = indexarPresets(presetsCache);
+    const preset = porModelo.get(nome.toLowerCase());
+    if (preset && !raw) {
+      await aplicarPresetById(preset.id);
+      if (el.attr_nome) el.attr_nome.value = "";
+      if (el.attr_valores) {
+        el.attr_valores.value = "";
+        el.attr_valores.placeholder = "Azul, Verde, Vermelho";
+      }
+      valoresAttrAuto = false;
+      return;
+    }
+    if (!raw) throw new Error("Informe as opções do atributo.");
     if (!(await confirmarRegenerarVariacoes("adicionar este atributo"))) return;
     const valores = raw
       .split(/[,;\n]+/)
@@ -663,27 +806,14 @@
     const j = await r.json();
     if (!r.ok || !j.success) throw new Error(j.message || "Erro.");
     if (el.attr_nome) el.attr_nome.value = "";
-    if (el.attr_valores) el.attr_valores.value = "";
+    if (el.attr_valores) {
+      el.attr_valores.value = "";
+      el.attr_valores.placeholder = "Azul, Verde, Vermelho";
+    }
+    valoresAttrAuto = false;
     if (el.formato) el.formato.value = j.criadas ? "E" : "S";
     syncFormatoUi();
     await Swal.fire(j.criadas ? "Sucesso" : "Atenção", j.message, j.criadas ? "success" : "info");
-    await carregarVariantes();
-  }
-
-  async function aplicarPreset() {
-    const idPreset = el.preset_variacao?.value;
-    if (!idPreset) throw new Error("Selecione um modelo.");
-    if (!(await confirmarRegenerarVariacoes("aplicar este modelo"))) return;
-    const r = await fetch(`${BASE}/variantes/aplicar-preset`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id_produto: idProduto, id_preset: Number(idPreset) }),
-    });
-    const j = await r.json();
-    if (!r.ok || !j.success) throw new Error(j.message || "Erro.");
-    if (el.formato) el.formato.value = "E";
-    syncFormatoUi();
-    await Swal.fire("Sucesso", j.message, "success");
     await carregarVariantes();
   }
 
@@ -779,7 +909,10 @@
     el.gtin.value = d.gtin || "";
     el.ncm.value = d.ncm || "";
     el.cest.value = d.cest || "";
-    el.origem_fiscal.value = d.origem_fiscal || "";
+    if (el.origem_fiscal) {
+      const o = String(d.origem_fiscal ?? "").trim();
+      el.origem_fiscal.value = /^[0-8]$/.test(o) ? o : "";
+    }
     el.volumes.value = d.volumes ?? "";
     el.producao.value = d.producao || "";
     if (el.frete_gratis) el.frete_gratis.checked = !!d.frete_gratis;
@@ -888,7 +1021,11 @@
   el.btnExcluir?.addEventListener("click", () => excluir().catch((e) => Swal.fire("Erro", e.message, "error")));
   el.btnNovaVariante?.addEventListener("click", () => novaVarianteDialog().catch((e) => Swal.fire("Erro", e.message, "error")));
   el.btnAdicionarVariacao?.addEventListener("click", () => adicionarVariacao().catch((e) => Swal.fire("Erro", e.message, "error")));
-  el.btnAplicarPreset?.addEventListener("click", () => aplicarPreset().catch((e) => Swal.fire("Erro", e.message, "error")));
+  el.attr_nome?.addEventListener("input", aplicarSugestaoAttrNome);
+  el.attr_nome?.addEventListener("change", aplicarSugestaoAttrNome);
+  el.attr_valores?.addEventListener("input", () => {
+    valoresAttrAuto = false;
+  });
   el.btnImgLink?.addEventListener("click", () => incluirLink().catch((e) => Swal.fire("Erro", e.message, "error")));
   el.btnImgUpload?.addEventListener("click", () => enviarUpload().catch((e) => Swal.fire("Erro", e.message, "error")));
   el.lista_atributos?.addEventListener("click", (ev) => {
