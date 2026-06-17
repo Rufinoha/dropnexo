@@ -515,6 +515,84 @@ def api_categorias_bling():
         return jsonify(success=False, message=str(e)), 500
 
 
+@bling_bp.get("/api/integracoes/bling/depositos")
+@login_obrigatorio()
+def api_depositos_bling():
+    if not _pode_bling_sync():
+        return jsonify(success=False, message="Sem permissão."), 403
+    id_tenant = session.get("id_tenant")
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT status FROM tbl_integracao_bling WHERE id_tenant = %s",
+            (id_tenant,),
+        )
+        row = cur.fetchone()
+        if not row or row[0] != "conectado":
+            return jsonify(success=False, message="Conecte o Bling antes."), 400
+
+        from api.bling.depositos import listar_mapa_depositos
+        from api.bling.sync_estoque import sincronizar_depositos_tenant
+        from api.bling.cliente import listar_depositos_bling
+
+        sincronizar_depositos_tenant(cur, int(id_tenant))
+        conn.commit()
+        mapa = listar_mapa_depositos(cur, int(id_tenant))
+        bling_deps = listar_depositos_bling(int(id_tenant))
+        cur.execute(
+            """
+            SELECT id, nome FROM tbl_deposito_expedicao
+            WHERE id_tenant = %s AND ativo = TRUE ORDER BY principal DESC, nome
+            """,
+            (id_tenant,),
+        )
+        drop_deps = [{"id": r[0], "nome": r[1]} for r in cur.fetchall()]
+        return jsonify(success=True, mapa=mapa, depositos_bling=bling_deps, depositos_dropnexo=drop_deps)
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
+@bling_bp.post("/api/integracoes/bling/depositos/vincular")
+@login_obrigatorio()
+def api_vincular_deposito_bling():
+    if not _pode_bling_sync():
+        return jsonify(success=False, message="Sem permissão."), 403
+    body = request.get_json(silent=True) or {}
+    id_bling = (body.get("id_bling_deposito") or "").strip()
+    nome_bling = (body.get("nome_bling") or "").strip() or None
+    id_drop = body.get("id_deposito_dropnexo")
+    id_drop = int(id_drop) if id_drop not in (None, "") else None
+    if not id_bling:
+        return jsonify(success=False, message="Depósito Bling inválido."), 400
+    id_tenant = session.get("id_tenant")
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        from api.bling.depositos import salvar_vinculo_deposito
+
+        rid = salvar_vinculo_deposito(
+            cur,
+            int(id_tenant),
+            id_bling_deposito=id_bling,
+            nome_bling=nome_bling,
+            id_deposito_dropnexo=id_drop,
+        )
+        conn.commit()
+        return jsonify(success=True, message="Vínculo salvo.", id=rid)
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 400
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
 @bling_bp.get("/api/produto-imagem/arquivo")
 @login_obrigatorio()
 def api_produto_imagem_arquivo():

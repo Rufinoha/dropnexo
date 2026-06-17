@@ -46,6 +46,63 @@
     }
   }
 
+  async function carregarDepositos() {
+    const tbody = document.getElementById("bl_tbl_depositos");
+    if (!tbody) return;
+    const r = await fetch("/api/integracoes/bling/depositos");
+    const j = await r.json();
+    if (!r.ok || !j.success) {
+      tbody.innerHTML = `<tr><td colspan="3">${j.message || "Erro ao carregar depósitos."}</td></tr>`;
+      return;
+    }
+    const dropOpts = (j.depositos_dropnexo || [])
+      .map((d) => `<option value="${d.id}">${d.nome}</option>`)
+      .join("");
+    const bling = j.depositos_bling || [];
+    if (!bling.length) {
+      tbody.innerHTML = `<tr><td colspan="3">Nenhum depósito retornado pelo Bling.</td></tr>`;
+      return;
+    }
+    const mapa = {};
+    (j.mapa || []).forEach((m) => {
+      mapa[m.id_bling_deposito] = m.id_deposito_dropnexo;
+    });
+    tbody.innerHTML = bling
+      .map((b) => {
+        const id = String(b.id || "");
+        const nome = (b.descricao || b.nome || id).replace(/</g, "&lt;");
+        return `<tr data-bling="${id}">
+          <td>${nome}</td>
+          <td><select class="Bl_DepSelect"><option value="">— não vincular —</option>${dropOpts}</select></td>
+          <td><button type="button" class="Cl_BtnSalvar Bl_DepBtnSalvar">Salvar</button></td>
+        </tr>`;
+      })
+      .join("");
+    tbody.querySelectorAll("tr").forEach((tr) => {
+      const idB = tr.dataset.bling;
+      const sel = tr.querySelector(".Bl_DepSelect");
+      if (sel && mapa[idB]) sel.value = String(mapa[idB]);
+      tr.querySelector(".Bl_DepBtnSalvar")?.addEventListener("click", async () => {
+        try {
+          const resp = await fetch("/api/integracoes/bling/depositos/vincular", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              id_bling_deposito: idB,
+              nome_bling: tr.cells[0]?.textContent?.trim(),
+              id_deposito_dropnexo: sel?.value || null,
+            }),
+          });
+          const jj = await resp.json();
+          if (!resp.ok || !jj.success) throw new Error(jj.message || "Erro.");
+          await Swal.fire({ icon: "success", title: "Vínculo salvo", timer: 1200, showConfirmButton: false });
+        } catch (e) {
+          Swal.fire({ icon: "error", title: "Erro", text: e.message });
+        }
+      });
+    });
+  }
+
   function renderStatus(data) {
     estado = data;
     const on = !!data.conectado;
@@ -70,6 +127,7 @@
         .join("") || '<li class="Bl_LogItem">Nenhum log ainda.</li>';
     }
     aplicarConfigTela();
+    if (on) carregarDepositos().catch(() => {});
   }
 
   async function carregarStatus() {

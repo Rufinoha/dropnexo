@@ -659,6 +659,15 @@ from global_utils import (
     url_imagem_produto,
     usuario_tem_permissao,
 )
+from fornecedor.catalogo.servico_estoque_deposito import (
+    atualizar_saldo_deposito,
+    listar_estoque_por_deposito,
+    sincronizar_estoque_produtos_bling,
+)
+from fornecedor.parametros.servico_precificacao import (
+    aplicar_valor_drop_produto_e_variantes,
+    salvar_valor_drop_manual,
+)
 
 
 _MOD_DIR = Path(__file__).resolve().parent
@@ -1297,7 +1306,9 @@ def catalogos_apoio():
                    p.prazo_envio_dias, p.moq, p.id_variante_padrao,
                    COALESCE(ve.quantidade, 0),
                    p.marca, p.grupo, p.valor_atacado, p.valor_dropshipping,
-                   p.reposicao_estoque, p.dimensao_caixa_cm, p.peso_gramas, p.id_deposito_expedicao
+                   p.reposicao_estoque, p.dimensao_caixa_cm, p.peso_gramas, p.id_deposito_expedicao,
+                   p.condicao, p.cest, p.origem_fiscal, p.frete_gratis, p.volumes, p.producao, p.valor_drop,
+                   COALESCE(p.valor_drop_manual, FALSE)
             FROM tbl_produto p
             LEFT JOIN tbl_produto_variante_estoque ve ON ve.id_variante = p.id_variante_padrao
             WHERE p.id = %s AND p.id_tenant = %s
@@ -1328,7 +1339,7 @@ def catalogos_apoio():
                 "gtin": r[14] or "",
                 "ncm": r[15] or "",
                 "referencia": r[16] or "",
-                "condicao": r[16] or "",
+                "condicao": r[34] or r[16] or "",
                 "peso_liquido_kg": float(r[17]) if r[17] is not None else None,
                 "peso_bruto_kg": float(r[18]) if r[18] is not None else None,
                 "altura_cm": float(r[19]) if r[19] is not None else None,
@@ -1346,9 +1357,117 @@ def catalogos_apoio():
                 "dimensao_caixa_cm": r[31] or "",
                 "peso_gramas": int(r[32]) if r[32] is not None else None,
                 "id_deposito": r[33],
+                "cest": r[35] or "",
+                "origem_fiscal": r[36] or "",
+                "frete_gratis": bool(r[37]),
+                "volumes": int(r[38]) if r[38] is not None else None,
+                "producao": r[39] or "",
+                "valor_drop": float(r[40]) if r[40] is not None else None,
+                "valor_drop_manual": bool(r[41]),
                 "status_promocao": r[5] is not None and r[4] and float(r[5]) < float(r[4]),
             },
         )
+    finally:
+        conn.close()
+
+
+@fn_catalogo_bp.get("/catalogos/estoque/depositos")
+@login_obrigatorio()
+@exigir_permissao(codigo="catalogos.ver")
+def catalogos_estoque_depositos():
+    id_produto = int(request.args.get("id_produto") or 0)
+    if not id_produto:
+        return jsonify(success=False, message="Produto inválido."), 400
+    id_tenant = session.get("id_tenant")
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        id_variante, itens, integrado = listar_estoque_por_deposito(cur, id_tenant, id_produto)
+        return jsonify(
+            success=True,
+            id_variante=id_variante,
+            integrado_bling=integrado,
+            depositos=itens,
+        )
+    finally:
+        conn.close()
+
+
+@fn_catalogo_bp.post("/catalogos/estoque/depositos/salvar")
+@login_obrigatorio()
+@exigir_permissao(codigo="catalogos.editar")
+def catalogos_estoque_deposito_salvar():
+    if (resp := _exigir_catalogo_escrita()) is not None:
+        return resp
+    body = request.get_json(silent=True) or {}
+    try:
+        id_produto = int(body.get("id_produto") or 0)
+        id_deposito = int(body.get("id_deposito") or 0)
+        quantidade = int(body.get("quantidade") or 0)
+    except (TypeError, ValueError):
+        return jsonify(success=False, message="Dados inválidos."), 400
+    sincronizar_bling = bool(body.get("sincronizar_bling", False))
+    id_tenant = session.get("id_tenant")
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        res = atualizar_saldo_deposito(
+            cur,
+            id_tenant,
+            id_produto=id_produto,
+            id_deposito=id_deposito,
+            quantidade=quantidade,
+            sincronizar_bling=sincronizar_bling,
+        )
+        conn.commit()
+        msg = "Saldo atualizado."
+        if res.get("bling_sincronizado"):
+            msg += " Sincronizado com o Bling."
+        elif res.get("integrado_bling") and sincronizar_bling and res.get("bling_mensagem"):
+            msg += f" Bling: {res['bling_mensagem']}"
+        return jsonify(success=True, message=msg, dados=res)
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 400
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
+@fn_catalogo_bp.post("/catalogos/valor-drop/salvar")
+@login_obrigatorio()
+@exigir_permissao(codigo="catalogos.editar")
+def catalogos_valor_drop_salvar():
+    if (resp := _exigir_catalogo_escrita()) is not None:
+        return resp
+    body = request.get_json(silent=True) or {}
+    try:
+        id_produto = int(body.get("id_produto") or body.get("id") or 0)
+        valor_drop = float(body.get("valor_drop") or 0)
+    except (TypeError, ValueError):
+        return jsonify(success=False, message="Valor inválido."), 400
+    if not id_produto:
+        return jsonify(success=False, message="Salve o produto antes de alterar o valor Drop."), 400
+    id_tenant = session.get("id_tenant")
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        vd = salvar_valor_drop_manual(cur, id_tenant, id_produto, valor_drop)
+        conn.commit()
+        return jsonify(
+            success=True,
+            message="Valor Drop atualizado manualmente.",
+            valor_drop=vd,
+            valor_drop_manual=True,
+        )
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 400
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 500
     finally:
         conn.close()
 
@@ -1384,6 +1503,13 @@ def catalogos_salvar():
         sku = sku.split("-", 1)[0].strip() or sku
     pcusto = body.get("preco_custo")
     preco_custo = _parse_decimal(pcusto) if pcusto not in (None, "") else None
+    condicao = (body.get("condicao") or body.get("referencia") or "").strip() or None
+    cest = (body.get("cest") or "").strip() or None
+    origem_fiscal = (body.get("origem_fiscal") or "").strip() or None
+    producao = (body.get("producao") or "").strip() or None
+    frete_gratis = bool(body.get("frete_gratis"))
+    volumes = body.get("volumes")
+    volumes = int(volumes) if volumes not in (None, "") else None
 
     conn = Var_ConectarBanco()
     try:
@@ -1405,7 +1531,8 @@ def catalogos_salvar():
             preco_custo,
             (body.get("gtin") or "").strip() or None,
             (body.get("ncm") or "").strip() or None,
-            (body.get("referencia") or "").strip() or None,
+            condicao,
+            condicao,
             body.get("peso_liquido_kg") or None,
             body.get("peso_bruto_kg") or None,
             body.get("altura_cm") or None,
@@ -1421,6 +1548,11 @@ def catalogos_salvar():
             (body.get("dimensao_caixa_cm") or "").strip() or None,
             peso_gramas,
             id_deposito,
+            cest,
+            origem_fiscal,
+            frete_gratis,
+            volumes,
+            producao,
             agora_utc(),
         )
         if _id:
@@ -1429,12 +1561,13 @@ def catalogos_salvar():
                 UPDATE tbl_produto SET
                     nome=%s, descricao=%s, sku=%s, preco=%s, preco_promocional=%s,
                     unidade=%s, id_categoria=%s, imagem_url=%s, ativo=%s, publicado=%s,
-                    formato=%s, tipo=%s, preco_custo=%s, gtin=%s, ncm=%s, referencia=%s,
+                    formato=%s, tipo=%s, preco_custo=%s, gtin=%s, ncm=%s, referencia=%s, condicao=%s,
                     peso_liquido_kg=%s, peso_bruto_kg=%s, altura_cm=%s, largura_cm=%s,
                     profundidade_cm=%s, prazo_envio_dias=%s, moq=%s,
                     marca=%s, grupo=%s, valor_atacado=%s, valor_dropshipping=%s,
                     reposicao_estoque=%s, dimensao_caixa_cm=%s, peso_gramas=%s,
-                    id_deposito_expedicao=%s,
+                    id_deposito_expedicao=%s, cest=%s, origem_fiscal=%s, frete_gratis=%s,
+                    volumes=%s, producao=%s,
                     origem = CASE WHEN origem IN ('arquivo', 'integracao') THEN 'editado' ELSE origem END,
                     atualizado_em=%s
                 WHERE id=%s AND id_tenant=%s
@@ -1452,13 +1585,14 @@ def catalogos_salvar():
                 INSERT INTO tbl_produto (
                     id_tenant, nome, descricao, sku, preco, preco_promocional,
                     unidade, id_categoria, imagem_url, ativo, publicado, formato, tipo,
-                    preco_custo, gtin, ncm, referencia, peso_liquido_kg, peso_bruto_kg,
+                    preco_custo, gtin, ncm, referencia, condicao, peso_liquido_kg, peso_bruto_kg,
                     altura_cm, largura_cm, profundidade_cm, prazo_envio_dias, moq,
                     marca, grupo, valor_atacado, valor_dropshipping, reposicao_estoque,
-                    dimensao_caixa_cm, peso_gramas, id_deposito_expedicao, atualizado_em
+                    dimensao_caixa_cm, peso_gramas, id_deposito_expedicao,
+                    cest, origem_fiscal, frete_gratis, volumes, producao, atualizado_em
                 ) VALUES (
-                    %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
-                    %s,%s,%s,%s,%s,%s,%s,%s,%s
+                    %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
+                    %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s
                 )
                 RETURNING id
                 """,
@@ -1490,16 +1624,15 @@ def catalogos_salvar():
                     vid,
                 ),
             )
-            cur.execute(
-                """
-                INSERT INTO tbl_produto_variante_estoque (id_variante, quantidade, atualizado_em)
-                VALUES (%s, %s, %s)
-                ON CONFLICT (id_variante) DO UPDATE SET
-                    quantidade = EXCLUDED.quantidade, atualizado_em = EXCLUDED.atualizado_em
-                """,
-                (vid, quantidade, agora_utc()),
+            from fornecedor.catalogo.servico_estoque_deposito import (
+                garantir_linhas_estoque_depositos,
+                sincronizar_total_variante,
             )
+
+            garantir_linhas_estoque_depositos(cur, id_tenant, vid)
+            sincronizar_total_variante(cur, vid)
             sync_pai_de_variante_padrao(cur, prod_id)
+        aplicar_valor_drop_produto_e_variantes(cur, id_tenant, prod_id, publicar=False)
         conn.commit()
         return jsonify(success=True, message="Produto salvo.", id=prod_id)
     except ValueError as e:
@@ -1543,6 +1676,150 @@ def catalogos_delete():
         if row_img and row_img[0] and str(row_img[0]).startswith("imge/produtos/"):
             _remover_imagem_disco(row_img[0])
         return jsonify(success=True, message="Produto excluído.")
+    finally:
+        conn.close()
+
+
+@fn_catalogo_bp.post("/catalogos/delete/lote")
+@login_obrigatorio()
+@exigir_permissao(codigo="catalogos.editar")
+def catalogos_delete_lote():
+    if (resp := _exigir_catalogo_escrita()) is not None:
+        return resp
+    body = request.get_json(silent=True) or {}
+    raw = body.get("ids") or []
+    ids = []
+    for x in raw:
+        try:
+            ids.append(int(x))
+        except (TypeError, ValueError):
+            continue
+    ids = list(dict.fromkeys(ids))
+    if not ids:
+        return jsonify(success=False, message="Nenhum produto selecionado."), 400
+    id_tenant = session.get("id_tenant")
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        excluidos = 0
+        for pid in ids:
+            cur.execute(
+                "SELECT imagem_url FROM tbl_produto WHERE id = %s AND id_tenant = %s",
+                (pid, id_tenant),
+            )
+            row_img = cur.fetchone()
+            cur.execute(
+                "DELETE FROM tbl_produto WHERE id = %s AND id_tenant = %s",
+                (pid, id_tenant),
+            )
+            if cur.rowcount:
+                excluidos += 1
+                if row_img and row_img[0] and str(row_img[0]).startswith("imge/produtos/"):
+                    _remover_imagem_disco(row_img[0])
+        conn.commit()
+        return jsonify(
+            success=True,
+            message=f"{excluidos} produto(s) excluído(s).",
+            excluidos=excluidos,
+        )
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
+@fn_catalogo_bp.post("/catalogos/categoria/associar")
+@login_obrigatorio()
+@exigir_permissao(codigo="catalogos.editar")
+def catalogos_categoria_associar():
+    if (resp := _exigir_catalogo_escrita()) is not None:
+        return resp
+    body = request.get_json(silent=True) or {}
+    raw = body.get("ids") or []
+    ids = []
+    for x in raw:
+        try:
+            ids.append(int(x))
+        except (TypeError, ValueError):
+            continue
+    ids = list(dict.fromkeys(ids))
+    if not ids:
+        return jsonify(success=False, message="Nenhum produto selecionado."), 400
+    id_categoria = body.get("id_categoria")
+    try:
+        id_categoria = int(id_categoria) if id_categoria not in (None, "") else None
+    except (TypeError, ValueError):
+        id_categoria = None
+    if not id_categoria:
+        return jsonify(success=False, message="Selecione uma categoria."), 400
+    id_tenant = session.get("id_tenant")
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT 1 FROM tbl_categoria WHERE id = %s AND id_tenant = %s AND ativo = TRUE",
+            (id_categoria, id_tenant),
+        )
+        if not cur.fetchone():
+            return jsonify(success=False, message="Categoria inválida."), 400
+        cur.execute(
+            """
+            UPDATE tbl_produto SET id_categoria = %s, atualizado_em = %s
+            WHERE id_tenant = %s AND id = ANY(%s)
+            """,
+            (id_categoria, agora_utc(), id_tenant, ids),
+        )
+        conn.commit()
+        return jsonify(
+            success=True,
+            message=f"Categoria associada a {cur.rowcount} produto(s).",
+            atualizados=cur.rowcount,
+        )
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
+@fn_catalogo_bp.post("/catalogos/estoque/sincronizar")
+@login_obrigatorio()
+@exigir_permissao(codigo="catalogos.editar")
+def catalogos_estoque_sincronizar():
+    if (resp := _exigir_catalogo_escrita()) is not None:
+        return resp
+    body = request.get_json(silent=True) or {}
+    raw = body.get("ids") or []
+    ids = []
+    for x in raw:
+        try:
+            ids.append(int(x))
+        except (TypeError, ValueError):
+            continue
+    ids = list(dict.fromkeys(ids))
+    if not ids:
+        return jsonify(success=False, message="Nenhum produto selecionado."), 400
+    id_tenant = session.get("id_tenant")
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT status FROM tbl_integracao_bling WHERE id_tenant = %s",
+            (id_tenant,),
+        )
+        row = cur.fetchone()
+        if not row or row[0] != "conectado":
+            return jsonify(success=False, message="Conecte o Bling antes de sincronizar estoque."), 400
+        resumo = sincronizar_estoque_produtos_bling(cur, id_tenant, ids)
+        conn.commit()
+        msg = f"Estoque sincronizado em {resumo['sincronizados']} de {resumo['total']} produto(s)."
+        if resumo["falhas"]:
+            msg += f" {len(resumo['falhas'])} com aviso."
+        return jsonify(success=True, message=msg, resumo=resumo)
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 500
     finally:
         conn.close()
 

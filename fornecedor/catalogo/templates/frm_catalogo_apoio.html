@@ -35,6 +35,16 @@
           <label for="preco">Preço de venda (R$)</label>
           <input type="number" id="preco" step="0.01" min="0" />
         </div>
+        <div class="Cl_FormCampo Cat_ValorDropCampo">
+          <label for="valor_drop">Valor Drop (R$)</label>
+          <input type="number" id="valor_drop" class="Cat_ValorDropInput" step="0.01" min="0" readonly
+            title="Duplo clique para editar manualmente" />
+          <span class="Cat_ImagemHint" id="hintValorDrop">Calculado em Parâmetros → Precificação. Duplo clique para ajustar.</span>
+        </div>
+        <div class="Cl_FormCampo">
+          <label for="preco_custo">Preço de custo (R$)</label>
+          <input type="number" id="preco_custo" step="0.01" min="0" />
+        </div>
         <div class="Cl_FormCampo">
           <label for="unidade">Unidade</label>
           <input type="text" id="unidade" list="lista_unidades" placeholder="UN" />
@@ -175,14 +185,29 @@
       </section>
 
       <section class="Cat_TabPanel" data-panel="estoque" hidden>
-        <p class="Cat_ImagemHint">Quantidade disponível para venda (produto simples). Em produtos com variações, o estoque é por SKU na aba Variações.</p>
-        <div id="painelEstoqueSimples" class="Cat_EstoqueBox">
-          <div class="Cl_FormCampo">
-            <label for="quantidade">Quantidade</label>
-            <input type="number" id="quantidade" min="0" step="1" value="0" />
+        <p class="Cat_ImagemHint" id="avisoEstoqueCadastro" hidden>Salve o produto para gerenciar estoque por depósito.</p>
+        <p class="Cat_ImagemHint" id="avisoEstoqueVariacao" hidden>
+          Produto com variações: o estoque é controlado por SKU na aba Variações.
+        </p>
+        <p class="Cat_ImagemHint" id="avisoEstoqueDeposito">
+          Vincule depósitos Bling ↔ DropNexo em <strong>Integrações → Bling</strong> para importar saldos automaticamente.
+        </p>
+        <div id="painelEstoqueDepositos" class="Cat_EstoqueDepWrap" hidden>
+          <div class="Cl_TabelaPrincipal Cat_EstoqueDepTbl">
+            <table>
+              <thead>
+                <tr>
+                  <th>Depósito</th>
+                  <th>Saldo atual</th>
+                  <th>Última atualização</th>
+                </tr>
+              </thead>
+              <tbody id="tblEstoqueDepositos"></tbody>
+            </table>
           </div>
+          <p class="Cat_ImagemHint">Dê duplo clique no saldo para alterar. Produtos integrados podem sincronizar com o Bling.</p>
         </div>
-        <p id="avisoEstoqueVariacao" class="Cat_ImagemHint" hidden>O estoque deste produto é controlado em cada variação.</p>
+        <input type="hidden" id="quantidade" value="0" />
       </section>
 
       <section class="Cat_TabPanel" data-panel="fornecedor" hidden>
@@ -192,8 +217,34 @@
       </section>
 
       <section class="Cat_TabPanel" data-panel="tributacao" hidden>
-        <div class="Cat_Placeholder">
-          <p>Campos de tributação (NCM, origem, etc.) serão adicionados em breve.</p>
+        <div class="Cat_Grid4">
+          <div class="Cl_FormCampo">
+            <label for="ncm">NCM</label>
+            <input type="text" id="ncm" maxlength="10" />
+          </div>
+          <div class="Cl_FormCampo">
+            <label for="cest">CEST</label>
+            <input type="text" id="cest" maxlength="10" />
+          </div>
+          <div class="Cl_FormCampo">
+            <label for="origem_fiscal">Origem fiscal</label>
+            <input type="text" id="origem_fiscal" maxlength="4" placeholder="0–8" />
+          </div>
+          <div class="Cl_FormCampo">
+            <label for="volumes">Volumes</label>
+            <input type="number" id="volumes" min="0" step="1" />
+          </div>
+          <div class="Cl_FormCampo">
+            <label for="producao">Tipo produção</label>
+            <input type="text" id="producao" maxlength="20" placeholder="Própria / Terceiros" />
+          </div>
+          <div class="Cl_FormCampo Cat_CheckCampo">
+            <label class="Cl_Switch">
+              <input type="checkbox" id="frete_gratis" />
+              <span class="Cl_SwitchSlider"></span>
+              <span>Frete grátis</span>
+            </label>
+          </div>
         </div>
       </section>
 
@@ -257,6 +308,6 @@
   <script src="{{ url_for('static', filename='script/global_utils.js') }}"></script>
   <script src="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.js"></script>
   <script src="{{ url_for('fn_catalogo.static', filename='script/Scatalogo_descricao_editor.js') }}?v=1"></script>
-  <script src="{{ url_for('fn_catalogo.static', filename='script/Scatalogo_apoio.js') }}?v=8"></script>
+  <script src="{{ url_for('fn_catalogo.static', filename='script/Scatalogo_apoio.js') }}?v=11"></script>
 </body>
 </html>

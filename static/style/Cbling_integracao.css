@@ -107,6 +107,18 @@
   color: #94a3b8;
 }
 
+.Bl_DepPanel {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e5e7eb;
+}
+.Bl_DepPanel h4 { margin: 0 0 0.35rem; font-size: 0.95rem; }
+.Bl_Hint { margin: 0 0 0.75rem; font-size: 0.8rem; color: #64748b; }
+.Bl_DepTbl { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.Bl_DepTbl th, .Bl_DepTbl td { padding: 8px 10px; border-bottom: 1px solid #e5e7eb; text-align: left; }
+.Bl_DepSelect { width: 100%; max-width: 260px; padding: 6px 8px; border-radius: 6px; border: 1px solid #d1d5db; }
+.Bl_DepBtnSalvar { padding: 6px 12px; font-size: 0.8rem; }
+
 .Bl_Actions--config {
   margin-bottom: 0.25rem;
 }

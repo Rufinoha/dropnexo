@@ -754,6 +754,9 @@ def carregar_menu_sidebar() -> list[dict]:
         itens = []
         for row in cur.fetchall():
             mid, nome, data_page, icone, nav_codigo, parent_id, pai = row
+            codigo = nav_codigo or ""
+            if mod_ativo == "fornecedor" and codigo == "inicio":
+                continue
             itens.append(
                 {
                     "id": mid,
@@ -788,8 +791,8 @@ def _menu_sidebar_fallback(mod_ativo: str = "vendedor") -> list[dict]:
         {"nome": "Dashboard", "url": url_for("dashboard.index"), "icone_svg": _ICONES_SVG["layout-dashboard"], "nav_codigo": "inicio"},
     ]
     if mod_ativo == MODULO_FORNECEDOR:
-        return comum + [
-            {"nome": "Catálogos", "url": url_for("fn_catalogo.pagina"), "icone_svg": _ICONES_SVG["package"], "nav_codigo": "catalogos"},
+        return [
+            {"nome": "Catálogo", "url": url_for("fn_catalogo.pagina"), "icone_svg": _ICONES_SVG["package"], "nav_codigo": "catalogos"},
         ]
     return comum + [
         {"nome": "Fornecedores", "url": url_for("vd_fornecedores.pagina"), "icone_svg": _ICONES_SVG["users"], "nav_codigo": "fornecedores"},

@@ -11,6 +11,7 @@ from flask import Blueprint, jsonify, redirect, render_template, request, sessio
 
 from api.bling.sync_produtos import importar_produtos
 from fornecedor.importacao.erro_traducao import montar_payload_erro
+from fornecedor.parametros.servico_precificacao import aplicar_valor_drop_produto_e_variantes
 from fornecedor.importacao.servico_importacao import (
     MODULO_CATALOGO,
     ORIGEM_ARQUIVO,
@@ -534,6 +535,8 @@ def importacao_arquivo():
                     """,
                     (prod_id, quantidade, agora_utc()),
                 )
+                if prod_id:
+                    aplicar_valor_drop_produto_e_variantes(cur, id_tenant, prod_id, publicar=False, forcar=True)
                 if criando and prod_id:
                     pass  # origem/lote já definidos no INSERT
             except Exception as ex:

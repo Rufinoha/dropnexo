@@ -253,3 +253,30 @@ def obter_variacoes_produto(id_tenant: int, id_pai: int | str) -> dict:
     resp = api_request(id_tenant, "GET", f"/produtos/variacoes/{id_pai}")
     data = resp.get("data") or {}
     return data if isinstance(data, dict) else {}
+
+
+def listar_depositos_bling(id_tenant: int, *, pagina: int = 1, limite: int = 100) -> list[dict]:
+    resp = api_request(
+        id_tenant,
+        "GET",
+        "/depositos",
+        params={"pagina": pagina, "limite": limite},
+    )
+    data = resp.get("data") or []
+    return data if isinstance(data, list) else []
+
+
+def obter_saldos_estoque(id_tenant: int, id_bling_produto: str | int) -> dict:
+    resp = api_request(
+        id_tenant,
+        "GET",
+        "/estoques/saldos",
+        params={"idsProdutos[]": str(id_bling_produto)},
+    )
+    data = resp.get("data") or []
+    if isinstance(data, list) and data:
+        item = data[0] if isinstance(data[0], dict) else {}
+        return item
+    if isinstance(data, dict):
+        return data
+    return {}

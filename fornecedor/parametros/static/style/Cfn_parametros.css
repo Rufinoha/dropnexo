@@ -1,0 +1,35 @@
+.FnPar_Wrap { max-width: 1100px; }
+.FnPar_Grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; margin-top: 16px; }
+.FnPar_Card {
+  text-align: left;
+  background: #fff;
+  border: 1px solid rgba(28, 46, 60, 0.12);
+  border-radius: 14px;
+  padding: 18px 16px;
+  cursor: pointer;
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+}
+.FnPar_Card:hover { border-color: rgba(2, 31, 129, 0.35); box-shadow: 0 10px 28px rgba(0,0,0,.08); }
+.FnPar_Card strong { display: block; font-size: 16px; margin-bottom: 6px; color: #1c2e3c; }
+.FnPar_CardDesc { font-size: 12px; color: #5c6570; line-height: 1.4; }
+.FnPar_CardIcon {
+  display: inline-flex; width: 36px; height: 36px; align-items: center; justify-content: center;
+  border-radius: 10px; background: #e8f0ff; color: #021f81; font-weight: 800; margin-bottom: 10px;
+}
+.FnPar_ApoioBody { margin: 0; background: #f5f6f6; }
+.FnPar_Apoio { padding: 16px; }
+.FnPar_Intro { font-size: 13px; color: #4e5048; margin: 0 0 16px; line-height: 1.45; }
+.FnPar_Secao {
+  background: #fff; border: 1px solid rgba(28,46,60,.1); border-radius: 12px;
+  padding: 14px 16px; margin-bottom: 14px;
+}
+.FnPar_Secao h3 { margin: 0 0 12px; font-size: 14px; color: #1c2e3c; }
+.FnPar_GridForm { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 12px; }
+.FnPar_CatAdd { display: grid; grid-template-columns: 1.4fr repeat(3, 0.7fr) auto; gap: 10px; align-items: end; margin-bottom: 12px; }
+.FnPar_Hint { font-size: 11px; color: #8a939e; display: block; margin-top: 4px; }
+.FnPar_TblWrap { margin-top: 8px; }
+.FnPar_Footer { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding-top: 8px; }
+.FnPar_BtnAplicar { min-width: 160px; }
+@media (max-width: 900px) {
+  .FnPar_GridForm, .FnPar_CatAdd { grid-template-columns: 1fr; }
+}

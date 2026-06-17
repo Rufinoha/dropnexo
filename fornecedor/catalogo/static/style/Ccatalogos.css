@@ -398,3 +398,63 @@
   color: #64748b;
   font-size: 0.88rem;
 }
+
+.Cat_ColSel {
+  width: 2.25rem;
+  padding: 0 0.35rem !important;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.Cat_ChkSel {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  cursor: pointer;
+  accent-color: #021f81;
+}
+
+.Cat_BulkBar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  min-height: 2rem;
+  padding: 0.35rem 0.5rem 0.5rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+.Cat_BulkActions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.Cat_BulkBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+
+.Cat_BulkBtn:hover {
+  color: #021f81;
+  background: rgba(2, 31, 129, 0.08);
+}
+
+.Cat_BulkBtn .icon-tech {
+  width: 17px;
+  height: 17px;
+}
+
+.Cat_BulkBtn--danger:hover {
+  color: #b91c1c;
+  background: rgba(185, 28, 28, 0.08);
+}

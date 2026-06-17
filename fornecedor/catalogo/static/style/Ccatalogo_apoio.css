@@ -893,3 +893,30 @@ html:has(.Cat_ApoioBody) body {
     justify-content: flex-end;
   }
 }
+
+.Cat_ValorDropInput {
+  cursor: pointer;
+  background: #f8fafc;
+}
+.Cat_ValorDropInput.is-manual {
+  border-color: #f59e0b;
+  background: #fffbeb;
+}
+.Cat_ValorDropCampo .Cat_ImagemHint { margin-top: 2px; }
+
+.Cat_EstoqueDepTbl table { width: 100%; }
+.Cat_EstoqueSaldo {
+  cursor: pointer;
+  font-weight: 600;
+  color: #021f81;
+}
+.Cat_EstoqueSaldo:hover { text-decoration: underline; }
+.Cat_EstoqueTag {
+  font-size: 10px;
+  font-weight: 700;
+  color: #0d6efd;
+  background: #e8f0ff;
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-left: 4px;
+}

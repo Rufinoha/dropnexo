@@ -13,6 +13,8 @@
     sku: document.getElementById("sku"),
     formato: document.getElementById("formato"),
     preco: document.getElementById("preco"),
+    valor_drop: document.getElementById("valor_drop"),
+    preco_custo: document.getElementById("preco_custo"),
     unidade: document.getElementById("unidade"),
     lista_unidades: document.getElementById("lista_unidades"),
     condicao: document.getElementById("condicao"),
@@ -27,6 +29,12 @@
     profundidade_cm: document.getElementById("profundidade_cm"),
     itens_por_caixa: document.getElementById("itens_por_caixa"),
     gtin: document.getElementById("gtin"),
+    ncm: document.getElementById("ncm"),
+    cest: document.getElementById("cest"),
+    origem_fiscal: document.getElementById("origem_fiscal"),
+    volumes: document.getElementById("volumes"),
+    producao: document.getElementById("producao"),
+    frete_gratis: document.getElementById("frete_gratis"),
     id_categoria: document.getElementById("id_categoria"),
     quantidade: document.getElementById("quantidade"),
     painelEstoqueSimples: document.getElementById("painelEstoqueSimples"),
@@ -54,6 +62,10 @@
     attr_valores: document.getElementById("attr_valores"),
     lista_atributos: document.getElementById("lista_atributos"),
     avisoVariacoes: document.getElementById("avisoVariacoes"),
+    painelEstoqueDepositos: document.getElementById("painelEstoqueDepositos"),
+    tblEstoqueDepositos: document.getElementById("tblEstoqueDepositos"),
+    avisoEstoqueCadastro: document.getElementById("avisoEstoqueCadastro"),
+    avisoEstoqueDeposito: document.getElementById("avisoEstoqueDeposito"),
     btnSalvar: document.getElementById("btnSalvar"),
     btnExcluir: document.getElementById("btnExcluir"),
   };
@@ -71,11 +83,183 @@
     return el.formato?.value === "E" ? "E" : "S";
   }
 
+  const BASE = "/catalogos";
+  const CONDICOES = new Set(["", "NOVO", "USADO", "RECONDICIONADO"]);
+  let integradoBling = false;
+  let estoqueDepositos = [];
+  let valorDropManual = false;
+
+  function syncValorDropUi() {
+    const hint = document.getElementById("hintValorDrop");
+    if (!el.valor_drop) return;
+    el.valor_drop.classList.toggle("is-manual", valorDropManual);
+    if (hint) {
+      hint.textContent = valorDropManual
+        ? "Valor ajustado manualmente. Ao aplicar a precificação novamente, será recalculado pelas regras."
+        : "Calculado em Parâmetros → Precificação. Duplo clique para ajustar.";
+    }
+  }
+
+  async function editarValorDrop() {
+    if (!idProduto) {
+      await Swal.fire("Atenção", "Salve o produto antes de alterar o valor Drop.", "warning");
+      return;
+    }
+    const atual = parseFloat(el.valor_drop?.value || "0") || 0;
+    const aviso = await Swal.fire({
+      icon: "info",
+      title: "Valor Drop manual",
+      html:
+        "Este valor é oferecido aos vendedores na rede.<br><br>" +
+        "<strong>Atenção:</strong> se você aplicar a precificação novamente " +
+        "(Parâmetros → Precificação → <em>Aplicar agora</em>), este valor será " +
+        "substituído pelo cálculo das regras.",
+      showCancelButton: true,
+      confirmButtonText: "Continuar",
+      cancelButtonText: "Cancelar",
+    });
+    if (!aviso.isConfirmed) return;
+    const r = await Swal.fire({
+      title: "Valor Drop (R$)",
+      input: "number",
+      inputValue: atual,
+      inputAttributes: { min: 0, step: 0.01 },
+      showCancelButton: true,
+      confirmButtonText: "Salvar",
+    });
+    if (!r.isConfirmed || r.value === undefined || r.value === "") return;
+    const vd = Math.max(0, parseFloat(r.value) || 0);
+    const resp = await fetch(`${BASE}/valor-drop/salvar`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ id_produto: idProduto, valor_drop: vd }),
+    });
+    const j = await resp.json();
+    if (!resp.ok || !j.success) throw new Error(j.message || "Erro ao salvar.");
+    el.valor_drop.value = j.valor_drop ?? vd;
+    valorDropManual = true;
+    syncValorDropUi();
+    await Swal.fire({ icon: "success", title: "Salvo", text: j.message, timer: 2000, showConfirmButton: false });
+  }
+
+  el.valor_drop?.addEventListener("dblclick", () => {
+    editarValorDrop().catch((e) => Swal.fire("Erro", e.message, "error"));
+  });
+
+  function fmtData(iso) {
+    if (!iso) return "—";
+    try {
+      return new Date(iso).toLocaleString("pt-BR");
+    } catch {
+      return iso;
+    }
+  }
+
+  function syncEstoqueUi() {
+    const comVariacao = formatoAtual() === "E";
+    const semProduto = !idProduto;
+    if (el.avisoEstoqueVariacao) el.avisoEstoqueVariacao.hidden = !comVariacao;
+    if (el.avisoEstoqueCadastro) el.avisoEstoqueCadastro.hidden = !semProduto || comVariacao;
+    if (el.painelEstoqueDepositos) el.painelEstoqueDepositos.hidden = semProduto || comVariacao;
+    if (el.avisoEstoqueDeposito) el.avisoEstoqueDeposito.hidden = comVariacao || semProduto;
+    if (!comVariacao && idProduto) carregarEstoqueDepositos().catch(() => {});
+  }
+
+  async function carregarEstoqueDepositos() {
+    if (!idProduto || !el.tblEstoqueDepositos) return;
+    const r = await fetch(`${BASE}/estoque/depositos?id_produto=${idProduto}`, { credentials: "include" });
+    const j = await r.json();
+    if (!r.ok || !j.success) throw new Error(j.message || "Erro ao carregar estoque.");
+    integradoBling = !!j.integrado_bling;
+    estoqueDepositos = j.depositos || [];
+    if (!estoqueDepositos.length) {
+      el.tblEstoqueDepositos.innerHTML =
+        `<tr><td colspan="3">Nenhum depósito cadastrado. Cadastre em Fornecedor → Depósitos.</td></tr>`;
+      return;
+    }
+    el.tblEstoqueDepositos.innerHTML = estoqueDepositos
+      .map(
+        (d) => `<tr data-dep="${d.id_deposito}">
+          <td>${d.nome}${d.vinculado_bling ? ' <span class="Cat_EstoqueTag">Bling</span>' : ""}</td>
+          <td class="Cat_EstoqueSaldo" title="Duplo clique para editar">${d.quantidade}</td>
+          <td>${fmtData(d.atualizado_em)}</td>
+        </tr>`
+      )
+      .join("");
+  }
+
+  async function editarSaldoDeposito(idDeposito, saldoAtual) {
+    const dep = estoqueDepositos.find((d) => d.id_deposito === idDeposito);
+  let sincronizarBling = false;
+    if (integradoBling) {
+      const c = await Swal.fire({
+        icon: "warning",
+        title: "Produto integrado ao Bling",
+        html: `Alterar o saldo também pode atualizar o estoque no Bling${dep?.vinculado_bling ? "" : " (depósito sem vínculo — só DropNexo)"}.`,
+        showCancelButton: true,
+        confirmButtonText: "Continuar",
+        cancelButtonText: "Cancelar",
+      });
+      if (!c.isConfirmed) return;
+      if (dep?.vinculado_bling) {
+        const s = await Swal.fire({
+          icon: "question",
+          title: "Sincronizar com o Bling?",
+          text: "O saldo será enviado ao depósito vinculado no Bling.",
+          showCancelButton: true,
+          confirmButtonText: "Sim, sincronizar",
+          cancelButtonText: "Só no DropNexo",
+        });
+        sincronizarBling = s.isConfirmed;
+      }
+    }
+    const r = await Swal.fire({
+      title: `Saldo — ${dep?.nome || "Depósito"}`,
+      input: "number",
+      inputValue: saldoAtual,
+      inputAttributes: { min: 0, step: 1 },
+      showCancelButton: true,
+      confirmButtonText: "Salvar",
+    });
+    if (!r.isConfirmed || r.value === undefined || r.value === "") return;
+    const qtd = Math.max(0, parseInt(r.value, 10) || 0);
+    const resp = await fetch(`${BASE}/estoque/depositos/salvar`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({
+        id_produto: idProduto,
+        id_deposito: idDeposito,
+        quantidade: qtd,
+        sincronizar_bling: sincronizarBling,
+      }),
+    });
+    const j = await resp.json();
+    if (!resp.ok || !j.success) throw new Error(j.message || "Erro ao salvar saldo.");
+    await Swal.fire({ icon: "success", title: "Salvo", text: j.message, timer: 2200, showConfirmButton: false });
+    await carregarEstoqueDepositos();
+    if (el.quantidade) {
+      const total = estoqueDepositos.reduce((s, d) => s + (d.quantidade || 0), 0);
+      el.quantidade.value = String(total);
+    }
+  }
+
+  el.tblEstoqueDepositos?.addEventListener("dblclick", (ev) => {
+    const cell = ev.target.closest(".Cat_EstoqueSaldo");
+    if (!cell || !idProduto) return;
+    const row = cell.closest("tr");
+    const idDep = parseInt(row?.dataset?.dep || "0", 10);
+    if (!idDep) return;
+    const atual = parseInt(cell.textContent || "0", 10) || 0;
+    editarSaldoDeposito(idDep, atual).catch((e) => Swal.fire("Erro", e.message, "error"));
+  });
+
   function syncFormatoUi() {
     const comVariacao = formatoAtual() === "E";
     if (el.tabVariacoes) el.tabVariacoes.hidden = !comVariacao;
-    if (el.painelEstoqueSimples) el.painelEstoqueSimples.hidden = comVariacao;
     if (el.avisoEstoqueVariacao) el.avisoEstoqueVariacao.hidden = !comVariacao;
+    syncEstoqueUi();
     if (el.painel_variantes) el.painel_variantes.style.display = comVariacao && idProduto ? "block" : "none";
     if (el.avisoVariacoes) el.avisoVariacoes.style.display = comVariacao && !idProduto ? "block" : "none";
     if (!comVariacao) {
@@ -118,7 +302,10 @@
 
   document.querySelectorAll(".Cat_Tab").forEach((btn) => {
     btn.addEventListener("click", () => {
-      if (!btn.hidden) ativarTab(btn.dataset.tab);
+      if (!btn.hidden) {
+        ativarTab(btn.dataset.tab);
+        if (btn.dataset.tab === "estoque") syncEstoqueUi();
+      }
     });
   });
 
@@ -541,6 +728,10 @@
     el.sku.value = d.sku || "";
     el.formato.value = d.formato === "E" ? "E" : "S";
     el.preco.value = d.preco ?? d.valor_atacado ?? "";
+    el.valor_drop.value = d.valor_drop ?? "";
+    valorDropManual = !!d.valor_drop_manual;
+    syncValorDropUi();
+    el.preco_custo.value = d.preco_custo ?? "";
     el.unidade.value = d.unidade || "UN";
     const cond = d.condicao || d.referencia || "";
     el.condicao.value = CONDICOES.has(cond) ? cond : "";
@@ -557,12 +748,19 @@
     el.profundidade_cm.value = d.profundidade_cm ?? "";
     el.itens_por_caixa.value = d.moq ?? d.itens_por_caixa ?? 1;
     el.gtin.value = d.gtin || "";
+    el.ncm.value = d.ncm || "";
+    el.cest.value = d.cest || "";
+    el.origem_fiscal.value = d.origem_fiscal || "";
+    el.volumes.value = d.volumes ?? "";
+    el.producao.value = d.producao || "";
+    if (el.frete_gratis) el.frete_gratis.checked = !!d.frete_gratis;
     el.id_categoria.value = d.id_categoria ? String(d.id_categoria) : "";
     el.quantidade.value = d.quantidade ?? 0;
     el.ativo.checked = d.ativo !== false;
     el.publicado.checked = !!d.publicado;
     el.btnExcluir.style.display = "inline-block";
     syncFormatoUi();
+    syncEstoqueUi();
     carregarImagens().then(syncAvisoImagens);
   }
 
@@ -594,6 +792,14 @@
       valor_atacado: preco,
       unidade: (el.unidade.value || "UN").trim().slice(0, 20),
       referencia: condicaoParaSalvar() || null,
+      condicao: condicaoParaSalvar() || null,
+      preco_custo: el.preco_custo?.value || null,
+      ncm: (el.ncm?.value || "").trim(),
+      cest: (el.cest?.value || "").trim() || null,
+      origem_fiscal: (el.origem_fiscal?.value || "").trim() || null,
+      volumes: el.volumes?.value || null,
+      producao: (el.producao?.value || "").trim() || null,
+      frete_gratis: !!el.frete_gratis?.checked,
       descricao: window.CatDescricaoEditor
         ? CatDescricaoEditor.getValue()
         : (el.descricao?.value || "").trim(),

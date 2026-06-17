@@ -3,7 +3,7 @@
 {% block title %}Bling — Integrações — {{ MARCA_NOME }}{% endblock %}
 {% block topbar_title %}Integração Bling{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('static', filename='style/Cbling_integracao.css') }}?v=4" />
+<link rel="stylesheet" href="{{ url_for('static', filename='style/Cbling_integracao.css') }}?v=5" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal Bl_Wrap">
@@ -95,6 +95,17 @@
     </div>
 
     <p class="Bl_Meta" id="bl_ultima_sync"></p>
+
+    <div class="Bl_DepPanel" id="bl_painel_depositos">
+      <h4>Pareamento de depósitos</h4>
+      <p class="Bl_Hint">Vincule cada depósito do Bling ao depósito correspondente no DropNexo para importar estoque por filial.</p>
+      <div class="Bl_DepTblWrap">
+        <table class="Bl_DepTbl">
+          <thead><tr><th>Bling</th><th>DropNexo</th><th></th></tr></thead>
+          <tbody id="bl_tbl_depositos"><tr><td colspan="3">Carregando…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
   </section>
 
   <section class="Bl_Card" id="bl_sec_logs" {% if not bling_conectado %}hidden{% endif %}>
@@ -104,5 +115,5 @@
 </div>
 {% endblock %}
 {% block page_js %}
-<script src="{{ url_for('static', filename='script/Sbling_integracao.js') }}?v=4"></script>
+<script src="{{ url_for('static', filename='script/Sbling_integracao.js') }}?v=5"></script>
 {% endblock %}

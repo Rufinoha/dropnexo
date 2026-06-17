@@ -71,7 +71,8 @@ def dados():
         cur = conn.cursor()
         cur.execute(
             f"""
-            SELECT var.id, p.nome, var.nome_exibicao, var.preco,
+            SELECT var.id, p.nome, var.nome_exibicao,
+                   COALESCE(NULLIF(var.valor_drop, 0), NULLIF(p.valor_drop, 0), var.preco) AS preco_drop,
                    COALESCE(var.imagem_url, p.imagem_url), COALESCE(e.quantidade, 0),
                    t.nome, p.id, p.id_categoria, c.id_segmento,
                    pv.id AS id_pv
@@ -130,7 +131,9 @@ def ativar():
         cur = conn.cursor()
         cur.execute(
             """
-            SELECT var.id, p.id, p.id_tenant, var.preco, c.id_segmento, p.id_categoria
+            SELECT var.id, p.id, p.id_tenant,
+                   COALESCE(NULLIF(var.valor_drop, 0), NULLIF(p.valor_drop, 0), var.preco) AS preco_drop,
+                   c.id_segmento, p.id_categoria
             FROM tbl_produto_variante var
             JOIN tbl_produto p ON p.id = var.id_produto
             LEFT JOIN tbl_categoria c ON c.id = p.id_categoria

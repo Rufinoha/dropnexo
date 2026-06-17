@@ -197,6 +197,10 @@ def main():
             "026_remover_menu_segmentos.sql",
             "027_importacao_lote.sql",
             "028_ocultar_menu_importacao.sql",
+            "029_bling_config_opcoes.sql",
+            "030_parametros_precificacao.sql",
+            "031_estoque_deposito.sql",
+            "032_valor_drop_manual.sql",
         ):
             executar_sql_arquivo(conn, sql_dir / nome)
         seed_usuario_dev(conn)

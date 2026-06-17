@@ -1,0 +1,25 @@
+{% set nav_ativo = 'fn_parametros' %}
+{% extends "frm_base.html" %}
+{% block title %}Parâmetros — {{ MARCA_NOME }}{% endblock %}
+{% block topbar_title %}Parâmetros{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('fn_parametros.static', filename='style/Cfn_parametros.css') }}?v=1" />
+{% endblock %}
+{% block content %}
+<div class="Cl_ContainerApoio cl-page-principal FnPar_Wrap">
+  <div class="cl-page-title">
+    <h2>Parâmetros</h2>
+    <p class="cl-page-desc">Configure regras comerciais do seu catálogo para a rede de vendedores.</p>
+  </div>
+  <div class="FnPar_Grid" id="fnParGrid">
+    <button type="button" class="FnPar_Card" data-card="precificacao">
+      <span class="FnPar_CardIcon" aria-hidden="true">%</span>
+      <strong>Precificação</strong>
+      <span class="FnPar_CardDesc">Defina descontos, acréscimos, taxas e comissão para calcular o preço Drop (valor_drop).</span>
+    </button>
+  </div>
+</div>
+{% endblock %}
+{% block page_js %}
+<script src="{{ url_for('fn_parametros.static', filename='script/Sfn_parametros.js') }}?v=1"></script>
+{% endblock %}

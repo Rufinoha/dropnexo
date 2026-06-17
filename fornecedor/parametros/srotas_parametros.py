@@ -1,0 +1,146 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+from flask import Blueprint, jsonify, render_template, request, session
+
+from fornecedor.parametros.servico_precificacao import (
+    aplicar_precificacao_catalogo,
+    listar_regras_fornecedor,
+    salvar_regra_fornecedor,
+)
+from global_utils import Var_ConectarBanco, exigir_modulo, exigir_permissao, login_obrigatorio
+from srotas_plataforma import MODULO_FORNECEDOR
+
+_MOD = Path(__file__).resolve().parent
+
+fn_parametros_bp = Blueprint(
+    "fn_parametros",
+    __name__,
+    root_path=str(_MOD),
+    template_folder="templates",
+    static_folder="static",
+    static_url_path="/static/fornecedor/parametros",
+)
+
+
+def init_app(app):
+    app.register_blueprint(fn_parametros_bp)
+
+
+def _id_tenant() -> int:
+    return int(session["id_tenant"])
+
+
+@fn_parametros_bp.get("/fornecedor/parametros")
+@login_obrigatorio()
+@exigir_modulo(MODULO_FORNECEDOR)
+@exigir_permissao(codigo="fn_parametros.ver")
+def parametros_pagina():
+    return render_template("frm_fn_parametros.html", nav_ativo="fn_parametros")
+
+
+@fn_parametros_bp.get("/fornecedor/parametros/precificacao")
+@login_obrigatorio()
+@exigir_modulo(MODULO_FORNECEDOR)
+@exigir_permissao(codigo="fn_parametros.ver")
+def parametros_precificacao_apoio():
+    return render_template("frm_parametros_precificacao.html")
+
+
+@fn_parametros_bp.get("/fornecedor/parametros/precificacao/dados")
+@login_obrigatorio()
+@exigir_modulo(MODULO_FORNECEDOR)
+@exigir_permissao(codigo="fn_parametros.ver")
+def parametros_precificacao_dados():
+    id_tenant = _id_tenant()
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        regras = listar_regras_fornecedor(cur, id_tenant)
+        cur.execute(
+            """
+            SELECT id, nome, nivel FROM tbl_categoria
+            WHERE id_tenant = %s AND ativo = TRUE
+            ORDER BY nivel, nome
+            """,
+            (id_tenant,),
+        )
+        categorias = [
+            {"id": r[0], "nome": r[1], "nivel": int(r[2] or 1)}
+            for r in cur.fetchall()
+        ]
+        return jsonify(success=True, regras=regras, categorias=categorias)
+    finally:
+        conn.close()
+
+
+@fn_parametros_bp.post("/fornecedor/parametros/precificacao/salvar")
+@login_obrigatorio()
+@exigir_modulo(MODULO_FORNECEDOR)
+@exigir_permissao(codigo="fn_parametros.editar")
+def parametros_precificacao_salvar():
+    body = request.get_json(silent=True) or {}
+    escopo = (body.get("escopo") or "global").strip().lower()
+    id_cat = body.get("id_categoria")
+    id_cat = int(id_cat) if id_cat not in (None, "") else None
+
+    def pct(k: str) -> float:
+        try:
+            return float(body.get(k) or 0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    aplicar = bool(body.get("aplicar_agora", False))
+    id_tenant = _id_tenant()
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        rid = salvar_regra_fornecedor(
+            cur,
+            id_tenant,
+            escopo=escopo,
+            id_categoria=id_cat,
+            pct_ajuste=pct("pct_ajuste"),
+            pct_taxas=pct("pct_taxas"),
+            pct_comissao=pct("pct_comissao"),
+        )
+        resumo = {"atualizados": 0, "ignorados": 0}
+        if aplicar:
+            resumo = aplicar_precificacao_catalogo(cur, id_tenant, marcar_publicado=True)
+        conn.commit()
+        msg = "Regra salva."
+        if aplicar:
+            msg = f"Precificação aplicada em {resumo['atualizados']} produto(s)."
+        return jsonify(success=True, message=msg, id=rid, resumo=resumo)
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 400
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
+@fn_parametros_bp.post("/fornecedor/parametros/precificacao/aplicar")
+@login_obrigatorio()
+@exigir_modulo(MODULO_FORNECEDOR)
+@exigir_permissao(codigo="fn_parametros.editar")
+def parametros_precificacao_aplicar():
+    id_tenant = _id_tenant()
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        resumo = aplicar_precificacao_catalogo(cur, id_tenant, marcar_publicado=True)
+        conn.commit()
+        return jsonify(
+            success=True,
+            message=f"Precificação aplicada em {resumo['atualizados']} produto(s).",
+            resumo=resumo,
+        )
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()

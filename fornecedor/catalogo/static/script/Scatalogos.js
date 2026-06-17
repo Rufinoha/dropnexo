@@ -6,6 +6,8 @@
   let linhasCompletas = [];
   /** IDs de produtos pai com variações recolhidas */
   const recolhidos = new Set();
+  /** Produtos pai selecionados para ações em lote */
+  const selecionados = new Set();
 
   const el = {
     filtroBusca: document.getElementById("ob_filtroBusca"),
@@ -19,6 +21,9 @@
     btnImportar: document.getElementById("ob_btnImportar"),
     btnImportarBling: document.getElementById("ob_btnImportarBling"),
     btnToggleExpandTodos: document.getElementById("ob_btnToggleExpandTodos"),
+    chkTodos: document.getElementById("ob_chkTodos"),
+    bulkBar: document.getElementById("ob_bulkBar"),
+    bulkActions: document.getElementById("ob_bulkActions"),
     tbody: document.getElementById("ob_listaProdutos"),
     paginaAtual: document.getElementById("ob_paginaAtual"),
     totalPaginas: document.getElementById("ob_totalPaginas"),
@@ -117,6 +122,153 @@
     return `<div class="Cat_VarCell"><span class="Cat_BadgeVarItem">Variação</span>${inativo}<span class="Cat_VarNome">${escapeHtml(l.nome)}</span></div>`;
   }
 
+  function idsPaisVisiveis() {
+    return linhasVisiveis().filter((l) => l.tipo === "pai").map((l) => l.id);
+  }
+
+  function syncBulkBar() {
+    const n = selecionados.size;
+    if (el.bulkBar) el.bulkBar.hidden = n === 0;
+    if (!el.chkTodos) return;
+    const visiveis = idsPaisVisiveis();
+    const marcados = visiveis.filter((id) => selecionados.has(id)).length;
+    el.chkTodos.checked = visiveis.length > 0 && marcados === visiveis.length;
+    el.chkTodos.indeterminate = marcados > 0 && marcados < visiveis.length;
+  }
+
+  function renderSelCell(l) {
+    if (l.tipo !== "pai") {
+      return '<span class="Cat_ExpandSpacer Cat_ExpandSpacer--var" aria-hidden="true"></span>';
+    }
+    const on = selecionados.has(l.id);
+    return `<input type="checkbox" class="Cat_ChkSel Cat_ChkRow" data-produto="${l.id}" ${on ? "checked" : ""} aria-label="Selecionar produto" />`;
+  }
+
+  function initBulkActions() {
+    if (!el.bulkActions || el.bulkActions.dataset.ready) return;
+    el.bulkActions.dataset.ready = "1";
+    const u = util();
+    const acoes = [
+      { acao: "excluir", icon: "excluir", title: "Excluir selecionados", danger: true },
+      { acao: "categoria", icon: "categorias", title: "Associar categoria" },
+      { acao: "exportar", icon: "download", title: "Exportar lista" },
+      { acao: "estoque", icon: "estoque", title: "Sincronizar estoque agora" },
+      { acao: "etiquetas", icon: "anexo", title: "Imprimir etiquetas" },
+    ];
+    el.bulkActions.innerHTML = acoes
+      .map(
+        (a) =>
+          `<button type="button" class="Cat_BulkBtn${a.danger ? " Cat_BulkBtn--danger" : ""}" data-bulk="${a.acao}" title="${escapeHtml(a.title)}">${u.gerarIconeTech(a.icon)}</button>`
+      )
+      .join("");
+    window.lucide?.createIcons?.();
+    el.bulkActions.addEventListener("click", async (ev) => {
+      const btn = ev.target.closest("[data-bulk]");
+      if (!btn) return;
+      const ids = [...selecionados];
+      if (!ids.length) return;
+      try {
+        if (btn.dataset.bulk === "excluir") await excluirLote(ids);
+        else if (btn.dataset.bulk === "categoria") await associarCategoriaLote(ids);
+        else if (btn.dataset.bulk === "exportar") await swalEmDesenvolvimento("Exportação da lista");
+        else if (btn.dataset.bulk === "estoque") await sincronizarEstoqueLote(ids);
+        else if (btn.dataset.bulk === "etiquetas") await swalEmDesenvolvimento("Impressão de etiquetas");
+      } catch (e) {
+        await Swal.fire("Erro", e.message, "error");
+      }
+    });
+  }
+
+  async function swalEmDesenvolvimento(recurso) {
+    await Swal.fire({
+      icon: "info",
+      title: "Em desenvolvimento",
+      text: `${recurso} será disponibilizado em breve. Ainda estamos definindo alguns detalhes.`,
+      confirmButtonColor: "#021F81",
+    });
+  }
+
+  async function excluirLote(ids) {
+    const c = await Swal.fire({
+      title: `Excluir ${ids.length} produto(s)?`,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Sim, excluir",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#b91c1c",
+    });
+    if (!c.isConfirmed) return;
+    const r = await fetch(`${BASE}/delete/lote`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids }),
+    });
+    const j = await r.json();
+    if (!r.ok || !j.success) throw new Error(j.message || "Erro.");
+    selecionados.clear();
+    syncBulkBar();
+    await Swal.fire("Sucesso", j.message, "success");
+    await carregar();
+  }
+
+  async function associarCategoriaLote(ids) {
+    const r = await fetch(`${BASE}/combos`);
+    const j = await r.json();
+    if (!r.ok || !j.success) throw new Error(j.message || "Erro ao carregar categorias.");
+    const opts = (j.categorias || [])
+      .map((c) => `<option value="${c.id}">${escapeHtml(c.nome)}</option>`)
+      .join("");
+    const html = `<label style="display:block;text-align:left;font-size:13px;margin-bottom:6px;">Categoria</label>
+      <select id="swalCat" class="swal2-select" style="width:100%;max-width:100%;">${opts}</select>`;
+    const res = await Swal.fire({
+      title: "Associar categoria",
+      html,
+      showCancelButton: true,
+      confirmButtonText: "Associar",
+      cancelButtonText: "Cancelar",
+      focusConfirm: false,
+      preConfirm: () => {
+        const v = document.getElementById("swalCat")?.value;
+        if (!v) {
+          Swal.showValidationMessage("Selecione uma categoria.");
+          return false;
+        }
+        return v;
+      },
+    });
+    if (!res.isConfirmed) return;
+    const resp = await fetch(`${BASE}/categoria/associar`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids, id_categoria: res.value }),
+    });
+    const jj = await resp.json();
+    if (!resp.ok || !jj.success) throw new Error(jj.message || "Erro.");
+    await Swal.fire("Sucesso", jj.message, "success");
+    await carregar();
+  }
+
+  async function sincronizarEstoqueLote(ids) {
+    const c = await Swal.fire({
+      title: "Sincronizar estoque?",
+      text: `Importar saldos do Bling para ${ids.length} produto(s) selecionado(s).`,
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonText: "Sincronizar",
+      cancelButtonText: "Cancelar",
+    });
+    if (!c.isConfirmed) return;
+    const r = await fetch(`${BASE}/estoque/sincronizar`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids }),
+    });
+    const j = await r.json();
+    if (!r.ok || !j.success) throw new Error(j.message || "Erro.");
+    await Swal.fire("Concluído", j.message, "success");
+    await carregar();
+  }
+
   function renderExpand(l) {
     if (!produtoTemVariacoes(l)) {
       return '<span class="Cat_ExpandSpacer" aria-hidden="true"></span>';
@@ -209,6 +361,7 @@
 
     return `<tr class="${rowCls}" data-tipo="${l.tipo}"${isVar ? ` data-id-variante="${l.id}" data-id-produto="${l.id_produto}"` : ` data-id-produto="${l.id}"`}>
       <td class="Cat_ColExpand">${expandCell}</td>
+      <td class="Cat_ColSel">${renderSelCell(l)}</td>
       <td class="Cat_ColImg">${thumb(l.imagem_url)}</td>
       <td class="Cat_ColNome">${nomeCell}</td>
       <td class="Cat_ColSku">${escapeHtml(l.sku || "—")}</td>
@@ -222,8 +375,9 @@
   function renderTabela() {
     const linhas = linhasVisiveis();
     if (!linhas.length) {
-      el.tbody.innerHTML = '<tr><td colspan="8">Nenhum produto encontrado.</td></tr>';
+      el.tbody.innerHTML = '<tr><td colspan="9">Nenhum produto encontrado.</td></tr>';
       atualizarBtnExpandTodos();
+      syncBulkBar();
       renderPaginacao();
       return;
     }
@@ -231,6 +385,7 @@
     el.tbody.innerHTML = linhas.map((l) => renderLinha(l, u)).join("");
     window.lucide?.createIcons?.();
     atualizarBtnExpandTodos();
+    syncBulkBar();
     renderPaginacao();
   }
 
@@ -259,6 +414,7 @@
       return carregar();
     }
     linhasCompletas = j.linhas || j.dados || [];
+    selecionados.clear();
     if (el.filtroTipo?.value !== "somente_variacoes") {
       syncRecolhidosPadrao(linhasCompletas);
     } else {
@@ -362,6 +518,14 @@
     carregar().catch((e) => Swal.fire("Erro", e.message, "error"));
   });
   el.btnToggleExpandTodos?.addEventListener("click", toggleExpandTodos);
+
+  el.chkTodos?.addEventListener("change", () => {
+    const visiveis = idsPaisVisiveis();
+    if (el.chkTodos.checked) visiveis.forEach((id) => selecionados.add(id));
+    else selecionados.clear();
+    renderTabela();
+  });
+
   el.btnIncluir?.addEventListener("click", () => abrirApoio(null));
   el.btnImportar?.addEventListener("click", () => {
     window.CatImportacao?.abrir?.();
@@ -393,6 +557,16 @@
   });
 
   el.tbody.addEventListener("click", async (ev) => {
+    const chk = ev.target.closest(".Cat_ChkRow");
+    if (chk) {
+      ev.stopPropagation();
+      const pid = Number(chk.dataset.produto || 0);
+      if (!pid) return;
+      if (chk.checked) selecionados.add(pid);
+      else selecionados.delete(pid);
+      syncBulkBar();
+      return;
+    }
     const expandBtn = ev.target.closest(".Cat_ExpandBtn");
     if (expandBtn) {
       toggleProduto(Number(expandBtn.dataset.produto || 0));
@@ -419,6 +593,7 @@
     }
   });
 
+  initBulkActions();
   carregarCategoriasFiltro()
     .then(() => carregar())
     .catch((e) => Swal.fire("Erro", e.message, "error"));

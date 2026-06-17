@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>Precificação — Parâmetros</title>
+  {% include "partials/marca_favicon.html" %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='style/global_utils.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('fn_parametros.static', filename='style/Cfn_parametros.css') }}?v=1" />
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+</head>
+<body class="FnPar_ApoioBody">
+  <div class="Cl_ContainerApoio FnPar_Apoio">
+    <p class="FnPar_Intro">
+      O <strong>preço de venda</strong> do produto é sua referência (custo/fornecedor).
+      O <strong>valor Drop</strong> é o preço oferecido aos vendedores na rede, calculado com as regras abaixo.
+    </p>
+
+    <div class="FnPar_Secao">
+      <h3>Precificação para todos</h3>
+      <div class="FnPar_GridForm">
+        <div class="Cl_FormCampo">
+          <label for="pctAjusteGlobal">Ajuste sobre o preço (%)</label>
+          <input type="number" id="pctAjusteGlobal" step="0.01" placeholder="Ex: -10 desconto · +15 acréscimo" />
+          <span class="FnPar_Hint">Negativo = desconto · Positivo = acréscimo</span>
+        </div>
+        <div class="Cl_FormCampo">
+          <label for="pctTaxasGlobal">Taxas (%)</label>
+          <input type="number" id="pctTaxasGlobal" step="0.01" value="0" />
+        </div>
+        <div class="Cl_FormCampo">
+          <label for="pctComissaoGlobal">Comissão (%)</label>
+          <input type="number" id="pctComissaoGlobal" step="0.01" value="0" />
+        </div>
+      </div>
+      <button type="button" class="Cl_botaoprimario" id="btnSalvarGlobal">Salvar regra global</button>
+    </div>
+
+    <div class="FnPar_Secao">
+      <h3>Por categoria</h3>
+      <p class="FnPar_Hint">Regras por categoria substituem a global para produtos daquela categoria.</p>
+      <div class="FnPar_CatAdd">
+        <div class="Cl_FormCampo FnPar_CatSelect">
+          <label for="selCategoria">Categoria</label>
+          <select id="selCategoria"><option value="">Selecione…</option></select>
+        </div>
+        <div class="Cl_FormCampo">
+          <label for="pctAjusteCat">Ajuste (%)</label>
+          <input type="number" id="pctAjusteCat" step="0.01" />
+        </div>
+        <div class="Cl_FormCampo">
+          <label for="pctTaxasCat">Taxas (%)</label>
+          <input type="number" id="pctTaxasCat" step="0.01" value="0" />
+        </div>
+        <div class="Cl_FormCampo">
+          <label for="pctComissaoCat">Comissão (%)</label>
+          <input type="number" id="pctComissaoCat" step="0.01" value="0" />
+        </div>
+        <button type="button" class="Cl_BtnIncluir" id="btnSalvarCategoria">Salvar categoria</button>
+      </div>
+      <div class="Cl_TabelaPrincipal FnPar_TblWrap">
+        <table>
+          <thead>
+            <tr><th>Escopo</th><th>Categoria</th><th>Ajuste %</th><th>Taxas %</th><th>Comissão %</th></tr>
+          </thead>
+          <tbody id="tblRegras"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <footer class="FnPar_Footer">
+      <button type="button" class="Cl_botaoprimario FnPar_BtnAplicar" id="btnAplicarAgora">Aplicar agora</button>
+      <span class="FnPar_Hint">Recalcula valor_drop em todo o catálogo (substitui ajustes manuais) e publica os produtos na rede.</span>
+    </footer>
+  </div>
+  <script src="{{ url_for('static', filename='script/global_utils.js') }}"></script>
+  <script src="{{ url_for('fn_parametros.static', filename='script/Sfn_parametros_precificacao.js') }}?v=1"></script>
+</body>
+</html>

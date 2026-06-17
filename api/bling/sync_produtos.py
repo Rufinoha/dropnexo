@@ -5,7 +5,11 @@ import json
 import traceback
 from typing import Any
 
-from api.bling.cliente import listar_produtos, obter_produto, obter_variacoes_produto
+from api.bling.campos_produto import (
+    extrair_campos_produto_bling,
+    preco_referencia_grupo,
+    tupla_campos_produto_sql,
+)
 from api.bling.imagens import aplicar_imagens_produto, extrair_urls_imagem_bling
 from api.bling.sync_categorias import (
     extrair_id_categoria_produto,
@@ -21,9 +25,41 @@ from fornecedor.importacao.servico_importacao import (
     finalizar_lote,
     registrar_erro_lote,
 )
+from api.bling.sync_estoque import importar_estoque_produto_bling
+from fornecedor.parametros.servico_precificacao import aplicar_valor_drop_produto_e_variantes
 from global_utils import agora_utc
+from api.bling.cliente import listar_produtos, obter_produto, obter_variacoes_produto
 
 _SAVEPOINT_PRODUTO = "bling_sync_produto"
+
+
+def _importar_estoque_apos_salvar(
+    cur,
+    *,
+    id_tenant: int,
+    contexto: str,
+    id_produto: int,
+    id_bling: str,
+    id_variante: int | None = None,
+    id_bling_var: str | None = None,
+) -> None:
+    if not id_variante:
+        cur.execute("SELECT id_variante_padrao FROM tbl_produto WHERE id = %s", (id_produto,))
+        row = cur.fetchone()
+        id_variante = int(row[0]) if row and row[0] else None
+    if not id_variante:
+        return
+    try:
+        importar_estoque_produto_bling(
+            cur,
+            id_tenant,
+            contexto,
+            id_produto=id_produto,
+            id_variante=id_variante,
+            id_bling_override=id_bling_var or id_bling,
+        )
+    except Exception:
+        pass
 
 
 def _savepoint(cur, nome: str) -> None:
@@ -355,16 +391,12 @@ def _salvar_produto(
     id_categoria: int | None = None,
     id_importacao_lote: int | None = None,
 ) -> int:
-    sku = (produto.get("codigo") or "").strip()
-    nome = (produto.get("nome") or sku or "Produto Bling").strip()
-    preco = float(produto.get("preco") or 0)
-    preco_custo = produto.get("precoCusto")
-    preco_custo = float(preco_custo) if preco_custo not in (None, "") else None
-    descricao = _montar_descricao(produto)
-    unidade = (produto.get("unidade") or "UN").strip()[:10] or "UN"
-    gtin = (produto.get("gtin") or produto.get("ean") or "")[:20] or None
-    ncm = (produto.get("ncm") or "")[:10] or None
-    ativo = _produto_ativo(produto)
+    campos = extrair_campos_produto_bling(produto)
+    sku = campos.get("sku") or ""
+    nome = campos.get("nome") or sku or "Produto Bling"
+    campos["nome"] = nome
+    campos["sku"] = sku or None
+    vals = tupla_campos_produto_sql(campos)
     agora = agora_utc()
 
     if id_produto_existente:
@@ -372,26 +404,15 @@ def _salvar_produto(
             """
             UPDATE tbl_produto SET
                 nome = %s, descricao = %s, sku = %s, preco = %s, preco_custo = %s,
-                unidade = %s, gtin = %s, ncm = %s, ativo = %s,
+                unidade = %s, gtin = %s, ncm = %s, marca = %s, referencia = %s, condicao = %s,
+                peso_liquido_kg = %s, peso_bruto_kg = %s, altura_cm = %s, largura_cm = %s,
+                profundidade_cm = %s, moq = %s, volumes = %s, frete_gratis = %s,
+                origem_fiscal = %s, cest = %s, producao = %s, ativo = %s,
                 id_categoria = COALESCE(%s, id_categoria), atualizado_em = %s
             WHERE id = %s AND id_tenant = %s
             RETURNING id
             """,
-            (
-                nome,
-                descricao or None,
-                sku,
-                preco,
-                preco_custo,
-                unidade,
-                gtin,
-                ncm,
-                ativo,
-                id_categoria,
-                agora,
-                id_produto_existente,
-                id_tenant,
-            ),
+            vals + (id_categoria, agora, id_produto_existente, id_tenant),
         )
         row = cur.fetchone()
         if row and row[0]:
@@ -404,23 +425,19 @@ def _salvar_produto(
             """
             INSERT INTO tbl_produto (
                 id_tenant, id_categoria, nome, descricao, sku, preco, preco_custo, unidade,
-                gtin, ncm, ativo, publicado, formato, tipo, origem, id_importacao_lote, atualizado_em
+                gtin, ncm, marca, referencia, condicao, peso_liquido_kg, peso_bruto_kg,
+                altura_cm, largura_cm, profundidade_cm, moq, volumes, frete_gratis,
+                origem_fiscal, cest, producao, ativo, publicado, formato, tipo, origem,
+                id_importacao_lote, atualizado_em
             ) VALUES (
-                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, FALSE, 'S', 'P', %s, %s, %s
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                %s, %s, %s, %s, %s, %s, FALSE, 'S', 'P', %s, %s, %s
             ) RETURNING id
             """,
             (
                 id_tenant,
                 id_categoria,
-                nome,
-                descricao or None,
-                sku,
-                preco,
-                preco_custo,
-                unidade,
-                gtin,
-                ncm,
-                ativo,
+                *vals,
                 ORIGEM_INTEGRACAO if id_importacao_lote else "manual",
                 id_importacao_lote,
                 agora,
@@ -432,29 +449,65 @@ def _salvar_produto(
     cur.execute(
         """
         UPDATE tbl_produto_variante SET
-            sku = %s, nome_exibicao = %s, preco = %s, preco_custo = %s, ativo = %s, atualizado_em = %s
+            sku = %s, nome_exibicao = %s, preco = %s, preco_custo = %s,
+            gtin = %s, ncm = %s, peso_liquido_kg = %s, peso_bruto_kg = %s,
+            altura_cm = %s, largura_cm = %s, profundidade_cm = %s, ativo = %s, atualizado_em = %s
         WHERE id = %s
         """,
-        (sku, nome, preco, preco_custo, ativo, agora, vid),
+        (
+            sku or None,
+            nome,
+            campos.get("preco"),
+            campos.get("preco_custo"),
+            campos.get("gtin"),
+            campos.get("ncm"),
+            campos.get("peso_liquido_kg"),
+            campos.get("peso_bruto_kg"),
+            campos.get("altura_cm"),
+            campos.get("largura_cm"),
+            campos.get("profundidade_cm"),
+            campos.get("ativo"),
+            agora,
+            vid,
+        ),
     )
+    aplicar_valor_drop_produto_e_variantes(cur, id_tenant, prod_id, publicar=False, forcar=True)
     return int(prod_id)
 
 
 def _inserir_variante_bling(cur, id_produto: int, var: dict, ordem: int) -> int:
-    sku = (var.get("codigo") or "").strip()
-    nome = (var.get("nome") or sku or "Variação").strip()
-    preco = float(var.get("preco") or 0)
-    preco_custo = var.get("precoCusto")
-    preco_custo = float(preco_custo) if preco_custo not in (None, "") else None
-    ativo = _produto_ativo(var)
+    campos = extrair_campos_produto_bling(var)
+    sku = campos.get("sku") or ""
+    nome = campos.get("nome") or sku or "Variação"
+    preco = campos.get("preco") or 0
+    preco_custo = campos.get("preco_custo")
+    ativo = campos.get("ativo", True)
     agora = agora_utc()
     cur.execute(
         """
         INSERT INTO tbl_produto_variante (
-            id_produto, sku, nome_exibicao, preco, preco_custo, ativo, ordem, atualizado_em
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id
+            id_produto, sku, nome_exibicao, preco, preco_custo, ativo, ordem,
+            gtin, ncm, peso_liquido_kg, peso_bruto_kg, altura_cm, largura_cm, profundidade_cm,
+            atualizado_em
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id
         """,
-        (id_produto, sku, nome, preco, preco_custo, ativo, ordem, agora),
+        (
+            id_produto,
+            sku or None,
+            nome,
+            preco,
+            preco_custo,
+            ativo,
+            ordem,
+            campos.get("gtin"),
+            campos.get("ncm"),
+            campos.get("peso_liquido_kg"),
+            campos.get("peso_bruto_kg"),
+            campos.get("altura_cm"),
+            campos.get("largura_cm"),
+            campos.get("profundidade_cm"),
+            agora,
+        ),
     )
     vid = _fetch_returning_id(cur, contexto="Falha ao inserir variação do produto.")
     cur.execute(
@@ -477,38 +530,29 @@ def _salvar_produto_grupo_variacoes(
     id_categoria: int | None = None,
     id_importacao_lote: int | None = None,
 ) -> int:
-    sku_raiz = _sku_pai_de_variacoes(pai, variacoes)
-    nome = (pai.get("nome") or sku_raiz or "Produto Bling").strip()
-    descricao = _montar_descricao(pai)
-    unidade = (pai.get("unidade") or "UN").strip()[:10] or "UN"
-    gtin = (pai.get("gtin") or pai.get("ean") or "")[:20] or None
-    ncm = (pai.get("ncm") or "")[:10] or None
-    ativo = _produto_ativo(pai)
+    campos = extrair_campos_produto_bling(pai)
+    sku_raiz = _sku_pai_de_variacoes(pai, variacoes) or campos.get("sku")
+    nome = campos.get("nome") or sku_raiz or "Produto Bling"
+    campos["nome"] = nome
+    campos["sku"] = sku_raiz or None
+    campos["preco"] = preco_referencia_grupo(pai, variacoes)
+    vals = tupla_campos_produto_sql(campos)
     agora = agora_utc()
 
     if id_produto_existente:
         cur.execute(
             """
             UPDATE tbl_produto SET
-                nome = %s, descricao = %s, sku = %s, unidade = %s, gtin = %s, ncm = %s,
-                ativo = %s, formato = 'E',
+                nome = %s, descricao = %s, sku = %s, preco = %s, preco_custo = %s,
+                unidade = %s, gtin = %s, ncm = %s, marca = %s, referencia = %s, condicao = %s,
+                peso_liquido_kg = %s, peso_bruto_kg = %s, altura_cm = %s, largura_cm = %s,
+                profundidade_cm = %s, moq = %s, volumes = %s, frete_gratis = %s,
+                origem_fiscal = %s, cest = %s, producao = %s, ativo = %s, formato = 'E',
                 id_categoria = COALESCE(%s, id_categoria), atualizado_em = %s
             WHERE id = %s AND id_tenant = %s
             RETURNING id
             """,
-            (
-                nome,
-                descricao or None,
-                sku_raiz or None,
-                unidade,
-                gtin,
-                ncm,
-                ativo,
-                id_categoria,
-                agora,
-                id_produto_existente,
-                id_tenant,
-            ),
+            vals + (id_categoria, agora, id_produto_existente, id_tenant),
         )
         row = cur.fetchone()
         if row and row[0]:
@@ -521,22 +565,20 @@ def _salvar_produto_grupo_variacoes(
         cur.execute(
             """
             INSERT INTO tbl_produto (
-                id_tenant, id_categoria, nome, descricao, sku, preco, unidade,
-                gtin, ncm, ativo, publicado, formato, tipo, origem, id_importacao_lote, atualizado_em
+                id_tenant, id_categoria, nome, descricao, sku, preco, preco_custo, unidade,
+                gtin, ncm, marca, referencia, condicao, peso_liquido_kg, peso_bruto_kg,
+                altura_cm, largura_cm, profundidade_cm, moq, volumes, frete_gratis,
+                origem_fiscal, cest, producao, ativo, publicado, formato, tipo, origem,
+                id_importacao_lote, atualizado_em
             ) VALUES (
-                %s, %s, %s, %s, %s, 0, %s, %s, %s, %s, FALSE, 'E', 'P', %s, %s, %s
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                %s, %s, %s, %s, %s, %s, FALSE, 'E', 'P', %s, %s, %s
             ) RETURNING id
             """,
             (
                 id_tenant,
                 id_categoria,
-                nome,
-                descricao or None,
-                sku_raiz or None,
-                unidade,
-                gtin,
-                ncm,
-                ativo,
+                *vals,
                 ORIGEM_INTEGRACAO if id_importacao_lote else "manual",
                 id_importacao_lote,
                 agora,
@@ -555,6 +597,7 @@ def _salvar_produto_grupo_variacoes(
             "UPDATE tbl_produto SET id_variante_padrao = %s, formato = 'E' WHERE id = %s",
             (primeira_vid, prod_id),
         )
+    aplicar_valor_drop_produto_e_variantes(cur, id_tenant, prod_id, publicar=False, forcar=True)
     return prod_id
 
 
@@ -666,6 +709,13 @@ def _processar_item_produto(
         prod_id,
         sku,
         {"nome": detalhe.get("nome"), "urls_imagem": urls, "id_categoria_bling": id_cat_bling},
+    )
+    _importar_estoque_apos_salvar(
+        cur,
+        id_tenant=id_tenant,
+        contexto=contexto,
+        id_produto=prod_id,
+        id_bling=id_bling,
     )
     return ("importado" if criando else "atualizado"), prod_id
 
@@ -781,6 +831,25 @@ def _processar_grupo_variacoes(
                 "id_pai_bling": id_bling_pai,
             },
         )
+        cur.execute(
+            """
+            SELECT id FROM tbl_produto_variante
+            WHERE id_produto = %s AND sku IS NOT DISTINCT FROM %s
+            ORDER BY id DESC LIMIT 1
+            """,
+            (prod_id, var_sku or None),
+        )
+        vrow = cur.fetchone()
+        if vrow:
+            _importar_estoque_apos_salvar(
+                cur,
+                id_tenant=id_tenant,
+                contexto=contexto,
+                id_produto=prod_id,
+                id_bling=id_bling_pai,
+                id_variante=int(vrow[0]),
+                id_bling_var=var_id,
+            )
 
     if id_bling_pai:
         concluidos.add(id_bling_pai)
