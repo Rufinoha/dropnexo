@@ -139,16 +139,90 @@ def _registrar_falha(
 
 
 def _formato_bling(produto: dict) -> str:
-    return str(produto.get("formato") or "S").upper()[:1] or "S"
+    fmt = produto.get("formato")
+    if fmt is not None and str(fmt).strip():
+        return str(fmt).strip().upper()[:1]
+    if _id_pai_bling(produto):
+        return "V"
+    return "S"
 
 
 def _id_pai_bling(produto: dict) -> str | None:
-    pai = produto.get("produtoPai") or produto.get("idProdutoPai")
+    pai = produto.get("produtoPai") or produto.get("produto_pai")
     if isinstance(pai, dict):
         pid = str(pai.get("id") or "").strip()
-    else:
-        pid = str(pai or "").strip()
-    return pid or None
+        if pid and pid != "0":
+            return pid
+    for key in ("idProdutoPai", "id_produto_pai", "idPai", "id_pai"):
+        val = produto.get(key)
+        if val not in (None, "", 0, "0"):
+            pid = str(val).strip()
+            if pid:
+                return pid
+    return None
+
+
+def _eh_variacao_filha(produto: dict) -> bool:
+    """Produto filho (variação) — identificado pelo vínculo com o pai."""
+    return bool(_id_pai_bling(produto))
+
+
+def _eh_produto_pai_variacoes(produto: dict) -> bool:
+    """Produto pai com grade (campos confiáveis na listagem)."""
+    if _id_pai_bling(produto):
+        return False
+    fmt = str(produto.get("formato") or "").strip().upper()
+    if fmt in ("E", "C"):
+        return True
+    variacoes = produto.get("variacoes")
+    return isinstance(variacoes, list) and len(variacoes) > 0
+
+
+def _detalhe_eh_pai_variavel(id_tenant: int, detalhe: dict) -> bool:
+    """Confirma produto formato V (variável) consultando variações na API."""
+    fmt = str(detalhe.get("formato") or "").strip().upper()
+    if fmt != "V" or _id_pai_bling(detalhe):
+        return False
+    id_p = str(detalhe.get("id") or "")
+    if not id_p:
+        return False
+    try:
+        vars_resp = obter_variacoes_produto(id_tenant, id_p)
+        return len(_extrair_lista_variacoes(vars_resp)) > 0
+    except Exception:
+        return False
+
+
+def _preparar_jobs_importacao(itens: list[dict]) -> list[dict]:
+    """Agrupa produtos pai (E/V pai) e evita importar variações (filhas) isoladamente."""
+    jobs_grupo: dict[str, dict] = {}
+    ids_filhas: set[str] = set()
+
+    for item in itens:
+        id_bling = str(item.get("id") or "")
+        if not id_bling:
+            continue
+
+        pai_id = _id_pai_bling(item)
+        if pai_id:
+            ids_filhas.add(id_bling)
+            if pai_id not in jobs_grupo:
+                jobs_grupo[pai_id] = {"tipo": "grupo", "id_bling": pai_id, "item": None}
+            continue
+
+        if _eh_produto_pai_variacoes(item):
+            jobs_grupo[id_bling] = {"tipo": "grupo", "id_bling": id_bling, "item": item}
+
+    jobs_simples: list[dict] = []
+    for item in itens:
+        id_bling = str(item.get("id") or "")
+        if not id_bling or id_bling in ids_filhas or id_bling in jobs_grupo:
+            continue
+        if _eh_variacao_filha(item) or _eh_produto_pai_variacoes(item):
+            continue
+        jobs_simples.append({"tipo": "simples", "id_bling": id_bling, "item": item})
+
+    return list(jobs_grupo.values()) + jobs_simples
 
 
 def _extrair_lista_variacoes(dados: dict | list | None) -> list[dict]:
@@ -188,31 +262,6 @@ def _sku_pai_de_variacoes(pai: dict, variacoes: list[dict]) -> str:
         if sku:
             return sku
     return ""
-
-
-def _preparar_jobs_importacao(itens: list[dict]) -> list[dict]:
-    """Agrupa produtos pai (E) e evita importar variações (V) isoladamente."""
-    jobs_grupo: dict[str, dict] = {}
-    jobs_simples: list[dict] = []
-
-    for item in itens:
-        id_bling = str(item.get("id") or "")
-        if not id_bling:
-            continue
-        fmt = _formato_bling(item)
-        if fmt == "E":
-            jobs_grupo[id_bling] = {"tipo": "grupo", "id_bling": id_bling, "item": item}
-        elif fmt == "V":
-            pai_id = _id_pai_bling(item)
-            if pai_id:
-                if pai_id not in jobs_grupo:
-                    jobs_grupo[pai_id] = {"tipo": "grupo", "id_bling": pai_id, "item": None}
-            else:
-                jobs_simples.append({"tipo": "simples", "id_bling": id_bling, "item": item})
-        else:
-            jobs_simples.append({"tipo": "simples", "id_bling": id_bling, "item": item})
-
-    return list(jobs_grupo.values()) + jobs_simples
 
 
 def _limpar_variantes(cur, id_produto: int) -> None:
@@ -520,6 +569,7 @@ def _processar_item_produto(
     categorias_sincronizadas: set[str],
     ids_categoria_filtro: set[str] | None,
     id_importacao_lote: int | None = None,
+    grupos_concluidos: set[str] | None = None,
 ) -> tuple[str, int | None]:
     id_bling = str(item.get("id") or "")
     sku_lista = (item.get("codigo") or "").strip()
@@ -527,6 +577,43 @@ def _processar_item_produto(
         raise ValueError("SKU obrigatório.")
 
     detalhe = obter_produto(id_tenant, id_bling) if id_bling else item
+    concluidos = grupos_concluidos if grupos_concluidos is not None else set()
+
+    pai_id = _id_pai_bling(detalhe) or _id_pai_bling(item)
+    if pai_id:
+        if pai_id in concluidos:
+            return "ignorado_filtro", None
+        resultado, prod_id = _processar_grupo_variacoes(
+            cur,
+            id_tenant=id_tenant,
+            contexto=contexto,
+            cfg=cfg,
+            job={"tipo": "grupo", "id_bling": pai_id, "item": None},
+            cache_categorias=cache_categorias,
+            categorias_sincronizadas=categorias_sincronizadas,
+            ids_categoria_filtro=ids_categoria_filtro,
+            id_importacao_lote=id_importacao_lote,
+            grupos_concluidos=concluidos,
+        )
+        return resultado, prod_id
+
+    if _eh_produto_pai_variacoes(detalhe) or _detalhe_eh_pai_variavel(id_tenant, detalhe):
+        if id_bling in concluidos:
+            return "ignorado_filtro", None
+        resultado, prod_id = _processar_grupo_variacoes(
+            cur,
+            id_tenant=id_tenant,
+            contexto=contexto,
+            cfg=cfg,
+            job={"tipo": "grupo", "id_bling": id_bling, "item": detalhe},
+            cache_categorias=cache_categorias,
+            categorias_sincronizadas=categorias_sincronizadas,
+            ids_categoria_filtro=ids_categoria_filtro,
+            id_importacao_lote=id_importacao_lote,
+            grupos_concluidos=concluidos,
+        )
+        return resultado, prod_id
+
     sku = (detalhe.get("codigo") or sku_lista).strip()
     if not sku:
         raise ValueError("SKU obrigatório.")
@@ -594,9 +681,14 @@ def _processar_grupo_variacoes(
     categorias_sincronizadas: set[str],
     ids_categoria_filtro: set[str] | None,
     id_importacao_lote: int | None = None,
+    grupos_concluidos: set[str] | None = None,
 ) -> tuple[str, int | None]:
     """Importa produto pai + todas as variações em uma única unidade (tudo ou nada)."""
     id_bling_pai = str(job.get("id_bling") or "")
+    concluidos = grupos_concluidos if grupos_concluidos is not None else set()
+    if id_bling_pai and id_bling_pai in concluidos:
+        return "ignorado_filtro", None
+
     item_lista = job.get("item") or {}
     detalhe_pai = obter_produto(id_tenant, id_bling_pai) if id_bling_pai else item_lista
     if not detalhe_pai:
@@ -690,6 +782,8 @@ def _processar_grupo_variacoes(
             },
         )
 
+    if id_bling_pai:
+        concluidos.add(id_bling_pai)
     return ("importado" if criando else "atualizado"), prod_id
 
 
@@ -787,6 +881,7 @@ def importar_produtos(
 
     itens = _iterar_listas_produtos(id_tenant, ids_categoria_api=ids_categoria_api)
     jobs = _preparar_jobs_importacao(itens)
+    grupos_concluidos: set[str] = set()
 
     for job in jobs:
         id_bling = str(job.get("id_bling") or "")
@@ -807,6 +902,7 @@ def importar_produtos(
                     categorias_sincronizadas=categorias_sincronizadas,
                     ids_categoria_filtro=ids_filtro,
                     id_importacao_lote=id_importacao_lote,
+                    grupos_concluidos=grupos_concluidos,
                 )
             else:
                 resultado, _ = _processar_item_produto(
@@ -819,6 +915,7 @@ def importar_produtos(
                     categorias_sincronizadas=categorias_sincronizadas,
                     ids_categoria_filtro=ids_filtro,
                     id_importacao_lote=id_importacao_lote,
+                    grupos_concluidos=grupos_concluidos,
                 )
             _release_savepoint(cur, _SAVEPOINT_PRODUTO)
             if resultado == "importado":
