@@ -44,6 +44,10 @@
     qs("#pctComissaoGlobal").value = g.pct_comissao ?? 0;
   }
 
+  function fmtMoeda(v) {
+    return Number(v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  }
+
   function renderTabela(regras) {
     const tbody = qs("#tblRegras");
     if (!tbody) return;
@@ -58,7 +62,7 @@
           <td>Categoria</td>
           <td>${esc(r.categoria_nome || r.id_categoria)}</td>
           <td>${r.pct_ajuste}</td>
-          <td>${r.pct_taxas}</td>
+          <td>${fmtMoeda(r.pct_taxas)}</td>
           <td>${r.pct_comissao}</td>
         </tr>`
       )
@@ -82,7 +86,7 @@
     const r = await fetch(`${BASE}/dados`, { credentials: "include" });
     const j = await r.json();
     if (!r.ok || !j.success) throw new Error(j.message || "Falha ao carregar.");
-    aplicarModoUI(j.modo || "global");
+    aplicarModoUI("global");
     preencherGlobal(j.regras || []);
     renderTabela(j.regras || []);
     preencherCategorias(j.categorias || []);

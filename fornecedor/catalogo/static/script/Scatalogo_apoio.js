@@ -731,7 +731,7 @@
       </tr>`
       )
       .join("");
-    window.lucide?.createIcons?.();
+    window.Util?.gerarIconeTech?.refresh?.();
   }
 
   function abrirVariante(idVar) {

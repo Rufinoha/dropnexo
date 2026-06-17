@@ -25,7 +25,7 @@
     </div>
 
     <div class="FnPar_Secao" id="secGlobal">
-      <p class="FnPar_Hint FnPar_Hint--sec">Mesma regra de ajuste, taxas e comissão para todo o catálogo.</p>
+      <p class="FnPar_Hint FnPar_Hint--sec">Mesma regra de ajuste, taxa fixa e comissão para todo o catálogo.</p>
       <div class="FnPar_GridForm">
         <div class="Cl_FormCampo">
           <label for="pctAjusteGlobal">Ajuste sobre o preço (%)</label>
@@ -33,8 +33,9 @@
           <span class="FnPar_Hint">Negativo = desconto · Positivo = acréscimo</span>
         </div>
         <div class="Cl_FormCampo">
-          <label for="pctTaxasGlobal">Taxas (%)</label>
-          <input type="number" id="pctTaxasGlobal" step="0.01" value="0" />
+          <label for="pctTaxasGlobal">Taxas (R$)</label>
+          <input type="number" id="pctTaxasGlobal" step="0.01" min="0" value="0" placeholder="0,00" />
+          <span class="FnPar_Hint">Valor fixo somado após o ajuste percentual</span>
         </div>
         <div class="Cl_FormCampo">
           <label for="pctComissaoGlobal">Comissão (%)</label>
@@ -59,8 +60,8 @@
             <input type="number" id="pctAjusteCat" step="0.01" />
           </div>
           <div class="Cl_FormCampo">
-            <label for="pctTaxasCat">Taxas (%)</label>
-            <input type="number" id="pctTaxasCat" step="0.01" value="0" />
+            <label for="pctTaxasCat">Taxas (R$)</label>
+            <input type="number" id="pctTaxasCat" step="0.01" min="0" value="0" placeholder="0,00" />
           </div>
           <div class="Cl_FormCampo">
             <label for="pctComissaoCat">Comissão (%)</label>
@@ -74,7 +75,7 @@
       <div class="Cl_TabelaPrincipal FnPar_TblWrap">
         <table>
           <thead>
-            <tr><th>Escopo</th><th>Categoria</th><th>Ajuste %</th><th>Taxas %</th><th>Comissão %</th></tr>
+            <tr><th>Escopo</th><th>Categoria</th><th>Ajuste %</th><th>Taxas R$</th><th>Comissão %</th></tr>
           </thead>
           <tbody id="tblRegras"></tbody>
         </table>
@@ -87,6 +88,6 @@
     </footer>
   </div>
   <script src="{{ url_for('static', filename='script/global_utils.js') }}"></script>
-  <script src="{{ url_for('fn_parametros.static', filename='script/Sfn_parametros_precificacao.js') }}?v=2"></script>
+  <script src="{{ url_for('fn_parametros.static', filename='script/Sfn_parametros_precificacao.js') }}?v=3"></script>
 </body>
 </html>

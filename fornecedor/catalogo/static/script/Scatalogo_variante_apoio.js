@@ -28,6 +28,7 @@
     nome_exibicao: document.getElementById("nome_exibicao"),
     sku: document.getElementById("sku"),
     descricao: document.getElementById("descricao"),
+    wrap_descricao: document.getElementById("wrapDescricaoVariante"),
     hint_descricao_herda: document.getElementById("hint_descricao_herda"),
     hint_atributos: document.getElementById("hint_atributos"),
     ativo: document.getElementById("ativo"),
@@ -496,22 +497,35 @@
     }
   }
 
+  function getDescricaoValue() {
+    return window.CatDescricaoEditor
+      ? CatDescricaoEditor.getValue()
+      : (el.descricao?.value || "").trim();
+  }
+
+  function setDescricaoValue(v) {
+    if (window.CatDescricaoEditor) CatDescricaoEditor.setValue(v);
+    else if (el.descricao) el.descricao.value = v;
+  }
+
   function syncDescricaoUi(h) {
-    if (!el.descricao) return;
+    if (!el.descricao && !document.getElementById("descricaoEditor")) return;
     const paiDesc = (dadosPai?.descricao || "").trim();
+    const wrap = el.wrap_descricao || document.querySelector(".Cat_DescricaoCampo");
     if (h) {
-      if (!descricaoPropria && el.descricao.value.trim() && el.descricao.value.trim() !== paiDesc) {
-        descricaoPropria = el.descricao.value.trim();
+      const atual = getDescricaoValue();
+      if (!descricaoPropria && atual && atual !== paiDesc) {
+        descricaoPropria = atual;
       }
-      el.descricao.value = paiDesc || el.descricao.value || "";
-      el.descricao.disabled = true;
-      el.descricao.classList.add("Cat_CampoHerdado");
+      setDescricaoValue(paiDesc || atual || "");
+      window.CatDescricaoEditor?.setReadOnly?.(true);
+      wrap?.classList.add("Cat_CampoHerdado");
       if (el.hint_descricao_herda) el.hint_descricao_herda.hidden = false;
     } else {
-      el.descricao.disabled = false;
-      el.descricao.classList.remove("Cat_CampoHerdado");
-      if (!el.descricao.value.trim()) {
-        el.descricao.value = descricaoPropria || paiDesc;
+      window.CatDescricaoEditor?.setReadOnly?.(false);
+      wrap?.classList.remove("Cat_CampoHerdado");
+      if (!getDescricaoValue()) {
+        setDescricaoValue(descricaoPropria || paiDesc);
       }
       if (el.hint_descricao_herda) el.hint_descricao_herda.hidden = true;
     }
@@ -564,9 +578,7 @@
     el.sku.value = d.sku || "";
     atributosCache = d.atributos || {};
     descricaoPropria = (d.descricao_propria || "").trim();
-    if (el.descricao) {
-      el.descricao.value = (d.descricao || pai?.descricao || "").trim();
-    }
+    setDescricaoValue((d.descricao || pai?.descricao || "").trim());
     if (el.hint_atributos) {
       const attrTxt = rotuloAttr(d.atributos);
       el.hint_atributos.textContent = attrTxt ? `Variação: ${attrTxt}` : "";
@@ -610,6 +622,15 @@
     syncPromoUi();
   }
 
+  function notificarPersistenciaVariante() {
+    window.parent.postMessage({ grupo: "atualizarVariantes", id_produto: idProduto }, "*");
+    const destinoLista =
+      window.parent.parent && window.parent.parent !== window.parent
+        ? window.parent.parent
+        : window.parent;
+    destinoLista.postMessage({ grupo: "atualizarTabela" }, "*");
+  }
+
   async function salvar() {
     const body = {
       id: idVariante,
@@ -618,7 +639,7 @@
       sku: (el.sku.value || "").trim(),
       descricao: el.herda_pai?.checked
         ? ""
-        : (el.descricao?.value || dadosPai?.descricao || "").trim(),
+        : getDescricaoValue() || (dadosPai?.descricao || "").trim(),
       ativo: !!el.ativo.checked,
       herda_pai: !!el.herda_pai.checked,
       preco: el.preco.value,
@@ -645,8 +666,7 @@
     const j = await r.json();
     if (!r.ok || !j.success) throw new Error(j.message || "Erro ao salvar.");
     await Swal.fire("Sucesso", j.message, "success");
-    window.parent.postMessage({ grupo: "atualizarTabela" }, "*");
-    window.parent.postMessage({ grupo: "atualizarVariantes", id_produto: idProduto }, "*");
+    notificarPersistenciaVariante();
     window.GlobalUtils?.fecharJanelaApoio(nivelModal);
   }
 
@@ -666,8 +686,7 @@
     const j = await r.json();
     if (!r.ok || !j.success) throw new Error(j.message || "Erro.");
     await Swal.fire("Sucesso", j.message, "success");
-    window.parent.postMessage({ grupo: "atualizarTabela" }, "*");
-    window.parent.postMessage({ grupo: "atualizarVariantes", id_produto: idProduto }, "*");
+    notificarPersistenciaVariante();
     window.GlobalUtils?.fecharJanelaApoio(nivelModal);
   }
 

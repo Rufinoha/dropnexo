@@ -106,6 +106,17 @@ html:has(.Cat_ApoioBody) body {
   background: #f8fafc;
 }
 
+.Cat_DescVisualPane.is-readonly,
+.Cat_DescHtmlPane.is-readonly {
+  opacity: 0.72;
+  pointer-events: none;
+}
+
+.Cat_DescricaoCampo.Cat_CampoHerdado .Cat_DescEditorActions {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
 /* ---- Cabeçalho do produto ---- */
 .Cat_ApoioWrap > .Cat_Head {
   background: #fff;
@@ -899,6 +910,28 @@ html:has(.Cat_ApoioBody) body {
   width: 100%;
 }
 
+.Cat_VarTabela .Cl_TableActions {
+  width: 56px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.Cat_VarTabela .Cl_BtnAcao {
+  color: #475569;
+}
+
+.Cat_VarTabela .Cl_BtnAcao:hover {
+  color: #021f81;
+  background: rgba(2, 31, 129, 0.08);
+}
+
+.Cat_VarTabela .Cl_BtnAcao .icon-tech,
+.Cat_VarTabela .Cl_BtnAcao svg {
+  width: 18px;
+  height: 18px;
+  pointer-events: none;
+}
+
 /* ---- Switch ativado (verde no header) ---- */
 .Cat_ApoioWrap .Cl_Switch input:checked + .Cl_SwitchSlider {
   background: #16a34a;
@@ -1025,8 +1058,9 @@ html:has(.Cat_ApoioBody) body {
 .Cat_TipBubble {
   position: absolute;
   left: 50%;
-  bottom: calc(100% + 6px);
-  z-index: 30;
+  top: calc(100% + 6px);
+  bottom: auto;
+  z-index: 50;
   width: max-content;
   max-width: 220px;
   padding: 8px 10px;
@@ -1039,7 +1073,7 @@ html:has(.Cat_ApoioBody) body {
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.22);
   opacity: 0;
   visibility: hidden;
-  transform: translateX(-50%) translateY(4px);
+  transform: translateX(-50%) translateY(-4px);
   transition: opacity 0.15s, transform 0.15s, visibility 0.15s;
   pointer-events: none;
   text-align: left;
@@ -1048,11 +1082,12 @@ html:has(.Cat_ApoioBody) body {
 .Cat_TipBubble::after {
   content: "";
   position: absolute;
-  top: 100%;
+  bottom: 100%;
+  top: auto;
   left: 50%;
   margin-left: -5px;
   border: 5px solid transparent;
-  border-top-color: #1e293b;
+  border-bottom-color: #1e293b;
 }
 
 .Cat_Tip:hover .Cat_TipBubble,

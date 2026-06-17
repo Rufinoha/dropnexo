@@ -288,6 +288,10 @@ GlobalUtils.receberDadosApoio = function (callback) {
       return;
     }
 
+    // Só a abertura do modal envia contexto (id/nivel). Outros grupos (ex.: atualizarTabela)
+    // são tratados por listeners locais com whitelist — não devem resetar o apoio.
+    if (event.data.grupo !== "apoioPronto") return;
+
     const nivel = event.data.nivel !== undefined ? event.data.nivel : 1;
     window.__nivelModal__ = nivel;
 

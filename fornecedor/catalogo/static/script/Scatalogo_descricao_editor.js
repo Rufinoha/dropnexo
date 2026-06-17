@@ -255,7 +255,20 @@
     if (el.hiddenField) el.hiddenField.value = v;
   }
 
-  window.CatDescricaoEditor = { init, getValue, setValue };
+  function setReadOnly(readonly) {
+    const ro = !!readonly;
+    if (quill) quill.enable(!ro);
+    if (el.htmlTextarea) {
+      el.htmlTextarea.readOnly = ro;
+      el.htmlTextarea.disabled = ro;
+    }
+    el.visualPane?.classList.toggle("is-readonly", ro);
+    el.htmlPane?.classList.toggle("is-readonly", ro);
+    el.btnToggle?.toggleAttribute("disabled", ro);
+    if (el.btnCopy) el.btnCopy.toggleAttribute("disabled", ro);
+  }
+
+  window.CatDescricaoEditor = { init, getValue, setValue, setReadOnly };
 
   if (document.getElementById("descricaoEditor")) {
     init();

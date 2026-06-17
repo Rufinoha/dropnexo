@@ -14,13 +14,13 @@ def calcular_valor_drop(
     pct_taxas: float = 0,
     pct_comissao: float = 0,
 ) -> float:
-    """preco × (1 + ajuste%) × (1 + (taxas + comissão)%). Ajuste negativo = desconto."""
+    """preço × (1 + ajuste%) + taxa fixa (R$); resultado × (1 + comissão%)."""
     base = float(preco_base or 0)
     if base <= 0:
         return 0.0
     apos_ajuste = base * (1 + float(pct_ajuste or 0) / 100)
-    pct_extra = float(pct_taxas or 0) + float(pct_comissao or 0)
-    return round(apos_ajuste * (1 + pct_extra / 100), 2)
+    apos_taxa = apos_ajuste + max(0.0, float(pct_taxas or 0))
+    return round(apos_taxa * (1 + float(pct_comissao or 0) / 100), 2)
 
 
 def _row_regra(row) -> dict:
