@@ -220,7 +220,10 @@ def sincronizar_estoque_produto_bling(
     """Importa saldos do Bling para o produto (simples ou variações)."""
     import json
 
+    from api.bling.depositos import garantir_depositos_bling_vinculados
     from api.bling.sync_estoque import importar_estoque_produto_bling
+
+    resumo_deps = garantir_depositos_bling_vinculados(cur, id_tenant)
 
     cur.execute(
         """
@@ -275,7 +278,10 @@ def sincronizar_estoque_produto_bling(
             id_bling_override=str(id_bling),
         )
     if total <= 0:
-        return False, "Nenhum saldo importado (verifique vínculo de depósitos).", 0
+        msg = "Nenhum saldo importado (verifique vínculo de depósitos)."
+        if resumo_deps.get("pendentes"):
+            msg += f" {resumo_deps['pendentes']} depósito(s) Bling sem vínculo."
+        return False, msg, 0
     return True, None, total
 
 

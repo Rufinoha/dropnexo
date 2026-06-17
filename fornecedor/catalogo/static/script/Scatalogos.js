@@ -22,7 +22,7 @@
     btnImportarBling: document.getElementById("ob_btnImportarBling"),
     btnToggleExpandTodos: document.getElementById("ob_btnToggleExpandTodos"),
     chkTodos: document.getElementById("ob_chkTodos"),
-    bulkBar: document.getElementById("ob_bulkBar"),
+    bulkRow: document.getElementById("ob_bulkRow"),
     bulkActions: document.getElementById("ob_bulkActions"),
     tbody: document.getElementById("ob_listaProdutos"),
     paginaAtual: document.getElementById("ob_paginaAtual"),
@@ -128,7 +128,8 @@
 
   function syncBulkBar() {
     const n = selecionados.size;
-    if (el.bulkBar) el.bulkBar.hidden = n === 0;
+    if (el.bulkRow) el.bulkRow.hidden = n === 0;
+    if (n > 0) window.Util?.gerarIconeTech?.refresh?.();
     if (!el.chkTodos) return;
     const visiveis = idsPaisVisiveis();
     const marcados = visiveis.filter((id) => selecionados.has(id)).length;
@@ -147,7 +148,6 @@
   function initBulkActions() {
     if (!el.bulkActions || el.bulkActions.dataset.ready) return;
     el.bulkActions.dataset.ready = "1";
-    const u = util();
     const acoes = [
       { acao: "excluir", icon: "excluir", title: "Excluir selecionados", danger: true },
       { acao: "categoria", icon: "categorias", title: "Associar categoria" },
@@ -155,13 +155,16 @@
       { acao: "estoque", icon: "estoque", title: "Sincronizar estoque agora" },
       { acao: "etiquetas", icon: "anexo", title: "Imprimir etiquetas" },
     ];
-    el.bulkActions.innerHTML = acoes
-      .map(
-        (a) =>
-          `<button type="button" class="Cat_BulkBtn${a.danger ? " Cat_BulkBtn--danger" : ""}" data-bulk="${a.acao}" title="${escapeHtml(a.title)}">${u.gerarIconeTech(a.icon)}</button>`
-      )
-      .join("");
-    window.lucide?.createIcons?.();
+    acoes.forEach((a) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = `Cl_BtnAcao Cat_BulkBtn${a.danger ? " Cat_BulkBtn--danger" : ""}`;
+      btn.dataset.bulk = a.acao;
+      btn.title = a.title;
+      btn.setAttribute("aria-label", a.title);
+      window.Util?.gerarIconeTech?.({ dest: btn, nome: a.icon });
+      el.bulkActions.appendChild(btn);
+    });
     el.bulkActions.addEventListener("click", async (ev) => {
       const btn = ev.target.closest("[data-bulk]");
       if (!btn) return;
@@ -360,8 +363,8 @@
          <button type="button" class="Cl_BtnAcao btnExcluir" data-id="${l.id}">${u.gerarIconeTech("excluir")}</button>`;
 
     return `<tr class="${rowCls}" data-tipo="${l.tipo}"${isVar ? ` data-id-variante="${l.id}" data-id-produto="${l.id_produto}"` : ` data-id-produto="${l.id}"`}>
-      <td class="Cat_ColExpand">${expandCell}</td>
       <td class="Cat_ColSel">${renderSelCell(l)}</td>
+      <td class="Cat_ColExpand">${expandCell}</td>
       <td class="Cat_ColImg">${thumb(l.imagem_url)}</td>
       <td class="Cat_ColNome">${nomeCell}</td>
       <td class="Cat_ColSku">${escapeHtml(l.sku || "—")}</td>

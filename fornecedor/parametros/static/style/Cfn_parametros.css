@@ -19,6 +19,33 @@
 .FnPar_ApoioBody { margin: 0; background: #f5f6f6; }
 .FnPar_Apoio { padding: 16px; }
 .FnPar_Intro { font-size: 13px; color: #4e5048; margin: 0 0 16px; line-height: 1.45; }
+.FnPar_ModoBar {
+  display: inline-flex;
+  gap: 0;
+  padding: 3px;
+  margin-bottom: 14px;
+  border-radius: 10px;
+  background: #e8edf2;
+  border: 1px solid rgba(28, 46, 60, 0.1);
+}
+.FnPar_ModoBtn {
+  border: none;
+  background: transparent;
+  color: #5c6570;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 18px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+}
+.FnPar_ModoBtn:hover { color: #1c2e3c; }
+.FnPar_ModoBtn.is-active {
+  background: #fff;
+  color: #021f81;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+.FnPar_Hint--sec { margin: 0 0 12px; font-size: 12px; }
 .FnPar_Secao {
   background: #fff; border: 1px solid rgba(28,46,60,.1); border-radius: 12px;
   padding: 14px 16px; margin-bottom: 14px;

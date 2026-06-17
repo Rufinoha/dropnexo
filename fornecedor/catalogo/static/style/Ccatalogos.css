@@ -236,9 +236,13 @@
 }
 
 .Cat_FiltroResumo {
-  margin: 0 0 0.65rem;
   font-size: 0.8rem;
   color: #64748b;
+  white-space: nowrap;
+}
+
+.Cat_Paginacao .Cat_FiltroResumo {
+  margin-right: auto;
 }
 
 .Cat_BadgeInativo {
@@ -414,19 +418,22 @@
   accent-color: #021f81;
 }
 
-.Cat_BulkBar {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  min-height: 2rem;
-  padding: 0.35rem 0.5rem 0.5rem;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+.Cat_BulkHeadRow th {
+  padding: 0.35rem 0.5rem 0.25rem;
+  border-bottom: none;
+  background: transparent;
+}
+
+.Cat_BulkHeadCell {
+  text-align: right;
+  vertical-align: bottom;
 }
 
 .Cat_BulkActions {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
+  justify-content: flex-end;
+  gap: 0.15rem;
 }
 
 .Cat_BulkBtn {

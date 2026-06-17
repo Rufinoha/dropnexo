@@ -100,3 +100,176 @@ def sincronizar_depositos_bling_api(cur, id_tenant: int, depositos_bling: list[d
         )
         n += 1
     return n
+
+
+def _endereco_tenant(cur, id_tenant: int) -> dict | None:
+    cur.execute(
+        """
+        SELECT nome, cep, logradouro, numero, complemento, bairro, cidade, uf
+        FROM tbl_tenant WHERE id = %s
+        """,
+        (id_tenant,),
+    )
+    row = cur.fetchone()
+    if not row:
+        return None
+    cep = "".join(ch for ch in str(row[1] or "") if ch.isdigit())
+    if len(cep) != 8:
+        return None
+    log = (row[2] or "").strip()
+    bairro = (row[5] or "").strip()
+    cidade = (row[6] or "").strip()
+    uf = (row[7] or "").strip()[:2].upper()
+    if not log or not bairro or not cidade or len(uf) != 2:
+        return None
+    return {
+        "nome_tenant": (row[0] or "").strip(),
+        "cep": cep,
+        "logradouro": log,
+        "numero": (row[3] or "S/N").strip() or "S/N",
+        "complemento": (row[4] or "").strip() or None,
+        "bairro": bairro,
+        "cidade": cidade,
+        "uf": uf,
+    }
+
+
+def _criar_deposito_dropnexo(
+    cur,
+    id_tenant: int,
+    *,
+    nome: str,
+    endereco: dict,
+    principal: bool = False,
+) -> int:
+    if principal:
+        cur.execute(
+            "UPDATE tbl_deposito_expedicao SET principal = FALSE WHERE id_tenant = %s",
+            (id_tenant,),
+        )
+    cur.execute(
+        """
+        INSERT INTO tbl_deposito_expedicao (
+            id_tenant, nome, cep, logradouro, numero, complemento, bairro, cidade, uf,
+            remetente_nome, principal, ativo, atualizado_em
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, TRUE, %s)
+        RETURNING id
+        """,
+        (
+            id_tenant,
+            (nome or "Depósito").strip()[:120],
+            endereco["cep"],
+            endereco["logradouro"],
+            endereco["numero"],
+            endereco.get("complemento"),
+            endereco["bairro"],
+            endereco["cidade"],
+            endereco["uf"],
+            endereco.get("nome_tenant"),
+            principal,
+            agora_utc(),
+        ),
+    )
+    return int(cur.fetchone()[0])
+
+
+def _normalizar_nome_dep(nome: str) -> str:
+    return " ".join((nome or "").strip().lower().split())
+
+
+def garantir_depositos_bling_vinculados(cur, id_tenant: int) -> dict:
+    """
+    Sincroniza depósitos do Bling, vincula por nome ou cria DropNexo quando possível.
+    Retorna resumo: mapa, vinculados, criados, pendentes.
+    """
+    from api.bling.sync_estoque import sincronizar_depositos_tenant
+
+    n_mapa = sincronizar_depositos_tenant(cur, id_tenant)
+    mapa = listar_mapa_depositos(cur, id_tenant)
+
+    cur.execute(
+        """
+        SELECT id, nome FROM tbl_deposito_expedicao
+        WHERE id_tenant = %s AND ativo = TRUE
+        ORDER BY principal DESC, nome
+        """,
+        (id_tenant,),
+    )
+    deps_local = [{"id": r[0], "nome": r[1] or ""} for r in cur.fetchall()]
+    ids_vinculados_local = {
+        m["id_deposito_dropnexo"]
+        for m in mapa
+        if m.get("id_deposito_dropnexo")
+    }
+
+    vinculados = 0
+    criados = 0
+    endereco = _endereco_tenant(cur, id_tenant)
+
+    for item in mapa:
+        if item.get("id_deposito_dropnexo"):
+            continue
+        nome_bling = (item.get("nome_bling") or "").strip()
+        id_bling = str(item.get("id_bling_deposito") or "")
+        alvo = None
+        nb = _normalizar_nome_dep(nome_bling)
+        for dep in deps_local:
+            if dep["id"] in ids_vinculados_local:
+                continue
+            if nb and _normalizar_nome_dep(dep["nome"]) == nb:
+                alvo = dep["id"]
+                break
+        if alvo:
+            salvar_vinculo_deposito(
+                cur,
+                id_tenant,
+                id_bling_deposito=id_bling,
+                nome_bling=nome_bling,
+                id_deposito_dropnexo=alvo,
+            )
+            ids_vinculados_local.add(alvo)
+            vinculados += 1
+            continue
+
+    mapa = listar_mapa_depositos(cur, id_tenant)
+    pendentes = [m for m in mapa if not m.get("id_deposito_dropnexo")]
+
+    if pendentes and endereco and not deps_local:
+        dep_id = _criar_deposito_dropnexo(
+            cur,
+            id_tenant,
+            nome=(pendentes[0].get("nome_bling") or "Depósito Bling"),
+            endereco=endereco,
+            principal=True,
+        )
+        deps_local.append({"id": dep_id, "nome": pendentes[0].get("nome_bling") or ""})
+        salvar_vinculo_deposito(
+            cur,
+            id_tenant,
+            id_bling_deposito=str(pendentes[0]["id_bling_deposito"]),
+            nome_bling=pendentes[0].get("nome_bling"),
+            id_deposito_dropnexo=dep_id,
+        )
+        criados += 1
+        vinculados += 1
+        pendentes = pendentes[1:]
+
+    if len(pendentes) == 1 and len(deps_local) == 1:
+        unico = deps_local[0]
+        if unico["id"] not in ids_vinculados_local:
+            salvar_vinculo_deposito(
+                cur,
+                id_tenant,
+                id_bling_deposito=str(pendentes[0]["id_bling_deposito"]),
+                nome_bling=pendentes[0].get("nome_bling"),
+                id_deposito_dropnexo=unico["id"],
+            )
+            vinculados += 1
+            pendentes = []
+
+    return {
+        "mapa": n_mapa,
+        "vinculados": vinculados,
+        "criados": criados,
+        "pendentes": len(pendentes),
+    }

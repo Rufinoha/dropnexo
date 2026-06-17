@@ -1,6 +1,28 @@
 .FnCat_Page { padding-bottom: 1.5rem; }
 
+.FnCat_BlingBanner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-top: 1rem;
+  padding: 0.85rem 1rem;
+  border-radius: 10px;
+  border: 1px solid rgba(2, 31, 129, 0.18);
+  background: #eef3ff;
+}
 
+.FnCat_BlingBannerText strong {
+  display: block;
+  color: #021f81;
+  font-size: 0.95rem;
+  margin-bottom: 0.2rem;
+}
+
+.FnCat_BlingBanner .FnCat_Hint {
+  margin: 0;
+}
 
 .FnCat_Layout {
 

@@ -3,7 +3,7 @@
 {% set nav_ativo = 'fn_categorias' %}
 {% block topbar_title %}Categorias{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('fn_categorias.static', filename='style/Cfn_categorias.css') }}?v=8" />
+<link rel="stylesheet" href="{{ url_for('fn_categorias.static', filename='style/Cfn_categorias.css') }}?v=9" />
 <link rel="stylesheet" href="{{ url_for('fn_categorias.static', filename='style/Cfn_categorias_tree.css') }}?v=8" />
 {% endblock %}
 {% block content %}
@@ -14,6 +14,16 @@
       Segmento em <a href="{{ url_for('perfil.meu_perfil', aba='empresa') }}">Minha empresa</a> —
       até 3 níveis de categorias.
     </p>
+  </div>
+
+  <div id="fn_cat_bling_banner" class="FnCat_BlingBanner" hidden>
+    <div class="FnCat_BlingBannerText">
+      <strong id="fn_cat_bling_titulo">Categorias do Bling aguardando segmento</strong>
+      <p id="fn_cat_bling_desc" class="FnCat_Hint">
+        Importadas da integração Bling. Associe a um segmento para exibi-las na árvore.
+      </p>
+    </div>
+    <button type="button" class="Cl_botaoprimario" id="fn_cat_btn_associar_bling">Associar ao segmento</button>
   </div>
 
   <div class="FnCat_Layout">
@@ -68,5 +78,5 @@
 {% endblock %}
 {% block page_js %}
 <script>window.FN_CAT_SEG_INICIAL = {{ id_segmento_inicial|tojson }};</script>
-<script src="{{ url_for('fn_categorias.static', filename='script/Sfn_categorias.js') }}"></script>
+<script src="{{ url_for('fn_categorias.static', filename='script/Sfn_categorias.js') }}?v=9"></script>
 {% endblock %}

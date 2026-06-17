@@ -3,9 +3,37 @@
 
   const BASE = "/fornecedor/parametros/precificacao";
   const qs = (s) => document.querySelector(s);
+  const qsa = (s) => [...document.querySelectorAll(s)];
+
+  let modoAtual = "global";
 
   function esc(s) {
     return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;");
+  }
+
+  function aplicarModoUI(modo) {
+    modoAtual = modo === "categoria" ? "categoria" : "global";
+    const secGlobal = qs("#secGlobal");
+    const secCategoria = qs("#secCategoria");
+    if (secGlobal) secGlobal.hidden = modoAtual !== "global";
+    if (secCategoria) secCategoria.hidden = modoAtual !== "categoria";
+    qsa(".FnPar_ModoBtn").forEach((btn) => {
+      const on = btn.dataset.modo === modoAtual;
+      btn.classList.toggle("is-active", on);
+      btn.setAttribute("aria-checked", on ? "true" : "false");
+    });
+  }
+
+  async function salvarModo(modo) {
+    const r = await fetch(`${BASE}/modo`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ modo }),
+    });
+    const j = await r.json();
+    if (!r.ok || !j.success) throw new Error(j.message || "Erro ao salvar modo.");
+    aplicarModoUI(j.modo || modo);
   }
 
   function preencherGlobal(regras) {
@@ -54,6 +82,7 @@
     const r = await fetch(`${BASE}/dados`, { credentials: "include" });
     const j = await r.json();
     if (!r.ok || !j.success) throw new Error(j.message || "Falha ao carregar.");
+    aplicarModoUI(j.modo || "global");
     preencherGlobal(j.regras || []);
     renderTabela(j.regras || []);
     preencherCategorias(j.categorias || []);
@@ -71,6 +100,14 @@
     await Swal.fire({ icon: "success", title: "Salvo", text: j.message, timer: 2000, showConfirmButton: false });
     await carregar();
   }
+
+  qsa(".FnPar_ModoBtn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const modo = btn.dataset.modo;
+      if (!modo || modo === modoAtual) return;
+      salvarModo(modo).catch((e) => Swal.fire("Erro", e.message, "error"));
+    });
+  });
 
   qs("#btnSalvarGlobal")?.addEventListener("click", () =>
     salvar({

@@ -40,3 +40,115 @@
 .Cl_ConfigActions {
   margin: 10px 0 14px;
 }
+
+/* ---- Apoio config (menu, usuários, etc.): label acima do input ---- */
+.CfgApoio_Body {
+  margin: 0;
+  background: transparent;
+}
+
+.CfgApoio_Body .Cl_ContainerApoio.CfgApoio_Form {
+  margin: 12px 16px 0;
+  padding: 16px 18px 18px;
+  box-shadow: none;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+}
+
+.CfgApoio_Form .Cl_FormCampo {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+}
+
+.CfgApoio_Form .Cl_FormCampo > label:not(.Cl_Switch) {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  margin: 0;
+  line-height: 1.35;
+  letter-spacing: 0.01em;
+}
+
+.CfgApoio_Form .Cl_FormCampo input:not([type="checkbox"]):not([type="radio"]),
+.CfgApoio_Form .Cl_FormCampo select,
+.CfgApoio_Form .Cl_FormCampo textarea {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #d1d9e6;
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 14px;
+  color: #1e293b;
+  background: #fff;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  margin: 0;
+}
+
+.CfgApoio_Form .Cl_FormCampo input:not([type="checkbox"]):not([type="radio"]),
+.CfgApoio_Form .Cl_FormCampo select {
+  height: 40px;
+}
+
+.CfgApoio_Form .Cl_FormCampo input:focus,
+.CfgApoio_Form .Cl_FormCampo select:focus,
+.CfgApoio_Form .Cl_FormCampo textarea:focus {
+  outline: none;
+  border-color: var(--marca-hover, #6922E6);
+  box-shadow: 0 0 0 3px rgba(123, 44, 255, 0.12);
+}
+
+.CfgApoio_Form .Cl_FormCampo textarea {
+  min-height: 88px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.CfgApoio_Grid {
+  display: grid;
+  gap: 14px 16px;
+  margin-bottom: 14px;
+}
+
+.CfgApoio_Grid--2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.CfgApoio_Grid--3 {
+  grid-template-columns: 1.2fr 1.2fr minmax(100px, 0.55fr);
+}
+
+.CfgApoio_Grid--4 {
+  grid-template-columns: minmax(120px, 0.85fr) minmax(0, 1.5fr) minmax(110px, 0.85fr) minmax(130px, 0.9fr);
+}
+
+.CfgApoio_Switches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px 28px;
+  align-items: center;
+  margin-bottom: 14px;
+  padding-top: 2px;
+}
+
+.CfgApoio_Body .Cl_BotoesApoio {
+  margin: 14px 16px 16px;
+  padding-top: 4px;
+}
+
+@media (max-width: 900px) {
+  .CfgApoio_Grid--2,
+  .CfgApoio_Grid--3,
+  .CfgApoio_Grid--4 {
+    grid-template-columns: 1fr;
+  }
+
+  .CfgApoio_ColNarrow {
+    grid-column: auto;
+  }
+}

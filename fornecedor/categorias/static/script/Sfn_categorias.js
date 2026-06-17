@@ -14,12 +14,16 @@
   const inpCtx = document.getElementById("fn_cat_ctx");
   const modalTitulo = document.getElementById("fn_cat_modal_titulo");
   const btnExcluir = document.getElementById("fn_cat_btn_excluir");
+  const blingBanner = document.getElementById("fn_cat_bling_banner");
+  const blingTitulo = document.getElementById("fn_cat_bling_titulo");
+  const btnAssociarBling = document.getElementById("fn_cat_btn_associar_bling");
 
   const BASE = "/fornecedor/categorias";
   const MAX_NIVEL = 3;
   let segmentos = [];
   let idSegmentoAtual = null;
   let arvoreCache = [];
+  let blingPendentes = { total: 0, segmentos: [], auto_segmento: null };
   const fechadosPorSeg = new Map();
 
   function fechados() {
@@ -143,6 +147,75 @@
           `<button type="button" class="FnCat_SegBtn${s.id === idSegmentoAtual ? " is-active" : ""}" data-id="${s.id}">${escapeHtml(s.nome)}</button>`
       )
       .join("");
+  }
+
+  async function carregarBlingPendentes() {
+    if (!blingBanner) return;
+    try {
+      const r = await fetch(BASE + "/bling/pendentes", { credentials: "same-origin" });
+      const j = await r.json();
+      if (!j.success) return;
+      blingPendentes = j;
+      if (j.total > 0) {
+        blingBanner.hidden = false;
+        if (blingTitulo) {
+          blingTitulo.textContent = `${j.total} categoria(s) do Bling aguardando segmento`;
+        }
+      } else {
+        blingBanner.hidden = true;
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  async function associarCategoriasBling() {
+    const segs = blingPendentes.segmentos || segmentos;
+    if (!segs.length) {
+      return alertar("Ative ao menos um segmento em Minha empresa.", "warning");
+    }
+    let idSeg = blingPendentes.auto_segmento || idSegmentoAtual;
+    if (segs.length > 1) {
+      const opcoes = segs.reduce((acc, s, i) => {
+        acc[s.id] = s.nome;
+        return acc;
+      }, {});
+      const escolha = await Swal.fire({
+        title: "Associar categorias do Bling",
+        text: "Escolha o segmento (nicho) destas categorias:",
+        input: "select",
+        inputOptions: opcoes,
+        inputValue: String(idSeg || segs[0].id),
+        showCancelButton: true,
+        confirmButtonText: "Associar",
+        cancelButtonText: "Cancelar",
+      });
+      if (!escolha.isConfirmed) return;
+      idSeg = +escolha.value;
+    } else {
+      idSeg = segs[0].id;
+      const ok = await Swal.fire({
+        icon: "question",
+        title: "Associar categorias do Bling?",
+        text: `Todas as categorias importadas serão vinculadas ao segmento "${segs[0].nome}".`,
+        showCancelButton: true,
+        confirmButtonText: "Associar",
+      });
+      if (!ok.isConfirmed) return;
+    }
+    const r = await fetch(BASE + "/bling/associar-segmento", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id_segmento: idSeg }),
+    });
+    const j = await r.json();
+    await alertar(j.message, j.success ? "success" : "error");
+    if (j.success) {
+      await carregarBlingPendentes();
+      if (idSegmentoAtual === idSeg) await carregarArvore();
+      else await selecionarSegmento(idSeg);
+    }
   }
 
   async function carregarSegmentos() {
@@ -305,5 +378,10 @@
     if (e.target === modal) fecharModal();
   });
 
+  btnAssociarBling?.addEventListener("click", () =>
+    associarCategoriasBling().catch((e) => alertar(e.message, "error"))
+  );
+
+  carregarBlingPendentes();
   carregarSegmentos();
 })();

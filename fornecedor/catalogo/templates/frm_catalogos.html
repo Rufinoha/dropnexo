@@ -7,7 +7,7 @@
 {% block topbar_title %}Catálogos{% endblock %}
 
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('fn_catalogo.static', filename='style/Ccatalogos.css') }}?v=7" />
+<link rel="stylesheet" href="{{ url_for('fn_catalogo.static', filename='style/Ccatalogos.css') }}?v=8" />
 <link rel="stylesheet" href="{{ url_for('fn_importacao.static', filename='style/Cimportacao.css') }}?v=7" />
 {% endblock %}
 
@@ -59,22 +59,23 @@
     </div>
   </div>
 
-  <p class="Cat_FiltroResumo" id="ob_filtroResumo" hidden></p>
-
   <div class="Cl_TabelaPrincipal" id="content-area-Principal">
-    <div class="Cat_BulkBar" id="ob_bulkBar" hidden>
-      <div class="Cat_BulkActions" id="ob_bulkActions" aria-label="Ações em lote"></div>
-    </div>
     <table>
       <thead>
+        <tr class="Cat_BulkHeadRow" id="ob_bulkRow" hidden>
+          <th colspan="6"></th>
+          <th colspan="3" class="Cat_BulkHeadCell">
+            <div class="Cat_BulkActions" id="ob_bulkActions" aria-label="Ações em lote"></div>
+          </th>
+        </tr>
         <tr>
+          <th class="Cat_ColSel">
+            <input type="checkbox" id="ob_chkTodos" class="Cat_ChkSel" aria-label="Selecionar todos os produtos da página" title="Selecionar todos" />
+          </th>
           <th class="Cat_ColExpand">
             <button type="button" class="Cat_ExpandBtn" id="ob_btnToggleExpandTodos" aria-label="Expandir todos" aria-expanded="false" title="Expandir todos" hidden>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
             </button>
-          </th>
-          <th class="Cat_ColSel">
-            <input type="checkbox" id="ob_chkTodos" class="Cat_ChkSel" aria-label="Selecionar todos os produtos da página" title="Selecionar todos" />
           </th>
           <th class="Cat_ColImg">Imagem</th>
           <th>Nome / produto</th>
@@ -91,7 +92,8 @@
     </table>
   </div>
 
-  <div class="Cl_Paginacao">
+  <div class="Cl_Paginacao Cat_Paginacao">
+    <span class="Cat_FiltroResumo" id="ob_filtroResumo" hidden></span>
     <button type="button" class="Cl_direcao" id="ob_btnPrimeiro" disabled>Primeiro</button>
     <button type="button" class="Cl_direcao" id="ob_btnAnterior" disabled>Anterior</button>
     <span>Página <strong id="ob_paginaAtual">1</strong> de <strong id="ob_totalPaginas">1</strong>
@@ -110,6 +112,6 @@
 <script>
   window.CAT_BLING_CONECTADO = {{ 'true' if bling_conectado else 'false' }};
 </script>
-<script src="{{ url_for('fn_importacao.static', filename='script/Simportacao.js') }}?v=5"></script>
-<script src="{{ url_for('fn_catalogo.static', filename='script/Scatalogos.js') }}?v=8"></script>
+<script defer src="{{ url_for('fn_importacao.static', filename='script/Simportacao.js') }}?v=5"></script>
+<script defer src="{{ url_for('fn_catalogo.static', filename='script/Scatalogos.js') }}?v=9"></script>
 {% endblock %}

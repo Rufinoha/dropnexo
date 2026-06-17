@@ -6,9 +6,38 @@ from collections import defaultdict
 from typing import Any
 
 from api.bling.cliente import listar_categorias_produtos, obter_categoria_produto
+from fornecedor.segmentos.servico_segmentos import ids_segmentos_fornecedor
 from global_utils import agora_utc
 
 MAX_NIVEL = 3
+
+
+def resolver_id_segmento_import(
+    cur,
+    id_tenant: int,
+    id_segmento: int | None = None,
+) -> int | None:
+    """Um segmento ativo → usa direto; vários → None (associar depois na tela)."""
+    if id_segmento:
+        cur.execute(
+            """
+            SELECT 1 FROM tbl_fornecedor_segmento fs
+            JOIN tbl_segmento s ON s.id = fs.id_segmento AND s.ativo = TRUE
+            WHERE fs.id_tenant = %s AND fs.id_segmento = %s
+            """,
+            (id_tenant, int(id_segmento)),
+        )
+        if not cur.fetchone():
+            raise ValueError("Segmento não está ativo para esta conta.")
+        return int(id_segmento)
+    ids = ids_segmentos_fornecedor(cur, id_tenant)
+    if len(ids) == 1:
+        return ids[0]
+    return None
+
+
+def _segmento_sql_val(id_segmento: int | None) -> int:
+    return int(id_segmento) if id_segmento else 0
 
 
 def _buscar_mapa_categoria(cur, id_tenant: int, contexto: str, id_bling: str) -> int | None:
@@ -56,22 +85,39 @@ def _id_pai_bling(cat: dict) -> str | None:
     return pid
 
 
+def _atualizar_categoria_local(
+    cur,
+    cat_id: int,
+    *,
+    nome: str,
+    nivel: int,
+    parent_dropnexo: int | None,
+    id_segmento: int | None,
+) -> None:
+    cur.execute(
+        """
+        UPDATE tbl_categoria
+        SET nome = %s, nivel = %s, parent_id = %s, ativo = TRUE,
+            id_segmento = COALESCE(id_segmento, %s)
+        WHERE id = %s
+        """,
+        (nome, nivel, parent_dropnexo, id_segmento, cat_id),
+    )
+
+
 def garantir_categoria_bling(
     cur,
     id_tenant: int,
     contexto: str,
     id_bling: str,
     *,
+    id_segmento: int | None = None,
     cache_api: dict[str, dict] | None = None,
 ) -> int | None:
     """Cria ou atualiza categoria no DropNexo a partir do ID Bling (com pais recursivos)."""
     id_bling = str(id_bling or "").strip()
     if not id_bling:
         return None
-
-    existente = _buscar_mapa_categoria(cur, id_tenant, contexto, id_bling)
-    if existente:
-        return existente
 
     if cache_api and id_bling in cache_api:
         cat = cache_api[id_bling]
@@ -89,40 +135,70 @@ def garantir_categoria_bling(
     nivel = 1
     if parent_bling:
         parent_dropnexo = garantir_categoria_bling(
-            cur, id_tenant, contexto, parent_bling, cache_api=cache_api
+            cur,
+            id_tenant,
+            contexto,
+            parent_bling,
+            id_segmento=id_segmento,
+            cache_api=cache_api,
         )
         if parent_dropnexo:
             cur.execute("SELECT nivel FROM tbl_categoria WHERE id = %s", (parent_dropnexo,))
             row = cur.fetchone()
             nivel = min(int(row[0] or 1) + 1, MAX_NIVEL) if row else 2
 
+    existente = _buscar_mapa_categoria(cur, id_tenant, contexto, id_bling)
+    if existente:
+        _atualizar_categoria_local(
+            cur,
+            existente,
+            nome=nome,
+            nivel=nivel,
+            parent_dropnexo=parent_dropnexo,
+            id_segmento=id_segmento,
+        )
+        _upsert_mapa_categoria(
+            cur,
+            id_tenant,
+            contexto,
+            id_bling,
+            existente,
+            {"nome": nome, "id_bling_pai": parent_bling},
+        )
+        return existente
+
+    seg_val = _segmento_sql_val(id_segmento)
     cur.execute(
         """
         SELECT c.id FROM tbl_categoria c
         WHERE c.id_tenant = %s
-          AND COALESCE(c.id_segmento, 0) = 0
+          AND COALESCE(c.id_segmento, 0) = %s
           AND COALESCE(c.parent_id, 0) = COALESCE(%s, 0)
           AND LOWER(c.nome) = LOWER(%s)
         LIMIT 1
         """,
-        (id_tenant, parent_dropnexo, nome),
+        (id_tenant, seg_val, parent_dropnexo, nome),
     )
     row = cur.fetchone()
     if row:
         cat_id = int(row[0])
-        cur.execute(
-            "UPDATE tbl_categoria SET ativo = TRUE, nivel = %s WHERE id = %s",
-            (nivel, cat_id),
+        _atualizar_categoria_local(
+            cur,
+            cat_id,
+            nome=nome,
+            nivel=nivel,
+            parent_dropnexo=parent_dropnexo,
+            id_segmento=id_segmento,
         )
     else:
         cur.execute(
             """
             INSERT INTO tbl_categoria (
                 id_tenant, id_segmento, parent_id, nome, ordem, nivel, ativo
-            ) VALUES (%s, NULL, %s, %s, 0, %s, TRUE)
+            ) VALUES (%s, %s, %s, %s, 0, %s, TRUE)
             RETURNING id
             """,
-            (id_tenant, parent_dropnexo, nome, nivel),
+            (id_tenant, id_segmento, parent_dropnexo, nome, nivel),
         )
         cat_id = int(cur.fetchone()[0])
 
@@ -135,6 +211,113 @@ def garantir_categoria_bling(
         {"nome": nome, "id_bling_pai": parent_bling},
     )
     return cat_id
+
+
+def sincronizar_arvore_categorias_bling(
+    cur,
+    id_tenant: int,
+    contexto: str,
+    *,
+    id_segmento: int | None = None,
+) -> int:
+    """Importa toda a árvore de categorias do Bling (sem produtos)."""
+    cache_api: dict[str, dict] = {}
+    n = 0
+    for item in listar_categorias_bling_flat(id_tenant):
+        cid = str(item.get("id") or "").strip()
+        if not cid:
+            continue
+        if garantir_categoria_bling(
+            cur,
+            id_tenant,
+            contexto,
+            cid,
+            id_segmento=id_segmento,
+            cache_api=cache_api,
+        ):
+            n += 1
+    return n
+
+
+def contar_categorias_bling_sem_segmento(cur, id_tenant: int) -> int:
+    cur.execute(
+        """
+        SELECT COUNT(*)::int
+        FROM tbl_categoria c
+        JOIN tbl_integracao_map m
+          ON m.id_dropnexo = c.id AND m.provedor = 'bling' AND m.entidade = 'categoria'
+        WHERE c.id_tenant = %s AND c.id_segmento IS NULL AND c.ativo = TRUE
+        """,
+        (id_tenant,),
+    )
+    return int(cur.fetchone()[0] or 0)
+
+
+def listar_categorias_bling_sem_segmento(cur, id_tenant: int) -> list[dict[str, Any]]:
+    cur.execute(
+        """
+        SELECT c.id, c.nome, c.nivel, c.parent_id, m.id_bling
+        FROM tbl_categoria c
+        JOIN tbl_integracao_map m
+          ON m.id_dropnexo = c.id AND m.provedor = 'bling' AND m.entidade = 'categoria'
+        WHERE c.id_tenant = %s AND c.id_segmento IS NULL AND c.ativo = TRUE
+        ORDER BY c.nivel, c.nome
+        """,
+        (id_tenant,),
+    )
+    return [
+        {
+            "id": r[0],
+            "nome": r[1],
+            "nivel": int(r[2] or 1),
+            "parent_id": r[3],
+            "id_bling": r[4],
+        }
+        for r in cur.fetchall()
+    ]
+
+
+def associar_segmento_categorias_bling(
+    cur,
+    id_tenant: int,
+    id_segmento: int,
+    *,
+    ids_categorias: list[int] | None = None,
+) -> int:
+    """Associa segmento às categorias importadas do Bling ainda sem segmento."""
+    if not resolver_id_segmento_import(cur, id_tenant, id_segmento):
+        raise ValueError("Segmento inválido.")
+
+    if ids_categorias:
+        ids = [int(i) for i in ids_categorias if i]
+        if not ids:
+            return 0
+        cur.execute(
+            """
+            UPDATE tbl_categoria c
+            SET id_segmento = %s
+            FROM tbl_integracao_map m
+            WHERE m.id_dropnexo = c.id
+              AND m.provedor = 'bling' AND m.entidade = 'categoria'
+              AND c.id_tenant = %s AND c.id_segmento IS NULL
+              AND c.id = ANY(%s)
+            """,
+            (id_segmento, id_tenant, ids),
+        )
+        return int(cur.rowcount or 0)
+
+    cur.execute(
+        """
+        UPDATE tbl_categoria c
+        SET id_segmento = %s
+        FROM tbl_integracao_map m
+        WHERE m.id_dropnexo = c.id
+          AND m.provedor = 'bling' AND m.entidade = 'categoria'
+          AND c.id_tenant = %s AND c.id_segmento IS NULL
+        """,
+        (id_segmento, id_tenant),
+    )
+    return int(cur.rowcount or 0)
 
 
 def listar_categorias_bling_flat(id_tenant: int) -> list[dict[str, Any]]:

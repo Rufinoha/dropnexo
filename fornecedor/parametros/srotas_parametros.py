@@ -7,6 +7,8 @@ from flask import Blueprint, jsonify, render_template, request, session
 from fornecedor.parametros.servico_precificacao import (
     aplicar_precificacao_catalogo,
     listar_regras_fornecedor,
+    obter_modo_precificacao,
+    salvar_modo_precificacao,
     salvar_regra_fornecedor,
 )
 from global_utils import Var_ConectarBanco, exigir_modulo, exigir_permissao, login_obrigatorio
@@ -70,7 +72,32 @@ def parametros_precificacao_dados():
             {"id": r[0], "nome": r[1], "nivel": int(r[2] or 1)}
             for r in cur.fetchall()
         ]
-        return jsonify(success=True, regras=regras, categorias=categorias)
+        modo = obter_modo_precificacao(cur, id_tenant)
+        return jsonify(success=True, regras=regras, categorias=categorias, modo=modo)
+    finally:
+        conn.close()
+
+
+@fn_parametros_bp.post("/fornecedor/parametros/precificacao/modo")
+@login_obrigatorio()
+@exigir_modulo(MODULO_FORNECEDOR)
+@exigir_permissao(codigo="fn_parametros.editar")
+def parametros_precificacao_modo():
+    body = request.get_json(silent=True) or {}
+    modo = (body.get("modo") or "global").strip().lower()
+    id_tenant = _id_tenant()
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        modo = salvar_modo_precificacao(cur, id_tenant, modo)
+        conn.commit()
+        return jsonify(success=True, modo=modo, message="Modo de precificação atualizado.")
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 400
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 500
     finally:
         conn.close()
 

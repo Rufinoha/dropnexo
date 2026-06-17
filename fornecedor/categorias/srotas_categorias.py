@@ -3,6 +3,11 @@ from __future__ import annotations
 from pathlib import Path
 
 from flask import Blueprint, jsonify, render_template, request, session, url_for
+from api.bling.sync_categorias import (
+    associar_segmento_categorias_bling,
+    contar_categorias_bling_sem_segmento,
+    listar_categorias_bling_sem_segmento,
+)
 from global_utils import Var_ConectarBanco, exigir_modulo, exigir_permissao, login_obrigatorio
 from srotas_negocio import MAX_NIVEL_CATEGORIA, flatten_arvore_com_caminho, montar_arvore_categorias
 from srotas_plataforma import MODULO_FORNECEDOR
@@ -219,6 +224,88 @@ def salvar():
         raise
     finally:
         conn.close()
+
+@fn_categorias_bp.get("/fornecedor/categorias/bling/pendentes")
+@login_obrigatorio()
+@exigir_modulo(MODULO_FORNECEDOR)
+@exigir_permissao(codigo="fn_categorias.ver")
+def categorias_bling_pendentes():
+    if (r := _exigir_fornecedor_tenant()) is not None:
+        return r
+    id_tenant = _id_tenant()
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        total = contar_categorias_bling_sem_segmento(cur, id_tenant)
+        lista = listar_categorias_bling_sem_segmento(cur, id_tenant) if total else []
+        cur.execute(
+            """
+            SELECT s.id, s.nome
+            FROM tbl_fornecedor_segmento fs
+            JOIN tbl_segmento s ON s.id = fs.id_segmento AND s.ativo = TRUE
+            WHERE fs.id_tenant = %s
+            ORDER BY s.ordem, s.nome
+            """,
+            (id_tenant,),
+        )
+        segmentos = [{"id": r[0], "nome": r[1]} for r in cur.fetchall()]
+        return jsonify(
+            success=True,
+            total=total,
+            categorias=lista[:200],
+            segmentos=segmentos,
+            auto_segmento=segmentos[0]["id"] if len(segmentos) == 1 else None,
+        )
+    finally:
+        conn.close()
+
+
+@fn_categorias_bp.post("/fornecedor/categorias/bling/associar-segmento")
+@login_obrigatorio()
+@exigir_modulo(MODULO_FORNECEDOR)
+@exigir_permissao(codigo="fn_categorias.editar")
+def categorias_bling_associar_segmento():
+    if (r := _exigir_fornecedor_tenant()) is not None:
+        return r
+    id_tenant = _id_tenant()
+    body = request.get_json(silent=True) or {}
+    try:
+        id_segmento = int(body.get("id_segmento"))
+    except (TypeError, ValueError):
+        return jsonify(success=False, message="Informe o segmento."), 400
+    ids_raw = body.get("ids_categorias")
+    ids_categorias = None
+    if isinstance(ids_raw, list) and ids_raw:
+        ids_categorias = [int(i) for i in ids_raw if i]
+
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        if not _segmento_ativo(cur, id_tenant, id_segmento):
+            return jsonify(success=False, message="Segmento não está ativo para sua conta."), 403
+        n = associar_segmento_categorias_bling(
+            cur,
+            id_tenant,
+            id_segmento,
+            ids_categorias=ids_categorias,
+        )
+        conn.commit()
+        restante = contar_categorias_bling_sem_segmento(cur, id_tenant)
+        return jsonify(
+            success=True,
+            message=f"{n} categoria(s) associada(s) ao segmento.",
+            associadas=n,
+            pendentes=restante,
+        )
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 400
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
 
 @fn_categorias_bp.post("/fornecedor/categorias/excluir")
 @login_obrigatorio()

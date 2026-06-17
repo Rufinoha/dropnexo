@@ -99,14 +99,6 @@ WHERE p.codigo IN ('dono', 'admin')
       WHERE pm.id_perfil = p.id AND pm.id_menu = m.id
   );
 
--- Reordenar menus fornecedor
-UPDATE tbl_menu SET nome_menu = 'Catálogo', ordem = 10
+-- Nome do menu catálogo (fornecedor); ordem é gerida pela tela Gestão de menus (tbl_menu.ordem)
+UPDATE tbl_menu SET nome_menu = 'Catálogo'
 WHERE nav_codigo = 'catalogos' AND contexto_modulo = 'fornecedor';
-
-UPDATE tbl_menu SET ordem = 20 WHERE nav_codigo = 'fn_vendedores';
-UPDATE tbl_menu SET ordem = 30 WHERE nav_codigo = 'fn_categorias';
-UPDATE tbl_menu SET ordem = 40 WHERE nav_codigo = 'fn_variacoes';
-UPDATE tbl_menu SET ordem = 50 WHERE nav_codigo = 'fn_depositos';
-UPDATE tbl_menu SET ordem = 60 WHERE nav_codigo = 'fn_usuarios';
-UPDATE tbl_menu SET ordem = 65 WHERE nav_codigo = 'fn_parametros';
-UPDATE tbl_menu SET ordem = 70 WHERE nav_codigo = 'fn_integracoes';

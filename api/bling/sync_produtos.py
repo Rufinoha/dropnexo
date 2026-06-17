@@ -15,7 +15,10 @@ from api.bling.sync_categorias import (
     extrair_id_categoria_produto,
     garantir_categoria_bling,
     ids_categoria_bling_com_descendentes,
+    resolver_id_segmento_import,
+    sincronizar_arvore_categorias_bling,
 )
+from api.bling.depositos import garantir_depositos_bling_vinculados
 from fornecedor.importacao.erro_traducao import montar_payload_erro
 from fornecedor.importacao.servico_importacao import (
     MODULO_CATALOGO,
@@ -611,6 +614,7 @@ def _processar_item_produto(
     cache_categorias: dict[str, dict],
     categorias_sincronizadas: set[str],
     ids_categoria_filtro: set[str] | None,
+    id_segmento: int | None = None,
     id_importacao_lote: int | None = None,
     grupos_concluidos: set[str] | None = None,
 ) -> tuple[str, int | None]:
@@ -635,6 +639,7 @@ def _processar_item_produto(
             cache_categorias=cache_categorias,
             categorias_sincronizadas=categorias_sincronizadas,
             ids_categoria_filtro=ids_categoria_filtro,
+            id_segmento=id_segmento,
             id_importacao_lote=id_importacao_lote,
             grupos_concluidos=concluidos,
         )
@@ -652,6 +657,7 @@ def _processar_item_produto(
             cache_categorias=cache_categorias,
             categorias_sincronizadas=categorias_sincronizadas,
             ids_categoria_filtro=ids_categoria_filtro,
+            id_segmento=id_segmento,
             id_importacao_lote=id_importacao_lote,
             grupos_concluidos=concluidos,
         )
@@ -673,6 +679,7 @@ def _processar_item_produto(
             id_tenant,
             contexto,
             id_cat_bling,
+            id_segmento=id_segmento,
             cache_api=cache_categorias,
         )
         categorias_sincronizadas.add(id_cat_bling)
@@ -730,6 +737,7 @@ def _processar_grupo_variacoes(
     cache_categorias: dict[str, dict],
     categorias_sincronizadas: set[str],
     ids_categoria_filtro: set[str] | None,
+    id_segmento: int | None = None,
     id_importacao_lote: int | None = None,
     grupos_concluidos: set[str] | None = None,
 ) -> tuple[str, int | None]:
@@ -767,6 +775,7 @@ def _processar_grupo_variacoes(
             id_tenant,
             contexto,
             id_cat_bling,
+            id_segmento=id_segmento,
             cache_api=cache_categorias,
         )
         categorias_sincronizadas.add(id_cat_bling)
@@ -894,6 +903,7 @@ def importar_produtos(
     id_categoria_bling: str | None = None,
     ids_categorias_bling: list[str] | None = None,
     incluir_subcategorias: bool = True,
+    id_segmento: int | None = None,
     id_importacao_lote: int | None = None,
     id_usuario: int | None = None,
 ) -> dict[str, Any]:
@@ -901,6 +911,15 @@ def importar_produtos(
     modo = cfg["produtos_modo"]
     if modo not in ("importar", "atualizar"):
         raise ValueError(f"Modo de produtos '{modo}' não permite importação. Altere para Importar ou Atualizar.")
+
+    id_segmento_resolvido = resolver_id_segmento_import(cur, id_tenant, id_segmento)
+    resumo_deps = garantir_depositos_bling_vinculados(cur, id_tenant)
+    n_cats_arvore = sincronizar_arvore_categorias_bling(
+        cur,
+        id_tenant,
+        contexto,
+        id_segmento=id_segmento_resolvido,
+    )
 
     importados = 0
     atualizados = 0
@@ -929,6 +948,7 @@ def importar_produtos(
                     id_tenant,
                     contexto,
                     cat_id,
+                    id_segmento=id_segmento_resolvido,
                     cache_api=cache_categorias,
                 )
                 _release_savepoint(cur, _SAVEPOINT_PRODUTO)
@@ -970,6 +990,7 @@ def importar_produtos(
                     cache_categorias=cache_categorias,
                     categorias_sincronizadas=categorias_sincronizadas,
                     ids_categoria_filtro=ids_filtro,
+                    id_segmento=id_segmento_resolvido,
                     id_importacao_lote=id_importacao_lote,
                     grupos_concluidos=grupos_concluidos,
                 )
@@ -983,6 +1004,7 @@ def importar_produtos(
                     cache_categorias=cache_categorias,
                     categorias_sincronizadas=categorias_sincronizadas,
                     ids_categoria_filtro=ids_filtro,
+                    id_segmento=id_segmento_resolvido,
                     id_importacao_lote=id_importacao_lote,
                     grupos_concluidos=grupos_concluidos,
                 )
@@ -1064,7 +1086,9 @@ def importar_produtos(
         escopo = "todos"
     resumo = (
         f"Importados: {importados}, atualizados: {atualizados}, ignorados: {ignorados}"
-        f", falhas: {len(falhas)} · categorias: {cat_n} · escopo: {escopo}"
+        f", falhas: {len(falhas)} · categorias: {cat_n} (árvore: {n_cats_arvore})"
+        f" · depósitos vinculados: {resumo_deps.get('vinculados', 0)}"
+        f" · escopo: {escopo}"
     )
     if falhas:
         status = "erro" if importados + atualizados == 0 else "aviso"
@@ -1094,6 +1118,9 @@ def importar_produtos(
         "falhas": falhas,
         "total_falhas": len(falhas),
         "categorias": cat_n,
+        "categorias_arvore": n_cats_arvore,
+        "depositos": resumo_deps,
+        "id_segmento": id_segmento_resolvido,
         "erros": erros_txt[:50],
         "status": status,
         "resumo": resumo,

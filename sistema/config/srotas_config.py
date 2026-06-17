@@ -754,9 +754,6 @@ def carregar_menu_sidebar() -> list[dict]:
         itens = []
         for row in cur.fetchall():
             mid, nome, data_page, icone, nav_codigo, parent_id, pai = row
-            codigo = nav_codigo or ""
-            if mod_ativo == "fornecedor" and codigo == "inicio":
-                continue
             itens.append(
                 {
                     "id": mid,

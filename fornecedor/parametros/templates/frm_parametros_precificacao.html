@@ -5,7 +5,7 @@
   <title>Precificação — Parâmetros</title>
   {% include "partials/marca_favicon.html" %}
   <link rel="stylesheet" href="{{ url_for('static', filename='style/global_utils.css') }}" />
-  <link rel="stylesheet" href="{{ url_for('fn_parametros.static', filename='style/Cfn_parametros.css') }}?v=1" />
+  <link rel="stylesheet" href="{{ url_for('fn_parametros.static', filename='style/Cfn_parametros.css') }}?v=2" />
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </head>
 <body class="FnPar_ApoioBody">
@@ -15,8 +15,17 @@
       O <strong>valor Drop</strong> é o preço oferecido aos vendedores na rede, calculado com as regras abaixo.
     </p>
 
-    <div class="FnPar_Secao">
-      <h3>Precificação para todos</h3>
+    <div class="FnPar_ModoBar" role="radiogroup" aria-label="Tipo de precificação">
+      <button type="button" class="FnPar_ModoBtn is-active" data-modo="global" role="radio" aria-checked="true">
+        Para todos
+      </button>
+      <button type="button" class="FnPar_ModoBtn" data-modo="categoria" role="radio" aria-checked="false">
+        Por categoria
+      </button>
+    </div>
+
+    <div class="FnPar_Secao" id="secGlobal">
+      <p class="FnPar_Hint FnPar_Hint--sec">Mesma regra de ajuste, taxas e comissão para todo o catálogo.</p>
       <div class="FnPar_GridForm">
         <div class="Cl_FormCampo">
           <label for="pctAjusteGlobal">Ajuste sobre o preço (%)</label>
@@ -35,9 +44,8 @@
       <button type="button" class="Cl_botaoprimario" id="btnSalvarGlobal">Salvar regra global</button>
     </div>
 
-    <div class="FnPar_Secao">
-      <h3>Por categoria</h3>
-      <p class="FnPar_Hint">Regras por categoria substituem a global para produtos daquela categoria.</p>
+    <div class="FnPar_Secao" id="secCategoria" hidden>
+      <p class="FnPar_Hint FnPar_Hint--sec">Configure uma regra para cada categoria. Produtos usam somente a regra da sua categoria.</p>
       <div class="FnPar_CatAdd">
         <div class="Cl_FormCampo FnPar_CatSelect">
           <label for="selCategoria">Categoria</label>
@@ -73,6 +81,6 @@
     </footer>
   </div>
   <script src="{{ url_for('static', filename='script/global_utils.js') }}"></script>
-  <script src="{{ url_for('fn_parametros.static', filename='script/Sfn_parametros_precificacao.js') }}?v=1"></script>
+  <script src="{{ url_for('fn_parametros.static', filename='script/Sfn_parametros_precificacao.js') }}?v=2"></script>
 </body>
 </html>

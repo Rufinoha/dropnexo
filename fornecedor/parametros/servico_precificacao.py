@@ -34,12 +34,36 @@ def _row_regra(row) -> dict:
     }
 
 
+def obter_modo_precificacao(cur, id_tenant: int) -> str:
+    cur.execute(
+        "SELECT precificacao_modo FROM tbl_tenant WHERE id = %s",
+        (id_tenant,),
+    )
+    row = cur.fetchone()
+    modo = (row[0] if row else None) or "global"
+    return modo if modo in ("global", "categoria") else "global"
+
+
+def salvar_modo_precificacao(cur, id_tenant: int, modo: str) -> str:
+    modo = (modo or "global").strip().lower()
+    if modo not in ("global", "categoria"):
+        raise ValueError("Modo de precificação inválido.")
+    cur.execute(
+        "UPDATE tbl_tenant SET precificacao_modo = %s WHERE id = %s",
+        (modo, id_tenant),
+    )
+    return modo
+
+
 def buscar_regra_fornecedor(
     cur,
     id_tenant: int,
     id_categoria: int | None = None,
 ) -> dict | None:
-    if id_categoria:
+    modo = obter_modo_precificacao(cur, id_tenant)
+    if modo == "categoria":
+        if not id_categoria:
+            return None
         cur.execute(
             """
             SELECT id, escopo, id_categoria, pct_ajuste, pct_taxas, pct_comissao
@@ -50,8 +74,7 @@ def buscar_regra_fornecedor(
             (id_tenant, id_categoria),
         )
         row = cur.fetchone()
-        if row:
-            return _row_regra(row)
+        return _row_regra(row) if row else None
     cur.execute(
         """
         SELECT id, escopo, id_categoria, pct_ajuste, pct_taxas, pct_comissao

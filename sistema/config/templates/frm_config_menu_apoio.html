@@ -5,10 +5,10 @@
   <title>Menu — {{ MARCA_NOME }}</title>
   {% include "partials/marca_favicon.html" %}
   <link rel="stylesheet" href="{{ url_for('static', filename='style/global_utils.css') }}" />
-  <link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_crud.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_crud.css') }}?v=2" />
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </head>
-<body>
+<body class="CfgApoio_Body">
   <div class="Cl_Header Cl_ApoioHeader">
     <div class="Cl_Logo">
       <img src="{{ marca_logo_nome_url }}" alt="{{ MARCA_NOME }}" />
@@ -18,23 +18,24 @@
 
   <input type="hidden" id="id" value="" />
 
-  <div class="Cl_ContainerApoio">
-    <div style="display:flex; gap:12px; flex-wrap:wrap;">
-      <div class="Cl_FormCampo" style="flex:1; min-width:200px;">
+  <div class="Cl_ContainerApoio CfgApoio_Form">
+    <div class="CfgApoio_Grid CfgApoio_Grid--2">
+      <div class="Cl_FormCampo">
         <label for="nome_menu">Nome</label>
         <input type="text" id="nome_menu" />
       </div>
-      <div class="Cl_FormCampo" style="flex:1; min-width:200px;">
+      <div class="Cl_FormCampo">
         <label for="descricao">Descrição</label>
         <input type="text" id="descricao" />
       </div>
     </div>
-    <div style="display:flex; gap:12px; flex-wrap:wrap; margin-top:10px;">
+
+    <div class="CfgApoio_Grid CfgApoio_Grid--4">
       <div class="Cl_FormCampo">
         <label for="icone">Ícone</label>
         <select id="icone"></select>
       </div>
-      <div class="Cl_FormCampo" style="flex:1;">
+      <div class="Cl_FormCampo">
         <label for="data_page">Data page (rota)</label>
         <input type="text" id="data_page" placeholder="/index" />
       </div>
@@ -47,7 +48,8 @@
         <select id="tipo_abrir"></select>
       </div>
     </div>
-    <div style="display:flex; gap:12px; flex-wrap:wrap; margin-top:10px;">
+
+    <div class="CfgApoio_Grid CfgApoio_Grid--3">
       <div class="Cl_FormCampo">
         <label for="parent_id">Parent (submenu de)</label>
         <select id="parent_id"></select>
@@ -56,12 +58,13 @@
         <label for="modulo">Módulo</label>
         <select id="modulo"></select>
       </div>
-      <div class="Cl_FormCampo" style="max-width:120px;">
+      <div class="Cl_FormCampo CfgApoio_ColNarrow">
         <label for="sequencia">Sequência</label>
         <input type="number" id="sequencia" />
       </div>
     </div>
-    <div style="display:flex; gap:20px; margin-top:12px; align-items:center;">
+
+    <div class="CfgApoio_Switches">
       <label class="Cl_Switch">
         <input type="checkbox" id="statusToggle" checked />
         <span class="Cl_SwitchSlider"></span>
@@ -73,7 +76,8 @@
         <span>É menu pai (sidebar)</span>
       </label>
     </div>
-    <div class="Cl_FormCampo" style="margin-top:10px;">
+
+    <div class="Cl_FormCampo">
       <label for="obs">Observações</label>
       <textarea id="obs" rows="3"></textarea>
     </div>
@@ -85,6 +89,6 @@
   </div>
 
   <script src="{{ url_for('static', filename='script/global_utils.js') }}"></script>
-  <script src="{{ url_for('config.static', filename='script/Sconfig_menu_apoio.js') }}"></script>
+  <script src="{{ url_for('config.static', filename='script/Sconfig_menu_apoio.js') }}?v=2"></script>
 </body>
 </html>

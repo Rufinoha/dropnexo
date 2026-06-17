@@ -201,6 +201,7 @@ def main():
             "030_parametros_precificacao.sql",
             "031_estoque_deposito.sql",
             "032_valor_drop_manual.sql",
+            "033_precificacao_modo.sql",
         ):
             executar_sql_arquivo(conn, sql_dir / nome)
         seed_usuario_dev(conn)
