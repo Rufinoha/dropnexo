@@ -1,0 +1,24 @@
+# Exemplo systemd — /etc/systemd/system/dropnexo.service
+# Ajuste paths e usuário. Importante: --timeout acima de rotas lentas (importação Bling).
+
+[Unit]
+Description=DropNexo Gunicorn
+After=network.target postgresql.service
+
+[Service]
+User=www-data
+Group=www-data
+WorkingDirectory=/srv/dropnexo
+EnvironmentFile=/srv/dropnexo/.env
+ExecStart=/srv/dropnexo/venv/bin/gunicorn \
+    --bind 127.0.0.1:5260 \
+    --workers 3 \
+    --timeout 120 \
+    --graceful-timeout 30 \
+    --keep-alive 5 \
+    app:app
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

@@ -211,7 +211,7 @@ def oauth_iniciar():
 
 
 @bling_bp.get("/api/integracoes/bling/oauth/callback")
-@login_obrigatorio()
+@login_obrigatorio(exigir_tenant=False)
 def oauth_callback():
     if not _pode_integracoes():
         return redirect(url_for("integracoes.pagina", erro="permissao"))

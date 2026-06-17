@@ -14,6 +14,8 @@ from global_utils import Var_ConectarBanco, agora_utc, obter_base_url
 
 BLING_AUTH_BASE = "https://www.bling.com.br/Api/v3"
 BLING_API_BASE = "https://api.bling.com.br/Api/v3"
+# OAuth deve terminar antes do timeout do Gunicorn (default 30s).
+BLING_OAUTH_TIMEOUT = (5, 15)
 
 
 def _env(key: str) -> str:
@@ -67,12 +69,19 @@ def _headers_token() -> dict[str, str]:
 
 
 def _post_token(body: dict[str, str]) -> dict[str, Any]:
-    r = requests.post(
-        f"{BLING_AUTH_BASE}/oauth/token",
-        headers=_headers_token(),
-        data=body,
-        timeout=30,
-    )
+    try:
+        r = requests.post(
+            f"{BLING_AUTH_BASE}/oauth/token",
+            headers=_headers_token(),
+            data=body,
+            timeout=BLING_OAUTH_TIMEOUT,
+        )
+    except requests.Timeout as e:
+        raise RuntimeError(
+            "Bling demorou para responder na troca do código OAuth. Tente conectar novamente."
+        ) from e
+    except requests.RequestException as e:
+        raise RuntimeError(f"Falha de rede ao contactar o Bling: {e}") from e
     if r.status_code >= 400:
         raise RuntimeError(f"Bling OAuth falhou ({r.status_code}): {r.text[:500]}")
     data = r.json()
