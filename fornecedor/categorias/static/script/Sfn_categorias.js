@@ -2,9 +2,12 @@
   const segLista = document.getElementById("fn_cat_seg_lista");
   const segVazio = document.getElementById("fn_cat_seg_vazio");
   const segTitulo = document.getElementById("fn_cat_seg_titulo");
+  const segCount = document.getElementById("fn_cat_seg_count");
   const arvoreEl = document.getElementById("fn_cat_arvore");
   const arvoreVazio = document.getElementById("fn_cat_arvore_vazio");
   const btnRaiz = document.getElementById("fn_cat_btn_raiz");
+  const btnRaizEmpty = document.getElementById("fn_cat_btn_raiz_empty");
+  const menuPop = document.getElementById("fn_cat_menu_pop");
   const modal = document.getElementById("fn_cat_modal");
   const form = document.getElementById("fn_cat_form");
   const inpId = document.getElementById("fn_cat_id");
@@ -20,10 +23,17 @@
 
   const BASE = "/fornecedor/categorias";
   const MAX_NIVEL = 3;
+
+  const ICON_BAG =
+    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>';
+  const ICON_DOTS =
+    '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>';
+
   let segmentos = [];
   let idSegmentoAtual = null;
   let arvoreCache = [];
   let blingPendentes = { total: 0, segmentos: [], auto_segmento: null };
+  let menuCtx = null;
   const fechadosPorSeg = new Map();
 
   function fechados() {
@@ -56,6 +66,12 @@
     inpNome.focus();
   }
 
+  function fecharMenu() {
+    if (!menuPop) return;
+    menuPop.hidden = true;
+    menuCtx = null;
+  }
+
   function findNode(nodes, id) {
     for (const n of nodes || []) {
       if (n.id === id) return n;
@@ -65,9 +81,28 @@
     return null;
   }
 
+  function gripEl() {
+    const g = document.createElement("span");
+    g.className = "FnCatTree-grip";
+    g.setAttribute("aria-hidden", "true");
+    g.title = "Arrastar";
+    const col1 = document.createElement("span");
+    col1.className = "FnCatTree-gripCols";
+    const col2 = document.createElement("span");
+    col2.className = "FnCatTree-gripCols";
+    for (let i = 0; i < 3; i++) {
+      col1.appendChild(document.createElement("span"));
+      col2.appendChild(document.createElement("span"));
+    }
+    g.appendChild(col1);
+    g.appendChild(col2);
+    return g;
+  }
+
   function renderNo(n, nivel) {
     const temFilhos = !!(n.filhos && n.filhos.length);
     const aberto = temFilhos && !fechados().has(n.id);
+    const qtd = Number(n.qtd_produtos || 0);
 
     const li = document.createElement("li");
     li.className = "FnCatTree-item";
@@ -76,36 +111,37 @@
 
     const row = document.createElement("div");
     row.className = "FnCatTree-row";
-    if (temFilhos) {
-      row.classList.add("FnCatTree-row--pai");
-      row.dataset.toggleId = String(n.id);
-      row.setAttribute("role", "button");
-      row.setAttribute("tabindex", "0");
-      row.setAttribute("aria-expanded", aberto ? "true" : "false");
-      row.setAttribute("aria-label", (aberto ? "Recolher " : "Expandir ") + (n.nome || "categoria"));
-    }
 
-    const guide = document.createElement("span");
-    guide.className = "FnCatTree-guide";
-    guide.setAttribute("aria-hidden", "true");
-    row.appendChild(guide);
+    row.appendChild(gripEl());
+
+    const icon = document.createElement("span");
+    icon.className = "FnCatTree-icon";
+    icon.innerHTML = ICON_BAG;
+    row.appendChild(icon);
+
+    const body = document.createElement("div");
+    body.className = "FnCatTree-body";
 
     const nome = document.createElement("span");
     nome.className = "FnCatTree-nome";
     nome.textContent = n.nome || "";
-    row.appendChild(nome);
+    body.appendChild(nome);
 
-    const qtd = document.createElement("span");
-    qtd.className = "FnCatTree-qtd";
-    qtd.textContent = (n.qtd_produtos || 0) + " prod.";
-    row.appendChild(qtd);
+    const qtdEl = document.createElement("span");
+    qtdEl.className = "FnCatTree-qtd";
+    qtdEl.textContent = qtd + (qtd === 1 ? " produto" : " produtos");
+    body.appendChild(qtdEl);
 
-    const acoes = document.createElement("span");
-    acoes.className = "FnCatTree-acoes";
-    acoes.innerHTML =
-      '<button type="button" data-acao="editar">Editar</button>' +
-      (nivel < MAX_NIVEL ? '<button type="button" data-acao="filho">+ Sub</button>' : "");
-    row.appendChild(acoes);
+    row.appendChild(body);
+
+    const menuBtn = document.createElement("button");
+    menuBtn.type = "button";
+    menuBtn.className = "FnCatTree-menu";
+    menuBtn.innerHTML = ICON_DOTS;
+    menuBtn.setAttribute("aria-label", "Ações de " + (n.nome || "categoria"));
+    menuBtn.dataset.menuId = String(n.id);
+    menuBtn.dataset.menuNivel = String(nivel);
+    row.appendChild(menuBtn);
 
     li.appendChild(row);
 
@@ -123,6 +159,10 @@
 
   function renderArvore() {
     arvoreEl.innerHTML = "";
+    if (!idSegmentoAtual) {
+      arvoreVazio.hidden = true;
+      return;
+    }
     if (!arvoreCache.length) {
       arvoreVazio.hidden = false;
       return;
@@ -134,19 +174,73 @@
     arvoreEl.appendChild(ul);
   }
 
+  function segCountLabel(n) {
+    return n + (n === 1 ? " segmento" : " segmentos");
+  }
+
   function renderSegmentos() {
     if (!segmentos.length) {
       segLista.innerHTML = "";
       segVazio.hidden = false;
+      if (segCount) segCount.textContent = segCountLabel(0);
       return;
     }
     segVazio.hidden = true;
     segLista.innerHTML = segmentos
       .map(
         (s) =>
-          `<button type="button" class="FnCat_SegBtn${s.id === idSegmentoAtual ? " is-active" : ""}" data-id="${s.id}">${escapeHtml(s.nome)}</button>`
+          `<button type="button" class="FnCat_SegBtn${s.id === idSegmentoAtual ? " is-active" : ""}" data-id="${s.id}">
+            <span class="FnCat_SegBtnIco">${ICON_BAG}</span>
+            <span class="FnCat_SegBtnNome">${escapeHtml(s.nome)}</span>
+            <span class="FnCat_SegBtnChev" aria-hidden="true">›</span>
+          </button>`
       )
       .join("");
+    if (segCount) segCount.textContent = segCountLabel(segmentos.length);
+  }
+
+  function syncToolbar() {
+    const temSeg = !!idSegmentoAtual;
+    btnRaiz.disabled = !temSeg;
+    if (btnRaizEmpty) btnRaizEmpty.disabled = !temSeg;
+  }
+
+  function abrirMenu(btn, node, nivel) {
+    if (!menuPop) return;
+    menuCtx = { node, nivel };
+    const rect = btn.getBoundingClientRect();
+    const items = [
+      { acao: "editar", label: "Editar categoria", danger: false },
+      ...(nivel < MAX_NIVEL
+        ? [{ acao: "filho", label: "Nova subcategoria", danger: false }]
+        : []),
+      { acao: "excluir", label: "Excluir", danger: true },
+    ];
+    menuPop.innerHTML = items
+      .map(
+        (it) =>
+          `<button type="button" data-acao="${it.acao}" class="${it.danger ? "danger" : ""}">${escapeHtml(it.label)}</button>`
+      )
+      .join("");
+    menuPop.hidden = false;
+    menuPop.style.top = rect.bottom + 6 + "px";
+    menuPop.style.left = Math.max(8, rect.right - 168) + "px";
+  }
+
+  async function excluirNo(id) {
+    const ok = U.confirmar
+      ? await U.confirmar("Excluir categoria?", "Esta ação não pode ser desfeita.")
+      : confirm("Excluir esta categoria?");
+    if (!ok) return;
+    const r = await fetch(BASE + "/excluir", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+    const j = await r.json();
+    await alertar(j.message, j.success ? "success" : "error");
+    if (j.success) await carregarArvore();
   }
 
   async function carregarBlingPendentes() {
@@ -159,7 +253,7 @@
       if (j.total > 0) {
         blingBanner.hidden = false;
         if (blingTitulo) {
-          blingTitulo.textContent = `${j.total} categoria(s) do Bling aguardando segmento`;
+          blingTitulo.textContent = "Categorias do Bling aguardando segmento";
         }
       } else {
         blingBanner.hidden = true;
@@ -176,7 +270,7 @@
     }
     let idSeg = blingPendentes.auto_segmento || idSegmentoAtual;
     if (segs.length > 1) {
-      const opcoes = segs.reduce((acc, s, i) => {
+      const opcoes = segs.reduce((acc, s) => {
         acc[s.id] = s.nome;
         return acc;
       }, {});
@@ -229,6 +323,8 @@
       await selecionarSegmento(+ini);
     } else if (segmentos.length === 1) {
       await selecionarSegmento(segmentos[0].id);
+    } else {
+      syncToolbar();
     }
   }
 
@@ -236,7 +332,6 @@
     idSegmentoAtual = id;
     const seg = segmentos.find((s) => s.id === id);
     segTitulo.textContent = seg ? seg.nome : "Segmento";
-    btnRaiz.disabled = !id;
     renderSegmentos();
     const url = new URL(window.location.href);
     url.searchParams.set("segmento", id);
@@ -248,12 +343,12 @@
     if (!idSegmentoAtual) {
       arvoreCache = [];
       renderArvore();
+      syncToolbar();
       return;
     }
-    const r = await fetch(
-      BASE + "/arvore?id_segmento=" + encodeURIComponent(idSegmentoAtual),
-      { credentials: "same-origin" }
-    );
+    const r = await fetch(BASE + "/arvore?id_segmento=" + encodeURIComponent(idSegmentoAtual), {
+      credentials: "same-origin",
+    });
     const j = await r.json();
     if (!j.success) {
       alertar(j.message || "Erro ao carregar.", "error");
@@ -261,6 +356,7 @@
     }
     arvoreCache = j.arvore || [];
     renderArvore();
+    syncToolbar();
   }
 
   function abrirForm(opts) {
@@ -274,58 +370,69 @@
     abrirModal();
   }
 
+  function abrirNovaRaiz() {
+    abrirForm({
+      titulo: "Nova categoria (nível 1)",
+      ctx: "Categoria principal do segmento.",
+      parentId: "",
+      excluir: false,
+    });
+  }
+
   segLista.addEventListener("click", (e) => {
     const btn = e.target.closest(".FnCat_SegBtn");
     if (!btn) return;
     selecionarSegmento(+btn.getAttribute("data-id"));
   });
 
-  btnRaiz.addEventListener("click", () =>
-    abrirForm({
-      titulo: "Nova categoria (nível 1)",
-      ctx: "Categoria principal do segmento.",
-      parentId: "",
-      excluir: false,
-    })
-  );
+  btnRaiz.addEventListener("click", abrirNovaRaiz);
+  btnRaizEmpty?.addEventListener("click", abrirNovaRaiz);
 
   arvoreEl.addEventListener("click", (e) => {
-    const tog = e.target.closest(".FnCatTree-row--pai[data-toggle-id]");
-    if (tog) {
-      if (e.target.closest("[data-acao]")) return;
-      e.preventDefault();
-      const id = +tog.dataset.toggleId;
-      const f = fechados();
-      if (f.has(id)) f.delete(id);
-      else f.add(id);
-      renderArvore();
-      return;
-    }
-
-    const acao = e.target.closest("[data-acao]");
-    if (!acao) return;
-    const li = e.target.closest(".FnCatTree-item[data-id]");
-    if (!li) return;
-    const node = findNode(arvoreCache, +li.dataset.id);
+    const menuBtn = e.target.closest(".FnCatTree-menu[data-menu-id]");
+    if (!menuBtn) return;
+    e.stopPropagation();
+    const node = findNode(arvoreCache, +menuBtn.dataset.menuId);
     if (!node) return;
-    if (acao.getAttribute("data-acao") === "editar") {
+    abrirMenu(menuBtn, node, +menuBtn.dataset.menuNivel);
+  });
+
+  menuPop?.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-acao]");
+    if (!btn || !menuCtx) return;
+    const { node, nivel } = menuCtx;
+    fecharMenu();
+    const acao = btn.getAttribute("data-acao");
+    if (acao === "editar") {
       abrirForm({
         id: node.id,
         parentId: node.parent_id || "",
         nome: node.nome,
         ordem: node.ordem,
         titulo: "Editar categoria",
-        ctx: "Nível " + (node.nivel || 1),
+        ctx: "Nível " + (node.nivel || nivel),
         excluir: true,
       });
-    } else {
+    } else if (acao === "filho") {
       abrirForm({
         titulo: "Nova subcategoria",
         ctx: "Filha de: " + node.nome,
         parentId: node.id,
         excluir: false,
       });
+    } else if (acao === "excluir") {
+      excluirNo(node.id).catch((err) => alertar(err.message, "error"));
     }
+  });
+
+  document.addEventListener("click", (e) => {
+    if (!menuPop || menuPop.hidden) return;
+    if (e.target.closest(".FnCatTree-menu") || e.target.closest("#fn_cat_menu_pop")) return;
+    fecharMenu();
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") fecharMenu();
   });
 
   form.addEventListener("submit", async (e) => {
@@ -354,22 +461,8 @@
 
   btnExcluir.addEventListener("click", async () => {
     if (!inpId.value) return;
-    const ok = U.confirmar
-      ? await U.confirmar("Excluir categoria?", "Esta ação não pode ser desfeita.")
-      : confirm("Excluir esta categoria?");
-    if (!ok) return;
-    const r = await fetch(BASE + "/excluir", {
-      method: "POST",
-      credentials: "same-origin",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: +inpId.value }),
-    });
-    const j = await r.json();
-    alertar(j.message, j.success ? "success" : "error");
-    if (j.success) {
-      fecharModal();
-      await carregarArvore();
-    }
+    await excluirNo(+inpId.value);
+    fecharModal();
   });
 
   document.getElementById("fn_cat_modal_fechar").onclick = fecharModal;

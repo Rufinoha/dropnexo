@@ -3,51 +3,113 @@
 {% set nav_ativo = 'fn_categorias' %}
 {% block topbar_title %}Categorias{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('fn_categorias.static', filename='style/Cfn_categorias.css') }}?v=9" />
-<link rel="stylesheet" href="{{ url_for('fn_categorias.static', filename='style/Cfn_categorias_tree.css') }}?v=8" />
+<link rel="stylesheet" href="{{ url_for('fn_categorias.static', filename='style/Cfn_categorias.css') }}?v=11" />
+<link rel="stylesheet" href="{{ url_for('fn_categorias.static', filename='style/Cfn_categorias_tree.css') }}?v=10" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal FnCat_Page">
-  <div class="cl-page-title">
-    <h2>Categorias</h2>
-    <p class="cl-page-desc">
-      Segmento em <a href="{{ url_for('perfil.meu_perfil', aba='empresa') }}">Minha empresa</a> —
-      até 3 níveis de categorias.
-    </p>
-  </div>
+  <header class="FnCat_Hero">
+    <div class="FnCat_HeroMain">
+      <div class="FnCat_HeroTitleRow">
+        <span class="FnCat_HeroIco" aria-hidden="true">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+        </span>
+        <h2>Categorias</h2>
+      </div>
+      <p class="FnCat_HeroDesc">Organize seus produtos em até 3 níveis para uma navegação mais eficiente.</p>
+      <a class="FnCat_HeroLink" href="{{ url_for('perfil.meu_perfil', aba='empresa') }}">
+        Saiba mais sobre categorias
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+      </a>
+    </div>
+    <div class="FnCat_HeroArt" aria-hidden="true">
+      <div class="FnCat_ArtFolder FnCat_ArtFolder--1"></div>
+      <div class="FnCat_ArtFolder FnCat_ArtFolder--2"></div>
+      <div class="FnCat_ArtTag"></div>
+      <div class="FnCat_ArtPlant"></div>
+    </div>
+  </header>
 
   <div id="fn_cat_bling_banner" class="FnCat_BlingBanner" hidden>
+    <span class="FnCat_BlingSpark" aria-hidden="true">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3-1.9 5.8H4l4.9 3.6-1.9 5.8L12 14.6l4.9 3.6-1.9-5.8L20 8.8h-6.1Z"/></svg>
+    </span>
     <div class="FnCat_BlingBannerText">
       <strong id="fn_cat_bling_titulo">Categorias do Bling aguardando segmento</strong>
-      <p id="fn_cat_bling_desc" class="FnCat_Hint">
-        Importadas da integração Bling. Associe a um segmento para exibi-las na árvore.
-      </p>
+      <p id="fn_cat_bling_desc">Estas categorias foram importadas da integração Bling. Associe a um segmento para exibi-las na árvore.</p>
     </div>
-    <button type="button" class="Cl_botaoprimario" id="fn_cat_btn_associar_bling">Associar ao segmento</button>
+    <button type="button" class="FnCat_BlingBtn" id="fn_cat_btn_associar_bling">
+      Associar ao segmento
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+    </button>
   </div>
 
   <div class="FnCat_Layout">
     <aside class="FnCat_Segmentos" aria-label="Segmentos ativos">
-      <h3 class="FnCat_PanelTitulo">Segmentos</h3>
+      <div class="FnCat_SegHead">
+        <h3 class="FnCat_SegHeadTitulo">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          Segmentos
+        </h3>
+        <a class="FnCat_SegAdd" href="{{ url_for('perfil.meu_perfil', aba='empresa') }}" title="Gerenciar segmentos">+</a>
+      </div>
       <div id="fn_cat_seg_lista" class="FnCat_SegLista"></div>
-      <p id="fn_cat_seg_vazio" class="FnCat_Hint" hidden>
-        Nenhum segmento ativo. <a href="{{ url_for('perfil.meu_perfil', aba='empresa') }}">Ative em Minha empresa</a>.
+      <p id="fn_cat_seg_vazio" class="FnCat_Hint FnCat_SegVazio" hidden>
+        Nenhum segmento ativo.
+        <a href="{{ url_for('perfil.meu_perfil', aba='empresa') }}">Ative em Minha empresa</a>.
       </p>
+      <div class="FnCat_SegPromo">
+        <div class="FnCat_SegPromoArt" aria-hidden="true"></div>
+        <p>Crie segmentos para organizar suas categorias de forma estratégica.</p>
+        <a class="FnCat_SegPromoBtn" href="{{ url_for('perfil.meu_perfil', aba='empresa') }}">+ Novo segmento</a>
+      </div>
     </aside>
 
     <main class="FnCat_ArvorePanel">
-      <h3 id="fn_cat_seg_titulo" class="FnCat_PanelTitulo">Selecione um segmento</h3>
-
-      <div class="FnCatTree-wrap">
-        <div class="FnCatTree-top">
-          <button type="button" class="Cl_BtnIncluir" id="fn_cat_btn_raiz" disabled>+ Categoria nível 1</button>
+      <header class="FnCat_PanelHead">
+        <div class="FnCat_PanelHeadLeft">
+          <span class="FnCat_PanelHeadIco" aria-hidden="true">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+          </span>
+          <h3 id="fn_cat_seg_titulo" class="FnCat_PanelHeadTitle">Selecione um segmento</h3>
         </div>
+        <div class="FnCat_PanelHeadRight">
+          <span class="FnCat_Pill FnCat_Pill--green" id="fn_cat_badge_niveis">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 12.65-8.58 3.91a2 2 0 0 1-1.66 0L2 12.65"/><path d="m22 17.65-8.58 3.91a2 2 0 0 1-1.66 0L2 17.65"/></svg>
+            3 níveis
+          </span>
+          <span class="FnCat_Pill FnCat_Pill--green" id="fn_cat_badge_segmentos">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+            <span id="fn_cat_seg_count">0 segmentos</span>
+          </span>
+          <button type="button" class="FnCat_BtnPrimary" id="fn_cat_btn_raiz" disabled>+ Categoria nível 1</button>
+        </div>
+      </header>
+
+      <div class="FnCatTree-scroll">
         <div id="fn_cat_arvore" class="FnCatTree" aria-live="polite"></div>
+        <div id="fn_cat_arvore_vazio" class="FnCat_Empty" hidden>
+          <div class="FnCat_EmptyIcon" aria-hidden="true">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+          </div>
+          <strong>Nenhuma categoria neste segmento</strong>
+          <p>Crie a primeira categoria ou associe importações do Bling.</p>
+          <button type="button" class="FnCat_BtnPrimary FnCat_BtnPrimary--outline" id="fn_cat_btn_raiz_empty" disabled>+ Categoria nível 1</button>
+        </div>
       </div>
-      <p id="fn_cat_arvore_vazio" class="FnCat_Vazio" hidden>Nenhuma categoria. Crie a primeira acima.</p>
     </main>
   </div>
+
+  <footer class="FnCat_Tip">
+    <span class="FnCat_TipIco" aria-hidden="true">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg>
+    </span>
+    <p><strong>Dica:</strong> Mantenha sua estrutura de categorias organizada para melhorar a experiência dos seus clientes.</p>
+    <div class="FnCat_TipWave" aria-hidden="true"></div>
+  </footer>
 </div>
+
+<div id="fn_cat_menu_pop" class="FnCat_MenuPop" hidden role="menu"></div>
 
 <div id="fn_cat_modal" class="FnCat_Modal" hidden aria-hidden="true" role="dialog">
   <div class="FnCat_ModalInner">
@@ -61,11 +123,11 @@
       <p id="fn_cat_ctx" class="FnCat_Ctx"></p>
       <div class="FnCat_Field">
         <label for="fn_cat_nome">Nome</label>
-        <input type="text" id="fn_cat_nome" maxlength="120" required />
+        <input type="text" id="fn_cat_nome" maxlength="120" required placeholder="Ex.: Roupas, Acessórios…" />
       </div>
       <div class="FnCat_Field">
-        <label for="fn_cat_ordem">Ordem</label>
-        <input type="number" id="fn_cat_ordem" value="0" style="width:100px" />
+        <label for="fn_cat_ordem">Ordem de exibição</label>
+        <input type="number" id="fn_cat_ordem" value="0" min="0" />
       </div>
       <div class="Cl_BotoesApoio FnCat_ModalFoot">
         <button type="submit" class="Cl_BtnSalvar" id="fn_cat_btn_salvar">Salvar</button>
@@ -78,5 +140,5 @@
 {% endblock %}
 {% block page_js %}
 <script>window.FN_CAT_SEG_INICIAL = {{ id_segmento_inicial|tojson }};</script>
-<script src="{{ url_for('fn_categorias.static', filename='script/Sfn_categorias.js') }}?v=9"></script>
+<script src="{{ url_for('fn_categorias.static', filename='script/Sfn_categorias.js') }}?v=11"></script>
 {% endblock %}
