@@ -206,6 +206,7 @@ def main():
             "035_variante_imagens.sql",
             "036_variante_descricao.sql",
             "037_variante_precos_promocao.sql",
+            "038_marktplace.sql",
         ):
             executar_sql_arquivo(conn, sql_dir / nome)
         seed_usuario_dev(conn)

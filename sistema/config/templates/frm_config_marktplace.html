@@ -1,0 +1,150 @@
+{% extends "frm_base.html" %}
+{% block title %}Marktplace — Configurações — {{ MARCA_NOME }}{% endblock %}
+{% set nav_ativo = 'config' %}
+{% block topbar_title %}Marktplace — catálogo{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.snow.css" />
+<link rel="stylesheet" href="{{ url_for('fn_catalogo.static', filename='style/Ccatalogo_apoio.css') }}" />
+<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_marktplace.css') }}" />
+{% endblock %}
+{% block content %}
+<div class="Cl_ContainerApoio cl-page-principal CfgMk_Page">
+  <div class="cl-page-title">
+    <h2>Produtos do Marktplace</h2>
+    <p class="cl-page-desc">Cadastre add-ons, armazenamento e treinamentos. Itens ativos aparecem na vitrine conforme o público definido.</p>
+  </div>
+  <p class="CfgMk_Aviso"><a class="Cl_BtnLink" href="{{ url_for('config.configuracoes') }}">← Voltar às Configurações</a></p>
+
+  <div class="CfgMk_Layout">
+    <section class="CfgMk_ListaWrap">
+      <div class="CfgMk_ListaHead">
+        <h3>Itens cadastrados</h3>
+        <button type="button" class="Cl_BtnIncluir" id="cfg_mk_btnNovo">Novo produto</button>
+      </div>
+      <div id="cfg_mk_lista" class="CfgMk_Lista"></div>
+    </section>
+
+    <section class="CfgMk_FormWrap">
+      <h3 id="cfg_mk_formTitulo">Novo produto</h3>
+      <input type="hidden" id="cfg_mk_id" value="" />
+
+      <div class="CfgMk_FormGrid">
+        <div class="filter-group CfgMk_Full">
+          <label for="cfg_mk_titulo">Título</label>
+          <input type="text" id="cfg_mk_titulo" placeholder="Ex.: + 100 MB de armazenamento" />
+        </div>
+        <div class="filter-group">
+          <label for="cfg_mk_slug">Slug</label>
+          <input type="text" id="cfg_mk_slug" placeholder="armazenamento-100mb" />
+        </div>
+        <div class="filter-group">
+          <label for="cfg_mk_ordem">Ordem</label>
+          <input type="number" id="cfg_mk_ordem" value="0" />
+        </div>
+        <div class="filter-group CfgMk_Full">
+          <label for="cfg_mk_resumo">Resumo (card)</label>
+          <textarea id="cfg_mk_resumo" rows="2" placeholder="Texto curto exibido no card da vitrine"></textarea>
+        </div>
+        <div class="filter-group">
+          <label for="cfg_mk_valor">Valor (R$)</label>
+          <input type="text" id="cfg_mk_valor" inputmode="decimal" placeholder="19,90" />
+        </div>
+        <div class="filter-group">
+          <label for="cfg_mk_tipo_pagamento">Pagamento</label>
+          <select id="cfg_mk_tipo_pagamento">
+            <option value="unico">Único</option>
+            <option value="mensal">Mensal</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label for="cfg_mk_publico">Público</label>
+          <select id="cfg_mk_publico">
+            <option value="ambos">Fornecedor e Vendedor</option>
+            <option value="fornecedor">Somente Fornecedor</option>
+            <option value="vendedor">Somente Vendedor</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label for="cfg_mk_categoria">Categoria</label>
+          <select id="cfg_mk_categoria">
+            <option value="modulo">Módulo</option>
+            <option value="armazenamento">Armazenamento</option>
+            <option value="treinamento">Treinamento</option>
+            <option value="suporte">Suporte</option>
+            <option value="geral">Geral</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label for="cfg_mk_tipo_acao">Ação automática</label>
+          <select id="cfg_mk_tipo_acao">
+            <option value="">Nenhuma</option>
+            <option value="modulo_vendedor">Ativar módulo Vendedor</option>
+            <option value="modulo_fornecedor">Ativar módulo Fornecedor</option>
+            <option value="storage">Pacote armazenamento</option>
+            <option value="treinamento">Treinamento</option>
+            <option value="suporte_urgente">Suporte urgente</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label for="cfg_mk_icone">Ícone (tech)</label>
+          <input type="text" id="cfg_mk_icone" value="shopping-bag" placeholder="shopping-bag" />
+        </div>
+        <div class="filter-group">
+          <label for="cfg_mk_cor">Cor do topo</label>
+          <input type="color" id="cfg_mk_cor" value="#5b57f5" />
+        </div>
+        <div class="filter-group CfgMk_Full">
+          <label for="cfg_mk_meta">Meta (JSON)</label>
+          <textarea id="cfg_mk_meta" rows="2" placeholder='{"mb": 100} ou {"apenas_plano": "starter"}'></textarea>
+        </div>
+        <div class="filter-group CfgMk_Check">
+          <label><input type="checkbox" id="cfg_mk_ativo" checked /> Ativo na vitrine</label>
+        </div>
+      </div>
+
+      <div class="Cl_FormCampo Cat_DescricaoCampo CfgMk_Descricao">
+        <div class="Cat_DescEditorWrap">
+          <div class="Cat_DescEditorLabelRow">
+            <label for="descricaoEditor">Descrição detalhada</label>
+            <div class="Cat_DescEditorActions">
+              <button type="button" id="btnDescCopyHtml" class="Cat_DescActionBtn" hidden title="Copiar HTML">
+                Copiar HTML
+              </button>
+              <button type="button" id="btnDescModeToggle" class="Cat_DescActionBtn Cat_DescActionBtn--primary" title="Alternar editor / HTML">
+                Ver código HTML
+              </button>
+            </div>
+          </div>
+          <div id="descricaoVisualPane" class="Cat_DescVisualPane Cat_DescToolbarWrap">
+            <div id="descricaoEditor" class="Cat_DescQuill"></div>
+          </div>
+          <div id="descricaoHtmlPane" class="Cat_DescHtmlPane" hidden>
+            <p class="Cat_DescHtmlHint">Cole HTML à esquerda — a pré-visualização atualiza em tempo real.</p>
+            <div class="Cat_DescHtmlSplit">
+              <div class="Cat_DescHtmlCode">
+                <div class="Cat_DescPaneHead">Código HTML</div>
+                <textarea id="descricaoHtml" spellcheck="false" placeholder="&lt;p&gt;Descrição formatada…&lt;/p&gt;"></textarea>
+              </div>
+              <div class="Cat_DescHtmlPreview">
+                <div class="Cat_DescPaneHead">Pré-visualização</div>
+                <div id="descricaoPreview" class="Cat_DescPreviewBody"></div>
+              </div>
+            </div>
+          </div>
+          <input type="hidden" id="descricao" value="" />
+        </div>
+      </div>
+
+      <div class="CfgMk_FormActions">
+        <button type="button" class="Cl_BtnSalvar" id="cfg_mk_btnSalvar">Salvar</button>
+        <button type="button" class="Cl_BtnExcluir" id="cfg_mk_btnExcluir" hidden>Excluir</button>
+      </div>
+    </section>
+  </div>
+</div>
+{% endblock %}
+{% block page_js %}
+<script src="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.js"></script>
+<script src="{{ url_for('fn_catalogo.static', filename='script/Scatalogo_descricao_editor.js') }}"></script>
+<script src="{{ url_for('config.static', filename='script/Sconfig_marktplace.js') }}"></script>
+{% endblock %}

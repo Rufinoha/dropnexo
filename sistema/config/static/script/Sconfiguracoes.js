@@ -34,6 +34,12 @@
       iconeTech: "nivel_acesso",
     },
     {
+      titulo: "Marktplace",
+      texto: "Cadastre add-ons, armazenamento e treinamentos exibidos na vitrine da plataforma.",
+      rota: "/configuracoes/marktplace-produtos",
+      iconeTech: "shopping-bag",
+    },
+    {
       titulo: "Novidades",
       texto: "Gerencie os cards exibidos na lateral do sistema.",
       rota: "/configuracoes/novidades",

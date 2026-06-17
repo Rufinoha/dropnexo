@@ -1,0 +1,215 @@
+.Mk_Page {
+  max-width: 1120px;
+  margin: 0 auto;
+}
+
+.Mk_Hero {
+  margin-bottom: 1.5rem;
+}
+
+.Mk_Hero h2 {
+  margin: 0 0 0.35rem;
+  font-size: 1.35rem;
+  color: #1e293b;
+}
+
+.Mk_Hero p {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.95rem;
+}
+
+.Mk_Grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+}
+
+.Mk_Loading,
+.Mk_Empty {
+  grid-column: 1 / -1;
+  text-align: center;
+  color: #64748b;
+  padding: 2rem;
+}
+
+.Mk_Card {
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border: 1px solid #e8edf3;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  transition: box-shadow 0.15s, transform 0.15s;
+}
+
+.Mk_Card:hover {
+  box-shadow: 0 8px 24px rgba(91, 87, 245, 0.1);
+  transform: translateY(-2px);
+}
+
+.Mk_CardTopo {
+  height: 6px;
+}
+
+.Mk_CardBody {
+  padding: 1rem 1.1rem 1.1rem;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.Mk_CardCat {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #8b5cf6;
+  margin-bottom: 0.35rem;
+}
+
+.Mk_CardTitulo {
+  margin: 0 0 0.45rem;
+  font-size: 1.02rem;
+  color: #0f172a;
+  line-height: 1.35;
+}
+
+.Mk_CardResumo {
+  margin: 0 0 1rem;
+  font-size: 0.88rem;
+  color: #64748b;
+  line-height: 1.45;
+  flex: 1;
+}
+
+.Mk_CardFoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: auto;
+}
+
+.Mk_Preco {
+  font-weight: 700;
+  color: #5b57f5;
+  font-size: 0.92rem;
+}
+
+.Mk_BtnGhost,
+.Mk_BtnPrimary {
+  border: none;
+  border-radius: 9px;
+  padding: 0.45rem 0.85rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.Mk_BtnGhost {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.Mk_BtnGhost:hover {
+  background: #e2e8f0;
+}
+
+.Mk_BtnPrimary {
+  background: #5b57f5;
+  color: #fff;
+}
+
+.Mk_BtnPrimary:hover {
+  background: #4a46e0;
+}
+
+.Mk_Modal[hidden] {
+  display: none !important;
+}
+
+.Mk_Modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.Mk_ModalBackdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.Mk_ModalPanel {
+  position: relative;
+  width: min(640px, 100%);
+  max-height: min(88vh, 720px);
+  overflow: auto;
+  background: #fff;
+  border-radius: 16px;
+  padding: 1.25rem 1.35rem 1.1rem;
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.18);
+}
+
+.Mk_ModalClose {
+  position: absolute;
+  top: 0.65rem;
+  right: 0.75rem;
+  border: none;
+  background: transparent;
+  font-size: 1.5rem;
+  line-height: 1;
+  color: #94a3b8;
+  cursor: pointer;
+}
+
+.Mk_ModalTopo {
+  height: 5px;
+  border-radius: 4px;
+  margin-bottom: 0.85rem;
+}
+
+.Mk_ModalPanel h3 {
+  margin: 0 0 0.35rem;
+  font-size: 1.2rem;
+  color: #0f172a;
+}
+
+.Mk_ModalResumo {
+  margin: 0 0 0.85rem;
+  color: #64748b;
+  font-size: 0.92rem;
+}
+
+.Mk_RichText {
+  font-size: 0.92rem;
+  color: #334155;
+  line-height: 1.55;
+}
+
+.Mk_RichText ul,
+.Mk_RichText ol {
+  padding-left: 1.25rem;
+}
+
+.Mk_ModalFoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1.1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #eef2f7;
+}
+
+.Mk_ModalPreco {
+  font-weight: 700;
+  color: #5b57f5;
+}

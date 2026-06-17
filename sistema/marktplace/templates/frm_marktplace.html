@@ -1,0 +1,39 @@
+{% extends "frm_base.html" %}
+{% block title %}Marktplace — {{ MARCA_NOME }}{% endblock %}
+{% set nav_ativo = 'marktplace' %}
+{% block topbar_title %}Marktplace{% endblock %}
+{% block topbar_sub %}<p class="fg-topbar-sub">Add-ons, armazenamento e treinamentos para sua conta</p>{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('marktplace.static', filename='style/Cmarktplace.css') }}" />
+{% endblock %}
+{% block content %}
+<div class="Mk_Page">
+  <header class="Mk_Hero">
+    <div>
+      <h2>Amplie sua operação</h2>
+      <p>Contrate módulos extras, pacotes de armazenamento e treinamentos pensados para o seu perfil.</p>
+    </div>
+  </header>
+  <div id="mk_grid" class="Mk_Grid" aria-live="polite">
+    <p class="Mk_Loading">Carregando catálogo…</p>
+  </div>
+</div>
+
+<div id="mk_modal" class="Mk_Modal" hidden>
+  <div class="Mk_ModalBackdrop" data-mk-close></div>
+  <div class="Mk_ModalPanel" role="dialog" aria-modal="true" aria-labelledby="mk_modal_titulo">
+    <button type="button" class="Mk_ModalClose" data-mk-close aria-label="Fechar">×</button>
+    <div class="Mk_ModalTopo" id="mk_modal_topo"></div>
+    <h3 id="mk_modal_titulo"></h3>
+    <p class="Mk_ModalResumo" id="mk_modal_resumo"></p>
+    <div class="Mk_ModalDesc Mk_RichText" id="mk_modal_desc"></div>
+    <div class="Mk_ModalFoot">
+      <span class="Mk_ModalPreco" id="mk_modal_preco"></span>
+      <button type="button" class="Mk_BtnPrimary" id="mk_btnContratar">Contratar</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block page_js %}
+<script src="{{ url_for('marktplace.static', filename='script/Smarktplace.js') }}"></script>
+{% endblock %}

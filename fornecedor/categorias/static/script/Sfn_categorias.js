@@ -51,10 +51,23 @@
       .replace(/>/g, "&gt;");
   }
 
-  const U = window.Util || {};
-
   function alertar(msg, tipo) {
-    return U.alertar ? U.alertar(msg, tipo || "info") : Swal.fire("Atenção", msg, "warning");
+    const U = window.Util;
+    return U?.alertar ? U.alertar(msg, tipo || "info") : Swal.fire("Atenção", msg, "warning");
+  }
+
+  async function confirmarAcao(titulo, texto) {
+    const U = window.Util;
+    if (U?.confirmar) return U.confirmar(titulo, texto);
+    const r = await Swal.fire({
+      title: titulo || "Confirmar?",
+      text: texto || "",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Sim",
+      cancelButtonText: "Cancelar",
+    });
+    return !!r.isConfirmed;
   }
 
   function fecharModal() {
@@ -246,9 +259,7 @@
   }
 
   async function excluirNo(id) {
-    const ok = U.confirmar
-      ? await U.confirmar("Excluir categoria?", "Esta ação não pode ser desfeita.")
-      : confirm("Excluir esta categoria?");
+    const ok = await confirmarAcao("Excluir categoria?", "Esta ação não pode ser desfeita.");
     if (!ok) return;
     const r = await fetch(BASE + "/excluir", {
       method: "POST",

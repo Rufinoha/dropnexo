@@ -960,6 +960,140 @@ def segmentos_plataforma_excluir():
         conn.close()
 
 
+# --- Marktplace (catálogo dinâmico) ---
+
+MARKTPLACE_ADMIN_PREFIX = "/configuracoes/marktplace-produtos"
+
+
+@config_bp.get(MARKTPLACE_ADMIN_PREFIX)
+@login_obrigatorio()
+def marktplace_produtos_pagina():
+    if not session.get("eh_desenvolvedor"):
+        return redirect(url_for("dashboard.index"))
+    return render_template("frm_config_marktplace.html", nav_ativo="config")
+
+
+@config_bp.get(f"{MARKTPLACE_ADMIN_PREFIX}/dados")
+@login_obrigatorio()
+def marktplace_produtos_dados():
+    if (r := _exigir_dev()) is not None:
+        return r
+    from sistema.marktplace.servico_marktplace import SQL_LISTA, produto_dict
+
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        cur.execute(SQL_LISTA)
+        lista = [produto_dict(r) for r in cur.fetchall()]
+        return jsonify(success=True, produtos=lista)
+    finally:
+        conn.close()
+
+
+@config_bp.post(f"{MARKTPLACE_ADMIN_PREFIX}/salvar")
+@login_obrigatorio()
+def marktplace_produtos_salvar():
+    if (r := _exigir_dev()) is not None:
+        return r
+    import json as _json
+
+    from sistema.marktplace.servico_marktplace import produto_dict
+
+    body = request.get_json(silent=True) or {}
+    titulo = (body.get("titulo") or "").strip()
+    if not titulo:
+        return jsonify(success=False, message="Informe o título do produto."), 400
+    slug = (body.get("slug") or "").strip() or _slugify_segmento(titulo)
+    try:
+        valor_centavos = int(round(float(body.get("valor_reais") or 0) * 100))
+    except (TypeError, ValueError):
+        return jsonify(success=False, message="Valor inválido."), 400
+    meta = body.get("meta")
+    if isinstance(meta, str):
+        try:
+            meta = _json.loads(meta) if meta.strip() else {}
+        except _json.JSONDecodeError:
+            return jsonify(success=False, message="Meta JSON inválido."), 400
+    elif not isinstance(meta, dict):
+        meta = {}
+
+    pid = body.get("id")
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        params = (
+            titulo,
+            slug,
+            (body.get("resumo") or "").strip() or None,
+            body.get("descricao") or "",
+            valor_centavos,
+            (body.get("tipo_pagamento") or "unico").strip(),
+            (body.get("publico") or "ambos").strip(),
+            (body.get("categoria") or "geral").strip(),
+            (body.get("tipo_acao") or "").strip() or None,
+            _json.dumps(meta),
+            (body.get("icone") or "shopping-bag").strip(),
+            (body.get("cor_topo") or "#5b57f5").strip(),
+            int(body.get("ordem") or 0),
+            bool(body.get("ativo", True)),
+        )
+        if pid:
+            cur.execute(
+                """
+                UPDATE tbl_marktplace_produto SET
+                    titulo=%s, slug=%s, resumo=%s, descricao=%s, valor_centavos=%s,
+                    tipo_pagamento=%s, publico=%s, categoria=%s, tipo_acao=%s, meta=%s::jsonb,
+                    icone=%s, cor_topo=%s, ordem=%s, ativo=%s, atualizado_em=NOW()
+                WHERE id=%s
+                RETURNING id, slug, titulo, resumo, descricao, valor_centavos, tipo_pagamento,
+                          publico, categoria, tipo_acao, meta, icone, cor_topo, ordem, ativo
+                """,
+                (*params, int(pid)),
+            )
+        else:
+            cur.execute(
+                """
+                INSERT INTO tbl_marktplace_produto (
+                    titulo, slug, resumo, descricao, valor_centavos, tipo_pagamento,
+                    publico, categoria, tipo_acao, meta, icone, cor_topo, ordem, ativo
+                ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s,%s,%s)
+                RETURNING id, slug, titulo, resumo, descricao, valor_centavos, tipo_pagamento,
+                          publico, categoria, tipo_acao, meta, icone, cor_topo, ordem, ativo
+                """,
+                params,
+            )
+        row = cur.fetchone()
+        conn.commit()
+        return jsonify(success=True, produto=produto_dict(row), message="Produto salvo.")
+    except Exception as e:
+        conn.rollback()
+        if "unique" in str(e).lower() or "slug" in str(e).lower():
+            return jsonify(success=False, message="Slug já cadastrado."), 409
+        raise
+    finally:
+        conn.close()
+
+
+@config_bp.post(f"{MARKTPLACE_ADMIN_PREFIX}/excluir")
+@login_obrigatorio()
+def marktplace_produtos_excluir():
+    if (r := _exigir_dev()) is not None:
+        return r
+    body = request.get_json(silent=True) or {}
+    try:
+        pid = int(body.get("id"))
+    except (TypeError, ValueError):
+        return jsonify(success=False, message="Produto inválido."), 400
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM tbl_marktplace_produto WHERE id = %s", (pid,))
+        conn.commit()
+        return jsonify(success=True, message="Produto removido.")
+    finally:
+        conn.close()
+
+
 # --- gestao fornecedores ---
 
 

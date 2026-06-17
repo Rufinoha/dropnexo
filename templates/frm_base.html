@@ -95,6 +95,14 @@
       </nav>
 
       <div class="fg-sidebar-foot">
+        <a href="{{ url_for('marktplace.pagina') }}" class="fg-marktplace-link{% if nav_ativo == 'marktplace' %} is-active{% endif %}" title="Marktplace">
+          <svg class="fg-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/>
+            <line x1="3" y1="6" x2="21" y2="6"/>
+            <path d="M16 10a4 4 0 0 1-8 0"/>
+          </svg>
+          <span class="fg-nav-label">Marktplace</span>
+        </a>
         <span class="fg-tenant-pill" title="{{ session.get('tenant_nome', '') }}">{{ session.get('tenant_nome', '') }}</span>
         <button type="button" class="fg-btn-collapse" id="fg-btn-collapse" aria-label="Recolher menu">«</button>
       </div>
@@ -107,6 +115,13 @@
           {% block topbar_sub %}{% endblock %}
         </div>
         <div class="fg-topbar-right">
+          <a href="{{ url_for('marktplace.pagina') }}" class="fg-btn-marktplace{% if nav_ativo == 'marktplace' %} is-active{% endif %}" title="Marktplace" aria-label="Abrir Marktplace">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/>
+              <line x1="3" y1="6" x2="21" y2="6"/>
+              <path d="M16 10a4 4 0 0 1-8 0"/>
+            </svg>
+          </a>
           <button type="button" class="fg-btn-novidades" id="fg_btnNovidades" title="Novidades" aria-label="Abrir novidades">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
               <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
@@ -143,6 +158,10 @@
               <a href="{{ url_for('planos.meu_plano') }}" class="fg-menu-item" role="menuitem">
                 <span class="fg-menu-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg></span>
                 <span>Meu Plano</span>
+              </a>
+              <a href="{{ url_for('marktplace.pagina') }}" class="fg-menu-item" role="menuitem">
+                <span class="fg-menu-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg></span>
+                <span>Marktplace</span>
               </a>
               {% if pode_config_plataforma %}
               <a href="{{ url_for('config.configuracoes') }}" class="fg-menu-item" role="menuitem">
