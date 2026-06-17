@@ -73,7 +73,7 @@
       <nav class="Cat_TabNav" role="tablist">
         <button type="button" class="Cat_Tab is-active" data-tab="caracteristicas">Características</button>
         <button type="button" class="Cat_Tab" data-tab="imagens">Imagens</button>
-        <button type="button" class="Cat_Tab" data-tab="estoque">Estoque</button>
+        <button type="button" class="Cat_Tab" data-tab="estoque" id="tabEstoque">Estoque</button>
         <button type="button" class="Cat_Tab" data-tab="fornecedor">Fornecedor</button>
         <button type="button" class="Cat_Tab" data-tab="tributacao">Tributação</button>
         <button type="button" class="Cat_Tab" data-tab="variacoes" id="tabVariacoes" hidden>Variações</button>
@@ -180,17 +180,6 @@
         <p class="Cat_ImagemHint" id="avisoImgSalvar">Salve o produto antes de incluir imagens.</p>
         <p class="Cat_ImagemHint" id="avisoImgOrdem" hidden>Arraste os cards para definir a ordem (principal, 2ª, 3ª…).</p>
         <div id="galeria_imagens" class="Cat_Galeria"></div>
-        <div id="painelImgAtributo" class="Cat_ImgAttrWrap" hidden>
-          <h4 class="Cat_ImgAttrTitulo">Imagem por atributo</h4>
-          <p class="Cat_ImagemHint">Associe uma foto da galeria a um valor (ex.: Cor = Preto). Todas as variantes com esse valor usam a mesma imagem.</p>
-          <div class="Cat_ImgAttrForm">
-            <select id="img_attr_nome"></select>
-            <input type="text" id="img_attr_valor" placeholder="Valor (ex.: Preto)" />
-            <select id="img_attr_imagem"></select>
-            <button type="button" class="Cl_BtnIncluir" id="btnImgAtributo">Associar</button>
-          </div>
-          <ul id="lista_img_atributo" class="Cat_ImgAttrLista"></ul>
-        </div>
         <input type="hidden" id="imagem_caminho" value="" />
         <input type="hidden" id="imagem_url" value="" />
       </section>
@@ -198,7 +187,7 @@
       <section class="Cat_TabPanel" data-panel="estoque" hidden>
         <p class="Cat_ImagemHint" id="avisoEstoqueCadastro" hidden>Salve o produto para gerenciar estoque por depósito.</p>
         <p class="Cat_ImagemHint" id="avisoEstoqueVariacao" hidden>
-          Produto com variações: o estoque é controlado por SKU na aba Variações.
+          Produto com variações: o estoque por depósito fica em cada SKU — abra a variação (ícone editar) → aba Estoque.
         </p>
         <p class="Cat_ImagemHint" id="avisoEstoqueDeposito">
           Vincule depósitos Bling ↔ DropNexo em <strong>Integrações → Bling</strong> para importar saldos automaticamente.
@@ -319,6 +308,6 @@
   <script src="{{ url_for('static', filename='script/global_utils.js') }}"></script>
   <script src="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.js"></script>
   <script src="{{ url_for('fn_catalogo.static', filename='script/Scatalogo_descricao_editor.js') }}?v=1"></script>
-  <script src="{{ url_for('fn_catalogo.static', filename='script/Scatalogo_apoio.js') }}?v=13"></script>
+  <script src="{{ url_for('fn_catalogo.static', filename='script/Scatalogo_apoio.js') }}?v=14"></script>
 </body>
 </html>

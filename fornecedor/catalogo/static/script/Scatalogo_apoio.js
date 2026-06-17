@@ -6,7 +6,6 @@
   let galeriaImagens = [];
   let imgDragIdx = null;
   let tipoGaleria = null;
-  let regrasAtributo = [];
 
   const el = {
     id: document.getElementById("id"),
@@ -50,12 +49,7 @@
     imgContador: document.getElementById("imgContador"),
     avisoImgSalvar: document.getElementById("avisoImgSalvar"),
     avisoImgOrdem: document.getElementById("avisoImgOrdem"),
-    painelImgAtributo: document.getElementById("painelImgAtributo"),
-    img_attr_nome: document.getElementById("img_attr_nome"),
-    img_attr_valor: document.getElementById("img_attr_valor"),
-    img_attr_imagem: document.getElementById("img_attr_imagem"),
-    btnImgAtributo: document.getElementById("btnImgAtributo"),
-    lista_img_atributo: document.getElementById("lista_img_atributo"),
+    tabEstoque: document.getElementById("tabEstoque"),
     imagem_caminho: document.getElementById("imagem_caminho"),
     imagem_url: document.getElementById("imagem_url"),
     tabVariacoes: document.getElementById("tabVariacoes"),
@@ -263,6 +257,7 @@
   function syncFormatoUi() {
     const comVariacao = formatoAtual() === "E";
     if (el.tabVariacoes) el.tabVariacoes.hidden = !comVariacao;
+    if (el.tabEstoque) el.tabEstoque.hidden = comVariacao;
     if (el.avisoEstoqueVariacao) el.avisoEstoqueVariacao.hidden = !comVariacao;
     syncEstoqueUi();
     if (el.painel_variantes) el.painel_variantes.style.display = comVariacao && idProduto ? "block" : "none";
@@ -270,6 +265,10 @@
     if (!comVariacao) {
       const tabVar = document.querySelector('.Cat_Tab[data-tab="variacoes"]');
       if (tabVar?.classList.contains("is-active")) ativarTab("caracteristicas");
+    }
+    if (comVariacao) {
+      const tabEst = document.querySelector('.Cat_Tab[data-tab="estoque"]');
+      if (tabEst?.classList.contains("is-active")) ativarTab("caracteristicas");
     }
     if (comVariacao && idProduto) {
       carregarVariantes().catch(() => {});
@@ -385,39 +384,6 @@
     return map[origem] || "";
   }
 
-  function renderRegrasAtributo() {
-    if (!el.painelImgAtributo) return;
-    const comVar = formatoAtual() === "E" && idProduto && galeriaImagens.length > 0;
-    el.painelImgAtributo.hidden = !comVar;
-    if (!comVar) return;
-
-    if (el.img_attr_nome) {
-      const nomes = [...new Set(atributosProduto.map((a) => a.nome).filter(Boolean))];
-      el.img_attr_nome.innerHTML = nomes.map((n) => `<option value="${n}">${n}</option>`).join("");
-    }
-    if (el.img_attr_imagem) {
-      el.img_attr_imagem.innerHTML = galeriaImagens
-        .filter((i) => i.id)
-        .map(
-          (img, idx) =>
-            `<option value="${img.id}">Imagem ${idx + 1}${img.principal ? " (principal)" : ""}</option>`
-        )
-        .join("");
-    }
-    if (el.lista_img_atributo) {
-      if (!regrasAtributo.length) {
-        el.lista_img_atributo.innerHTML = '<li class="Cat_ImagemHint">Nenhuma regra cadastrada.</li>';
-        return;
-      }
-      el.lista_img_atributo.innerHTML = regrasAtributo
-        .map(
-          (r) =>
-            `<li><img src="${r.url || ""}" alt="" /><span><strong>${r.nome_atributo}</strong> = ${r.valor}</span></li>`
-        )
-        .join("");
-    }
-  }
-
   function renderGaleria() {
     if (!el.galeria_imagens) return;
     if (el.imgContador) el.imgContador.textContent = `${galeriaImagens.length} / ${MAX_IMAGENS} imagens`;
@@ -432,7 +398,7 @@
     el.galeria_imagens.innerHTML = galeriaImagens
       .map(
         (img, idx) => `<div class="Cat_GaleriaItem${drag ? " is-draggable" : ""}" data-idx="${idx}" ${drag ? 'draggable="true"' : ""}>
-        <span class="Cat_GaleriaOrdem">${rotuloOrdemImagem(idx)}</span>
+        <span class="Cat_GaleriaOrdem" title="Arraste para reordenar">${rotuloOrdemImagem(idx)}</span>
         <button type="button" class="Cat_GaleriaRm" data-id="${img.id ?? ""}" data-idx="${idx}" title="Remover">×</button>
         <img src="${img.url || ""}" alt="" loading="lazy" draggable="false" />
         <div class="Cat_GaleriaMeta">
@@ -446,9 +412,18 @@
     if (drag) {
       el.galeria_imagens.querySelectorAll(".Cat_GaleriaItem.is-draggable").forEach((item) => {
         item.addEventListener("dragstart", (ev) => {
+          if (ev.target.closest(".Cat_GaleriaRm")) {
+            ev.preventDefault();
+            return;
+          }
           imgDragIdx = Number(item.dataset.idx);
           item.classList.add("is-dragging");
           ev.dataTransfer.effectAllowed = "move";
+          try {
+            ev.dataTransfer.setData("text/plain", String(imgDragIdx));
+          } catch {
+            /* ignore */
+          }
         });
         item.addEventListener("dragend", () => {
           item.classList.remove("is-dragging");
@@ -465,13 +440,13 @@
           ev.preventDefault();
           item.classList.remove("is-dragover");
           const toIdx = Number(item.dataset.idx);
-          if (imgDragIdx == null || imgDragIdx === toIdx) return;
-          reordenarImagensLocal(imgDragIdx, toIdx);
+          const fromIdx = imgDragIdx ?? Number(ev.dataTransfer.getData("text/plain"));
+          if (Number.isNaN(fromIdx) || fromIdx === toIdx) return;
+          reordenarImagensLocal(fromIdx, toIdx);
         });
       });
     }
     syncAvisoImagens();
-    renderRegrasAtributo();
   }
 
   async function reordenarImagensLocal(from, to) {
@@ -510,30 +485,6 @@
       if (radio) radio.checked = true;
     }
     renderGaleria();
-  }
-
-  async function associarImagemAtributo() {
-    if (!idProduto) throw new Error("Salve o produto antes.");
-    const nome = (el.img_attr_nome?.value || "").trim();
-    const valor = (el.img_attr_valor?.value || "").trim();
-    const idImagem = Number(el.img_attr_imagem?.value || 0);
-    if (!nome || !valor || !idImagem) throw new Error("Preencha atributo, valor e imagem.");
-    const r = await fetch(`${BASE}/imagens/atributo`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        id_produto: idProduto,
-        nome_atributo: nome,
-        valor,
-        id_imagem: idImagem,
-      }),
-    });
-    const j = await r.json();
-    if (!r.ok || !j.success) throw new Error(j.message || "Erro.");
-    regrasAtributo = j.regras || [];
-    if (el.img_attr_valor) el.img_attr_valor.value = "";
-    renderRegrasAtributo();
-    await Swal.fire("Sucesso", j.message, "success");
   }
 
   function syncAvisoImagens() {
@@ -642,10 +593,9 @@
     const j = await r.json();
     if (!r.ok || !j.success) return;
     atributosProduto = j.atributos || [];
-    renderRegrasAtributo();
     renderAtributos();
     const u = util();
-    const rows = (j.variantes || []).filter((v) => Object.keys(v.atributos || {}).length > 0);
+    const rows = j.variantes || [];
     if (!rows.length) {
       el.lista_variantes.innerHTML =
         "<tr><td colspan='7'>Nenhuma variante. Adicione uma variação ou aplique um modelo.</td></tr>";
@@ -656,7 +606,7 @@
         (v) => `<tr>
         <td>${v.sku || "—"}</td>
         <td>${v.nome_exibicao || ""}</td>
-        <td>${rotuloAttr(v.atributos)}</td>
+        <td>${rotuloAttr(v.atributos) || v.nome_exibicao || "—"}</td>
         <td>${Number(v.preco || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</td>
         <td>${v.estoque ?? 0}</td>
         <td>${v.herda_pai !== false ? "Sim" : "Não"}</td>
@@ -941,9 +891,6 @@
   el.btnAplicarPreset?.addEventListener("click", () => aplicarPreset().catch((e) => Swal.fire("Erro", e.message, "error")));
   el.btnImgLink?.addEventListener("click", () => incluirLink().catch((e) => Swal.fire("Erro", e.message, "error")));
   el.btnImgUpload?.addEventListener("click", () => enviarUpload().catch((e) => Swal.fire("Erro", e.message, "error")));
-  el.btnImgAtributo?.addEventListener("click", () =>
-    associarImagemAtributo().catch((e) => Swal.fire("Erro", e.message, "error"))
-  );
   el.lista_atributos?.addEventListener("click", (ev) => {
     const btn = ev.target.closest(".Cat_VarTagRm");
     if (!btn) return;

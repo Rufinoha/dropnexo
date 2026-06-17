@@ -7,6 +7,8 @@
   let atributosCache = {};
   let galeriaPai = [];
   let idImagemSelecionada = null;
+  let integradoBling = false;
+  let estoqueDepositos = [];
 
   const el = {
     id_variante: document.getElementById("id_variante"),
@@ -33,6 +35,7 @@
     ncm: document.getElementById("ncm"),
     quantidade: document.getElementById("quantidade"),
     preview_imagem: document.getElementById("preview_imagem"),
+    tblEstoqueDepositosVar: document.getElementById("tblEstoqueDepositosVar"),
     btnSalvar: document.getElementById("btnSalvar"),
     btnExcluir: document.getElementById("btnExcluir"),
   };
@@ -53,7 +56,109 @@
   }
 
   document.querySelectorAll(".Cat_Tab").forEach((btn) => {
-    btn.addEventListener("click", () => ativarTab(btn.dataset.tab));
+    btn.addEventListener("click", () => {
+      ativarTab(btn.dataset.tab);
+      if (btn.dataset.tab === "estoque") carregarEstoqueDepositos().catch(() => {});
+    });
+  });
+
+  function fmtData(iso) {
+    if (!iso) return "—";
+    try {
+      return new Date(iso).toLocaleString("pt-BR");
+    } catch {
+      return iso;
+    }
+  }
+
+  async function carregarEstoqueDepositos() {
+    if (!idVariante || !el.tblEstoqueDepositosVar) return;
+    const r = await fetch(
+      `${BASE}/estoque/depositos?id_produto=${idProduto}&id_variante=${idVariante}`,
+      { credentials: "include" }
+    );
+    const j = await r.json();
+    if (!r.ok || !j.success) throw new Error(j.message || "Erro ao carregar estoque.");
+    integradoBling = !!j.integrado_bling;
+    estoqueDepositos = j.depositos || [];
+    if (!estoqueDepositos.length) {
+      el.tblEstoqueDepositosVar.innerHTML =
+        `<tr><td colspan="3">Nenhum depósito cadastrado. Cadastre em Fornecedor → Depósitos.</td></tr>`;
+      return;
+    }
+    el.tblEstoqueDepositosVar.innerHTML = estoqueDepositos
+      .map(
+        (d) => `<tr data-dep="${d.id_deposito}">
+          <td>${d.nome}${d.vinculado_bling ? ' <span class="Cat_EstoqueTag">Bling</span>' : ""}</td>
+          <td class="Cat_EstoqueSaldo" title="Duplo clique para editar">${d.quantidade}</td>
+          <td>${fmtData(d.atualizado_em)}</td>
+        </tr>`
+      )
+      .join("");
+    const total = estoqueDepositos.reduce((s, d) => s + (d.quantidade || 0), 0);
+    if (el.quantidade) el.quantidade.value = String(total);
+  }
+
+  async function editarSaldoDeposito(idDeposito, saldoAtual) {
+    const dep = estoqueDepositos.find((d) => d.id_deposito === idDeposito);
+    let sincronizarBling = false;
+    if (integradoBling) {
+      const c = await Swal.fire({
+        icon: "warning",
+        title: "Produto integrado ao Bling",
+        html: `Alterar o saldo desta variação pode atualizar o estoque no Bling.`,
+        showCancelButton: true,
+        confirmButtonText: "Continuar",
+        cancelButtonText: "Cancelar",
+      });
+      if (!c.isConfirmed) return;
+      if (dep?.vinculado_bling) {
+        const s = await Swal.fire({
+          icon: "question",
+          title: "Sincronizar com o Bling?",
+          showCancelButton: true,
+          confirmButtonText: "Sim, sincronizar",
+          cancelButtonText: "Só no DropNexo",
+        });
+        sincronizarBling = s.isConfirmed;
+      }
+    }
+    const r = await Swal.fire({
+      title: `Saldo — ${dep?.nome || "Depósito"}`,
+      input: "number",
+      inputValue: saldoAtual,
+      inputAttributes: { min: 0, step: 1 },
+      showCancelButton: true,
+      confirmButtonText: "Salvar",
+    });
+    if (!r.isConfirmed || r.value === undefined || r.value === "") return;
+    const qtd = Math.max(0, parseInt(r.value, 10) || 0);
+    const resp = await fetch(`${BASE}/estoque/depositos/salvar`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({
+        id_produto: idProduto,
+        id_variante: idVariante,
+        id_deposito: idDeposito,
+        quantidade: qtd,
+        sincronizar_bling: sincronizarBling,
+      }),
+    });
+    const j = await resp.json();
+    if (!resp.ok || !j.success) throw new Error(j.message || "Erro ao salvar saldo.");
+    await Swal.fire({ icon: "success", title: "Salvo", text: j.message, timer: 2200, showConfirmButton: false });
+    await carregarEstoqueDepositos();
+  }
+
+  el.tblEstoqueDepositosVar?.addEventListener("dblclick", (ev) => {
+    const cell = ev.target.closest(".Cat_EstoqueSaldo");
+    if (!cell || !idVariante) return;
+    const row = cell.closest("tr");
+    const idDep = parseInt(row?.dataset?.dep || "0", 10);
+    if (!idDep) return;
+    const atual = parseInt(cell.textContent || "0", 10) || 0;
+    editarSaldoDeposito(idDep, atual).catch((e) => Swal.fire("Erro", e.message, "error"));
   });
 
   function syncHerdaUi() {
@@ -182,6 +287,7 @@
     if (!r.ok || !j.success) throw new Error(j.message || "Erro ao carregar.");
     await carregarGaleriaPai();
     preencher(j.dados, j.pai);
+    await carregarEstoqueDepositos().catch(() => {});
   }
 
   async function salvar() {

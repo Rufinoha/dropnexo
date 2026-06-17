@@ -478,6 +478,23 @@ def _salvar_produto(
     return int(prod_id)
 
 
+def _atributos_de_variacao_bling(var: dict) -> dict:
+    bloco = var.get("variacao") if isinstance(var.get("variacao"), dict) else {}
+    nome = (bloco.get("nome") or "").strip()
+    out: dict[str, str] = {}
+    if not nome:
+        return out
+    for parte in nome.split(";"):
+        parte = parte.strip()
+        if ":" in parte:
+            k, v = parte.split(":", 1)
+            k = k.strip()
+            v = v.strip()
+            if k and v:
+                out[k] = v
+    return out
+
+
 def _inserir_variante_bling(cur, id_produto: int, var: dict, ordem: int) -> int:
     campos = extrair_campos_produto_bling(var)
     sku = campos.get("sku") or ""
@@ -485,14 +502,15 @@ def _inserir_variante_bling(cur, id_produto: int, var: dict, ordem: int) -> int:
     preco = campos.get("preco") or 0
     preco_custo = campos.get("preco_custo")
     ativo = campos.get("ativo", True)
+    atributos = _atributos_de_variacao_bling(var)
     agora = agora_utc()
     cur.execute(
         """
         INSERT INTO tbl_produto_variante (
             id_produto, sku, nome_exibicao, preco, preco_custo, ativo, ordem,
-            gtin, ncm, peso_liquido_kg, peso_bruto_kg, altura_cm, largura_cm, profundidade_cm,
+            atributos, gtin, ncm, peso_liquido_kg, peso_bruto_kg, altura_cm, largura_cm, profundidade_cm,
             atualizado_em
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id
         """,
         (
             id_produto,
@@ -502,6 +520,7 @@ def _inserir_variante_bling(cur, id_produto: int, var: dict, ordem: int) -> int:
             preco_custo,
             ativo,
             ordem,
+            json.dumps(atributos, ensure_ascii=False),
             campos.get("gtin"),
             campos.get("ncm"),
             campos.get("peso_liquido_kg"),

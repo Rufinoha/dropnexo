@@ -82,7 +82,12 @@ def listar_estoque_por_deposito(
     cur,
     id_tenant: int,
     id_produto: int,
+    *,
+    id_variante: int | None = None,
 ) -> tuple[int | None, list[dict], bool]:
+    if id_variante:
+        return _listar_estoque_variante(cur, id_tenant, id_variante)
+
     cur.execute(
         """
         SELECT id_variante_padrao, formato FROM tbl_produto
@@ -133,6 +138,85 @@ def listar_estoque_por_deposito(
     return id_variante, itens, integrado
 
 
+def _listar_estoque_variante(
+    cur,
+    id_tenant: int,
+    id_variante: int,
+) -> tuple[int | None, list[dict], bool]:
+    cur.execute(
+        """
+        SELECT v.id_produto, p.id_tenant
+        FROM tbl_produto_variante v
+        JOIN tbl_produto p ON p.id = v.id_produto
+        WHERE v.id = %s AND p.id_tenant = %s
+        """,
+        (id_variante, id_tenant),
+    )
+    row = cur.fetchone()
+    if not row:
+        return None, [], False
+    id_produto = int(row[0])
+    garantir_linhas_estoque_depositos(cur, id_tenant, id_variante)
+    cur.execute(
+        """
+        SELECT ped.id_deposito, d.nome, ped.quantidade, ped.atualizado_em,
+               dm.id_bling_deposito, dm.nome_bling
+        FROM tbl_produto_estoque_deposito ped
+        JOIN tbl_deposito_expedicao d ON d.id = ped.id_deposito
+        LEFT JOIN tbl_integracao_deposito_map dm
+            ON dm.id_tenant = %s AND dm.id_deposito_dropnexo = d.id
+        WHERE ped.id_variante = %s AND d.id_tenant = %s AND d.ativo = TRUE
+        ORDER BY d.principal DESC, d.nome
+        """,
+        (id_tenant, id_variante, id_tenant),
+    )
+    itens = []
+    for r in cur.fetchall():
+        itens.append(
+            {
+                "id_deposito": r[0],
+                "nome": r[1],
+                "quantidade": int(r[2] or 0),
+                "atualizado_em": r[3].isoformat() if r[3] else None,
+                "id_bling_deposito": r[4],
+                "nome_bling": r[5],
+                "vinculado_bling": bool(r[4]),
+            }
+        )
+    integrado = produto_integrado_bling(cur, id_tenant, id_produto)
+    return id_variante, itens, integrado
+
+
+def id_bling_variante(cur, id_tenant: int, id_variante: int, *, contexto: str = "fornecedor") -> str | None:
+    cur.execute(
+        """
+        SELECT v.id_produto, v.sku FROM tbl_produto_variante v
+        JOIN tbl_produto p ON p.id = v.id_produto AND p.id_tenant = %s
+        WHERE v.id = %s
+        """,
+        (id_tenant, id_variante),
+    )
+    row = cur.fetchone()
+    if not row:
+        return None
+    id_produto, sku = int(row[0]), (row[1] or "").strip()
+    if sku:
+        cur.execute(
+            """
+            SELECT id_bling FROM tbl_integracao_map
+            WHERE id_tenant = %s AND provedor = 'bling' AND contexto = %s
+              AND entidade = 'produto' AND id_dropnexo = %s AND sku = %s
+            ORDER BY atualizado_em DESC NULLS LAST
+            LIMIT 1
+            """,
+            (id_tenant, contexto, id_produto, sku),
+        )
+        r2 = cur.fetchone()
+        if r2 and r2[0]:
+            return str(r2[0])
+    return id_bling_produto(cur, id_tenant, id_produto, contexto=contexto)
+
+
 def atualizar_saldo_deposito(
     cur,
     id_tenant: int,
@@ -142,26 +226,40 @@ def atualizar_saldo_deposito(
     quantidade: int,
     sincronizar_bling: bool = False,
     contexto: str = "fornecedor",
+    id_variante: int | None = None,
 ) -> dict:
     quantidade = max(0, int(quantidade))
-    cur.execute(
-        """
-        SELECT p.id_variante_padrao, p.formato FROM tbl_produto p
-        WHERE p.id = %s AND p.id_tenant = %s
-        """,
-        (id_produto, id_tenant),
-    )
-    row = cur.fetchone()
-    if not row:
-        raise ValueError("Produto não encontrado.")
-    id_variante, formato = row[0], row[1] or "S"
-    if formato == "E":
-        raise ValueError("Produto com variações: edite o estoque por SKU na aba Variações.")
+    if id_variante:
+        cur.execute(
+            """
+            SELECT v.id_produto, p.formato FROM tbl_produto_variante v
+            JOIN tbl_produto p ON p.id = v.id_produto AND p.id_tenant = %s
+            WHERE v.id = %s
+            """,
+            (id_tenant, id_variante),
+        )
+        row = cur.fetchone()
+        if not row:
+            raise ValueError("Variante não encontrada.")
+        id_produto = int(row[0])
+    else:
+        cur.execute(
+            """
+            SELECT p.id_variante_padrao, p.formato FROM tbl_produto p
+            WHERE p.id = %s AND p.id_tenant = %s
+            """,
+            (id_produto, id_tenant),
+        )
+        row = cur.fetchone()
+        if not row:
+            raise ValueError("Produto não encontrado.")
+        id_variante, formato = row[0], row[1] or "S"
+        if formato == "E":
+            raise ValueError("Produto com variações: edite o estoque em cada variação.")
+        if not id_variante:
+            from fornecedor.catalogo.srotas_catalogo import garantir_variante_padrao as _gvp
 
-    if not id_variante:
-        from fornecedor.catalogo.srotas_catalogo import garantir_variante_padrao as _gvp
-
-        id_variante = _gvp(cur, id_produto, id_tenant)
+            id_variante = _gvp(cur, id_produto, id_tenant)
 
     cur.execute(
         """
@@ -192,6 +290,7 @@ def atualizar_saldo_deposito(
     if sincronizar_bling and integrado:
         from api.bling.sync_estoque import exportar_saldo_deposito_bling
 
+        id_bling_var = id_bling_variante(cur, id_tenant, int(id_variante), contexto=contexto)
         bling_ok, bling_msg = exportar_saldo_deposito_bling(
             cur,
             id_tenant,
@@ -199,6 +298,7 @@ def atualizar_saldo_deposito(
             id_produto=id_produto,
             id_deposito=id_deposito,
             quantidade=quantidade,
+            id_bling_override=id_bling_var,
         )
 
     return {

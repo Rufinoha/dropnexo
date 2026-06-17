@@ -97,6 +97,7 @@ def exportar_saldo_deposito_bling(
     id_produto: int,
     id_deposito: int,
     quantidade: int,
+    id_bling_override: str | None = None,
 ) -> tuple[bool, str | None]:
     cur.execute(
         """
@@ -112,7 +113,7 @@ def exportar_saldo_deposito_bling(
 
     from fornecedor.catalogo.servico_estoque_deposito import id_bling_produto as buscar_id_bling
 
-    id_bling = buscar_id_bling(cur, id_tenant, id_produto, contexto=contexto)
+    id_bling = id_bling_override or buscar_id_bling(cur, id_tenant, id_produto, contexto=contexto)
     if not id_bling:
         return False, "Produto sem vínculo no Bling."
 

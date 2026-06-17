@@ -552,6 +552,26 @@ def variantes_precisam_regenerar(cur, id_produto: int, id_tenant: int) -> bool:
 
 
 def sincronizar_variantes_se_necessario(cur, id_produto: int, id_tenant: int) -> bool:
+    cur.execute(
+        "SELECT COUNT(*) FROM tbl_produto_variante WHERE id_produto = %s",
+        (id_produto,),
+    )
+    n_var = int(cur.fetchone()[0] or 0)
+    if n_var > 0:
+        cur.execute(
+            """
+            SELECT COUNT(*) FROM tbl_produto_variante
+            WHERE id_produto = %s
+              AND (
+                atributos IS NULL
+                OR atributos::text IN ('{}', 'null')
+              )
+            """,
+            (id_produto,),
+        )
+        sem_attr = int(cur.fetchone()[0] or 0)
+        if sem_attr > 0:
+            return False
     if not variantes_precisam_regenerar(cur, id_produto, id_tenant):
         return False
     gerar_variantes_produto(cur, id_produto, id_tenant)
@@ -1366,16 +1386,43 @@ def catalogos_apoio():
 @exigir_permissao(codigo="catalogos.ver")
 def catalogos_estoque_depositos():
     id_produto = int(request.args.get("id_produto") or 0)
-    if not id_produto:
-        return jsonify(success=False, message="Produto inválido."), 400
+    id_variante = int(request.args.get("id_variante") or 0)
+    if not id_produto and not id_variante:
+        return jsonify(success=False, message="Produto ou variante inválido."), 400
     id_tenant = session.get("id_tenant")
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
-        id_variante, itens, integrado = listar_estoque_por_deposito(cur, id_tenant, id_produto)
+        if id_variante:
+            cur.execute(
+                """
+                SELECT v.id_produto FROM tbl_produto_variante v
+                JOIN tbl_produto p ON p.id = v.id_produto AND p.id_tenant = %s
+                WHERE v.id = %s
+                """,
+                (id_tenant, id_variante),
+            )
+            row = cur.fetchone()
+            if not row:
+                return jsonify(success=False, message="Variante não encontrada."), 404
+            id_produto = int(row[0])
+        else:
+            cur.execute(
+                "SELECT id FROM tbl_produto WHERE id = %s AND id_tenant = %s",
+                (id_produto, id_tenant),
+            )
+            if not cur.fetchone():
+                return jsonify(success=False, message="Produto não encontrado."), 404
+
+        vid, itens, integrado = listar_estoque_por_deposito(
+            cur,
+            id_tenant,
+            id_produto,
+            id_variante=id_variante or None,
+        )
         return jsonify(
             success=True,
-            id_variante=id_variante,
+            id_variante=vid,
             integrado_bling=integrado,
             depositos=itens,
         )
@@ -1392,10 +1439,13 @@ def catalogos_estoque_deposito_salvar():
     body = request.get_json(silent=True) or {}
     try:
         id_produto = int(body.get("id_produto") or 0)
+        id_variante = int(body.get("id_variante") or 0) or None
         id_deposito = int(body.get("id_deposito") or 0)
         quantidade = int(body.get("quantidade") or 0)
     except (TypeError, ValueError):
         return jsonify(success=False, message="Dados inválidos."), 400
+    if not id_produto and not id_variante:
+        return jsonify(success=False, message="Informe produto ou variante."), 400
     sincronizar_bling = bool(body.get("sincronizar_bling", False))
     id_tenant = session.get("id_tenant")
     conn = Var_ConectarBanco()
@@ -1408,6 +1458,7 @@ def catalogos_estoque_deposito_salvar():
             id_deposito=id_deposito,
             quantidade=quantidade,
             sincronizar_bling=sincronizar_bling,
+            id_variante=id_variante,
         )
         conn.commit()
         msg = "Saldo atualizado."

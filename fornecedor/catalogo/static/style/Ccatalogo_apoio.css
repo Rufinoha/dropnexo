@@ -685,6 +685,10 @@ html:has(.Cat_ApoioBody) body {
   cursor: grab;
 }
 
+.Cat_GaleriaItem.is-draggable:active {
+  cursor: grabbing;
+}
+
 .Cat_GaleriaItem.is-dragging {
   opacity: 0.55;
   cursor: grabbing;

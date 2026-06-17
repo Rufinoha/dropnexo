@@ -31,6 +31,7 @@
       <button type="button" class="Cat_Tab" data-tab="precos">Preços</button>
       <button type="button" class="Cat_Tab" data-tab="logistica">Logística</button>
       <button type="button" class="Cat_Tab" data-tab="midia">Mídia</button>
+      <button type="button" class="Cat_Tab" data-tab="estoque">Estoque</button>
     </nav>
 
     <section class="Cat_TabPanel is-active" data-panel="ident">
@@ -57,7 +58,6 @@
       <div class="Cat_Grid3">
         <div class="Cl_FormCampo"><label for="peso_liquido_kg">Peso líquido (kg)</label><input type="number" id="peso_liquido_kg" step="0.001" min="0" /></div>
         <div class="Cl_FormCampo"><label for="peso_bruto_kg">Peso bruto (kg)</label><input type="number" id="peso_bruto_kg" step="0.001" min="0" /></div>
-        <div class="Cl_FormCampo"><label for="quantidade">Estoque</label><input type="number" id="quantidade" min="0" step="1" /></div>
       </div>
       <div class="Cat_Grid3">
         <div class="Cl_FormCampo"><label for="altura_cm">Altura (cm)</label><input type="number" id="altura_cm" step="0.01" min="0" /></div>
@@ -78,6 +78,25 @@
       <input type="hidden" id="id_imagem_principal" value="" />
       <img id="preview_imagem" class="Cat_ImagemPreview" alt="" hidden />
     </section>
+
+    <section class="Cat_TabPanel" data-panel="estoque" hidden>
+      <p class="Cat_ImagemHint" id="avisoEstoqueDepositoVar">
+        Estoque por depósito desta variação (SKU). Duplo clique no saldo para editar.
+      </p>
+      <div class="Cl_TabelaPrincipal Cat_EstoqueDepTbl">
+        <table>
+          <thead>
+            <tr>
+              <th>Depósito</th>
+              <th>Saldo atual</th>
+              <th>Última atualização</th>
+            </tr>
+          </thead>
+          <tbody id="tblEstoqueDepositosVar"></tbody>
+        </table>
+      </div>
+      <input type="hidden" id="quantidade" value="0" />
+    </section>
   </div>
 
   <div class="Cl_BotoesApoio">
@@ -86,6 +105,6 @@
   </div>
 
   <script src="{{ url_for('static', filename='script/global_utils.js') }}"></script>
-  <script src="{{ url_for('fn_catalogo.static', filename='script/Scatalogo_variante_apoio.js') }}?v=2"></script>
+  <script src="{{ url_for('fn_catalogo.static', filename='script/Scatalogo_variante_apoio.js') }}?v=3"></script>
 </body>
 </html>
