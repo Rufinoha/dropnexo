@@ -65,6 +65,7 @@ def _headers_token() -> dict[str, str]:
         "Authorization": f"Basic {basic}",
         "Content-Type": "application/x-www-form-urlencoded",
         "Accept": "application/json",
+        "enable-jwt": "1",
     }
 
 
