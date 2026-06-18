@@ -879,6 +879,125 @@
 .imp-erro-pre--muted { color: #5c6570; }
 .imp-erro-trace .imp-erro-pre { max-height: 160px; font-size: 10px; }
 
+/* Modal mapeamento categorias Bling */
+.imp-catmap-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 12000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.imp-catmap-modal[aria-hidden="false"] { display: flex; }
+.imp-catmap-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+}
+.imp-catmap-dialog {
+  position: relative;
+  z-index: 1;
+  width: min(920px, 100%);
+  max-height: min(90vh, 820px);
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 24px 48px rgba(15, 23, 42, 0.18);
+  overflow: hidden;
+}
+.imp-catmap-header {
+  padding: 18px 22px 12px;
+  border-bottom: 1px solid #e8edf2;
+}
+.imp-catmap-header h2 {
+  margin: 0 0 4px;
+  font-size: 18px;
+  color: #1c2e3c;
+}
+.imp-catmap-body {
+  flex: 1;
+  overflow: auto;
+  padding: 16px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.imp-catmap-sec h3 {
+  margin: 0 0 6px;
+  font-size: 14px;
+  color: #1c2e3c;
+}
+.imp-catmap-hint { margin: 0 0 10px; }
+.imp-catmap-list { display: flex; flex-direction: column; gap: 10px; }
+.imp-catmap-row {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: #fafbfc;
+}
+.imp-catmap-row-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px 12px;
+  margin-bottom: 8px;
+}
+.imp-catmap-bling strong { display: block; font-size: 13px; color: #1c2e3c; }
+.imp-catmap-bling small { color: #64748b; font-size: 11px; }
+.imp-catmap-badge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #e0e7ff;
+  color: #021f81;
+  white-space: nowrap;
+}
+.imp-catmap-badge--mapa { background: #dcfce7; color: #166534; }
+.imp-catmap-arrow {
+  font-size: 12px;
+  color: #64748b;
+  margin: 4px 0;
+}
+.imp-catmap-drop strong { font-size: 13px; color: #0f172a; }
+.imp-catmap-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+.imp-catmap-row-actions label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.imp-catmap-row-actions select {
+  min-width: min(100%, 320px);
+  flex: 1;
+  font-size: 12px;
+  padding: 7px 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+}
+.imp-catmap-footer {
+  padding: 12px 22px 18px;
+  border-top: 1px solid #e8edf2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.imp-catmap-actions { display: flex; gap: 10px; }
+
 @media (max-width: 980px) {
   .imp-row, .imp-row-bling { grid-template-columns: 1fr; }
   .imp-bling-scope-row { grid-template-columns: 1fr; }

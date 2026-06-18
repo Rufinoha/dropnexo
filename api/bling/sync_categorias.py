@@ -53,6 +53,187 @@ def _buscar_mapa_categoria(cur, id_tenant: int, contexto: str, id_bling: str) ->
     return int(row[0]) if row and row[0] else None
 
 
+def _categoria_dropnexo_existe(cur, id_tenant: int, cat_id: int) -> bool:
+    cur.execute(
+        "SELECT 1 FROM tbl_categoria WHERE id = %s AND id_tenant = %s AND ativo = TRUE",
+        (int(cat_id), id_tenant),
+    )
+    return bool(cur.fetchone())
+
+
+def _resolver_mapa_categoria_valido(cur, id_tenant: int, contexto: str, id_bling: str) -> int | None:
+    """Mapa salvo cujo id_dropnexo ainda existe (ignora mapas órfãos)."""
+    mapped = _buscar_mapa_categoria(cur, id_tenant, contexto, id_bling)
+    if not mapped:
+        return None
+    if _categoria_dropnexo_existe(cur, id_tenant, mapped):
+        return mapped
+    return None
+
+
+def _obter_nome_categoria_dropnexo(cur, cat_id: int) -> str:
+    cur.execute("SELECT nome FROM tbl_categoria WHERE id = %s", (int(cat_id),))
+    row = cur.fetchone()
+    return (row[0] or "").strip() if row else ""
+
+
+def _buscar_match_por_nome(
+    cur,
+    id_tenant: int,
+    *,
+    nome: str,
+    parent_dropnexo: int | None,
+    id_segmento: int | None,
+) -> int | None:
+    seg_val = _segmento_sql_val(id_segmento)
+    cur.execute(
+        """
+        SELECT c.id FROM tbl_categoria c
+        WHERE c.id_tenant = %s
+          AND COALESCE(c.id_segmento, 0) = %s
+          AND COALESCE(c.parent_id, 0) = COALESCE(%s, 0)
+          AND LOWER(c.nome) = LOWER(%s)
+          AND c.ativo = TRUE
+        LIMIT 1
+        """,
+        (id_tenant, seg_val, parent_dropnexo, nome),
+    )
+    row = cur.fetchone()
+    return int(row[0]) if row else None
+
+
+def _fetch_categoria_bling(
+    id_tenant: int,
+    id_bling: str,
+    cache_api: dict[str, dict],
+) -> dict:
+    id_bling = str(id_bling or "").strip()
+    if id_bling in cache_api:
+        return cache_api[id_bling]
+    cat = obter_categoria_produto(id_tenant, id_bling)
+    cache_api[id_bling] = cat
+    return cat
+
+
+def _nome_categoria_bling(cat: dict, id_bling: str) -> str:
+    return (cat.get("descricao") or f"Categoria Bling {id_bling}").strip()[:120]
+
+
+def _caminho_categoria_bling(
+    id_bling: str,
+    cache_api: dict[str, dict],
+    id_tenant: int,
+) -> str:
+    partes: list[str] = []
+    atual = str(id_bling or "").strip()
+    vistos: set[str] = set()
+    while atual and atual not in vistos:
+        vistos.add(atual)
+        cat = _fetch_categoria_bling(id_tenant, atual, cache_api)
+        partes.insert(0, _nome_categoria_bling(cat, atual))
+        atual = _id_pai_bling(cat) or ""
+    return " › ".join(partes)
+
+
+def expandir_ancestrais_categorias_bling(
+    id_tenant: int,
+    ids: set[str],
+    cache_api: dict[str, dict],
+) -> set[str]:
+    out = set(ids)
+    fila = list(ids)
+    while fila:
+        cid = fila.pop()
+        cat = _fetch_categoria_bling(id_tenant, cid, cache_api)
+        pai = _id_pai_bling(cat)
+        if pai and pai not in out:
+            out.add(pai)
+            fila.append(pai)
+    return out
+
+
+def _ordenar_ids_categoria_bling(
+    ids: set[str],
+    cache_api: dict[str, dict],
+    id_tenant: int,
+) -> list[str]:
+    niveis: dict[str, int] = {}
+
+    def nivel(cid: str) -> int:
+        if cid in niveis:
+            return niveis[cid]
+        cat = _fetch_categoria_bling(id_tenant, cid, cache_api)
+        pai = _id_pai_bling(cat)
+        n = 1 + (nivel(pai) if pai and pai in ids else 0) if pai else 1
+        niveis[cid] = n
+        return n
+
+    for cid in ids:
+        nivel(cid)
+    return sorted(ids, key=lambda c: (niveis.get(c, 99), _nome_categoria_bling(cache_api.get(c, {}), c).lower()))
+
+
+def _vincular_categoria_bling(
+    cur,
+    id_tenant: int,
+    contexto: str,
+    id_bling: str,
+    id_dropnexo: int,
+    *,
+    meta: dict,
+) -> None:
+    _upsert_mapa_categoria(cur, id_tenant, contexto, id_bling, int(id_dropnexo), meta)
+
+
+def _criar_categoria_do_bling(
+    cur,
+    id_tenant: int,
+    contexto: str,
+    id_bling: str,
+    *,
+    id_segmento: int | None,
+    parent_dropnexo: int | None,
+    cache_api: dict[str, dict] | None = None,
+) -> int | None:
+    """Cria categoria DropNexo a partir do Bling e grava mapa."""
+    cache = cache_api if cache_api is not None else {}
+    id_bling = str(id_bling or "").strip()
+    if not id_bling:
+        return None
+
+    cat = _fetch_categoria_bling(id_tenant, id_bling, cache)
+    nome = _nome_categoria_bling(cat, id_bling)
+    if not nome:
+        return None
+
+    parent_bling = _id_pai_bling(cat)
+    nivel = 1
+    if parent_dropnexo:
+        cur.execute("SELECT nivel FROM tbl_categoria WHERE id = %s", (parent_dropnexo,))
+        row = cur.fetchone()
+        nivel = min(int(row[0] or 1) + 1, MAX_NIVEL) if row else 2
+
+    cur.execute(
+        """
+        INSERT INTO tbl_categoria (
+            id_tenant, id_segmento, parent_id, nome, ordem, nivel, ativo
+        ) VALUES (%s, %s, %s, %s, 0, %s, TRUE)
+        RETURNING id
+        """,
+        (id_tenant, id_segmento, parent_dropnexo, nome, nivel),
+    )
+    cat_id = int(cur.fetchone()[0])
+    _upsert_mapa_categoria(
+        cur,
+        id_tenant,
+        contexto,
+        id_bling,
+        cat_id,
+        {"nome": nome, "id_bling_pai": parent_bling, "origem": "criacao_importacao"},
+    )
+    return cat_id
+
+
 def _upsert_mapa_categoria(
     cur,
     id_tenant: int,
@@ -113,20 +294,16 @@ def garantir_categoria_bling(
     *,
     id_segmento: int | None = None,
     cache_api: dict[str, dict] | None = None,
+    somente_mapa: bool = False,
 ) -> int | None:
-    """Cria ou atualiza categoria no DropNexo a partir do ID Bling (com pais recursivos)."""
+    """Resolve categoria DropNexo para ID Bling. Modo legado cria/atualiza; somente_mapa só consulta mapa."""
     id_bling = str(id_bling or "").strip()
     if not id_bling:
         return None
 
-    if cache_api and id_bling in cache_api:
-        cat = cache_api[id_bling]
-    else:
-        cat = obter_categoria_produto(id_tenant, id_bling)
-        if cache_api is not None:
-            cache_api[id_bling] = cat
-
-    nome = (cat.get("descricao") or f"Categoria Bling {id_bling}").strip()[:120]
+    cache = cache_api if cache_api is not None else {}
+    cat = _fetch_categoria_bling(id_tenant, id_bling, cache)
+    nome = _nome_categoria_bling(cat, id_bling)
     if not nome:
         return None
 
@@ -140,18 +317,50 @@ def garantir_categoria_bling(
             contexto,
             parent_bling,
             id_segmento=id_segmento,
-            cache_api=cache_api,
+            cache_api=cache,
+            somente_mapa=somente_mapa,
         )
         if parent_dropnexo:
             cur.execute("SELECT nivel FROM tbl_categoria WHERE id = %s", (parent_dropnexo,))
             row = cur.fetchone()
             nivel = min(int(row[0] or 1) + 1, MAX_NIVEL) if row else 2
 
-    existente = _buscar_mapa_categoria(cur, id_tenant, contexto, id_bling)
+    existente = _resolver_mapa_categoria_valido(cur, id_tenant, contexto, id_bling)
     if existente:
+        if not somente_mapa:
+            _atualizar_categoria_local(
+                cur,
+                existente,
+                nome=nome,
+                nivel=nivel,
+                parent_dropnexo=parent_dropnexo,
+                id_segmento=id_segmento,
+            )
+            _upsert_mapa_categoria(
+                cur,
+                id_tenant,
+                contexto,
+                id_bling,
+                existente,
+                {"nome": nome, "id_bling_pai": parent_bling},
+            )
+        return existente
+
+    if somente_mapa:
+        return None
+
+    id_match = _buscar_match_por_nome(
+        cur,
+        id_tenant,
+        nome=nome,
+        parent_dropnexo=parent_dropnexo,
+        id_segmento=id_segmento,
+    )
+    if id_match:
+        cat_id = id_match
         _atualizar_categoria_local(
             cur,
-            existente,
+            cat_id,
             nome=nome,
             nivel=nivel,
             parent_dropnexo=parent_dropnexo,
@@ -162,54 +371,22 @@ def garantir_categoria_bling(
             id_tenant,
             contexto,
             id_bling,
-            existente,
+            cat_id,
             {"nome": nome, "id_bling_pai": parent_bling},
         )
-        return existente
-
-    seg_val = _segmento_sql_val(id_segmento)
-    cur.execute(
-        """
-        SELECT c.id FROM tbl_categoria c
-        WHERE c.id_tenant = %s
-          AND COALESCE(c.id_segmento, 0) = %s
-          AND COALESCE(c.parent_id, 0) = COALESCE(%s, 0)
-          AND LOWER(c.nome) = LOWER(%s)
-        LIMIT 1
-        """,
-        (id_tenant, seg_val, parent_dropnexo, nome),
-    )
-    row = cur.fetchone()
-    if row:
-        cat_id = int(row[0])
-        _atualizar_categoria_local(
-            cur,
-            cat_id,
-            nome=nome,
-            nivel=nivel,
-            parent_dropnexo=parent_dropnexo,
-            id_segmento=id_segmento,
-        )
     else:
-        cur.execute(
-            """
-            INSERT INTO tbl_categoria (
-                id_tenant, id_segmento, parent_id, nome, ordem, nivel, ativo
-            ) VALUES (%s, %s, %s, %s, 0, %s, TRUE)
-            RETURNING id
-            """,
-            (id_tenant, id_segmento, parent_dropnexo, nome, nivel),
+        cat_id = _criar_categoria_do_bling(
+            cur,
+            id_tenant,
+            contexto,
+            id_bling,
+            id_segmento=id_segmento,
+            parent_dropnexo=parent_dropnexo,
+            cache_api=cache,
         )
-        cat_id = int(cur.fetchone()[0])
+        if not cat_id:
+            return None
 
-    _upsert_mapa_categoria(
-        cur,
-        id_tenant,
-        contexto,
-        id_bling,
-        cat_id,
-        {"nome": nome, "id_bling_pai": parent_bling},
-    )
     return cat_id
 
 

@@ -377,19 +377,189 @@
     }
   }
 
-  async function importarBling() {
+  async function montarBodyBling() {
     const modo = qs('input[name="imp_bling_modo"]:checked')?.value || "todos";
     const body = { contexto: "fornecedor" };
     if (modo === "categorias") {
       const ids = getSelectedCatIds();
       if (!ids.length) {
         await Swal.fire({ icon: "warning", title: "Atenção", text: "Selecione ao menos uma categoria." });
-        return;
+        return null;
       }
       body.ids_categorias_bling = ids;
       body.incluir_subcategorias = qs("#impBlingSub")?.checked !== false;
     }
+    return body;
+  }
 
+  function opcoesCategoriaHtml(opcoes, selectedId) {
+    const opts = (opcoes || [])
+      .map(
+        (o) =>
+          `<option value="${esc(o.id)}"${String(o.id) === String(selectedId) ? " selected" : ""}>${esc(o.caminho || o.nome)}</option>`
+      )
+      .join("");
+    return `<option value="">— Selecione categoria DropNexo —</option>${opts}`;
+  }
+
+  function abrirModalMapeamentoCategorias(dados) {
+    return new Promise((resolve) => {
+      const modal = qs("#impCatMapModal");
+      if (!modal) {
+        resolve(null);
+        return;
+      }
+
+      const mapeadas = dados.mapeadas || [];
+      const pendentes = dados.pendentes || [];
+      const opcoesDn = dados.categorias_dropnexo || [];
+      const estado = { correcoes: {}, decisoes: {} };
+
+      qs("#impCatMapSecMapeadas").hidden = !mapeadas.length;
+      qs("#impCatMapSecPendentes").hidden = !pendentes.length;
+
+      const listaMap = qs("#impCatMapListaMapeadas");
+      listaMap.innerHTML = mapeadas
+        .map((m) => {
+          const badge =
+            m.origem === "mapa"
+              ? '<span class="imp-catmap-badge imp-catmap-badge--mapa">Mapa salvo</span>'
+              : '<span class="imp-catmap-badge">Match automático</span>';
+          const editavel = m.editavel === true;
+          const correcao = editavel
+            ? `<div class="imp-catmap-row-actions" data-tipo="match" data-id-bling="${esc(m.id_bling)}">
+                <label><input type="radio" name="match_${esc(m.id_bling)}" value="manter" checked /> Manter vínculo</label>
+                <label><input type="radio" name="match_${esc(m.id_bling)}" value="vincular" /> Vincular a outra</label>
+                <select hidden disabled data-select-match="${esc(m.id_bling)}">${opcoesCategoriaHtml(opcoesDn, m.id_dropnexo)}</select>
+              </div>`
+            : "";
+          return `<div class="imp-catmap-row">
+            <div class="imp-catmap-row-head">
+              <div class="imp-catmap-bling"><strong>${esc(m.nome_bling)}</strong><small>Bling · ${esc(m.caminho_bling || m.id_bling)}</small></div>
+              ${badge}
+            </div>
+            <div class="imp-catmap-arrow">→</div>
+            <div class="imp-catmap-drop"><strong>${esc(m.nome_dropnexo || "—")}</strong></div>
+            ${editavel ? `<small class="imp-hint">${esc(m.motivo_match || "")}</small>` : ""}
+            ${correcao}
+          </div>`;
+        })
+        .join("");
+
+      const listaPen = qs("#impCatMapListaPendentes");
+      listaPen.innerHTML = pendentes
+        .map(
+          (p) => `<div class="imp-catmap-row">
+            <div class="imp-catmap-bling"><strong>${esc(p.nome_bling)}</strong><small>Bling · ${esc(p.caminho_bling || p.id_bling)}</small></div>
+            <div class="imp-catmap-row-actions" data-tipo="pendente" data-id-bling="${esc(p.id_bling)}">
+              <label><input type="radio" name="pend_${esc(p.id_bling)}" value="criar" checked /> Criar nova categoria</label>
+              <label><input type="radio" name="pend_${esc(p.id_bling)}" value="vincular" /> Vincular existente</label>
+              <select hidden disabled data-select-pend="${esc(p.id_bling)}">${opcoesCategoriaHtml(opcoesDn, "")}</select>
+            </div>
+          </div>`
+        )
+        .join("");
+
+      const atualizarResumo = () => {
+        const criarDefault = pendentes.filter((p) => {
+          const r = modal.querySelector(`input[name="pend_${p.id_bling}"]:checked`);
+          return !r || r.value === "criar";
+        }).length;
+        qs("#impCatMapResumo").textContent =
+          `${mapeadas.length} mapeada(s) · ${pendentes.length} pendente(s) · ${criarDefault} será(ão) criada(s) por padrão`;
+      };
+      atualizarResumo();
+
+      modal.querySelectorAll('[data-tipo="match"]').forEach((wrap) => {
+        const idBling = wrap.dataset.idBling;
+        const sel = wrap.querySelector(`[data-select-match="${idBling}"]`);
+        wrap.querySelectorAll(`input[name="match_${idBling}"]`).forEach((radio) => {
+          radio.addEventListener("change", () => {
+            const vincular = radio.value === "vincular" && radio.checked;
+            if (sel) {
+              sel.hidden = !vincular;
+              sel.disabled = !vincular;
+            }
+          });
+        });
+      });
+
+      modal.querySelectorAll('[data-tipo="pendente"]').forEach((wrap) => {
+        const idBling = wrap.dataset.idBling;
+        const sel = wrap.querySelector(`[data-select-pend="${idBling}"]`);
+        wrap.querySelectorAll(`input[name="pend_${idBling}"]`).forEach((radio) => {
+          radio.addEventListener("change", () => {
+            const vincular = radio.value === "vincular" && radio.checked;
+            if (sel) {
+              sel.hidden = !vincular;
+              sel.disabled = !vincular;
+            }
+            atualizarResumo();
+          });
+        });
+      });
+
+      const fechar = (resultado) => {
+        modal.setAttribute("aria-hidden", "true");
+        document.body.style.overflow = "";
+        btnCancel.removeEventListener("click", onCancel);
+        btnOk.removeEventListener("click", onOk);
+        resolve(resultado);
+      };
+
+      const onCancel = () => fechar(null);
+      const onOk = () => {
+        const correcoes = [];
+        mapeadas.filter((m) => m.editavel).forEach((m) => {
+          const vincular = modal.querySelector(`input[name="match_${m.id_bling}"][value="vincular"]`)?.checked;
+          if (!vincular) return;
+          const sel = modal.querySelector(`[data-select-match="${m.id_bling}"]`);
+          const idDrop = sel?.value;
+          if (!idDrop) {
+            Swal.fire({ icon: "warning", title: "Atenção", text: `Selecione a categoria DropNexo para «${m.nome_bling}».` });
+            throw new Error("categoria_obrigatoria");
+          }
+          if (String(idDrop) !== String(m.id_dropnexo)) {
+            correcoes.push({ id_bling: m.id_bling, id_dropnexo: Number(idDrop) });
+          }
+        });
+
+        const decisoes = [];
+        pendentes.forEach((p) => {
+          const vincular = modal.querySelector(`input[name="pend_${p.id_bling}"][value="vincular"]`)?.checked;
+          if (vincular) {
+            const sel = modal.querySelector(`[data-select-pend="${p.id_bling}"]`);
+            const idDrop = sel?.value;
+            if (!idDrop) {
+              Swal.fire({ icon: "warning", title: "Atenção", text: `Selecione a categoria DropNexo para «${p.nome_bling}».` });
+              throw new Error("categoria_obrigatoria");
+            }
+            decisoes.push({ id_bling: p.id_bling, acao: "vincular", id_dropnexo: Number(idDrop) });
+          } else {
+            decisoes.push({ id_bling: p.id_bling, acao: "criar" });
+          }
+        });
+
+        fechar({ correcoes, decisoes, confirmar_categorias: true });
+      };
+
+      const btnCancel = qs("#impCatMapCancel");
+      const btnOk = qs("#impCatMapContinuar");
+      btnCancel.addEventListener("click", onCancel);
+      btnOk.addEventListener("click", () => {
+        try {
+          onOk();
+        } catch {
+          /* validação inline */
+        }
+      });
+
+      modal.setAttribute("aria-hidden", "false");
+      document.body.style.overflow = "hidden";
+    });
+  }
+
+  async function executarImportacaoBling(body) {
     Swal.fire({ title: "Importando do Bling…", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
     try {
       const r = await fetch(`${BASE}/integracao/bling`, {
@@ -411,6 +581,38 @@
         confirmButtonColor: "#021F81",
       });
       window.dispatchEvent(new CustomEvent("catalogo:importacao-concluida"));
+    } catch (e) {
+      Swal.close();
+      await Swal.fire("Erro", e.message, "error");
+    }
+  }
+
+  async function importarBling() {
+    const body = await montarBodyBling();
+    if (!body) return;
+
+    Swal.fire({ title: "Analisando categorias…", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    try {
+      const r = await fetch(`${BASE}/integracao/bling/categorias/pre-analise`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        credentials: "include",
+      });
+      const j = await r.json();
+      Swal.close();
+      if (!r.ok || !j.success) throw new Error(j.message || "Falha na pré-análise.");
+
+      const dados = j.dados || {};
+      if (dados.exibir_modal) {
+        const escolhas = await abrirModalMapeamentoCategorias(dados);
+        if (!escolhas) return;
+        body.confirmar_categorias = true;
+        body.decisoes_categorias = escolhas.decisoes;
+        body.correcoes_match = escolhas.correcoes;
+      }
+
+      await executarImportacaoBling(body);
     } catch (e) {
       Swal.close();
       await Swal.fire("Erro", e.message, "error");

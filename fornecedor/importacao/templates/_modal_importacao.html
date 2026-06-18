@@ -289,3 +289,35 @@
     </div>
   </div>
 </div>
+
+{# Modal mapeamento categorias Bling — não fecha ao clicar fora #}
+<div id="impCatMapModal" class="imp-catmap-modal" aria-hidden="true">
+  <div class="imp-catmap-backdrop" aria-hidden="true"></div>
+  <div class="imp-catmap-dialog" role="dialog" aria-modal="true" aria-labelledby="impCatMapTitulo">
+    <div class="imp-catmap-header">
+      <div>
+        <h2 id="impCatMapTitulo">Mapeamento de categorias</h2>
+        <p class="imp-hint" id="impCatMapSub">Revise os vínculos antes de importar os produtos.</p>
+      </div>
+    </div>
+    <div class="imp-catmap-body">
+      <section class="imp-catmap-sec" id="impCatMapSecMapeadas" hidden>
+        <h3>Mapeadas automaticamente</h3>
+        <p class="imp-hint imp-catmap-hint">Confira se os vínculos por nome estão corretos. Mapas já salvos não podem ser alterados aqui.</p>
+        <div class="imp-catmap-list" id="impCatMapListaMapeadas"></div>
+      </section>
+      <section class="imp-catmap-sec" id="impCatMapSecPendentes" hidden>
+        <h3>Sem mapeamento</h3>
+        <p class="imp-hint imp-catmap-hint">Escolha criar uma categoria nova ou vincular a uma existente. Sem escolha, será criada automaticamente.</p>
+        <div class="imp-catmap-list" id="impCatMapListaPendentes"></div>
+      </section>
+    </div>
+    <div class="imp-catmap-footer">
+      <span class="imp-hint" id="impCatMapResumo"></span>
+      <div class="imp-catmap-actions">
+        <button type="button" class="Cl_botaosecundario" id="impCatMapCancel">Cancelar</button>
+        <button type="button" class="Cl_botaoprimario" id="impCatMapContinuar">Continuar importação</button>
+      </div>
+    </div>
+  </div>
+</div>

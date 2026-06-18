@@ -10,6 +10,7 @@ from pathlib import Path
 from flask import Blueprint, jsonify, redirect, render_template, request, session, url_for
 
 from api.bling.sync_produtos import importar_produtos
+from api.bling.mapeamento_categorias import aplicar_mapeamento_categorias, pre_analisar_mapeamento_categorias
 from fornecedor.importacao.erro_traducao import montar_payload_erro
 from fornecedor.parametros.servico_precificacao import aplicar_valor_drop_produto_e_variantes
 from fornecedor.importacao.servico_importacao import (
@@ -732,6 +733,48 @@ def importacao_layout_padrao():
         conn.close()
 
 
+@fn_importacao_bp.post("/fornecedor/importacao/integracao/bling/categorias/pre-analise")
+@login_obrigatorio()
+@exigir_permissao(codigo="fn_importacao.editar")
+def importacao_bling_categorias_pre_analise():
+    if (resp := _exigir_escrita()) is not None:
+        return resp
+
+    body = request.get_json(silent=True) or {}
+    contexto = (body.get("contexto") or "fornecedor").strip()
+    if contexto not in ("fornecedor", "vendedor"):
+        return jsonify(success=False, message="Contexto inválido."), 400
+
+    raw_ids = body.get("ids_categorias_bling")
+    ids_categorias_bling: list[str] | None = None
+    if isinstance(raw_ids, list):
+        ids_categorias_bling = [str(c).strip() for c in raw_ids if str(c or "").strip()]
+    incluir_sub = body.get("incluir_subcategorias", True)
+    if isinstance(incluir_sub, str):
+        incluir_sub = incluir_sub.lower() in ("1", "true", "sim", "yes")
+
+    id_tenant = int(session.get("id_tenant"))
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        if not _bling_conectado(cur, id_tenant):
+            return jsonify(success=False, message="Conecte o Bling antes de importar."), 400
+        dados = pre_analisar_mapeamento_categorias(
+            cur,
+            id_tenant,
+            contexto,
+            ids_categorias_bling=ids_categorias_bling,
+            incluir_subcategorias=bool(incluir_sub),
+        )
+        return jsonify(success=True, dados=dados)
+    except ValueError as e:
+        return jsonify(success=False, message=str(e)), 400
+    except Exception as e:
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
 @fn_importacao_bp.post("/fornecedor/importacao/integracao/bling")
 @login_obrigatorio()
 @exigir_permissao(codigo="fn_importacao.editar")
@@ -754,12 +797,26 @@ def importacao_bling():
 
     id_tenant = int(session.get("id_tenant"))
     id_usuario = session.get("id_usuario")
+    decisoes_categorias = body.get("decisoes_categorias")
+    correcoes_match = body.get("correcoes_match")
+    confirmar_categorias = bool(body.get("confirmar_categorias"))
 
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
         if not _bling_conectado(cur, id_tenant):
             return jsonify(success=False, message="Conecte o Bling antes de sincronizar."), 400
+
+        if confirmar_categorias:
+            aplicar_mapeamento_categorias(
+                cur,
+                id_tenant,
+                contexto,
+                ids_categorias_bling=ids_categorias_bling,
+                incluir_subcategorias=bool(incluir_sub),
+                decisoes=decisoes_categorias if isinstance(decisoes_categorias, list) else None,
+                correcoes=correcoes_match if isinstance(correcoes_match, list) else None,
+            )
 
         id_lote, numero = criar_lote(
             cur,
@@ -781,6 +838,7 @@ def importacao_bling():
             incluir_subcategorias=bool(incluir_sub),
             id_importacao_lote=id_lote,
             id_usuario=int(id_usuario) if id_usuario else None,
+            modo_categorias="mapeamento",
         )
         conn.commit()
 

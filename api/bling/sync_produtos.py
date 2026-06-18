@@ -668,6 +668,7 @@ def _processar_item_produto(
     id_segmento: int | None = None,
     id_importacao_lote: int | None = None,
     grupos_concluidos: set[str] | None = None,
+    somente_mapa: bool = False,
 ) -> tuple[str, int | None]:
     id_bling = str(item.get("id") or "")
     sku_lista = (item.get("codigo") or "").strip()
@@ -693,6 +694,7 @@ def _processar_item_produto(
             id_segmento=id_segmento,
             id_importacao_lote=id_importacao_lote,
             grupos_concluidos=concluidos,
+            somente_mapa=somente_mapa,
         )
         return resultado, prod_id
 
@@ -711,6 +713,7 @@ def _processar_item_produto(
             id_segmento=id_segmento,
             id_importacao_lote=id_importacao_lote,
             grupos_concluidos=concluidos,
+            somente_mapa=somente_mapa,
         )
         return resultado, prod_id
 
@@ -732,6 +735,7 @@ def _processar_item_produto(
             id_cat_bling,
             id_segmento=id_segmento,
             cache_api=cache_categorias,
+            somente_mapa=somente_mapa,
         )
         categorias_sincronizadas.add(id_cat_bling)
 
@@ -791,6 +795,7 @@ def _processar_grupo_variacoes(
     id_segmento: int | None = None,
     id_importacao_lote: int | None = None,
     grupos_concluidos: set[str] | None = None,
+    somente_mapa: bool = False,
 ) -> tuple[str, int | None]:
     """Importa produto pai + todas as variações em uma única unidade (tudo ou nada)."""
     id_bling_pai = str(job.get("id_bling") or "")
@@ -828,6 +833,7 @@ def _processar_grupo_variacoes(
             id_cat_bling,
             id_segmento=id_segmento,
             cache_api=cache_categorias,
+            somente_mapa=somente_mapa,
         )
         categorias_sincronizadas.add(id_cat_bling)
 
@@ -958,6 +964,7 @@ def importar_produtos(
     id_segmento: int | None = None,
     id_importacao_lote: int | None = None,
     id_usuario: int | None = None,
+    modo_categorias: str = "mapeamento",
 ) -> dict[str, Any]:
     cfg = _garantir_config(cur, id_tenant, contexto)
     modo = cfg["produtos_modo"]
@@ -966,12 +973,16 @@ def importar_produtos(
 
     id_segmento_resolvido = resolver_id_segmento_import(cur, id_tenant, id_segmento)
     resumo_deps = garantir_depositos_bling_vinculados(cur, id_tenant)
-    n_cats_arvore = sincronizar_arvore_categorias_bling(
-        cur,
-        id_tenant,
-        contexto,
-        id_segmento=id_segmento_resolvido,
-    )
+    somente_mapa = modo_categorias == "mapeamento"
+    if modo_categorias == "legado":
+        n_cats_arvore = sincronizar_arvore_categorias_bling(
+            cur,
+            id_tenant,
+            contexto,
+            id_segmento=id_segmento_resolvido,
+        )
+    else:
+        n_cats_arvore = 0
 
     importados = 0
     atualizados = 0
@@ -989,7 +1000,7 @@ def importar_produtos(
     elif id_categoria_bling:
         raizes = [str(id_categoria_bling).strip()]
 
-    if raizes:
+    if raizes and not somente_mapa:
         ids_filtro = set()
         ids_categoria_api = []
         for cat_id in raizes:
@@ -1008,6 +1019,21 @@ def importar_produtos(
                 _rollback_savepoint(cur, _SAVEPOINT_PRODUTO)
                 raise ValueError(f"Categoria Bling #{cat_id}: {e}") from e
             categorias_sincronizadas.add(cat_id)
+            if incluir_subcategorias:
+                ids_cat = ids_categoria_bling_com_descendentes(
+                    id_tenant,
+                    cat_id,
+                    incluir_subcategorias=True,
+                )
+            else:
+                ids_cat = {cat_id}
+            ids_filtro |= ids_cat
+            ids_categoria_api.extend(ids_cat)
+        ids_categoria_api = sorted(set(ids_categoria_api))
+    elif raizes:
+        ids_filtro = set()
+        ids_categoria_api = []
+        for cat_id in raizes:
             if incluir_subcategorias:
                 ids_cat = ids_categoria_bling_com_descendentes(
                     id_tenant,
@@ -1045,6 +1071,7 @@ def importar_produtos(
                     id_segmento=id_segmento_resolvido,
                     id_importacao_lote=id_importacao_lote,
                     grupos_concluidos=grupos_concluidos,
+                    somente_mapa=somente_mapa,
                 )
             else:
                 resultado, _ = _processar_item_produto(
@@ -1059,6 +1086,7 @@ def importar_produtos(
                     id_segmento=id_segmento_resolvido,
                     id_importacao_lote=id_importacao_lote,
                     grupos_concluidos=grupos_concluidos,
+                    somente_mapa=somente_mapa,
                 )
             _release_savepoint(cur, _SAVEPOINT_PRODUTO)
             if resultado == "importado":

@@ -486,6 +486,7 @@ def sync_produtos():
             incluir_subcategorias=bool(incluir_subcategorias),
             id_importacao_lote=id_lote,
             id_usuario=int(id_usuario) if id_usuario else None,
+            modo_categorias="legado",
         )
         conn.commit()
         status = resultado.get("status") or "ok"
