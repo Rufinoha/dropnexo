@@ -68,13 +68,23 @@
   font-size: 0.9rem;
 }
 
-.cadastro-field input {
+.cadastro-field input,
+.cadastro-field select {
   padding: 0.6rem 0.75rem;
   border-radius: 8px;
   border: 1px solid var(--border);
   background: #fff;
   color: var(--text);
   font: inherit;
+}
+
+.cadastro-body--fornecedor .cadastro-section {
+  margin-bottom: 0.85rem;
+}
+
+.cadastro-body--fornecedor .input-com-botao .btn {
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .cadastro-field-span2 {

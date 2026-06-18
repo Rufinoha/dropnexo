@@ -177,6 +177,111 @@ def _normalizar_nome_dep(nome: str) -> str:
     return " ".join((nome or "").strip().lower().split())
 
 
+def criar_deposito_igual_bling(
+    cur,
+    id_tenant: int,
+    *,
+    id_bling_deposito: str,
+    nome_bling: str | None = None,
+    padrao_bling: bool = False,
+) -> int:
+    """
+    Cria depósito DropNexo espelhando o depósito Bling (nome e flag principal)
+    e usa o endereço cadastrado da empresa.
+    """
+    endereco = _endereco_tenant(cur, id_tenant)
+    if not endereco:
+        raise ValueError(
+            "Complete o endereço da empresa (Minha Empresa) antes de criar depósitos automaticamente."
+        )
+
+    nome = (nome_bling or "").strip()
+    if not nome:
+        cur.execute(
+            """
+            SELECT nome_bling FROM tbl_integracao_deposito_map
+            WHERE id_tenant = %s AND id_bling_deposito = %s
+            LIMIT 1
+            """,
+            (id_tenant, str(id_bling_deposito)),
+        )
+        row = cur.fetchone()
+        nome = (row[0] if row else "") or "Depósito Bling"
+
+    cur.execute(
+        """
+        SELECT id FROM tbl_deposito_expedicao
+        WHERE id_tenant = %s AND ativo = TRUE
+          AND LOWER(TRIM(nome)) = LOWER(TRIM(%s))
+        LIMIT 1
+        """,
+        (id_tenant, nome),
+    )
+    existente = cur.fetchone()
+    if existente:
+        return int(existente[0])
+
+    cur.execute(
+        "SELECT COUNT(*) FROM tbl_deposito_expedicao WHERE id_tenant = %s AND ativo = TRUE",
+        (id_tenant,),
+    )
+    sem_depositos = int(cur.fetchone()[0] or 0) == 0
+    principal = padrao_bling or sem_depositos
+
+    try:
+        return _criar_deposito_dropnexo(
+            cur,
+            id_tenant,
+            nome=nome,
+            endereco=endereco,
+            principal=principal,
+        )
+    except Exception as exc:
+        err = str(exc).lower()
+        if "unique" in err and "cep" in err:
+            raise ValueError(
+                "Já existe um depósito com o CEP da empresa. "
+                "Cadastre outro endereço em Expedição ou vincule a um depósito existente."
+            ) from exc
+        raise
+
+
+def vincular_ou_criar_deposito_bling(
+    cur,
+    id_tenant: int,
+    *,
+    id_bling_deposito: str,
+    nome_bling: str | None,
+    id_deposito_dropnexo: int | None,
+    criar_igual: bool = False,
+    padrao_bling: bool = False,
+) -> tuple[int, int | None, bool]:
+    """
+    Salva vínculo Bling ↔ DropNexo. Se criar_igual, cria depósito antes de vincular.
+    Retorna (id_mapa, id_deposito_dropnexo, criou_deposito).
+    """
+    id_drop = id_deposito_dropnexo
+    criou = False
+    if criar_igual:
+        id_drop = criar_deposito_igual_bling(
+            cur,
+            id_tenant,
+            id_bling_deposito=id_bling_deposito,
+            nome_bling=nome_bling,
+            padrao_bling=padrao_bling,
+        )
+        criou = True
+
+    rid = salvar_vinculo_deposito(
+        cur,
+        id_tenant,
+        id_bling_deposito=id_bling_deposito,
+        nome_bling=nome_bling,
+        id_deposito_dropnexo=id_drop,
+    )
+    return rid, id_drop, criou
+
+
 def garantir_depositos_bling_vinculados(cur, id_tenant: int) -> dict:
     """
     Sincroniza depósitos do Bling, vincula por nome ou cria DropNexo quando possível.

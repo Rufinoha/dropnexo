@@ -991,12 +991,16 @@
   padding: 12px 22px 18px;
   border-top: 1px solid #e8edf2;
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  flex-wrap: wrap;
 }
-.imp-catmap-actions { display: flex; gap: 10px; }
+
+.imp-catmap-foot-actions.Cl_BotoesApoio {
+  margin: 0;
+  flex-shrink: 0;
+}
 
 @media (max-width: 980px) {
   .imp-row, .imp-row-bling { grid-template-columns: 1fr; }

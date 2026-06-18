@@ -44,6 +44,21 @@ Regras:
 5. Tokens por tenant, criptografados com derivado de `SECRET_KEY`.
 6. Refresh token rotacionado a cada renovação.
 
+### Revogar / desconectar (OAuth)
+
+Ao desconectar no DropNexo, o backend chama `POST /oauth/revoke` **antes** de apagar os tokens locais.
+
+| Item | Valor |
+|------|--------|
+| Autenticação | `Authorization: Basic` (client_id:client_secret) |
+| Header | `enable-jwt: 1` (obrigatório com tokens JWT) |
+| Body mínimo | `token=<refresh_token ou access_token>` |
+| Desinstalar no Bling | `token=<refresh_token>`, `revoke_action=logout`, `revoke_target=user` |
+
+URLs tentadas (em ordem): `www.bling.com.br/Api/v3/oauth/revoke`, `api.bling.com.br/Api/v3/oauth/revoke`, `api.bling.com.br/oauth/revoke`. Override opcional: `BLING_OAUTH_REVOKE_URL` no `.env`.
+
+Se o DropNexo já tiver apagado os tokens numa desconexão anterior, não há como revogar retroativamente — reconectar e desconectar de novo, ou **Desinstalar** em [Minhas instalações](https://www.bling.com.br/central.extensoes.php) no Bling.
+
 ### Variáveis `.env`
 
 ```

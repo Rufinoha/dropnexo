@@ -98,7 +98,7 @@
 
     <div class="Bl_DepPanel" id="bl_painel_depositos">
       <h4>Pareamento de depósitos</h4>
-      <p class="Bl_Hint">Vincule cada depósito do Bling ao depósito correspondente no DropNexo para importar estoque por filial.</p>
+      <p class="Bl_Hint">Vincule cada depósito do Bling ao depósito correspondente no DropNexo. Use <strong>— Criar igual —</strong> para criar automaticamente um depósito com o mesmo nome e vincular na hora.</p>
       <div class="Bl_DepTblWrap">
         <table class="Bl_DepTbl">
           <thead><tr><th>Bling</th><th>DropNexo</th><th></th></tr></thead>
@@ -115,5 +115,5 @@
 </div>
 {% endblock %}
 {% block page_js %}
-<script src="{{ url_for('static', filename='script/Sbling_integracao.js') }}?v=5"></script>
+<script src="{{ url_for('static', filename='script/Sbling_integracao.js') }}?v=6"></script>
 {% endblock %}

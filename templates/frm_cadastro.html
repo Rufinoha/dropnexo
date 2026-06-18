@@ -7,11 +7,13 @@
   {% include "partials/marca_favicon.html" %}
   <link rel="stylesheet" href="{{ url_for('static', filename='style/global_utils.css') }}" />
   <link rel="stylesheet" href="{{ url_for('static', filename='style/Ccadastro.css') }}" />
+  {% if tipo_negocio != 'fornecedor' %}
   <link rel="stylesheet" href="{{ url_for('static', filename='style/Csegmentos_nichos.css') }}" />
+  {% endif %}
   <script defer src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <script defer src="{{ url_for('static', filename='script/global_utils.js') }}"></script>
 </head>
-<body class="public-body cadastro-body">
+<body class="public-body cadastro-body{% if tipo_negocio == 'fornecedor' %} cadastro-body--fornecedor{% endif %}">
   <main class="cadastro-wrap">
     <div class="cadastro-card">
       <header class="cadastro-header">
@@ -26,6 +28,57 @@
 
       <form id="form-cadastro" class="cadastro-form" novalidate>
         <input type="hidden" name="tipo_negocio" id="tipo_negocio" value="{{ tipo_negocio }}" />
+
+        {% if tipo_negocio == 'fornecedor' %}
+        <input type="hidden" name="tipo_pessoa" value="J" />
+
+        <fieldset class="cadastro-section">
+          <legend>Empresa</legend>
+          <label class="cadastro-field cadastro-field-span2">
+            <span>CNPJ</span>
+            <div class="input-com-botao">
+              <input type="text" name="documento" id="documento" required maxlength="18" autocomplete="off"
+                placeholder="00.000.000/0000-00" />
+              <button type="button" class="btn btn-secondary" id="btn-buscar-cnpj">Preencher dados</button>
+            </div>
+          </label>
+          <div class="cadastro-grid cadastro-grid-2">
+            <label class="cadastro-field">
+              <span>Razão social</span>
+              <input type="text" name="nome_completo" id="nome_completo" required maxlength="255" />
+            </label>
+            <label class="cadastro-field">
+              <span>Apelido / nome fantasia</span>
+              <input type="text" name="nome" id="nome" required maxlength="120" />
+            </label>
+          </div>
+          <label class="cadastro-field cadastro-field-span2">
+            <span>Segmento do marketplace</span>
+            <select name="id_segmento" id="cad-segmento" required>
+              <option value="">Selecione o segmento…</option>
+            </select>
+          </label>
+        </fieldset>
+
+        <fieldset class="cadastro-section">
+          <legend>Dono</legend>
+          <label class="cadastro-field cadastro-field-span2">
+            <span>Nome completo</span>
+            <input type="text" name="nome_usuario" required maxlength="255" />
+          </label>
+          <div class="cadastro-grid cadastro-grid-2">
+            <label class="cadastro-field">
+              <span>E-mail (login)</span>
+              <input type="email" name="email" required autocomplete="email" />
+            </label>
+            <label class="cadastro-field">
+              <span>WhatsApp</span>
+              <input type="tel" name="whatsapp" required maxlength="16" placeholder="(11) 99999-9999" />
+            </label>
+          </div>
+        </fieldset>
+
+        {% else %}
 
         <fieldset class="cadastro-section cadastro-section--destaque">
           <legend>Perfil na plataforma</legend>
@@ -91,6 +144,8 @@
           </div>
         </fieldset>
 
+        {% endif %}
+
         <fieldset class="cadastro-section">
           <legend>Endereço</legend>
           <div class="cadastro-grid cadastro-grid-2">
@@ -128,17 +183,6 @@
           </div>
         </fieldset>
 
-        {% if tipo_negocio == 'fornecedor' %}
-        <fieldset class="cadastro-section cadastro-section--destaque" id="cad-sec-segmentos">
-          <legend>Segmentos do marketplace <span class="ch-req">*</span></legend>
-          <p class="hint">
-            Selecione os nichos em que você atua como fornecedor. Clique em <strong>?</strong> para ver exemplos.
-          </p>
-          <div id="cad-segmentos-nichos" class="SegNichos_Grid"></div>
-          <p id="cad-seg-erro" class="SegNichos_Erro" hidden></p>
-        </fieldset>
-        {% endif %}
-
         <p class="form-msg" id="msg-cad" hidden></p>
         <div class="cadastro-actions">
           <button type="submit" class="btn btn-primary btn-block" id="btn-cadastrar">Cadastrar e receber e-mail</button>
@@ -150,9 +194,13 @@
   <script>
     window.OSB_CADASTRO_API = "{{ url_for('cadastro.api_cadastro_novo') }}";
     window.OSB_CADASTRO_SEGMENTOS_API = "{{ url_for('cadastro.api_cadastro_segmentos') }}";
+    window.OSB_CADASTRO_CNPJ_API = "{{ url_for('cadastro.api_cadastro_cnpj', cnpj='00000000000000') }}".replace(/00000000000000$/, "");
     window.OSB_CADASTRO_TIPO = {{ tipo_negocio|tojson }};
+    window.OSB_LOGIN_URL = "{{ url_for('auth.pagina_login') }}";
   </script>
+  {% if tipo_negocio != 'fornecedor' %}
   <script src="{{ url_for('static', filename='script/Ssegmentos_nichos.js') }}"></script>
+  {% endif %}
   <script src="{{ url_for('static', filename='script/Scadastro.js') }}"></script>
 </body>
 </html>

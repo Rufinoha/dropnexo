@@ -1,6 +1,7 @@
 # api/bling/cliente.py — OAuth 2.0 e cliente HTTP Bling API v3
 from __future__ import annotations
 
+import logging
 import os
 import secrets
 from datetime import datetime, timedelta, timezone
@@ -12,10 +13,19 @@ import requests
 from api.bling.tokens import criptografar_token, descriptografar_token
 from global_utils import Var_ConectarBanco, agora_utc, obter_base_url
 
+_log = logging.getLogger(__name__)
+
 BLING_AUTH_BASE = "https://www.bling.com.br/Api/v3"
 BLING_API_BASE = "https://api.bling.com.br/Api/v3"
 # OAuth deve terminar antes do timeout do Gunicorn (default 30s).
 BLING_OAUTH_TIMEOUT = (5, 15)
+
+# Endpoints documentados para POST /oauth/revoke (tentamos em ordem).
+BLING_REVOKE_URLS = (
+    f"{BLING_AUTH_BASE}/oauth/revoke",
+    "https://api.bling.com.br/Api/v3/oauth/revoke",
+    "https://api.bling.com.br/oauth/revoke",
+)
 
 
 def _env(key: str) -> str:
@@ -109,28 +119,75 @@ def renovar_access_token(refresh_token: str) -> dict[str, Any]:
     )
 
 
+def _revoke_urls() -> tuple[str, ...]:
+    custom = _env("BLING_OAUTH_REVOKE_URL")
+    if custom:
+        return (custom.rstrip("/"),) + tuple(u for u in BLING_REVOKE_URLS if u != custom.rstrip("/"))
+    return BLING_REVOKE_URLS
+
+
+def _token_ja_invalido_resposta(status: int, texto: str) -> bool:
+    if status not in (400, 401):
+        return False
+    t = (texto or "").lower()
+    return any(
+        x in t
+        for x in (
+            "invalid",
+            "expir",
+            "revog",
+            "invalid_grant",
+            "token inv",
+            "não encontrado",
+            "nao encontrado",
+        )
+    )
+
+
 def _post_revoke(body: dict[str, str]) -> tuple[bool, str]:
-    """POST /oauth/revoke. Retorna (sucesso, detalhe)."""
+    """
+    POST /oauth/revoke no Bling.
+
+    Requisitos (documentação developer.bling.com.br):
+    - Authorization: Basic base64(client_id:client_secret)
+    - Content-Type: application/x-www-form-urlencoded
+    - Header enable-jwt: 1 (tokens JWT)
+    - Body: token=<access ou refresh>
+    - Para desinstalar do ponto de vista do usuário (Minhas instalações):
+      token=<refresh_token>, revoke_action=logout, revoke_target=user
+    """
     if not bling_configurado():
         return False, "bling_nao_configurado"
-    try:
-        r = requests.post(
-            f"{BLING_AUTH_BASE}/oauth/revoke",
-            headers=_headers_token(),
-            data=body,
-            timeout=BLING_OAUTH_TIMEOUT,
-        )
-    except requests.Timeout:
-        return False, "timeout"
-    except requests.RequestException as exc:
-        return False, f"rede:{exc}"
 
-    if r.status_code in (200, 204):
-        return True, "ok"
-    # Token já inválido / revogado — objetivo alcançado
-    if r.status_code in (400, 401, 404):
-        return True, f"ja_invalido_{r.status_code}"
-    return False, f"http_{r.status_code}:{(r.text or '')[:120]}"
+    ultimo = "sem_resposta"
+    for url in _revoke_urls():
+        try:
+            r = requests.post(
+                url,
+                headers=_headers_token(),
+                data=body,
+                timeout=BLING_OAUTH_TIMEOUT,
+            )
+        except requests.Timeout:
+            ultimo = f"timeout:{url}"
+            continue
+        except requests.RequestException as exc:
+            ultimo = f"rede:{url}:{exc}"
+            continue
+
+        texto = (r.text or "")[:200]
+        if r.status_code in (200, 204):
+            _log.info("Bling revoke OK em %s body_keys=%s", url, list(body.keys()))
+            return True, f"ok:{url}"
+
+        if _token_ja_invalido_resposta(r.status_code, texto):
+            _log.info("Bling revoke token já inválido em %s (%s)", url, r.status_code)
+            return True, f"ja_invalido:{url}:{r.status_code}"
+
+        ultimo = f"http_{r.status_code}:{url}:{texto}"
+        _log.warning("Bling revoke falhou: %s", ultimo)
+
+    return False, ultimo
 
 
 def revogar_tokens_bling(
@@ -139,8 +196,11 @@ def revogar_tokens_bling(
     refresh_token: str | None = None,
 ) -> dict[str, Any]:
     """
-    Revoga tokens no Bling (best-effort).
-    Preferência: refresh_token (invalida renovação) + access_token.
+    Revoga tokens no Bling para remover a instalação em Minhas instalações.
+
+    Estratégia:
+    1. refresh_token + revoke_action=logout + revoke_target=user (revoga o usuário no app)
+    2. Revogação simples do refresh_token e access_token (fallback)
     """
     resultado: dict[str, Any] = {"revogado_bling": False, "detalhes": []}
     if not bling_configurado():
@@ -153,7 +213,12 @@ def revogar_tokens_bling(
         resultado["detalhes"].append("sem_tokens_locais")
         return resultado
 
-    # Revogação ampla (equivalente a desinstalar / revogar usuário no app Bling)
+    def _marcar(ok: bool, det: str) -> None:
+        resultado["detalhes"].append(det)
+        if ok:
+            resultado["revogado_bling"] = True
+
+    # Passo crítico: remove "Autenticado" em Minhas instalações no Bling
     if refresh:
         ok, det = _post_revoke(
             {
@@ -162,17 +227,23 @@ def revogar_tokens_bling(
                 "revoke_target": "user",
             }
         )
-        resultado["detalhes"].append(f"revoke_user:{det}")
-        if ok:
-            resultado["revogado_bling"] = True
+        _marcar(ok, f"logout_user_refresh:{det}")
+
+    if access and not resultado["revogado_bling"]:
+        ok, det = _post_revoke(
+            {
+                "token": access,
+                "revoke_action": "logout",
+                "revoke_target": "user",
+            }
+        )
+        _marcar(ok, f"logout_user_access:{det}")
 
     for label, tok in (("refresh_token", refresh), ("access_token", access)):
         if not tok:
             continue
         ok, det = _post_revoke({"token": tok})
-        resultado["detalhes"].append(f"{label}:{det}")
-        if ok:
-            resultado["revogado_bling"] = True
+        _marcar(ok, f"{label}:{det}")
 
     return resultado
 

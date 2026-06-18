@@ -280,25 +280,26 @@ def desconectar():
         )
         conn.commit()
 
+        detalhes_revoke = "; ".join(revogacao.get("detalhes") or [])
         if revogacao.get("revogado_bling"):
             msg = "Bling desconectado. Autorização revogada no Bling."
         elif not (tokens.get("refresh_token") or tokens.get("access_token")):
             msg = (
                 "Bling desconectado no DropNexo. "
-                "Não havia tokens salvos; se ainda aparecer em Minhas instalações no Bling, "
-                "use Desinstalar aplicativo lá."
+                "Não havia tokens salvos para revogar no Bling — reconecte e desconecte "
+                "novamente, ou use Desinstalar em Minhas instalações no Bling."
             )
         else:
             msg = (
-                "Bling desconectado no DropNexo. "
-                "Não foi possível confirmar a revogação no Bling; "
-                "se ainda aparecer instalado, desinstale em Minhas instalações."
+                "Bling desconectado no DropNexo, mas a revogação no Bling não foi confirmada. "
+                "Se ainda aparecer Autenticado, desinstale manualmente em Minhas instalações."
             )
 
         return jsonify(
             success=True,
             message=msg,
             revogacao_bling=bool(revogacao.get("revogado_bling")),
+            revogacao_detalhes=detalhes_revoke,
         )
     finally:
         conn.close()
@@ -592,25 +593,37 @@ def api_vincular_deposito_bling():
     body = request.get_json(silent=True) or {}
     id_bling = (body.get("id_bling_deposito") or "").strip()
     nome_bling = (body.get("nome_bling") or "").strip() or None
-    id_drop = body.get("id_deposito_dropnexo")
-    id_drop = int(id_drop) if id_drop not in (None, "") else None
+    criar_igual = bool(body.get("criar_igual"))
+    padrao_bling = bool(body.get("padrao_bling"))
+    id_drop_raw = body.get("id_deposito_dropnexo")
+    if str(id_drop_raw or "").strip() in ("", "__criar_igual__"):
+        id_drop = None
+        if str(id_drop_raw or "").strip() == "__criar_igual__":
+            criar_igual = True
+    else:
+        id_drop = int(id_drop_raw)
     if not id_bling:
         return jsonify(success=False, message="Depósito Bling inválido."), 400
+    if not criar_igual and id_drop is None and id_drop_raw not in (None, "", "__criar_igual__"):
+        return jsonify(success=False, message="Depósito DropNexo inválido."), 400
     id_tenant = session.get("id_tenant")
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
-        from api.bling.depositos import salvar_vinculo_deposito
+        from api.bling.depositos import vincular_ou_criar_deposito_bling
 
-        rid = salvar_vinculo_deposito(
+        rid, id_drop, criou = vincular_ou_criar_deposito_bling(
             cur,
             int(id_tenant),
             id_bling_deposito=id_bling,
             nome_bling=nome_bling,
             id_deposito_dropnexo=id_drop,
+            criar_igual=criar_igual,
+            padrao_bling=padrao_bling,
         )
         conn.commit()
-        return jsonify(success=True, message="Vínculo salvo.", id=rid)
+        msg = "Depósito criado e vinculado." if criou else "Vínculo salvo."
+        return jsonify(success=True, message=msg, id=rid, id_deposito_dropnexo=id_drop, criou_deposito=criou)
     except ValueError as e:
         conn.rollback()
         return jsonify(success=False, message=str(e)), 400

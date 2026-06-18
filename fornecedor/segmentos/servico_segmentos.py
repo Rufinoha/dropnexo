@@ -77,6 +77,34 @@ def ids_segmentos_fornecedor(cur, id_tenant: int) -> list[int]:
     return [int(r[0]) for r in cur.fetchall()]
 
 
+def ids_segmentos_com_categorias(cur, id_tenant: int) -> list[int]:
+    """Segmentos do tenant que possuem ao menos uma categoria ativa vinculada."""
+    cur.execute(
+        """
+        SELECT DISTINCT c.id_segmento
+        FROM tbl_categoria c
+        WHERE c.id_tenant = %s AND c.id_segmento IS NOT NULL AND c.ativo = TRUE
+        ORDER BY c.id_segmento
+        """,
+        (id_tenant,),
+    )
+    return [int(r[0]) for r in cur.fetchall()]
+
+
+def _nomes_segmentos(cur, ids: list[int]) -> list[str]:
+    if not ids:
+        return []
+    cur.execute(
+        """
+        SELECT nome FROM tbl_segmento
+        WHERE id = ANY(%s) AND id_tenant IS NULL
+        ORDER BY nome
+        """,
+        (ids,),
+    )
+    return [str(r[0]) for r in cur.fetchall()]
+
+
 def _validar_ids_segmentos(cur, ids: list[int]) -> list[int]:
     if not ids:
         return []
@@ -101,6 +129,18 @@ def salvar_segmentos_fornecedor(
     ids = _validar_ids_segmentos(cur, list(dict.fromkeys(int(i) for i in ids_segmentos if i)))
     if exigir_minimo and not ids:
         raise ValueError("Selecione ao menos um segmento (nicho) em que sua empresa atua.")
+
+    atuais = set(ids_segmentos_fornecedor(cur, id_tenant))
+    novos = set(ids)
+    bloqueados = set(ids_segmentos_com_categorias(cur, id_tenant))
+    removidos_bloqueados = sorted((atuais - novos) & bloqueados)
+    if removidos_bloqueados:
+        nomes = _nomes_segmentos(cur, removidos_bloqueados)
+        rotulos = ", ".join(nomes) if nomes else ", ".join(str(i) for i in removidos_bloqueados)
+        raise ValueError(
+            f"Não é possível remover segmento(s) com categorias cadastradas: {rotulos}. "
+            "Exclua ou mova as categorias antes de desmarcar o segmento."
+        )
 
     cur.execute("DELETE FROM tbl_fornecedor_segmento WHERE id_tenant = %s", (id_tenant,))
     for sid in ids:

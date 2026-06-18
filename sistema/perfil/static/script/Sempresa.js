@@ -62,7 +62,7 @@
     if (!exigeNichos) return;
     const segs = d.segmentos_nichos || [];
     const ids = d.ids_segmentos_nichos || [];
-    SegNichos.render(box, segs, ids);
+    SegNichos.render(box, segs, ids, d.ids_segmentos_com_categorias || []);
     SegNichos.bind(box);
   }
 

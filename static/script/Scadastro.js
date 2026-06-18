@@ -4,16 +4,41 @@
 
   const apiUrl = window.OSB_CADASTRO_API || "/api/cadastro/novo";
   const apiSegmentos = window.OSB_CADASTRO_SEGMENTOS_API || "/api/cadastro/segmentos";
+  const apiCnpjBase = window.OSB_CADASTRO_CNPJ_API || "/api/cadastro/cnpj/";
   const tipoNegocioCadastro = (window.OSB_CADASTRO_TIPO || "").toLowerCase();
+  const ehFornecedor = tipoNegocioCadastro === "fornecedor";
   const msgEl = document.getElementById("msg-cad");
   const inpDoc = document.getElementById("documento");
   const inpCep = document.getElementById("cep");
   const inpWhatsapp = form.querySelector('[name="whatsapp"]');
-  const radiosTipo = form.querySelectorAll('input[name="tipo_pessoa"]');
 
-  const lblDoc = document.getElementById("lbl-documento");
-  const lblNomeCompleto = document.getElementById("lbl-nome-completo");
-  const lblNomeConta = document.getElementById("lbl-nome-conta");
+  const MSG_SUCESSO_FORNECEDOR =
+    "Cadastro realizado com sucesso! Você receberá um e-mail para finalizar o cadastro e poderá efetuar login na plataforma após definir sua senha.";
+
+  function urlLoginPosCadastro(redirect) {
+    return redirect || window.OSB_LOGIN_URL || "/login";
+  }
+
+  async function concluirCadastroSucesso(j, { titulo = "Cadastro realizado!", texto = "" } = {}) {
+    const destino = urlLoginPosCadastro(j.redirect);
+    const mensagem = texto || j.message || MSG_SUCESSO_FORNECEDOR;
+    form.reset();
+    if (window.Swal) {
+      await Swal.fire({
+        title: titulo,
+        text: mensagem,
+        icon: "success",
+        confirmButtonColor: "#021f81",
+        confirmButtonText: "Ir para login",
+      });
+      window.location.href = destino;
+      return;
+    }
+    mostrarMsg(mensagem, true);
+    setTimeout(() => {
+      window.location.href = destino;
+    }, 2500);
+  }
 
   function soDigitos(v) {
     return String(v || "").replace(/\D/g, "");
@@ -53,22 +78,6 @@
       .replace(/(\d{5})(\d)/, "$1-$2");
   }
 
-  function tipoAtual() {
-    const r = form.querySelector('input[name="tipo_pessoa"]:checked');
-    return r ? r.value : "F";
-  }
-
-  function aplicarTipoPessoa() {
-    const j = tipoAtual() === "J";
-    lblDoc.textContent = j ? "CNPJ" : "CPF";
-    lblNomeCompleto.textContent = j ? "Razão social" : "Nome completo";
-    lblNomeConta.textContent = j
-      ? "Nome fantasia (exibição no sistema)"
-      : "Nome no sistema (apelido)";
-    inpDoc.value = j ? mascaraCnpj(inpDoc.value) : mascaraCpf(inpDoc.value);
-    inpDoc.placeholder = j ? "00.000.000/0000-00" : "000.000.000-00";
-  }
-
   function normalizarSlug(val) {
     return String(val || "")
       .toLowerCase()
@@ -80,32 +89,19 @@
   }
 
   function mostrarMsg(texto, ok) {
+    if (!msgEl) return;
     msgEl.textContent = texto;
     msgEl.className = ok ? "form-msg is-ok" : "form-msg is-error";
     msgEl.hidden = false;
   }
 
-  radiosTipo.forEach((r) => r.addEventListener("change", aplicarTipoPessoa));
-
-  inpDoc.addEventListener("input", () => {
-    const j = tipoAtual() === "J";
-    inpDoc.value = j ? mascaraCnpj(inpDoc.value) : mascaraCpf(inpDoc.value);
-  });
-
-  inpCep.addEventListener("input", () => {
+  inpCep?.addEventListener("input", () => {
     inpCep.value = mascaraCep(inpCep.value);
   });
 
-  inpWhatsapp.addEventListener("input", () => {
+  inpWhatsapp?.addEventListener("input", () => {
     inpWhatsapp.value = mascaraTelefone(inpWhatsapp.value);
   });
-
-  const slugInput = form.querySelector('[name="slug"]');
-  if (slugInput) {
-    slugInput.addEventListener("blur", () => {
-      slugInput.value = normalizarSlug(slugInput.value);
-    });
-  }
 
   document.getElementById("btn-buscar-cep")?.addEventListener("click", async () => {
     const cep = soDigitos(inpCep.value);
@@ -124,23 +120,177 @@
       document.getElementById("bairro").value = j.bairro || "";
       document.getElementById("cidade").value = j.localidade || "";
       document.getElementById("uf").value = (j.uf || "").toUpperCase();
-      msgEl.hidden = true;
+      if (msgEl) msgEl.hidden = true;
     } catch {
       mostrarMsg("Não foi possível consultar o CEP.", false);
     }
   });
 
-  form.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    msgEl.hidden = true;
+  if (ehFornecedor) {
+    inpDoc?.addEventListener("input", () => {
+      inpDoc.value = mascaraCnpj(inpDoc.value);
+    });
 
-    const boxSeg = document.getElementById("cad-segmentos-nichos");
-    if (tipoNegocioCadastro === "fornecedor" && boxSeg && window.SegNichos) {
-      if (!SegNichos.validarMinimo(boxSeg, "Selecione ao menos um segmento (nicho) em que sua empresa atua.")) {
-        mostrarMsg("Selecione ao menos um segmento (nicho) em que sua empresa atua.", false);
+    document.getElementById("btn-buscar-cnpj")?.addEventListener("click", async () => {
+      const doc = soDigitos(inpDoc?.value);
+      if (doc.length !== 14) {
+        mostrarMsg("Informe o CNPJ completo com 14 dígitos.", false);
         return;
       }
+      const btn = document.getElementById("btn-buscar-cnpj");
+      btn.disabled = true;
+      try {
+        const r = await fetch(`${apiCnpjBase}${doc}`, { headers: { Accept: "application/json" } });
+        const j = await r.json();
+        if (!r.ok || !j.success) {
+          throw new Error(j.message || "Erro na consulta do CNPJ.");
+        }
+        const d = j.dados || {};
+        const elRazao = document.getElementById("nome_completo");
+        const elNome = document.getElementById("nome");
+        if (elRazao) elRazao.value = d.razao_social || "";
+        if (elNome) elNome.value = d.nome_fantasia || d.razao_social || "";
+        if (d.cep) {
+          inpCep.value = mascaraCep(d.cep);
+        }
+        if (d.logradouro) document.getElementById("logradouro").value = d.logradouro;
+        if (d.numero) form.querySelector('[name="numero"]').value = d.numero;
+        if (d.complemento) form.querySelector('[name="complemento"]').value = d.complemento;
+        if (d.bairro) document.getElementById("bairro").value = d.bairro;
+        if (d.cidade) document.getElementById("cidade").value = d.cidade;
+        if (d.uf) document.getElementById("uf").value = d.uf;
+        if (msgEl) msgEl.hidden = true;
+        if (window.Swal) {
+          await Swal.fire({
+            title: "Dados carregados",
+            text: "Razão social, fantasia e endereço foram preenchidos com base no CNPJ.",
+            icon: "success",
+            confirmButtonColor: "#021f81",
+          });
+        }
+      } catch (err) {
+        mostrarMsg(err.message || "Não foi possível consultar o CNPJ.", false);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    async function carregarSegmentosCombobox() {
+      const sel = document.getElementById("cad-segmento");
+      if (!sel) return;
+      try {
+        const r = await fetch(apiSegmentos, { headers: { Accept: "application/json" } });
+        const j = await r.json();
+        if (!j.success || !Array.isArray(j.segmentos)) return;
+        j.segmentos.forEach((seg) => {
+          const opt = document.createElement("option");
+          opt.value = String(seg.id);
+          opt.textContent = seg.nome || seg.titulo || `Segmento ${seg.id}`;
+          sel.appendChild(opt);
+        });
+      } catch (err) {
+        console.error(err);
+      }
     }
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      if (msgEl) msgEl.hidden = true;
+
+      const fd = new FormData(form);
+      const idSegmento = String(fd.get("id_segmento") || "").trim();
+      if (!idSegmento) {
+        mostrarMsg("Selecione o segmento do marketplace.", false);
+        return;
+      }
+
+      const body = {
+        tipo_negocio: "fornecedor",
+        tipo_pessoa: "J",
+        documento: soDigitos(fd.get("documento")),
+        nome_completo: String(fd.get("nome_completo") || "").trim(),
+        nome: String(fd.get("nome") || "").trim(),
+        nome_usuario: String(fd.get("nome_usuario") || "").trim(),
+        email: String(fd.get("email") || "").trim().toLowerCase(),
+        whatsapp: soDigitos(fd.get("whatsapp")),
+        cep: soDigitos(fd.get("cep")),
+        logradouro: String(fd.get("logradouro") || "").trim(),
+        numero: String(fd.get("numero") || "").trim(),
+        complemento: String(fd.get("complemento") || "").trim(),
+        bairro: String(fd.get("bairro") || "").trim(),
+        cidade: String(fd.get("cidade") || "").trim(),
+        uf: String(fd.get("uf") || "").trim().toUpperCase(),
+        ids_segmentos_nichos: [parseInt(idSegmento, 10)],
+      };
+
+      const btn = document.getElementById("btn-cadastrar");
+      btn.disabled = true;
+
+      try {
+        const r = await fetch(apiUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify(body),
+        });
+        const j = await r.json();
+        if (j.success) {
+          await concluirCadastroSucesso(j);
+          return;
+        }
+        mostrarMsg(j.message || "Não foi possível concluir o cadastro.", false);
+      } catch {
+        mostrarMsg("Falha na comunicação com o servidor.", false);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    carregarSegmentosCombobox();
+    return;
+  }
+
+  const radiosTipo = form.querySelectorAll('input[name="tipo_pessoa"]');
+  const lblDoc = document.getElementById("lbl-documento");
+  const lblNomeCompleto = document.getElementById("lbl-nome-completo");
+  const lblNomeConta = document.getElementById("lbl-nome-conta");
+
+  function tipoAtual() {
+    const r = form.querySelector('input[name="tipo_pessoa"]:checked');
+    return r ? r.value : "F";
+  }
+
+  function aplicarTipoPessoa() {
+    const j = tipoAtual() === "J";
+    if (lblDoc) lblDoc.textContent = j ? "CNPJ" : "CPF";
+    if (lblNomeCompleto) lblNomeCompleto.textContent = j ? "Razão social" : "Nome completo";
+    if (lblNomeConta) {
+      lblNomeConta.textContent = j
+        ? "Nome fantasia (exibição no sistema)"
+        : "Nome no sistema (apelido)";
+    }
+    if (inpDoc) {
+      inpDoc.value = j ? mascaraCnpj(inpDoc.value) : mascaraCpf(inpDoc.value);
+      inpDoc.placeholder = j ? "00.000.000/0000-00" : "000.000.000-00";
+    }
+  }
+
+  radiosTipo.forEach((r) => r.addEventListener("change", aplicarTipoPessoa));
+
+  inpDoc?.addEventListener("input", () => {
+    const j = tipoAtual() === "J";
+    inpDoc.value = j ? mascaraCnpj(inpDoc.value) : mascaraCpf(inpDoc.value);
+  });
+
+  const slugInput = form.querySelector('[name="slug"]');
+  if (slugInput) {
+    slugInput.addEventListener("blur", () => {
+      slugInput.value = normalizarSlug(slugInput.value);
+    });
+  }
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (msgEl) msgEl.hidden = true;
 
     const fd = new FormData(form);
     const tipo = tipoAtual();
@@ -163,9 +313,6 @@
       cidade: String(fd.get("cidade") || "").trim(),
       uf: String(fd.get("uf") || "").trim().toUpperCase(),
     };
-    if (tipoNegocioCadastro === "fornecedor" && boxSeg && window.SegNichos) {
-      body.ids_segmentos_nichos = SegNichos.idsSelecionados(boxSeg);
-    }
 
     const btn = document.getElementById("btn-cadastrar");
     btn.disabled = true;
@@ -178,14 +325,7 @@
       });
       const j = await r.json();
       if (j.success) {
-        mostrarMsg(j.message || "Cadastro realizado.", true);
-        form.reset();
-        aplicarTipoPessoa();
-        if (j.redirect) {
-          setTimeout(() => {
-            window.location.href = j.redirect;
-          }, 2000);
-        }
+        await concluirCadastroSucesso(j, { texto: j.message || "Cadastro realizado." });
         return;
       }
       mostrarMsg(j.message || "Não foi possível concluir o cadastro.", false);
@@ -197,21 +337,4 @@
   });
 
   aplicarTipoPessoa();
-
-  async function carregarSegmentosCadastro() {
-    const box = document.getElementById("cad-segmentos-nichos");
-    if (!box || tipoNegocioCadastro !== "fornecedor" || !window.SegNichos) return;
-    try {
-      const r = await fetch(apiSegmentos, { headers: { Accept: "application/json" } });
-      const j = await r.json();
-      if (j.success && j.segmentos) {
-        SegNichos.render(box, j.segmentos, []);
-        SegNichos.bind(box);
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  }
-
-  carregarSegmentosCadastro();
 })();

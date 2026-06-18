@@ -46,6 +46,8 @@
     }
   }
 
+  const CRIAR_IGUAL = "__criar_igual__";
+
   async function carregarDepositos() {
     const tbody = document.getElementById("bl_tbl_depositos");
     if (!tbody) return;
@@ -71,9 +73,10 @@
       .map((b) => {
         const id = String(b.id || "");
         const nome = (b.descricao || b.nome || id).replace(/</g, "&lt;");
-        return `<tr data-bling="${id}">
+        const padrao = b.padrao ? "1" : "0";
+        return `<tr data-bling="${id}" data-padrao="${padrao}">
           <td>${nome}</td>
-          <td><select class="Bl_DepSelect"><option value="">— não vincular —</option>${dropOpts}</select></td>
+          <td><select class="Bl_DepSelect"><option value="">— não vincular —</option><option value="${CRIAR_IGUAL}">— Criar igual —</option>${dropOpts}</select></td>
           <td><button type="button" class="Cl_BtnSalvar Bl_DepBtnSalvar">Salvar</button></td>
         </tr>`;
       })
@@ -84,18 +87,29 @@
       if (sel && mapa[idB]) sel.value = String(mapa[idB]);
       tr.querySelector(".Bl_DepBtnSalvar")?.addEventListener("click", async () => {
         try {
+          const valor = sel?.value || "";
+          const criarIgual = valor === CRIAR_IGUAL;
           const resp = await fetch("/api/integracoes/bling/depositos/vincular", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               id_bling_deposito: idB,
               nome_bling: tr.cells[0]?.textContent?.trim(),
-              id_deposito_dropnexo: sel?.value || null,
+              id_deposito_dropnexo: criarIgual ? CRIAR_IGUAL : valor || null,
+              criar_igual: criarIgual,
+              padrao_bling: tr.dataset.padrao === "1",
             }),
           });
           const jj = await resp.json();
           if (!resp.ok || !jj.success) throw new Error(jj.message || "Erro.");
-          await Swal.fire({ icon: "success", title: "Vínculo salvo", timer: 1200, showConfirmButton: false });
+          await Swal.fire({
+            icon: "success",
+            title: jj.criou_deposito ? "Depósito criado" : "Vínculo salvo",
+            text: jj.message || "",
+            timer: jj.criou_deposito ? 1800 : 1200,
+            showConfirmButton: false,
+          });
+          if (jj.criou_deposito) await carregarDepositos();
         } catch (e) {
           Swal.fire({ icon: "error", title: "Erro", text: e.message });
         }

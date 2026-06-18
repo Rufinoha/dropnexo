@@ -621,10 +621,16 @@ from global_utils import (
     valida_email,
 )
 from fornecedor.segmentos.servico_segmentos import listar_segmentos_plataforma, salvar_segmentos_fornecedor
+from servico_cnpj import consultar_cnpj
 
 cadastro_bp = Blueprint("cadastro", __name__)
 
 TIPOS_NEGOCIO = frozenset({"fornecedor", "vendedor"})
+
+MSG_SUCESSO_CADASTRO_FORNECEDOR = (
+    "Cadastro realizado com sucesso! Você receberá um e-mail para finalizar o cadastro "
+    "e poderá efetuar login na plataforma após definir sua senha."
+)
 
 
 
@@ -664,9 +670,15 @@ def _html_email_nova_conta_vinculada(*, nome_usuario: str, nome_conta: str, link
 
 
 def _enviar_email_ativacao_conta(**kwargs) -> tuple[bool, str]:
-    html = _html_email_ativacao(**kwargs)
+    email = kwargs["email"]
+    html = _html_email_ativacao(
+        nome_usuario=kwargs["nome_usuario"],
+        nome_conta=kwargs["nome_conta"],
+        link_ativacao=kwargs["link_ativacao"],
+        horas_validade=kwargs["horas_validade"],
+    )
     ok, msg, _ = enviar_email(
-        [kwargs["email"]],
+        [email],
         "Ativação de acesso • DropNexo",
         html,
         tag="dropnexo_cadastro",
@@ -675,9 +687,14 @@ def _enviar_email_ativacao_conta(**kwargs) -> tuple[bool, str]:
 
 
 def _enviar_email_nova_conta_vinculada(**kwargs) -> tuple[bool, str]:
-    html = _html_email_nova_conta_vinculada(**kwargs)
+    email = kwargs["email"]
+    html = _html_email_nova_conta_vinculada(
+        nome_usuario=kwargs["nome_usuario"],
+        nome_conta=kwargs["nome_conta"],
+        link_login=kwargs["link_login"],
+    )
     ok, msg, _ = enviar_email(
-        [kwargs["email"]],
+        [email],
         "Nova conta vinculada • DropNexo",
         html,
         tag="dropnexo_cadastro_nova_conta",
@@ -713,6 +730,28 @@ def _valida_documento(tipo_pessoa: str, documento: str) -> bool:
     return False
 
 
+def _gerar_slug_disponivel(cur, *, nome_tenant: str, documento: str) -> str:
+    bases: list[str] = []
+    if nome_tenant:
+        bases.append(_normalizar_slug(nome_tenant))
+    doc = _so_digitos(documento)
+    if len(doc) >= 8:
+        bases.append(f"cnpj-{doc[-8:]}")
+    if doc:
+        bases.append(doc)
+
+    for base in bases:
+        if not base or len(base) < 2:
+            continue
+        candidato = base
+        for n in range(0, 100):
+            cur.execute("SELECT 1 FROM tbl_tenant WHERE slug = %s LIMIT 1", (candidato,))
+            if not cur.fetchone():
+                return candidato
+            candidato = f"{base}-{n + 1}"[:64]
+    return f"conta-{doc[-6:]}" if doc else "conta-nova"
+
+
 @cadastro_bp.get("/cadastro")
 def pagina_cadastro():
     tipo = (request.args.get("tipo") or "").strip().lower()
@@ -734,6 +773,15 @@ def api_cadastro_segmentos():
         return jsonify(success=True, segmentos=listar_segmentos_plataforma(cur))
     finally:
         conn.close()
+
+
+@cadastro_bp.get("/api/cadastro/cnpj/<cnpj>")
+def api_cadastro_cnpj(cnpj: str):
+    """Consulta pública de CNPJ para preenchimento do cadastro de fornecedor."""
+    try:
+        return jsonify(success=True, dados=consultar_cnpj(cnpj))
+    except ValueError as exc:
+        return jsonify(success=False, message=str(exc)), 400
 
 
 @cadastro_bp.post("/api/cadastro/novo")
@@ -759,8 +807,12 @@ def api_cadastro_novo():
 
     if tipo_negocio not in TIPOS_NEGOCIO:
         return jsonify(success=False, message="Informe se você é fornecedor ou vendedor."), 400
-    if tipo_pessoa not in ("F", "J"):
+
+    if tipo_negocio == "fornecedor":
+        tipo_pessoa = "J"
+    elif tipo_pessoa not in ("F", "J"):
         return jsonify(success=False, message="Selecione Pessoa Física ou Jurídica."), 400
+
     if not _valida_documento(tipo_pessoa, documento):
         doc_label = "CPF" if tipo_pessoa == "F" else "CNPJ"
         return jsonify(success=False, message=f"{doc_label} inválido."), 400
@@ -768,7 +820,7 @@ def api_cadastro_novo():
         return jsonify(success=False, message="Informe o nome completo ou razão social."), 400
     if len(nome_tenant) < 2:
         return jsonify(success=False, message="Informe o nome de exibição da conta."), 400
-    if not slug or len(slug) < 2:
+    if tipo_negocio != "fornecedor" and (not slug or len(slug) < 2):
         return jsonify(success=False, message="Identificador (slug) inválido."), 400
     if len(nome_usuario) < 2:
         return jsonify(success=False, message="Informe o nome do responsável."), 400
@@ -785,10 +837,13 @@ def api_cadastro_novo():
 
     ids_segmentos_nichos = dados.get("ids_segmentos_nichos") or []
     if tipo_negocio == "fornecedor":
+        id_segmento = dados.get("id_segmento")
+        if id_segmento and not ids_segmentos_nichos:
+            ids_segmentos_nichos = [id_segmento]
         if not isinstance(ids_segmentos_nichos, list) or not ids_segmentos_nichos:
             return jsonify(
                 success=False,
-                message="Selecione ao menos um segmento (nicho) em que sua empresa atua.",
+                message="Selecione o segmento do marketplace.",
             ), 400
 
     conn = None
@@ -797,9 +852,14 @@ def api_cadastro_novo():
         conn = Var_ConectarBanco()
         cur = conn.cursor()
 
-        cur.execute("SELECT 1 FROM tbl_tenant WHERE slug = %s LIMIT 1", (slug,))
-        if cur.fetchone():
-            return jsonify(success=False, message="Este identificador (slug) já está em uso."), 409
+        if tipo_negocio == "fornecedor":
+            slug = _gerar_slug_disponivel(cur, nome_tenant=nome_tenant, documento=documento)
+        elif slug:
+            cur.execute("SELECT 1 FROM tbl_tenant WHERE slug = %s LIMIT 1", (slug,))
+            if cur.fetchone():
+                return jsonify(success=False, message="Este identificador (slug) já está em uso."), 409
+        else:
+            return jsonify(success=False, message="Identificador (slug) inválido."), 400
 
         cur.execute("SELECT 1 FROM tbl_tenant WHERE documento = %s LIMIT 1", (documento,))
         if cur.fetchone():
@@ -901,7 +961,16 @@ def api_cadastro_novo():
             )
             if not ok:
                 return jsonify(success=False, message=f"Conta criada, mas o e-mail falhou: {msg}"), 500
-            return jsonify(success=True, message="Enviamos um e-mail com o link para você definir sua senha.")
+            msg_sucesso = (
+                MSG_SUCESSO_CADASTRO_FORNECEDOR
+                if tipo_negocio == "fornecedor"
+                else "Enviamos um e-mail com o link para você definir sua senha."
+            )
+            return jsonify(
+                success=True,
+                message=msg_sucesso,
+                redirect=url_for("auth.pagina_login"),
+            )
 
         raw = secrets.token_urlsafe(32)
         token_hash = gerar_hmac_token(raw)
@@ -934,7 +1003,16 @@ def api_cadastro_novo():
         )
         if not ok:
             return jsonify(success=False, message=f"Conta criada, mas o e-mail falhou: {msg}"), 500
-        return jsonify(success=True, message="Enviamos um e-mail com o link para você definir sua senha.")
+        msg_sucesso = (
+            MSG_SUCESSO_CADASTRO_FORNECEDOR
+            if tipo_negocio == "fornecedor"
+            else "Enviamos um e-mail com o link para você definir sua senha."
+        )
+        return jsonify(
+            success=True,
+            message=msg_sucesso,
+            redirect=url_for("auth.pagina_login"),
+        )
     except Exception as e:
         if conn:
             try:

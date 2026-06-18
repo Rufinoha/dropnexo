@@ -49,23 +49,28 @@
     });
   }
 
-  function render(container, segmentos, selecionados) {
+  function render(container, segmentos, selecionados, bloqueados) {
     if (!container) return;
     const sel = new Set((selecionados || []).map((id) => Number(id)));
+    const locked = new Set((bloqueados || []).map((id) => Number(id)));
     container.innerHTML = (segmentos || [])
       .map((s) => {
         const on = sel.has(Number(s.id)) || s.selecionado;
+        const isLocked = on && locked.has(Number(s.id));
         return (
           '<div class="SegNichos_Item" data-seg-id="' +
           s.id +
           '">' +
           '<button type="button" class="SegNichos_Pill' +
           (on ? " is-on" : "") +
+          (isLocked ? " is-locked" : "") +
           '" data-id="' +
           s.id +
           '" data-on="' +
           (on ? "1" : "0") +
-          '">' +
+          '"' +
+          (isLocked ? ' data-locked="1" title="Segmento com categorias — não pode ser removido"' : "") +
+          ">" +
           '<span class="SegNichos_PillText">' +
           escapeHtml(s.nome) +
           "</span>" +
@@ -79,6 +84,7 @@
       })
       .join("");
     container._segmentosCache = segmentos || [];
+    container._segmentosBloqueados = Array.from(locked);
   }
 
   function idsSelecionados(container) {
@@ -105,6 +111,21 @@
       }
       const pill = e.target.closest(".SegNichos_Pill");
       if (!pill) return;
+      const estavaOn = pill.classList.contains("is-on");
+      if (estavaOn && pill.getAttribute("data-locked") === "1") {
+        const id = Number(pill.getAttribute("data-id"));
+        const seg = (container._segmentosCache || []).find((s) => Number(s.id) === id);
+        const nome = seg?.nome || "este segmento";
+        const msg =
+          "Este segmento possui categorias cadastradas e não pode ser desmarcado. " +
+          "Exclua ou mova as categorias antes de remover o segmento.";
+        if (typeof Swal !== "undefined") {
+          Swal.fire({ icon: "warning", title: nome, text: msg, confirmButtonColor: "#021F81" });
+        } else {
+          alert(msg);
+        }
+        return;
+      }
       const on = pill.classList.toggle("is-on");
       pill.setAttribute("data-on", on ? "1" : "0");
       const err = container.parentElement?.querySelector(".SegNichos_Erro");

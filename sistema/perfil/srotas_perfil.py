@@ -19,6 +19,7 @@ from global_utils import (
     validar_politica_senha,
 )
 from fornecedor.segmentos.servico_segmentos import (
+    ids_segmentos_com_categorias,
     ids_segmentos_fornecedor,
     listar_segmentos_plataforma,
     salvar_segmentos_fornecedor,
@@ -681,6 +682,7 @@ def api_minha_empresa_dados():
             return jsonify(success=False, message="Empresa não encontrada."), 404
         if tenant_exige_segmentos_nichos(dados.get("tipo_negocio")):
             dados["ids_segmentos_nichos"] = ids_segmentos_fornecedor(cur, id_tenant)
+            dados["ids_segmentos_com_categorias"] = ids_segmentos_com_categorias(cur, id_tenant)
             dados["segmentos_nichos"] = listar_segmentos_plataforma(cur, id_tenant)
         return jsonify(success=True, dados=dados)
     except Exception as e:
@@ -799,6 +801,9 @@ def api_minha_empresa_salvar():
         conn.commit()
         session["tenant_nome"] = nome
         return jsonify(success=True, message="Dados da empresa salvos.")
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 400
     except Exception as e:
         conn.rollback()
         return jsonify(success=False, message=str(e)), 500
