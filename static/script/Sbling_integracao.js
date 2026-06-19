@@ -196,12 +196,28 @@
       Swal.fire({ icon: "error", title: "Erro", text: j.message, confirmButtonColor: "#021F81" });
       return;
     }
-    const icon = j.instalacao_removida ? "success" : j.revogacao_bling ? "warning" : "info";
+    const removido = !!j.instalacao_removida;
+    const tokenMorto = !!j.token_inativo;
+    const icon = removido ? "success" : tokenMorto || j.revogacao_bling ? "warning" : "warning";
+    const title = removido
+      ? "Desinstalado no Bling"
+      : tokenMorto
+        ? "Desconectado — token revogado"
+        : "Desconectado no DropNexo";
+    let html = `<p style="text-align:left;margin:0">${j.message || ""}</p>`;
+    if (!removido) {
+      html += `<hr style="margin:12px 0;border-color:#e2e8f0"><p style="text-align:left;margin:0;font-size:0.9em"><strong>No Bling (uma vez):</strong><br>Central de Extensões → Minhas instalações → DropNexo → ⋮ → <strong>Desinstalar aplicativo</strong></p>`;
+    }
+    if (j.revogacao_detalhes) {
+      html += `<p style="text-align:left;margin:12px 0 0;font-size:0.75em;color:#64748b">${j.revogacao_detalhes}</p>`;
+    }
+    if (j.bling_client_id_prefix) {
+      html += `<p style="text-align:left;margin:8px 0 0;font-size:0.75em;color:#64748b">Client ID servidor: ${j.bling_client_id_prefix}…</p>`;
+    }
     await Swal.fire({
       icon,
-      title: j.instalacao_removida ? "Desinstalado no Bling" : "Desconectado",
-      text: j.message || "",
-      footer: j.revogacao_detalhes ? `<small style="color:#64748b">${j.revogacao_detalhes}</small>` : undefined,
+      title,
+      html,
       confirmButtonColor: "#021F81",
     });
     await carregarStatus();

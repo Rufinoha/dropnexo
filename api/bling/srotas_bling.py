@@ -265,6 +265,45 @@ def desconectar():
             access_token=tokens.get("access_token") or None,
             refresh_token=tokens.get("refresh_token") or None,
         )
+
+        detalhes_revoke = "; ".join(revogacao.get("detalhes") or [])
+        client_id = (os.getenv("BLING_CLIENT_ID") or "")[:8]
+        token_inativo = bool(revogacao.get("token_inativo"))
+
+        if revogacao.get("instalacao_removida"):
+            msg = (
+                "Bling desconectado. Tokens revogados e verificação confirmou que a API "
+                "não responde mais com este acesso."
+            )
+        elif token_inativo:
+            msg = (
+                "Bling desconectado no DropNexo. A API do Bling não aceita mais este token, "
+                "mas o card em Minhas instalações pode demorar a sumir. Se continuar "
+                "como Autenticado, use Desinstalar aplicativo no menu ⋮ do card no Bling."
+            )
+        elif revogacao.get("revogado_bling"):
+            msg = (
+                "Bling desconectado no DropNexo, porém a revogação na API do Bling "
+                "não foi confirmada. Verifique se o Client ID do servidor corresponde "
+                "ao app DropNexo no portal do desenvolvedor."
+            )
+        elif not (tokens.get("refresh_token") or tokens.get("access_token")):
+            msg = (
+                "Bling desconectado no DropNexo. "
+                "Não havia tokens salvos — reconecte e desconecte novamente, "
+                "ou desinstale manualmente em Minhas instalações no Bling."
+            )
+        else:
+            msg = (
+                "Bling desconectado no DropNexo, mas não foi possível revogar no Bling. "
+                "Desinstale manualmente: Central de Extensões → Minhas instalações → "
+                "DropNexo → ⋮ → Desinstalar aplicativo."
+            )
+
+        ultimo_erro = None
+        if not token_inativo and (tokens.get("refresh_token") or tokens.get("access_token")):
+            ultimo_erro = f"revoke:{detalhes_revoke[:900]}"
+
         cur.execute(
             """
             UPDATE tbl_integracao_bling SET
@@ -272,40 +311,22 @@ def desconectar():
                 access_token_enc = NULL,
                 refresh_token_enc = NULL,
                 token_expires_em = NULL,
-                ultimo_erro = NULL,
+                ultimo_erro = %s,
                 atualizado_em = %s
             WHERE id_tenant = %s
             """,
-            (agora_utc(), id_tenant),
+            (ultimo_erro, agora_utc(), id_tenant),
         )
         conn.commit()
-
-        detalhes_revoke = "; ".join(revogacao.get("detalhes") or [])
-        if revogacao.get("instalacao_removida"):
-            msg = "Bling desconectado. O aplicativo foi desinstalado na sua conta Bling."
-        elif revogacao.get("revogado_bling"):
-            msg = (
-                "Bling desconectado no DropNexo. Tokens revogados, mas o Bling pode ainda "
-                "mostrar a instalação — atualize Minhas instalações ou desinstale manualmente."
-            )
-        elif not (tokens.get("refresh_token") or tokens.get("access_token")):
-            msg = (
-                "Bling desconectado no DropNexo. "
-                "Não havia tokens salvos para revogar no Bling — reconecte e desconecte "
-                "novamente, ou use Desinstalar em Minhas instalações no Bling."
-            )
-        else:
-            msg = (
-                "Bling desconectado no DropNexo, mas não foi possível desinstalar no Bling. "
-                "Use Desinstalar em Minhas instalações se ainda aparecer Autenticado."
-            )
 
         return jsonify(
             success=True,
             message=msg,
             revogacao_bling=bool(revogacao.get("revogado_bling")),
             instalacao_removida=bool(revogacao.get("instalacao_removida")),
+            token_inativo=token_inativo,
             revogacao_detalhes=detalhes_revoke,
+            bling_client_id_prefix=client_id or None,
         )
     finally:
         conn.close()
