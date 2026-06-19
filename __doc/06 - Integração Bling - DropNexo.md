@@ -53,7 +53,9 @@ Ao desconectar no DropNexo, o backend chama `POST /oauth/revoke` **antes** de ap
 | Autenticação | `Authorization: Basic` (client_id:client_secret) |
 | Header | `enable-jwt: 1` (obrigatório com tokens JWT) |
 | Body mínimo | `token=<refresh_token ou access_token>` |
-| Desinstalar no Bling | `token=<refresh_token>`, `revoke_action=logout`, `revoke_target=user` |
+| Desinstalar no Bling | `token=<refresh_token>`, `token_type_hint=refresh_token`, `revoke_action=uninstall`, `revoke_target=company` (ou `user`) |
+
+`logout` apenas invalida tokens; `uninstall` remove a instalação em Minhas instalações (Central de Extensões).
 
 URLs tentadas (em ordem): `www.bling.com.br/Api/v3/oauth/revoke`, `api.bling.com.br/Api/v3/oauth/revoke`, `api.bling.com.br/oauth/revoke`. Override opcional: `BLING_OAUTH_REVOKE_URL` no `.env`.
 

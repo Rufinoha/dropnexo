@@ -281,8 +281,13 @@ def desconectar():
         conn.commit()
 
         detalhes_revoke = "; ".join(revogacao.get("detalhes") or [])
-        if revogacao.get("revogado_bling"):
-            msg = "Bling desconectado. Autorização revogada no Bling."
+        if revogacao.get("instalacao_removida"):
+            msg = "Bling desconectado. O aplicativo foi desinstalado na sua conta Bling."
+        elif revogacao.get("revogado_bling"):
+            msg = (
+                "Bling desconectado no DropNexo. Tokens revogados, mas o Bling pode ainda "
+                "mostrar a instalação — atualize Minhas instalações ou desinstale manualmente."
+            )
         elif not (tokens.get("refresh_token") or tokens.get("access_token")):
             msg = (
                 "Bling desconectado no DropNexo. "
@@ -291,14 +296,15 @@ def desconectar():
             )
         else:
             msg = (
-                "Bling desconectado no DropNexo, mas a revogação no Bling não foi confirmada. "
-                "Se ainda aparecer Autenticado, desinstale manualmente em Minhas instalações."
+                "Bling desconectado no DropNexo, mas não foi possível desinstalar no Bling. "
+                "Use Desinstalar em Minhas instalações se ainda aparecer Autenticado."
             )
 
         return jsonify(
             success=True,
             message=msg,
             revogacao_bling=bool(revogacao.get("revogado_bling")),
+            instalacao_removida=bool(revogacao.get("instalacao_removida")),
             revogacao_detalhes=detalhes_revoke,
         )
     finally:

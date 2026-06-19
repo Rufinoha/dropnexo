@@ -196,6 +196,14 @@
       Swal.fire({ icon: "error", title: "Erro", text: j.message, confirmButtonColor: "#021F81" });
       return;
     }
+    const icon = j.instalacao_removida ? "success" : j.revogacao_bling ? "warning" : "info";
+    await Swal.fire({
+      icon,
+      title: j.instalacao_removida ? "Desinstalado no Bling" : "Desconectado",
+      text: j.message || "",
+      footer: j.revogacao_detalhes ? `<small style="color:#64748b">${j.revogacao_detalhes}</small>` : undefined,
+      confirmButtonColor: "#021F81",
+    });
     await carregarStatus();
   });
 

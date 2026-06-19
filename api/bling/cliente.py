@@ -66,17 +66,19 @@ def url_autorizacao(state: str) -> str:
     return f"{BLING_AUTH_BASE}/oauth/authorize?{qs}"
 
 
-def _headers_token() -> dict[str, str]:
+def _headers_token(*, com_jwt: bool = True) -> dict[str, str]:
     client_id, client_secret = credenciais_bling()
     import base64
 
     basic = base64.b64encode(f"{client_id}:{client_secret}".encode()).decode()
-    return {
+    headers = {
         "Authorization": f"Basic {basic}",
         "Content-Type": "application/x-www-form-urlencoded",
         "Accept": "application/json",
-        "enable-jwt": "1",
     }
+    if com_jwt:
+        headers["enable-jwt"] = "1"
+    return headers
 
 
 def _post_token(body: dict[str, str]) -> dict[str, Any]:
@@ -133,61 +135,69 @@ def _token_ja_invalido_resposta(status: int, texto: str) -> bool:
     return any(
         x in t
         for x in (
-            "invalid",
-            "expir",
-            "revog",
             "invalid_grant",
+            "token expir",
             "token inv",
-            "não encontrado",
-            "nao encontrado",
+            "token revog",
+            "already revoked",
+            "já revog",
+            "ja revog",
         )
     )
 
 
-def _post_revoke(body: dict[str, str]) -> tuple[bool, str]:
+def _post_revoke(body: dict[str, str]) -> tuple[bool, str, bool]:
     """
     POST /oauth/revoke no Bling.
 
-    Requisitos (documentação developer.bling.com.br):
-    - Authorization: Basic base64(client_id:client_secret)
-    - Content-Type: application/x-www-form-urlencoded
-    - Header enable-jwt: 1 (tokens JWT)
-    - Body: token=<access ou refresh>
-    - Para desinstalar do ponto de vista do usuário (Minhas instalações):
-      token=<refresh_token>, revoke_action=logout, revoke_target=user
+    Documentação oficial (developer.bling.com.br/aplicativos):
+    - Basic auth (client_id:client_secret)
+    - Body: token, token_type_hint (opcional)
+    - Revogação avançada:
+        revoke_action = logout | uninstall
+        revoke_target = user | company
+    - Para sumir de Minhas instalações: revoke_action=uninstall
+
+    Retorna (sucesso_confirmado, detalhe, instalacao_removida).
+    instalacao_removida=True quando a estratégia inclui uninstall e HTTP 2xx.
     """
     if not bling_configurado():
-        return False, "bling_nao_configurado"
+        return False, "bling_nao_configurado", False
 
+    eh_uninstall = body.get("revoke_action") == "uninstall"
     ultimo = "sem_resposta"
-    for url in _revoke_urls():
-        try:
-            r = requests.post(
-                url,
-                headers=_headers_token(),
-                data=body,
-                timeout=BLING_OAUTH_TIMEOUT,
-            )
-        except requests.Timeout:
-            ultimo = f"timeout:{url}"
-            continue
-        except requests.RequestException as exc:
-            ultimo = f"rede:{url}:{exc}"
-            continue
+    header_variants = (True, False)
 
-        texto = (r.text or "")[:200]
-        if r.status_code in (200, 204):
-            _log.info("Bling revoke OK em %s body_keys=%s", url, list(body.keys()))
-            return True, f"ok:{url}"
+    for com_jwt in header_variants:
+        for url in _revoke_urls():
+            try:
+                r = requests.post(
+                    url,
+                    headers=_headers_token(com_jwt=com_jwt),
+                    data=body,
+                    timeout=BLING_OAUTH_TIMEOUT,
+                )
+            except requests.Timeout:
+                ultimo = f"timeout:{url}:jwt={int(com_jwt)}"
+                continue
+            except requests.RequestException as exc:
+                ultimo = f"rede:{url}:jwt={int(com_jwt)}:{exc}"
+                continue
 
-        if _token_ja_invalido_resposta(r.status_code, texto):
-            _log.info("Bling revoke token já inválido em %s (%s)", url, r.status_code)
-            return True, f"ja_invalido:{url}:{r.status_code}"
+            texto = (r.text or "")[:240]
+            tag = f"jwt={int(com_jwt)}"
+            if r.status_code in (200, 204):
+                _log.info("Bling revoke OK (%s) %s keys=%s", tag, url, list(body.keys()))
+                return True, f"ok:{url}:{tag}", eh_uninstall
 
-        ultimo = f"http_{r.status_code}:{url}:{texto}"
-        _log.warning("Bling revoke falhou: %s", ultimo)
+            if _token_ja_invalido_resposta(r.status_code, texto):
+                _log.info("Bling revoke token já inválido (%s) %s", tag, url)
+                return True, f"ja_invalido:{url}:{r.status_code}:{tag}", False
 
-    return False, ultimo
+            ultimo = f"http_{r.status_code}:{url}:{tag}:{texto}"
+            _log.warning("Bling revoke falhou: %s", ultimo)
+
+    return False, ultimo, False
 
 
 def revogar_tokens_bling(
@@ -196,13 +206,15 @@ def revogar_tokens_bling(
     refresh_token: str | None = None,
 ) -> dict[str, Any]:
     """
-    Revoga tokens no Bling para remover a instalação em Minhas instalações.
+    Revoga tokens e desinstala o app no Bling (Minhas instalações).
 
-    Estratégia:
-    1. refresh_token + revoke_action=logout + revoke_target=user (revoga o usuário no app)
-    2. Revogação simples do refresh_token e access_token (fallback)
+    Ordem: uninstall (company/user) → logout (company/user) → revoke simples.
     """
-    resultado: dict[str, Any] = {"revogado_bling": False, "detalhes": []}
+    resultado: dict[str, Any] = {
+        "revogado_bling": False,
+        "instalacao_removida": False,
+        "detalhes": [],
+    }
     if not bling_configurado():
         resultado["detalhes"].append("bling_nao_configurado")
         return resultado
@@ -213,37 +225,65 @@ def revogar_tokens_bling(
         resultado["detalhes"].append("sem_tokens_locais")
         return resultado
 
-    def _marcar(ok: bool, det: str) -> None:
+    def _marcar(ok: bool, det: str, instalacao: bool) -> None:
         resultado["detalhes"].append(det)
         if ok:
             resultado["revogado_bling"] = True
+        if ok and instalacao:
+            resultado["instalacao_removida"] = True
 
-    # Passo crítico: remove "Autenticado" em Minhas instalações no Bling
-    if refresh:
-        ok, det = _post_revoke(
-            {
-                "token": refresh,
-                "revoke_action": "logout",
-                "revoke_target": "user",
-            }
-        )
-        _marcar(ok, f"logout_user_refresh:{det}")
+    estrategias: list[tuple[str, dict[str, str]]] = []
+    for alvo in ("company", "user"):
+        if refresh:
+            estrategias.append(
+                (
+                    f"uninstall_{alvo}_refresh",
+                    {
+                        "token": refresh,
+                        "token_type_hint": "refresh_token",
+                        "revoke_action": "uninstall",
+                        "revoke_target": alvo,
+                    },
+                )
+            )
+        if access:
+            estrategias.append(
+                (
+                    f"uninstall_{alvo}_access",
+                    {
+                        "token": access,
+                        "token_type_hint": "access_token",
+                        "revoke_action": "uninstall",
+                        "revoke_target": alvo,
+                    },
+                )
+            )
 
-    if access and not resultado["revogado_bling"]:
-        ok, det = _post_revoke(
-            {
-                "token": access,
-                "revoke_action": "logout",
-                "revoke_target": "user",
-            }
-        )
-        _marcar(ok, f"logout_user_access:{det}")
+    for alvo in ("company", "user"):
+        if refresh:
+            estrategias.append(
+                (
+                    f"logout_{alvo}_refresh",
+                    {
+                        "token": refresh,
+                        "token_type_hint": "refresh_token",
+                        "revoke_action": "logout",
+                        "revoke_target": alvo,
+                    },
+                )
+            )
 
     for label, tok in (("refresh_token", refresh), ("access_token", access)):
         if not tok:
             continue
-        ok, det = _post_revoke({"token": tok})
-        _marcar(ok, f"{label}:{det}")
+        hint = "refresh_token" if label == "refresh_token" else "access_token"
+        estrategias.append((label, {"token": tok, "token_type_hint": hint}))
+
+    for nome, body in estrategias:
+        if resultado["instalacao_removida"]:
+            break
+        ok, det, instalacao = _post_revoke(body)
+        _marcar(ok, f"{nome}:{det}", instalacao)
 
     return resultado
 
