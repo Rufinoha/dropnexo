@@ -24,9 +24,13 @@ def consultar_cnpj(cnpj: str) -> dict:
         raise ValueError(f"Não foi possível consultar o CNPJ: {exc}") from exc
 
     if r.status_code == 404:
-        raise ValueError("CNPJ não encontrado na base pública.")
+        raise ValueError("CNPJ não encontrado na base pública. Preencha os dados manualmente.")
+    if r.status_code == 429:
+        raise ValueError("Consulta de CNPJ temporariamente indisponível. Aguarde um minuto ou preencha manualmente.")
     if r.status_code >= 400:
-        raise ValueError("Serviço de consulta CNPJ indisponível. Tente novamente.")
+        raise ValueError(
+            f"Serviço de consulta CNPJ indisponível (HTTP {r.status_code}). Preencha os dados manualmente."
+        )
 
     data = r.json()
     if not isinstance(data, dict):

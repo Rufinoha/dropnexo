@@ -93,6 +93,7 @@
     msgEl.textContent = texto;
     msgEl.className = ok ? "form-msg is-ok" : "form-msg is-error";
     msgEl.hidden = false;
+    if (!ok) msgEl.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }
 
   inpCep?.addEventListener("input", () => {
@@ -141,7 +142,12 @@
       btn.disabled = true;
       try {
         const r = await fetch(`${apiCnpjBase}${doc}`, { headers: { Accept: "application/json" } });
-        const j = await r.json();
+        let j;
+        try {
+          j = await r.json();
+        } catch {
+          throw new Error("Resposta inválida do servidor ao consultar CNPJ.");
+        }
         if (!r.ok || !j.success) {
           throw new Error(j.message || "Erro na consulta do CNPJ.");
         }
@@ -169,7 +175,16 @@
           });
         }
       } catch (err) {
-        mostrarMsg(err.message || "Não foi possível consultar o CNPJ.", false);
+        const texto = err.message || "Não foi possível consultar o CNPJ.";
+        mostrarMsg(texto, false);
+        if (window.Swal) {
+          await Swal.fire({
+            title: "Consulta CNPJ",
+            text: texto,
+            icon: "warning",
+            confirmButtonColor: "#021f81",
+          });
+        }
       } finally {
         btn.disabled = false;
       }
