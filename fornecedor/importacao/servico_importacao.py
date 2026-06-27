@@ -135,6 +135,115 @@ def registrar_erro_lote(
     )
 
 
+def atualizar_progresso_lote(
+    cur,
+    id_lote: int,
+    *,
+    total: int,
+    processados: int,
+    importados: int,
+    atualizados: int,
+    rejeitadas: int,
+    ignorados: int = 0,
+    meta_patch: dict | None = None,
+) -> None:
+    """Atualiza contadores visíveis durante importação assíncrona (polling)."""
+    patch: dict[str, Any] = {
+        "processados": processados,
+        "ignorados": ignorados,
+        "total_jobs": total,
+        "fase": "processando",
+    }
+    if meta_patch:
+        patch.update(meta_patch)
+    cur.execute(
+        """
+        UPDATE tbl_importacao_lote SET
+            status = %s,
+            total_linhas = %s,
+            total_importadas = %s,
+            total_atualizadas = %s,
+            total_rejeitadas = %s,
+            meta = COALESCE(meta, '{}'::jsonb) || %s::jsonb
+        WHERE id = %s
+        """,
+        (
+            STATUS_PROCESSANDO,
+            total,
+            importados,
+            atualizados,
+            rejeitadas,
+            json.dumps(patch),
+            id_lote,
+        ),
+    )
+
+
+def marcar_lote_erro_fatal(cur, id_lote: int, mensagem: str) -> None:
+    cur.execute(
+        """
+        UPDATE tbl_importacao_lote SET
+            status = %s,
+            meta = COALESCE(meta, '{}'::jsonb) || %s::jsonb,
+            finalizado_em = %s
+        WHERE id = %s
+        """,
+        (
+            STATUS_ERRO,
+            json.dumps({"erro_fatal": mensagem[:900], "fase": "erro"}),
+            agora_utc(),
+            id_lote,
+        ),
+    )
+
+
+def obter_meta_lote(cur, id_tenant: int, id_lote: int) -> dict[str, Any]:
+    cur.execute(
+        """
+        SELECT meta FROM tbl_importacao_lote
+        WHERE id = %s AND id_tenant = %s
+        """,
+        (id_lote, id_tenant),
+    )
+    row = cur.fetchone()
+    if not row:
+        return {}
+    raw = row[0]
+    if isinstance(raw, dict):
+        return raw
+    if isinstance(raw, str):
+        try:
+            return json.loads(raw)
+        except Exception:
+            return {}
+    return {}
+
+
+def progresso_importacao_dict(lote: dict[str, Any], meta: dict[str, Any]) -> dict[str, Any]:
+    total = int(lote.get("total_linhas") or meta.get("total_jobs") or 0)
+    processados = int(meta.get("processados") or 0)
+    status = (lote.get("status") or STATUS_PROCESSANDO).lower()
+    concluido = status in (STATUS_CONCLUIDO, STATUS_ERRO, STATUS_CANCELADO)
+    pct = round((processados / total) * 100) if total > 0 else (100 if concluido else 0)
+    return {
+        "id_lote": lote.get("id"),
+        "numero": lote.get("numero"),
+        "status": status,
+        "fase": meta.get("fase") or ("concluido" if concluido else "processando"),
+        "total": total,
+        "processados": processados,
+        "importados": int(lote.get("total_importadas") or 0),
+        "atualizados": int(lote.get("total_atualizadas") or 0),
+        "erros": int(lote.get("total_rejeitadas") or 0),
+        "ignorados": int(meta.get("ignorados") or 0),
+        "percentual": min(pct, 100),
+        "concluido": concluido,
+        "mensagem": meta.get("mensagem"),
+        "erro_fatal": meta.get("erro_fatal"),
+        "status_importacao": meta.get("status_importacao"),
+    }
+
+
 def finalizar_lote(
     cur,
     id_lote: int,

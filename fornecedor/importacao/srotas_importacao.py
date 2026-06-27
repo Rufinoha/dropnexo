@@ -7,8 +7,9 @@ import json
 import traceback
 from pathlib import Path
 
-from flask import Blueprint, jsonify, redirect, render_template, request, session, url_for
+from flask import Blueprint, current_app, jsonify, redirect, render_template, request, session, url_for
 
+from api.bling.importacao_progresso import iniciar_importacao_bling_async, obter_progresso_bling
 from api.bling.sync_produtos import importar_produtos
 from api.bling.mapeamento_categorias import aplicar_mapeamento_categorias, pre_analisar_mapeamento_categorias
 from fornecedor.importacao.erro_traducao import montar_payload_erro
@@ -81,6 +82,26 @@ def _bling_conectado(cur, id_tenant: int) -> bool:
     )
     row = cur.fetchone()
     return bool(row and row[0] == "conectado")
+
+
+def _parse_body_importacao_bling(body: dict) -> tuple[str, list[str] | None, bool, list | None, list | None, bool]:
+    contexto = (body.get("contexto") or "fornecedor").strip()
+    if contexto not in ("fornecedor", "vendedor"):
+        raise ValueError("Contexto inválido.")
+
+    raw_ids = body.get("ids_categorias_bling")
+    ids_categorias_bling: list[str] | None = None
+    if isinstance(raw_ids, list):
+        ids_categorias_bling = [str(c).strip() for c in raw_ids if str(c or "").strip()]
+
+    incluir_sub = body.get("incluir_subcategorias", True)
+    if isinstance(incluir_sub, str):
+        incluir_sub = incluir_sub.lower() in ("1", "true", "sim", "yes")
+
+    decisoes = body.get("decisoes_categorias")
+    correcoes = body.get("correcoes_match")
+    confirmar = bool(body.get("confirmar_categorias"))
+    return contexto, ids_categorias_bling, bool(incluir_sub), decisoes, correcoes, confirmar
 
 
 def _bling_config_fornecedor(cur, id_tenant: int) -> dict:
@@ -279,7 +300,6 @@ def importacao_lote_detalhe(id_lote: int):
 
 @fn_importacao_bp.delete("/fornecedor/importacao/lote/<int:id_lote>")
 @login_obrigatorio()
-@exigir_permissao(codigo="fn_importacao.editar")
 def importacao_lote_excluir(id_lote: int):
     if (resp := _exigir_escrita()) is not None:
         return resp
@@ -306,7 +326,6 @@ def importacao_lote_excluir(id_lote: int):
 
 @fn_importacao_bp.post("/fornecedor/importacao/bling/estoque")
 @login_obrigatorio()
-@exigir_permissao(codigo="fn_importacao.editar")
 def importacao_bling_estoque():
     if (resp := _exigir_escrita()) is not None:
         return resp
@@ -331,7 +350,6 @@ def importacao_bling_estoque():
 
 @fn_importacao_bp.post("/fornecedor/importacao/arquivo")
 @login_obrigatorio()
-@exigir_permissao(codigo="fn_importacao.editar")
 def importacao_arquivo():
     if (resp := _exigir_escrita()) is not None:
         return resp
@@ -664,7 +682,6 @@ def importacao_layout_apoio():
 
 @fn_importacao_bp.post("/fornecedor/importacao/layout/salvar")
 @login_obrigatorio()
-@exigir_permissao(codigo="fn_importacao.editar")
 def importacao_layout_salvar():
     if (resp := _exigir_escrita()) is not None:
         return resp
@@ -689,7 +706,6 @@ def importacao_layout_salvar():
 
 @fn_importacao_bp.delete("/fornecedor/importacao/layout/<int:id_layout>")
 @login_obrigatorio()
-@exigir_permissao(codigo="fn_importacao.editar")
 def importacao_layout_excluir(id_layout: int):
     if (resp := _exigir_escrita()) is not None:
         return resp
@@ -710,7 +726,6 @@ def importacao_layout_excluir(id_layout: int):
 
 @fn_importacao_bp.post("/fornecedor/importacao/layout/padrao")
 @login_obrigatorio()
-@exigir_permissao(codigo="fn_importacao.editar")
 def importacao_layout_padrao():
     if (resp := _exigir_escrita()) is not None:
         return resp
@@ -735,7 +750,6 @@ def importacao_layout_padrao():
 
 @fn_importacao_bp.post("/fornecedor/importacao/integracao/bling/categorias/pre-analise")
 @login_obrigatorio()
-@exigir_permissao(codigo="fn_importacao.editar")
 def importacao_bling_categorias_pre_analise():
     if (resp := _exigir_escrita()) is not None:
         return resp
@@ -775,9 +789,74 @@ def importacao_bling_categorias_pre_analise():
         conn.close()
 
 
+@fn_importacao_bp.post("/fornecedor/importacao/integracao/bling/iniciar")
+@login_obrigatorio()
+def importacao_bling_iniciar():
+    if (resp := _exigir_escrita()) is not None:
+        return resp
+
+    body = request.get_json(silent=True) or {}
+    try:
+        contexto, ids_categorias_bling, incluir_sub, decisoes, correcoes, confirmar = (
+            _parse_body_importacao_bling(body)
+        )
+    except ValueError as e:
+        return jsonify(success=False, message=str(e)), 400
+
+    id_tenant = int(session.get("id_tenant"))
+    id_usuario = session.get("id_usuario")
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        if not _bling_conectado(cur, id_tenant):
+            return jsonify(success=False, message="Conecte o Bling antes de sincronizar."), 400
+
+        if confirmar:
+            aplicar_mapeamento_categorias(
+                cur,
+                id_tenant,
+                contexto,
+                ids_categorias_bling=ids_categorias_bling,
+                incluir_subcategorias=incluir_sub,
+                decisoes=decisoes if isinstance(decisoes, list) else None,
+                correcoes=correcoes if isinstance(correcoes, list) else None,
+            )
+            conn.commit()
+    finally:
+        conn.close()
+
+    try:
+        dados = iniciar_importacao_bling_async(
+            current_app._get_current_object(),
+            id_tenant=id_tenant,
+            contexto=contexto,
+            ids_categorias_bling=ids_categorias_bling,
+            incluir_subcategorias=incluir_sub,
+            id_usuario=int(id_usuario) if id_usuario else None,
+        )
+        return jsonify(
+            success=True,
+            message="Importação iniciada.",
+            id_lote=dados["id_lote"],
+            numero=dados["numero"],
+        )
+    except Exception as e:
+        return jsonify(success=False, message=str(e)), 500
+
+
+@fn_importacao_bp.get("/fornecedor/importacao/integracao/bling/lote/<int:id_lote>/progresso")
+@login_obrigatorio()
+@exigir_permissao(codigo="catalogos.ver")
+def importacao_bling_progresso(id_lote: int):
+    id_tenant = int(session.get("id_tenant"))
+    progresso = obter_progresso_bling(id_tenant, id_lote)
+    if not progresso:
+        return jsonify(success=False, message="Lote não encontrado."), 404
+    return jsonify(success=True, progresso=progresso)
+
+
 @fn_importacao_bp.post("/fornecedor/importacao/integracao/bling")
 @login_obrigatorio()
-@exigir_permissao(codigo="fn_importacao.editar")
 def importacao_bling():
     if (resp := _exigir_escrita()) is not None:
         return resp

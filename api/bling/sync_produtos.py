@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import traceback
+from collections.abc import Callable
 from typing import Any
 
 from api.bling.campos_produto import (
@@ -965,6 +966,8 @@ def importar_produtos(
     id_importacao_lote: int | None = None,
     id_usuario: int | None = None,
     modo_categorias: str = "mapeamento",
+    on_progresso: Callable[[dict[str, int]], None] | None = None,
+    intervalo_progresso: int = 3,
 ) -> dict[str, Any]:
     cfg = _garantir_config(cur, id_tenant, contexto)
     modo = cfg["produtos_modo"]
@@ -1049,8 +1052,26 @@ def importar_produtos(
     itens = _iterar_listas_produtos(id_tenant, ids_categoria_api=ids_categoria_api)
     jobs = _preparar_jobs_importacao(itens)
     grupos_concluidos: set[str] = set()
+    total_jobs = len(jobs)
 
-    for job in jobs:
+    def _emitir_progresso(processados: int) -> None:
+        if not on_progresso:
+            return
+        on_progresso(
+            {
+                "total": total_jobs,
+                "processados": processados,
+                "importados": importados,
+                "atualizados": atualizados,
+                "ignorados": ignorados,
+                "rejeitadas": len(falhas),
+            }
+        )
+
+    if on_progresso:
+        _emitir_progresso(0)
+
+    for idx, job in enumerate(jobs, start=1):
         id_bling = str(job.get("id_bling") or "")
         item = job.get("item") or {}
         nome_ref = (item.get("nome") or "").strip()
@@ -1150,6 +1171,9 @@ def importar_produtos(
                     origem="bling",
                 )
 
+        if on_progresso and (idx % intervalo_progresso == 0 or idx == total_jobs):
+            _emitir_progresso(idx)
+
     cur.execute(
         """
         UPDATE tbl_integracao_bling_config
@@ -1177,13 +1201,13 @@ def importar_produtos(
     detalhe_log = json.dumps({"falhas": falhas[:80]}, ensure_ascii=False)
     _registrar_log(cur, id_tenant, contexto, status, resumo, detalhe_log)
 
-    if id_importacao_lote:
+    if id_importacao_lote and not on_progresso:
         lote_status = STATUS_ERRO if importados + atualizados == 0 else STATUS_CONCLUIDO
         finalizar_lote(
             cur,
             id_importacao_lote,
             status=lote_status,
-            total_linhas=len(jobs),
+            total_linhas=total_jobs,
             total_importadas=importados,
             total_atualizadas=atualizados,
             total_rejeitadas=len(falhas),
@@ -1197,6 +1221,7 @@ def importar_produtos(
         "ignorados": ignorados,
         "falhas": falhas,
         "total_falhas": len(falhas),
+        "total_jobs": total_jobs,
         "categorias": cat_n,
         "categorias_arvore": n_cats_arvore,
         "depositos": resumo_deps,

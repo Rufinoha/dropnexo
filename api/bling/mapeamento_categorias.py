@@ -79,11 +79,13 @@ def coletar_ids_categoria_bling_do_escopo(
         if not id_bling:
             continue
         item = job.get("item")
-        if job.get("tipo") == "grupo" and not item:
-            detalhe = obter_produto(id_tenant, id_bling)
-        else:
-            detalhe = item if item else obter_produto(id_tenant, id_bling)
-        cid = extrair_id_categoria_produto(detalhe or {})
+        cid = extrair_id_categoria_produto(item or {})
+        if not cid:
+            if job.get("tipo") == "grupo" and not item:
+                detalhe = obter_produto(id_tenant, id_bling)
+            else:
+                detalhe = item if item else obter_produto(id_tenant, id_bling)
+            cid = extrair_id_categoria_produto(detalhe or {})
         if cid:
             ids_cats.add(cid)
 

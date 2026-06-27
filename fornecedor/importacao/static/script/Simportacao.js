@@ -42,6 +42,20 @@
       .replace(/>/g, "&gt;");
   }
 
+  async function lerJsonResposta(r) {
+    const texto = await r.text();
+    try {
+      return JSON.parse(texto);
+    } catch {
+      const snippet = texto.replace(/\s+/g, " ").trim().slice(0, 120);
+      throw new Error(
+        r.status >= 500
+          ? `Erro no servidor (${r.status}). Tente de novo ou contate o suporte.`
+          : `Resposta inválida do servidor (${r.status}). ${snippet || "Sem detalhes."}`
+      );
+    }
+  }
+
   function icoHtml(nome) {
     if (window.Util?.gerarIconeTech) return Util.gerarIconeTech(nome);
     return "";
@@ -559,25 +573,91 @@
     });
   }
 
-  async function executarImportacaoBling(body) {
-    Swal.fire({ title: "Importando do Bling…", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+  function htmlProgressoBling(p, totalPrevisto) {
+    const total = Number(p?.total || totalPrevisto || 0);
+    const proc = Number(p?.processados || 0);
+    const pct = Number(p?.percentual ?? (total ? Math.min(100, Math.round((proc / total) * 100)) : 0));
+    const fase = p?.fase || "processando";
+    const faseTxt =
+      fase === "listando" || fase === "iniciando"
+        ? "Preparando lista de produtos no Bling…"
+        : fase === "concluido"
+          ? "Finalizando…"
+          : "Importando produtos do Bling…";
+    return `<div class="imp-swal-progress">
+      <p style="margin:0 0 12px;text-align:left;font-size:0.95em">${faseTxt}</p>
+      <div style="background:#e2e8f0;border-radius:6px;height:12px;overflow:hidden">
+        <div style="width:${pct}%;background:#021F81;height:100%;transition:width .35s ease"></div>
+      </div>
+      <p style="margin:12px 0 0;text-align:center;font-size:1.05em">
+        <strong>${proc}</strong>${total ? ` de <strong>${total}</strong>` : ""} produto(s)
+      </p>
+      <p style="margin:8px 0 0;text-align:center;font-size:0.85em;color:#64748b">
+        Inseridos: ${Number(p?.importados || 0)} · Atualizados: ${Number(p?.atualizados || 0)} · Erros: ${Number(p?.erros || 0)}
+      </p>
+    </div>`;
+  }
+
+  function aguardar(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  async function pollProgressoImportacaoBling(idLote, totalPrevisto) {
+    const intervaloMs = 1500;
+    for (;;) {
+      const r = await fetch(`${BASE}/integracao/bling/lote/${idLote}/progresso`, {
+        credentials: "include",
+        headers: { Accept: "application/json" },
+      });
+      const j = await lerJsonResposta(r);
+      if (!r.ok || !j.success) throw new Error(j.message || "Falha ao consultar progresso.");
+      const p = j.progresso || {};
+      Swal.update({ html: htmlProgressoBling(p, totalPrevisto) });
+      if (p.concluido) {
+        if (p.erro_fatal) throw new Error(p.erro_fatal);
+        return p;
+      }
+      await aguardar(intervaloMs);
+    }
+  }
+
+  async function executarImportacaoBling(body, totalPrevisto = 0) {
+    Swal.fire({
+      title: "Importando do Bling",
+      html: htmlProgressoBling({ processados: 0, total: totalPrevisto, percentual: 0 }, totalPrevisto),
+      allowOutsideClick: false,
+      showConfirmButton: false,
+      didOpen: () => Swal.showLoading(),
+    });
+
     try {
-      const r = await fetch(`${BASE}/integracao/bling`, {
+      const r = await fetch(`${BASE}/integracao/bling/iniciar`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify(body),
         credentials: "include",
       });
-      const j = await r.json();
+      const j = await lerJsonResposta(r);
+      if (!r.ok || !j.success) throw new Error(j.message || "Falha ao iniciar importação.");
+
+      const progresso = await pollProgressoImportacaoBling(j.id_lote, totalPrevisto);
       Swal.close();
-      if (!r.ok || !j.success) throw new Error(j.message || "Falha na importação.");
-      await carregarCards("bling", j.lote?.id || j.dados?.id_importacao_lote);
+
+      await carregarCards("bling", j.id_lote);
       pickTab("bling");
-      const st = j.dados?.status;
+
+      const stImport = progresso.status_importacao || (progresso.erros > 0 ? "aviso" : "ok");
+      const icon = stImport === "erro" ? "error" : stImport === "aviso" || progresso.erros > 0 ? "warning" : "success";
+      const msg =
+        progresso.mensagem ||
+        (progresso.erros > 0
+          ? `Importação ${j.numero} concluída com ${progresso.erros} falha(s).`
+          : `Importação ${j.numero} concluída.`);
+
       await Swal.fire({
-        icon: st === "ok" ? "success" : st === "aviso" ? "warning" : "error",
+        icon,
         title: "Concluído",
-        text: j.message,
+        text: msg,
         confirmButtonColor: "#021F81",
       });
       window.dispatchEvent(new CustomEvent("catalogo:importacao-concluida"));
@@ -595,11 +675,11 @@
     try {
       const r = await fetch(`${BASE}/integracao/bling/categorias/pre-analise`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify(body),
         credentials: "include",
       });
-      const j = await r.json();
+      const j = await lerJsonResposta(r);
       Swal.close();
       if (!r.ok || !j.success) throw new Error(j.message || "Falha na pré-análise.");
 
@@ -612,7 +692,7 @@
         body.correcoes_match = escolhas.correcoes;
       }
 
-      await executarImportacaoBling(body);
+      await executarImportacaoBling(body, Number(dados.total_produtos_escopo || 0));
     } catch (e) {
       Swal.close();
       await Swal.fire("Erro", e.message, "error");
