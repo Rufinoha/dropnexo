@@ -6,7 +6,7 @@ import mimetypes
 import os
 from pathlib import Path
 
-from flask import Blueprint, abort, jsonify, redirect, render_template, request, send_file, session, url_for
+from flask import Blueprint, abort, current_app, jsonify, redirect, render_template, request, send_file, session, url_for
 
 from api.bling.cliente import (
     bling_configurado,
@@ -117,7 +117,7 @@ def _pode_bling_sync() -> bool:
 
 
 def _config_dict(row) -> dict:
-    return {
+    out = {
         "contexto": row[0],
         "fonte_principal": row[1],
         "modo_imagem": row[2],
@@ -128,6 +128,19 @@ def _config_dict(row) -> dict:
         "ultima_sync_estoque": row[7].isoformat() if row[7] else None,
         "ultima_sync_pedidos": row[8].isoformat() if row[8] else None,
     }
+    if len(row) > 9:
+        out["ultima_sync_estoque_recebido"] = row[9].isoformat() if row[9] else None
+    if len(row) > 10:
+        out["ultima_sync_estoque_enviado"] = row[10].isoformat() if row[10] else None
+    if len(row) > 11 and row[11]:
+        raw = row[11]
+        if isinstance(raw, str):
+            try:
+                raw = json.loads(raw)
+            except json.JSONDecodeError:
+                raw = {}
+        out["opcoes"] = raw if isinstance(raw, dict) else {}
+    return out
 
 
 @bling_bp.get("/api/integracoes/bling/status")
@@ -150,17 +163,49 @@ def api_status():
         row = cur.fetchone()
         conectado = bool(row and row[0] == "conectado")
         contexto = garantir_modulo_sessao()
+        bling_conta = None
+        depositos_resumo = {"vinculados": 0, "pendentes": 0}
         if conectado:
             garantir_config_contexto(cur, id_tenant, contexto)
+            from api.bling.conta_empresa import garantir_conta_bling
+            from api.bling.depositos import resumo_depositos_bling
+
+            try:
+                bling_conta = garantir_conta_bling(cur, int(id_tenant))
+                depositos_resumo = resumo_depositos_bling(cur, int(id_tenant))
+            except Exception:
+                pass
             conn.commit()
-        cur.execute(
-            """
-            SELECT contexto, fonte_principal, modo_imagem, produtos_modo, estoque_modo, pedidos_modo,
-                   ultima_sync_produtos, ultima_sync_estoque, ultima_sync_pedidos
-            FROM tbl_integracao_bling_config WHERE id_tenant = %s ORDER BY contexto
-            """,
-            (id_tenant,),
-        )
+        try:
+            cur.execute(
+                """
+                SELECT contexto, fonte_principal, modo_imagem, produtos_modo, estoque_modo, pedidos_modo,
+                       ultima_sync_produtos, ultima_sync_estoque, ultima_sync_pedidos,
+                       ultima_sync_estoque_recebido, ultima_sync_estoque_enviado, opcoes
+                FROM tbl_integracao_bling_config WHERE id_tenant = %s ORDER BY contexto
+                """,
+                (id_tenant,),
+            )
+        except Exception:
+            try:
+                cur.execute(
+                    """
+                    SELECT contexto, fonte_principal, modo_imagem, produtos_modo, estoque_modo, pedidos_modo,
+                           ultima_sync_produtos, ultima_sync_estoque, ultima_sync_pedidos,
+                           ultima_sync_estoque_recebido, ultima_sync_estoque_enviado
+                    FROM tbl_integracao_bling_config WHERE id_tenant = %s ORDER BY contexto
+                    """,
+                    (id_tenant,),
+                )
+            except Exception:
+                cur.execute(
+                    """
+                    SELECT contexto, fonte_principal, modo_imagem, produtos_modo, estoque_modo, pedidos_modo,
+                           ultima_sync_produtos, ultima_sync_estoque, ultima_sync_pedidos
+                    FROM tbl_integracao_bling_config WHERE id_tenant = %s ORDER BY contexto
+                    """,
+                    (id_tenant,),
+                )
         configs = [_config_dict(r) for r in cur.fetchall()]
 
         cur.execute(
@@ -184,7 +229,10 @@ def api_status():
             success=True,
             app_configurado=bling_configurado(),
             redirect_uri=redirect_uri_oauth(),
+            webhook_url=f"{obter_url_site_publico().rstrip('/')}/api/integracoes/bling/webhook",
             conectado=conectado,
+            bling_conta=bling_conta,
+            depositos=depositos_resumo,
             contexto_modulo=garantir_modulo_sessao(),
             contexto_modulo_rotulo=rotulo_modulo(garantir_modulo_sessao()),
             conectado_em=row[1].isoformat() if row and row[1] else None,
@@ -241,6 +289,12 @@ def oauth_callback():
             _salvar_tokens(cur, int(id_tenant), tokens)
             contexto = session.get("bling_oauth_contexto") or garantir_modulo_sessao()
             aplicar_defaults_conexao(cur, int(id_tenant), contexto)
+            from api.bling.conta_empresa import garantir_conta_bling
+
+            try:
+                garantir_conta_bling(cur, int(id_tenant), forcar=True)
+            except Exception:
+                pass
             conn.commit()
         finally:
             conn.close()
@@ -649,8 +703,26 @@ def api_vincular_deposito_bling():
             padrao_bling=padrao_bling,
         )
         conn.commit()
+        sync_job_id = None
+        if id_drop:
+            from api.bling.estoque_sync_progresso import iniciar_sync_inicial_deposito
+
+            sync_job_id = iniciar_sync_inicial_deposito(
+                current_app._get_current_object(),
+                id_tenant=int(id_tenant),
+                id_bling_deposito=id_bling,
+            )
         msg = "Depósito criado e vinculado." if criou else "Vínculo salvo."
-        return jsonify(success=True, message=msg, id=rid, id_deposito_dropnexo=id_drop, criou_deposito=criou)
+        if sync_job_id:
+            msg += " Sincronização inicial de estoque iniciada."
+        return jsonify(
+            success=True,
+            message=msg,
+            id=rid,
+            id_deposito_dropnexo=id_drop,
+            criou_deposito=criou,
+            sync_job_id=sync_job_id,
+        )
     except ValueError as e:
         conn.rollback()
         return jsonify(success=False, message=str(e)), 400
@@ -659,6 +731,29 @@ def api_vincular_deposito_bling():
         return jsonify(success=False, message=str(e)), 500
     finally:
         conn.close()
+
+
+@bling_bp.post("/api/integracoes/bling/webhook")
+def api_bling_webhook():
+    """Webhook público Bling (estoque, produtos, etc.) — autenticado por HMAC."""
+    from api.bling.webhook_estoque import receber_webhook_http
+
+    body, code = receber_webhook_http(current_app._get_current_object(), request)
+    return jsonify(body), code
+
+
+@bling_bp.get("/api/integracoes/bling/estoque/sync-progresso/<job_id>")
+@login_obrigatorio()
+def api_estoque_sync_progresso(job_id: str):
+    if not _pode_bling_sync():
+        return jsonify(success=False, message="Sem permissão."), 403
+    from api.bling.estoque_sync_progresso import obter_progresso_sync
+
+    id_tenant = session.get("id_tenant")
+    job = obter_progresso_sync(job_id, int(id_tenant))
+    if not job:
+        return jsonify(success=False, message="Job não encontrado."), 404
+    return jsonify(success=True, progresso=job)
 
 
 @bling_bp.get("/api/produto-imagem/arquivo")

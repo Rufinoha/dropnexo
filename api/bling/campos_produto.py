@@ -20,6 +20,29 @@ def _s(val: Any, max_len: int = 0) -> str | None:
     return t[:max_len] if max_len else t
 
 
+def _primeiro_definido(*vals: Any) -> Any:
+    """Retorna o primeiro valor não-None (aceita 0)."""
+    for v in vals:
+        if v is not None:
+            return v
+    return None
+
+
+def _origem_fiscal_bling(produto: dict, trib: dict) -> str | None:
+    """Origem ICMS 0–8; Bling envia 0 como inteiro — não usar `or`."""
+    raw = _primeiro_definido(trib.get("origem"), produto.get("origem"))
+    if raw in (None, ""):
+        return None
+    try:
+        n = int(raw)
+    except (TypeError, ValueError):
+        t = str(raw).strip()
+        return t if t in "012345678" else None
+    if 0 <= n <= 8:
+        return str(n)
+    return None
+
+
 def _condicao_bling(produto: dict) -> str | None:
     raw = produto.get("condicao")
     if raw in (None, "", 0, "0"):
@@ -61,7 +84,7 @@ def extrair_campos_produto_bling(produto: dict) -> dict[str, Any]:
     gtin = _s(produto.get("gtin") or produto.get("ean"), 20)
     ncm = _s(produto.get("ncm") or trib.get("ncm"), 10)
     cest = _s(produto.get("cest") or trib.get("cest"), 10)
-    origem = _s(trib.get("origem") or produto.get("origem"), 4)
+    origem = _origem_fiscal_bling(produto, trib)
 
     condicao = _condicao_bling(produto)
     referencia = condicao  # UI DropNexo usa referencia como condição

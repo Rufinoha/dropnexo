@@ -108,10 +108,22 @@ def _bling_config_fornecedor(cur, id_tenant: int) -> dict:
     """Config Bling do fornecedor (opcoes de estoque, últimas syncs)."""
     padrao = {
         "estoque_baixa_pedido": False,
-        "estoque_importar_bling": False,
+        "estoque_importar_bling": True,
         "estoque_polling_minutos": 30,
     }
+    row = None
     try:
+        cur.execute(
+            """
+            SELECT estoque_modo, pedidos_modo, ultima_sync_estoque, ultima_sync_produtos, opcoes,
+                   ultima_sync_estoque_recebido, ultima_sync_estoque_enviado
+            FROM tbl_integracao_bling_config
+            WHERE id_tenant = %s AND contexto = 'fornecedor'
+            """,
+            (id_tenant,),
+        )
+        row = cur.fetchone()
+    except Exception:
         cur.execute(
             """
             SELECT estoque_modo, pedidos_modo, ultima_sync_estoque, ultima_sync_produtos, opcoes
@@ -120,18 +132,15 @@ def _bling_config_fornecedor(cur, id_tenant: int) -> dict:
             """,
             (id_tenant,),
         )
-    except Exception:
-        cur.execute(
-            """
-            SELECT estoque_modo, pedidos_modo, ultima_sync_estoque, ultima_sync_produtos
-            FROM tbl_integracao_bling_config
-            WHERE id_tenant = %s AND contexto = 'fornecedor'
-            """,
-            (id_tenant,),
-        )
-    row = cur.fetchone()
+        row = cur.fetchone()
     if not row:
-        return {**padrao, "estoque_modo": "importar", "pedidos_modo": "importar"}
+        return {
+            **padrao,
+            "estoque_modo": "importar",
+            "pedidos_modo": "importar",
+            "depositos_vinculados": 0,
+            "depositos_pendentes": 0,
+        }
 
     opcoes_raw = row[4] if len(row) > 4 else {}
     if isinstance(opcoes_raw, str):
@@ -145,7 +154,14 @@ def _bling_config_fornecedor(cur, id_tenant: int) -> dict:
     def sync_iso(val):
         return val.isoformat() if val else None
 
-    return {
+    from api.bling.depositos import resumo_depositos_bling
+
+    try:
+        deps = resumo_depositos_bling(cur, id_tenant)
+    except Exception:
+        deps = {"vinculados": 0, "pendentes": 0}
+
+    out = {
         "estoque_modo": row[0] or "importar",
         "pedidos_modo": row[1] or "importar",
         "ultima_sync_estoque": sync_iso(row[2]),
@@ -153,7 +169,14 @@ def _bling_config_fornecedor(cur, id_tenant: int) -> dict:
         "estoque_baixa_pedido": bool(opcoes_raw.get("estoque_baixa_pedido", padrao["estoque_baixa_pedido"])),
         "estoque_importar_bling": bool(opcoes_raw.get("estoque_importar_bling", padrao["estoque_importar_bling"])),
         "estoque_polling_minutos": int(opcoes_raw.get("estoque_polling_minutos") or padrao["estoque_polling_minutos"]),
+        "depositos_vinculados": int(deps.get("vinculados") or 0),
+        "depositos_pendentes": int(deps.get("pendentes") or 0),
     }
+    if len(row) > 5:
+        out["ultima_sync_estoque_recebido"] = sync_iso(row[5])
+    if len(row) > 6:
+        out["ultima_sync_estoque_enviado"] = sync_iso(row[6])
+    return out
 
 
 def _salvar_bling_estoque_config(cur, id_tenant: int, body: dict) -> None:

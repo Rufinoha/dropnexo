@@ -154,6 +154,15 @@
     setCards(scope, j.dados || {});
   }
 
+  function fmtSync(iso, rotulo) {
+    if (!iso) return `${rotulo}: nunca`;
+    try {
+      return `${rotulo}: ${new Date(iso).toLocaleString("pt-BR")}`;
+    } catch {
+      return `${rotulo}: —`;
+    }
+  }
+
   function atualizarStatusBling() {
     const status = qs("#impBlingStatus");
     const titulo = qs("#impBlingStatusTitulo");
@@ -161,31 +170,37 @@
     if (!status || !cfg.bling_conectado) return;
 
     const bc = cfg.bling_config || {};
-    const syncAtivo = bc.estoque_baixa_pedido || bc.estoque_importar_bling;
+    const depsOk = Number(bc.depositos_vinculados || 0) > 0;
+    const alertDep = qs("#impEstoqueAlertDep");
+    if (alertDep) alertDep.hidden = depsOk;
 
+    const syncAtivo = depsOk && (bc.estoque_baixa_pedido || bc.estoque_importar_bling);
     status.classList.toggle("inativo", !syncAtivo);
     titulo.textContent = "Conectado ao Bling";
-    if (syncAtivo) {
+    if (!depsOk) {
+      sub.textContent = "Estoque pausado — vincule depósitos em Integrações → Bling";
+    } else if (syncAtivo) {
       const partes = [];
-      if (bc.estoque_baixa_pedido) partes.push("baixa de estoque em pedidos");
-      if (bc.estoque_importar_bling) partes.push(`consulta a cada ${bc.estoque_polling_minutos || 30} min`);
-      sub.textContent = `Sincronização ativa — ${partes.join(" · ")}`;
+      if (bc.estoque_importar_bling) partes.push("recebimento via webhook");
+      if (bc.estoque_baixa_pedido) partes.push("baixa em pedidos confirmados");
+      sub.textContent = `Sincronização configurada — ${partes.join(" · ")}`;
     } else {
-      sub.textContent = "Integração conectada — configure a sincronização de estoque abaixo";
+      sub.textContent = "Depósitos vinculados — ative as opções de estoque abaixo";
     }
   }
 
   function preencherFormEstoque() {
     const bc = cfg.bling_config || {};
     qs("#impEstoqueBaixaPedido").checked = !!bc.estoque_baixa_pedido;
-    qs("#impEstoqueImportarBling").checked = !!bc.estoque_importar_bling;
-    qs("#impEstoquePolling").value = String(bc.estoque_polling_minutos || 30);
-    toggleEstoquePolling();
-
-    const ult = bc.ultima_sync_estoque;
-    qs("#impEstoqueUltimaSync").textContent = ult
-      ? `Última sync de estoque: ${new Date(ult).toLocaleString("pt-BR")}`
-      : "Nenhuma sincronização de estoque registrada ainda.";
+    qs("#impEstoqueImportarBling").checked = bc.estoque_importar_bling !== false;
+    qs("#impEstoqueUltimaRecebido").textContent = fmtSync(
+      bc.ultima_sync_estoque_recebido,
+      "Recebido do Bling"
+    );
+    qs("#impEstoqueUltimaEnviado").textContent = fmtSync(
+      bc.ultima_sync_estoque_enviado,
+      "Enviado ao Bling"
+    );
     atualizarStatusBling();
     atualizarAnimacaoEstoque();
   }
@@ -203,11 +218,6 @@
     visual.classList.toggle("sync-in", importar);
     visual.classList.toggle("sync-both", baixa && importar);
     visual.setAttribute("aria-hidden", ativo ? "false" : "true");
-  }
-
-  function toggleEstoquePolling() {
-    const on = qs("#impEstoqueImportarBling")?.checked;
-    qs("#impEstoquePollingWrap").hidden = !on;
   }
 
   async function carregarDadosIniciais() {
@@ -703,7 +713,6 @@
     const body = {
       estoque_baixa_pedido: qs("#impEstoqueBaixaPedido")?.checked === true,
       estoque_importar_bling: qs("#impEstoqueImportarBling")?.checked === true,
-      estoque_polling_minutos: Number(qs("#impEstoquePolling")?.value || 30),
     };
 
     Swal.fire({ title: "Salvando…", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
@@ -987,7 +996,6 @@
     });
     qsa('input[name="imp_bling_modo"]').forEach((r) => r.addEventListener("change", toggleBlingCats));
     qs("#impEstoqueImportarBling")?.addEventListener("change", () => {
-      toggleEstoquePolling();
       atualizarStatusBling();
       atualizarAnimacaoEstoque();
     });

@@ -9,17 +9,84 @@
   const logsEl = document.getElementById("bl_logs");
   const ultimaSync = document.getElementById("bl_ultima_sync");
   const btnSalvar = document.getElementById("bl_btn_salvar");
+  const btnSalvarEstoque = document.getElementById("bl_btn_salvar_estoque");
+  const paneConfig = document.getElementById("bl_pane_config");
+  const paneEstoque = document.getElementById("bl_pane_estoque");
+  const alertDep = document.getElementById("bl_estoque_alert_dep");
+  const webhookHint = document.getElementById("bl_webhook_hint");
+  const syncRecebido = document.getElementById("bl_sync_recebido");
+  const syncEnviado = document.getElementById("bl_sync_enviado");
+  const chkReceber = document.getElementById("bl_estoque_receber");
+  const chkBaixa = document.getElementById("bl_estoque_baixa");
 
-  let estado = { conectado: false, contexto_modulo: "fornecedor", configs: [] };
+  let estado = {
+    conectado: false,
+    contexto_modulo: "fornecedor",
+    configs: [],
+    depositos: { vinculados: 0, pendentes: 0 },
+    webhook_url: "",
+    bling_conta: null,
+  };
+
+  let tabAtiva = "config";
 
   function cfgAtual() {
     return estado.configs.find((c) => c.contexto === estado.contexto_modulo) || {};
+  }
+
+  function cfgFornecedor() {
+    return estado.configs.find((c) => c.contexto === "fornecedor") || {};
   }
 
   function definirVisivel(el, visivel) {
     if (!el) return;
     el.hidden = !visivel;
     el.style.display = visivel ? "" : "none";
+  }
+
+  function fmtSync(iso, rotulo) {
+    if (!iso) return `${rotulo}: nunca`;
+    try {
+      return `${rotulo}: ${new Date(iso).toLocaleString("pt-BR")}`;
+    } catch {
+      return `${rotulo}: —`;
+    }
+  }
+
+  function pickTab(tab) {
+    tabAtiva = tab;
+    document.querySelectorAll(".Bl_SubTab").forEach((b) => {
+      b.classList.toggle("is-active", b.dataset.blTab === tab);
+    });
+    definirVisivel(paneConfig, tab === "config");
+    definirVisivel(paneEstoque, tab === "estoque");
+    if (tab === "estoque") carregarDepositos().catch(() => {});
+  }
+
+  function aplicarEstoqueTela() {
+    const cfg = cfgFornecedor();
+    const opcoes = cfg.opcoes || {};
+    if (chkReceber) {
+      chkReceber.checked =
+        opcoes.estoque_importar_bling !== undefined ? !!opcoes.estoque_importar_bling : true;
+    }
+    if (chkBaixa) chkBaixa.checked = !!opcoes.estoque_baixa_pedido;
+
+    const vinc = Number(estado.depositos?.vinculados || 0);
+    if (alertDep) alertDep.hidden = vinc > 0;
+
+    if (syncRecebido) {
+      syncRecebido.textContent = fmtSync(cfg.ultima_sync_estoque_recebido, "Recebido do Bling");
+    }
+    if (syncEnviado) {
+      syncEnviado.textContent = fmtSync(cfg.ultima_sync_estoque_enviado, "Enviado ao Bling");
+    }
+    if (webhookHint) {
+      const url = estado.webhook_url || "";
+      webhookHint.textContent = url
+        ? `Configure o webhook de Estoque no app DropNexo (Central de Extensões Bling) apontando para: ${url}`
+        : "";
+    }
   }
 
   function aplicarConfigTela() {
@@ -44,9 +111,45 @@
         ? `Última sync produtos: ${new Date(cfg.ultima_sync_produtos).toLocaleString("pt-BR")}`
         : "";
     }
+    aplicarEstoqueTela();
   }
 
   const CRIAR_IGUAL = "__criar_igual__";
+
+  async function pollSyncJob(jobId) {
+    const poll = async () => {
+      const r = await fetch(`/api/integracoes/bling/estoque/sync-progresso/${encodeURIComponent(jobId)}`);
+      const j = await r.json();
+      if (!r.ok || !j.success) throw new Error(j.message || "Erro no progresso.");
+      const p = j.progresso || {};
+      Swal.update({
+        html: `<p>${p.mensagem || "Sincronizando…"}</p><p><strong>${p.processados || 0}/${p.total || "?"}</strong> · ok: ${p.sincronizados || 0}</p>`,
+      });
+      if (p.status === "concluido") {
+        await carregarStatus();
+        Swal.fire({
+          icon: "success",
+          title: "Estoque sincronizado",
+          text: p.resumo || p.mensagem || "Concluído.",
+          confirmButtonColor: "#021F81",
+        });
+        return;
+      }
+      if (p.status === "erro") throw new Error(p.mensagem || "Falha na sync.");
+      setTimeout(poll, 1200);
+    };
+    Swal.fire({
+      title: "Sincronizando estoque…",
+      html: "Aguarde…",
+      allowOutsideClick: false,
+      didOpen: () => Swal.showLoading(),
+    });
+    try {
+      await poll();
+    } catch (e) {
+      Swal.fire({ icon: "error", title: "Erro", text: e.message, confirmButtonColor: "#021F81" });
+    }
+  }
 
   async function carregarDepositos() {
     const tbody = document.getElementById("bl_tbl_depositos");
@@ -102,13 +205,18 @@
           });
           const jj = await resp.json();
           if (!resp.ok || !jj.success) throw new Error(jj.message || "Erro.");
-          await Swal.fire({
-            icon: "success",
-            title: jj.criou_deposito ? "Depósito criado" : "Vínculo salvo",
-            text: jj.message || "",
-            timer: jj.criou_deposito ? 1800 : 1200,
-            showConfirmButton: false,
-          });
+          await carregarStatus();
+          if (jj.sync_job_id && valor) {
+            await pollSyncJob(jj.sync_job_id);
+          } else {
+            await Swal.fire({
+              icon: "success",
+              title: jj.criou_deposito ? "Depósito criado" : "Vínculo salvo",
+              text: jj.message || "",
+              timer: 1400,
+              showConfirmButton: false,
+            });
+          }
           if (jj.criou_deposito) await carregarDepositos();
         } catch (e) {
           Swal.fire({ icon: "error", title: "Erro", text: e.message });
@@ -141,7 +249,7 @@
         .join("") || '<li class="Bl_LogItem">Nenhum log ainda.</li>';
     }
     aplicarConfigTela();
-    if (on) carregarDepositos().catch(() => {});
+    if (on && tabAtiva === "estoque") carregarDepositos().catch(() => {});
   }
 
   async function carregarStatus() {
@@ -172,9 +280,40 @@
     await carregarStatus();
   }
 
+  async function salvarEstoque() {
+    const body = {
+      estoque_baixa_pedido: chkBaixa?.checked === true,
+      estoque_importar_bling: chkReceber?.checked === true,
+    };
+    const r = await fetch("/fornecedor/importacao/bling/estoque", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      credentials: "include",
+    });
+    const j = await r.json();
+    if (!r.ok || !j.success) throw new Error(j.message || "Erro ao salvar estoque.");
+    await Swal.fire({ icon: "success", title: "Salvo", timer: 1400, showConfirmButton: false });
+    await carregarStatus();
+  }
+
+  document.getElementById("bl_subtabs")?.addEventListener("click", (ev) => {
+    const btn = ev.target.closest(".Bl_SubTab");
+    if (!btn) return;
+    pickTab(btn.dataset.blTab || "config");
+  });
+
   btnSalvar?.addEventListener("click", async () => {
     try {
       await salvarConfig();
+    } catch (e) {
+      Swal.fire({ icon: "error", title: "Erro", text: e.message, confirmButtonColor: "#021F81" });
+    }
+  });
+
+  btnSalvarEstoque?.addEventListener("click", async () => {
+    try {
+      await salvarEstoque();
     } catch (e) {
       Swal.fire({ icon: "error", title: "Erro", text: e.message, confirmButtonColor: "#021F81" });
     }
@@ -196,37 +335,16 @@
       Swal.fire({ icon: "error", title: "Erro", text: j.message, confirmButtonColor: "#021F81" });
       return;
     }
-    const removido = !!j.instalacao_removida;
-    const tokenMorto = !!j.token_inativo;
-    const icon = removido ? "success" : tokenMorto || j.revogacao_bling ? "warning" : "warning";
-    const title = removido
-      ? "Desinstalado no Bling"
-      : tokenMorto
-        ? "Desconectado — token revogado"
-        : "Desconectado no DropNexo";
-    let html = `<p style="text-align:left;margin:0">${j.message || ""}</p>`;
-    if (!removido) {
-      html += `<hr style="margin:12px 0;border-color:#e2e8f0"><p style="text-align:left;margin:0;font-size:0.9em"><strong>No Bling (uma vez):</strong><br>Central de Extensões → Minhas instalações → DropNexo → ⋮ → <strong>Desinstalar aplicativo</strong></p>`;
-    }
-    if (j.revogacao_detalhes) {
-      html += `<p style="text-align:left;margin:12px 0 0;font-size:0.75em;color:#64748b">${j.revogacao_detalhes}</p>`;
-    }
-    if (j.bling_client_id_prefix) {
-      html += `<p style="text-align:left;margin:8px 0 0;font-size:0.75em;color:#64748b">Client ID servidor: ${j.bling_client_id_prefix}…</p>`;
-    }
-    await Swal.fire({
-      icon,
-      title,
-      html,
-      confirmButtonColor: "#021F81",
-    });
+    await Swal.fire({ icon: "success", title: "Desconectado", timer: 1500, showConfirmButton: false });
     await carregarStatus();
   });
 
-  if (new URLSearchParams(location.search).get("conectado") === "1") {
+  const params = new URLSearchParams(location.search);
+  if (params.get("conectado") === "1") {
     Swal.fire({ icon: "success", title: "Conectado", timer: 1500, showConfirmButton: false });
     window.history.replaceState({}, "", location.pathname);
   }
+  if (params.get("aba") === "estoque") pickTab("estoque");
 
   carregarStatus().catch((e) => {
     Swal.fire({ icon: "error", title: "Erro", text: e.message, confirmButtonColor: "#021F81" });

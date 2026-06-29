@@ -7,19 +7,36 @@
   <h2>Olá, {{ session.get('nome', '') }}!</h2>
   <p>
     Conta <strong>{{ session.get('tenant_nome', '') }}</strong>
-    · perfil
-    <strong>{% if tipo_negocio == 'fornecedor' %}Fornecedor{% else %}Vendedor{% endif %}</strong>
+    · tipo
+    <strong>
+      {%- if tipo_negocio == 'fornecedor' -%}Fornecedor
+      {%- elif tipo_negocio == 'hibrido' -%}Híbrido
+      {%- else -%}Vendedor
+      {%- endif -%}
+    </strong>
+    {%- if tipo_negocio == 'hibrido' -%}
+    · módulo ativo <strong>{{ modulo_ativo_rotulo }}</strong>
+    {%- endif -%}
     · plano {{ session.get('tenant_plano', 'starter') }}
   </p>
 </section>
 
 <div class="Cl_ContainerApoio Cl_PainelPagina">
   <p style="margin:0 0 1rem;color:#5c6570;">
-    Bem-vindo ao DropNexo. Os módulos de catálogo, fornecedores e integrações serão liberados em breve.
+    {%- if tipo_negocio == 'hibrido' -%}
+    Conta híbrida: use o seletor <strong>Módulo</strong> na barra lateral para alternar entre Fornecedor (catálogo, Bling) e Vendedor.
+    {%- elif tipo_negocio == 'fornecedor' or modulo_ativo == 'fornecedor' -%}
+    Bem-vindo ao DropNexo. Gerencie catálogos, integrações e produtos no menu Fornecedor.
+    {%- else -%}
+    Bem-vindo ao DropNexo. Busque fornecedores e gerencie seus produtos de revenda.
+    {%- endif -%}
   </p>
   <div class="fg-shortcuts" style="display:flex;flex-wrap:wrap;gap:10px;">
-    {% if tipo_negocio == 'fornecedor' %}
+    {% if tipo_negocio == 'fornecedor' or (tipo_negocio == 'hibrido' and modulo_ativo == 'fornecedor') %}
     <a class="Cl_botaoprimario" style="text-decoration:none;display:inline-block;" href="{{ url_for('fn_catalogo.pagina') }}">Catálogos</a>
+    <a class="Cl_botaosecundario" style="text-decoration:none;display:inline-block;" href="{{ url_for('integracoes.pagina') }}">Integrações</a>
+    {% elif tipo_negocio == 'hibrido' %}
+    <a class="Cl_botaoprimario" style="text-decoration:none;display:inline-block;" href="{{ url_for('fn_catalogo.pagina') }}">Abrir módulo Fornecedor</a>
     {% else %}
     <a class="Cl_botaoprimario" style="text-decoration:none;display:inline-block;" href="{{ url_for('vd_fornecedores.pagina') }}">Buscar fornecedores</a>
     <a class="Cl_botaosecundario" style="text-decoration:none;display:inline-block;margin-left:8px;" href="{{ url_for('vd_meus_produtos.pagina') }}">Meus produtos</a>

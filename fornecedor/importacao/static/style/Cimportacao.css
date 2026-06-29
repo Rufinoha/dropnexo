@@ -544,6 +544,25 @@
 
 .imp-sync-hint { margin: 0 0 10px; }
 
+.imp-sync-alert {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #fef3c7;
+  border: 1px solid #fcd34d;
+  color: #92400e;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.imp-sync-alert a { color: #021f81; font-weight: 600; }
+
+.imp-estoque-sync-times {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 .imp-btn-novo-layout { margin-top: 10px; }
 .imp-layout-rule { margin: 8px 0 10px; }
 

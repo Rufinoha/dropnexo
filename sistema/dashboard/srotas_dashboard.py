@@ -23,8 +23,14 @@ def init_app(app):
 @dashboard_bp.get("/index")
 @login_obrigatorio()
 def index():
+    from srotas_plataforma import garantir_modulo_sessao, rotulo_modulo
+
+    tipo = session.get("tenant_tipo_negocio", "vendedor")
+    modulo = garantir_modulo_sessao()
     return render_template(
         "index.html",
         nav_ativo="inicio",
-        tipo_negocio=session.get("tenant_tipo_negocio", "vendedor"),
+        tipo_negocio=tipo,
+        modulo_ativo=modulo,
+        modulo_ativo_rotulo=rotulo_modulo(modulo),
     )

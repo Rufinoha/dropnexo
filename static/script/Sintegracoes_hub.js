@@ -186,7 +186,7 @@
     }
   }
 
-  function abrirIntegracao(slug, nome, conectado, ativa) {
+  function abrirIntegracao(slug, nome, conectado, ativa, dblclick = false) {
     if (!ativa) {
       Swal.fire({
         title: nome,
@@ -199,7 +199,9 @@
     }
     if (conectado) {
       const st = statusIntegracao(slug);
-      window.location.href = st.config_url || `/integracoes/${slug}`;
+      let url = st.config_url || `/integracoes/${slug}`;
+      if (dblclick && slug === "bling") url += "?aba=estoque";
+      window.location.href = url;
       return;
     }
     const cat = categorias.find((c) => c.id === categoriaAtiva);
@@ -229,14 +231,38 @@
     if (ev.key === "Escape" && itemModalAberto) fecharModalCard();
   });
 
+  let clickTimer = null;
+
   elGrid.addEventListener("click", (ev) => {
     const card = ev.target.closest(".FnInt_Card");
     if (!card) return;
+    if (clickTimer) clearTimeout(clickTimer);
+    clickTimer = setTimeout(() => {
+      abrirIntegracao(
+        card.dataset.slug || "",
+        card.dataset.nome || "Integração",
+        card.dataset.conectado === "1",
+        card.dataset.ativa === "1",
+        false
+      );
+      clickTimer = null;
+    }, 260);
+  });
+
+  elGrid.addEventListener("dblclick", (ev) => {
+    const card = ev.target.closest(".FnInt_Card");
+    if (!card) return;
+    ev.preventDefault();
+    if (clickTimer) {
+      clearTimeout(clickTimer);
+      clickTimer = null;
+    }
     abrirIntegracao(
       card.dataset.slug || "",
       card.dataset.nome || "Integração",
       card.dataset.conectado === "1",
-      card.dataset.ativa === "1"
+      card.dataset.ativa === "1",
+      true
     );
   });
 

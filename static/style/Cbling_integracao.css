@@ -273,3 +273,69 @@
   background: #fffbeb;
   color: #92400e;
 }
+
+.Bl_SubTabs {
+  display: flex;
+  gap: 0.35rem;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 0.35rem;
+}
+
+.Bl_SubTab {
+  border: none;
+  background: transparent;
+  padding: 0.45rem 0.85rem;
+  border-radius: 8px 8px 0 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+}
+
+.Bl_SubTab.is-active {
+  color: #021f81;
+  background: #eef2ff;
+}
+
+.Bl_EstoqueAlert {
+  margin: 0 0 0.85rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: 8px;
+  background: #fef3c7;
+  border: 1px solid #fcd34d;
+  color: #92400e;
+  font-size: 0.85rem;
+}
+
+.Bl_EstoqueGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  margin-bottom: 0.85rem;
+}
+
+.Bl_EstoqueCard {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.Bl_EstoqueCard strong { display: block; font-size: 0.85rem; }
+.Bl_EstoqueCard small { color: #64748b; font-size: 0.78rem; }
+
+.Bl_SyncTimes {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-bottom: 0.85rem;
+}
+
+@media (max-width: 720px) {
+  .Bl_EstoqueGrid { grid-template-columns: 1fr; }
+}

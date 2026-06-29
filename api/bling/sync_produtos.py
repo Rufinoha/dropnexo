@@ -19,7 +19,7 @@ from api.bling.sync_categorias import (
     resolver_id_segmento_import,
     sincronizar_arvore_categorias_bling,
 )
-from api.bling.depositos import garantir_depositos_bling_vinculados
+from api.bling.depositos import resumo_depositos_bling
 from fornecedor.importacao.erro_traducao import montar_payload_erro
 from fornecedor.importacao.servico_importacao import (
     MODULO_CATALOGO,
@@ -29,41 +29,11 @@ from fornecedor.importacao.servico_importacao import (
     finalizar_lote,
     registrar_erro_lote,
 )
-from api.bling.sync_estoque import importar_estoque_produto_bling
 from fornecedor.parametros.servico_precificacao import aplicar_valor_drop_produto_e_variantes
 from global_utils import agora_utc
 from api.bling.cliente import listar_produtos, obter_produto, obter_variacoes_produto
 
 _SAVEPOINT_PRODUTO = "bling_sync_produto"
-
-
-def _importar_estoque_apos_salvar(
-    cur,
-    *,
-    id_tenant: int,
-    contexto: str,
-    id_produto: int,
-    id_bling: str,
-    id_variante: int | None = None,
-    id_bling_var: str | None = None,
-) -> None:
-    if not id_variante:
-        cur.execute("SELECT id_variante_padrao FROM tbl_produto WHERE id = %s", (id_produto,))
-        row = cur.fetchone()
-        id_variante = int(row[0]) if row and row[0] else None
-    if not id_variante:
-        return
-    try:
-        importar_estoque_produto_bling(
-            cur,
-            id_tenant,
-            contexto,
-            id_produto=id_produto,
-            id_variante=id_variante,
-            id_bling_override=id_bling_var or id_bling,
-        )
-    except Exception:
-        pass
 
 
 def _savepoint(cur, nome: str) -> None:
@@ -773,13 +743,6 @@ def _processar_item_produto(
         sku,
         {"nome": detalhe.get("nome"), "urls_imagem": urls, "id_categoria_bling": id_cat_bling},
     )
-    _importar_estoque_apos_salvar(
-        cur,
-        id_tenant=id_tenant,
-        contexto=contexto,
-        id_produto=prod_id,
-        id_bling=id_bling,
-    )
     return ("importado" if criando else "atualizado"), prod_id
 
 
@@ -909,15 +872,7 @@ def _processar_grupo_variacoes(
         )
         vrow = cur.fetchone()
         if vrow:
-            _importar_estoque_apos_salvar(
-                cur,
-                id_tenant=id_tenant,
-                contexto=contexto,
-                id_produto=prod_id,
-                id_bling=id_bling_pai,
-                id_variante=int(vrow[0]),
-                id_bling_var=var_id,
-            )
+            pass
 
     if id_bling_pai:
         concluidos.add(id_bling_pai)
@@ -975,7 +930,7 @@ def importar_produtos(
         raise ValueError(f"Modo de produtos '{modo}' não permite importação. Altere para Importar ou Atualizar.")
 
     id_segmento_resolvido = resolver_id_segmento_import(cur, id_tenant, id_segmento)
-    resumo_deps = garantir_depositos_bling_vinculados(cur, id_tenant)
+    resumo_deps = resumo_depositos_bling(cur, id_tenant)
     somente_mapa = modo_categorias == "mapeamento"
     if modo_categorias == "legado":
         n_cats_arvore = sincronizar_arvore_categorias_bling(

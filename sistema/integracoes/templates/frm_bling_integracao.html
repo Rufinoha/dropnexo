@@ -3,7 +3,7 @@
 {% block title %}Bling — Integrações — {{ MARCA_NOME }}{% endblock %}
 {% block topbar_title %}Integração Bling{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('static', filename='style/Cbling_integracao.css') }}?v=5" />
+<link rel="stylesheet" href="{{ url_for('static', filename='style/Cbling_integracao.css') }}?v=6" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal Bl_Wrap">
@@ -46,64 +46,96 @@
   </section>
 
   <section class="Bl_Card Bl_ContextPanel" id="bl_painel_config" {% if not bling_conectado %}hidden{% endif %}>
-    <h3 id="bl_titulo_modulo">Configuração</h3>
-    <input type="hidden" id="bl_contexto_ativo" value="" />
+    <nav class="Bl_SubTabs" id="bl_subtabs" aria-label="Seções Bling">
+      <button type="button" class="Bl_SubTab is-active" data-bl-tab="config">Configuração</button>
+      <button type="button" class="Bl_SubTab" data-bl-tab="estoque">Estoque</button>
+    </nav>
 
-    <div class="Bl_Grid2">
-      <label class="Bl_Field">
-        <span>Modo das imagens</span>
-        <select id="bl_modo_imagem">
-          <option value="link">Manter como link</option>
-          <option value="download">Baixar para o servidor</option>
-        </select>
-      </label>
-      <label class="Bl_Field">
-        <span>Fonte principal</span>
-        <select id="bl_fonte">
-          <option value="bling">Bling</option>
-          <option value="dropnexo">DropNexo</option>
-        </select>
-      </label>
-      <label class="Bl_Field">
-        <span>Produtos</span>
-        <select id="bl_produtos_modo">
-          <option value="importar">Importar</option>
-          <option value="exportar">Exportar</option>
-          <option value="atualizar">Atualizar (ambos)</option>
-        </select>
-      </label>
-      <label class="Bl_Field">
-        <span>Estoque</span>
-        <select id="bl_estoque_modo">
-          <option value="importar">Importar</option>
-          <option value="exportar">Exportar</option>
-          <option value="atualizar">Atualizar (ambos)</option>
-        </select>
-      </label>
-      <label class="Bl_Field">
-        <span>Pedidos</span>
-        <select id="bl_pedidos_modo">
-          <option value="importar">Importar</option>
-          <option value="exportar">Exportar</option>
-          <option value="atualizar">Atualizar (ambos)</option>
-        </select>
-      </label>
+    <div id="bl_pane_config">
+      <h3 id="bl_titulo_modulo">Configuração</h3>
+      <input type="hidden" id="bl_contexto_ativo" value="" />
+
+      <div class="Bl_Grid2">
+        <label class="Bl_Field">
+          <span>Modo das imagens</span>
+          <select id="bl_modo_imagem">
+            <option value="link">Manter como link</option>
+            <option value="download">Baixar para o servidor</option>
+          </select>
+        </label>
+        <label class="Bl_Field">
+          <span>Fonte principal</span>
+          <select id="bl_fonte">
+            <option value="bling">Bling</option>
+            <option value="dropnexo">DropNexo</option>
+          </select>
+        </label>
+        <label class="Bl_Field">
+          <span>Produtos</span>
+          <select id="bl_produtos_modo">
+            <option value="importar">Importar</option>
+            <option value="exportar">Exportar</option>
+            <option value="atualizar">Atualizar (ambos)</option>
+          </select>
+        </label>
+        <label class="Bl_Field">
+          <span>Estoque</span>
+          <select id="bl_estoque_modo">
+            <option value="importar">Importar</option>
+            <option value="exportar">Exportar</option>
+            <option value="atualizar">Atualizar (ambos)</option>
+          </select>
+        </label>
+        <label class="Bl_Field">
+          <span>Pedidos</span>
+          <select id="bl_pedidos_modo">
+            <option value="importar">Importar</option>
+            <option value="exportar">Exportar</option>
+            <option value="atualizar">Atualizar (ambos)</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="Bl_Actions Bl_Actions--config">
+        <button type="button" class="Cl_BtnSalvar" id="bl_btn_salvar">Salvar</button>
+      </div>
+
+      <p class="Bl_Meta" id="bl_ultima_sync"></p>
     </div>
 
-    <div class="Bl_Actions Bl_Actions--config">
-      <button type="button" class="Cl_BtnSalvar" id="bl_btn_salvar">Salvar</button>
-    </div>
+    <div id="bl_pane_estoque" hidden>
+      <h3>Estoque</h3>
+      <div class="Bl_EstoqueAlert" id="bl_estoque_alert_dep" hidden role="alert">
+        Estoque não será sincronizado até vincular pelo menos um depósito Bling abaixo.
+      </div>
+      <p class="Bl_Hint" id="bl_webhook_hint"></p>
+      <div class="Bl_EstoqueGrid">
+        <label class="Bl_EstoqueCard">
+          <span><strong>Receber do Bling</strong><small>Webhook quando o estoque mudar no ERP.</small></span>
+          <input type="checkbox" id="bl_estoque_receber" />
+        </label>
+        <label class="Bl_EstoqueCard">
+          <span><strong>Baixa em pedidos</strong><small>Envia ao Bling quando o pedido for confirmado.</small></span>
+          <input type="checkbox" id="bl_estoque_baixa" />
+        </label>
+      </div>
+      <div class="Bl_SyncTimes">
+        <span class="Bl_Meta" id="bl_sync_recebido">Recebido do Bling: —</span>
+        <span class="Bl_Meta" id="bl_sync_enviado">Enviado ao Bling: —</span>
+      </div>
+      <div class="Bl_Actions Bl_Actions--config">
+        <button type="button" class="Cl_BtnSalvar" id="bl_btn_salvar_estoque">Salvar estoque</button>
+      </div>
 
-    <p class="Bl_Meta" id="bl_ultima_sync"></p>
-
-    <div class="Bl_DepPanel" id="bl_painel_depositos">
-      <h4>Pareamento de depósitos</h4>
-      <p class="Bl_Hint">Vincule cada depósito do Bling ao depósito correspondente no DropNexo. Use <strong>— Criar igual —</strong> para criar automaticamente um depósito com o mesmo nome e vincular na hora.</p>
-      <div class="Bl_DepTblWrap">
-        <table class="Bl_DepTbl">
-          <thead><tr><th>Bling</th><th>DropNexo</th><th></th></tr></thead>
-          <tbody id="bl_tbl_depositos"><tr><td colspan="3">Carregando…</td></tr></tbody>
-        </table>
+      <div class="Bl_DepPanel" id="bl_painel_depositos">
+        <h4>Pareamento de depósitos</h4>
+        <p class="Bl_Hint">Vincule manualmente cada depósito Bling ao depósito DropNexo. Ao salvar um vínculo, a sincronização inicial de estoque é disparada.</p>
+        <div class="Bl_DepTblWrap">
+          <table class="Bl_DepTbl">
+            <thead><tr><th>Bling</th><th>DropNexo</th><th></th></tr></thead>
+            <tbody id="bl_tbl_depositos"><tr><td colspan="3">Carregando…</td></tr></tbody>
+          </table>
+        </div>
       </div>
     </div>
   </section>
@@ -115,5 +147,5 @@
 </div>
 {% endblock %}
 {% block page_js %}
-<script src="{{ url_for('static', filename='script/Sbling_integracao.js') }}?v=8"></script>
+<script src="{{ url_for('static', filename='script/Sbling_integracao.js') }}?v=9"></script>
 {% endblock %}

@@ -4,7 +4,7 @@
 
   const apiUrl = window.OSB_CADASTRO_API || "/api/cadastro/novo";
   const apiSegmentos = window.OSB_CADASTRO_SEGMENTOS_API || "/api/cadastro/segmentos";
-  const apiCnpjBase = window.OSB_CADASTRO_CNPJ_API || "/api/cadastro/cnpj/";
+  const apiCnpjUrl = window.OSB_CADASTRO_CNPJ_API || "/api/cadastro/cnpj";
   const tipoNegocioCadastro = (window.OSB_CADASTRO_TIPO || "").toLowerCase();
   const ehFornecedor = tipoNegocioCadastro === "fornecedor";
   const msgEl = document.getElementById("msg-cad");
@@ -141,7 +141,9 @@
       const btn = document.getElementById("btn-buscar-cnpj");
       btn.disabled = true;
       try {
-        const r = await fetch(`${apiCnpjBase}${doc}`, { headers: { Accept: "application/json" } });
+        const r = await fetch(`${apiCnpjUrl}?cnpj=${encodeURIComponent(doc)}`, {
+          headers: { Accept: "application/json" },
+        });
         let j;
         try {
           j = await r.json();

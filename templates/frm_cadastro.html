@@ -194,13 +194,13 @@
   <script>
     window.OSB_CADASTRO_API = "{{ url_for('cadastro.api_cadastro_novo') }}";
     window.OSB_CADASTRO_SEGMENTOS_API = "{{ url_for('cadastro.api_cadastro_segmentos') }}";
-    window.OSB_CADASTRO_CNPJ_API = "{{ url_for('cadastro.api_cadastro_cnpj', cnpj='00000000000000') }}".replace(/00000000000000$/, "");
+    window.OSB_CADASTRO_CNPJ_API = "{{ url_for('cadastro.api_cadastro_cnpj') }}";
     window.OSB_CADASTRO_TIPO = {{ tipo_negocio|tojson }};
     window.OSB_LOGIN_URL = "{{ url_for('auth.pagina_login') }}";
   </script>
   {% if tipo_negocio != 'fornecedor' %}
   <script src="{{ url_for('static', filename='script/Ssegmentos_nichos.js') }}"></script>
   {% endif %}
-  <script src="{{ url_for('static', filename='script/Scadastro.js') }}?v=2"></script>
+  <script src="{{ url_for('static', filename='script/Scadastro.js') }}?v=3"></script>
 </body>
 </html>

@@ -775,11 +775,15 @@ def api_cadastro_segmentos():
         conn.close()
 
 
+@cadastro_bp.get("/api/cadastro/cnpj")
 @cadastro_bp.get("/api/cadastro/cnpj/<cnpj>")
-def api_cadastro_cnpj(cnpj: str):
+def api_cadastro_cnpj(cnpj: str | None = None):
     """Consulta pública de CNPJ para preenchimento do cadastro de fornecedor."""
+    doc = _so_digitos(cnpj or request.args.get("cnpj") or "")
+    if not doc:
+        return jsonify(success=False, message="Informe o CNPJ."), 400
     try:
-        return jsonify(success=True, dados=consultar_cnpj(cnpj))
+        return jsonify(success=True, dados=consultar_cnpj(doc))
     except ValueError as exc:
         return jsonify(success=False, message=str(exc)), 400
 
