@@ -618,6 +618,66 @@
   line-height: 1.35;
 }
 
+.Bl_DepSyncStack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.Bl_DepSyncBadge {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  max-width: 220px;
+}
+
+.Bl_DepSyncBadge--ok {
+  background: #ecfdf5;
+  border-color: #86efac;
+  color: #166534;
+}
+
+.Bl_DepSyncBadge--pend {
+  background: #fffbeb;
+  border-color: #fcd34d;
+  color: #92400e;
+}
+
+.Bl_DepSyncBadge--neutro {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+  color: #64748b;
+}
+
+.Bl_DepSyncBadgeIcon {
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.2;
+  margin-top: 1px;
+}
+
+.Bl_DepSyncBadgeText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  line-height: 1.25;
+}
+
+.Bl_DepSyncBadgeText strong {
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.Bl_DepSyncBadgeText small {
+  font-size: 0.7rem;
+  font-weight: 500;
+  opacity: 0.9;
+}
+
 .Bl_DepBtnSalvar:disabled {
   opacity: 0.5;
   cursor: not-allowed;

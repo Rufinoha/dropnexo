@@ -147,6 +147,47 @@
     );
   }
 
+  function fmtDepSync(iso) {
+    if (!iso) return "";
+    try {
+      return new Date(iso).toLocaleString("pt-BR");
+    } catch {
+      return "";
+    }
+  }
+
+  function htmlDepSyncOk(concluidoEm) {
+    const quando = fmtDepSync(concluidoEm);
+    return (
+      `<span class="Bl_DepSyncBadge Bl_DepSyncBadge--ok">` +
+      `<span class="Bl_DepSyncBadgeIcon" aria-hidden="true">✓</span>` +
+      `<span class="Bl_DepSyncBadgeText"><strong>Estoque sincronizado</strong>` +
+      (quando ? `<small>${quando}</small>` : "") +
+      `</span></span>`
+    );
+  }
+
+  function htmlDepSyncPendente() {
+    return (
+      `<span class="Bl_DepSyncBadge Bl_DepSyncBadge--pend">` +
+      `<span class="Bl_DepSyncBadgeText"><strong>Pendente</strong><small>Clique em Atualizar estoque</small></span></span>`
+    );
+  }
+
+  async function refreshLinhaDeposito(tr) {
+    const idB = tr.dataset.bling;
+    if (!idB) return;
+    const r = await fetch("/api/integracoes/bling/depositos");
+    const j = await r.json();
+    if (!r.ok || !j.success) return;
+    const meta = (j.mapa || []).find((m) => String(m.id_bling_deposito) === idB) || {};
+    const sel = tr.querySelector(".Bl_DepSelect");
+    const saved = meta.id_deposito_dropnexo ? String(meta.id_deposito_dropnexo) : "";
+    if (sel && saved) sel.value = saved;
+    tr.dataset.savedDrop = saved;
+    renderCelulaSync(tr, meta);
+  }
+
   async function pollSyncDeposito(tr, jobId) {
     const cell = tr.querySelector(".Bl_DepSyncCell");
     const btnSave = tr.querySelector(".Bl_DepBtnSalvar");
@@ -171,10 +212,10 @@
         label.textContent = p.mensagem || `Processados ${p.processados || 0}/${p.total || "?"}`;
       }
       if (p.status === "concluido") {
-        cell.innerHTML = `<span class="Bl_DepSyncOk">Sincronização do depósito efetuada com sucesso</span>`;
         if (btnSave) btnSave.disabled = false;
         tr.dataset.syncPendente = "0";
         await carregarStatus();
+        await refreshLinhaDeposito(tr);
         return;
       }
       if (p.status === "erro") throw new Error(p.mensagem || "Falha na sincronização.");
@@ -228,7 +269,10 @@
     }
 
     if (pendente) {
-      cell.innerHTML = `<button type="button" class="Bl_DepBtnSync">Atualizar estoque</button>`;
+      cell.innerHTML =
+        `<div class="Bl_DepSyncStack">` +
+        htmlDepSyncPendente() +
+        `<button type="button" class="Bl_DepBtnSync">Atualizar estoque</button></div>`;
       tr.dataset.syncPendente = "1";
       if (btnSave) btnSave.disabled = false;
       cell.querySelector(".Bl_DepBtnSync")?.addEventListener("click", async () => {
@@ -238,6 +282,23 @@
           Swal.fire({ icon: "error", title: "Erro", text: e.message });
         }
       });
+      return;
+    }
+
+    if (meta.estoque_sync_concluido_em) {
+      cell.innerHTML = `<div class="Bl_DepSyncStack">${htmlDepSyncOk(meta.estoque_sync_concluido_em)}</div>`;
+      tr.dataset.syncPendente = "0";
+      if (btnSave) btnSave.disabled = false;
+      return;
+    }
+
+    if (vinculado) {
+      cell.innerHTML =
+        `<div class="Bl_DepSyncStack">` +
+        `<span class="Bl_DepSyncBadge Bl_DepSyncBadge--neutro">` +
+        `<span class="Bl_DepSyncBadgeText"><strong>Vinculado</strong><small>Sync não registrada</small></span></span></div>`;
+      tr.dataset.syncPendente = "0";
+      if (btnSave) btnSave.disabled = false;
       return;
     }
 
@@ -308,9 +369,19 @@
       renderCelulaSync(tr, meta);
 
       sel?.addEventListener("change", () => {
-        const mudou = (sel.value || "") !== (tr.dataset.savedDrop || "");
-        if (!mudou && tr.dataset.syncPendente !== "1") {
-          renderCelulaSync(tr, { ...meta, id_deposito_dropnexo: saved || null, estoque_sync_pendente: false });
+        const valor = sel.value || "";
+        const mudou = valor !== (tr.dataset.savedDrop || "");
+        if (!valor) {
+          renderCelulaSync(tr, {});
+          return;
+        }
+        if (mudou) {
+          renderCelulaSync(tr, {
+            id_deposito_dropnexo: valor === CRIAR_IGUAL ? null : valor,
+            estoque_sync_pendente: true,
+          });
+        } else {
+          renderCelulaSync(tr, meta);
         }
       });
 
