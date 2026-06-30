@@ -3,7 +3,6 @@
   const btnConectar = document.getElementById("bl_btn_conectar");
   const btnDesconectar = document.getElementById("bl_btn_desconectar");
   const painelConfig = document.getElementById("bl_painel_config");
-  const secLogs = document.getElementById("bl_sec_logs");
   const tituloModulo = document.getElementById("bl_titulo_modulo");
   const ctxInput = document.getElementById("bl_contexto_ativo");
   const logsEl = document.getElementById("bl_logs");
@@ -12,12 +11,14 @@
   const btnSalvarEstoque = document.getElementById("bl_btn_salvar_estoque");
   const paneConfig = document.getElementById("bl_pane_config");
   const paneEstoque = document.getElementById("bl_pane_estoque");
+  const paneLogs = document.getElementById("bl_pane_logs");
   const alertDep = document.getElementById("bl_estoque_alert_dep");
   const webhookHint = document.getElementById("bl_webhook_hint");
   const syncRecebido = document.getElementById("bl_sync_recebido");
   const syncEnviado = document.getElementById("bl_sync_enviado");
   const chkReceber = document.getElementById("bl_estoque_receber");
   const chkBaixa = document.getElementById("bl_estoque_baixa");
+  const syncVisual = document.getElementById("bl_sync_visual");
 
   let estado = {
     conectado: false,
@@ -53,6 +54,19 @@
     }
   }
 
+  function atualizarAnimacaoEstoque() {
+    if (!syncVisual) return;
+    const baixa = chkBaixa?.checked === true;
+    const importar = chkReceber?.checked === true;
+    const ativo = baixa || importar;
+
+    syncVisual.classList.toggle("inativo", !ativo);
+    syncVisual.classList.toggle("sync-out", baixa);
+    syncVisual.classList.toggle("sync-in", importar);
+    syncVisual.classList.toggle("sync-both", baixa && importar);
+    syncVisual.setAttribute("aria-hidden", ativo ? "false" : "true");
+  }
+
   function pickTab(tab) {
     tabAtiva = tab;
     document.querySelectorAll(".Bl_SubTab").forEach((b) => {
@@ -60,6 +74,7 @@
     });
     definirVisivel(paneConfig, tab === "config");
     definirVisivel(paneEstoque, tab === "estoque");
+    definirVisivel(paneLogs, tab === "logs");
     if (tab === "estoque") carregarDepositos().catch(() => {});
   }
 
@@ -87,6 +102,7 @@
         ? `Configure o webhook de Estoque no app DropNexo (Central de Extensões Bling) apontando para: ${url}`
         : "";
     }
+    atualizarAnimacaoEstoque();
   }
 
   function aplicarConfigTela() {
@@ -103,9 +119,7 @@
       if (el && val) el.value = val;
     });
     if (ctxInput) ctxInput.value = estado.contexto_modulo || "";
-    if (tituloModulo && estado.contexto_modulo_rotulo) {
-      tituloModulo.textContent = `Configuração — ${estado.contexto_modulo_rotulo}`;
-    }
+    if (tituloModulo) tituloModulo.textContent = "Configurações";
     if (ultimaSync) {
       ultimaSync.textContent = cfg.ultima_sync_produtos
         ? `Última sync produtos: ${new Date(cfg.ultima_sync_produtos).toLocaleString("pt-BR")}`
@@ -235,7 +249,6 @@
     definirVisivel(btnConectar, !on);
     definirVisivel(btnDesconectar, on);
     definirVisivel(painelConfig, on);
-    definirVisivel(secLogs, on);
 
     if (logsEl) {
       logsEl.innerHTML = (data.logs || [])
@@ -303,6 +316,9 @@
     pickTab(btn.dataset.blTab || "config");
   });
 
+  chkReceber?.addEventListener("change", atualizarAnimacaoEstoque);
+  chkBaixa?.addEventListener("change", atualizarAnimacaoEstoque);
+
   btnSalvar?.addEventListener("click", async () => {
     try {
       await salvarConfig();
@@ -344,7 +360,8 @@
     Swal.fire({ icon: "success", title: "Conectado", timer: 1500, showConfirmButton: false });
     window.history.replaceState({}, "", location.pathname);
   }
-  if (params.get("aba") === "estoque") pickTab("estoque");
+  const aba = params.get("aba");
+  if (aba === "estoque" || aba === "logs" || aba === "config") pickTab(aba);
 
   carregarStatus().catch((e) => {
     Swal.fire({ icon: "error", title: "Erro", text: e.message, confirmButtonColor: "#021F81" });

@@ -3,7 +3,7 @@
 {% block title %}Bling — Integrações — {{ MARCA_NOME }}{% endblock %}
 {% block topbar_title %}Integração Bling{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('static', filename='style/Cbling_integracao.css') }}?v=6" />
+<link rel="stylesheet" href="{{ url_for('static', filename='style/Cbling_integracao.css') }}?v=7" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal Bl_Wrap">
@@ -47,12 +47,13 @@
 
   <section class="Bl_Card Bl_ContextPanel" id="bl_painel_config" {% if not bling_conectado %}hidden{% endif %}>
     <nav class="Bl_SubTabs" id="bl_subtabs" aria-label="Seções Bling">
-      <button type="button" class="Bl_SubTab is-active" data-bl-tab="config">Configuração</button>
+      <button type="button" class="Bl_SubTab is-active" data-bl-tab="config">Configurações</button>
       <button type="button" class="Bl_SubTab" data-bl-tab="estoque">Estoque</button>
+      <button type="button" class="Bl_SubTab" data-bl-tab="logs">Últimos logs</button>
     </nav>
 
     <div id="bl_pane_config">
-      <h3 id="bl_titulo_modulo">Configuração</h3>
+      <h3 id="bl_titulo_modulo">Configurações</h3>
       <input type="hidden" id="bl_contexto_ativo" value="" />
 
       <div class="Bl_Grid2">
@@ -104,28 +105,75 @@
     </div>
 
     <div id="bl_pane_estoque" hidden>
-      <h3>Estoque</h3>
-      <div class="Bl_EstoqueAlert" id="bl_estoque_alert_dep" hidden role="alert">
-        Estoque não será sincronizado até vincular pelo menos um depósito Bling abaixo.
-      </div>
-      <p class="Bl_Hint" id="bl_webhook_hint"></p>
-      <div class="Bl_EstoqueGrid">
-        <label class="Bl_EstoqueCard">
-          <span><strong>Receber do Bling</strong><small>Webhook quando o estoque mudar no ERP.</small></span>
-          <input type="checkbox" id="bl_estoque_receber" />
-        </label>
-        <label class="Bl_EstoqueCard">
-          <span><strong>Baixa em pedidos</strong><small>Envia ao Bling quando o pedido for confirmado.</small></span>
-          <input type="checkbox" id="bl_estoque_baixa" />
-        </label>
-      </div>
-      <div class="Bl_SyncTimes">
-        <span class="Bl_Meta" id="bl_sync_recebido">Recebido do Bling: —</span>
-        <span class="Bl_Meta" id="bl_sync_enviado">Enviado ao Bling: —</span>
-      </div>
-      <div class="Bl_Actions Bl_Actions--config">
-        <button type="button" class="Cl_BtnSalvar" id="bl_btn_salvar_estoque">Salvar estoque</button>
-      </div>
+      <section class="Bl_EstoqueBlock">
+        <h3 class="Bl_EstoqueBlockTitle">Sincronizar estoque</h3>
+
+        <div class="Bl_SyncAlert" id="bl_estoque_alert_dep" hidden role="alert">
+          Estoque não será sincronizado: nenhum depósito Bling vinculado. Vincule abaixo.
+        </div>
+
+        <p class="Bl_Hint Bl_WebhookHint" id="bl_webhook_hint"></p>
+
+        <div class="Bl_SyncGrid">
+          <label class="Bl_SyncCard">
+            <span class="Bl_SyncCardBody">
+              <strong>Receber do Bling</strong>
+              <small>Atualiza o estoque local quando o Bling enviar alterações (webhook).</small>
+            </span>
+            <span class="Cl_Switch">
+              <input type="checkbox" id="bl_estoque_receber" />
+              <span class="Cl_SwitchSlider"></span>
+            </span>
+          </label>
+          <label class="Bl_SyncCard">
+            <span class="Bl_SyncCardBody">
+              <strong>Baixa em pedidos</strong>
+              <small>Envia a quantidade vendida para o Bling quando o pedido for confirmado.</small>
+            </span>
+            <span class="Cl_Switch">
+              <input type="checkbox" id="bl_estoque_baixa" />
+              <span class="Cl_SwitchSlider"></span>
+            </span>
+          </label>
+        </div>
+
+        <div class="Bl_SyncVisual inativo" id="bl_sync_visual" aria-hidden="true">
+          <div class="Bl_SyncNode">
+            <div class="Bl_SyncIcon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none"><path d="M4 7h16v12H4z" stroke="currentColor" stroke-width="1.6"/><path d="M4 11h16M9 7V5h6v2" stroke="currentColor" stroke-width="1.6"/></svg>
+            </div>
+            <strong>DropNexo</strong>
+            <span>Estoque</span>
+          </div>
+          <div class="Bl_SyncBridge">
+            <div class="Bl_SyncTrack">
+              <span class="Bl_SyncDot Bl_SyncDot--dn-bling"></span>
+              <span class="Bl_SyncDot Bl_SyncDot--bling-dn"></span>
+            </div>
+            <div class="Bl_SyncLabels">
+              <span class="Bl_SyncLabel Bl_SyncLabel--out">Pedidos</span>
+              <span class="Bl_SyncLabel Bl_SyncLabel--in">Webhook</span>
+            </div>
+          </div>
+          <div class="Bl_SyncNode">
+            <div class="Bl_SyncIcon Bl_SyncIcon--bling" aria-hidden="true">B</div>
+            <strong>Bling</strong>
+            <span>ERP</span>
+          </div>
+        </div>
+
+        <p class="Bl_Hint Bl_SyncHint">
+          Após vincular depósitos, a primeira sincronização é feita automaticamente. Depois, o Bling avisa via webhook.
+        </p>
+
+        <div class="Bl_EstoqueFooter">
+          <div class="Bl_SyncTimes">
+            <span class="Bl_Meta" id="bl_sync_recebido">Recebido do Bling: nunca</span>
+            <span class="Bl_Meta" id="bl_sync_enviado">Enviado ao Bling: nunca</span>
+          </div>
+          <button type="button" class="Cl_botaoprimario" id="bl_btn_salvar_estoque">Salvar</button>
+        </div>
+      </section>
 
       <div class="Bl_DepPanel" id="bl_painel_depositos">
         <h4>Pareamento de depósitos</h4>
@@ -138,14 +186,15 @@
         </div>
       </div>
     </div>
-  </section>
 
-  <section class="Bl_Card" id="bl_sec_logs" {% if not bling_conectado %}hidden{% endif %}>
-    <h3>Últimos logs</h3>
-    <ul class="Bl_LogList" id="bl_logs"></ul>
+    <div id="bl_pane_logs" hidden>
+      <h3>Últimos logs</h3>
+      <p class="Bl_Hint">Registro das últimas operações de integração com o Bling.</p>
+      <ul class="Bl_LogList" id="bl_logs"></ul>
+    </div>
   </section>
 </div>
 {% endblock %}
 {% block page_js %}
-<script src="{{ url_for('static', filename='script/Sbling_integracao.js') }}?v=9"></script>
+<script src="{{ url_for('static', filename='script/Sbling_integracao.js') }}?v=10"></script>
 {% endblock %}

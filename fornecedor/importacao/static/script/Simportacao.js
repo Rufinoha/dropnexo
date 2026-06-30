@@ -154,70 +154,16 @@
     setCards(scope, j.dados || {});
   }
 
-  function fmtSync(iso, rotulo) {
-    if (!iso) return `${rotulo}: nunca`;
-    try {
-      return `${rotulo}: ${new Date(iso).toLocaleString("pt-BR")}`;
-    } catch {
-      return `${rotulo}: —`;
-    }
-  }
-
   function atualizarStatusBling() {
     const status = qs("#impBlingStatus");
     const titulo = qs("#impBlingStatusTitulo");
     const sub = qs("#impBlingStatusSub");
     if (!status || !cfg.bling_conectado) return;
 
-    const bc = cfg.bling_config || {};
-    const depsOk = Number(bc.depositos_vinculados || 0) > 0;
-    const alertDep = qs("#impEstoqueAlertDep");
-    if (alertDep) alertDep.hidden = depsOk;
-
-    const syncAtivo = depsOk && (bc.estoque_baixa_pedido || bc.estoque_importar_bling);
-    status.classList.toggle("inativo", !syncAtivo);
+    status.classList.remove("inativo");
     titulo.textContent = "Conectado ao Bling";
-    if (!depsOk) {
-      sub.textContent = "Estoque pausado — vincule depósitos em Integrações → Bling";
-    } else if (syncAtivo) {
-      const partes = [];
-      if (bc.estoque_importar_bling) partes.push("recebimento via webhook");
-      if (bc.estoque_baixa_pedido) partes.push("baixa em pedidos confirmados");
-      sub.textContent = `Sincronização configurada — ${partes.join(" · ")}`;
-    } else {
-      sub.textContent = "Depósitos vinculados — ative as opções de estoque abaixo";
-    }
-  }
-
-  function preencherFormEstoque() {
-    const bc = cfg.bling_config || {};
-    qs("#impEstoqueBaixaPedido").checked = !!bc.estoque_baixa_pedido;
-    qs("#impEstoqueImportarBling").checked = bc.estoque_importar_bling !== false;
-    qs("#impEstoqueUltimaRecebido").textContent = fmtSync(
-      bc.ultima_sync_estoque_recebido,
-      "Recebido do Bling"
-    );
-    qs("#impEstoqueUltimaEnviado").textContent = fmtSync(
-      bc.ultima_sync_estoque_enviado,
-      "Enviado ao Bling"
-    );
-    atualizarStatusBling();
-    atualizarAnimacaoEstoque();
-  }
-
-  function atualizarAnimacaoEstoque() {
-    const visual = qs("#impSyncVisual");
-    if (!visual) return;
-
-    const baixa = qs("#impEstoqueBaixaPedido")?.checked === true;
-    const importar = qs("#impEstoqueImportarBling")?.checked === true;
-    const ativo = baixa || importar;
-
-    visual.classList.toggle("inativo", !ativo);
-    visual.classList.toggle("sync-out", baixa);
-    visual.classList.toggle("sync-in", importar);
-    visual.classList.toggle("sync-both", baixa && importar);
-    visual.setAttribute("aria-hidden", ativo ? "false" : "true");
+    sub.innerHTML =
+      'Configure estoque em <a href="/integracoes/bling?aba=estoque" target="_blank" rel="noopener">Integrações → Bling → Estoque</a>';
   }
 
   async function carregarDadosIniciais() {
@@ -237,7 +183,7 @@
 
     if (j.bling_conectado) {
       await carregarCategoriasBling();
-      preencherFormEstoque();
+      atualizarStatusBling();
       await carregarCards("bling", j.ultimo_lote_bling?.id || null);
     }
 
@@ -709,37 +655,6 @@
     }
   }
 
-  async function salvarEstoqueBling() {
-    const body = {
-      estoque_baixa_pedido: qs("#impEstoqueBaixaPedido")?.checked === true,
-      estoque_importar_bling: qs("#impEstoqueImportarBling")?.checked === true,
-    };
-
-    Swal.fire({ title: "Salvando…", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-    try {
-      const r = await fetch(`${BASE}/bling/estoque`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-        credentials: "include",
-      });
-      const j = await r.json();
-      Swal.close();
-      if (!r.ok || !j.success) throw new Error(j.message || "Falha ao salvar.");
-      cfg.bling_config = j.bling_config || body;
-      preencherFormEstoque();
-      await Swal.fire({
-        icon: "success",
-        title: "Salvo",
-        text: j.message,
-        confirmButtonColor: "#021F81",
-      });
-    } catch (e) {
-      Swal.close();
-      await Swal.fire("Erro", e.message, "error");
-    }
-  }
-
   function abrirErrosManutencao(scope) {
     const idLote = loteSelecionado[scope];
     const errosEl = scope === "bling" ? "#impBlingResErros" : "#impResErros";
@@ -987,7 +902,6 @@
     qsa("[data-acao='fechar']").forEach((b) => b.addEventListener("click", () => setModalOpen(false)));
     qs("#impBtnArquivo")?.addEventListener("click", importarArquivo);
     qs("#impBtnBling")?.addEventListener("click", importarBling);
-    qs("#impBtnSalvarEstoque")?.addEventListener("click", salvarEstoqueBling);
     qs("#impBtnFiltrar")?.addEventListener("click", carregarLotes);
     qs("#impBtnLimpar")?.addEventListener("click", () => {
       qs("#impFiltroDe").value = "";
@@ -995,14 +909,6 @@
       carregarLotes();
     });
     qsa('input[name="imp_bling_modo"]').forEach((r) => r.addEventListener("change", toggleBlingCats));
-    qs("#impEstoqueImportarBling")?.addEventListener("change", () => {
-      atualizarStatusBling();
-      atualizarAnimacaoEstoque();
-    });
-    qs("#impEstoqueBaixaPedido")?.addEventListener("change", () => {
-      atualizarStatusBling();
-      atualizarAnimacaoEstoque();
-    });
     bindCatPicker();
     bindLayoutTab();
     window.addEventListener("message", async (event) => {

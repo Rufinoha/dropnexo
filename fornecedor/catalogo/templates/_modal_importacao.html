@@ -24,7 +24,7 @@
             <span class="imp-pulse" aria-hidden="true"></span>
             <div class="imp-bling-status-text">
               <strong id="impBlingStatusTitulo">Conectado ao Bling</strong>
-              <span class="imp-hint" id="impBlingStatusSub">Sincronização ativa</span>
+              <span class="imp-hint" id="impBlingStatusSub">Configure estoque em <a href="/integracoes/bling?aba=estoque" target="_blank" rel="noopener">Integrações → Bling → Estoque</a></span>
             </div>
           </div>
 
@@ -93,70 +93,6 @@
               </div>
             </div>
             <div class="imp-last" id="impBlingResObs">Nenhuma importação via Bling ainda.</div>
-          </section>
-
-          <section class="imp-bling-block imp-bling-block--sync">
-            <h3 class="imp-bling-block-title">Sincronizar estoque</h3>
-            <div class="imp-sync-alert" id="impEstoqueAlertDep" hidden role="alert">
-              Estoque não será sincronizado: nenhum depósito Bling vinculado.
-              <a href="/integracoes/bling" target="_blank" rel="noopener">Vincule em Integrações → Bling</a>.
-            </div>
-            <div class="imp-sync-grid">
-              <label class="imp-sync-card">
-                <span class="imp-sync-card-body">
-                  <strong>Receber do Bling</strong>
-                  <small>Atualiza o estoque local quando o Bling enviar alterações (webhook).</small>
-                </span>
-                <span class="Cl_Switch">
-                  <input type="checkbox" id="impEstoqueImportarBling" />
-                  <span class="Cl_SwitchSlider"></span>
-                </span>
-              </label>
-              <label class="imp-sync-card">
-                <span class="imp-sync-card-body">
-                  <strong>Baixa em pedidos</strong>
-                  <small>Envia a quantidade vendida para o Bling quando o pedido for confirmado.</small>
-                </span>
-                <span class="Cl_Switch">
-                  <input type="checkbox" id="impEstoqueBaixaPedido" />
-                  <span class="Cl_SwitchSlider"></span>
-                </span>
-              </label>
-            </div>
-            <div class="imp-sync-visual inativo" id="impSyncVisual" aria-hidden="true">
-              <div class="imp-sync-node imp-sync-node--dn">
-                <div class="imp-sync-icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none"><path d="M4 7h16v12H4z" stroke="currentColor" stroke-width="1.6"/><path d="M4 11h16M9 7V5h6v2" stroke="currentColor" stroke-width="1.6"/></svg>
-                </div>
-                <strong>DropNexo</strong>
-                <span>Estoque</span>
-              </div>
-              <div class="imp-sync-bridge">
-                <div class="imp-sync-track">
-                  <span class="imp-sync-dot imp-sync-dot--dn-bling"></span>
-                  <span class="imp-sync-dot imp-sync-dot--bling-dn"></span>
-                </div>
-                <div class="imp-sync-labels">
-                  <span class="imp-sync-label imp-sync-label--out">Pedidos</span>
-                  <span class="imp-sync-label imp-sync-label--in">Webhook</span>
-                </div>
-              </div>
-              <div class="imp-sync-node imp-sync-node--bling">
-                <div class="imp-sync-icon imp-sync-icon--bling" aria-hidden="true">B</div>
-                <strong>Bling</strong>
-                <span>ERP</span>
-              </div>
-            </div>
-            <p class="imp-hint imp-sync-hint">
-              Após vincular depósitos, a primeira sincronização é feita automaticamente. Depois, o Bling avisa via webhook.
-            </p>
-            <div class="imp-estoque-footer">
-              <div class="imp-estoque-sync-times">
-                <span class="imp-hint" id="impEstoqueUltimaRecebido"></span>
-                <span class="imp-hint" id="impEstoqueUltimaEnviado"></span>
-              </div>
-              <button type="button" class="Cl_botaoprimario" id="impBtnSalvarEstoque">Salvar</button>
-            </div>
           </section>
         </div>
 
