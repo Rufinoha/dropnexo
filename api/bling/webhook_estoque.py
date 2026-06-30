@@ -27,49 +27,149 @@ def validar_assinatura_webhook(body: bytes, signature_header: str | None) -> boo
     return hmac.compare_digest(esperado, calculado)
 
 
-def _extrair_company_id(envelope: dict[str, Any]) -> str:
-    for chave in ("companyId", "company_id"):
-        val = envelope.get(chave)
-        if val:
-            return str(val).strip()
-    data = envelope.get("data")
-    if isinstance(data, dict):
-        for chave in ("companyId", "company_id"):
-            val = data.get(chave)
-            if val:
-                return str(val).strip()
+_RECURSOS_ESTOQUE = frozenset({"stock", "virtual_stock", "estoque", "estoque_virtual"})
+_CHAVES_RECURSO = ("$resource", "resource", "recurso", "eventType", "tipo", "type")
+_CHAVES_ACAO = ("$action", "action", "acao", "eventAction")
+_CHAVES_COMPANY = ("companyId", "company_id", "companyid")
+
+
+def _blocos_aninhados(envelope: dict[str, Any], *, max_depth: int = 5) -> list[dict[str, Any]]:
+    blocos: list[dict[str, Any]] = []
+
+    def _walk(obj: Any, depth: int) -> None:
+        if depth > max_depth or not isinstance(obj, dict):
+            return
+        blocos.append(obj)
+        for val in obj.values():
+            if isinstance(val, dict):
+                _walk(val, depth + 1)
+
+    _walk(envelope, 0)
+    return blocos
+
+
+def _valor_dict(bloco: dict[str, Any], chaves: tuple[str, ...]) -> str:
+    for chave in chaves:
+        val = bloco.get(chave)
+        if val is not None and str(val).strip():
+            return str(val).strip().lower()
     return ""
 
 
+def _extrair_company_id(envelope: dict[str, Any]) -> str:
+    for bloco in _blocos_aninhados(envelope):
+        cid = _valor_dict(bloco, _CHAVES_COMPANY)
+        if cid:
+            return cid
+    return ""
+
+
+def _inferir_recurso_evento(envelope: dict[str, Any]) -> str:
+    for bloco in _blocos_aninhados(envelope):
+        evento = str(bloco.get("event") or bloco.get("evento") or "").strip().lower()
+        if not evento:
+            continue
+        if "virtual_stock" in evento or "estoque_virtual" in evento:
+            return "virtual_stock"
+        if "stock" in evento or "estoque" in evento:
+            return "stock"
+        if "." in evento:
+            prefixo = evento.split(".", 1)[0]
+            if prefixo in _RECURSOS_ESTOQUE:
+                return prefixo
+    return ""
+
+
+def _parece_payload_estoque(bloco: dict[str, Any]) -> bool:
+    if bloco.get("produto") or bloco.get("deposito"):
+        return True
+    if bloco.get("produtoId") or bloco.get("depositoId"):
+        return True
+    if any(chave in bloco for chave in ("saldoFisico", "saldoVirtual", "saldoFisicoTotal")):
+        return bool(bloco.get("produto") or bloco.get("produtoId") or bloco.get("idProduto"))
+    return False
+
+
 def _extrair_recurso_acao(envelope: dict[str, Any]) -> tuple[str, str]:
-    # Bling API v3 documenta os campos como $resource e $action (com cifrão).
-    recurso = str(
-        envelope.get("resource")
-        or envelope.get("recurso")
-        or envelope.get("$resource")
-        or ""
-    ).strip().lower()
-    acao = str(
-        envelope.get("action")
-        or envelope.get("acao")
-        or envelope.get("$action")
-        or ""
-    ).strip().lower()
+    recurso = ""
+    acao = ""
+    for bloco in _blocos_aninhados(envelope):
+        if not recurso:
+            recurso = _valor_dict(bloco, _CHAVES_RECURSO)
+        if not acao:
+            acao = _valor_dict(bloco, _CHAVES_ACAO)
+        if recurso and acao:
+            break
+    if not recurso:
+        recurso = _inferir_recurso_evento(envelope)
+    if not recurso:
+        for bloco in _blocos_aninhados(envelope):
+            if _parece_payload_estoque(bloco):
+                recurso = "stock"
+                break
     return recurso, acao
 
 
+def _normalizar_payload_estoque(bloco: dict[str, Any]) -> dict[str, Any]:
+    produto = bloco.get("produto")
+    deposito = bloco.get("deposito")
+    if not isinstance(produto, dict):
+        produto = {"id": produto} if produto is not None else {}
+    if not isinstance(deposito, dict):
+        deposito = {"id": deposito} if deposito is not None else {}
+
+    if not produto.get("id"):
+        for chave in ("produtoId", "idProduto", "id_produto"):
+            if bloco.get(chave) is not None:
+                produto["id"] = bloco.get(chave)
+                break
+    if not deposito.get("id"):
+        for chave in ("depositoId", "idDeposito", "id_deposito"):
+            if bloco.get(chave) is not None:
+                deposito["id"] = bloco.get(chave)
+                break
+    for chave in ("saldoFisico", "saldoVirtual", "quantidade", "saldoFisicoTotal"):
+        if chave in bloco and deposito.get(chave) is None:
+            deposito[chave] = bloco.get(chave)
+    return {"produto": produto, "deposito": deposito}
+
+
 def _payload_estoque(envelope: dict[str, Any]) -> dict[str, Any]:
-    candidatos: list[Any] = [
-        envelope.get("data"),
-        envelope.get("$payload"),
-        envelope.get("payload"),
-    ]
-    for bloco in candidatos:
-        if isinstance(bloco, dict) and (bloco.get("produto") or bloco.get("deposito")):
-            return bloco
-    if envelope.get("produto") or envelope.get("deposito"):
-        return envelope
+    for bloco in _blocos_aninhados(envelope):
+        for cand in (
+            bloco,
+            bloco.get("$payload"),
+            bloco.get("payload"),
+            bloco.get("data"),
+        ):
+            if isinstance(cand, dict) and _parece_payload_estoque(cand):
+                return _normalizar_payload_estoque(cand)
     return {}
+
+
+def _eh_recurso_estoque(recurso: str, envelope: dict[str, Any]) -> bool:
+    if recurso in _RECURSOS_ESTOQUE:
+        return True
+    return bool(_payload_estoque(envelope))
+
+
+def _resolver_tenant_webhook(cur, company_id: str | None) -> int | None:
+    cid = str(company_id or "").strip()
+    if cid:
+        tid = resolver_tenant_por_company(cur, cid)
+        if tid:
+            return tid
+    cur.execute(
+        """
+        SELECT id_tenant FROM tbl_integracao_bling
+        WHERE status = 'conectado'
+        ORDER BY id_tenant
+        """
+    )
+    rows = cur.fetchall()
+    if len(rows) == 1:
+        return int(rows[0][0])
+    return None
 
 
 def enfileirar_webhook(cur, *, id_tenant: int | None, company_id: str, envelope: dict) -> int:
@@ -114,19 +214,20 @@ def processar_fila_webhook(cur, fila_id: int) -> dict[str, Any]:
             envelope = {}
 
     recurso = (recurso or _extrair_recurso_acao(envelope)[0]).lower()
-    if recurso not in ("stock", "virtual_stock", "estoque", "estoque_virtual"):
+    if not _eh_recurso_estoque(recurso, envelope):
+        chaves = ",".join(sorted(envelope.keys()))[:120]
         cur.execute(
             """
             UPDATE tbl_integracao_bling_webhook_fila
             SET status = 'ignorado', processado_em = %s, erro = %s
             WHERE id = %s
             """,
-            (agora_utc(), f"recurso_nao_estoque:{recurso}", fila_id),
+            (agora_utc(), f"recurso_nao_estoque:{recurso or '?'}|keys={chaves}", fila_id),
         )
         return {"ok": True, "ignorado": True, "motivo": "recurso_nao_estoque"}
 
-    if not id_tenant and company_id:
-        id_tenant = resolver_tenant_por_company(cur, company_id)
+    if not id_tenant:
+        id_tenant = _resolver_tenant_webhook(cur, company_id)
     if not id_tenant:
         cur.execute(
             """
@@ -195,7 +296,7 @@ def receber_webhook_http(app: Flask, request: Request) -> tuple[dict, int]:
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
-        id_tenant = resolver_tenant_por_company(cur, company_id) if company_id else None
+        id_tenant = _resolver_tenant_webhook(cur, company_id)
         fila_id = enfileirar_webhook(
             cur, id_tenant=id_tenant, company_id=company_id, envelope=envelope
         )
