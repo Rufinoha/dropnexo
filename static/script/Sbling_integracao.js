@@ -11,6 +11,7 @@
   const btnSalvarEstoque = document.getElementById("bl_btn_salvar_estoque");
   const paneConfig = document.getElementById("bl_pane_config");
   const paneEstoque = document.getElementById("bl_pane_estoque");
+  const paneCategorias = document.getElementById("bl_pane_categorias");
   const paneLogs = document.getElementById("bl_pane_logs");
   const alertDep = document.getElementById("bl_estoque_alert_dep");
   const webhookHint = document.getElementById("bl_webhook_hint");
@@ -30,6 +31,7 @@
   };
 
   let tabAtiva = "config";
+  let catPainel = { segmentos: [], opcoes: [] };
 
   function cfgAtual() {
     return estado.configs.find((c) => c.contexto === estado.contexto_modulo) || {};
@@ -74,8 +76,10 @@
     });
     definirVisivel(paneConfig, tab === "config");
     definirVisivel(paneEstoque, tab === "estoque");
+    definirVisivel(paneCategorias, tab === "categorias");
     definirVisivel(paneLogs, tab === "logs");
     if (tab === "estoque") carregarDepositos().catch(() => {});
+    if (tab === "categorias") carregarCategorias().catch(() => {});
   }
 
   function aplicarEstoqueTela() {
@@ -129,6 +133,193 @@
   }
 
   const CRIAR_IGUAL = "__criar_igual__";
+
+  function escHtml(s) {
+    return String(s ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function badgeCatStatus(st) {
+    if (st === "mapeada") return `<span class="Bl_CatBadge Bl_CatBadge--ok">Mapeada</span>`;
+    if (st === "ignorada") return `<span class="Bl_CatBadge Bl_CatBadge--ign">Não importar</span>`;
+    return `<span class="Bl_CatBadge Bl_CatBadge--pend">Pendente</span>`;
+  }
+
+  function opcoesSegmentoHtml(segmentos, selected) {
+    const opts = (segmentos || [])
+      .map((s) => `<option value="${s.id}"${String(s.id) === String(selected || "") ? " selected" : ""}>${escHtml(s.nome)}</option>`)
+      .join("");
+    return `<option value="">— segmento —</option>${opts}`;
+  }
+
+  function opcoesDropHtml(opcoes, idSegmento, selected) {
+    const filtradas = (opcoes || []).filter((o) => {
+      if (!idSegmento) return true;
+      return String(o.id_segmento || "") === String(idSegmento);
+    });
+    const opts = filtradas
+      .map(
+        (o) =>
+          `<option value="${o.id}"${String(o.id) === String(selected || "") ? " selected" : ""}>${escHtml(o.caminho || o.nome)}</option>`
+      )
+      .join("");
+    return `<option value="">— categoria —</option>${opts}`;
+  }
+
+  function opcoesPaiHtml(opcoes, idSegmento, selected) {
+    const filtradas = (opcoes || []).filter((o) => {
+      if (idSegmento && String(o.id_segmento || "") !== String(idSegmento)) return false;
+      return Number(o.nivel || 1) < 3;
+    });
+    const opts = filtradas
+      .map(
+        (o) =>
+          `<option value="${o.id}"${String(o.id) === String(selected || "") ? " selected" : ""}>${escHtml(o.caminho || o.nome)}</option>`
+      )
+      .join("");
+    return `<option value="">— raiz (nível 1) —</option>${opts}`;
+  }
+
+  function atualizarDestCatRow(tr) {
+    const acao = tr.querySelector(".Bl_CatAcao")?.value || "";
+    const wrapV = tr.querySelector(".Bl_CatDestVincular");
+    const wrapC = tr.querySelector(".Bl_CatDestCriar");
+    if (wrapV) wrapV.hidden = acao !== "vincular";
+    if (wrapC) wrapC.hidden = acao !== "criar";
+  }
+
+  function aplicarResumoCategorias(resumo) {
+    const el = document.getElementById("bl_cat_resumo");
+    if (!el || !resumo) return;
+    const { total = 0, mapeadas = 0, ignoradas = 0, pendentes = 0, pronto = false } = resumo;
+    el.hidden = false;
+    el.className = "Bl_CatResumo " + (pronto ? "Bl_CatResumo--ok" : "Bl_CatResumo--pend");
+    el.textContent = pronto
+      ? `${total} categorias mapeadas — importação liberada (${mapeadas} vinculadas/criadas, ${ignoradas} excluídas).`
+      : `${pendentes} de ${total} categorias pendentes — conclua o mapeamento para importar produtos.`;
+  }
+
+  async function salvarCategoriaRow(tr) {
+    const idB = tr.dataset.bling || "";
+    const acao = tr.querySelector(".Bl_CatAcao")?.value || "";
+    const idSeg = tr.querySelector(".Bl_CatSegmento")?.value || "";
+    const idDrop = tr.querySelector(".Bl_CatDropVincular")?.value || "";
+    const idPai = tr.querySelector(".Bl_CatDropPai")?.value || "";
+    const ctx = estado.contexto_modulo || "fornecedor";
+
+    if (!idB || !acao) throw new Error("Selecione a ação.");
+    if (acao !== "ignorar" && !idSeg) throw new Error("Selecione o segmento.");
+    if (acao === "vincular" && !idDrop) throw new Error("Selecione a categoria DropNexo.");
+
+    const body = {
+      contexto: ctx,
+      id_bling: idB,
+      acao,
+      id_segmento: idSeg ? Number(idSeg) : null,
+      id_dropnexo: acao === "vincular" && idDrop ? Number(idDrop) : null,
+      id_parent_dropnexo: acao === "criar" && idPai ? Number(idPai) : null,
+    };
+
+    const r = await fetch("/api/integracoes/bling/categorias/salvar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const j = await r.json();
+    if (!r.ok || !j.success) throw new Error(j.message || "Erro ao salvar.");
+    await carregarCategorias();
+  }
+
+  async function carregarCategorias() {
+    const tbody = document.getElementById("bl_tbl_categorias");
+    if (!tbody) return;
+    const ctx = estado.contexto_modulo || "fornecedor";
+    const r = await fetch(`/api/integracoes/bling/categorias/mapeamento?contexto=${encodeURIComponent(ctx)}`);
+    const j = await r.json();
+    if (!r.ok || !j.success) {
+      tbody.innerHTML = `<tr><td colspan="6">${escHtml(j.message || "Erro ao carregar categorias.")}</td></tr>`;
+      return;
+    }
+
+    const dados = j.dados || {};
+    catPainel = {
+      segmentos: dados.segmentos || [],
+      opcoes: dados.opcoes_dropnexo || [],
+    };
+    aplicarResumoCategorias(dados.resumo);
+
+    const cats = dados.categorias || [];
+    if (!cats.length) {
+      tbody.innerHTML = `<tr><td colspan="6">Nenhuma categoria retornada pelo Bling.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = cats
+      .map((c) => {
+        const st = c.status || "pendente";
+        const acaoSalva = c.acao || (st === "ignorada" ? "ignorar" : st === "mapeada" ? "vincular" : "");
+        const acaoSel =
+          acaoSalva === "criar"
+            ? "criar"
+            : acaoSalva === "ignorar"
+              ? "ignorar"
+              : acaoSalva === "vincular"
+                ? "vincular"
+                : "";
+        const idSeg = c.id_segmento || "";
+        return `<tr data-bling="${escHtml(c.id_bling)}" data-status="${escHtml(st)}">
+          <td><span class="Bl_CatNomeBling">${escHtml(c.label_bling || c.nome_bling)}</span></td>
+          <td><select class="Bl_CatSegmento">${opcoesSegmentoHtml(catPainel.segmentos, idSeg)}</select></td>
+          <td>
+            <select class="Bl_CatAcao">
+              <option value="">— pendente —</option>
+              <option value="vincular"${acaoSel === "vincular" ? " selected" : ""}>Vincular existente</option>
+              <option value="criar"${acaoSel === "criar" ? " selected" : ""}>Criar no DropNexo</option>
+              <option value="ignorar"${acaoSel === "ignorar" ? " selected" : ""}>Não importar</option>
+            </select>
+          </td>
+          <td>
+            <div class="Bl_CatDestWrap Bl_CatDestVincular"${acaoSel === "vincular" ? "" : " hidden"}>
+              <select class="Bl_CatDropVincular">${opcoesDropHtml(catPainel.opcoes, idSeg, c.id_dropnexo)}</select>
+            </div>
+            <div class="Bl_CatDestWrap Bl_CatDestCriar"${acaoSel === "criar" ? "" : " hidden"}>
+              <select class="Bl_CatDropPai">${opcoesPaiHtml(catPainel.opcoes, idSeg, "")}</select>
+            </div>
+          </td>
+          <td>${badgeCatStatus(st)}</td>
+          <td><button type="button" class="Cl_BtnSalvar Bl_CatBtnSalvar">Salvar</button></td>
+        </tr>`;
+      })
+      .join("");
+
+    tbody.querySelectorAll("tr").forEach((tr) => {
+      tr.querySelector(".Bl_CatAcao")?.addEventListener("change", () => atualizarDestCatRow(tr));
+      tr.querySelector(".Bl_CatSegmento")?.addEventListener("change", () => {
+        const seg = tr.querySelector(".Bl_CatSegmento")?.value || "";
+        const vinc = tr.querySelector(".Bl_CatDropVincular");
+        const pai = tr.querySelector(".Bl_CatDropPai");
+        if (vinc) {
+          const sel = vinc.value;
+          vinc.innerHTML = opcoesDropHtml(catPainel.opcoes, seg, sel);
+        }
+        if (pai) {
+          const sel = pai.value;
+          pai.innerHTML = opcoesPaiHtml(catPainel.opcoes, seg, sel);
+        }
+      });
+      tr.querySelector(".Bl_CatBtnSalvar")?.addEventListener("click", async () => {
+        try {
+          await salvarCategoriaRow(tr);
+          await Swal.fire({ icon: "success", title: "Salvo", timer: 1200, showConfirmButton: false });
+        } catch (e) {
+          Swal.fire({ icon: "error", title: "Erro", text: e.message, confirmButtonColor: "#021F81" });
+        }
+      });
+      atualizarDestCatRow(tr);
+    });
+  }
 
   function pctSync(p) {
     const total = Number(p.total) || 0;
@@ -572,7 +763,7 @@
     window.history.replaceState({}, "", location.pathname);
   }
   const aba = params.get("aba");
-  if (aba === "estoque" || aba === "logs" || aba === "config") pickTab(aba);
+  if (aba === "estoque" || aba === "logs" || aba === "config" || aba === "categorias") pickTab(aba);
 
   carregarStatus().catch((e) => {
     Swal.fire({ icon: "error", title: "Erro", text: e.message, confirmButtonColor: "#021F81" });

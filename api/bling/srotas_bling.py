@@ -28,6 +28,11 @@ from api.bling.manual_conteudo import (
     MANUAL_IMAGENS_PERMITIDAS,
 )
 from api.bling.sync_categorias import listar_categorias_bling_flat
+from api.bling.mapeamento_categorias import (
+    listar_painel_categorias_bling,
+    salvar_mapeamento_categoria_ui,
+    validar_mapeamento_para_importacao,
+)
 from api.bling.sync_produtos import importar_produtos
 from api.bling.tokens import descriptografar_token
 from global_utils import Var_ConectarBanco, agora_utc, login_obrigatorio, obter_url_site_publico, usuario_tem_permissao
@@ -540,6 +545,22 @@ def sync_produtos():
         if not row or row[0] != "conectado":
             return jsonify(success=False, message="Conecte o Bling antes de sincronizar."), 400
 
+        from api.bling.mapeamento_categorias import validar_mapeamento_para_importacao
+
+        val = validar_mapeamento_para_importacao(
+            cur,
+            int(id_tenant),
+            contexto,
+            ids_categorias_bling=ids_categorias_bling,
+            incluir_subcategorias=bool(incluir_subcategorias),
+        )
+        if not val.get("importacao_liberada"):
+            return jsonify(
+                success=False,
+                message=val.get("mensagem"),
+                validacao=val,
+            ), 400
+
         from fornecedor.importacao.servico_importacao import (
             MODULO_CATALOGO,
             ORIGEM_INTEGRACAO,
@@ -568,7 +589,7 @@ def sync_produtos():
             incluir_subcategorias=bool(incluir_subcategorias),
             id_importacao_lote=id_lote,
             id_usuario=int(id_usuario) if id_usuario else None,
-            modo_categorias="legado",
+            modo_categorias="mapeamento",
         )
         conn.commit()
         status = resultado.get("status") or "ok"
@@ -623,6 +644,144 @@ def api_categorias_bling():
         return jsonify(success=True, categorias=categorias)
     except Exception as e:
         return jsonify(success=False, message=str(e)), 500
+
+
+@bling_bp.get("/api/integracoes/bling/categorias/mapeamento")
+@login_obrigatorio()
+def api_categorias_bling_mapeamento():
+    """Painel de mapeamento Bling ↔ DropNexo (aba Categorias)."""
+    if not _pode_bling_sync():
+        return jsonify(success=False, message="Sem permissão."), 403
+
+    contexto = (request.args.get("contexto") or "fornecedor").strip()
+    if contexto not in ("fornecedor", "vendedor"):
+        return jsonify(success=False, message="Contexto inválido."), 400
+
+    id_tenant = session.get("id_tenant")
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT status FROM tbl_integracao_bling WHERE id_tenant = %s",
+            (id_tenant,),
+        )
+        row = cur.fetchone()
+        if not row or row[0] != "conectado":
+            return jsonify(success=False, message="Conecte o Bling antes de mapear categorias."), 400
+        dados = listar_painel_categorias_bling(cur, int(id_tenant), contexto)
+        return jsonify(success=True, dados=dados)
+    except Exception as e:
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
+@bling_bp.post("/api/integracoes/bling/categorias/salvar")
+@login_obrigatorio()
+def api_categorias_bling_salvar():
+    if not _pode_bling_sync():
+        return jsonify(success=False, message="Sem permissão."), 403
+
+    body = request.get_json(silent=True) or {}
+    contexto = (body.get("contexto") or "fornecedor").strip()
+    if contexto not in ("fornecedor", "vendedor"):
+        return jsonify(success=False, message="Contexto inválido."), 400
+
+    id_bling = (body.get("id_bling") or "").strip()
+    acao = (body.get("acao") or "").strip().lower()
+    id_segmento = body.get("id_segmento")
+    id_dropnexo = body.get("id_dropnexo")
+    id_parent = body.get("id_parent_dropnexo")
+
+    try:
+        id_seg = int(id_segmento) if id_segmento not in (None, "") else None
+    except (TypeError, ValueError):
+        id_seg = None
+    try:
+        id_drop = int(id_dropnexo) if id_dropnexo not in (None, "") else None
+    except (TypeError, ValueError):
+        id_drop = None
+    try:
+        id_parent_drop = int(id_parent) if id_parent not in (None, "") else None
+    except (TypeError, ValueError):
+        id_parent_drop = None
+
+    id_tenant = session.get("id_tenant")
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT status FROM tbl_integracao_bling WHERE id_tenant = %s",
+            (id_tenant,),
+        )
+        row = cur.fetchone()
+        if not row or row[0] != "conectado":
+            return jsonify(success=False, message="Conecte o Bling antes de mapear categorias."), 400
+
+        resultado = salvar_mapeamento_categoria_ui(
+            cur,
+            int(id_tenant),
+            contexto,
+            id_bling=id_bling,
+            acao=acao,
+            id_segmento=id_seg,
+            id_dropnexo=id_drop,
+            id_parent_dropnexo=id_parent_drop,
+        )
+        conn.commit()
+        return jsonify(success=True, message="Mapeamento salvo.", dados=resultado)
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 400
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
+@bling_bp.post("/api/integracoes/bling/categorias/validar-importacao")
+@login_obrigatorio()
+def api_categorias_bling_validar_importacao():
+    if not _pode_bling_sync():
+        return jsonify(success=False, message="Sem permissão."), 403
+
+    body = request.get_json(silent=True) or {}
+    contexto = (body.get("contexto") or "fornecedor").strip()
+    if contexto not in ("fornecedor", "vendedor"):
+        return jsonify(success=False, message="Contexto inválido."), 400
+
+    raw_ids = body.get("ids_categorias_bling")
+    ids_categorias_bling: list[str] | None = None
+    if isinstance(raw_ids, list):
+        ids_categorias_bling = [str(c).strip() for c in raw_ids if str(c or "").strip()]
+    incluir_sub = body.get("incluir_subcategorias", True)
+    if isinstance(incluir_sub, str):
+        incluir_sub = incluir_sub.lower() in ("1", "true", "sim", "yes")
+
+    id_tenant = session.get("id_tenant")
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT status FROM tbl_integracao_bling WHERE id_tenant = %s",
+            (id_tenant,),
+        )
+        row = cur.fetchone()
+        if not row or row[0] != "conectado":
+            return jsonify(success=False, message="Conecte o Bling antes de importar."), 400
+        val = validar_mapeamento_para_importacao(
+            cur,
+            int(id_tenant),
+            contexto,
+            ids_categorias_bling=ids_categorias_bling,
+            incluir_subcategorias=bool(incluir_sub),
+        )
+        return jsonify(success=True, dados=val)
+    except Exception as e:
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
 
 
 @bling_bp.get("/api/integracoes/bling/depositos")

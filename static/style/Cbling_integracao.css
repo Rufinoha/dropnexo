@@ -683,6 +683,67 @@
   cursor: not-allowed;
 }
 
+.Bl_CatPanel { margin-top: 0.5rem; }
+
+.Bl_CatResumo {
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  border: 1px solid transparent;
+}
+
+.Bl_CatResumo--ok {
+  background: #ecfdf5;
+  border-color: #86efac;
+  color: #166534;
+}
+
+.Bl_CatResumo--pend {
+  background: #fffbeb;
+  border-color: #fcd34d;
+  color: #92400e;
+}
+
+.Bl_CatTbl select {
+  max-width: 220px;
+  width: 100%;
+  font-size: 0.82rem;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid #d1d5db;
+}
+
+.Bl_CatTbl td { vertical-align: middle; }
+
+.Bl_CatNomeBling {
+  font-size: 0.85rem;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.Bl_CatBadge {
+  display: inline-flex;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  border: 1px solid transparent;
+}
+
+.Bl_CatBadge--ok { background: #ecfdf5; border-color: #86efac; color: #166534; }
+.Bl_CatBadge--pend { background: #fffbeb; border-color: #fcd34d; color: #92400e; }
+.Bl_CatBadge--ign { background: #f1f5f9; border-color: #cbd5e1; color: #64748b; }
+
+.Bl_CatDestWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.Bl_CatDestWrap[hidden] { display: none !important; }
+
 @media (max-width: 720px) {
   .Bl_SyncGrid { grid-template-columns: 1fr; }
   .Bl_SubTab { font-size: 0.78rem; padding: 0.5rem 0.45rem; }

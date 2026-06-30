@@ -1,6 +1,7 @@
 # api/bling/mapeamento_categorias.py — pré-análise e aplicação de mapa Bling ↔ DropNexo
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from api.bling.cliente import obter_categoria_produto, obter_produto
@@ -379,4 +380,282 @@ def aplicar_mapeamento_categorias(
         "criadas": criadas,
         "vinculadas": vinculadas,
         "confirmadas_match": confirmadas,
+    }
+
+
+def _validar_segmento_tenant(cur, id_tenant: int, id_segmento: int) -> None:
+    cur.execute(
+        """
+        SELECT 1 FROM tbl_fornecedor_segmento fs
+        JOIN tbl_segmento s ON s.id = fs.id_segmento AND s.ativo = TRUE
+        WHERE fs.id_tenant = %s AND fs.id_segmento = %s
+        """,
+        (id_tenant, int(id_segmento)),
+    )
+    if not cur.fetchone():
+        raise ValueError("Segmento inválido para esta conta.")
+
+
+def listar_painel_categorias_bling(cur, id_tenant: int, contexto: str) -> dict[str, Any]:
+    from api.bling.sync_categorias import listar_categorias_bling_flat, obter_estado_mapeamento_categoria
+    from fornecedor.segmentos.servico_segmentos import ids_segmentos_fornecedor
+
+    bling_flat = listar_categorias_bling_flat(id_tenant)
+    drop = listar_categorias_dropnexo_tenant(cur, id_tenant)
+    cur.execute(
+        "SELECT id, id_segmento FROM tbl_categoria WHERE id_tenant = %s AND ativo = TRUE",
+        (id_tenant,),
+    )
+    seg_por_cat = {int(r[0]): int(r[1]) if r[1] else None for r in cur.fetchall()}
+    for op in drop.get("opcoes") or []:
+        op["id_segmento"] = seg_por_cat.get(int(op.get("id") or 0))
+    seg_ids = ids_segmentos_fornecedor(cur, id_tenant)
+    segmentos: list[dict[str, Any]] = []
+    if seg_ids:
+        cur.execute(
+            "SELECT id, nome FROM tbl_segmento WHERE id = ANY(%s) ORDER BY nome",
+            (seg_ids,),
+        )
+        segmentos = [{"id": int(r[0]), "nome": r[1]} for r in cur.fetchall()]
+
+    linhas: list[dict[str, Any]] = []
+    n_mapeadas = n_ignoradas = n_pendentes = 0
+    cache_api: dict[str, dict] = {}
+
+    for b in bling_flat:
+        id_b = str(b.get("id") or "")
+        estado = obter_estado_mapeamento_categoria(cur, id_tenant, contexto, id_b)
+        st = estado.get("status") or "pendente"
+        if st == "mapeada":
+            n_mapeadas += 1
+        elif st == "ignorada":
+            n_ignoradas += 1
+        else:
+            n_pendentes += 1
+
+        cat = _fetch_categoria_bling(id_tenant, id_b, cache_api)
+        parent_bling = _id_pai_bling(cat)
+        linhas.append(
+            {
+                "id_bling": id_b,
+                "nome_bling": b.get("nome") or _nome_categoria_bling(cat, id_b),
+                "label_bling": b.get("label") or b.get("nome") or id_b,
+                "nivel": int(b.get("nivel") or 1),
+                "id_bling_pai": parent_bling,
+                "status": st,
+                "acao": estado.get("acao"),
+                "id_dropnexo": estado.get("id_dropnexo"),
+                "id_segmento": estado.get("id_segmento"),
+                "nome_dropnexo": estado.get("nome_dropnexo"),
+            }
+        )
+
+    total = len(linhas)
+    return {
+        "categorias": linhas,
+        "segmentos": segmentos,
+        "opcoes_dropnexo": drop["opcoes"],
+        "multi_segmento": drop["multi_segmento"],
+        "resumo": {
+            "total": total,
+            "mapeadas": n_mapeadas,
+            "ignoradas": n_ignoradas,
+            "pendentes": n_pendentes,
+            "pronto": n_pendentes == 0 and total > 0,
+        },
+    }
+
+
+def salvar_mapeamento_categoria_ui(
+    cur,
+    id_tenant: int,
+    contexto: str,
+    *,
+    id_bling: str,
+    acao: str,
+    id_segmento: int | None = None,
+    id_dropnexo: int | None = None,
+    id_parent_dropnexo: int | None = None,
+) -> dict[str, Any]:
+    from api.bling.sync_categorias import (
+        _criar_categoria_do_bling,
+        _fetch_categoria_bling,
+        _id_pai_bling,
+        _nome_categoria_bling,
+        _resolver_mapa_categoria_valido,
+        _upsert_mapa_categoria,
+        _vincular_categoria_bling,
+        obter_estado_mapeamento_categoria,
+    )
+
+    id_bling = str(id_bling or "").strip()
+    acao = (acao or "").strip().lower()
+    if not id_bling:
+        raise ValueError("Categoria Bling inválida.")
+    if acao not in ("vincular", "criar", "ignorar"):
+        raise ValueError("Ação inválida. Use vincular, criar ou ignorar.")
+
+    cache_api: dict[str, dict] = {}
+    cat = _fetch_categoria_bling(id_tenant, id_bling, cache_api)
+    nome_bling = _nome_categoria_bling(cat, id_bling)
+    parent_bling = _id_pai_bling(cat)
+
+    if acao == "ignorar":
+        _upsert_mapa_categoria(
+            cur,
+            id_tenant,
+            contexto,
+            id_bling,
+            None,
+            {
+                "nome": nome_bling,
+                "id_bling_pai": parent_bling,
+                "acao": "ignorar",
+                "origem": "integracao_ui",
+            },
+        )
+        return {"status": "ignorada", "id_bling": id_bling}
+
+    if acao == "vincular":
+        if not id_dropnexo:
+            raise ValueError("Selecione a categoria DropNexo para vincular.")
+        if not _categoria_dropnexo_existe(cur, id_tenant, int(id_dropnexo)):
+            raise ValueError("Categoria DropNexo não encontrada.")
+        if id_segmento:
+            _validar_segmento_tenant(cur, id_tenant, int(id_segmento))
+            cur.execute(
+                "UPDATE tbl_categoria SET id_segmento = COALESCE(id_segmento, %s) WHERE id = %s AND id_tenant = %s",
+                (int(id_segmento), int(id_dropnexo), id_tenant),
+            )
+        _vincular_categoria_bling(
+            cur,
+            id_tenant,
+            contexto,
+            id_bling,
+            int(id_dropnexo),
+            meta={
+                "nome": nome_bling,
+                "id_bling_pai": parent_bling,
+                "acao": "vincular",
+                "origem": "integracao_ui",
+            },
+        )
+        estado = obter_estado_mapeamento_categoria(cur, id_tenant, contexto, id_bling)
+        return {"status": estado.get("status"), "id_bling": id_bling, **estado}
+
+    if not id_segmento:
+        raise ValueError("Selecione o segmento para criar a categoria.")
+    _validar_segmento_tenant(cur, id_tenant, int(id_segmento))
+
+    parent_drop = int(id_parent_dropnexo) if id_parent_dropnexo else None
+    if parent_drop is None and parent_bling:
+        parent_drop = _resolver_mapa_categoria_valido(cur, id_tenant, contexto, parent_bling)
+
+    existente = _resolver_mapa_categoria_valido(cur, id_tenant, contexto, id_bling)
+    if existente:
+        from api.bling.sync_categorias import _atualizar_categoria_local
+
+        cur.execute("SELECT nivel FROM tbl_categoria WHERE id = %s", (parent_drop,))
+        row = cur.fetchone()
+        nivel = min(int(row[0] or 1) + 1, 3) if parent_drop and row else 1
+        _atualizar_categoria_local(
+            cur,
+            existente,
+            nome=nome_bling,
+            nivel=nivel,
+            parent_dropnexo=parent_drop,
+            id_segmento=int(id_segmento),
+        )
+        _upsert_mapa_categoria(
+            cur,
+            id_tenant,
+            contexto,
+            id_bling,
+            existente,
+            {
+                "nome": nome_bling,
+                "id_bling_pai": parent_bling,
+                "acao": "criar",
+                "origem": "integracao_ui",
+            },
+        )
+        cat_id = existente
+    else:
+        cat_id = _criar_categoria_do_bling(
+            cur,
+            id_tenant,
+            contexto,
+            id_bling,
+            id_segmento=int(id_segmento),
+            parent_dropnexo=parent_drop,
+            cache_api=cache_api,
+        )
+        if not cat_id:
+            raise ValueError("Não foi possível criar a categoria.")
+        cur.execute(
+            """
+            UPDATE tbl_integracao_map
+            SET meta = meta || %s::jsonb, atualizado_em = NOW()
+            WHERE id_tenant = %s AND provedor = 'bling' AND contexto = %s
+              AND entidade = 'categoria' AND id_bling = %s
+            """,
+            (json.dumps({"acao": "criar", "origem": "integracao_ui"}), id_tenant, contexto, id_bling),
+        )
+
+    estado = obter_estado_mapeamento_categoria(cur, id_tenant, contexto, id_bling)
+    return {"status": estado.get("status"), "id_bling": id_bling, "id_dropnexo": cat_id, **estado}
+
+
+def validar_mapeamento_para_importacao(
+    cur,
+    id_tenant: int,
+    contexto: str,
+    *,
+    ids_categorias_bling: list[str] | None = None,
+    incluir_subcategorias: bool = True,
+) -> dict[str, Any]:
+    from api.bling.sync_categorias import obter_estado_mapeamento_categoria
+
+    ids_escopo = coletar_ids_categoria_bling_do_escopo(
+        id_tenant,
+        ids_categorias_bling=ids_categorias_bling,
+        incluir_subcategorias=incluir_subcategorias,
+    )
+    cache_api: dict[str, dict] = {}
+    pendentes: list[dict[str, Any]] = []
+
+    if not ids_escopo:
+        return {
+            "importacao_liberada": True,
+            "pendentes": [],
+            "total_categorias_escopo": 0,
+            "mensagem": "Nenhuma categoria Bling nos produtos do escopo.",
+        }
+
+    for id_bling in _ordenar_ids_categoria_bling(ids_escopo, cache_api, id_tenant):
+        estado = obter_estado_mapeamento_categoria(cur, id_tenant, contexto, id_bling)
+        st = estado.get("status")
+        if st not in ("mapeada", "ignorada"):
+            cat = _fetch_categoria_bling(id_tenant, id_bling, cache_api)
+            pendentes.append(
+                {
+                    "id_bling": id_bling,
+                    "nome_bling": _nome_categoria_bling(cat, id_bling),
+                    "caminho_bling": _caminho_categoria_bling(id_bling, cache_api, id_tenant),
+                    "motivo": estado.get("motivo") or "nao_mapeada",
+                }
+            )
+
+    ok = len(pendentes) == 0
+    msg = (
+        "Importação liberada."
+        if ok
+        else f"Importação bloqueada: {len(pendentes)} categoria(s) do Bling ainda não mapeada(s). "
+        "Configure em Integrações › Bling › Categorias."
+    )
+    return {
+        "importacao_liberada": ok,
+        "pendentes": pendentes,
+        "total_categorias_escopo": len(ids_escopo),
+        "mensagem": msg,
     }

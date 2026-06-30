@@ -53,6 +53,84 @@ def _buscar_mapa_categoria(cur, id_tenant: int, contexto: str, id_bling: str) ->
     return int(row[0]) if row and row[0] else None
 
 
+def _buscar_mapa_categoria_row(cur, id_tenant: int, contexto: str, id_bling: str) -> tuple[int | None, dict] | None:
+    cur.execute(
+        """
+        SELECT id_dropnexo, meta FROM tbl_integracao_map
+        WHERE id_tenant = %s AND provedor = 'bling' AND contexto = %s
+          AND entidade = 'categoria' AND id_bling = %s
+        """,
+        (id_tenant, contexto, id_bling),
+    )
+    row = cur.fetchone()
+    if not row:
+        return None
+    meta_raw = row[1]
+    if isinstance(meta_raw, dict):
+        meta = meta_raw
+    elif meta_raw:
+        try:
+            meta = json.loads(meta_raw)
+        except Exception:
+            meta = {}
+    else:
+        meta = {}
+    id_drop = int(row[0]) if row[0] else None
+    return id_drop, meta
+
+
+def categoria_bling_ignorada(cur, id_tenant: int, contexto: str, id_bling: str) -> bool:
+    row = _buscar_mapa_categoria_row(cur, id_tenant, contexto, id_bling)
+    if not row:
+        return False
+    _id_drop, meta = row
+    return (meta.get("acao") or "").strip().lower() == "ignorar"
+
+
+def obter_estado_mapeamento_categoria(
+    cur,
+    id_tenant: int,
+    contexto: str,
+    id_bling: str,
+) -> dict[str, Any]:
+    """Estado persistido do mapa: pendente | mapeada | ignorada."""
+    row = _buscar_mapa_categoria_row(cur, id_tenant, contexto, id_bling)
+    if not row:
+        return {"status": "pendente", "acao": None, "id_dropnexo": None, "id_segmento": None}
+
+    id_drop, meta = row
+    acao = (meta.get("acao") or "").strip().lower()
+    if acao == "ignorar":
+        return {"status": "ignorada", "acao": "ignorar", "id_dropnexo": None, "id_segmento": None}
+
+    if id_drop and _categoria_dropnexo_existe(cur, id_tenant, id_drop):
+        cur.execute(
+            "SELECT id_segmento, nome FROM tbl_categoria WHERE id = %s",
+            (int(id_drop),),
+        )
+        cat_row = cur.fetchone()
+        id_seg = int(cat_row[0]) if cat_row and cat_row[0] else None
+        nome_dn = (cat_row[1] or "").strip() if cat_row else ""
+        if not id_seg:
+            return {
+                "status": "pendente",
+                "acao": acao or "vincular",
+                "id_dropnexo": id_drop,
+                "id_segmento": None,
+                "nome_dropnexo": nome_dn,
+                "motivo": "sem_segmento",
+            }
+        return {
+            "status": "mapeada",
+            "acao": acao or "vincular",
+            "id_dropnexo": id_drop,
+            "id_segmento": id_seg,
+            "nome_dropnexo": nome_dn,
+        }
+
+    return {"status": "pendente", "acao": None, "id_dropnexo": None, "id_segmento": None}
+
+
 def _categoria_dropnexo_existe(cur, id_tenant: int, cat_id: int) -> bool:
     cur.execute(
         "SELECT 1 FROM tbl_categoria WHERE id = %s AND id_tenant = %s AND ativo = TRUE",
@@ -239,7 +317,7 @@ def _upsert_mapa_categoria(
     id_tenant: int,
     contexto: str,
     id_bling: str,
-    id_dropnexo: int,
+    id_dropnexo: int | None,
     meta: dict,
 ) -> None:
     cur.execute(

@@ -515,10 +515,6 @@
     if (e.target === modal) fecharModal();
   });
 
-  btnAssociarBling?.addEventListener("click", () =>
-    associarCategoriasBling().catch((e) => alertar(e.message, "error"))
-  );
-
   carregarBlingPendentes();
   carregarSegmentos();
 })();

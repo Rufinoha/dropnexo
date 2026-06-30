@@ -3,7 +3,7 @@
 {% block title %}Bling — Integrações — {{ MARCA_NOME }}{% endblock %}
 {% block topbar_title %}Integração Bling{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('static', filename='style/Cbling_integracao.css') }}?v=10" />
+<link rel="stylesheet" href="{{ url_for('static', filename='style/Cbling_integracao.css') }}?v=11" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal Bl_Wrap">
@@ -49,6 +49,7 @@
     <nav class="Bl_SubTabs" id="bl_subtabs" aria-label="Seções Bling">
       <button type="button" class="Bl_SubTab is-active" data-bl-tab="config">Configurações</button>
       <button type="button" class="Bl_SubTab" data-bl-tab="estoque">Estoque</button>
+      <button type="button" class="Bl_SubTab" data-bl-tab="categorias">Categorias</button>
       <button type="button" class="Bl_SubTab" data-bl-tab="logs">Últimos logs</button>
     </nav>
 
@@ -189,6 +190,33 @@
       </div>
     </div>
 
+    <div id="bl_pane_categorias" hidden>
+      <section class="Bl_CatPanel">
+        <h3 class="Bl_EstoqueBlockTitle">Mapeamento de categorias</h3>
+        <p class="Bl_Hint">
+          Vincule cada categoria do Bling ao DropNexo antes de importar produtos.
+          Escolha o <strong>segmento</strong>, a <strong>ação</strong> e clique em <strong>Salvar</strong>.
+          Use <strong>Não importar</strong> para excluir produtos dessa categoria do Bling.
+        </p>
+        <div class="Bl_CatResumo" id="bl_cat_resumo" hidden role="status"></div>
+        <div class="Bl_DepTblWrap Bl_CatTblWrap">
+          <table class="Bl_DepTbl Bl_CatTbl">
+            <thead>
+              <tr>
+                <th>Bling</th>
+                <th>Segmento</th>
+                <th>Ação</th>
+                <th>DropNexo</th>
+                <th>Status</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="bl_tbl_categorias"><tr><td colspan="6">Carregando…</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
     <div id="bl_pane_logs" hidden>
       <h3>Últimos logs</h3>
       <p class="Bl_Hint">Registro das últimas operações de integração com o Bling.</p>
@@ -198,5 +226,5 @@
 </div>
 {% endblock %}
 {% block page_js %}
-<script src="{{ url_for('static', filename='script/Sbling_integracao.js') }}?v=15"></script>
+<script src="{{ url_for('static', filename='script/Sbling_integracao.js') }}?v=16"></script>
 {% endblock %}

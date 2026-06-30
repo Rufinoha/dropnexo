@@ -11,7 +11,7 @@ from flask import Blueprint, current_app, jsonify, redirect, render_template, re
 
 from api.bling.importacao_progresso import iniciar_importacao_bling_async, obter_progresso_bling
 from api.bling.sync_produtos import importar_produtos
-from api.bling.mapeamento_categorias import aplicar_mapeamento_categorias, pre_analisar_mapeamento_categorias
+from api.bling.mapeamento_categorias import aplicar_mapeamento_categorias, pre_analisar_mapeamento_categorias, validar_mapeamento_para_importacao
 from fornecedor.importacao.erro_traducao import montar_payload_erro
 from fornecedor.parametros.servico_precificacao import aplicar_valor_drop_produto_e_variantes
 from fornecedor.importacao.servico_importacao import (
@@ -803,6 +803,15 @@ def importacao_bling_categorias_pre_analise():
             ids_categorias_bling=ids_categorias_bling,
             incluir_subcategorias=bool(incluir_sub),
         )
+        val = validar_mapeamento_para_importacao(
+            cur,
+            id_tenant,
+            contexto,
+            ids_categorias_bling=ids_categorias_bling,
+            incluir_subcategorias=bool(incluir_sub),
+        )
+        dados["validacao"] = val
+        dados["importacao_liberada"] = val.get("importacao_liberada", False)
         return jsonify(success=True, dados=dados)
     except ValueError as e:
         return jsonify(success=False, message=str(e)), 400
@@ -833,6 +842,20 @@ def importacao_bling_iniciar():
         cur = conn.cursor()
         if not _bling_conectado(cur, id_tenant):
             return jsonify(success=False, message="Conecte o Bling antes de sincronizar."), 400
+
+        val = validar_mapeamento_para_importacao(
+            cur,
+            id_tenant,
+            contexto,
+            ids_categorias_bling=ids_categorias_bling,
+            incluir_subcategorias=incluir_sub,
+        )
+        if not val.get("importacao_liberada"):
+            return jsonify(
+                success=False,
+                message=val.get("mensagem"),
+                validacao=val,
+            ), 400
 
         if confirmar:
             aplicar_mapeamento_categorias(
@@ -908,6 +931,20 @@ def importacao_bling():
         cur = conn.cursor()
         if not _bling_conectado(cur, id_tenant):
             return jsonify(success=False, message="Conecte o Bling antes de sincronizar."), 400
+
+        val = validar_mapeamento_para_importacao(
+            cur,
+            id_tenant,
+            contexto,
+            ids_categorias_bling=ids_categorias_bling,
+            incluir_subcategorias=bool(incluir_sub),
+        )
+        if not val.get("importacao_liberada"):
+            return jsonify(
+                success=False,
+                message=val.get("mensagem"),
+                validacao=val,
+            ), 400
 
         if confirmar_categorias:
             aplicar_mapeamento_categorias(

@@ -465,3 +465,36 @@
   color: #b91c1c;
   background: rgba(185, 28, 28, 0.08);
 }
+
+
+
+
+/* Largura das colunas */
+
+
+#content-area-Principal table th:nth-child(5),
+#content-area-Principal table td:nth-child(5) {
+  width: 160px;
+  text-align: left;
+}
+
+
+#content-area-Principal table th:nth-child(6),
+#content-area-Principal table td:nth-child(6) {
+  width: 60px;
+  text-align: center;
+}
+
+#content-area-Principal table th:nth-child(7),
+#content-area-Principal table td:nth-child(7) {
+  width: 120px;
+  text-align: right;
+}
+
+#content-area-Principal table th:nth-child(8),
+#content-area-Principal table td:nth-child(8),
+#content-area-Principal table th:nth-child(9),
+#content-area-Principal table td:nth-child(9) {
+  width: 100px;
+  text-align: center;
+}

@@ -627,7 +627,7 @@
     const body = await montarBodyBling();
     if (!body) return;
 
-    Swal.fire({ title: "Analisando categorias…", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    Swal.fire({ title: "Verificando categorias…", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
     try {
       const r = await fetch(`${BASE}/integracao/bling/categorias/pre-analise`, {
         method: "POST",
@@ -637,15 +637,26 @@
       });
       const j = await lerJsonResposta(r);
       Swal.close();
-      if (!r.ok || !j.success) throw new Error(j.message || "Falha na pré-análise.");
+      if (!r.ok || !j.success) throw new Error(j.message || "Falha na verificação.");
 
       const dados = j.dados || {};
-      if (dados.exibir_modal) {
-        const escolhas = await abrirModalMapeamentoCategorias(dados);
-        if (!escolhas) return;
-        body.confirmar_categorias = true;
-        body.decisoes_categorias = escolhas.decisoes;
-        body.correcoes_match = escolhas.correcoes;
+      const val = dados.validacao || {};
+      if (!val.importacao_liberada) {
+        const lista = (val.pendentes || [])
+          .slice(0, 10)
+          .map((p) => esc(p.caminho_bling || p.nome_bling))
+          .join("<br>");
+        const extra = (val.pendentes || []).length > 10 ? "<br>…" : "";
+        await Swal.fire({
+          icon: "warning",
+          title: "Categorias não mapeadas",
+          html:
+            `${esc(val.mensagem || "Conclua o mapeamento antes de importar.")}` +
+            (lista ? `<br><br><small>${lista}${extra}</small>` : "") +
+            `<br><br><a href="/integracoes/bling?aba=categorias" style="color:#021F81;font-weight:600">Abrir Integrações › Bling › Categorias</a>`,
+          confirmButtonColor: "#021F81",
+        });
+        return;
       }
 
       await executarImportacaoBling(body, Number(dados.total_produtos_escopo || 0));

@@ -697,6 +697,12 @@ def _processar_item_produto(
         if not id_cat_bling or id_cat_bling not in ids_categoria_filtro:
             return "ignorado_filtro", None
 
+    if id_cat_bling:
+        from api.bling.sync_categorias import categoria_bling_ignorada
+
+        if categoria_bling_ignorada(cur, id_tenant, contexto, id_cat_bling):
+            return "ignorado_categoria", None
+
     id_categoria_drop = None
     if id_cat_bling:
         id_categoria_drop = garantir_categoria_bling(
@@ -787,6 +793,12 @@ def _processar_grupo_variacoes(
     if ids_categoria_filtro is not None:
         if not id_cat_bling or id_cat_bling not in ids_categoria_filtro:
             return "ignorado_filtro", None
+
+    if id_cat_bling:
+        from api.bling.sync_categorias import categoria_bling_ignorada
+
+        if categoria_bling_ignorada(cur, id_tenant, contexto, id_cat_bling):
+            return "ignorado_categoria", None
 
     id_categoria_drop = None
     if id_cat_bling:
@@ -1069,7 +1081,7 @@ def importar_produtos(
                 importados += 1
             elif resultado == "atualizado":
                 atualizados += 1
-            elif resultado == "ignorado_filtro":
+            elif resultado in ("ignorado_filtro", "ignorado_categoria"):
                 ignorados += 1
         except Exception as e:
             _rollback_savepoint(cur, _SAVEPOINT_PRODUTO)
