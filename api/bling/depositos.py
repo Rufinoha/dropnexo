@@ -343,16 +343,63 @@ def resumo_depositos_bling(cur, id_tenant: int) -> dict:
     """
     from api.bling.sync_estoque import sincronizar_depositos_tenant
 
-    n_mapa = sincronizar_depositos_tenant(cur, id_tenant)
+    try:
+        sincronizar_depositos_tenant(cur, id_tenant)
+    except Exception:
+        pass
     mapa = listar_mapa_depositos(cur, id_tenant)
     vinculados = sum(1 for m in mapa if m.get("id_deposito_dropnexo"))
     pendentes = len(mapa) - vinculados
     return {
-        "mapa": n_mapa,
+        "mapa": len(mapa),
         "vinculados": vinculados,
         "criados": 0,
         "pendentes": pendentes,
     }
+
+
+def _depositos_ui_from_mapa(mapa: list[dict]) -> list[dict]:
+    """Fallback quando a API Bling está indisponível — usa nomes já salvos no mapa local."""
+    out: list[dict] = []
+    vistos: set[str] = set()
+    for m in mapa:
+        bid = str(m.get("id_bling_deposito") or "").strip()
+        if not bid or bid in vistos:
+            continue
+        vistos.add(bid)
+        nome = (m.get("nome_bling") or bid).strip()
+        out.append({"id": bid, "descricao": nome, "nome": nome})
+    return out
+
+
+def carregar_depositos_bling_ui(cur, id_tenant: int) -> tuple[list[dict], list[dict], str | None]:
+    """
+    Lista depósitos para a tela de pareamento.
+    Retorna (mapa_enriquecido, depositos_bling, aviso_api ou None).
+    """
+    from api.bling.cliente import listar_depositos_bling
+
+    mapa = listar_mapa_depositos(cur, id_tenant)
+    aviso: str | None = None
+    bling_deps: list[dict] = []
+    try:
+        bling_deps = listar_depositos_bling(id_tenant)
+        sincronizar_depositos_bling_api(cur, id_tenant, bling_deps)
+        mapa = listar_mapa_depositos(cur, id_tenant)
+    except Exception as exc:
+        aviso = str(exc)[:240]
+        bling_deps = _depositos_ui_from_mapa(mapa)
+        if not bling_deps:
+            raise
+
+    mapa_enriquecido: list[dict] = []
+    for m in mapa:
+        item = dict(m)
+        job = obter_job_sync_ativo_deposito(cur, id_tenant, str(m.get("id_bling_deposito") or ""))
+        if job:
+            item["sync_job"] = job
+        mapa_enriquecido.append(item)
+    return mapa_enriquecido, bling_deps, aviso
 
 
 def garantir_depositos_bling_vinculados(cur, id_tenant: int) -> dict:

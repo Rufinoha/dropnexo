@@ -642,14 +642,10 @@ def api_depositos_bling():
         if not row or row[0] != "conectado":
             return jsonify(success=False, message="Conecte o Bling antes."), 400
 
-        from api.bling.depositos import listar_mapa_depositos
-        from api.bling.sync_estoque import sincronizar_depositos_tenant
-        from api.bling.cliente import listar_depositos_bling
+        from api.bling.depositos import carregar_depositos_bling_ui
 
-        sincronizar_depositos_tenant(cur, int(id_tenant))
+        mapa_enriquecido, bling_deps, aviso_bling = carregar_depositos_bling_ui(cur, int(id_tenant))
         conn.commit()
-        mapa = listar_mapa_depositos(cur, int(id_tenant))
-        bling_deps = listar_depositos_bling(int(id_tenant))
         cur.execute(
             """
             SELECT id, nome FROM tbl_deposito_expedicao
@@ -658,20 +654,12 @@ def api_depositos_bling():
             (id_tenant,),
         )
         drop_deps = [{"id": r[0], "nome": r[1]} for r in cur.fetchall()]
-        from api.bling.depositos import obter_job_sync_ativo_deposito
-
-        mapa_enriquecido = []
-        for m in mapa:
-            item = dict(m)
-            job = obter_job_sync_ativo_deposito(cur, int(id_tenant), str(m.get("id_bling_deposito") or ""))
-            if job:
-                item["sync_job"] = job
-            mapa_enriquecido.append(item)
         return jsonify(
             success=True,
             mapa=mapa_enriquecido,
             depositos_bling=bling_deps,
             depositos_dropnexo=drop_deps,
+            aviso_bling=aviso_bling,
         )
     except Exception as e:
         conn.rollback()

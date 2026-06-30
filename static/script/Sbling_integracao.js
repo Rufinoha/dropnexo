@@ -255,6 +255,23 @@
       tbody.innerHTML = `<tr><td colspan="4">${j.message || "Erro ao carregar depósitos."}</td></tr>`;
       return;
     }
+    const avisoBling = j.aviso_bling || "";
+    const painelDep = document.getElementById("bl_painel_depositos");
+    let avisoEl = document.getElementById("bl_dep_aviso_bling");
+    if (avisoBling && painelDep) {
+      if (!avisoEl) {
+        avisoEl = document.createElement("div");
+        avisoEl.id = "bl_dep_aviso_bling";
+        avisoEl.className = "Bl_SyncAlert";
+        avisoEl.setAttribute("role", "alert");
+        painelDep.insertBefore(avisoEl, painelDep.querySelector(".Bl_DepTblWrap"));
+      }
+      avisoEl.textContent =
+        "Lista do Bling temporariamente indisponível — exibindo depósitos já conhecidos. Tente atualizar a página em alguns minutos.";
+      avisoEl.hidden = false;
+    } else if (avisoEl) {
+      avisoEl.hidden = true;
+    }
     const dropOpts = (j.depositos_dropnexo || [])
       .map((d) => `<option value="${d.id}">${d.nome}</option>`)
       .join("");
