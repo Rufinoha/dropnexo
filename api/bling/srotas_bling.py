@@ -668,12 +668,44 @@ def api_categorias_bling_mapeamento():
         row = cur.fetchone()
         if not row or row[0] != "conectado":
             return jsonify(success=False, message="Conecte o Bling antes de mapear categorias."), 400
-        dados = listar_painel_categorias_bling(cur, int(id_tenant), contexto)
+
+        from api.bling.categorias_sync_progresso import iniciar_carregar_painel_categorias
+        from api.bling.sync_categorias import (
+            PAINEL_ENRIQUECER_ASYNC_MIN,
+            cache_categorias_precisa_enriquecer,
+            carregar_mapa_categorias_bling_listagem,
+        )
+
+        id_tenant_int = int(id_tenant)
+        cache = carregar_mapa_categorias_bling_listagem(id_tenant_int)
+        if cache_categorias_precisa_enriquecer(cache) and len(cache) >= PAINEL_ENRIQUECER_ASYNC_MIN:
+            job_id = iniciar_carregar_painel_categorias(
+                current_app._get_current_object(),
+                id_tenant=id_tenant_int,
+                contexto=contexto,
+            )
+            return jsonify(success=True, carregamento_async=True, sync_job_id=job_id, total=len(cache))
+
+        dados = listar_painel_categorias_bling(cur, id_tenant_int, contexto)
         return jsonify(success=True, dados=dados)
     except Exception as e:
         return jsonify(success=False, message=str(e)), 500
     finally:
         conn.close()
+
+
+@bling_bp.get("/api/integracoes/bling/categorias/mapeamento-job/<job_id>")
+@login_obrigatorio()
+def api_categorias_bling_mapeamento_job(job_id: str):
+    if not _pode_bling_sync():
+        return jsonify(success=False, message="Sem permissão."), 403
+    from api.bling.categorias_sync_progresso import obter_job_painel_categorias
+
+    id_tenant = session.get("id_tenant")
+    job = obter_job_painel_categorias(job_id, int(id_tenant))
+    if not job:
+        return jsonify(success=False, message="Job não encontrado."), 404
+    return jsonify(success=True, job=job)
 
 
 @bling_bp.post("/api/integracoes/bling/categorias/salvar")
@@ -793,6 +825,42 @@ def api_categorias_sync_progresso(job_id: str):
     if not job:
         return jsonify(success=False, message="Job não encontrado."), 404
     return jsonify(success=True, progresso=job)
+
+
+@bling_bp.post("/api/integracoes/bling/categorias/reparar-hierarquia")
+@login_obrigatorio()
+def api_categorias_bling_reparar_hierarquia():
+    """Reorganiza parent_id das categorias já mapeadas conforme árvore Bling."""
+    if not _pode_bling_sync():
+        return jsonify(success=False, message="Sem permissão."), 403
+
+    body = request.get_json(silent=True) or {}
+    contexto = (body.get("contexto") or "fornecedor").strip()
+    if contexto not in ("fornecedor", "vendedor"):
+        return jsonify(success=False, message="Contexto inválido."), 400
+
+    id_tenant = session.get("id_tenant")
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT status FROM tbl_integracao_bling WHERE id_tenant = %s",
+            (id_tenant,),
+        )
+        row = cur.fetchone()
+        if not row or row[0] != "conectado":
+            return jsonify(success=False, message="Conecte o Bling antes de reorganizar categorias."), 400
+    finally:
+        conn.close()
+
+    from api.bling.categorias_sync_progresso import iniciar_reparar_hierarquia_categorias
+
+    job_id = iniciar_reparar_hierarquia_categorias(
+        current_app._get_current_object(),
+        id_tenant=int(id_tenant),
+        contexto=contexto,
+    )
+    return jsonify(success=True, sync_job_id=job_id)
 
 
 @bling_bp.post("/api/integracoes/bling/categorias/validar-importacao")

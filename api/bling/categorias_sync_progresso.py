@@ -16,6 +16,7 @@ from global_utils import Var_ConectarBanco, agora_utc
 _log = logging.getLogger(__name__)
 _lock = threading.Lock()
 _jobs_memoria: dict[str, dict[str, Any]] = {}
+_painel_jobs: dict[str, dict[str, Any]] = {}
 _USE_DB: bool | None = None
 
 
@@ -134,7 +135,19 @@ def iniciar_salvar_categorias_lote(
         with app.app_context():
             conn = Var_ConectarBanco()
             try:
-                cache = carregar_mapa_categorias_bling_listagem(id_tenant)
+                from api.bling.sync_categorias import (
+                    carregar_mapa_categorias_bling_listagem,
+                    obter_cache_categorias_bling_enriquecido,
+                )
+
+                def _progresso_prep(p: dict[str, int | str]) -> None:
+                    _atualizar_job(job_id, **p)
+
+                cache = obter_cache_categorias_bling_enriquecido(
+                    id_tenant,
+                    cache_api=carregar_mapa_categorias_bling_listagem(id_tenant),
+                    on_progresso=_progresso_prep,
+                )
                 _atualizar_job(job_id, mensagem="Iniciando…", total=len(acoes or []))
 
                 cur = conn.cursor()
@@ -193,6 +206,173 @@ def iniciar_salvar_categorias_lote(
         name=f"bling-cat-{job_id[:8]}",
     ).start()
     return job_id
+
+
+def iniciar_reparar_hierarquia_categorias(
+    app: Flask,
+    *,
+    id_tenant: int,
+    contexto: str,
+) -> str:
+    job_id = str(uuid.uuid4())
+    _atualizar_job(
+        job_id,
+        status="processando",
+        id_tenant=id_tenant,
+        total=0,
+        processados=0,
+        sincronizados=0,
+        falhas=0,
+        mensagem="Iniciando reparo…",
+        resumo=json.dumps({"tipo": "categorias_reparo_hierarquia"}, ensure_ascii=False),
+    )
+
+    def _worker() -> None:
+        with app.app_context():
+            conn = Var_ConectarBanco()
+            try:
+                from api.bling.sync_categorias import reparar_hierarquia_categorias_mapeadas
+
+                cur = conn.cursor()
+
+                def _progresso(p: dict[str, int | str]) -> None:
+                    _atualizar_job(job_id, **p)
+
+                resultado = reparar_hierarquia_categorias_mapeadas(
+                    cur,
+                    id_tenant,
+                    contexto,
+                    on_progresso=_progresso,
+                )
+                conn.commit()
+
+                falhas = int(resultado.get("falhas") or 0)
+                ok = int(resultado.get("sincronizados") or 0)
+                msg = resultado.get("mensagem") or f"{ok} categoria(s) reorganizada(s)."
+                _atualizar_job(
+                    job_id,
+                    status="concluido" if ok or not falhas else "erro",
+                    total=int(resultado.get("total") or 0),
+                    processados=int(resultado.get("processados") or 0),
+                    sincronizados=ok,
+                    falhas=falhas,
+                    mensagem=msg,
+                    resumo=json.dumps(
+                        {"tipo": "categorias_reparo_hierarquia", "erros": (resultado.get("erros") or [])[:10]},
+                        ensure_ascii=False,
+                    )[:500],
+                )
+            except Exception as e:
+                conn.rollback()
+                _log.exception("Reparo hierarquia categorias tenant=%s", id_tenant)
+                _atualizar_job(job_id, status="erro", mensagem=str(e)[:300])
+            finally:
+                conn.close()
+
+    threading.Thread(
+        target=_worker,
+        daemon=True,
+        name=f"bling-cat-fix-{job_id[:8]}",
+    ).start()
+    return job_id
+
+
+def iniciar_carregar_painel_categorias(
+    app: Flask,
+    *,
+    id_tenant: int,
+    contexto: str,
+) -> str:
+    job_id = str(uuid.uuid4())
+    with _lock:
+        _painel_jobs[job_id] = {
+            "status": "processando",
+            "id_tenant": id_tenant,
+            "contexto": contexto,
+            "total": 0,
+            "processados": 0,
+            "mensagem": "Carregando categorias do Bling…",
+        }
+
+    def _atualizar_painel(**kwargs) -> None:
+        with _lock:
+            job = dict(_painel_jobs.get(job_id) or {})
+            job.update(kwargs)
+            _painel_jobs[job_id] = job
+
+    def _worker() -> None:
+        with app.app_context():
+            conn = Var_ConectarBanco()
+            try:
+                from api.bling.mapeamento_categorias import listar_painel_categorias_bling
+                from api.bling.sync_categorias import (
+                    carregar_mapa_categorias_bling_listagem,
+                    cache_categorias_precisa_enriquecer,
+                    obter_cache_categorias_bling_enriquecido,
+                )
+
+                cache = carregar_mapa_categorias_bling_listagem(id_tenant)
+                total = len(cache)
+                _atualizar_painel(total=total, mensagem="Consultando hierarquia no Bling…")
+
+                if cache_categorias_precisa_enriquecer(cache):
+
+                    def _prog(p: dict[str, int | str]) -> None:
+                        _atualizar_painel(
+                            total=int(p.get("total") or total),
+                            processados=int(p.get("processados") or 0),
+                            mensagem=str(p.get("mensagem") or ""),
+                        )
+
+                    cache = obter_cache_categorias_bling_enriquecido(
+                        id_tenant,
+                        cache_api=cache,
+                        on_progresso=_prog,
+                    )
+
+                cur = conn.cursor()
+                dados = listar_painel_categorias_bling(
+                    cur,
+                    id_tenant,
+                    contexto,
+                    cache_api=cache,
+                    cache_enriquecido=True,
+                )
+                _atualizar_painel(
+                    status="concluido",
+                    processados=total,
+                    total=total,
+                    mensagem=f"{len(dados.get('categorias') or [])} categorias carregadas.",
+                    dados=dados,
+                )
+            except Exception as e:
+                _log.exception("Carregar painel categorias tenant=%s", id_tenant)
+                _atualizar_painel(status="erro", mensagem=str(e)[:300])
+            finally:
+                conn.close()
+
+    threading.Thread(
+        target=_worker,
+        daemon=True,
+        name=f"bling-cat-panel-{job_id[:8]}",
+    ).start()
+    return job_id
+
+
+def obter_job_painel_categorias(job_id: str, id_tenant: int) -> dict[str, Any] | None:
+    with _lock:
+        job = _painel_jobs.get(job_id)
+    if not job or int(job.get("id_tenant") or 0) != int(id_tenant):
+        return None
+    out: dict[str, Any] = {
+        "status": job.get("status") or "processando",
+        "total": int(job.get("total") or 0),
+        "processados": int(job.get("processados") or 0),
+        "mensagem": job.get("mensagem") or "",
+    }
+    if job.get("status") == "concluido" and job.get("dados"):
+        out["dados"] = job["dados"]
+    return out
 
 
 def _ler_job_db(job_id: str, id_tenant: int) -> dict[str, Any] | None:

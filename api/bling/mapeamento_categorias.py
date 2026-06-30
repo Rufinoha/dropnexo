@@ -396,10 +396,19 @@ def _validar_segmento_tenant(cur, id_tenant: int, id_segmento: int) -> None:
         raise ValueError("Segmento inválido para esta conta.")
 
 
-def listar_painel_categorias_bling(cur, id_tenant: int, contexto: str) -> dict[str, Any]:
+def listar_painel_categorias_bling(
+    cur,
+    id_tenant: int,
+    contexto: str,
+    *,
+    cache_api: dict[str, dict] | None = None,
+    cache_enriquecido: bool = False,
+    on_progresso=None,
+) -> dict[str, Any]:
     from api.bling.sync_categorias import (
         carregar_mapa_categorias_bling_listagem,
         listar_categorias_bling_flat,
+        obter_cache_categorias_bling_enriquecido,
         obter_estado_mapeamento_categoria,
         _caminho_categoria_bling_local,
         _id_pai_bling,
@@ -407,7 +416,19 @@ def listar_painel_categorias_bling(cur, id_tenant: int, contexto: str) -> dict[s
     )
     from fornecedor.segmentos.servico_segmentos import ids_segmentos_fornecedor
 
-    cache_api = carregar_mapa_categorias_bling_listagem(id_tenant)
+    if cache_enriquecido and cache_api is not None:
+        cache_api = dict(cache_api)
+    elif cache_api is not None:
+        cache_api = obter_cache_categorias_bling_enriquecido(
+            id_tenant,
+            cache_api=cache_api,
+            on_progresso=on_progresso,
+        )
+    else:
+        cache_api = obter_cache_categorias_bling_enriquecido(
+            id_tenant,
+            on_progresso=on_progresso,
+        )
     bling_flat = listar_categorias_bling_flat(id_tenant, by_id=cache_api)
     drop = listar_categorias_dropnexo_tenant(cur, id_tenant)
     cur.execute(
@@ -503,7 +524,11 @@ def salvar_mapeamento_categoria_ui(
     if acao not in ("vincular", "criar", "ignorar"):
         raise ValueError("Ação inválida. Use vincular, criar ou ignorar.")
 
-    cache: dict[str, dict] = cache_api if cache_api is not None else {}
+    cache: dict[str, dict] = dict(cache_api) if cache_api is not None else {}
+    if not cache:
+        from api.bling.sync_categorias import obter_cache_categorias_bling_enriquecido
+
+        cache = obter_cache_categorias_bling_enriquecido(id_tenant)
     cat = cache.get(id_bling) or _fetch_categoria_bling(id_tenant, id_bling, cache)
     nome_bling = _nome_categoria_bling(cat, id_bling)
     parent_bling = _id_pai_bling(cat)
@@ -584,11 +609,15 @@ def processar_lote_mapeamento_categorias_ui(
 
     from api.bling.sync_categorias import (
         _ordenar_ids_categoria_bling,
-        carregar_mapa_categorias_bling_listagem,
+        obter_cache_categorias_bling_enriquecido,
     )
     from api.bling.sync_estoque import BLING_INTERVALO_SYNC_SEG, BLING_SYNC_MAX_TENTATIVAS
 
-    cache = dict(cache_api) if cache_api is not None else carregar_mapa_categorias_bling_listagem(id_tenant)
+    cache = obter_cache_categorias_bling_enriquecido(
+        id_tenant,
+        cache_api=cache_api,
+        on_progresso=on_progresso,
+    )
 
     normalizadas: list[dict[str, Any]] = []
     for raw in acoes or []:

@@ -457,12 +457,76 @@ def _upsert_mapa_categoria(
 
 def _id_pai_bling(cat: dict) -> str | None:
     pai = cat.get("categoriaPai")
-    if not isinstance(pai, dict):
+    if pai is None:
+        pai = cat.get("idCategoriaPai") or cat.get("categoria_pai") or cat.get("id_categoria_pai")
+    if isinstance(pai, dict):
+        pid = str(pai.get("id") or "").strip()
+    elif pai is not None and pai != "":
+        pid = str(pai).strip()
+    else:
         return None
-    pid = str(pai.get("id") or "").strip()
     if not pid or pid == "0":
         return None
     return pid
+
+
+def _cache_precisa_detalhe_pai(cat: dict) -> bool:
+    if not cat:
+        return True
+    if "categoriaPai" in cat or "idCategoriaPai" in cat or "categoria_pai" in cat:
+        return False
+    return True
+
+
+def enriquecer_cache_pais_categorias_bling(
+    id_tenant: int,
+    cache: dict[str, dict],
+    *,
+    on_progresso=None,
+) -> int:
+    """Completa categoriaPai via GET quando a listagem não trouxe hierarquia."""
+    import time
+
+    from api.bling.cliente import obter_categoria_produto
+    from api.bling.sync_estoque import BLING_INTERVALO_SYNC_SEG, BLING_SYNC_MAX_TENTATIVAS
+
+    com_pai = sum(1 for c in cache.values() if _id_pai_bling(c))
+    if com_pai == 0 and len(cache) > 1:
+        ids = list(cache.keys())
+    else:
+        ids = [cid for cid, cat in cache.items() if _cache_precisa_detalhe_pai(cat)]
+
+    total = len(ids)
+    if not total:
+        return 0
+
+    for i, cid in enumerate(ids):
+        ultimo_erro: Exception | None = None
+        for tentativa in range(BLING_SYNC_MAX_TENTATIVAS):
+            try:
+                det = obter_categoria_produto(id_tenant, cid)
+                if det:
+                    cache[cid] = {**(cache.get(cid) or {}), **det}
+                ultimo_erro = None
+                break
+            except Exception as exc:
+                ultimo_erro = exc
+                msg = str(exc).lower()
+                if "limite" in msg or "too_many" in msg or "429" in msg:
+                    time.sleep(min(8.0, 1.5 * (tentativa + 1)))
+                    continue
+                break
+        if ultimo_erro:
+            _log = __import__("logging").getLogger(__name__)
+            _log.warning("Falha ao enriquecer categoria Bling %s: %s", cid, ultimo_erro)
+        if on_progresso:
+            on_progresso(
+                total=total,
+                processados=i + 1,
+                mensagem=f"Consultando hierarquia Bling ({i + 1}/{total})…",
+            )
+        time.sleep(BLING_INTERVALO_SYNC_SEG)
+    return total
 
 
 def _atualizar_categoria_local(
@@ -696,6 +760,30 @@ def associar_segmento_categorias_bling(
     return int(cur.rowcount or 0)
 
 
+def cache_categorias_precisa_enriquecer(cache: dict[str, dict]) -> bool:
+    """Listagem Bling sem nenhum pai indica hierarquia incompleta."""
+    if len(cache) <= 1:
+        return False
+    com_pai = sum(1 for c in cache.values() if _id_pai_bling(c))
+    return com_pai == 0
+
+
+PAINEL_ENRIQUECER_ASYNC_MIN = 12
+
+
+def obter_cache_categorias_bling_enriquecido(
+    id_tenant: int,
+    *,
+    cache_api: dict[str, dict] | None = None,
+    on_progresso=None,
+) -> dict[str, dict]:
+    """Carrega listagem e completa categoriaPai via GET quando necessário."""
+    cache = dict(cache_api) if cache_api is not None else carregar_mapa_categorias_bling_listagem(id_tenant)
+    if cache_categorias_precisa_enriquecer(cache):
+        enriquecer_cache_pais_categorias_bling(id_tenant, cache, on_progresso=on_progresso)
+    return cache
+
+
 def carregar_mapa_categorias_bling_listagem(id_tenant: int) -> dict[str, dict]:
     """Mapa id → categoria a partir da listagem paginada Bling (1 req/página)."""
     todas: list[dict] = []
@@ -715,6 +803,152 @@ def carregar_mapa_categorias_bling_listagem(id_tenant: int) -> dict[str, dict]:
         if cid:
             by_id[cid] = c
     return by_id
+
+
+def reparar_hierarquia_categorias_mapeadas(
+    cur,
+    id_tenant: int,
+    contexto: str,
+    *,
+    on_progresso=None,
+    cache_api: dict[str, dict] | None = None,
+) -> dict[str, Any]:
+    """Reorganiza parent_id/nivel das categorias já mapeadas conforme árvore Bling."""
+    cache = dict(cache_api) if cache_api is not None else carregar_mapa_categorias_bling_listagem(id_tenant)
+
+    def _emit(**kwargs) -> None:
+        if on_progresso:
+            on_progresso(kwargs)
+
+    _emit(total=0, processados=0, sincronizados=0, falhas=0, mensagem="Consultando hierarquia no Bling…")
+    enriquecer_cache_pais_categorias_bling(id_tenant, cache, on_progresso=_emit)
+
+    cur.execute(
+        """
+        SELECT id_bling, id_dropnexo
+        FROM tbl_integracao_map
+        WHERE id_tenant = %s AND provedor = 'bling' AND contexto = %s
+          AND entidade = 'categoria' AND id_dropnexo IS NOT NULL
+        """,
+        (id_tenant, contexto),
+    )
+    bling_to_drop: dict[str, int] = {str(r[0]): int(r[1]) for r in cur.fetchall() if r[0] and r[1]}
+    if not bling_to_drop:
+        return {
+            "total": 0,
+            "processados": 0,
+            "sincronizados": 0,
+            "falhas": 0,
+            "erros": [],
+            "mensagem": "Nenhuma categoria mapeada encontrada.",
+        }
+
+    ordenados = _ordenar_ids_categoria_bling(set(bling_to_drop.keys()), cache, id_tenant)
+    total = len(ordenados)
+    processados = atualizados = falhas = 0
+    erros: list[str] = []
+
+    for id_bling in ordenados:
+        id_drop = bling_to_drop[id_bling]
+        cat = _fetch_categoria_bling(id_tenant, id_bling, cache)
+        nome = _nome_categoria_bling(cat, id_bling)
+        parent_bling = _id_pai_bling(cat)
+        parent_drop: int | None = None
+
+        if parent_bling:
+            parent_drop = bling_to_drop.get(parent_bling)
+            if not parent_drop:
+                cur.execute(
+                    "SELECT id_segmento FROM tbl_categoria WHERE id = %s AND id_tenant = %s",
+                    (id_drop, id_tenant),
+                )
+                seg_row = cur.fetchone()
+                id_seg = int(seg_row[0]) if seg_row and seg_row[0] else None
+                if id_seg:
+                    try:
+                        parent_drop = criar_categoria_bling_com_arvore(
+                            cur,
+                            id_tenant,
+                            contexto,
+                            parent_bling,
+                            id_segmento=id_seg,
+                            cache_api=cache,
+                        )
+                        bling_to_drop[parent_bling] = parent_drop
+                    except Exception as exc:
+                        erros.append(f"{nome}: pai Bling não resolvido ({exc})")
+
+        cur.execute(
+            """
+            SELECT nome, id_segmento, parent_id, nivel
+            FROM tbl_categoria WHERE id = %s AND id_tenant = %s
+            """,
+            (id_drop, id_tenant),
+        )
+        row = cur.fetchone()
+        if not row:
+            falhas += 1
+            processados += 1
+            _emit(
+                total=total,
+                processados=processados,
+                sincronizados=atualizados,
+                falhas=falhas,
+                mensagem=f"Reorganizando {processados}/{total}",
+            )
+            continue
+
+        nome_db, id_seg, pid_atual, nivel_atual = row[0], row[1], row[2], row[3]
+        nivel = 1
+        if parent_drop:
+            cur.execute("SELECT nivel FROM tbl_categoria WHERE id = %s", (parent_drop,))
+            pr = cur.fetchone()
+            nivel = min(int(pr[0] or 1) + 1, MAX_NIVEL) if pr else 2
+
+        pid_novo = int(parent_drop) if parent_drop else None
+        pid_atual_n = int(pid_atual) if pid_atual else None
+
+        if pid_atual_n != pid_novo or int(nivel_atual or 1) != nivel:
+            _atualizar_categoria_local(
+                cur,
+                id_drop,
+                nome=nome_db or nome,
+                nivel=nivel,
+                parent_dropnexo=pid_novo,
+                id_segmento=int(id_seg) if id_seg else None,
+            )
+            _upsert_mapa_categoria(
+                cur,
+                id_tenant,
+                contexto,
+                id_bling,
+                id_drop,
+                {
+                    "nome": nome,
+                    "id_bling_pai": parent_bling,
+                    "acao": "criar",
+                    "origem": "reparo_hierarquia",
+                },
+            )
+            atualizados += 1
+
+        processados += 1
+        _emit(
+            total=total,
+            processados=processados,
+            sincronizados=atualizados,
+            falhas=falhas,
+            mensagem=f"Reorganizando {processados}/{total}",
+        )
+
+    return {
+        "total": total,
+        "processados": processados,
+        "sincronizados": atualizados,
+        "falhas": falhas,
+        "erros": erros[:20],
+        "mensagem": f"{atualizados} categoria(s) reorganizada(s).",
+    }
 
 
 def listar_categorias_bling_flat(

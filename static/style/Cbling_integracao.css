@@ -685,6 +685,13 @@
 
 .Bl_CatPanel { margin-top: 0.5rem; }
 
+.Bl_CatToolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 10px;
+}
+
 .Bl_CatResumo {
   margin: 0 0 12px;
   padding: 10px 14px;
@@ -801,10 +808,25 @@
 
 .Bl_CatTbl td { vertical-align: middle; }
 
+.Bl_CatNomeWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
 .Bl_CatNomeBling {
   font-size: 0.85rem;
   line-height: 1.35;
   white-space: nowrap;
+}
+
+.Bl_CatCaminho {
+  display: block;
+  font-size: 0.72rem;
+  line-height: 1.3;
+  color: #64748b;
+  white-space: normal;
 }
 
 .Bl_CatBadge {

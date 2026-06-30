@@ -444,6 +444,67 @@
     }
   }
 
+  async function repararHierarquiaCategorias() {
+    const ctx = estado.contexto_modulo || "fornecedor";
+    const ok = await Swal.fire({
+      icon: "question",
+      title: "Reorganizar hierarquia?",
+      html:
+        "<p>Corrige pais e filhos das categorias já mapeadas conforme a árvore do Bling.</p>" +
+        "<p><small>Use se as categorias foram criadas todas no nível raiz.</small></p>",
+      showCancelButton: true,
+      confirmButtonText: "Reorganizar",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#021F81",
+    });
+    if (!ok.isConfirmed) return;
+
+    const btn = document.getElementById("bl_cat_btn_reparar");
+    if (btn) btn.disabled = true;
+
+    Swal.fire({
+      title: "Reorganizando hierarquia…",
+      html: htmlProgSync("Iniciando…"),
+      allowOutsideClick: false,
+      showConfirmButton: false,
+      didOpen: () => Swal.showLoading(),
+    });
+
+    try {
+      const resp = await fetch("/api/integracoes/bling/categorias/reparar-hierarquia", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contexto: ctx }),
+      });
+      const jj = await resp.json();
+      if (!resp.ok || !jj.success) throw new Error(jj.message || "Erro ao iniciar reparo.");
+
+      const resultado = await pollSyncCategorias(jj.sync_job_id, (p) => {
+        const bar = Swal.getHtmlContainer()?.querySelector(".Bl_DepProgBar");
+        const label = Swal.getHtmlContainer()?.querySelector(".Bl_DepProgLabel");
+        const pct = pctSync(p);
+        if (bar) bar.style.width = `${pct}%`;
+        if (label) {
+          label.textContent = p.mensagem || `Processados ${p.processados || 0}/${p.total || "?"}`;
+        }
+      });
+
+      Swal.close();
+      await carregarCategorias();
+      await Swal.fire({
+        icon: "success",
+        title: "Hierarquia reorganizada",
+        text: resultado.mensagem || "Concluído.",
+        confirmButtonColor: "#021F81",
+      });
+    } catch (e) {
+      Swal.close();
+      Swal.fire({ icon: "error", title: "Erro", text: e.message, confirmButtonColor: "#021F81" });
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
   function bindBulkCategoriasOnce() {
     if (catBulkBound) return;
     catBulkBound = true;
@@ -466,6 +527,11 @@
     document.getElementById("bl_cat_btn_aplicar")?.addEventListener("click", aplicarBulkCategorias);
     document.getElementById("bl_cat_btn_salvar_sel")?.addEventListener("click", () => {
       salvarCategoriasSelecionadas().catch((e) => {
+        Swal.fire({ icon: "error", title: "Erro", text: e.message, confirmButtonColor: "#021F81" });
+      });
+    });
+    document.getElementById("bl_cat_btn_reparar")?.addEventListener("click", () => {
+      repararHierarquiaCategorias().catch((e) => {
         Swal.fire({ icon: "error", title: "Erro", text: e.message, confirmButtonColor: "#021F81" });
       });
     });
@@ -522,7 +588,7 @@
       `<div class="Bl_CatLoading" role="status" aria-live="polite" aria-busy="true">` +
       `<div class="Bl_CatSpinner" aria-hidden="true"></div>` +
       `<span class="Bl_CatLoadingText">Buscando categorias no Bling…</span>` +
-      `<span class="Bl_CatLoadingSub">Isso pode levar alguns segundos se houver muitas categorias.</span>` +
+      `<span class="Bl_CatLoadingSub">Carregando árvore completa (pais e filhos) para mapear corretamente.</span>` +
       `</div></td></tr>${skels}`
     );
   }
@@ -550,20 +616,69 @@
     document.getElementById("bl_cat_chk_all")?.removeAttribute("disabled");
   }
 
-  async function carregarCategorias() {
+  function atualizarLoadingCategorias(mensagem, sub) {
+    const row = document.querySelector(".Bl_CatLoadingRow .Bl_CatLoadingText");
+    const subEl = document.querySelector(".Bl_CatLoadingRow .Bl_CatLoadingSub");
+    if (row && mensagem) row.textContent = mensagem;
+    if (subEl && sub) subEl.textContent = sub;
+    const resumo = document.getElementById("bl_cat_resumo");
+    if (resumo && mensagem) resumo.textContent = mensagem;
+  }
+
+  function pollPainelCategorias(jobId) {
+    return new Promise((resolve, reject) => {
+      const poll = async () => {
+        try {
+          const r = await fetch(
+            `/api/integracoes/bling/categorias/mapeamento-job/${encodeURIComponent(jobId)}`
+          );
+          const j = await r.json();
+          if (r.status === 404) {
+            setTimeout(poll, 1500);
+            return;
+          }
+          if (!r.ok || !j.success) throw new Error(j.message || "Erro ao carregar categorias.");
+          const job = j.job || {};
+          const pct = pctSync(job);
+          atualizarLoadingCategorias(
+            job.mensagem || "Carregando categorias…",
+            job.total
+              ? `Hierarquia Bling: ${job.processados || 0}/${job.total} (${pct}%)`
+              : "Consultando árvore de categorias no Bling…"
+          );
+          if (job.status === "concluido") {
+            resolve(job.dados || {});
+            return;
+          }
+          if (job.status === "erro") throw new Error(job.mensagem || "Falha ao carregar categorias.");
+          setTimeout(poll, 1200);
+        } catch (e) {
+          reject(e);
+        }
+      };
+      poll();
+    });
+  }
+
+  function htmlCatNomeCell(c) {
+    const caminho = c.caminho_bling || "";
+    const label = c.label_bling || c.nome_bling || "";
+    const showCaminho =
+      caminho &&
+      caminho !== label &&
+      caminho.replace(/\s*›\s*/g, " › ") !== label;
+    return (
+      `<div class="Bl_CatNomeWrap">` +
+      `<span class="Bl_CatNomeBling" title="${escHtml(caminho || label)}">${escHtml(label)}</span>` +
+      (showCaminho ? `<small class="Bl_CatCaminho">${escHtml(caminho)}</small>` : "") +
+      `</div>`
+    );
+  }
+
+  function renderCategoriasPainel(dados) {
     const tbody = document.getElementById("bl_tbl_categorias");
     if (!tbody) return;
-    mostrarCarregandoCategorias();
-    const ctx = estado.contexto_modulo || "fornecedor";
-    try {
-    const r = await fetch(`/api/integracoes/bling/categorias/mapeamento?contexto=${encodeURIComponent(ctx)}`);
-    const j = await r.json();
-    if (!r.ok || !j.success) {
-      tbody.innerHTML = `<tr><td colspan="7">${escHtml(j.message || "Erro ao carregar categorias.")}</td></tr>`;
-      return;
-    }
 
-    const dados = j.dados || {};
     catPainel = {
       segmentos: dados.segmentos || [],
       opcoes: dados.opcoes_dropnexo || [],
@@ -594,10 +709,9 @@
                 ? "vincular"
                 : "";
         const idSeg = c.id_segmento || segUnico || "";
-        const caminho = c.caminho_bling || c.label_bling || c.nome_bling || "";
         return `<tr data-bling="${escHtml(c.id_bling)}" data-status="${escHtml(st)}" data-nivel="${c.nivel || 1}">
           <td class="Bl_CatColChk"><input type="checkbox" class="Bl_CatChk" aria-label="Selecionar categoria" /></td>
-          <td><span class="Bl_CatNomeBling" title="${escHtml(caminho)}">${escHtml(c.label_bling || c.nome_bling)}</span></td>
+          <td>${htmlCatNomeCell(c)}</td>
           <td><select class="Bl_CatSegmento">${opcoesSegmentoHtml(catPainel.segmentos, idSeg)}</select></td>
           <td>
             <select class="Bl_CatAcao">
@@ -641,6 +755,31 @@
       atualizarDestCatRow(tr);
     });
     syncCatChkAll();
+  }
+
+  async function carregarCategorias() {
+    const tbody = document.getElementById("bl_tbl_categorias");
+    if (!tbody) return;
+    mostrarCarregandoCategorias();
+    const ctx = estado.contexto_modulo || "fornecedor";
+    try {
+      const r = await fetch(`/api/integracoes/bling/categorias/mapeamento?contexto=${encodeURIComponent(ctx)}`);
+      const j = await r.json();
+      if (!r.ok || !j.success) {
+        tbody.innerHTML = `<tr><td colspan="7">${escHtml(j.message || "Erro ao carregar categorias.")}</td></tr>`;
+        return;
+      }
+
+      let dados = j.dados || null;
+      if (j.carregamento_async && j.sync_job_id) {
+        atualizarLoadingCategorias(
+          "Consultando hierarquia no Bling…",
+          j.total ? `${j.total} categorias — aguarde a árvore completa.` : "Isso evita criar tudo na raiz."
+        );
+        dados = await pollPainelCategorias(j.sync_job_id);
+      }
+
+      renderCategoriasPainel(dados || {});
     } catch (e) {
       tbody.innerHTML = `<tr><td colspan="7">${escHtml(e.message || "Erro ao carregar categorias.")}</td></tr>`;
     } finally {
