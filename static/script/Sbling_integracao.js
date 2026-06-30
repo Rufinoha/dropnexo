@@ -185,6 +185,7 @@
     const saved = meta.id_deposito_dropnexo ? String(meta.id_deposito_dropnexo) : "";
     if (sel && saved) sel.value = saved;
     tr.dataset.savedDrop = saved;
+    tr._blDepMeta = meta;
     renderCelulaSync(tr, meta);
   }
 
@@ -365,24 +366,19 @@
       const saved = meta.id_deposito_dropnexo ? String(meta.id_deposito_dropnexo) : "";
       if (sel && saved) sel.value = saved;
       tr.dataset.savedDrop = saved;
+      tr._blDepMeta = meta;
 
       renderCelulaSync(tr, meta);
 
       sel?.addEventListener("change", () => {
         const valor = sel.value || "";
         const mudou = valor !== (tr.dataset.savedDrop || "");
-        if (!valor) {
-          renderCelulaSync(tr, {});
+        if (mudou) {
+          const cell = tr.querySelector(".Bl_DepSyncCell");
+          if (cell) cell.innerHTML = "";
           return;
         }
-        if (mudou) {
-          renderCelulaSync(tr, {
-            id_deposito_dropnexo: valor === CRIAR_IGUAL ? null : valor,
-            estoque_sync_pendente: true,
-          });
-        } else {
-          renderCelulaSync(tr, meta);
-        }
+        renderCelulaSync(tr, tr._blDepMeta || meta);
       });
 
       tr.querySelector(".Bl_DepBtnSalvar")?.addEventListener("click", async () => {
@@ -432,10 +428,12 @@
           }
           tr.dataset.savedDrop = jj.id_deposito_dropnexo ? String(jj.id_deposito_dropnexo) : "";
           if (sel && jj.id_deposito_dropnexo) sel.value = String(jj.id_deposito_dropnexo);
-          renderCelulaSync(tr, {
+          tr._blDepMeta = {
             id_deposito_dropnexo: jj.id_deposito_dropnexo,
             estoque_sync_pendente: !!jj.estoque_sync_pendente,
-          });
+            estoque_sync_concluido_em: jj.estoque_sync_concluido_em || null,
+          };
+          renderCelulaSync(tr, tr._blDepMeta);
           await Swal.fire({
             icon: "success",
             title: "Vínculo salvo",
