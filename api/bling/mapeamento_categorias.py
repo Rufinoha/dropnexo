@@ -435,11 +435,13 @@ def listar_painel_categorias_bling(cur, id_tenant: int, contexto: str) -> dict[s
 
         cat = _fetch_categoria_bling(id_tenant, id_b, cache_api)
         parent_bling = _id_pai_bling(cat)
+        caminho = _caminho_categoria_bling(id_b, cache_api, id_tenant)
         linhas.append(
             {
                 "id_bling": id_b,
                 "nome_bling": b.get("nome") or _nome_categoria_bling(cat, id_b),
                 "label_bling": b.get("label") or b.get("nome") or id_b,
+                "caminho_bling": caminho,
                 "nivel": int(b.get("nivel") or 1),
                 "id_bling_pai": parent_bling,
                 "status": st,
@@ -478,13 +480,11 @@ def salvar_mapeamento_categoria_ui(
     id_parent_dropnexo: int | None = None,
 ) -> dict[str, Any]:
     from api.bling.sync_categorias import (
-        _criar_categoria_do_bling,
         _fetch_categoria_bling,
         _id_pai_bling,
         _nome_categoria_bling,
-        _resolver_mapa_categoria_valido,
-        _upsert_mapa_categoria,
         _vincular_categoria_bling,
+        criar_categoria_bling_com_arvore,
         obter_estado_mapeamento_categoria,
     )
 
@@ -547,60 +547,16 @@ def salvar_mapeamento_categoria_ui(
         raise ValueError("Selecione o segmento para criar a categoria.")
     _validar_segmento_tenant(cur, id_tenant, int(id_segmento))
 
-    parent_drop = int(id_parent_dropnexo) if id_parent_dropnexo else None
-    if parent_drop is None and parent_bling:
-        parent_drop = _resolver_mapa_categoria_valido(cur, id_tenant, contexto, parent_bling)
+    from api.bling.sync_categorias import criar_categoria_bling_com_arvore
 
-    existente = _resolver_mapa_categoria_valido(cur, id_tenant, contexto, id_bling)
-    if existente:
-        from api.bling.sync_categorias import _atualizar_categoria_local
-
-        cur.execute("SELECT nivel FROM tbl_categoria WHERE id = %s", (parent_drop,))
-        row = cur.fetchone()
-        nivel = min(int(row[0] or 1) + 1, 3) if parent_drop and row else 1
-        _atualizar_categoria_local(
-            cur,
-            existente,
-            nome=nome_bling,
-            nivel=nivel,
-            parent_dropnexo=parent_drop,
-            id_segmento=int(id_segmento),
-        )
-        _upsert_mapa_categoria(
-            cur,
-            id_tenant,
-            contexto,
-            id_bling,
-            existente,
-            {
-                "nome": nome_bling,
-                "id_bling_pai": parent_bling,
-                "acao": "criar",
-                "origem": "integracao_ui",
-            },
-        )
-        cat_id = existente
-    else:
-        cat_id = _criar_categoria_do_bling(
-            cur,
-            id_tenant,
-            contexto,
-            id_bling,
-            id_segmento=int(id_segmento),
-            parent_dropnexo=parent_drop,
-            cache_api=cache_api,
-        )
-        if not cat_id:
-            raise ValueError("Não foi possível criar a categoria.")
-        cur.execute(
-            """
-            UPDATE tbl_integracao_map
-            SET meta = meta || %s::jsonb, atualizado_em = NOW()
-            WHERE id_tenant = %s AND provedor = 'bling' AND contexto = %s
-              AND entidade = 'categoria' AND id_bling = %s
-            """,
-            (json.dumps({"acao": "criar", "origem": "integracao_ui"}), id_tenant, contexto, id_bling),
-        )
+    cat_id = criar_categoria_bling_com_arvore(
+        cur,
+        id_tenant,
+        contexto,
+        id_bling,
+        id_segmento=int(id_segmento),
+        cache_api=cache_api,
+    )
 
     estado = obter_estado_mapeamento_categoria(cur, id_tenant, contexto, id_bling)
     return {"status": estado.get("status"), "id_bling": id_bling, "id_dropnexo": cat_id, **estado}

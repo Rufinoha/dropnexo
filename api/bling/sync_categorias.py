@@ -272,6 +272,7 @@ def _criar_categoria_do_bling(
     id_segmento: int | None,
     parent_dropnexo: int | None,
     cache_api: dict[str, dict] | None = None,
+    meta_extra: dict | None = None,
 ) -> int | None:
     """Cria categoria DropNexo a partir do Bling e grava mapa."""
     cache = cache_api if cache_api is not None else {}
@@ -301,14 +302,121 @@ def _criar_categoria_do_bling(
         (id_tenant, id_segmento, parent_dropnexo, nome, nivel),
     )
     cat_id = int(cur.fetchone()[0])
+    meta = {"nome": nome, "id_bling_pai": parent_bling, "origem": "criacao_importacao"}
+    if meta_extra:
+        meta.update(meta_extra)
     _upsert_mapa_categoria(
         cur,
         id_tenant,
         contexto,
         id_bling,
         cat_id,
-        {"nome": nome, "id_bling_pai": parent_bling, "origem": "criacao_importacao"},
+        meta,
     )
+    return cat_id
+
+
+def _cadeia_ancestrais_bling(
+    id_tenant: int,
+    id_bling: str,
+    cache_api: dict[str, dict],
+) -> list[str]:
+    """Raiz → folha na árvore Bling."""
+    cadeia: list[str] = []
+    atual = str(id_bling or "").strip()
+    vistos: set[str] = set()
+    while atual and atual not in vistos:
+        vistos.add(atual)
+        cadeia.insert(0, atual)
+        cat = _fetch_categoria_bling(id_tenant, atual, cache_api)
+        atual = _id_pai_bling(cat) or ""
+    return cadeia
+
+
+def criar_categoria_bling_com_arvore(
+    cur,
+    id_tenant: int,
+    contexto: str,
+    id_bling: str,
+    *,
+    id_segmento: int,
+    cache_api: dict[str, dict] | None = None,
+) -> int:
+    """
+    Cria a categoria e todos os ancestrais Bling ainda não mapeados,
+    preservando a hierarquia do Bling (ex.: Carros › Acessórios › …).
+    """
+    cache = cache_api if cache_api is not None else {}
+    id_bling = str(id_bling or "").strip()
+    if not id_bling:
+        raise ValueError("Categoria Bling inválida.")
+
+    cadeia = _cadeia_ancestrais_bling(id_tenant, id_bling, cache)
+    if not cadeia:
+        raise ValueError("Categoria Bling inválida.")
+
+    parent_drop: int | None = None
+    cat_id: int | None = None
+    meta_criar = {"acao": "criar", "origem": "integracao_ui"}
+
+    for cid in cadeia:
+        if categoria_bling_ignorada(cur, id_tenant, contexto, cid):
+            cat = _fetch_categoria_bling(id_tenant, cid, cache)
+            nome = _nome_categoria_bling(cat, cid)
+            raise ValueError(
+                f'Categoria Bling "{nome}" está marcada como Não importar — '
+                "não é possível criar a árvore abaixo dela."
+            )
+
+        existente = _resolver_mapa_categoria_valido(cur, id_tenant, contexto, cid)
+        if existente:
+            cat = _fetch_categoria_bling(id_tenant, cid, cache)
+            nome = _nome_categoria_bling(cat, cid)
+            parent_bling = _id_pai_bling(cat)
+            cur.execute("SELECT nivel FROM tbl_categoria WHERE id = %s", (parent_drop,))
+            row = cur.fetchone()
+            nivel = min(int(row[0] or 1) + 1, MAX_NIVEL) if parent_drop and row else 1
+            _atualizar_categoria_local(
+                cur,
+                existente,
+                nome=nome,
+                nivel=nivel,
+                parent_dropnexo=parent_drop,
+                id_segmento=id_segmento,
+            )
+            _upsert_mapa_categoria(
+                cur,
+                id_tenant,
+                contexto,
+                cid,
+                existente,
+                {
+                    "nome": nome,
+                    "id_bling_pai": parent_bling,
+                    **meta_criar,
+                },
+            )
+            parent_drop = existente
+            cat_id = existente
+            continue
+
+        cat_id = _criar_categoria_do_bling(
+            cur,
+            id_tenant,
+            contexto,
+            cid,
+            id_segmento=id_segmento,
+            parent_dropnexo=parent_drop,
+            cache_api=cache,
+            meta_extra=meta_criar,
+        )
+        if not cat_id:
+            cat = _fetch_categoria_bling(id_tenant, cid, cache)
+            raise ValueError(f'Não foi possível criar "{_nome_categoria_bling(cat, cid)}".')
+        parent_drop = cat_id
+
+    if not cat_id:
+        raise ValueError("Não foi possível criar a categoria.")
     return cat_id
 
 

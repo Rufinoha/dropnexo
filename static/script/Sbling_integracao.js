@@ -191,6 +191,10 @@
     if (wrapC) wrapC.hidden = acao !== "criar";
   }
 
+  function hintCriarArvore() {
+    return `<span class="Bl_CatCriarHint">Recria a árvore do Bling automaticamente (pais inclusos).</span>`;
+  }
+
   function aplicarResumoCategorias(resumo) {
     const el = document.getElementById("bl_cat_resumo");
     if (!el || !resumo) return;
@@ -228,15 +232,14 @@
   function atualizarBulkDestCat() {
     const acao = document.getElementById("bl_cat_bulk_acao")?.value || "";
     const vinc = document.getElementById("bl_cat_bulk_vincular");
-    const pai = document.getElementById("bl_cat_bulk_pai");
+    const hint = document.getElementById("bl_cat_bulk_criar_hint");
     if (vinc) vinc.hidden = acao !== "vincular";
-    if (pai) pai.hidden = acao !== "criar";
+    if (hint) hint.hidden = acao !== "criar";
   }
 
   function preencherBulkCategorias() {
     const segEl = document.getElementById("bl_cat_bulk_seg");
     const vincEl = document.getElementById("bl_cat_bulk_vincular");
-    const paiEl = document.getElementById("bl_cat_bulk_pai");
     const idSeg = segEl?.value || "";
     if (segEl) {
       const prev = segEl.value;
@@ -250,14 +253,10 @@
       const prev = vincEl.value;
       vincEl.innerHTML = opcoesDropHtml(catPainel.opcoes, seg, prev);
     }
-    if (paiEl) {
-      const prev = paiEl.value;
-      paiEl.innerHTML = opcoesPaiHtml(catPainel.opcoes, seg, prev);
-    }
     atualizarBulkDestCat();
   }
 
-  function aplicarValoresLinhaCat(tr, { seg, acao, idDrop, idPai }) {
+  function aplicarValoresLinhaCat(tr, { seg, acao, idDrop }) {
     const segSel = tr.querySelector(".Bl_CatSegmento");
     const acaoSel = tr.querySelector(".Bl_CatAcao");
     if (seg && segSel) {
@@ -272,10 +271,6 @@
       const v = tr.querySelector(".Bl_CatDropVincular");
       if (v) v.value = idDrop;
     }
-    if (acao === "criar" && idPai !== undefined) {
-      const p = tr.querySelector(".Bl_CatDropPai");
-      if (p) p.value = idPai;
-    }
     atualizarDestCatRow(tr);
   }
 
@@ -288,7 +283,6 @@
     const seg = document.getElementById("bl_cat_bulk_seg")?.value || "";
     const acao = document.getElementById("bl_cat_bulk_acao")?.value || "";
     const idDrop = document.getElementById("bl_cat_bulk_vincular")?.value || "";
-    const idPai = document.getElementById("bl_cat_bulk_pai")?.value || "";
 
     if (!seg && !acao) {
       Swal.fire({ icon: "warning", title: "Em lote", text: "Escolha segmento e/ou ação na linha Em lote." });
@@ -308,7 +302,6 @@
         seg: seg || undefined,
         acao: acao || undefined,
         idDrop: acao === "vincular" ? idDrop : undefined,
-        idPai: acao === "criar" ? idPai : undefined,
       });
     });
 
@@ -331,7 +324,10 @@
     Swal.fire({ title: "Salvando…", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
     let ok = 0;
     const erros = [];
-    for (const tr of rows) {
+    const ordenadas = [...rows].sort(
+      (a, b) => Number(a.dataset.nivel || 99) - Number(b.dataset.nivel || 99)
+    );
+    for (const tr of ordenadas) {
       const nome = tr.querySelector(".Bl_CatNomeBling")?.textContent?.trim() || tr.dataset.bling;
       try {
         await salvarCategoriaRow(tr, { reload: false });
@@ -377,9 +373,7 @@
     document.getElementById("bl_cat_bulk_seg")?.addEventListener("change", () => {
       const seg = document.getElementById("bl_cat_bulk_seg")?.value || "";
       const vinc = document.getElementById("bl_cat_bulk_vincular");
-      const pai = document.getElementById("bl_cat_bulk_pai");
       if (vinc) vinc.innerHTML = opcoesDropHtml(catPainel.opcoes, seg, vinc.value);
-      if (pai) pai.innerHTML = opcoesPaiHtml(catPainel.opcoes, seg, pai.value);
     });
 
     document.getElementById("bl_cat_btn_aplicar")?.addEventListener("click", aplicarBulkCategorias);
@@ -395,7 +389,6 @@
     const acao = tr.querySelector(".Bl_CatAcao")?.value || "";
     const idSeg = tr.querySelector(".Bl_CatSegmento")?.value || "";
     const idDrop = tr.querySelector(".Bl_CatDropVincular")?.value || "";
-    const idPai = tr.querySelector(".Bl_CatDropPai")?.value || "";
     const ctx = estado.contexto_modulo || "fornecedor";
 
     if (!idB || !acao) throw new Error("Selecione a ação.");
@@ -408,7 +401,6 @@
       acao,
       id_segmento: idSeg ? Number(idSeg) : null,
       id_dropnexo: acao === "vincular" && idDrop ? Number(idDrop) : null,
-      id_parent_dropnexo: acao === "criar" && idPai ? Number(idPai) : null,
     };
 
     const r = await fetch("/api/integracoes/bling/categorias/salvar", {
@@ -463,9 +455,10 @@
                 ? "vincular"
                 : "";
         const idSeg = c.id_segmento || segUnico || "";
-        return `<tr data-bling="${escHtml(c.id_bling)}" data-status="${escHtml(st)}">
+        const caminho = c.caminho_bling || c.label_bling || c.nome_bling || "";
+        return `<tr data-bling="${escHtml(c.id_bling)}" data-status="${escHtml(st)}" data-nivel="${c.nivel || 1}">
           <td class="Bl_CatColChk"><input type="checkbox" class="Bl_CatChk" aria-label="Selecionar categoria" /></td>
-          <td><span class="Bl_CatNomeBling">${escHtml(c.label_bling || c.nome_bling)}</span></td>
+          <td><span class="Bl_CatNomeBling" title="${escHtml(caminho)}">${escHtml(c.label_bling || c.nome_bling)}</span></td>
           <td><select class="Bl_CatSegmento">${opcoesSegmentoHtml(catPainel.segmentos, idSeg)}</select></td>
           <td>
             <select class="Bl_CatAcao">
@@ -479,9 +472,7 @@
             <div class="Bl_CatDestWrap Bl_CatDestVincular"${acaoSel === "vincular" ? "" : " hidden"}>
               <select class="Bl_CatDropVincular">${opcoesDropHtml(catPainel.opcoes, idSeg, c.id_dropnexo)}</select>
             </div>
-            <div class="Bl_CatDestWrap Bl_CatDestCriar"${acaoSel === "criar" ? "" : " hidden"}>
-              <select class="Bl_CatDropPai">${opcoesPaiHtml(catPainel.opcoes, idSeg, "")}</select>
-            </div>
+            <div class="Bl_CatDestWrap Bl_CatDestCriar"${acaoSel === "criar" ? "" : " hidden"}>${hintCriarArvore()}</div>
           </td>
           <td>${badgeCatStatus(st)}</td>
           <td><button type="button" class="Cl_BtnSalvar Bl_CatBtnSalvar">Salvar</button></td>
@@ -495,14 +486,9 @@
       tr.querySelector(".Bl_CatSegmento")?.addEventListener("change", () => {
         const seg = tr.querySelector(".Bl_CatSegmento")?.value || "";
         const vinc = tr.querySelector(".Bl_CatDropVincular");
-        const pai = tr.querySelector(".Bl_CatDropPai");
         if (vinc) {
           const sel = vinc.value;
           vinc.innerHTML = opcoesDropHtml(catPainel.opcoes, seg, sel);
-        }
-        if (pai) {
-          const sel = pai.value;
-          pai.innerHTML = opcoesPaiHtml(catPainel.opcoes, seg, sel);
         }
       });
       tr.querySelector(".Bl_CatBtnSalvar")?.addEventListener("click", async () => {

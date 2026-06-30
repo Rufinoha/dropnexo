@@ -3,7 +3,7 @@
 {% block title %}Bling — Integrações — {{ MARCA_NOME }}{% endblock %}
 {% block topbar_title %}Integração Bling{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('static', filename='style/Cbling_integracao.css') }}?v=12" />
+<link rel="stylesheet" href="{{ url_for('static', filename='style/Cbling_integracao.css') }}?v=13" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal Bl_Wrap">
@@ -223,7 +223,7 @@
                 </select></th>
                 <th>
                   <select id="bl_cat_bulk_vincular" class="Bl_CatBulkSel Bl_CatBulkDest" hidden aria-label="Categoria DropNexo em lote"></select>
-                  <select id="bl_cat_bulk_pai" class="Bl_CatBulkSel Bl_CatBulkDest" hidden aria-label="Pai no DropNexo em lote"></select>
+                  <span id="bl_cat_bulk_criar_hint" class="Bl_CatCriarHint" hidden>Árvore Bling automática</span>
                 </th>
                 <th></th>
                 <th class="Bl_CatBulkActions">
@@ -247,5 +247,5 @@
 </div>
 {% endblock %}
 {% block page_js %}
-<script src="{{ url_for('static', filename='script/Sbling_integracao.js') }}?v=17"></script>
+<script src="{{ url_for('static', filename='script/Sbling_integracao.js') }}?v=18"></script>
 {% endblock %}
