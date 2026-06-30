@@ -42,15 +42,31 @@ def _extrair_company_id(envelope: dict[str, Any]) -> str:
 
 
 def _extrair_recurso_acao(envelope: dict[str, Any]) -> tuple[str, str]:
-    recurso = str(envelope.get("resource") or envelope.get("recurso") or "").strip().lower()
-    acao = str(envelope.get("action") or envelope.get("acao") or "").strip().lower()
+    # Bling API v3 documenta os campos como $resource e $action (com cifrão).
+    recurso = str(
+        envelope.get("resource")
+        or envelope.get("recurso")
+        or envelope.get("$resource")
+        or ""
+    ).strip().lower()
+    acao = str(
+        envelope.get("action")
+        or envelope.get("acao")
+        or envelope.get("$action")
+        or ""
+    ).strip().lower()
     return recurso, acao
 
 
 def _payload_estoque(envelope: dict[str, Any]) -> dict[str, Any]:
-    data = envelope.get("data")
-    if isinstance(data, dict) and (data.get("produto") or data.get("deposito")):
-        return data
+    candidatos: list[Any] = [
+        envelope.get("data"),
+        envelope.get("$payload"),
+        envelope.get("payload"),
+    ]
+    for bloco in candidatos:
+        if isinstance(bloco, dict) and (bloco.get("produto") or bloco.get("deposito")):
+            return bloco
     if envelope.get("produto") or envelope.get("deposito"):
         return envelope
     return {}
