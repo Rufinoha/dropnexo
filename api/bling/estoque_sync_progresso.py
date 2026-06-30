@@ -151,13 +151,10 @@ def iniciar_sync_inicial_deposito(
 
                 marcar_sync_estoque_deposito_concluido(cur, id_tenant, id_bling_deposito)
                 conn.commit()
-                _atualizar_job(
-                    job_id,
-                    status="concluido",
-                    **resultado,
-                    mensagem="Sincronização do depósito efetuada com sucesso",
-                    resumo=resultado.get("resumo") or "Sincronização do depósito efetuada com sucesso",
-                )
+                fim = dict(resultado)
+                fim["status"] = "concluido"
+                fim["mensagem"] = "Sincronização do depósito efetuada com sucesso"
+                _atualizar_job(job_id, **fim)
             except Exception as e:
                 conn.rollback()
                 _log.exception("Sync estoque inicial tenant=%s", id_tenant)
