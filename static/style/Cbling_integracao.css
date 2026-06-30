@@ -744,6 +744,64 @@
 
 .Bl_CatDestWrap[hidden] { display: none !important; }
 
+.Bl_CatColChk {
+  width: 36px;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.Bl_CatColChk input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.Bl_CatBulkRow {
+  background: #f8fafc;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+.Bl_CatBulkRow th {
+  font-weight: 600;
+  vertical-align: middle;
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+.Bl_CatBulkLbl {
+  font-size: 0.78rem;
+  color: #64748b;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.Bl_CatBulkSel {
+  max-width: 200px;
+  width: 100%;
+  font-size: 0.82rem;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+}
+
+.Bl_CatBulkActions {
+  white-space: nowrap;
+}
+
+.Bl_CatBtnAplicar,
+.Bl_CatBtnSalvarSel {
+  font-size: 0.78rem;
+  padding: 6px 10px;
+  margin: 2px 0;
+  display: inline-block;
+}
+
+.Bl_CatBtnSalvarSel {
+  margin-left: 6px;
+}
+
 @media (max-width: 720px) {
   .Bl_SyncGrid { grid-template-columns: 1fr; }
   .Bl_SubTab { font-size: 0.78rem; padding: 0.5rem 0.45rem; }

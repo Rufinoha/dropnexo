@@ -32,6 +32,7 @@
 
   let tabAtiva = "config";
   let catPainel = { segmentos: [], opcoes: [] };
+  let catBulkBound = false;
 
   function cfgAtual() {
     return estado.configs.find((c) => c.contexto === estado.contexto_modulo) || {};
@@ -201,7 +202,195 @@
       : `${pendentes} de ${total} categorias pendentes — conclua o mapeamento para importar produtos.`;
   }
 
-  async function salvarCategoriaRow(tr) {
+  function linhasCatSelecionadas() {
+    const tbody = document.getElementById("bl_tbl_categorias");
+    if (!tbody) return [];
+    return Array.from(tbody.querySelectorAll("tr[data-bling] .Bl_CatChk:checked")).map((cb) =>
+      cb.closest("tr")
+    );
+  }
+
+  function syncCatChkAll() {
+    const tbody = document.getElementById("bl_tbl_categorias");
+    const chkAll = document.getElementById("bl_cat_chk_all");
+    if (!tbody || !chkAll) return;
+    const boxes = tbody.querySelectorAll(".Bl_CatChk");
+    if (!boxes.length) {
+      chkAll.checked = false;
+      chkAll.indeterminate = false;
+      return;
+    }
+    const n = Array.from(boxes).filter((b) => b.checked).length;
+    chkAll.checked = n === boxes.length;
+    chkAll.indeterminate = n > 0 && n < boxes.length;
+  }
+
+  function atualizarBulkDestCat() {
+    const acao = document.getElementById("bl_cat_bulk_acao")?.value || "";
+    const vinc = document.getElementById("bl_cat_bulk_vincular");
+    const pai = document.getElementById("bl_cat_bulk_pai");
+    if (vinc) vinc.hidden = acao !== "vincular";
+    if (pai) pai.hidden = acao !== "criar";
+  }
+
+  function preencherBulkCategorias() {
+    const segEl = document.getElementById("bl_cat_bulk_seg");
+    const vincEl = document.getElementById("bl_cat_bulk_vincular");
+    const paiEl = document.getElementById("bl_cat_bulk_pai");
+    const idSeg = segEl?.value || "";
+    if (segEl) {
+      const prev = segEl.value;
+      segEl.innerHTML = opcoesSegmentoHtml(catPainel.segmentos, prev);
+      if (!prev && catPainel.segmentos.length === 1) {
+        segEl.value = String(catPainel.segmentos[0].id);
+      }
+    }
+    const seg = segEl?.value || idSeg;
+    if (vincEl) {
+      const prev = vincEl.value;
+      vincEl.innerHTML = opcoesDropHtml(catPainel.opcoes, seg, prev);
+    }
+    if (paiEl) {
+      const prev = paiEl.value;
+      paiEl.innerHTML = opcoesPaiHtml(catPainel.opcoes, seg, prev);
+    }
+    atualizarBulkDestCat();
+  }
+
+  function aplicarValoresLinhaCat(tr, { seg, acao, idDrop, idPai }) {
+    const segSel = tr.querySelector(".Bl_CatSegmento");
+    const acaoSel = tr.querySelector(".Bl_CatAcao");
+    if (seg && segSel) {
+      segSel.value = seg;
+      segSel.dispatchEvent(new Event("change"));
+    }
+    if (acao && acaoSel) {
+      acaoSel.value = acao;
+      atualizarDestCatRow(tr);
+    }
+    if (acao === "vincular" && idDrop) {
+      const v = tr.querySelector(".Bl_CatDropVincular");
+      if (v) v.value = idDrop;
+    }
+    if (acao === "criar" && idPai !== undefined) {
+      const p = tr.querySelector(".Bl_CatDropPai");
+      if (p) p.value = idPai;
+    }
+    atualizarDestCatRow(tr);
+  }
+
+  function aplicarBulkCategorias() {
+    const rows = linhasCatSelecionadas();
+    if (!rows.length) {
+      Swal.fire({ icon: "warning", title: "Nenhuma seleção", text: "Marque ao menos uma categoria." });
+      return;
+    }
+    const seg = document.getElementById("bl_cat_bulk_seg")?.value || "";
+    const acao = document.getElementById("bl_cat_bulk_acao")?.value || "";
+    const idDrop = document.getElementById("bl_cat_bulk_vincular")?.value || "";
+    const idPai = document.getElementById("bl_cat_bulk_pai")?.value || "";
+
+    if (!seg && !acao) {
+      Swal.fire({ icon: "warning", title: "Em lote", text: "Escolha segmento e/ou ação na linha Em lote." });
+      return;
+    }
+    if (acao && acao !== "ignorar" && !seg) {
+      Swal.fire({ icon: "warning", title: "Segmento", text: "Selecione o segmento na linha Em lote." });
+      return;
+    }
+    if (acao === "vincular" && !idDrop) {
+      Swal.fire({ icon: "warning", title: "DropNexo", text: "Selecione a categoria DropNexo na linha Em lote." });
+      return;
+    }
+
+    rows.forEach((tr) => {
+      aplicarValoresLinhaCat(tr, {
+        seg: seg || undefined,
+        acao: acao || undefined,
+        idDrop: acao === "vincular" ? idDrop : undefined,
+        idPai: acao === "criar" ? idPai : undefined,
+      });
+    });
+
+    Swal.fire({
+      icon: "success",
+      title: "Aplicado",
+      text: `${rows.length} categoria(s) atualizada(s). Revise e clique em Salvar selecionadas.`,
+      timer: 1800,
+      showConfirmButton: false,
+    });
+  }
+
+  async function salvarCategoriasSelecionadas() {
+    const rows = linhasCatSelecionadas();
+    if (!rows.length) {
+      Swal.fire({ icon: "warning", title: "Nenhuma seleção", text: "Marque ao menos uma categoria." });
+      return;
+    }
+
+    Swal.fire({ title: "Salvando…", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    let ok = 0;
+    const erros = [];
+    for (const tr of rows) {
+      const nome = tr.querySelector(".Bl_CatNomeBling")?.textContent?.trim() || tr.dataset.bling;
+      try {
+        await salvarCategoriaRow(tr, { reload: false });
+        ok += 1;
+      } catch (e) {
+        erros.push(`${nome}: ${e.message}`);
+      }
+    }
+    Swal.close();
+    await carregarCategorias();
+
+    if (erros.length) {
+      await Swal.fire({
+        icon: ok > 0 ? "warning" : "error",
+        title: ok > 0 ? "Concluído com avisos" : "Erro",
+        html: `<p>${ok} salva(s), ${erros.length} falha(s).</p><small>${erros.slice(0, 8).map(escHtml).join("<br>")}</small>`,
+        confirmButtonColor: "#021F81",
+      });
+    } else {
+      await Swal.fire({
+        icon: "success",
+        title: "Salvo",
+        text: `${ok} categoria(s) salva(s).`,
+        timer: 1600,
+        showConfirmButton: false,
+      });
+    }
+  }
+
+  function bindBulkCategoriasOnce() {
+    if (catBulkBound) return;
+    catBulkBound = true;
+
+    document.getElementById("bl_cat_chk_all")?.addEventListener("change", (ev) => {
+      const on = ev.target.checked;
+      document.querySelectorAll("#bl_tbl_categorias .Bl_CatChk").forEach((cb) => {
+        cb.checked = on;
+      });
+      syncCatChkAll();
+    });
+
+    document.getElementById("bl_cat_bulk_acao")?.addEventListener("change", atualizarBulkDestCat);
+    document.getElementById("bl_cat_bulk_seg")?.addEventListener("change", () => {
+      const seg = document.getElementById("bl_cat_bulk_seg")?.value || "";
+      const vinc = document.getElementById("bl_cat_bulk_vincular");
+      const pai = document.getElementById("bl_cat_bulk_pai");
+      if (vinc) vinc.innerHTML = opcoesDropHtml(catPainel.opcoes, seg, vinc.value);
+      if (pai) pai.innerHTML = opcoesPaiHtml(catPainel.opcoes, seg, pai.value);
+    });
+
+    document.getElementById("bl_cat_btn_aplicar")?.addEventListener("click", aplicarBulkCategorias);
+    document.getElementById("bl_cat_btn_salvar_sel")?.addEventListener("click", () => {
+      salvarCategoriasSelecionadas().catch((e) => {
+        Swal.fire({ icon: "error", title: "Erro", text: e.message, confirmButtonColor: "#021F81" });
+      });
+    });
+  }
+
+  async function salvarCategoriaRow(tr, opts = {}) {
     const idB = tr.dataset.bling || "";
     const acao = tr.querySelector(".Bl_CatAcao")?.value || "";
     const idSeg = tr.querySelector(".Bl_CatSegmento")?.value || "";
@@ -229,7 +418,7 @@
     });
     const j = await r.json();
     if (!r.ok || !j.success) throw new Error(j.message || "Erro ao salvar.");
-    await carregarCategorias();
+    if (opts.reload !== false) await carregarCategorias();
   }
 
   async function carregarCategorias() {
@@ -239,7 +428,7 @@
     const r = await fetch(`/api/integracoes/bling/categorias/mapeamento?contexto=${encodeURIComponent(ctx)}`);
     const j = await r.json();
     if (!r.ok || !j.success) {
-      tbody.innerHTML = `<tr><td colspan="6">${escHtml(j.message || "Erro ao carregar categorias.")}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="7">${escHtml(j.message || "Erro ao carregar categorias.")}</td></tr>`;
       return;
     }
 
@@ -249,12 +438,17 @@
       opcoes: dados.opcoes_dropnexo || [],
     };
     aplicarResumoCategorias(dados.resumo);
+    preencherBulkCategorias();
+    bindBulkCategoriasOnce();
 
     const cats = dados.categorias || [];
     if (!cats.length) {
-      tbody.innerHTML = `<tr><td colspan="6">Nenhuma categoria retornada pelo Bling.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="7">Nenhuma categoria retornada pelo Bling.</td></tr>`;
+      syncCatChkAll();
       return;
     }
+
+    const segUnico = catPainel.segmentos.length === 1 ? String(catPainel.segmentos[0].id) : "";
 
     tbody.innerHTML = cats
       .map((c) => {
@@ -268,8 +462,9 @@
               : acaoSalva === "vincular"
                 ? "vincular"
                 : "";
-        const idSeg = c.id_segmento || "";
+        const idSeg = c.id_segmento || segUnico || "";
         return `<tr data-bling="${escHtml(c.id_bling)}" data-status="${escHtml(st)}">
+          <td class="Bl_CatColChk"><input type="checkbox" class="Bl_CatChk" aria-label="Selecionar categoria" /></td>
           <td><span class="Bl_CatNomeBling">${escHtml(c.label_bling || c.nome_bling)}</span></td>
           <td><select class="Bl_CatSegmento">${opcoesSegmentoHtml(catPainel.segmentos, idSeg)}</select></td>
           <td>
@@ -295,6 +490,7 @@
       .join("");
 
     tbody.querySelectorAll("tr").forEach((tr) => {
+      tr.querySelector(".Bl_CatChk")?.addEventListener("change", syncCatChkAll);
       tr.querySelector(".Bl_CatAcao")?.addEventListener("change", () => atualizarDestCatRow(tr));
       tr.querySelector(".Bl_CatSegmento")?.addEventListener("change", () => {
         const seg = tr.querySelector(".Bl_CatSegmento")?.value || "";
@@ -319,6 +515,7 @@
       });
       atualizarDestCatRow(tr);
     });
+    syncCatChkAll();
   }
 
   function pctSync(p) {

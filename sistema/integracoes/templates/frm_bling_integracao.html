@@ -3,7 +3,7 @@
 {% block title %}Bling — Integrações — {{ MARCA_NOME }}{% endblock %}
 {% block topbar_title %}Integração Bling{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('static', filename='style/Cbling_integracao.css') }}?v=11" />
+<link rel="stylesheet" href="{{ url_for('static', filename='style/Cbling_integracao.css') }}?v=12" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal Bl_Wrap">
@@ -195,14 +195,15 @@
         <h3 class="Bl_EstoqueBlockTitle">Mapeamento de categorias</h3>
         <p class="Bl_Hint">
           Vincule cada categoria do Bling ao DropNexo antes de importar produtos.
-          Escolha o <strong>segmento</strong>, a <strong>ação</strong> e clique em <strong>Salvar</strong>.
+          Use a linha <strong>Em lote</strong> para aplicar segmento e ação às categorias selecionadas.
           Use <strong>Não importar</strong> para excluir produtos dessa categoria do Bling.
         </p>
         <div class="Bl_CatResumo" id="bl_cat_resumo" hidden role="status"></div>
         <div class="Bl_DepTblWrap Bl_CatTblWrap">
           <table class="Bl_DepTbl Bl_CatTbl">
             <thead>
-              <tr>
+              <tr class="Bl_CatHeadRow">
+                <th class="Bl_CatColChk"><input type="checkbox" id="bl_cat_chk_all" title="Marcar todas" aria-label="Marcar todas" /></th>
                 <th>Bling</th>
                 <th>Segmento</th>
                 <th>Ação</th>
@@ -210,8 +211,28 @@
                 <th>Status</th>
                 <th></th>
               </tr>
+              <tr class="Bl_CatBulkRow">
+                <th class="Bl_CatColChk"></th>
+                <th><span class="Bl_CatBulkLbl">Em lote</span></th>
+                <th><select id="bl_cat_bulk_seg" class="Bl_CatBulkSel" aria-label="Segmento em lote"></select></th>
+                <th><select id="bl_cat_bulk_acao" class="Bl_CatBulkSel" aria-label="Ação em lote">
+                  <option value="">— ação —</option>
+                  <option value="vincular">Vincular existente</option>
+                  <option value="criar">Criar no DropNexo</option>
+                  <option value="ignorar">Não importar</option>
+                </select></th>
+                <th>
+                  <select id="bl_cat_bulk_vincular" class="Bl_CatBulkSel Bl_CatBulkDest" hidden aria-label="Categoria DropNexo em lote"></select>
+                  <select id="bl_cat_bulk_pai" class="Bl_CatBulkSel Bl_CatBulkDest" hidden aria-label="Pai no DropNexo em lote"></select>
+                </th>
+                <th></th>
+                <th class="Bl_CatBulkActions">
+                  <button type="button" class="Cl_BtnCancelar Bl_CatBtnAplicar" id="bl_cat_btn_aplicar">Aplicar</button>
+                  <button type="button" class="Cl_BtnSalvar Bl_CatBtnSalvarSel" id="bl_cat_btn_salvar_sel">Salvar selecionadas</button>
+                </th>
+              </tr>
             </thead>
-            <tbody id="bl_tbl_categorias"><tr><td colspan="6">Carregando…</td></tr></tbody>
+            <tbody id="bl_tbl_categorias"><tr><td colspan="7">Carregando…</td></tr></tbody>
           </table>
         </div>
       </section>
@@ -226,5 +247,5 @@
 </div>
 {% endblock %}
 {% block page_js %}
-<script src="{{ url_for('static', filename='script/Sbling_integracao.js') }}?v=16"></script>
+<script src="{{ url_for('static', filename='script/Sbling_integracao.js') }}?v=17"></script>
 {% endblock %}
