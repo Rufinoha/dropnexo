@@ -314,6 +314,51 @@
     });
   }
 
+  function coletarAcoesCatRows(rows) {
+    const ctx = estado.contexto_modulo || "fornecedor";
+    return rows.map((tr) => {
+      const acao = tr.querySelector(".Bl_CatAcao")?.value || "";
+      const idSeg = tr.querySelector(".Bl_CatSegmento")?.value || "";
+      const idDrop = tr.querySelector(".Bl_CatDropVincular")?.value || "";
+      return {
+        id_bling: tr.dataset.bling || "",
+        acao,
+        id_segmento: idSeg ? Number(idSeg) : null,
+        id_dropnexo: acao === "vincular" && idDrop ? Number(idDrop) : null,
+        nivel: Number(tr.dataset.nivel || 99),
+      };
+    });
+  }
+
+  function pollSyncCategorias(jobId, onTick) {
+    return new Promise((resolve, reject) => {
+      const poll = async () => {
+        try {
+          const r = await fetch(
+            `/api/integracoes/bling/categorias/progresso/${encodeURIComponent(jobId)}`
+          );
+          const j = await r.json();
+          if (r.status === 404) {
+            setTimeout(poll, 1500);
+            return;
+          }
+          if (!r.ok || !j.success) throw new Error(j.message || "Erro no progresso.");
+          const p = j.progresso || {};
+          if (onTick) onTick(p);
+          if (p.status === "concluido") {
+            resolve(p);
+            return;
+          }
+          if (p.status === "erro") throw new Error(p.mensagem || "Falha ao salvar categorias.");
+          setTimeout(poll, 1200);
+        } catch (e) {
+          reject(e);
+        }
+      };
+      poll();
+    });
+  }
+
   async function salvarCategoriasSelecionadas() {
     const rows = linhasCatSelecionadas();
     if (!rows.length) {
@@ -321,39 +366,81 @@
       return;
     }
 
-    Swal.fire({ title: "Salvando…", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-    let ok = 0;
-    const erros = [];
     const ordenadas = [...rows].sort(
       (a, b) => Number(a.dataset.nivel || 99) - Number(b.dataset.nivel || 99)
     );
-    for (const tr of ordenadas) {
-      const nome = tr.querySelector(".Bl_CatNomeBling")?.textContent?.trim() || tr.dataset.bling;
-      try {
-        await salvarCategoriaRow(tr, { reload: false });
-        ok += 1;
-      } catch (e) {
-        erros.push(`${nome}: ${e.message}`);
-      }
-    }
-    Swal.close();
-    await carregarCategorias();
+    const acoes = coletarAcoesCatRows(ordenadas);
+    const ctx = estado.contexto_modulo || "fornecedor";
 
-    if (erros.length) {
-      await Swal.fire({
-        icon: ok > 0 ? "warning" : "error",
-        title: ok > 0 ? "Concluído com avisos" : "Erro",
-        html: `<p>${ok} salva(s), ${erros.length} falha(s).</p><small>${erros.slice(0, 8).map(escHtml).join("<br>")}</small>`,
-        confirmButtonColor: "#021F81",
+    const btnSalvar = document.getElementById("bl_cat_btn_salvar_sel");
+    if (btnSalvar) btnSalvar.disabled = true;
+
+    Swal.fire({
+      title: "Salvando categorias…",
+      html: htmlProgSync("Iniciando…"),
+      allowOutsideClick: false,
+      showConfirmButton: false,
+      didOpen: () => {
+        Swal.showLoading();
+      },
+    });
+
+    try {
+      const resp = await fetch("/api/integracoes/bling/categorias/salvar-lote", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contexto: ctx, acoes }),
       });
-    } else {
-      await Swal.fire({
-        icon: "success",
-        title: "Salvo",
-        text: `${ok} categoria(s) salva(s).`,
-        timer: 1600,
-        showConfirmButton: false,
+      const jj = await resp.json();
+      if (!resp.ok || !jj.success) throw new Error(jj.message || "Erro ao iniciar salvamento.");
+
+      const resultado = await pollSyncCategorias(jj.sync_job_id, (p) => {
+        const bar = Swal.getHtmlContainer()?.querySelector(".Bl_DepProgBar");
+        const label = Swal.getHtmlContainer()?.querySelector(".Bl_DepProgLabel");
+        const pct = pctSync(p);
+        if (bar) bar.style.width = `${pct}%`;
+        if (label) {
+          label.textContent = p.mensagem || `Processados ${p.processados || 0}/${p.total || "?"}`;
+        }
       });
+
+      Swal.close();
+      await carregarCategorias();
+
+      const falhas = Number(resultado.falhas) || 0;
+      const ok = Number(resultado.sincronizados) || 0;
+      let errosHtml = "";
+      try {
+        const res = resultado.resumo ? JSON.parse(resultado.resumo) : {};
+        const erros = res.erros || [];
+        if (erros.length) {
+          errosHtml = `<small>${erros.slice(0, 8).map(escHtml).join("<br>")}</small>`;
+        }
+      } catch {
+        /* ignore */
+      }
+
+      if (falhas) {
+        await Swal.fire({
+          icon: ok > 0 ? "warning" : "error",
+          title: ok > 0 ? "Concluído com avisos" : "Erro",
+          html: `<p>${escHtml(resultado.mensagem || "")}</p>${errosHtml}`,
+          confirmButtonColor: "#021F81",
+        });
+      } else {
+        await Swal.fire({
+          icon: "success",
+          title: "Salvo",
+          text: resultado.mensagem || `${ok} categoria(s) salva(s).`,
+          timer: 1800,
+          showConfirmButton: false,
+        });
+      }
+    } catch (e) {
+      Swal.close();
+      Swal.fire({ icon: "error", title: "Erro", text: e.message, confirmButtonColor: "#021F81" });
+    } finally {
+      if (btnSalvar) btnSalvar.disabled = false;
     }
   }
 

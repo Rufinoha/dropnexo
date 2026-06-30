@@ -740,6 +740,61 @@ def api_categorias_bling_salvar():
         conn.close()
 
 
+@bling_bp.post("/api/integracoes/bling/categorias/salvar-lote")
+@login_obrigatorio()
+def api_categorias_bling_salvar_lote():
+    """Salva mapeamento de várias categorias em background (throttle + retry 429)."""
+    if not _pode_bling_sync():
+        return jsonify(success=False, message="Sem permissão."), 403
+
+    body = request.get_json(silent=True) or {}
+    contexto = (body.get("contexto") or "fornecedor").strip()
+    if contexto not in ("fornecedor", "vendedor"):
+        return jsonify(success=False, message="Contexto inválido."), 400
+
+    acoes = body.get("acoes")
+    if not isinstance(acoes, list) or not acoes:
+        return jsonify(success=False, message="Informe ao menos uma ação."), 400
+
+    id_tenant = session.get("id_tenant")
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT status FROM tbl_integracao_bling WHERE id_tenant = %s",
+            (id_tenant,),
+        )
+        row = cur.fetchone()
+        if not row or row[0] != "conectado":
+            return jsonify(success=False, message="Conecte o Bling antes de mapear categorias."), 400
+    finally:
+        conn.close()
+
+    from api.bling.categorias_sync_progresso import iniciar_salvar_categorias_lote
+
+    job_id = iniciar_salvar_categorias_lote(
+        current_app._get_current_object(),
+        id_tenant=int(id_tenant),
+        contexto=contexto,
+        acoes=acoes,
+    )
+    return jsonify(success=True, sync_job_id=job_id)
+
+
+@bling_bp.get("/api/integracoes/bling/categorias/progresso/<job_id>")
+@login_obrigatorio()
+def api_categorias_sync_progresso(job_id: str):
+    if not _pode_bling_sync():
+        return jsonify(success=False, message="Sem permissão."), 403
+    from api.bling.categorias_sync_progresso import obter_progresso_categorias
+
+    id_tenant = session.get("id_tenant")
+    job = obter_progresso_categorias(job_id, int(id_tenant))
+    if not job:
+        return jsonify(success=False, message="Job não encontrado."), 404
+    return jsonify(success=True, progresso=job)
+
+
 @bling_bp.post("/api/integracoes/bling/categorias/validar-importacao")
 @login_obrigatorio()
 def api_categorias_bling_validar_importacao():

@@ -197,6 +197,19 @@ def _nome_categoria_bling(cat: dict, id_bling: str) -> str:
     return (cat.get("descricao") or f"Categoria Bling {id_bling}").strip()[:120]
 
 
+def _caminho_categoria_bling_local(id_bling: str, by_id: dict[str, dict]) -> str:
+    """Monta caminho usando apenas dados já carregados (sem GET por id)."""
+    partes: list[str] = []
+    atual = str(id_bling or "").strip()
+    vistos: set[str] = set()
+    while atual and atual not in vistos:
+        vistos.add(atual)
+        cat = by_id.get(atual) or {}
+        partes.insert(0, _nome_categoria_bling(cat, atual))
+        atual = _id_pai_bling(cat) or ""
+    return " › ".join(partes)
+
+
 def _caminho_categoria_bling(
     id_bling: str,
     cache_api: dict[str, dict],
@@ -207,7 +220,7 @@ def _caminho_categoria_bling(
     vistos: set[str] = set()
     while atual and atual not in vistos:
         vistos.add(atual)
-        cat = _fetch_categoria_bling(id_tenant, atual, cache_api)
+        cat = cache_api.get(atual) if atual in cache_api else _fetch_categoria_bling(id_tenant, atual, cache_api)
         partes.insert(0, _nome_categoria_bling(cat, atual))
         atual = _id_pai_bling(cat) or ""
     return " › ".join(partes)
@@ -683,8 +696,8 @@ def associar_segmento_categorias_bling(
     return int(cur.rowcount or 0)
 
 
-def listar_categorias_bling_flat(id_tenant: int) -> list[dict[str, Any]]:
-    """Lista categorias do Bling em ordem de árvore para o select da UI."""
+def carregar_mapa_categorias_bling_listagem(id_tenant: int) -> dict[str, dict]:
+    """Mapa id → categoria a partir da listagem paginada Bling (1 req/página)."""
     todas: list[dict] = []
     pagina = 1
     while True:
@@ -701,6 +714,16 @@ def listar_categorias_bling_flat(id_tenant: int) -> list[dict[str, Any]]:
         cid = str(c.get("id") or "").strip()
         if cid:
             by_id[cid] = c
+    return by_id
+
+
+def listar_categorias_bling_flat(
+    id_tenant: int,
+    *,
+    by_id: dict[str, dict] | None = None,
+) -> list[dict[str, Any]]:
+    """Lista categorias do Bling em ordem de árvore para o select da UI."""
+    by_id = by_id if by_id is not None else carregar_mapa_categorias_bling_listagem(id_tenant)
 
     filhos: dict[str, list[str]] = defaultdict(list)
     raizes: list[str] = []
@@ -724,6 +747,7 @@ def listar_categorias_bling_flat(id_tenant: int) -> list[dict[str, Any]]:
                 "nome": nome,
                 "label": f"{prefixo}{nome}",
                 "nivel": profundidade + 1,
+                "id_bling_pai": _id_pai_bling(cat),
             }
         ]
         for filho in ordenar(filhos.get(cid, [])):

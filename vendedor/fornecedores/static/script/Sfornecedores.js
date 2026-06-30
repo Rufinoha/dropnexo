@@ -122,15 +122,15 @@
                 <p class="Forn_CardLocal">${esc(local)}</p>
               </div>
             </div>
-            <span class="Forn_CardBadge">${esc(st.badge || st.txt)}</span>
           </div>
           <div class="Forn_CardChips">${chips || '<span class="Forn_Chip Forn_Chip--muted">Sem segmento</span>'}</div>
-          <div class="Forn_CardStats">
+          ${f.motivo_recusa ? `<p class="Forn_CardRecusa" title="${attrEsc(f.motivo_recusa)}">Motivo: ${esc(f.motivo_recusa)}</p>` : ""}
+          <div class="Forn_CardMetaRow">
             <span class="Forn_CardStat">
               <strong>${qtd}</strong> ${qtd === 1 ? "produto" : "produtos"}
             </span>
+            <span class="Forn_CardBadge">${esc(st.badge || st.txt)}</span>
           </div>
-          ${f.motivo_recusa ? `<p class="Forn_CardRecusa" title="${attrEsc(f.motivo_recusa)}">Motivo: ${esc(f.motivo_recusa)}</p>` : ""}
           <div class="Forn_CardFooter">
             <button type="button" class="Forn_CardBtn Forn_CardBtn--ghost" data-acao="loja">Ver catálogo</button>
             ${

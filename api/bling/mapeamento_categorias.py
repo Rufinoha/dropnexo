@@ -397,10 +397,18 @@ def _validar_segmento_tenant(cur, id_tenant: int, id_segmento: int) -> None:
 
 
 def listar_painel_categorias_bling(cur, id_tenant: int, contexto: str) -> dict[str, Any]:
-    from api.bling.sync_categorias import listar_categorias_bling_flat, obter_estado_mapeamento_categoria
+    from api.bling.sync_categorias import (
+        carregar_mapa_categorias_bling_listagem,
+        listar_categorias_bling_flat,
+        obter_estado_mapeamento_categoria,
+        _caminho_categoria_bling_local,
+        _id_pai_bling,
+        _nome_categoria_bling,
+    )
     from fornecedor.segmentos.servico_segmentos import ids_segmentos_fornecedor
 
-    bling_flat = listar_categorias_bling_flat(id_tenant)
+    cache_api = carregar_mapa_categorias_bling_listagem(id_tenant)
+    bling_flat = listar_categorias_bling_flat(id_tenant, by_id=cache_api)
     drop = listar_categorias_dropnexo_tenant(cur, id_tenant)
     cur.execute(
         "SELECT id, id_segmento FROM tbl_categoria WHERE id_tenant = %s AND ativo = TRUE",
@@ -420,7 +428,6 @@ def listar_painel_categorias_bling(cur, id_tenant: int, contexto: str) -> dict[s
 
     linhas: list[dict[str, Any]] = []
     n_mapeadas = n_ignoradas = n_pendentes = 0
-    cache_api: dict[str, dict] = {}
 
     for b in bling_flat:
         id_b = str(b.get("id") or "")
@@ -433,9 +440,9 @@ def listar_painel_categorias_bling(cur, id_tenant: int, contexto: str) -> dict[s
         else:
             n_pendentes += 1
 
-        cat = _fetch_categoria_bling(id_tenant, id_b, cache_api)
-        parent_bling = _id_pai_bling(cat)
-        caminho = _caminho_categoria_bling(id_b, cache_api, id_tenant)
+        cat = cache_api.get(id_b) or {}
+        parent_bling = b.get("id_bling_pai") or _id_pai_bling(cat)
+        caminho = _caminho_categoria_bling_local(id_b, cache_api)
         linhas.append(
             {
                 "id_bling": id_b,
@@ -478,6 +485,7 @@ def salvar_mapeamento_categoria_ui(
     id_segmento: int | None = None,
     id_dropnexo: int | None = None,
     id_parent_dropnexo: int | None = None,
+    cache_api: dict[str, dict] | None = None,
 ) -> dict[str, Any]:
     from api.bling.sync_categorias import (
         _fetch_categoria_bling,
@@ -495,8 +503,8 @@ def salvar_mapeamento_categoria_ui(
     if acao not in ("vincular", "criar", "ignorar"):
         raise ValueError("Ação inválida. Use vincular, criar ou ignorar.")
 
-    cache_api: dict[str, dict] = {}
-    cat = _fetch_categoria_bling(id_tenant, id_bling, cache_api)
+    cache: dict[str, dict] = cache_api if cache_api is not None else {}
+    cat = cache.get(id_bling) or _fetch_categoria_bling(id_tenant, id_bling, cache)
     nome_bling = _nome_categoria_bling(cat, id_bling)
     parent_bling = _id_pai_bling(cat)
 
@@ -555,11 +563,147 @@ def salvar_mapeamento_categoria_ui(
         contexto,
         id_bling,
         id_segmento=int(id_segmento),
-        cache_api=cache_api,
+        cache_api=cache,
     )
 
     estado = obter_estado_mapeamento_categoria(cur, id_tenant, contexto, id_bling)
     return {"status": estado.get("status"), "id_bling": id_bling, "id_dropnexo": cat_id, **estado}
+
+
+def processar_lote_mapeamento_categorias_ui(
+    cur,
+    id_tenant: int,
+    contexto: str,
+    acoes: list[dict[str, Any]],
+    *,
+    on_progresso=None,
+    cache_api: dict[str, dict] | None = None,
+) -> dict[str, Any]:
+    """Aplica várias ações de mapeamento com throttle entre itens."""
+    import time
+
+    from api.bling.sync_categorias import (
+        _ordenar_ids_categoria_bling,
+        carregar_mapa_categorias_bling_listagem,
+    )
+    from api.bling.sync_estoque import BLING_INTERVALO_SYNC_SEG, BLING_SYNC_MAX_TENTATIVAS
+
+    cache = dict(cache_api) if cache_api is not None else carregar_mapa_categorias_bling_listagem(id_tenant)
+
+    normalizadas: list[dict[str, Any]] = []
+    for raw in acoes or []:
+        id_bling = str(raw.get("id_bling") or "").strip()
+        acao = (raw.get("acao") or "").strip().lower()
+        if not id_bling or acao not in ("vincular", "criar", "ignorar"):
+            continue
+        try:
+            id_seg = int(raw["id_segmento"]) if raw.get("id_segmento") not in (None, "") else None
+        except (TypeError, ValueError):
+            id_seg = None
+        try:
+            id_drop = int(raw["id_dropnexo"]) if raw.get("id_dropnexo") not in (None, "") else None
+        except (TypeError, ValueError):
+            id_drop = None
+        normalizadas.append(
+            {
+                "id_bling": id_bling,
+                "acao": acao,
+                "id_segmento": id_seg,
+                "id_dropnexo": id_drop,
+            }
+        )
+
+    ids_set = {a["id_bling"] for a in normalizadas}
+    ordenadas = _ordenar_ids_categoria_bling(ids_set, cache, id_tenant)
+    por_id = {a["id_bling"]: a for a in normalizadas}
+    fila = [por_id[i] for i in ordenadas if i in por_id]
+
+    total = len(fila)
+    processados = ok = falhas = 0
+    erros: list[str] = []
+
+    def _emit(**kwargs) -> None:
+        if on_progresso:
+            on_progresso(kwargs)
+
+    _emit(total=total, processados=0, sincronizados=0, falhas=0, mensagem="Iniciando…")
+
+    for item in fila:
+        id_bling = item["id_bling"]
+        acao = item["acao"]
+        id_seg = item.get("id_segmento")
+        id_drop = item.get("id_dropnexo")
+        nome = (cache.get(id_bling) or {}).get("descricao") or id_bling
+
+        if acao != "ignorar" and not id_seg:
+            falhas += 1
+            processados += 1
+            erros.append(f"{nome}: selecione o segmento.")
+            _emit(
+                processados=processados,
+                sincronizados=ok,
+                falhas=falhas,
+                mensagem=f"Processados {processados}/{total}",
+            )
+            time.sleep(BLING_INTERVALO_SYNC_SEG)
+            continue
+
+        if acao == "vincular" and not id_drop:
+            falhas += 1
+            processados += 1
+            erros.append(f"{nome}: selecione a categoria DropNexo.")
+            _emit(
+                processados=processados,
+                sincronizados=ok,
+                falhas=falhas,
+                mensagem=f"Processados {processados}/{total}",
+            )
+            time.sleep(BLING_INTERVALO_SYNC_SEG)
+            continue
+
+        ultimo_erro: Exception | None = None
+        for tentativa in range(BLING_SYNC_MAX_TENTATIVAS):
+            try:
+                salvar_mapeamento_categoria_ui(
+                    cur,
+                    id_tenant,
+                    contexto,
+                    id_bling=id_bling,
+                    acao=acao,
+                    id_segmento=id_seg,
+                    id_dropnexo=id_drop,
+                    cache_api=cache,
+                )
+                ok += 1
+                ultimo_erro = None
+                break
+            except Exception as exc:
+                ultimo_erro = exc
+                msg = str(exc).lower()
+                if "limite" in msg or "too_many" in msg or "429" in msg:
+                    time.sleep(min(8.0, 1.5 * (tentativa + 1)))
+                    continue
+                break
+
+        processados += 1
+        if ultimo_erro:
+            falhas += 1
+            erros.append(f"{nome}: {ultimo_erro}")
+        _emit(
+            processados=processados,
+            sincronizados=ok,
+            falhas=falhas,
+            mensagem=f"Processados {processados}/{total}",
+        )
+        time.sleep(BLING_INTERVALO_SYNC_SEG)
+
+    return {
+        "total": total,
+        "processados": processados,
+        "sincronizados": ok,
+        "falhas": falhas,
+        "erros": erros[:20],
+    }
 
 
 def validar_mapeamento_para_importacao(
