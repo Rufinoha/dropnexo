@@ -16,8 +16,25 @@ from global_utils import Var_ConectarBanco, agora_utc
 _log = logging.getLogger(__name__)
 _lock = threading.Lock()
 _jobs_memoria: dict[str, dict[str, Any]] = {}
-_painel_jobs: dict[str, dict[str, Any]] = {}
 _USE_DB: bool | None = None
+_PAYLOAD_COL: bool | None = None
+
+
+def _payload_col_disponivel(cur) -> bool:
+    global _PAYLOAD_COL
+    if _PAYLOAD_COL is not None:
+        return _PAYLOAD_COL
+    try:
+        cur.execute(
+            """
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'tbl_integracao_bling_sync_job' AND column_name = 'payload'
+            """
+        )
+        _PAYLOAD_COL = bool(cur.fetchone())
+    except Exception:
+        _PAYLOAD_COL = False
+    return _PAYLOAD_COL
 
 
 def _tabela_disponivel(cur) -> bool:
@@ -64,36 +81,62 @@ def _salvar_job_db(job_id: str, dados: dict[str, Any]) -> None:
         cur = conn.cursor()
         if not _tabela_disponivel(cur):
             return
-        cur.execute(
-            """
-            INSERT INTO tbl_integracao_bling_sync_job (
-                job_id, id_tenant, id_bling_deposito, status,
-                total, processados, sincronizados, falhas, mensagem, resumo, atualizado_em
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            ON CONFLICT (job_id) DO UPDATE SET
-                status = EXCLUDED.status,
-                total = EXCLUDED.total,
-                processados = EXCLUDED.processados,
-                sincronizados = EXCLUDED.sincronizados,
-                falhas = EXCLUDED.falhas,
-                mensagem = EXCLUDED.mensagem,
-                resumo = COALESCE(EXCLUDED.resumo, tbl_integracao_bling_sync_job.resumo),
-                atualizado_em = EXCLUDED.atualizado_em
-            """,
-            (
-                job_id,
-                int(dados.get("id_tenant") or 0),
-                None,
-                dados.get("status") or "processando",
-                int(dados.get("total") or 0),
-                int(dados.get("processados") or 0),
-                int(dados.get("sincronizados") or 0),
-                int(dados.get("falhas") or 0),
-                (dados.get("mensagem") or "")[:500] or None,
-                (dados.get("resumo") or "")[:500] or None,
-                agora_utc(),
-            ),
+        payload = dados.get("payload")
+        if payload is None and dados.get("dados") is not None:
+            payload = dados.get("dados")
+        payload_json = json.dumps(payload, ensure_ascii=False) if payload is not None else None
+        params = (
+            job_id,
+            int(dados.get("id_tenant") or 0),
+            None,
+            dados.get("status") or "processando",
+            int(dados.get("total") or 0),
+            int(dados.get("processados") or 0),
+            int(dados.get("sincronizados") or 0),
+            int(dados.get("falhas") or 0),
+            (dados.get("mensagem") or "")[:500] or None,
+            (dados.get("resumo") or "")[:500] or None,
+            agora_utc(),
         )
+        if _payload_col_disponivel(cur) and payload_json is not None:
+            cur.execute(
+                """
+                INSERT INTO tbl_integracao_bling_sync_job (
+                    job_id, id_tenant, id_bling_deposito, status,
+                    total, processados, sincronizados, falhas, mensagem, resumo, payload, atualizado_em
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s)
+                ON CONFLICT (job_id) DO UPDATE SET
+                    status = EXCLUDED.status,
+                    total = EXCLUDED.total,
+                    processados = EXCLUDED.processados,
+                    sincronizados = EXCLUDED.sincronizados,
+                    falhas = EXCLUDED.falhas,
+                    mensagem = EXCLUDED.mensagem,
+                    resumo = COALESCE(EXCLUDED.resumo, tbl_integracao_bling_sync_job.resumo),
+                    payload = COALESCE(EXCLUDED.payload, tbl_integracao_bling_sync_job.payload),
+                    atualizado_em = EXCLUDED.atualizado_em
+                """,
+                params + (payload_json,),
+            )
+        else:
+            cur.execute(
+                """
+                INSERT INTO tbl_integracao_bling_sync_job (
+                    job_id, id_tenant, id_bling_deposito, status,
+                    total, processados, sincronizados, falhas, mensagem, resumo, atualizado_em
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (job_id) DO UPDATE SET
+                    status = EXCLUDED.status,
+                    total = EXCLUDED.total,
+                    processados = EXCLUDED.processados,
+                    sincronizados = EXCLUDED.sincronizados,
+                    falhas = EXCLUDED.falhas,
+                    mensagem = EXCLUDED.mensagem,
+                    resumo = COALESCE(EXCLUDED.resumo, tbl_integracao_bling_sync_job.resumo),
+                    atualizado_em = EXCLUDED.atualizado_em
+                """,
+                params,
+            )
         conn.commit()
     finally:
         conn.close()
@@ -284,21 +327,23 @@ def iniciar_carregar_painel_categorias(
     contexto: str,
 ) -> str:
     job_id = str(uuid.uuid4())
-    with _lock:
-        _painel_jobs[job_id] = {
-            "status": "processando",
-            "id_tenant": id_tenant,
-            "contexto": contexto,
-            "total": 0,
-            "processados": 0,
-            "mensagem": "Carregando categorias do Bling…",
-        }
+    _atualizar_job(
+        job_id,
+        status="processando",
+        id_tenant=id_tenant,
+        total=0,
+        processados=0,
+        sincronizados=0,
+        falhas=0,
+        mensagem="Carregando categorias do Bling…",
+        resumo=json.dumps({"tipo": "categorias_painel", "contexto": contexto}, ensure_ascii=False),
+    )
 
     def _atualizar_painel(**kwargs) -> None:
-        with _lock:
-            job = dict(_painel_jobs.get(job_id) or {})
-            job.update(kwargs)
-            _painel_jobs[job_id] = job
+        if "dados" in kwargs:
+            kwargs["payload"] = kwargs.pop("dados")
+        kwargs.setdefault("id_tenant", id_tenant)
+        _atualizar_job(job_id, **kwargs)
 
     def _worker() -> None:
         with app.app_context():
@@ -359,19 +404,82 @@ def iniciar_carregar_painel_categorias(
     return job_id
 
 
+def _ler_job_painel_db(job_id: str, id_tenant: int) -> dict[str, Any] | None:
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        if not _tabela_disponivel(cur):
+            return None
+        if _payload_col_disponivel(cur):
+            cur.execute(
+                """
+                SELECT status, total, processados, mensagem, resumo, payload
+                FROM tbl_integracao_bling_sync_job
+                WHERE job_id = %s AND id_tenant = %s
+                """,
+                (job_id, int(id_tenant)),
+            )
+        else:
+            cur.execute(
+                """
+                SELECT status, total, processados, mensagem, resumo, NULL
+                FROM tbl_integracao_bling_sync_job
+                WHERE job_id = %s AND id_tenant = %s
+                """,
+                (job_id, int(id_tenant)),
+            )
+        row = cur.fetchone()
+        if not row:
+            return None
+        resumo_raw = row[4]
+        tipo = ""
+        if resumo_raw:
+            try:
+                meta = json.loads(resumo_raw) if isinstance(resumo_raw, str) else resumo_raw
+                tipo = (meta.get("tipo") or "") if isinstance(meta, dict) else ""
+            except Exception:
+                tipo = ""
+        if tipo != "categorias_painel":
+            return None
+        out: dict[str, Any] = {
+            "status": row[0],
+            "total": int(row[1] or 0),
+            "processados": int(row[2] or 0),
+            "mensagem": row[3] or "",
+        }
+        payload = row[5]
+        if isinstance(payload, str):
+            try:
+                payload = json.loads(payload)
+            except Exception:
+                payload = None
+        if row[0] == "concluido" and isinstance(payload, dict):
+            out["dados"] = payload
+        return out
+    finally:
+        conn.close()
+
+
 def obter_job_painel_categorias(job_id: str, id_tenant: int) -> dict[str, Any] | None:
+    job = _ler_job_painel_db(job_id, int(id_tenant))
+    if job:
+        return job
     with _lock:
-        job = _painel_jobs.get(job_id)
-    if not job or int(job.get("id_tenant") or 0) != int(id_tenant):
+        mem = _jobs_memoria.get(job_id)
+    if not mem or int(mem.get("id_tenant") or 0) != int(id_tenant):
+        return None
+    resumo = mem.get("resumo") or ""
+    if "categorias_painel" not in str(resumo):
         return None
     out: dict[str, Any] = {
-        "status": job.get("status") or "processando",
-        "total": int(job.get("total") or 0),
-        "processados": int(job.get("processados") or 0),
-        "mensagem": job.get("mensagem") or "",
+        "status": mem.get("status") or "processando",
+        "total": int(mem.get("total") or 0),
+        "processados": int(mem.get("processados") or 0),
+        "mensagem": mem.get("mensagem") or "",
     }
-    if job.get("status") == "concluido" and job.get("dados"):
-        out["dados"] = job["dados"]
+    payload = mem.get("payload") or mem.get("dados")
+    if mem.get("status") == "concluido" and payload:
+        out["dados"] = payload
     return out
 
 

@@ -332,6 +332,7 @@
 
   function pollSyncCategorias(jobId, onTick) {
     return new Promise((resolve, reject) => {
+      let tentativas404 = 0;
       const poll = async () => {
         try {
           const r = await fetch(
@@ -339,9 +340,12 @@
           );
           const j = await r.json();
           if (r.status === 404) {
+            tentativas404 += 1;
+            if (tentativas404 > 8) throw new Error("Job não encontrado. Recarregue a página.");
             setTimeout(poll, 1500);
             return;
           }
+          tentativas404 = 0;
           if (!r.ok || !j.success) throw new Error(j.message || "Erro no progresso.");
           const p = j.progresso || {};
           if (onTick) onTick(p);
@@ -405,7 +409,7 @@
       });
 
       Swal.close();
-      await carregarCategorias();
+      await carregarCategorias({ sync: true });
 
       const falhas = Number(resultado.falhas) || 0;
       const ok = Number(resultado.sincronizados) || 0;
@@ -490,7 +494,7 @@
       });
 
       Swal.close();
-      await carregarCategorias();
+      await carregarCategorias({ sync: true });
       await Swal.fire({
         icon: "success",
         title: "Hierarquia reorganizada",
@@ -627,6 +631,7 @@
 
   function pollPainelCategorias(jobId) {
     return new Promise((resolve, reject) => {
+      let tentativas404 = 0;
       const poll = async () => {
         try {
           const r = await fetch(
@@ -634,9 +639,14 @@
           );
           const j = await r.json();
           if (r.status === 404) {
+            tentativas404 += 1;
+            if (tentativas404 > 8) {
+              throw new Error("Job não encontrado. Recarregue a aba Categorias.");
+            }
             setTimeout(poll, 1500);
             return;
           }
+          tentativas404 = 0;
           if (!r.ok || !j.success) throw new Error(j.message || "Erro ao carregar categorias.");
           const job = j.job || {};
           const pct = pctSync(job);
@@ -757,13 +767,16 @@
     syncCatChkAll();
   }
 
-  async function carregarCategorias() {
+  async function carregarCategorias(opts = {}) {
     const tbody = document.getElementById("bl_tbl_categorias");
     if (!tbody) return;
     mostrarCarregandoCategorias();
     const ctx = estado.contexto_modulo || "fornecedor";
+    const sync = !!opts.sync;
     try {
-      const r = await fetch(`/api/integracoes/bling/categorias/mapeamento?contexto=${encodeURIComponent(ctx)}`);
+      const qs = new URLSearchParams({ contexto: ctx });
+      if (sync) qs.set("modo", "sync");
+      const r = await fetch(`/api/integracoes/bling/categorias/mapeamento?${qs.toString()}`);
       const j = await r.json();
       if (!r.ok || !j.success) {
         tbody.innerHTML = `<tr><td colspan="7">${escHtml(j.message || "Erro ao carregar categorias.")}</td></tr>`;
@@ -777,6 +790,9 @@
           j.total ? `${j.total} categorias — aguarde a árvore completa.` : "Isso evita criar tudo na raiz."
         );
         dados = await pollPainelCategorias(j.sync_job_id);
+        if (!dados?.categorias?.length) {
+          return carregarCategorias({ sync: true });
+        }
       }
 
       renderCategoriasPainel(dados || {});

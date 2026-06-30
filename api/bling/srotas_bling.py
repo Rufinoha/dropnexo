@@ -657,6 +657,12 @@ def api_categorias_bling_mapeamento():
     if contexto not in ("fornecedor", "vendedor"):
         return jsonify(success=False, message="Contexto inválido."), 400
 
+    forcar_sync = (request.args.get("modo") or "").strip().lower() == "sync" or request.args.get("sync") in (
+        "1",
+        "true",
+        "sim",
+    )
+
     id_tenant = session.get("id_tenant")
     conn = Var_ConectarBanco()
     try:
@@ -678,7 +684,11 @@ def api_categorias_bling_mapeamento():
 
         id_tenant_int = int(id_tenant)
         cache = carregar_mapa_categorias_bling_listagem(id_tenant_int)
-        if cache_categorias_precisa_enriquecer(cache) and len(cache) >= PAINEL_ENRIQUECER_ASYNC_MIN:
+        if (
+            not forcar_sync
+            and cache_categorias_precisa_enriquecer(cache)
+            and len(cache) >= PAINEL_ENRIQUECER_ASYNC_MIN
+        ):
             job_id = iniciar_carregar_painel_categorias(
                 current_app._get_current_object(),
                 id_tenant=id_tenant_int,
