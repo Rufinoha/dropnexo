@@ -3,7 +3,7 @@
 {% block title %}Bling — Integrações — {{ MARCA_NOME }}{% endblock %}
 {% block topbar_title %}Integração Bling{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('static', filename='style/Cbling_integracao.css') }}?v=7" />
+<link rel="stylesheet" href="{{ url_for('static', filename='style/Cbling_integracao.css') }}?v=8" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal Bl_Wrap">
@@ -139,8 +139,8 @@
 
         <div class="Bl_SyncVisual inativo" id="bl_sync_visual" aria-hidden="true">
           <div class="Bl_SyncNode">
-            <div class="Bl_SyncIcon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none"><path d="M4 7h16v12H4z" stroke="currentColor" stroke-width="1.6"/><path d="M4 11h16M9 7V5h6v2" stroke="currentColor" stroke-width="1.6"/></svg>
+            <div class="Bl_SyncIcon Bl_SyncIcon--img" aria-hidden="true">
+              <img src="{{ url_for('static', filename='imge/icone_dropnexo.png') }}" alt="" width="46" height="46" />
             </div>
             <strong>DropNexo</strong>
             <span>Estoque</span>
@@ -156,7 +156,9 @@
             </div>
           </div>
           <div class="Bl_SyncNode">
-            <div class="Bl_SyncIcon Bl_SyncIcon--bling" aria-hidden="true">B</div>
+            <div class="Bl_SyncIcon Bl_SyncIcon--img Bl_SyncIcon--bling" aria-hidden="true">
+              <img src="{{ url_for('bling.static', filename='imge/icone_bling.png') }}" alt="" width="46" height="46" />
+            </div>
             <strong>Bling</strong>
             <span>ERP</span>
           </div>
@@ -196,5 +198,5 @@
 </div>
 {% endblock %}
 {% block page_js %}
-<script src="{{ url_for('static', filename='script/Sbling_integracao.js') }}?v=10"></script>
+<script src="{{ url_for('static', filename='script/Sbling_integracao.js') }}?v=11"></script>
 {% endblock %}

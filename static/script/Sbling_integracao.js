@@ -134,6 +134,16 @@
     const poll = async () => {
       const r = await fetch(`/api/integracoes/bling/estoque/sync-progresso/${encodeURIComponent(jobId)}`);
       const j = await r.json();
+      if (r.status === 404) {
+        await carregarStatus();
+        await Swal.fire({
+          icon: "info",
+          title: "Vínculo salvo",
+          text: "A sincronização inicial foi iniciada. O progresso não pôde ser acompanhado nesta sessão — confira em Últimos logs ou atualize a página em instantes.",
+          confirmButtonColor: "#021F81",
+        });
+        return;
+      }
       if (!r.ok || !j.success) throw new Error(j.message || "Erro no progresso.");
       const p = j.progresso || {};
       Swal.update({

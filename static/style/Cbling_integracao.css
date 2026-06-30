@@ -426,13 +426,24 @@
   box-shadow: 0 8px 20px rgba(28, 46, 60, 0.22);
 }
 
+.Bl_SyncIcon--img {
+  background: #fff;
+  padding: 4px;
+  overflow: hidden;
+}
+
+.Bl_SyncIcon--img img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  border-radius: 10px;
+}
+
 .Bl_SyncIcon svg { width: 24px; height: 24px; }
 
 .Bl_SyncIcon--bling {
-  font-size: 22px;
-  font-weight: 900;
-  background: linear-gradient(145deg, #0ea5e9, #0284c7);
-  box-shadow: 0 8px 20px rgba(2, 132, 199, 0.28);
+  box-shadow: 0 8px 20px rgba(2, 132, 199, 0.18);
 }
 
 .Bl_SyncBridge { position: relative; padding: 8px 0 18px; }
