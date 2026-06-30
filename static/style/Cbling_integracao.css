@@ -554,6 +554,75 @@
   margin-bottom: 0.35rem;
 }
 
+.Bl_DepSyncCell {
+  min-width: 200px;
+  vertical-align: middle;
+}
+
+.Bl_DepBtnSync {
+  padding: 6px 12px;
+  font-size: 0.78rem;
+  border-radius: 8px;
+  border: 1px solid rgba(2, 31, 129, 0.35);
+  background: linear-gradient(180deg, #fff, #f4f7ff);
+  color: #021f81;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: box-shadow 160ms ease, transform 160ms ease;
+}
+
+.Bl_DepBtnSync:hover:not(:disabled) {
+  box-shadow: 0 4px 14px rgba(2, 31, 129, 0.12);
+  transform: translateY(-1px);
+}
+
+.Bl_DepBtnSync:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.Bl_DepProg {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 180px;
+}
+
+.Bl_DepProgTrack {
+  height: 8px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  overflow: hidden;
+}
+
+.Bl_DepProgBar {
+  height: 100%;
+  width: 0%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #021f81, #2c6bf3);
+  transition: width 400ms ease;
+}
+
+.Bl_DepProgLabel {
+  font-size: 0.72rem;
+  color: #64748b;
+  line-height: 1.3;
+}
+
+.Bl_DepSyncOk {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #166534;
+  line-height: 1.35;
+}
+
+.Bl_DepBtnSalvar:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 @media (max-width: 720px) {
   .Bl_SyncGrid { grid-template-columns: 1fr; }
   .Bl_SubTab { font-size: 0.78rem; padding: 0.5rem 0.45rem; }

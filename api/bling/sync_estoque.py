@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import time
 from typing import Callable
 
 from api.bling.cliente import api_request, listar_depositos_bling, obter_saldos_estoque
@@ -12,6 +13,27 @@ from fornecedor.catalogo.servico_estoque_deposito import (
     sincronizar_total_variante,
 )
 from global_utils import agora_utc
+
+# Bling: máx. 3 req/s — intervalo conservador entre produtos na sync manual
+BLING_INTERVALO_SYNC_SEG = 0.4
+BLING_SYNC_MAX_TENTATIVAS = 6
+
+
+def _obter_saldos_com_retry(id_tenant: int, id_bling: str) -> dict:
+    ultimo_erro: Exception | None = None
+    for tentativa in range(BLING_SYNC_MAX_TENTATIVAS):
+        try:
+            return obter_saldos_estoque(id_tenant, id_bling)
+        except Exception as exc:
+            ultimo_erro = exc
+            msg = str(exc).lower()
+            if "limite" in msg or "too_many" in msg or "429" in msg:
+                time.sleep(min(8.0, 1.5 * (tentativa + 1)))
+                continue
+            raise
+    if ultimo_erro:
+        raise ultimo_erro
+    return {}
 
 
 def _estoque_modo_permite_importar(cur, id_tenant: int, contexto: str) -> bool:
@@ -187,7 +209,7 @@ def importar_estoque_produto_bling(
         return 0
 
     try:
-        saldos = obter_saldos_estoque(id_tenant, id_bling)
+        saldos = _obter_saldos_com_retry(id_tenant, id_bling)
     except Exception:
         return 0
 
@@ -337,7 +359,7 @@ def sincronizar_estoque_inicial_tenant(
             ok += 1
         elif not sucesso:
             falhas += 1
-        if on_progresso and (idx % 5 == 0 or idx == total):
+        if on_progresso and (idx % 2 == 0 or idx == total):
             on_progresso(
                 {
                     "total": total,
@@ -347,6 +369,8 @@ def sincronizar_estoque_inicial_tenant(
                     "mensagem": f"Processados {idx}/{total}",
                 }
             )
+        if idx < total:
+            time.sleep(BLING_INTERVALO_SYNC_SEG)
 
     if ok > 0:
         marcar_sync_estoque_recebido(cur, id_tenant, contexto)

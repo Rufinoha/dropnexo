@@ -3,7 +3,7 @@
 {% block title %}Bling — Integrações — {{ MARCA_NOME }}{% endblock %}
 {% block topbar_title %}Integração Bling{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('static', filename='style/Cbling_integracao.css') }}?v=8" />
+<link rel="stylesheet" href="{{ url_for('static', filename='style/Cbling_integracao.css') }}?v=9" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal Bl_Wrap">
@@ -165,7 +165,7 @@
         </div>
 
         <p class="Bl_Hint Bl_SyncHint">
-          Após vincular depósitos, a primeira sincronização é feita automaticamente. Depois, o Bling avisa via webhook.
+          Após vincular depósitos, use <strong>Atualizar estoque</strong> para importar os saldos do Bling (respeitando o limite da API). Depois, o Bling avisa via webhook.
         </p>
 
         <div class="Bl_EstoqueFooter">
@@ -179,10 +179,10 @@
 
       <div class="Bl_DepPanel" id="bl_painel_depositos">
         <h4>Pareamento de depósitos</h4>
-        <p class="Bl_Hint">Vincule manualmente cada depósito Bling ao depósito DropNexo. Ao salvar um vínculo, a sincronização inicial de estoque é disparada.</p>
+        <p class="Bl_Hint">Vincule cada depósito Bling ao DropNexo com <strong>Salvar</strong>. Se o vínculo mudar, use <strong>Atualizar estoque</strong> para importar os saldos (uma vez por alteração).</p>
         <div class="Bl_DepTblWrap">
           <table class="Bl_DepTbl">
-            <thead><tr><th>Bling</th><th>DropNexo</th><th></th></tr></thead>
+            <thead><tr><th>Bling</th><th>DropNexo</th><th>Estoque</th><th></th></tr></thead>
             <tbody id="bl_tbl_depositos"><tr><td colspan="3">Carregando…</td></tr></tbody>
           </table>
         </div>
@@ -198,5 +198,5 @@
 </div>
 {% endblock %}
 {% block page_js %}
-<script src="{{ url_for('static', filename='script/Sbling_integracao.js') }}?v=11"></script>
+<script src="{{ url_for('static', filename='script/Sbling_integracao.js') }}?v=12"></script>
 {% endblock %}

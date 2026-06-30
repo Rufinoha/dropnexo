@@ -147,11 +147,16 @@ def iniciar_sync_inicial_deposito(
                     on_progresso=_progresso,
                 )
                 conn.commit()
+                from api.bling.depositos import marcar_sync_estoque_deposito_concluido
+
+                marcar_sync_estoque_deposito_concluido(cur, id_tenant, id_bling_deposito)
+                conn.commit()
                 _atualizar_job(
                     job_id,
                     status="concluido",
                     **resultado,
-                    mensagem=resultado.get("resumo") or "Concluído",
+                    mensagem="Sincronização do depósito efetuada com sucesso",
+                    resumo=resultado.get("resumo") or "Sincronização do depósito efetuada com sucesso",
                 )
             except Exception as e:
                 conn.rollback()
@@ -203,3 +208,9 @@ def obter_progresso_sync(job_id: str, id_tenant: int) -> dict[str, Any] | None:
     if not mem or int(mem.get("id_tenant") or 0) != int(id_tenant):
         return None
     return dict(mem)
+
+
+def deposito_tem_sync_ativa(cur, id_tenant: int, id_bling_deposito: str) -> bool:
+    from api.bling.depositos import obter_job_sync_ativo_deposito
+
+    return obter_job_sync_ativo_deposito(cur, id_tenant, id_bling_deposito) is not None

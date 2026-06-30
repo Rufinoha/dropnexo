@@ -7,7 +7,8 @@ from global_utils import agora_utc
 def listar_mapa_depositos(cur, id_tenant: int) -> list[dict]:
     cur.execute(
         """
-        SELECT dm.id, dm.id_bling_deposito, dm.nome_bling, dm.id_deposito_dropnexo, d.nome
+        SELECT dm.id, dm.id_bling_deposito, dm.nome_bling, dm.id_deposito_dropnexo, d.nome,
+               dm.estoque_sync_pendente, dm.estoque_sync_concluido_em
         FROM tbl_integracao_deposito_map dm
         LEFT JOIN tbl_deposito_expedicao d ON d.id = dm.id_deposito_dropnexo
         WHERE dm.id_tenant = %s
@@ -24,6 +25,8 @@ def listar_mapa_depositos(cur, id_tenant: int) -> list[dict]:
                 "nome_bling": r[2] or "",
                 "id_deposito_dropnexo": r[3],
                 "nome_dropnexo": r[4] or "",
+                "estoque_sync_pendente": bool(r[5]) if len(r) > 5 else False,
+                "estoque_sync_concluido_em": r[6].isoformat() if len(r) > 6 and r[6] else None,
             }
         )
     return out
@@ -49,7 +52,7 @@ def salvar_vinculo_deposito(
     id_bling_deposito: str,
     nome_bling: str | None,
     id_deposito_dropnexo: int | None,
-) -> int:
+) -> tuple[int, bool]:
     id_bling = str(id_bling_deposito).strip()
     if not id_bling:
         raise ValueError("Depósito Bling inválido.")
@@ -66,18 +69,69 @@ def salvar_vinculo_deposito(
 
     cur.execute(
         """
+        SELECT id_deposito_dropnexo FROM tbl_integracao_deposito_map
+        WHERE id_tenant = %s AND id_bling_deposito = %s
+        """,
+        (id_tenant, id_bling),
+    )
+    row_ant = cur.fetchone()
+    id_ant = int(row_ant[0]) if row_ant and row_ant[0] is not None else None
+    id_novo = int(id_deposito_dropnexo) if id_deposito_dropnexo else None
+    alterado = id_ant != id_novo
+
+    sync_pendente = False
+    sync_concluido = None
+    if id_novo and alterado:
+        sync_pendente = True
+    elif id_novo and not alterado:
+        cur.execute(
+            """
+            SELECT estoque_sync_pendente, estoque_sync_concluido_em
+            FROM tbl_integracao_deposito_map
+            WHERE id_tenant = %s AND id_bling_deposito = %s
+            """,
+            (id_tenant, id_bling),
+        )
+        st = cur.fetchone()
+        if st:
+            sync_pendente = bool(st[0])
+            sync_concluido = st[1]
+
+    cur.execute(
+        """
         INSERT INTO tbl_integracao_deposito_map (
-            id_tenant, id_bling_deposito, nome_bling, id_deposito_dropnexo, atualizado_em
-        ) VALUES (%s, %s, %s, %s, %s)
+            id_tenant, id_bling_deposito, nome_bling, id_deposito_dropnexo,
+            estoque_sync_pendente, estoque_sync_concluido_em, atualizado_em
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT (id_tenant, id_bling_deposito) DO UPDATE SET
             nome_bling = EXCLUDED.nome_bling,
             id_deposito_dropnexo = EXCLUDED.id_deposito_dropnexo,
+            estoque_sync_pendente = CASE
+                WHEN EXCLUDED.id_deposito_dropnexo IS NULL THEN FALSE
+                WHEN tbl_integracao_deposito_map.id_deposito_dropnexo IS DISTINCT FROM EXCLUDED.id_deposito_dropnexo
+                    THEN TRUE
+                ELSE tbl_integracao_deposito_map.estoque_sync_pendente
+            END,
+            estoque_sync_concluido_em = CASE
+                WHEN EXCLUDED.id_deposito_dropnexo IS NULL THEN NULL
+                WHEN tbl_integracao_deposito_map.id_deposito_dropnexo IS DISTINCT FROM EXCLUDED.id_deposito_dropnexo
+                    THEN NULL
+                ELSE tbl_integracao_deposito_map.estoque_sync_concluido_em
+            END,
             atualizado_em = EXCLUDED.atualizado_em
         RETURNING id
         """,
-        (id_tenant, id_bling, (nome_bling or "").strip() or None, id_deposito_dropnexo, agora_utc()),
+        (
+            id_tenant,
+            id_bling,
+            (nome_bling or "").strip() or None,
+            id_deposito_dropnexo,
+            sync_pendente,
+            sync_concluido,
+            agora_utc(),
+        ),
     )
-    return int(cur.fetchone()[0])
+    return int(cur.fetchone()[0]), alterado
 
 
 def sincronizar_depositos_bling_api(cur, id_tenant: int, depositos_bling: list[dict]) -> int:
@@ -255,10 +309,10 @@ def vincular_ou_criar_deposito_bling(
     id_deposito_dropnexo: int | None,
     criar_igual: bool = False,
     padrao_bling: bool = False,
-) -> tuple[int, int | None, bool]:
+) -> tuple[int, int | None, bool, bool]:
     """
     Salva vínculo Bling ↔ DropNexo. Se criar_igual, cria depósito antes de vincular.
-    Retorna (id_mapa, id_deposito_dropnexo, criou_deposito).
+    Retorna (id_mapa, id_deposito_dropnexo, criou_deposito, alterado).
     """
     id_drop = id_deposito_dropnexo
     criou = False
@@ -279,7 +333,7 @@ def vincular_ou_criar_deposito_bling(
         nome_bling=nome_bling,
         id_deposito_dropnexo=id_drop,
     )
-    return rid, id_drop, criou
+    return rid[0], id_drop, criou, rid[1]
 
 
 def resumo_depositos_bling(cur, id_tenant: int) -> dict:
@@ -304,3 +358,46 @@ def resumo_depositos_bling(cur, id_tenant: int) -> dict:
 def garantir_depositos_bling_vinculados(cur, id_tenant: int) -> dict:
     """Alias legado — apenas lista depósitos; vínculo é sempre manual."""
     return resumo_depositos_bling(cur, id_tenant)
+
+
+def marcar_sync_estoque_deposito_concluido(cur, id_tenant: int, id_bling_deposito: str) -> None:
+    cur.execute(
+        """
+        UPDATE tbl_integracao_deposito_map
+        SET estoque_sync_pendente = FALSE,
+            estoque_sync_concluido_em = %s,
+            atualizado_em = %s
+        WHERE id_tenant = %s AND id_bling_deposito = %s
+        """,
+        (agora_utc(), agora_utc(), id_tenant, str(id_bling_deposito)),
+    )
+
+
+def obter_job_sync_ativo_deposito(cur, id_tenant: int, id_bling_deposito: str) -> dict | None:
+    try:
+        cur.execute(
+            """
+            SELECT job_id::text, status, total, processados, sincronizados, falhas, mensagem
+            FROM tbl_integracao_bling_sync_job
+            WHERE id_tenant = %s
+              AND id_bling_deposito = %s
+              AND status = 'processando'
+            ORDER BY criado_em DESC
+            LIMIT 1
+            """,
+            (id_tenant, str(id_bling_deposito)),
+        )
+    except Exception:
+        return None
+    row = cur.fetchone()
+    if not row:
+        return None
+    return {
+        "job_id": row[0],
+        "status": row[1],
+        "total": row[2] or 0,
+        "processados": row[3] or 0,
+        "sincronizados": row[4] or 0,
+        "falhas": row[5] or 0,
+        "mensagem": row[6] or "",
+    }

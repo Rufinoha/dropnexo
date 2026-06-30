@@ -130,49 +130,120 @@
 
   const CRIAR_IGUAL = "__criar_igual__";
 
-  async function pollSyncJob(jobId) {
+  function pctSync(p) {
+    const total = Number(p.total) || 0;
+    const proc = Number(p.processados) || 0;
+    if (p.status === "concluido") return 100;
+    if (!total) return proc > 0 ? 5 : 0;
+    return Math.min(100, Math.round((proc / total) * 100));
+  }
+
+  function htmlProgSync(mensagem) {
+    const msg = mensagem || "Iniciando…";
+    return (
+      `<div class="Bl_DepProg">` +
+      `<div class="Bl_DepProgTrack"><div class="Bl_DepProgBar" style="width:0%"></div></div>` +
+      `<span class="Bl_DepProgLabel">${msg}</span></div>`
+    );
+  }
+
+  async function pollSyncDeposito(tr, jobId) {
+    const cell = tr.querySelector(".Bl_DepSyncCell");
+    const btnSave = tr.querySelector(".Bl_DepBtnSalvar");
+    if (!cell) return;
+    if (btnSave) btnSave.disabled = true;
+    cell.innerHTML = htmlProgSync("Iniciando…");
+
     const poll = async () => {
       const r = await fetch(`/api/integracoes/bling/estoque/sync-progresso/${encodeURIComponent(jobId)}`);
       const j = await r.json();
       if (r.status === 404) {
-        await carregarStatus();
-        await Swal.fire({
-          icon: "info",
-          title: "Vínculo salvo",
-          text: "A sincronização inicial foi iniciada. O progresso não pôde ser acompanhado nesta sessão — confira em Últimos logs ou atualize a página em instantes.",
-          confirmButtonColor: "#021F81",
-        });
+        setTimeout(poll, 1500);
         return;
       }
       if (!r.ok || !j.success) throw new Error(j.message || "Erro no progresso.");
       const p = j.progresso || {};
-      Swal.update({
-        html: `<p>${p.mensagem || "Sincronizando…"}</p><p><strong>${p.processados || 0}/${p.total || "?"}</strong> · ok: ${p.sincronizados || 0}</p>`,
-      });
+      const bar = cell.querySelector(".Bl_DepProgBar");
+      const label = cell.querySelector(".Bl_DepProgLabel");
+      const pct = pctSync(p);
+      if (bar) bar.style.width = `${pct}%`;
+      if (label) {
+        label.textContent = p.mensagem || `Processados ${p.processados || 0}/${p.total || "?"}`;
+      }
       if (p.status === "concluido") {
+        cell.innerHTML = `<span class="Bl_DepSyncOk">Sincronização do depósito efetuada com sucesso</span>`;
+        if (btnSave) btnSave.disabled = false;
+        tr.dataset.syncPendente = "0";
         await carregarStatus();
-        Swal.fire({
-          icon: "success",
-          title: "Estoque sincronizado",
-          text: p.resumo || p.mensagem || "Concluído.",
-          confirmButtonColor: "#021F81",
-        });
         return;
       }
-      if (p.status === "erro") throw new Error(p.mensagem || "Falha na sync.");
+      if (p.status === "erro") throw new Error(p.mensagem || "Falha na sincronização.");
       setTimeout(poll, 1200);
     };
-    Swal.fire({
-      title: "Sincronizando estoque…",
-      html: "Aguarde…",
-      allowOutsideClick: false,
-      didOpen: () => Swal.showLoading(),
-    });
+
     try {
       await poll();
     } catch (e) {
+      if (btnSave) btnSave.disabled = false;
       Swal.fire({ icon: "error", title: "Erro", text: e.message, confirmButtonColor: "#021F81" });
+      await carregarDepositos();
     }
+  }
+
+  async function iniciarSyncDeposito(tr, idBling) {
+    const cell = tr.querySelector(".Bl_DepSyncCell");
+    const btnSave = tr.querySelector(".Bl_DepBtnSalvar");
+    if (btnSave) btnSave.disabled = true;
+    if (cell) cell.innerHTML = htmlProgSync("Preparando…");
+
+    const resp = await fetch("/api/integracoes/bling/depositos/sincronizar-estoque", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id_bling_deposito: idBling }),
+    });
+    const jj = await resp.json();
+    if (!resp.ok || !jj.success) throw new Error(jj.message || "Erro ao iniciar sincronização.");
+    await pollSyncDeposito(tr, jj.sync_job_id);
+  }
+
+  function renderCelulaSync(tr, meta) {
+    const cell = tr.querySelector(".Bl_DepSyncCell");
+    const btnSave = tr.querySelector(".Bl_DepBtnSalvar");
+    if (!cell) return;
+
+    const vinculado = meta?.id_deposito_dropnexo;
+    const pendente = !!meta?.estoque_sync_pendente;
+    const job = meta?.sync_job;
+
+    if (job?.job_id) {
+      pollSyncDeposito(tr, job.job_id).catch(() => {});
+      return;
+    }
+
+    if (!vinculado) {
+      cell.innerHTML = "";
+      if (btnSave) btnSave.disabled = false;
+      tr.dataset.syncPendente = "0";
+      return;
+    }
+
+    if (pendente) {
+      cell.innerHTML = `<button type="button" class="Bl_DepBtnSync">Atualizar estoque</button>`;
+      tr.dataset.syncPendente = "1";
+      if (btnSave) btnSave.disabled = false;
+      cell.querySelector(".Bl_DepBtnSync")?.addEventListener("click", async () => {
+        try {
+          await iniciarSyncDeposito(tr, tr.dataset.bling || "");
+        } catch (e) {
+          Swal.fire({ icon: "error", title: "Erro", text: e.message });
+        }
+      });
+      return;
+    }
+
+    cell.innerHTML = "";
+    tr.dataset.syncPendente = "0";
+    if (btnSave) btnSave.disabled = false;
   }
 
   async function carregarDepositos() {
@@ -181,7 +252,7 @@
     const r = await fetch("/api/integracoes/bling/depositos");
     const j = await r.json();
     if (!r.ok || !j.success) {
-      tbody.innerHTML = `<tr><td colspan="3">${j.message || "Erro ao carregar depósitos."}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="4">${j.message || "Erro ao carregar depósitos."}</td></tr>`;
       return;
     }
     const dropOpts = (j.depositos_dropnexo || [])
@@ -189,32 +260,59 @@
       .join("");
     const bling = j.depositos_bling || [];
     if (!bling.length) {
-      tbody.innerHTML = `<tr><td colspan="3">Nenhum depósito retornado pelo Bling.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="4">Nenhum depósito retornado pelo Bling.</td></tr>`;
       return;
     }
     const mapa = {};
     (j.mapa || []).forEach((m) => {
-      mapa[m.id_bling_deposito] = m.id_deposito_dropnexo;
+      mapa[m.id_bling_deposito] = m;
     });
     tbody.innerHTML = bling
       .map((b) => {
         const id = String(b.id || "");
         const nome = (b.descricao || b.nome || id).replace(/</g, "&lt;");
         const padrao = b.padrao ? "1" : "0";
-        return `<tr data-bling="${id}" data-padrao="${padrao}">
+        return `<tr data-bling="${id}" data-padrao="${padrao}" data-saved-drop="">
           <td>${nome}</td>
           <td><select class="Bl_DepSelect"><option value="">— não vincular —</option><option value="${CRIAR_IGUAL}">— Criar igual —</option>${dropOpts}</select></td>
+          <td class="Bl_DepSyncCell"></td>
           <td><button type="button" class="Cl_BtnSalvar Bl_DepBtnSalvar">Salvar</button></td>
         </tr>`;
       })
       .join("");
     tbody.querySelectorAll("tr").forEach((tr) => {
       const idB = tr.dataset.bling;
+      const meta = mapa[idB] || {};
       const sel = tr.querySelector(".Bl_DepSelect");
-      if (sel && mapa[idB]) sel.value = String(mapa[idB]);
+      const saved = meta.id_deposito_dropnexo ? String(meta.id_deposito_dropnexo) : "";
+      if (sel && saved) sel.value = saved;
+      tr.dataset.savedDrop = saved;
+
+      renderCelulaSync(tr, meta);
+
+      sel?.addEventListener("change", () => {
+        const mudou = (sel.value || "") !== (tr.dataset.savedDrop || "");
+        if (!mudou && tr.dataset.syncPendente !== "1") {
+          renderCelulaSync(tr, { ...meta, id_deposito_dropnexo: saved || null, estoque_sync_pendente: false });
+        }
+      });
+
       tr.querySelector(".Bl_DepBtnSalvar")?.addEventListener("click", async () => {
         try {
           const valor = sel?.value || "";
+          if (valor === (tr.dataset.savedDrop || "") && valor) {
+            await Swal.fire({
+              icon: "info",
+              title: "Sem alterações",
+              text: "O vínculo deste depósito não foi alterado.",
+              timer: 1400,
+              showConfirmButton: false,
+            });
+            return;
+          }
+          if (!valor && !(tr.dataset.savedDrop || "")) {
+            return;
+          }
           const criarIgual = valor === CRIAR_IGUAL;
           const resp = await fetch("/api/integracoes/bling/depositos/vincular", {
             method: "POST",
@@ -230,18 +328,35 @@
           const jj = await resp.json();
           if (!resp.ok || !jj.success) throw new Error(jj.message || "Erro.");
           await carregarStatus();
-          if (jj.sync_job_id && valor) {
-            await pollSyncJob(jj.sync_job_id);
-          } else {
+          if (!jj.alterado) {
             await Swal.fire({
-              icon: "success",
-              title: jj.criou_deposito ? "Depósito criado" : "Vínculo salvo",
-              text: jj.message || "",
+              icon: "info",
+              title: "Sem alterações",
+              text: jj.message || "Nenhuma alteração no vínculo.",
               timer: 1400,
               showConfirmButton: false,
             });
+            return;
           }
-          if (jj.criou_deposito) await carregarDepositos();
+          if (jj.criou_deposito) {
+            await carregarDepositos();
+            return;
+          }
+          tr.dataset.savedDrop = jj.id_deposito_dropnexo ? String(jj.id_deposito_dropnexo) : "";
+          if (sel && jj.id_deposito_dropnexo) sel.value = String(jj.id_deposito_dropnexo);
+          renderCelulaSync(tr, {
+            id_deposito_dropnexo: jj.id_deposito_dropnexo,
+            estoque_sync_pendente: !!jj.estoque_sync_pendente,
+          });
+          await Swal.fire({
+            icon: "success",
+            title: "Vínculo salvo",
+            text: jj.id_deposito_dropnexo
+              ? "Use «Atualizar estoque» para importar os saldos deste depósito."
+              : jj.message || "",
+            timer: 2200,
+            showConfirmButton: false,
+          });
         } catch (e) {
           Swal.fire({ icon: "error", title: "Erro", text: e.message });
         }

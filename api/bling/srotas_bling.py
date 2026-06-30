@@ -658,7 +658,21 @@ def api_depositos_bling():
             (id_tenant,),
         )
         drop_deps = [{"id": r[0], "nome": r[1]} for r in cur.fetchall()]
-        return jsonify(success=True, mapa=mapa, depositos_bling=bling_deps, depositos_dropnexo=drop_deps)
+        from api.bling.depositos import obter_job_sync_ativo_deposito
+
+        mapa_enriquecido = []
+        for m in mapa:
+            item = dict(m)
+            job = obter_job_sync_ativo_deposito(cur, int(id_tenant), str(m.get("id_bling_deposito") or ""))
+            if job:
+                item["sync_job"] = job
+            mapa_enriquecido.append(item)
+        return jsonify(
+            success=True,
+            mapa=mapa_enriquecido,
+            depositos_bling=bling_deps,
+            depositos_dropnexo=drop_deps,
+        )
     except Exception as e:
         conn.rollback()
         return jsonify(success=False, message=str(e)), 500
@@ -693,7 +707,7 @@ def api_vincular_deposito_bling():
         cur = conn.cursor()
         from api.bling.depositos import vincular_ou_criar_deposito_bling
 
-        rid, id_drop, criou = vincular_ou_criar_deposito_bling(
+        rid, id_drop, criou, alterado = vincular_ou_criar_deposito_bling(
             cur,
             int(id_tenant),
             id_bling_deposito=id_bling,
@@ -703,31 +717,76 @@ def api_vincular_deposito_bling():
             padrao_bling=padrao_bling,
         )
         conn.commit()
-        sync_job_id = None
+        msg = "Depósito criado e vinculado." if criou else ("Vínculo salvo." if alterado else "Nenhuma alteração no vínculo.")
+        estoque_sync_pendente = False
         if id_drop:
-            from api.bling.estoque_sync_progresso import iniciar_sync_inicial_deposito
-
-            sync_job_id = iniciar_sync_inicial_deposito(
-                current_app._get_current_object(),
-                id_tenant=int(id_tenant),
-                id_bling_deposito=id_bling,
+            cur.execute(
+                """
+                SELECT estoque_sync_pendente FROM tbl_integracao_deposito_map
+                WHERE id_tenant = %s AND id_bling_deposito = %s
+                """,
+                (id_tenant, id_bling),
             )
-        msg = "Depósito criado e vinculado." if criou else "Vínculo salvo."
-        if sync_job_id:
-            msg += " Sincronização inicial de estoque iniciada."
+            row_p = cur.fetchone()
+            estoque_sync_pendente = bool(row_p[0]) if row_p else alterado
         return jsonify(
             success=True,
             message=msg,
             id=rid,
             id_deposito_dropnexo=id_drop,
             criou_deposito=criou,
-            sync_job_id=sync_job_id,
+            alterado=alterado,
+            estoque_sync_pendente=estoque_sync_pendente,
         )
     except ValueError as e:
         conn.rollback()
         return jsonify(success=False, message=str(e)), 400
     except Exception as e:
         conn.rollback()
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
+@bling_bp.post("/api/integracoes/bling/depositos/sincronizar-estoque")
+@login_obrigatorio()
+def api_sincronizar_estoque_deposito_bling():
+    if not _pode_bling_sync():
+        return jsonify(success=False, message="Sem permissão."), 403
+    body = request.get_json(silent=True) or {}
+    id_bling = (body.get("id_bling_deposito") or "").strip()
+    if not id_bling:
+        return jsonify(success=False, message="Depósito Bling inválido."), 400
+    id_tenant = session.get("id_tenant")
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT id_deposito_dropnexo, estoque_sync_pendente
+            FROM tbl_integracao_deposito_map
+            WHERE id_tenant = %s AND id_bling_deposito = %s
+            """,
+            (id_tenant, id_bling),
+        )
+        row = cur.fetchone()
+        if not row or not row[0]:
+            return jsonify(success=False, message="Vincule o depósito antes de sincronizar."), 400
+        if not row[1]:
+            return jsonify(success=False, message="Estoque deste depósito já foi sincronizado. Altere o vínculo para sincronizar novamente."), 409
+
+        from api.bling.estoque_sync_progresso import deposito_tem_sync_ativa, iniciar_sync_inicial_deposito
+
+        if deposito_tem_sync_ativa(cur, int(id_tenant), id_bling):
+            return jsonify(success=False, message="Sincronização já em andamento para este depósito."), 409
+
+        sync_job_id = iniciar_sync_inicial_deposito(
+            current_app._get_current_object(),
+            id_tenant=int(id_tenant),
+            id_bling_deposito=id_bling,
+        )
+        return jsonify(success=True, sync_job_id=sync_job_id)
+    except Exception as e:
         return jsonify(success=False, message=str(e)), 500
     finally:
         conn.close()
