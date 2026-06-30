@@ -140,7 +140,7 @@ def iniciar_salvar_categorias_lote(
                     obter_cache_categorias_bling_enriquecido,
                 )
 
-                def _progresso_prep(p: dict[str, int | str]) -> None:
+                def _progresso_prep(**p) -> None:
                     _atualizar_job(job_id, **p)
 
                 cache = obter_cache_categorias_bling_enriquecido(
@@ -152,7 +152,7 @@ def iniciar_salvar_categorias_lote(
 
                 cur = conn.cursor()
 
-                def _progresso(p: dict[str, int | str]) -> None:
+                def _progresso(**p) -> None:
                     _atualizar_job(job_id, **p)
 
                 resultado = processar_lote_mapeamento_categorias_ui(
@@ -235,7 +235,7 @@ def iniciar_reparar_hierarquia_categorias(
 
                 cur = conn.cursor()
 
-                def _progresso(p: dict[str, int | str]) -> None:
+                def _progresso(**p) -> None:
                     _atualizar_job(job_id, **p)
 
                 resultado = reparar_hierarquia_categorias_mapeadas(
@@ -317,7 +317,7 @@ def iniciar_carregar_painel_categorias(
 
                 if cache_categorias_precisa_enriquecer(cache):
 
-                    def _prog(p: dict[str, int | str]) -> None:
+                    def _prog(**p) -> None:
                         _atualizar_painel(
                             total=int(p.get("total") or total),
                             processados=int(p.get("processados") or 0),

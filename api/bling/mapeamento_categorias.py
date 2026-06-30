@@ -653,7 +653,7 @@ def processar_lote_mapeamento_categorias_ui(
 
     def _emit(**kwargs) -> None:
         if on_progresso:
-            on_progresso(kwargs)
+            on_progresso(**kwargs)
 
     _emit(total=total, processados=0, sincronizados=0, falhas=0, mensagem="Iniciando…")
 

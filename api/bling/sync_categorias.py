@@ -818,7 +818,7 @@ def reparar_hierarquia_categorias_mapeadas(
 
     def _emit(**kwargs) -> None:
         if on_progresso:
-            on_progresso(kwargs)
+            on_progresso(**kwargs)
 
     _emit(total=0, processados=0, sincronizados=0, falhas=0, mensagem="Consultando hierarquia no Bling…")
     enriquecer_cache_pais_categorias_bling(id_tenant, cache, on_progresso=_emit)
