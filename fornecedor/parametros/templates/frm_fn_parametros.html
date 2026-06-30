@@ -3,7 +3,7 @@
 {% block title %}Parâmetros — {{ MARCA_NOME }}{% endblock %}
 {% block topbar_title %}Parâmetros{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('fn_parametros.static', filename='style/Cfn_parametros.css') }}?v=1" />
+<link rel="stylesheet" href="{{ url_for('fn_parametros.static', filename='style/Cfn_parametros.css') }}?v=5" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal FnPar_Wrap">
@@ -16,6 +16,11 @@
       <span class="FnPar_CardIcon" aria-hidden="true">%</span>
       <strong>Precificação</strong>
       <span class="FnPar_CardDesc">Defina descontos, acréscimos, taxas e comissão para calcular o preço Drop (valor_drop).</span>
+    </button>
+    <button type="button" class="FnPar_Card" data-card="requisitos_vendedor">
+      <span class="FnPar_CardIcon FnPar_CardIcon--rede" aria-hidden="true">✓</span>
+      <strong>Requisitos para vendedores</strong>
+      <span class="FnPar_CardDesc">CNPJ, NF e taxas de vínculo — critérios exibidos antes do vendedor solicitar parceria.</span>
     </button>
   </div>
 </div>

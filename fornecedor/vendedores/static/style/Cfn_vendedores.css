@@ -1,0 +1,197 @@
+/* Fornecedor — Vendedores parceiros */
+
+.VdParceiros_Hint {
+  font-size: 0.85rem;
+  color: #64748b;
+  margin: 0.25rem 0 0;
+}
+
+.VdParceiros_Grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.VdParceiros_Card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 1rem 1.1rem;
+  cursor: pointer;
+  transition: box-shadow 0.15s, transform 0.15s, border-color 0.15s;
+  user-select: none;
+}
+
+.VdParceiros_Card:hover {
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.07);
+  transform: translateY(-2px);
+}
+
+.VdParceiros_Card.is-aguardando {
+  border-color: #fbbf24;
+  background: #fffbeb;
+}
+
+.VdParceiros_Card.is-ativo {
+  border-color: #34d399;
+  background: #ecfdf5;
+}
+
+.VdParceiros_CardNome {
+  margin: 0 0 0.35rem;
+  font-size: 1.05rem;
+  color: var(--marca-primary, #021f81);
+}
+
+.VdParceiros_CardMeta {
+  margin: 0;
+  font-size: 0.875rem;
+  color: #64748b;
+}
+
+.VdParceiros_Badge {
+  display: inline-block;
+  margin-top: 0.5rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.VdParceiros_Badge.is-aguardando {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.VdParceiros_Badge.is-ativo {
+  background: #d1fae5;
+  color: #047857;
+}
+
+.VdParceiros_Vazio {
+  text-align: center;
+  color: #64748b;
+  padding: 2rem;
+}
+
+.VdParceiros_Modal[hidden] {
+  display: none !important;
+}
+
+.VdParceiros_Modal:not([hidden]) {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.VdParceiros_ModalInner {
+  background: #fff;
+  border-radius: 12px;
+  max-width: 720px;
+  width: 100%;
+  max-height: 90vh;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.VdParceiros_ModalHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.VdParceiros_ModalHead h3 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.VdParceiros_ModalBody {
+  padding: 1rem 1.25rem;
+}
+
+.VdParceiros_Secao {
+  margin-bottom: 1.25rem;
+}
+
+.VdParceiros_Secao h4 {
+  margin: 0 0 0.5rem;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
+}
+
+.VdParceiros_Dl {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 0.35rem 1rem;
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.VdParceiros_Dl dt {
+  color: #64748b;
+  font-weight: 600;
+}
+
+.VdParceiros_Dl dd {
+  margin: 0;
+  color: #0f172a;
+}
+
+.VdParceiros_Stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.VdParceiros_Stat {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.82rem;
+}
+
+.VdParceiros_ModalFoot {
+  padding: 1rem 1.25rem;
+  border-top: 1px solid #e5e7eb;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+
+.VdParceiros_RecusaBox {
+  flex: 1 1 100%;
+  margin-top: 0.5rem;
+}
+
+.VdParceiros_RecusaBox textarea {
+  width: 100%;
+  min-height: 72px;
+  padding: 0.5rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 0.9rem;
+}
+
+.VdParceiros_RecusaBox label {
+  display: block;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #475569;
+  margin-bottom: 0.35rem;
+}

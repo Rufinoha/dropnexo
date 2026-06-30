@@ -413,10 +413,62 @@
     if (opts.reload !== false) await carregarCategorias();
   }
 
+  function htmlCatCarregando() {
+    const skels = Array.from({ length: 5 }, (_, i) => {
+      const wNome = 55 + (i % 3) * 12;
+      return (
+        `<tr class="Bl_CatSkeletonRow" aria-hidden="true">` +
+        `<td class="Bl_CatColChk"><div class="Bl_CatSkel Bl_CatSkel--sm"></div></td>` +
+        `<td><div class="Bl_CatSkel" style="width:${wNome}%"></div></td>` +
+        `<td><div class="Bl_CatSkel Bl_CatSkel--field"></div></td>` +
+        `<td><div class="Bl_CatSkel Bl_CatSkel--field"></div></td>` +
+        `<td><div class="Bl_CatSkel Bl_CatSkel--field"></div></td>` +
+        `<td><div class="Bl_CatSkel Bl_CatSkel--badge"></div></td>` +
+        `<td><div class="Bl_CatSkel Bl_CatSkel--btn"></div></td>` +
+        `</tr>`
+      );
+    }).join("");
+
+    return (
+      `<tr class="Bl_CatLoadingRow">` +
+      `<td colspan="7">` +
+      `<div class="Bl_CatLoading" role="status" aria-live="polite" aria-busy="true">` +
+      `<div class="Bl_CatSpinner" aria-hidden="true"></div>` +
+      `<span class="Bl_CatLoadingText">Buscando categorias no Bling…</span>` +
+      `<span class="Bl_CatLoadingSub">Isso pode levar alguns segundos se houver muitas categorias.</span>` +
+      `</div></td></tr>${skels}`
+    );
+  }
+
+  function mostrarCarregandoCategorias() {
+    const tbody = document.getElementById("bl_tbl_categorias");
+    const resumo = document.getElementById("bl_cat_resumo");
+    const wrap = document.querySelector(".Bl_CatTblWrap");
+    if (tbody) tbody.innerHTML = htmlCatCarregando();
+    if (resumo) {
+      resumo.hidden = false;
+      resumo.className = "Bl_CatResumo Bl_CatResumo--load";
+      resumo.textContent = "Consultando categorias do Bling…";
+    }
+    wrap?.classList.add("is-loading");
+    document.getElementById("bl_cat_btn_aplicar")?.setAttribute("disabled", "disabled");
+    document.getElementById("bl_cat_btn_salvar_sel")?.setAttribute("disabled", "disabled");
+    document.getElementById("bl_cat_chk_all")?.setAttribute("disabled", "disabled");
+  }
+
+  function finalizarCarregandoCategorias() {
+    document.querySelector(".Bl_CatTblWrap")?.classList.remove("is-loading");
+    document.getElementById("bl_cat_btn_aplicar")?.removeAttribute("disabled");
+    document.getElementById("bl_cat_btn_salvar_sel")?.removeAttribute("disabled");
+    document.getElementById("bl_cat_chk_all")?.removeAttribute("disabled");
+  }
+
   async function carregarCategorias() {
     const tbody = document.getElementById("bl_tbl_categorias");
     if (!tbody) return;
+    mostrarCarregandoCategorias();
     const ctx = estado.contexto_modulo || "fornecedor";
+    try {
     const r = await fetch(`/api/integracoes/bling/categorias/mapeamento?contexto=${encodeURIComponent(ctx)}`);
     const j = await r.json();
     if (!r.ok || !j.success) {
@@ -502,6 +554,11 @@
       atualizarDestCatRow(tr);
     });
     syncCatChkAll();
+    } catch (e) {
+      tbody.innerHTML = `<tr><td colspan="7">${escHtml(e.message || "Erro ao carregar categorias.")}</td></tr>`;
+    } finally {
+      finalizarCarregandoCategorias();
+    }
   }
 
   function pctSync(p) {

@@ -124,70 +124,260 @@
 
 .Forn_GridCards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 1rem;
-  margin-top: 1rem;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1.1rem;
+  margin-top: 0.75rem;
 }
 
 .Forn_Card {
+  position: relative;
   background: #fff;
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  padding: 1rem 1.1rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 1.1rem 1.15rem 1rem;
   display: flex;
   flex-direction: column;
-  gap: 0.45rem;
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+  gap: 0.75rem;
+  min-height: 220px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 4px 16px rgba(15, 23, 42, 0.04);
+  cursor: pointer;
+  overflow: hidden;
+  transition: box-shadow 0.2s ease, transform 0.2s ease, border-color 0.2s ease;
 }
 
-.Forn_Card.is-pending {
-  border-color: #fbbf24;
-  background: #fffbeb;
-}
-
-.Forn_Card.is-active {
-  border-color: #34d399;
-  background: #ecfdf5;
-}
-
-.Forn_Card.is-denied {
+.Forn_Card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--marca-primary, #021f81), var(--marca-hover, #2c6bf3));
   opacity: 0.85;
-  background: #f8fafc;
+}
+
+.Forn_Card.is-pending::before {
+  background: linear-gradient(90deg, #d97706, #fbbf24);
+}
+
+.Forn_Card.is-active::before {
+  background: linear-gradient(90deg, #047857, #34d399);
+}
+
+.Forn_Card.is-denied::before {
+  background: linear-gradient(90deg, #94a3b8, #cbd5e1);
+}
+
+.Forn_Card:hover {
+  box-shadow: 0 12px 32px rgba(2, 31, 129, 0.1);
+  transform: translateY(-3px);
+  border-color: #c7d9ff;
+}
+
+.Forn_Card:focus-visible {
+  outline: 2px solid var(--marca-hover, #2c6bf3);
+  outline-offset: 2px;
+}
+
+.Forn_CardTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.65rem;
+}
+
+.Forn_CardBrand {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.Forn_CardAvatar {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: var(--marca-primary, #021f81);
+  background: linear-gradient(145deg, #eef4ff 0%, #dce8ff 100%);
+  border: 1px solid #c7d9ff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+.Forn_CardBrandText {
+  min-width: 0;
 }
 
 .Forn_CardNome {
   margin: 0;
-  font-size: 1.05rem;
-  color: var(--marca-primary, #021f81);
+  font-size: 1.02rem;
+  font-weight: 700;
+  line-height: 1.25;
+  color: #0f172a;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.Forn_CardLocal {
+  margin: 0.2rem 0 0;
+  font-size: 0.8rem;
+  color: #64748b;
+  line-height: 1.35;
+}
+
+.Forn_CardBadge {
+  flex-shrink: 0;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.28rem 0.55rem;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #e2e8f0;
+}
+
+.Forn_Card.is-pending .Forn_CardBadge {
+  background: #fffbeb;
+  color: #b45309;
+  border-color: #fde68a;
+}
+
+.Forn_Card.is-active .Forn_CardBadge {
+  background: #ecfdf5;
+  color: #047857;
+  border-color: #a7f3d0;
+}
+
+.Forn_Card.is-denied .Forn_CardBadge {
+  background: #f8fafc;
+  color: #64748b;
+  border-color: #e2e8f0;
 }
 
 .Forn_CardChips {
   display: flex;
   flex-wrap: wrap;
   gap: 0.35rem;
+  min-height: 1.5rem;
 }
 
 .Forn_Chip {
   font-size: 0.72rem;
-  padding: 0.15rem 0.45rem;
+  font-weight: 600;
+  padding: 0.22rem 0.55rem;
   border-radius: 999px;
   background: var(--marca-light, #e8f0ff);
-  color: #334155;
+  color: var(--marca-primary, #021f81);
+  border: 1px solid rgba(2, 31, 129, 0.08);
 }
 
 .Forn_Chip--muted {
-  background: #f1f5f9;
+  background: #f8fafc;
+  color: #64748b;
+  border-color: #e2e8f0;
+  font-weight: 500;
+}
+
+.Forn_CardStats {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding-top: 0.15rem;
+}
+
+.Forn_CardStat {
+  font-size: 0.78rem;
   color: #64748b;
 }
 
-.Forn_CardStatus {
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: #b45309;
+.Forn_CardStat strong {
+  font-size: 0.92rem;
+  font-weight: 800;
+  color: #0f172a;
+  font-variant-numeric: tabular-nums;
 }
 
-.Forn_Card.is-active .Forn_CardStatus {
-  color: #047857;
+.Forn_CardRecusa {
+  font-size: 0.78rem;
+  color: #b45309;
+  margin: 0;
+  padding: 0.45rem 0.55rem;
+  background: #fffbeb;
+  border-radius: 8px;
+  border: 1px solid #fde68a;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.Forn_CardFooter {
+  display: flex;
+  align-items: center;
+  justify-content: stretch;
+  gap: 0.5rem;
+  margin-top: auto;
+  padding-top: 0.65rem;
+  border-top: 1px solid #f1f5f9;
+}
+
+.Forn_CardBtn {
+  flex: 1 1 auto;
+  min-height: 36px;
+  padding: 0.45rem 0.75rem;
+  border-radius: 10px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s, transform 0.12s;
+  white-space: nowrap;
+}
+
+.Forn_CardBtn:active {
+  transform: scale(0.98);
+}
+
+.Forn_CardBtn--ghost {
+  background: #fff;
+  color: #334155;
+  border: 1px solid #d6dee6;
+}
+
+.Forn_CardBtn--ghost:hover {
+  background: #f8fafc;
+  border-color: #94a3b8;
+  color: #0f172a;
+}
+
+.Forn_CardBtn--primary {
+  background: var(--marca-primary, #021f81);
+  color: #fff;
+  border: 1px solid var(--marca-primary, #021f81);
+  box-shadow: 0 4px 12px rgba(2, 31, 129, 0.18);
+}
+
+.Forn_CardBtn--primary:hover {
+  background: var(--marca-hover, #2c6bf3);
+  border-color: var(--marca-hover, #2c6bf3);
+}
+
+.Forn_Card.is-active .Forn_CardFooter {
+  justify-content: center;
+}
+
+.Forn_Card.is-active .Forn_CardBtn--ghost {
+  flex: 1 1 100%;
 }
 
 .Forn_CardAcoes {
@@ -254,4 +444,128 @@
   text-align: center;
   color: #64748b;
   padding: 2rem;
+}
+
+/* —— Layout principal: sidebar + grid —— */
+.Forn_Page .Forn_BuscaTopo {
+  margin-bottom: 0;
+}
+
+.Forn_Layout {
+  display: flex;
+  gap: 1.25rem;
+  align-items: flex-start;
+  margin-top: 1rem;
+}
+
+.Forn_Sidebar {
+  flex: 0 0 220px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 1rem;
+  position: sticky;
+  top: 1rem;
+  max-height: calc(100vh - 220px);
+  overflow: auto;
+}
+
+.Forn_SidebarHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.Forn_SidebarHead h3 {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #475569;
+}
+
+.Forn_SidebarLimpar {
+  font-size: 0.75rem;
+  padding: 0;
+}
+
+.Forn_SidebarLista {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.Forn_SidebarItem {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  color: #334155;
+  cursor: pointer;
+  padding: 0.35rem 0.25rem;
+  border-radius: 6px;
+  user-select: none;
+}
+
+.Forn_SidebarItem:hover {
+  background: #f8fafc;
+}
+
+.Forn_SidebarItem input {
+  accent-color: var(--marca-primary, #021f81);
+  flex-shrink: 0;
+}
+
+.Forn_SidebarItemCount {
+  margin-left: auto;
+  font-size: 0.72rem;
+  color: #94a3b8;
+  font-variant-numeric: tabular-nums;
+}
+
+.Forn_SidebarCarregando,
+.Forn_SidebarVazio {
+  font-size: 0.85rem;
+  color: #94a3b8;
+  margin: 0;
+}
+
+.Forn_Conteudo {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.Forn_Contador {
+  font-size: 0.8rem;
+  color: #64748b;
+  margin: 0 0 0.75rem;
+}
+
+.Forn_DicaVinculo {
+  font-size: 0.85rem;
+  color: #64748b;
+  margin: 0.25rem 0 0;
+}
+
+@media (max-width: 900px) {
+  .Forn_Layout {
+    flex-direction: column;
+  }
+
+  .Forn_Sidebar {
+    flex: none;
+    width: 100%;
+    position: static;
+    max-height: none;
+  }
+
+  .Forn_SidebarLista {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
 }

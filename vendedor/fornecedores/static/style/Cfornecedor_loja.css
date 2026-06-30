@@ -1,0 +1,294 @@
+/* DropNexo — Vitrine do fornecedor (apoio modal) */
+
+.Loja_ApoioBody {
+  margin: 0;
+  min-height: 100vh;
+  background: #f1f5f9;
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  color: #0f172a;
+}
+
+.Loja_ApoioBody .Cl_Header {
+  display: none !important;
+}
+
+.Loja_Shell {
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 0 16px 24px;
+  box-sizing: border-box;
+}
+
+.Loja_Hero {
+  padding: 20px 4px 16px;
+}
+
+.Loja_Kicker {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #64748b;
+  margin-bottom: 4px;
+}
+
+.Loja_Hero h1 {
+  margin: 0 0 4px;
+  font-size: 1.45rem;
+  color: var(--marca-primary, #021f81);
+}
+
+.Loja_Subtitulo {
+  margin: 0 0 8px;
+  font-size: 0.9rem;
+  color: #64748b;
+}
+
+.Loja_StatusBadge {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.Loja_StatusBadge.is-ativo {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.Loja_StatusBadge.is-pending {
+  background: #fffbeb;
+  color: #b45309;
+}
+
+.Loja_BtnVinculoHero {
+  display: inline-block;
+  margin-top: 0.65rem;
+  min-height: 36px;
+  font-size: 0.88rem;
+}
+
+.Loja_Toolbar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.Loja_Toolbar input {
+  flex: 1;
+  max-width: 420px;
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+
+.Loja_Grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.Loja_Card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+}
+
+.Loja_CardImgWrap {
+  position: relative;
+  aspect-ratio: 1;
+  background: #f8fafc;
+}
+
+.Loja_CardImgWrap img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.Loja_CardImgVazio {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #cbd5e1;
+  font-size: 2rem;
+}
+
+.Loja_CardBadge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  background: #7c3aed;
+  color: #fff;
+}
+
+.Loja_CardBody {
+  padding: 10px 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+}
+
+.Loja_CardNome {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.25;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.Loja_Grades {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.Loja_GradeChip {
+  font-size: 0.65rem;
+  padding: 0.1rem 0.35rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  color: #475569;
+  background: #fff;
+}
+
+.Loja_Precos {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 8px;
+  font-size: 0.68rem;
+  margin-top: auto;
+}
+
+.Loja_PrecoLbl {
+  display: block;
+  color: #94a3b8;
+  font-size: 0.62rem;
+}
+
+.Loja_PrecoSug {
+  font-weight: 700;
+  color: #7c3aed;
+  font-size: 0.78rem;
+}
+
+.Loja_PrecoLucro {
+  font-weight: 700;
+  color: #059669;
+  font-size: 0.78rem;
+}
+
+.Loja_Margem {
+  grid-column: 1 / -1;
+  font-size: 0.62rem;
+  color: #059669;
+  background: #ecfdf5;
+  padding: 0.15rem 0.35rem;
+  border-radius: 999px;
+  width: fit-content;
+}
+
+.Loja_BtnIntegrar {
+  width: 100%;
+  margin-top: 4px;
+  padding: 8px 6px;
+  border: none;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #6d28d9 0%, #7c3aed 100%);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+  line-height: 1.2;
+}
+
+.Loja_BtnIntegrar:hover:not(:disabled) {
+  filter: brightness(1.05);
+}
+
+.Loja_BtnIntegrar:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.Loja_BtnIntegrar.is-done {
+  background: #e2e8f0;
+  color: #475569;
+}
+
+.Loja_BtnVinculo {
+  background: linear-gradient(135deg, #021f81 0%, #2c6bf3 100%);
+}
+
+.Loja_Vazio {
+  text-align: center;
+  color: #64748b;
+  padding: 2rem;
+}
+
+.Loja_Paginacao {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 20px;
+  flex-wrap: wrap;
+}
+
+.Loja_PagBtn {
+  min-width: 36px;
+  padding: 6px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.Loja_PagBtn.is-active {
+  background: var(--marca-primary, #021f81);
+  color: #fff;
+  border-color: var(--marca-primary, #021f81);
+}
+
+.Loja_PagBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+@media (max-width: 1200px) {
+  .Loja_Grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .Loja_Grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 600px) {
+  .Loja_Grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

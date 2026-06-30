@@ -1,0 +1,116 @@
+.Vinc_ApoioBody .Cl_ContainerApoio.Vinc_Shell {
+  margin: 0;
+  padding: 14px 18px 18px;
+  box-shadow: none;
+  border-radius: 0;
+  background: transparent;
+}
+
+.Vinc_Intro {
+  font-size: 0.9rem;
+  color: #475569;
+  margin: 0 0 1rem;
+  line-height: 1.45;
+}
+
+.Vinc_Secao {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 0.85rem 1rem 1rem;
+  margin-bottom: 0.85rem;
+  background: #fff;
+}
+
+.Vinc_Secao--muted {
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 0.88rem;
+}
+
+.Vinc_Secao--muted p {
+  margin: 0;
+}
+
+.Vinc_Secao--info {
+  background: #f0f6ff;
+  border-color: #c7d9ff;
+}
+
+.Vinc_SecaoTit {
+  margin: 0 0 0.65rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
+}
+
+.Vinc_Lista {
+  margin: 0;
+  padding-left: 1.15rem;
+  color: #1e293b;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.Vinc_Lista li + li {
+  margin-top: 0.35rem;
+}
+
+.Vinc_InfoText {
+  margin: 0;
+  font-size: 0.88rem;
+  color: #334155;
+  line-height: 1.45;
+}
+
+.Vinc_Contato {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.35rem 1rem;
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.Vinc_Contato dt {
+  font-weight: 600;
+  color: #64748b;
+}
+
+.Vinc_Contato dd {
+  margin: 0;
+  color: #0f172a;
+}
+
+.Vinc_Form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin-top: 0.25rem;
+}
+
+.Vinc_Check {
+  display: flex;
+  gap: 0.65rem;
+  align-items: flex-start;
+  font-size: 0.86rem;
+  color: #334155;
+  line-height: 1.4;
+  cursor: pointer;
+  user-select: none;
+}
+
+.Vinc_Check input {
+  margin-top: 0.2rem;
+  flex-shrink: 0;
+  accent-color: var(--marca-primary, #021f81);
+}
+
+.Vinc_Footer {
+  margin: 0.5rem 0 0;
+  padding-top: 0.25rem;
+}
+
+.Vinc_ApoioBody .Cl_BotoesApoio {
+  margin: 0;
+}

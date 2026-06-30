@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>Requisitos para vendedores — Parâmetros</title>
+  {% include "partials/marca_favicon.html" %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='style/global_utils.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('fn_parametros.static', filename='style/Cfn_parametros.css') }}?v=7" />
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+</head>
+<body class="FnPar_ApoioBody">
+  <div class="Cl_ContainerApoio FnPar_Apoio mp-req-card">
+    <p class="FnPar_Intro">
+      Defina o que o vendedor precisa atender <strong>antes de solicitar vínculo</strong> com sua rede.
+      Regra global — vale para todos os parceiros, com ou sem integração ERP.
+    </p>
+
+    <form id="formRequisitosVendedor" class="mp-req-form">
+      <div class="mp-req-grid">
+        <fieldset class="mp-req-panel">
+          <legend>Documentação</legend>
+          <div class="mp-req-row">
+            <div class="mp-req-rowText">
+              <strong>Exige CNPJ</strong>
+              <span>Pessoa jurídica com cadastro completo</span>
+            </div>
+            <label class="Cl_Switch mp-req-switch" title="Exige CNPJ">
+              <input type="checkbox" id="req_exige_cnpj" />
+              <span class="Cl_SwitchSlider"></span>
+            </label>
+          </div>
+          <div class="mp-req-row">
+            <div class="mp-req-rowText">
+              <strong>Exige emissão de NF</strong>
+              <span>Vendedor deve emitir nota fiscal nas vendas</span>
+            </div>
+            <label class="Cl_Switch mp-req-switch" title="Exige NF">
+              <input type="checkbox" id="req_exige_nf" />
+              <span class="Cl_SwitchSlider"></span>
+            </label>
+          </div>
+          <div class="mp-req-row">
+            <div class="mp-req-rowText">
+              <strong>Mostrar contato ao vendedor</strong>
+              <span>Exibe seu nome, e-mail e WhatsApp na tela de solicitação de vínculo.</span>
+            </div>
+            <label class="Cl_Switch mp-req-switch" title="Mostrar contato ao vendedor">
+              <input type="checkbox" id="req_mostrar_contato" checked />
+              <span class="Cl_SwitchSlider"></span>
+            </label>
+          </div>
+        </fieldset>
+
+        <fieldset class="mp-req-panel">
+          <legend>Taxas comerciais</legend>
+          <div class="mp-req-taxa">
+            <div class="mp-req-taxaHead">
+              <div class="mp-req-rowText">
+                <strong>Taxa única de vínculo</strong>
+                <span>Cobrada uma vez ao aprovar o parceiro</span>
+              </div>
+              <label class="Cl_Switch mp-req-switch" title="Taxa única de vínculo">
+                <input type="checkbox" id="req_cobra_vinculo" />
+                <span class="Cl_SwitchSlider"></span>
+              </label>
+            </div>
+            <div class="mp-req-valor">
+              <label for="req_valor_vinculo">Valor (R$)</label>
+              <input type="number" id="req_valor_vinculo" min="0" step="0.01" placeholder="0,00" disabled />
+            </div>
+          </div>
+          <div class="mp-req-taxa">
+            <div class="mp-req-taxaHead">
+              <div class="mp-req-rowText">
+                <strong>Taxa recorrente mensal</strong>
+                <span>Mensalidade para manter o vínculo ativo</span>
+              </div>
+              <label class="Cl_Switch mp-req-switch" title="Taxa mensal">
+                <input type="checkbox" id="req_cobra_mensal" />
+                <span class="Cl_SwitchSlider"></span>
+              </label>
+            </div>
+            <div class="mp-req-valor">
+              <label for="req_valor_mensal">Valor mensal (R$)</label>
+              <input type="number" id="req_valor_mensal" min="0" step="0.01" placeholder="0,00" disabled />
+            </div>
+          </div>
+          <div class="mp-req-taxa">
+            <div class="mp-req-taxaHead">
+              <div class="mp-req-rowText">
+                <strong>Taxa por pedido</strong>
+                <span>Valor cobrado a cada pedido B2B na rede</span>
+              </div>
+              <label class="Cl_Switch mp-req-switch" title="Taxa por pedido">
+                <input type="checkbox" id="req_cobra_pedido" />
+                <span class="Cl_SwitchSlider"></span>
+              </label>
+            </div>
+            <div class="mp-req-valor">
+              <label for="req_valor_pedido">Valor por pedido (R$)</label>
+              <input type="number" id="req_valor_pedido" min="0" step="0.01" placeholder="0,00" disabled />
+            </div>
+          </div>
+        </fieldset>
+      </div>
+
+      <div class="mp-req-obs">
+        <label for="req_texto_adicional">Observações adicionais</label>
+        <textarea id="req_texto_adicional" rows="4" placeholder="Regras extras, prazos, documentos complementares…"></textarea>
+      </div>
+
+      <div class="FnPar_Footer Cl_BotoesApoio mp-req-actions">
+        <button type="submit" class="Cl_BtnSalvar" id="req_btnSalvar">Salvar requisitos</button>
+      </div>
+    </form>
+  </div>
+
+  <script src="{{ url_for('static', filename='script/global_utils.js') }}"></script>
+  <script src="{{ url_for('fn_parametros.static', filename='script/Sfn_parametros_requisitos.js') }}?v=1"></script>
+</body>
+</html>

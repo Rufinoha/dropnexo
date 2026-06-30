@@ -12,5 +12,14 @@
         nivel: 2,
       });
     }
+    if (card.dataset.card === "requisitos_vendedor") {
+      GlobalUtils.abrirJanelaApoioModal({
+        rota: "/fornecedor/parametros/requisitos-vendedor",
+        titulo: "Requisitos para vendedores",
+        largura: 980,
+        altura: 640,
+        nivel: 2,
+      });
+    }
   });
 })();

@@ -371,8 +371,27 @@
 .mp-check-row {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 0.45rem;
-  margin-top: 0.15rem;
+  margin-top: 0.35rem;
+  font-size: 0.9rem;
+  color: #334155;
+}
+
+.mp-fieldset {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 0.85rem 1rem 1rem;
+  margin: 0 0 1rem;
+}
+
+.mp-fieldset legend {
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #64748b;
+  padding: 0 0.35rem;
 }
 
 .mp-check-pill {

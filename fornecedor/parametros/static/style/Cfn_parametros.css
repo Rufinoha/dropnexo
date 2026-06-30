@@ -16,6 +16,7 @@
   display: inline-flex; width: 36px; height: 36px; align-items: center; justify-content: center;
   border-radius: 10px; background: #e8f0ff; color: #021f81; font-weight: 800; margin-bottom: 10px;
 }
+.FnPar_CardIcon--rede { background: #ecfdf5; color: #047857; font-size: 18px; }
 .FnPar_ApoioBody { margin: 0; background: #fff; min-height: 0; }
 .FnPar_ApoioBody .Cl_ContainerApoio.FnPar_Apoio {
   margin: 0;
@@ -140,4 +141,168 @@
 .FnPar_Hint { font-size: 11px; color: #8a939e; display: block; margin-top: 4px; }
 @media (max-width: 900px) {
   .FnPar_GridForm, .FnPar_CatGrid { grid-template-columns: 1fr; }
+  .mp-req-grid { grid-template-columns: 1fr; }
+  .mp-req-taxa { flex-direction: column; align-items: stretch; }
+  .mp-req-valor { flex: none; width: 100%; }
+}
+
+/* —— Requisitos para vendedores (modal apoio) —— */
+.mp-req-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.mp-req-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  align-items: stretch;
+}
+
+.mp-req-panel {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 1rem 1.1rem 1.1rem;
+  margin: 0;
+  min-height: 100%;
+  background: #fafbfc;
+}
+
+.mp-req-panel legend {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #64748b;
+  padding: 0 0.35rem;
+  margin-bottom: 0.5rem;
+}
+
+.mp-req-row,
+.mp-req-taxaHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.65rem 0;
+  border-bottom: 1px solid #e8edf2;
+}
+
+.mp-req-panel .mp-req-row:last-of-type,
+.mp-req-panel .mp-req-taxa:last-child {
+  border-bottom: none;
+}
+
+.mp-req-rowText {
+  flex: 1;
+  min-width: 0;
+}
+
+.mp-req-rowText strong {
+  display: block;
+  font-size: 0.92rem;
+  color: #0f172a;
+  font-weight: 600;
+}
+
+.mp-req-rowText span {
+  display: block;
+  font-size: 0.78rem;
+  color: #64748b;
+  margin-top: 0.15rem;
+  line-height: 1.35;
+}
+
+.mp-req-switch {
+  flex-shrink: 0;
+}
+
+.mp-req-taxa {
+  display: flex;
+  align-items: flex-end;
+  gap: 1rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid #e8edf2;
+}
+
+.mp-req-taxaHead {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: none;
+}
+
+.mp-req-valor {
+  flex: 0 0 132px;
+  margin: 0;
+}
+
+.mp-req-valor label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #64748b;
+  margin-bottom: 0.25rem;
+  display: block;
+}
+
+.mp-req-valor input {
+  width: 100%;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  background: #fff;
+  box-sizing: border-box;
+}
+
+.mp-req-valor input:disabled {
+  background: #f1f5f9;
+  color: #94a3b8;
+  cursor: not-allowed;
+}
+
+.mp-req-taxa.is-ativo .mp-req-valor input:not(:disabled) {
+  border-color: #cbd5e1;
+}
+
+.mp-req-obs label {
+  display: block;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #475569;
+  margin-bottom: 0.35rem;
+}
+
+.mp-req-obs textarea {
+  width: 100%;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 0.9rem;
+  resize: vertical;
+  min-height: 96px;
+  box-sizing: border-box;
+}
+
+.mp-req-panel--full {
+  grid-column: 1 / -1;
+}
+
+.FnPar_Apoio .Cl_BotoesApoio,
+.FnPar_Apoio .FnPar_Footer {
+  margin: 0;
+}
+
+.mp-req-valor input:focus,
+.mp-req-obs textarea:focus {
+  outline: none;
+  border-color: var(--marca-hover, #2c6bf3);
+  box-shadow: 0 0 0 3px rgba(2, 31, 129, 0.12);
+}
+
+.mp-req-actions {
+  margin: 0;
+  padding-top: 0.25rem;
 }

@@ -11,6 +11,7 @@ from fornecedor.parametros.servico_precificacao import (
     salvar_modo_precificacao,
     salvar_regra_fornecedor,
 )
+from fornecedor.requisitos_vendedor import carregar_requisitos, salvar_requisitos
 from global_utils import Var_ConectarBanco, exigir_modulo, exigir_permissao, login_obrigatorio
 from srotas_plataforma import MODULO_FORNECEDOR
 
@@ -143,6 +144,52 @@ def parametros_precificacao_salvar():
     except ValueError as e:
         conn.rollback()
         return jsonify(success=False, message=str(e)), 400
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
+@fn_parametros_bp.get("/fornecedor/parametros/requisitos-vendedor")
+@login_obrigatorio()
+@exigir_modulo(MODULO_FORNECEDOR)
+@exigir_permissao(codigo="fn_parametros.ver")
+def parametros_requisitos_vendedor_apoio():
+    return render_template("frm_parametros_requisitos_vendedor.html")
+
+
+@fn_parametros_bp.get("/fornecedor/parametros/requisitos-vendedor/dados")
+@login_obrigatorio()
+@exigir_modulo(MODULO_FORNECEDOR)
+@exigir_permissao(codigo="fn_parametros.ver")
+def parametros_requisitos_vendedor_dados():
+    id_tenant = _id_tenant()
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        return jsonify(success=True, requisitos=carregar_requisitos(cur, id_tenant))
+    finally:
+        conn.close()
+
+
+@fn_parametros_bp.post("/fornecedor/parametros/requisitos-vendedor/salvar")
+@login_obrigatorio()
+@exigir_modulo(MODULO_FORNECEDOR)
+@exigir_permissao(codigo="fn_parametros.editar")
+def parametros_requisitos_vendedor_salvar():
+    id_tenant = _id_tenant()
+    body = request.get_json(silent=True) or {}
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        salvar_requisitos(cur, id_tenant, body)
+        conn.commit()
+        return jsonify(
+            success=True,
+            message="Requisitos salvos.",
+            requisitos=carregar_requisitos(cur, id_tenant),
+        )
     except Exception as e:
         conn.rollback()
         return jsonify(success=False, message=str(e)), 500

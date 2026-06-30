@@ -3,38 +3,49 @@
 {% set nav_ativo = 'fornecedores' %}
 {% block topbar_title %}Fornecedores{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('vd_fornecedores.static', filename='style/Cvd_fornecedores.css') }}" />
+<link rel="stylesheet" href="{{ url_for('vd_fornecedores.static', filename='style/Cfornecedores.css') }}?v=4" />
 {% endblock %}
 {% block content %}
-<div class="Cl_ContainerApoio cl-page-principal">
+<div class="Cl_ContainerApoio cl-page-principal Forn_Page">
   <div class="cl-page-title">
     <h2>Rede de fornecedores</h2>
     <p class="cl-page-desc">Conheça parceiros, visualize o catálogo e solicite vínculo para vender.</p>
+    <p class="Forn_DicaVinculo">Clique no card para ver o catálogo · use <strong>Solicitar vínculo</strong> quando quiser se associar ao fornecedor</p>
   </div>
-  <div class="filter-panel">
+
+  <div class="filter-panel Forn_BuscaTopo">
     <div class="filter-panel-fields">
       <div class="filter-group Forn_CampoBusca">
         <label for="ob_filtroBusca">Busca</label>
-        <input type="text" id="ob_filtroBusca" placeholder="Nome, cidade…" autocomplete="off" />
+        <input type="text" id="ob_filtroBusca" placeholder="Nome ou cidade do fornecedor…" autocomplete="off" />
       </div>
     </div>
     <div class="filter-panel-actions">
       <button type="button" class="Cl_BtnPrincipal" id="ob_btnBuscar">Buscar</button>
     </div>
   </div>
-  <div id="ob_gridFornecedores" class="Forn_GridCards" aria-live="polite"></div>
-  <p id="ob_msgVazio" class="Forn_MsgVazio" hidden>Nenhum fornecedor encontrado.</p>
-</div>
-<div id="ob_modalCatalogo" class="Forn_Modal" hidden aria-hidden="true" role="dialog" aria-labelledby="ob_modalTitulo">
-  <div class="Forn_ModalInner" role="document">
-    <header class="Forn_ModalHead">
-      <h3 id="ob_modalTitulo">Catálogo do fornecedor</h3>
-      <button type="button" class="Cl_BtnLink" id="ob_fecharModal" aria-label="Fechar catálogo">Fechar</button>
-    </header>
-    <div id="ob_modalProdutos" class="Forn_GridProdutos"></div>
+
+  <div class="Forn_Layout">
+    <aside class="Forn_Sidebar" aria-label="Filtrar por segmento">
+      <div class="Forn_SidebarHead">
+        <h3>Segmentos</h3>
+        <button type="button" class="Cl_BtnLink Forn_SidebarLimpar" id="ob_limparSegmentos" hidden>Limpar</button>
+      </div>
+      <div id="ob_listaSegmentos" class="Forn_SidebarLista" aria-live="polite">
+        <p class="Forn_SidebarCarregando">Carregando…</p>
+      </div>
+    </aside>
+
+    <div class="Forn_Conteudo">
+      <p id="ob_contador" class="Forn_Contador" hidden></p>
+      <div id="ob_gridFornecedores" class="Forn_GridCards" aria-live="polite"></div>
+      <p id="ob_msgVazio" class="Forn_MsgVazio" hidden>Nenhum fornecedor encontrado.</p>
+    </div>
   </div>
 </div>
 {% endblock %}
 {% block page_js %}
-<script src="{{ url_for('vd_fornecedores.static', filename='script/Svd_fornecedores.js') }}"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="{{ url_for('vd_fornecedores.static', filename='script/Svinculo_requisitos.js') }}?v=2"></script>
+<script src="{{ url_for('vd_fornecedores.static', filename='script/Sfornecedores.js') }}?v=5"></script>
 {% endblock %}

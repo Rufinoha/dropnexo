@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>Solicitar vínculo — {{ MARCA_NOME }}</title>
+  {% include "partials/marca_favicon.html" %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='style/global_utils.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('vd_fornecedores.static', filename='style/Cvinculo_solicitar.css') }}?v=1" />
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+</head>
+<body class="FnPar_ApoioBody Vinc_ApoioBody">
+  <div class="Cl_ContainerApoio Vinc_Shell">
+    <p class="Vinc_Intro" id="vincIntro">Carregando condições…</p>
+
+    <section class="Vinc_Secao" id="secRequisitos" hidden>
+      <h2 class="Vinc_SecaoTit">Condições comerciais</h2>
+      <ul class="Vinc_Lista" id="vincListaReq"></ul>
+    </section>
+
+    <section class="Vinc_Secao Vinc_Secao--muted" id="secSemRequisitos" hidden>
+      <p>Este fornecedor não definiu condições comerciais adicionais além das regras gerais da plataforma.</p>
+    </section>
+
+    <section class="Vinc_Secao" id="secContato" hidden>
+      <h2 class="Vinc_SecaoTit">Contato do fornecedor</h2>
+      <dl class="Vinc_Contato" id="vincContato"></dl>
+    </section>
+
+    <section class="Vinc_Secao Vinc_Secao--info">
+      <h2 class="Vinc_SecaoTit">Seus dados cadastrais</h2>
+      <p class="Vinc_InfoText">
+        Para analisar seu pedido, o fornecedor precisará consultar as informações da sua empresa
+        cadastradas no DropNexo (identificação, endereço, contatos e demais dados do perfil).
+        Mantenha tudo correto e atualizado em <strong>Minha conta</strong>.
+      </p>
+    </section>
+
+    <form id="formVinculoAceite" class="Vinc_Form">
+      <label class="Vinc_Check" id="wrapCheckReq" hidden>
+        <input type="checkbox" id="vincCheckReq" />
+        <span>Li e entendi as condições comerciais listadas acima.</span>
+      </label>
+      <label class="Vinc_Check">
+        <input type="checkbox" id="vincCheckDados" />
+        <span>
+          Autorizo este fornecedor a acessar os dados cadastrais da minha empresa no DropNexo
+          exclusivamente para avaliar esta solicitação, e comprometo-me a mantê-los corretos e atualizados.
+        </span>
+      </label>
+      <label class="Vinc_Check">
+        <input type="checkbox" id="vincCheckApto" />
+        <span>
+          Declaro estar apto a cumprir as condições informadas e confirmo o pedido de vínculo comercial.
+        </span>
+      </label>
+
+      <div class="FnPar_Footer Cl_BotoesApoio Vinc_Footer">
+        <button type="button" class="Cl_BtnCancelar" id="vincBtnCancelar">Cancelar</button>
+        <button type="submit" class="Cl_BtnSalvar" id="vincBtnConfirmar">Confirmar solicitação</button>
+      </div>
+    </form>
+  </div>
+
+  <input type="hidden" id="id_fornecedor" value="" />
+
+  <script src="{{ url_for('static', filename='script/global_utils.js') }}"></script>
+  <script src="{{ url_for('vd_fornecedores.static', filename='script/Svinculo_solicitar.js') }}?v=2"></script>
+</body>
+</html>

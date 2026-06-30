@@ -434,7 +434,7 @@ textarea {
 .Cl_botaoprimario:hover, .Cl_botaoFiltro:hover, .Cl_BtnIncluir:hover, .Cl_BtnSalvar:hover {
     background-color: var(--marca-hover, #6922E6);
     border-color: var(--marca-hover, #6922E6);
-    box-shadow: 0 10px 22px rgba(123, 44, 255, 0.22);
+    box-shadow: 0 10px 22px color-mix(in srgb, var(--marca-primary, #7B2CFF) 22%, transparent);
     transform: translateY(-1px);
 }
 
@@ -1192,6 +1192,15 @@ textarea {
   --ok: #22c55e;
   --radius: 10px;
   --font: system-ui, "Segoe UI", Roboto, sans-serif;
+}
+
+/* DropNexo — telas apoio/modal (iframe, fora do app shell) */
+body.FnPar_ApoioBody,
+body:has(.Cl_ApoioHeader) {
+  --marca-primary: #021f81;
+  --marca-hover: #2c6bf3;
+  --marca-light: #e8f0ff;
+  --marca-border: #c7d9ff;
 }
 
 body.public-body,

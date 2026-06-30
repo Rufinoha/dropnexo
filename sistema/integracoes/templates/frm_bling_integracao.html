@@ -3,7 +3,7 @@
 {% block title %}Bling — Integrações — {{ MARCA_NOME }}{% endblock %}
 {% block topbar_title %}Integração Bling{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('static', filename='style/Cbling_integracao.css') }}?v=13" />
+<link rel="stylesheet" href="{{ url_for('static', filename='style/Cbling_integracao.css') }}?v=14" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal Bl_Wrap">
@@ -232,7 +232,7 @@
                 </th>
               </tr>
             </thead>
-            <tbody id="bl_tbl_categorias"><tr><td colspan="7">Carregando…</td></tr></tbody>
+            <tbody id="bl_tbl_categorias"><tr class="Bl_CatLoadingRow"><td colspan="7"><div class="Bl_CatLoading" role="status" aria-live="polite" aria-busy="true"><div class="Bl_CatSpinner" aria-hidden="true"></div><span class="Bl_CatLoadingText">Buscando categorias no Bling…</span></div></td></tr></tbody>
           </table>
         </div>
       </section>
@@ -247,5 +247,5 @@
 </div>
 {% endblock %}
 {% block page_js %}
-<script src="{{ url_for('static', filename='script/Sbling_integracao.js') }}?v=18"></script>
+<script src="{{ url_for('static', filename='script/Sbling_integracao.js') }}?v=19"></script>
 {% endblock %}

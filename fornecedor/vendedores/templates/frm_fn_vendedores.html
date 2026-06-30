@@ -1,41 +1,32 @@
 {% extends "frm_base.html" %}
 {% block title %}Vendedores — {{ MARCA_NOME }}{% endblock %}
 {% block topbar_title %}Vendedores parceiros{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('fn_vendedores.static', filename='style/Cfn_vendedores.css') }}?v=1" />
+{% endblock %}
 {% block content %}
-<div class="cl-page-principal" style="padding:1rem;">
-  <p class="cl-page-desc">Aprove solicitações, encerre vínculos (produtos desativados e estoque zerado na vitrine).</p>
-  <div id="lista" style="display:flex;flex-direction:column;gap:0.75rem;margin-top:1rem;"></div>
+<div class="Cl_ContainerApoio cl-page-principal VdParceiros_Page">
+  <div class="cl-page-title">
+    <h2>Vendedores parceiros</h2>
+    <p class="cl-page-desc">Aprove solicitações, encerre vínculos (produtos desativados e estoque zerado na vitrine).</p>
+    <p class="VdParceiros_Hint">Clique duas vezes em um card para ver os detalhes e tomar a decisão.</p>
+  </div>
+  <div id="vd_lista" class="VdParceiros_Grid" aria-live="polite"></div>
+  <p id="vd_vazio" class="VdParceiros_Vazio" hidden>Nenhuma solicitação ou vínculo.</p>
+</div>
+
+<div id="vd_modal" class="VdParceiros_Modal" hidden aria-hidden="true" role="dialog" aria-labelledby="vd_modalTitulo">
+  <div class="VdParceiros_ModalInner" role="document">
+    <header class="VdParceiros_ModalHead">
+      <h3 id="vd_modalTitulo">Detalhes do vendedor</h3>
+      <button type="button" class="Cl_BtnLink" id="vd_fecharModal" aria-label="Fechar">Fechar</button>
+    </header>
+    <div id="vd_modalBody" class="VdParceiros_ModalBody"></div>
+    <footer id="vd_modalFooter" class="VdParceiros_ModalFoot" hidden></footer>
+  </div>
 </div>
 {% endblock %}
 {% block page_js %}
-<script>
-(async function(){
-  const el = document.getElementById("lista");
-  const r = await fetch("/fornecedor/vendedores/dados", {credentials:"same-origin"});
-  const j = await r.json();
-  if(!j.success){ el.textContent = j.message||"Erro"; return; }
-  const rows = j.dados||[];
-  if(!rows.length){ el.textContent = "Nenhuma solicitação."; return; }
-  el.innerHTML = rows.map(v => `
-    <article style="border:1px solid #e5e7eb;border-radius:10px;padding:1rem;background:#fff">
-      <strong>${v.nome}</strong> — ${v.cidade}/${v.uf} <span style="font-size:12px;color:#64748b">(${v.status})</span>
-      <p style="margin:0.35rem 0;font-size:13px">${v.email||""} ${v.telefone||""}</p>
-      ${v.status==="aguardando" ? `
-        <button type="button" data-id="${v.id}" data-ac="aprovar" class="Cl_BtnPrincipal" style="margin-right:6px">Aprovar</button>
-        <button type="button" data-id="${v.id}" data-ac="recusar" class="Cl_BtnSecundario">Recusar</button>` : ""}
-      ${v.status==="ativo" ? `<button type="button" data-id="${v.id}" data-ac="inativar" class="Cl_BtnLink">Encerrar vínculo</button>` : ""}
-    </article>`).join("");
-  el.addEventListener("click", async e => {
-    const b = e.target.closest("button[data-ac]"); if(!b) return;
-    const r2 = await fetch("/fornecedor/vendedores/responder", {
-      method:"POST", credentials:"same-origin",
-      headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({ id: +b.dataset.id, acao: b.dataset.ac })
-    });
-    const j2 = await r2.json();
-    alert(j2.message||(j2.success?"OK":"Erro"));
-    if(j2.success) location.reload();
-  });
-})();
-</script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="{{ url_for('fn_vendedores.static', filename='script/Sfn_vendedores.js') }}?v=1"></script>
 {% endblock %}
