@@ -760,7 +760,7 @@ def carregar_menu_sidebar() -> list[dict]:
                 {
                     "id": mid,
                     "nome": nome,
-                    "url": resolver_url_menu(data_page),
+                    "url": resolver_url_menu(data_page, nav_codigo),
                     "icone_svg": _icone_svg_menu(icone),
                     "nav_codigo": nav_codigo or "",
                     "parent_id": parent_id,

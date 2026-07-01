@@ -70,10 +70,24 @@ def icone_modulo(codigo: str) -> str:
     return "shopping-bag"
 
 
-def resolver_url_menu(data_page: str) -> str:
+def resolver_url_menu(data_page: str, nav_codigo: str | None = None) -> str:
     page = (data_page or "/").strip()
     if not page.startswith("/"):
         page = "/" + page
+    nav = (nav_codigo or "").strip().lower()
+    rotas_por_nav = {
+        "inicio": "dashboard.index",
+        "fornecedores": "vd_fornecedores.pagina",
+        "catalogos": "fn_catalogo.pagina",
+        "vd_catalogo": "vd_catalogo.pagina",
+        "produtos": "vd_meus_produtos.pagina",
+        "vd_precificacao": "vd_precificacao.pagina",
+        "vd_pedidos": "vd_pedidos.pedidos",
+        "vd_expedicao": "vd_expedicao.expedicao",
+        "vd_usuarios": "vd_usuarios.usuarios",
+        "integracoes": "integracoes.pagina",
+        "fn_parametros": "fn_parametros.parametros_pagina",
+    }
     rotas = {
         "/index": "dashboard.index",
         "/fornecedores": "vd_fornecedores.pagina",
@@ -88,6 +102,7 @@ def resolver_url_menu(data_page: str) -> str:
         "/fornecedor/vendedores": "fn_vendedores.vendedores",
         "/fornecedor/usuarios": "fn_usuarios.usuarios",
         "/fornecedor/integracoes": "integracoes.pagina",
+        "/fornecedor/parametros": "fn_parametros.parametros_pagina",
         "/vendedor/catalogo": "vd_catalogo.pagina",
         "/vendedor/precificacao": "vd_precificacao.pagina",
         "/vendedor/pedidos": "vd_pedidos.pedidos",
@@ -95,7 +110,7 @@ def resolver_url_menu(data_page: str) -> str:
         "/vendedor/usuarios": "vd_usuarios.usuarios",
         "/configuracoes/fornecedores-plataforma": "config.fornecedores_plataforma",
     }
-    endpoint = rotas.get(page)
+    endpoint = rotas_por_nav.get(nav) or rotas.get(page)
     if endpoint:
         try:
             return url_for(endpoint)

@@ -375,6 +375,9 @@ def usuario_tem_permissao(codigo: str) -> bool:
     """Desenvolvedor (eh_desenvolvedor) ignora RBAC — acesso total."""
     if session.get("eh_desenvolvedor"):
         return True
+    papel = (session.get("perfil_codigo") or session.get("papel") or "").strip().lower()
+    if papel in ("dono", "admin"):
+        return True
     perms = session.get("permissoes") or []
     if "*" in perms:
         return True

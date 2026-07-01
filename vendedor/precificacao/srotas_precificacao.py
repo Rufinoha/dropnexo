@@ -26,7 +26,7 @@ def init_app(app):
 @vd_precificacao_bp.get("/vendedor/precificacao")
 @login_obrigatorio()
 @exigir_modulo(MODULO_VENDEDOR)
-@exigir_permissao(codigo="vd_precificacao.ver")
+@exigir_permissao(codigo="precificacao.ver")
 def pagina():
     return render_template("frm_vd_precificacao.html", nav_ativo="vd_precificacao")
 
@@ -82,7 +82,7 @@ def dados():
 @vd_precificacao_bp.post("/vendedor/precificacao/salvar")
 @login_obrigatorio()
 @exigir_modulo(MODULO_VENDEDOR)
-@exigir_permissao(codigo="vd_precificacao.editar")
+@exigir_permissao(codigo="precificacao.editar")
 def salvar():
     id_v = session.get("id_tenant")
     body = request.get_json(silent=True) or {}
