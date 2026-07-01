@@ -154,6 +154,7 @@
       { acao: "exportar", icon: "download", title: "Exportar lista" },
       { acao: "estoque", icon: "estoque", title: "Sincronizar estoque agora" },
       { acao: "etiquetas", icon: "etiquetas", title: "Imprimir etiquetas" },
+      { acao: "rede", icon: "rede", title: "Publicar / despublicar na rede" },
     ];
     acoes.forEach((a) => {
       const btn = document.createElement("button");
@@ -176,6 +177,7 @@
         else if (btn.dataset.bulk === "exportar") await swalEmDesenvolvimento("Exportação da lista");
         else if (btn.dataset.bulk === "estoque") await sincronizarEstoqueLote(ids);
         else if (btn.dataset.bulk === "etiquetas") await swalEmDesenvolvimento("Impressão de etiquetas");
+        else if (btn.dataset.bulk === "rede") await alternarPublicacaoRedeLote(ids);
       } catch (e) {
         await Swal.fire("Erro", e.message, "error");
       }
@@ -265,6 +267,34 @@
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ids }),
+    });
+    const j = await r.json();
+    if (!r.ok || !j.success) throw new Error(j.message || "Erro.");
+    await Swal.fire("Concluído", j.message, "success");
+    await carregar();
+  }
+
+  async function alternarPublicacaoRedeLote(ids) {
+    const selecionadosDados = linhasCompletas.filter((l) => l.tipo === "pai" && ids.includes(l.id));
+    const todosPublicados =
+      selecionadosDados.length > 0 && selecionadosDados.every((l) => l.publicado);
+    const publicar = !todosPublicados;
+    const c = await Swal.fire({
+      title: publicar ? "Publicar na rede?" : "Despublicar da rede?",
+      text: publicar
+        ? `${ids.length} produto(s) ficarão visíveis para vendedores da rede.`
+        : `${ids.length} produto(s) deixarão de aparecer na rede de vendedores.`,
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonText: publicar ? "Publicar" : "Despublicar",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#021F81",
+    });
+    if (!c.isConfirmed) return;
+    const r = await fetch(`${BASE}/rede/publicar`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids, publicado: publicar }),
     });
     const j = await r.json();
     if (!r.ok || !j.success) throw new Error(j.message || "Erro.");

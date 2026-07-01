@@ -1050,6 +1050,7 @@ def _catalogo_montar_linhas_pai(
                     "estoque_total": estoque_total,
                     "qtd_variantes": len(vars_p),
                     "ativo": p["ativo"],
+                    "publicado": p.get("publicado", False),
                     "imagem_url": p["imagem_url"],
                 }
             )
@@ -1091,6 +1092,7 @@ def _catalogo_montar_linhas_pai(
                 "estoque_total": estoque_total,
                 "qtd_variantes": len(vars_p) if p["formato"] == "E" else int(p.get("qtd_variantes") or 0),
                 "ativo": p["ativo"],
+                "publicado": p.get("publicado", False),
                 "imagem_url": p["imagem_url"],
             }
         )
@@ -1881,6 +1883,51 @@ def catalogos_categoria_associar():
             success=True,
             message=f"Categoria associada a {cur.rowcount} produto(s).",
             atualizados=cur.rowcount,
+        )
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
+@fn_catalogo_bp.post("/catalogos/rede/publicar")
+@login_obrigatorio()
+@exigir_permissao(codigo="catalogos.editar")
+def catalogos_rede_publicar():
+    if (resp := _exigir_catalogo_escrita()) is not None:
+        return resp
+    body = request.get_json(silent=True) or {}
+    raw = body.get("ids") or []
+    ids = []
+    for x in raw:
+        try:
+            ids.append(int(x))
+        except (TypeError, ValueError):
+            continue
+    ids = list(dict.fromkeys(ids))
+    if not ids:
+        return jsonify(success=False, message="Nenhum produto selecionado."), 400
+    publicado = _normalizar_bool(body.get("publicado"), True)
+    id_tenant = session.get("id_tenant")
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            UPDATE tbl_produto SET publicado = %s, atualizado_em = %s
+            WHERE id_tenant = %s AND id = ANY(%s)
+            """,
+            (publicado, agora_utc(), id_tenant, ids),
+        )
+        atualizados = cur.rowcount
+        conn.commit()
+        acao = "publicado(s) na rede" if publicado else "despublicado(s) da rede"
+        return jsonify(
+            success=True,
+            message=f"{atualizados} produto(s) {acao}.",
+            atualizados=atualizados,
+            publicado=publicado,
         )
     except Exception as e:
         conn.rollback()

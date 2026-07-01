@@ -48,6 +48,25 @@
     }
   }
 
+  function renderVariacoesResumo(p) {
+    const resumo = p.atributos_resumo || [];
+    if (resumo.length) {
+      return `<div class="Loja_VarResumo">${resumo
+        .map(
+          (a) =>
+            `<div class="Loja_VarLinha"><span class="Loja_VarNome">${esc(a.nome)}:</span> ${esc((a.valores || []).join(", "))}</div>`
+        )
+        .join("")}</div>`;
+    }
+    if (!p.tem_variacoes) return "";
+    const grades = [...new Set((p.grades || []).map((g) => String(g || "").trim()).filter(Boolean))];
+    if (grades.length <= 1) return "";
+    return `<div class="Loja_VarResumo">${grades
+      .slice(0, 6)
+      .map((g) => `<div class="Loja_VarLinha">${esc(g)}</div>`)
+      .join("")}</div>`;
+  }
+
   function renderProdutos(produtos) {
     if (!produtos.length) {
       el.grid.innerHTML = "";
@@ -61,10 +80,7 @@
 
     el.grid.innerHTML = produtos
       .map((p) => {
-        const grades = (p.grades || [])
-          .slice(0, 8)
-          .map((g) => `<span class="Loja_GradeChip">${esc(g)}</span>`)
-          .join("");
+        const variacoesHtml = renderVariacoesResumo(p);
         const img = p.imagem_url
           ? `<img src="${esc(p.imagem_url)}" alt="" loading="lazy" />`
           : '<div class="Loja_CardImgVazio">📦</div>';
@@ -83,12 +99,12 @@
         return `
         <article class="Loja_Card">
           <div class="Loja_CardImgWrap">
-            ${p.formato === "V" ? '<span class="Loja_CardBadge">Variações</span>' : ""}
+            ${p.tem_variacoes ? '<span class="Loja_CardBadge">Variações</span>' : ""}
             ${img}
           </div>
           <div class="Loja_CardBody">
             <h3 class="Loja_CardNome" title="${esc(p.nome)}">${esc(p.nome)}</h3>
-            ${grades ? `<div class="Loja_Grades">${grades}</div>` : ""}
+            ${variacoesHtml}
             <div class="Loja_Precos">
               <div>
                 <span class="Loja_PrecoLbl">Venda sugerida</span>

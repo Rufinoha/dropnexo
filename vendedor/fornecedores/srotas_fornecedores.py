@@ -62,6 +62,67 @@ def _where_rede(id_tenant: int, busca: str, id_fornecedor: str, id_categoria: st
     return " AND ".join(where), params
 
 
+def _parse_atributos_variante(raw) -> dict[str, str]:
+    if isinstance(raw, dict):
+        data = raw
+    elif raw:
+        try:
+            data = json.loads(raw) if isinstance(raw, str) else raw
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return {}
+        if not isinstance(data, dict):
+            return {}
+    else:
+        return {}
+    out: dict[str, str] = {}
+    for chave, valor in data.items():
+        nome = str(chave or "").strip()
+        val = str(valor or "").strip()
+        if nome and val:
+            out[nome] = val
+    return out
+
+
+def _ordem_atributos_produto(cur, id_produto: int) -> list[str]:
+    cur.execute(
+        "SELECT nome FROM tbl_produto_atributo WHERE id_produto = %s ORDER BY ordem, nome",
+        (id_produto,),
+    )
+    return [str(r[0]).strip() for r in cur.fetchall() if r and r[0]]
+
+
+def _agrupar_atributos_resumo(
+    variantes: list[dict],
+    ordem_nomes: list[str] | None = None,
+) -> list[dict]:
+    ordem: list[str] = []
+    mapa: dict[str, list[str]] = {}
+    for var in variantes:
+        for nome, valor in (var.get("atributos") or {}).items():
+            if nome not in mapa:
+                ordem.append(nome)
+                mapa[nome] = []
+            if valor not in mapa[nome]:
+                mapa[nome].append(valor)
+    if ordem_nomes:
+        por_nome = {n.lower(): n for n in ordem}
+        ordenados: list[str] = []
+        vistos: set[str] = set()
+        for nome in ordem_nomes:
+            chave = (nome or "").strip()
+            if not chave:
+                continue
+            real = por_nome.get(chave.lower())
+            if real and real not in vistos:
+                ordenados.append(real)
+                vistos.add(real)
+        for nome in ordem:
+            if nome not in vistos:
+                ordenados.append(nome)
+        ordem = ordenados
+    return [{"nome": nome, "valores": mapa[nome]} for nome in ordem if mapa.get(nome)]
+
+
 @vd_fornecedores_bp.get("/fornecedores")
 @login_obrigatorio()
 @exigir_modulo(MODULO_VENDEDOR)
@@ -637,7 +698,7 @@ def loja_dados(id_fornecedor: int):
             id_produto = row[0]
             cur.execute(
                 """
-                SELECT v.id, v.nome_exibicao,
+                SELECT v.id, v.nome_exibicao, v.atributos,
                        COALESCE(NULLIF(v.valor_drop, 0), NULLIF(p.valor_drop, 0), v.preco) AS preco_drop,
                        COALESCE(v.imagem_url, p.imagem_url),
                        COALESCE(e.quantidade, 0),
@@ -655,15 +716,17 @@ def loja_dados(id_fornecedor: int):
             variantes = []
             precos_drop: list[float] = []
             for vr in cur.fetchall():
-                preco_drop = float(vr[2] or 0)
+                preco_drop = float(vr[3] or 0)
                 precos_drop.append(preco_drop)
+                atributos = _parse_atributos_variante(vr[2])
                 variantes.append(
                     {
                         "id_variante": vr[0],
                         "grade": (vr[1] or "").strip() or "Único",
+                        "atributos": atributos,
                         "preco_fornecedor": preco_drop,
-                        "estoque": int(vr[4] or 0),
-                        "ativado": bool(vr[5]),
+                        "estoque": int(vr[5] or 0),
+                        "ativado": bool(vr[6]),
                     }
                 )
             if not variantes:
@@ -693,6 +756,11 @@ def loja_dados(id_fornecedor: int):
 
             todos_ativados = all(v["ativado"] for v in variantes)
             algum_ativado = any(v["ativado"] for v in variantes)
+            atributos_resumo = _agrupar_atributos_resumo(
+                variantes,
+                _ordem_atributos_produto(cur, id_produto),
+            )
+            tem_variacoes = (row[6] or "S") == "E" or len(variantes) > 1
 
             produtos.append(
                 {
@@ -702,6 +770,8 @@ def loja_dados(id_fornecedor: int):
                     "imagem_url": img_url,
                     "formato": row[6] or "S",
                     "variantes": variantes,
+                    "atributos_resumo": atributos_resumo,
+                    "tem_variacoes": tem_variacoes,
                     "grades": [v["grade"] for v in variantes[:12]],
                     "preco_fornecedor": preco_forn,
                     "preco_sugerido": preco_sug,
