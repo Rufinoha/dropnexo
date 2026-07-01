@@ -322,11 +322,14 @@
     const tipo = tipoAtual();
     const tipoNegocio = (document.getElementById("tipo_negocio")?.value || "").trim();
     const nomeCompleto = String(fd.get("nome_completo") || "").trim();
+    const docDigitos = soDigitos(fd.get("documento"));
     const body = {
       tipo_negocio: tipoNegocio,
       tipo_pessoa: tipo,
-      documento: soDigitos(fd.get("documento")),
+      documento: docDigitos,
       nome_completo: nomeCompleto,
+      nome: nomeCompleto,
+      slug: normalizarSlug(nomeCompleto) || (docDigitos ? `conta-${docDigitos.slice(-6)}` : ""),
       nome_usuario:
         tipo === "F"
           ? nomeCompleto
