@@ -186,11 +186,13 @@ def _fetch_categoria_bling(
     cache_api: dict[str, dict],
 ) -> dict:
     id_bling = str(id_bling or "").strip()
-    if id_bling in cache_api:
-        return cache_api[id_bling]
+    cached = cache_api.get(id_bling)
+    if cached and _cache_tem_detalhe_hierarquia(cached):
+        return cached
     cat = obter_categoria_produto(id_tenant, id_bling)
-    cache_api[id_bling] = cat
-    return cat
+    merged = {**(cached or {}), **(cat or {}), "_bling_detalhe": True}
+    cache_api[id_bling] = merged
+    return merged
 
 
 def _ler_meta_mapa_categoria(cur, id_tenant: int, contexto: str, id_bling: str) -> dict[str, Any]:
@@ -498,7 +500,13 @@ def _upsert_mapa_categoria(
 def _id_pai_bling(cat: dict) -> str | None:
     pai = cat.get("categoriaPai")
     if pai is None:
-        pai = cat.get("idCategoriaPai") or cat.get("categoria_pai") or cat.get("id_categoria_pai")
+        pai = (
+            cat.get("idCategoriaPai")
+            or cat.get("categoria_pai")
+            or cat.get("id_categoria_pai")
+            or cat.get("categoriapai_id")
+            or cat.get("idcategoriapai")
+        )
     if isinstance(pai, dict):
         pid = str(pai.get("id") or "").strip()
     elif pai is not None and pai != "":
@@ -510,12 +518,13 @@ def _id_pai_bling(cat: dict) -> str | None:
     return pid
 
 
+def _cache_tem_detalhe_hierarquia(cat: dict) -> bool:
+    """True após GET individual — listagem Bling não traz pai confiável."""
+    return bool(cat and cat.get("_bling_detalhe"))
+
+
 def _cache_precisa_detalhe_pai(cat: dict) -> bool:
-    if not cat:
-        return True
-    if "categoriaPai" in cat or "idCategoriaPai" in cat or "categoria_pai" in cat:
-        return False
-    return True
+    return not _cache_tem_detalhe_hierarquia(cat)
 
 
 def enriquecer_cache_pais_categorias_bling(
@@ -530,11 +539,7 @@ def enriquecer_cache_pais_categorias_bling(
     from api.bling.cliente import obter_categoria_produto
     from api.bling.sync_estoque import BLING_INTERVALO_SYNC_SEG, BLING_SYNC_MAX_TENTATIVAS
 
-    com_pai = sum(1 for c in cache.values() if _id_pai_bling(c))
-    if com_pai == 0 and len(cache) > 1:
-        ids = list(cache.keys())
-    else:
-        ids = [cid for cid, cat in cache.items() if _cache_precisa_detalhe_pai(cat)]
+    ids = [cid for cid, cat in cache.items() if _cache_precisa_detalhe_pai(cat)]
 
     total = len(ids)
     if not total:
@@ -546,7 +551,7 @@ def enriquecer_cache_pais_categorias_bling(
             try:
                 det = obter_categoria_produto(id_tenant, cid)
                 if det:
-                    cache[cid] = {**(cache.get(cid) or {}), **det}
+                    cache[cid] = {**(cache.get(cid) or {}), **det, "_bling_detalhe": True}
                 ultimo_erro = None
                 break
             except Exception as exc:
@@ -801,11 +806,10 @@ def associar_segmento_categorias_bling(
 
 
 def cache_categorias_precisa_enriquecer(cache: dict[str, dict]) -> bool:
-    """Listagem Bling sem nenhum pai indica hierarquia incompleta."""
+    """Listagem Bling não traz hierarquia confiável — exige GET por id."""
     if len(cache) <= 1:
         return False
-    com_pai = sum(1 for c in cache.values() if _id_pai_bling(c))
-    return com_pai == 0
+    return any(_cache_precisa_detalhe_pai(c) for c in cache.values())
 
 
 PAINEL_ENRIQUECER_ASYNC_MIN = 12
