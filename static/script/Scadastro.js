@@ -269,21 +269,35 @@
   const radiosTipo = form.querySelectorAll('input[name="tipo_pessoa"]');
   const lblDoc = document.getElementById("lbl-documento");
   const lblNomeCompleto = document.getElementById("lbl-nome-completo");
-  const lblNomeConta = document.getElementById("lbl-nome-conta");
+  const wrapNomeUsuario = document.getElementById("wrap-nome-usuario");
+  const legendResponsavel = document.getElementById("legend-responsavel");
+  const inpNomeUsuario = form.querySelector('[name="nome_usuario"]');
+
+  const inpNomeCompleto = form.querySelector('[name="nome_completo"]');
 
   function tipoAtual() {
     const r = form.querySelector('input[name="tipo_pessoa"]:checked');
     return r ? r.value : "F";
   }
 
+  function sincronizarNomeUsuarioPf() {
+    if (tipoAtual() !== "F" || !inpNomeUsuario || !inpNomeCompleto) return;
+    inpNomeUsuario.value = String(inpNomeCompleto.value || "").trim();
+  }
+
   function aplicarTipoPessoa() {
     const j = tipoAtual() === "J";
     if (lblDoc) lblDoc.textContent = j ? "CNPJ" : "CPF";
     if (lblNomeCompleto) lblNomeCompleto.textContent = j ? "Razão social" : "Nome completo";
-    if (lblNomeConta) {
-      lblNomeConta.textContent = j
-        ? "Nome fantasia (exibição no sistema)"
-        : "Nome no sistema (apelido)";
+    if (wrapNomeUsuario) wrapNomeUsuario.hidden = !j;
+    if (legendResponsavel) legendResponsavel.textContent = j ? "Responsável (dono)" : "Contato";
+    if (inpNomeUsuario) {
+      inpNomeUsuario.required = j;
+      if (j) {
+        inpNomeUsuario.value = "";
+      } else {
+        sincronizarNomeUsuarioPf();
+      }
     }
     if (inpDoc) {
       inpDoc.value = j ? mascaraCnpj(inpDoc.value) : mascaraCpf(inpDoc.value);
@@ -293,17 +307,12 @@
 
   radiosTipo.forEach((r) => r.addEventListener("change", aplicarTipoPessoa));
 
+  inpNomeCompleto?.addEventListener("input", sincronizarNomeUsuarioPf);
+
   inpDoc?.addEventListener("input", () => {
     const j = tipoAtual() === "J";
     inpDoc.value = j ? mascaraCnpj(inpDoc.value) : mascaraCpf(inpDoc.value);
   });
-
-  const slugInput = form.querySelector('[name="slug"]');
-  if (slugInput) {
-    slugInput.addEventListener("blur", () => {
-      slugInput.value = normalizarSlug(slugInput.value);
-    });
-  }
 
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -312,14 +321,16 @@
     const fd = new FormData(form);
     const tipo = tipoAtual();
     const tipoNegocio = (document.getElementById("tipo_negocio")?.value || "").trim();
+    const nomeCompleto = String(fd.get("nome_completo") || "").trim();
     const body = {
       tipo_negocio: tipoNegocio,
       tipo_pessoa: tipo,
       documento: soDigitos(fd.get("documento")),
-      nome_completo: String(fd.get("nome_completo") || "").trim(),
-      nome: String(fd.get("nome") || "").trim(),
-      slug: normalizarSlug(fd.get("slug")),
-      nome_usuario: String(fd.get("nome_usuario") || "").trim(),
+      nome_completo: nomeCompleto,
+      nome_usuario:
+        tipo === "F"
+          ? nomeCompleto
+          : String(fd.get("nome_usuario") || "").trim(),
       email: String(fd.get("email") || "").trim().toLowerCase(),
       whatsapp: soDigitos(fd.get("whatsapp")),
       cep: soDigitos(fd.get("cep")),
@@ -330,6 +341,11 @@
       cidade: String(fd.get("cidade") || "").trim(),
       uf: String(fd.get("uf") || "").trim().toUpperCase(),
     };
+
+    if (tipo === "J" && body.nome_usuario.length < 2) {
+      mostrarMsg("Informe o nome do responsável.", false);
+      return;
+    }
 
     const btn = document.getElementById("btn-cadastrar");
     btn.disabled = true;

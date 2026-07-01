@@ -68,6 +68,10 @@
   font-size: 0.9rem;
 }
 
+.cadastro-field[hidden] {
+  display: none !important;
+}
+
 .cadastro-field input,
 .cadastro-field select {
   padding: 0.6rem 0.75rem;

@@ -822,10 +822,16 @@ def api_cadastro_novo():
         return jsonify(success=False, message=f"{doc_label} inválido."), 400
     if len(nome_completo) < 2:
         return jsonify(success=False, message="Informe o nome completo ou razão social."), 400
-    if len(nome_tenant) < 2:
-        return jsonify(success=False, message="Informe o nome de exibição da conta."), 400
-    if tipo_negocio != "fornecedor" and (not slug or len(slug) < 2):
-        return jsonify(success=False, message="Identificador (slug) inválido."), 400
+
+    if tipo_negocio == "fornecedor":
+        if len(nome_tenant) < 2:
+            return jsonify(success=False, message="Informe o apelido ou nome fantasia."), 400
+    else:
+        if len(nome_tenant) < 2:
+            nome_tenant = nome_completo[:120]
+        if tipo_pessoa == "F" and len(nome_usuario) < 2:
+            nome_usuario = nome_completo
+
     if len(nome_usuario) < 2:
         return jsonify(success=False, message="Informe o nome do responsável."), 400
     if not valida_email(email):
@@ -856,14 +862,7 @@ def api_cadastro_novo():
         conn = Var_ConectarBanco()
         cur = conn.cursor()
 
-        if tipo_negocio == "fornecedor":
-            slug = _gerar_slug_disponivel(cur, nome_tenant=nome_tenant, documento=documento)
-        elif slug:
-            cur.execute("SELECT 1 FROM tbl_tenant WHERE slug = %s LIMIT 1", (slug,))
-            if cur.fetchone():
-                return jsonify(success=False, message="Este identificador (slug) já está em uso."), 409
-        else:
-            return jsonify(success=False, message="Identificador (slug) inválido."), 400
+        slug = _gerar_slug_disponivel(cur, nome_tenant=nome_tenant, documento=documento)
 
         cur.execute("SELECT 1 FROM tbl_tenant WHERE documento = %s LIMIT 1", (documento,))
         if cur.fetchone():

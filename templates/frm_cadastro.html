@@ -113,25 +113,15 @@
               <span id="lbl-nome-completo">Nome completo</span>
               <input type="text" name="nome_completo" required maxlength="255" />
             </label>
-            <label class="cadastro-field cadastro-field-span2">
-              <span id="lbl-nome-conta">Nome no sistema (apelido / fantasia)</span>
-              <input type="text" name="nome" required maxlength="120" />
-            </label>
-            <label class="cadastro-field cadastro-field-span2">
-              <span>Identificador da conta (slug)</span>
-              <input type="text" name="slug" required pattern="[a-z0-9][a-z0-9\-]*[a-z0-9]|[a-z0-9]{2,}"
-                title="Letras minúsculas, números e hífen. Ex.: minha-loja" placeholder="minha-loja" />
-              <span class="hint">URL interna · ex.: <code>minha-loja.dropnexo.com.br</code> (futuro)</span>
-            </label>
           </div>
         </fieldset>
 
-        <fieldset class="cadastro-section">
-          <legend>Responsável (dono)</legend>
+        <fieldset class="cadastro-section" id="secao-responsavel">
+          <legend id="legend-responsavel">Contato</legend>
           <div class="cadastro-grid cadastro-grid-2">
-            <label class="cadastro-field cadastro-field-span2">
+            <label class="cadastro-field cadastro-field-span2" id="wrap-nome-usuario" hidden>
               <span>Seu nome</span>
-              <input type="text" name="nome_usuario" required maxlength="255" />
+              <input type="text" name="nome_usuario" maxlength="255" />
             </label>
             <label class="cadastro-field">
               <span>E-mail (login)</span>
@@ -201,6 +191,6 @@
   {% if tipo_negocio != 'fornecedor' %}
   <script src="{{ url_for('static', filename='script/Ssegmentos_nichos.js') }}"></script>
   {% endif %}
-  <script src="{{ url_for('static', filename='script/Scadastro.js') }}?v=3"></script>
+  <script src="{{ url_for('static', filename='script/Scadastro.js') }}?v=5"></script>
 </body>
 </html>
