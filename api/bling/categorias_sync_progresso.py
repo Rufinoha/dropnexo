@@ -84,7 +84,13 @@ def _salvar_job_db(job_id: str, dados: dict[str, Any]) -> None:
         payload = dados.get("payload")
         if payload is None and dados.get("dados") is not None:
             payload = dados.get("dados")
-        payload_json = json.dumps(payload, ensure_ascii=False) if payload is not None else None
+        payload_json: str | None = None
+        if payload is not None:
+            try:
+                payload_json = json.dumps(payload, ensure_ascii=False, default=str)
+            except Exception:
+                _log.exception("Serializar payload job=%s", job_id[:8])
+                payload_json = None
         params = (
             job_id,
             int(dados.get("id_tenant") or 0),
@@ -98,45 +104,36 @@ def _salvar_job_db(job_id: str, dados: dict[str, Any]) -> None:
             (dados.get("resumo") or "")[:500] or None,
             agora_utc(),
         )
-        if _payload_col_disponivel(cur) and payload_json is not None:
-            cur.execute(
-                """
-                INSERT INTO tbl_integracao_bling_sync_job (
-                    job_id, id_tenant, id_bling_deposito, status,
-                    total, processados, sincronizados, falhas, mensagem, resumo, payload, atualizado_em
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s)
-                ON CONFLICT (job_id) DO UPDATE SET
-                    status = EXCLUDED.status,
-                    total = EXCLUDED.total,
-                    processados = EXCLUDED.processados,
-                    sincronizados = EXCLUDED.sincronizados,
-                    falhas = EXCLUDED.falhas,
-                    mensagem = EXCLUDED.mensagem,
-                    resumo = COALESCE(EXCLUDED.resumo, tbl_integracao_bling_sync_job.resumo),
-                    payload = COALESCE(EXCLUDED.payload, tbl_integracao_bling_sync_job.payload),
-                    atualizado_em = EXCLUDED.atualizado_em
-                """,
-                params + (payload_json,),
-            )
-        else:
-            cur.execute(
-                """
-                INSERT INTO tbl_integracao_bling_sync_job (
-                    job_id, id_tenant, id_bling_deposito, status,
-                    total, processados, sincronizados, falhas, mensagem, resumo, atualizado_em
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                ON CONFLICT (job_id) DO UPDATE SET
-                    status = EXCLUDED.status,
-                    total = EXCLUDED.total,
-                    processados = EXCLUDED.processados,
-                    sincronizados = EXCLUDED.sincronizados,
-                    falhas = EXCLUDED.falhas,
-                    mensagem = EXCLUDED.mensagem,
-                    resumo = COALESCE(EXCLUDED.resumo, tbl_integracao_bling_sync_job.resumo),
-                    atualizado_em = EXCLUDED.atualizado_em
-                """,
-                params,
-            )
+        cur.execute(
+            """
+            INSERT INTO tbl_integracao_bling_sync_job (
+                job_id, id_tenant, id_bling_deposito, status,
+                total, processados, sincronizados, falhas, mensagem, resumo, atualizado_em
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (job_id) DO UPDATE SET
+                status = EXCLUDED.status,
+                total = EXCLUDED.total,
+                processados = EXCLUDED.processados,
+                sincronizados = EXCLUDED.sincronizados,
+                falhas = EXCLUDED.falhas,
+                mensagem = EXCLUDED.mensagem,
+                resumo = COALESCE(EXCLUDED.resumo, tbl_integracao_bling_sync_job.resumo),
+                atualizado_em = EXCLUDED.atualizado_em
+            """,
+            params,
+        )
+        if payload_json and _payload_col_disponivel(cur):
+            try:
+                cur.execute(
+                    """
+                    UPDATE tbl_integracao_bling_sync_job
+                    SET payload = %s::jsonb, atualizado_em = %s
+                    WHERE job_id = %s
+                    """,
+                    (payload_json, agora_utc(), job_id),
+                )
+            except Exception:
+                _log.exception("Falha ao gravar payload job=%s", job_id[:8])
         conn.commit()
     finally:
         conn.close()
@@ -375,6 +372,12 @@ def iniciar_carregar_painel_categorias(
                         on_progresso=_prog,
                     )
 
+                _atualizar_painel(
+                    processados=total,
+                    total=total,
+                    mensagem="Montando árvore de categorias…",
+                )
+
                 cur = conn.cursor()
                 dados = listar_painel_categorias_bling(
                     cur,
@@ -455,32 +458,42 @@ def _ler_job_painel_db(job_id: str, id_tenant: int) -> dict[str, Any] | None:
                 payload = None
         if row[0] == "concluido" and isinstance(payload, dict):
             out["dados"] = payload
+        elif row[0] == "concluido":
+            out["recarregar_sync"] = True
         return out
     finally:
         conn.close()
 
 
 def obter_job_painel_categorias(job_id: str, id_tenant: int) -> dict[str, Any] | None:
-    job = _ler_job_painel_db(job_id, int(id_tenant))
-    if job:
-        return job
+    db_job = _ler_job_painel_db(job_id, int(id_tenant))
     with _lock:
-        mem = _jobs_memoria.get(job_id)
-    if not mem or int(mem.get("id_tenant") or 0) != int(id_tenant):
+        mem = dict(_jobs_memoria.get(job_id) or {})
+    if int(mem.get("id_tenant") or 0) not in (0, int(id_tenant)) and not db_job:
         return None
-    resumo = mem.get("resumo") or ""
-    if "categorias_painel" not in str(resumo):
+    if mem and "categorias_painel" not in str(mem.get("resumo") or ""):
+        mem = {}
+
+    job: dict[str, Any] = dict(db_job or {})
+    if mem and int(mem.get("id_tenant") or 0) == int(id_tenant):
+        mem_status = mem.get("status") or "processando"
+        db_status = job.get("status") or "processando"
+        if not job or mem_status in ("concluido", "erro") and db_status == "processando":
+            job = {
+                "status": mem_status,
+                "total": int(mem.get("total") or job.get("total") or 0),
+                "processados": int(mem.get("processados") or job.get("processados") or 0),
+                "mensagem": mem.get("mensagem") or job.get("mensagem") or "",
+            }
+            payload = mem.get("payload") or mem.get("dados")
+            if mem_status == "concluido" and isinstance(payload, dict):
+                job["dados"] = payload
+            elif mem_status == "concluido":
+                job["recarregar_sync"] = True
+
+    if not job:
         return None
-    out: dict[str, Any] = {
-        "status": mem.get("status") or "processando",
-        "total": int(mem.get("total") or 0),
-        "processados": int(mem.get("processados") or 0),
-        "mensagem": mem.get("mensagem") or "",
-    }
-    payload = mem.get("payload") or mem.get("dados")
-    if mem.get("status") == "concluido" and payload:
-        out["dados"] = payload
-    return out
+    return job
 
 
 def _ler_job_db(job_id: str, id_tenant: int) -> dict[str, Any] | None:

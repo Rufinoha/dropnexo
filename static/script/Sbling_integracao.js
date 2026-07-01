@@ -632,6 +632,7 @@
   function pollPainelCategorias(jobId) {
     return new Promise((resolve, reject) => {
       let tentativas404 = 0;
+      let pollsCheio = 0;
       const poll = async () => {
         try {
           const r = await fetch(
@@ -641,7 +642,8 @@
           if (r.status === 404) {
             tentativas404 += 1;
             if (tentativas404 > 8) {
-              throw new Error("Job não encontrado. Recarregue a aba Categorias.");
+              reject(new Error("SYNC_FALLBACK"));
+              return;
             }
             setTimeout(poll, 1500);
             return;
@@ -657,10 +659,23 @@
               : "Consultando árvore de categorias no Bling…"
           );
           if (job.status === "concluido") {
-            resolve(job.dados || {});
+            if (job.dados?.categorias?.length) {
+              resolve(job.dados);
+            } else {
+              reject(new Error("SYNC_FALLBACK"));
+            }
             return;
           }
           if (job.status === "erro") throw new Error(job.mensagem || "Falha ao carregar categorias.");
+          if (job.total && Number(job.processados) >= Number(job.total)) {
+            pollsCheio += 1;
+            if (pollsCheio >= 10) {
+              reject(new Error("SYNC_FALLBACK"));
+              return;
+            }
+          } else {
+            pollsCheio = 0;
+          }
           setTimeout(poll, 1200);
         } catch (e) {
           reject(e);
@@ -789,8 +804,11 @@
           "Consultando hierarquia no Bling…",
           j.total ? `${j.total} categorias — aguarde a árvore completa.` : "Isso evita criar tudo na raiz."
         );
-        dados = await pollPainelCategorias(j.sync_job_id);
-        if (!dados?.categorias?.length) {
+        try {
+          dados = await pollPainelCategorias(j.sync_job_id);
+        } catch (e) {
+          if (String(e.message || "") !== "SYNC_FALLBACK") throw e;
+          atualizarLoadingCategorias("Finalizando carregamento…", "Modo direto (sem job em background).");
           return carregarCategorias({ sync: true });
         }
       }
