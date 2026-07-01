@@ -288,7 +288,16 @@ def iniciar_reparar_hierarquia_categorias(
 
                 falhas = int(resultado.get("falhas") or 0)
                 ok = int(resultado.get("sincronizados") or 0)
+                erros = resultado.get("erros") or []
                 msg = resultado.get("mensagem") or f"{ok} categoria(s) reorganizada(s)."
+                if falhas and ok:
+                    msg = f"{msg} {falhas} categoria(s) ignorada(s) (não existem mais no Bling)."
+                elif falhas and not ok:
+                    msg = (
+                        erros[0]
+                        if erros
+                        else "Nenhuma categoria pôde ser reorganizada. Verifique os mapeamentos no Bling."
+                    )
                 _atualizar_job(
                     job_id,
                     status="concluido" if ok or not falhas else "erro",

@@ -495,15 +495,30 @@
 
       Swal.close();
       await carregarCategorias({ sync: true });
-      await Swal.fire({
-        icon: "success",
-        title: "Hierarquia reorganizada",
-        text: resultado.mensagem || "Concluído.",
-        confirmButtonColor: "#021F81",
-      });
+      const falhas = Number(resultado.falhas) || 0;
+      const ok = Number(resultado.sincronizados) || 0;
+      if (falhas && ok) {
+        await Swal.fire({
+          icon: "warning",
+          title: "Concluído com avisos",
+          text: resultado.mensagem || `${ok} reorganizada(s), ${falhas} ignorada(s).`,
+          confirmButtonColor: "#021F81",
+        });
+      } else {
+        await Swal.fire({
+          icon: "success",
+          title: "Hierarquia reorganizada",
+          text: resultado.mensagem || "Concluído.",
+          confirmButtonColor: "#021F81",
+        });
+      }
     } catch (e) {
       Swal.close();
-      Swal.fire({ icon: "error", title: "Erro", text: e.message, confirmButtonColor: "#021F81" });
+      const msg = String(e.message || "");
+      const amigavel = /não encontrado|nao encontrado|not found/i.test(msg)
+        ? "Uma ou mais categorias mapeadas não existem mais no Bling. Atualize a aba Categorias e remova vínculos inválidos."
+        : msg;
+      Swal.fire({ icon: "error", title: "Erro", text: amigavel, confirmButtonColor: "#021F81" });
     } finally {
       if (btn) btn.disabled = false;
     }

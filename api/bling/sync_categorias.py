@@ -193,6 +193,46 @@ def _fetch_categoria_bling(
     return cat
 
 
+def _ler_meta_mapa_categoria(cur, id_tenant: int, contexto: str, id_bling: str) -> dict[str, Any]:
+    cur.execute(
+        """
+        SELECT meta FROM tbl_integracao_map
+        WHERE id_tenant = %s AND provedor = 'bling' AND contexto = %s
+          AND entidade = 'categoria' AND id_bling = %s
+        """,
+        (id_tenant, contexto, str(id_bling or "").strip()),
+    )
+    row = cur.fetchone()
+    if not row or not row[0]:
+        return {}
+    raw = row[0]
+    if isinstance(raw, dict):
+        return raw
+    try:
+        return json.loads(raw)
+    except Exception:
+        return {}
+
+
+def _fetch_categoria_bling_opcional(
+    id_tenant: int,
+    id_bling: str,
+    cache_api: dict[str, dict],
+) -> tuple[dict, str | None]:
+    """Retorna (categoria, erro) — não interrompe o lote se o Bling responder 404."""
+    id_bling = str(id_bling or "").strip()
+    try:
+        return _fetch_categoria_bling(id_tenant, id_bling, cache_api), None
+    except Exception as exc:
+        msg = str(exc).strip()
+        low = msg.lower()
+        if id_bling in cache_api:
+            return cache_api[id_bling], None
+        if "não encontrado" in low or "nao encontrado" in low or "404" in low or "not found" in low:
+            return {}, msg
+        raise
+
+
 def _nome_categoria_bling(cat: dict, id_bling: str) -> str:
     return (cat.get("descricao") or f"Categoria Bling {id_bling}").strip()[:120]
 
@@ -850,9 +890,26 @@ def reparar_hierarquia_categorias_mapeadas(
 
     for id_bling in ordenados:
         id_drop = bling_to_drop[id_bling]
-        cat = _fetch_categoria_bling(id_tenant, id_bling, cache)
+        cat, err_cat = _fetch_categoria_bling_opcional(id_tenant, id_bling, cache)
+        meta_mapa = _ler_meta_mapa_categoria(cur, id_tenant, contexto, id_bling)
+        if err_cat:
+            nome = meta_mapa.get("nome") or f"Categoria Bling {id_bling}"
+            erros.append(f"{nome}: não existe mais no Bling (mapeamento antigo).")
+            falhas += 1
+            processados += 1
+            _emit(
+                total=total,
+                processados=processados,
+                sincronizados=atualizados,
+                falhas=falhas,
+                mensagem=f"Reorganizando {processados}/{total}",
+            )
+            continue
+
         nome = _nome_categoria_bling(cat, id_bling)
-        parent_bling = _id_pai_bling(cat)
+        parent_bling = _id_pai_bling(cat) or meta_mapa.get("id_bling_pai")
+        if parent_bling:
+            parent_bling = str(parent_bling).strip() or None
         parent_drop: int | None = None
 
         if parent_bling:
