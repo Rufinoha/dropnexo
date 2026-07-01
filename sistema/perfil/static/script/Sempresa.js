@@ -7,6 +7,7 @@
   const cfg = window.OSB_MEU_PERFIL || {};
   let dadosOriginais = null;
   let exigeNichos = false;
+  let conversaoPjAtiva = false;
 
   function el(id) {
     return document.getElementById(id);
@@ -14,6 +15,113 @@
 
   function soDigitos(v) {
     return String(v || "").replace(/\D/g, "");
+  }
+
+  function mascaraCpf(v) {
+    const d = soDigitos(v).slice(0, 11);
+    return d
+      .replace(/(\d{3})(\d)/, "$1.$2")
+      .replace(/(\d{3})(\d)/, "$1.$2")
+      .replace(/(\d{3})(\d{1,2})$/, "$1-$2");
+  }
+
+  function mascaraCnpj(v) {
+    const d = soDigitos(v).slice(0, 14);
+    return d
+      .replace(/^(\d{2})(\d)/, "$1.$2")
+      .replace(/^(\d{2})\.(\d{3})(\d)/, "$1.$2.$3")
+      .replace(/\.(\d{3})(\d)/, ".$1/$2")
+      .replace(/(\d{4})(\d)/, "$1-$2");
+  }
+
+  function formatarDocumento(doc, tipo) {
+    const d = soDigitos(doc);
+    if (!d) return "";
+    return (tipo || "").toUpperCase() === "J" ? mascaraCnpj(d) : mascaraCpf(d);
+  }
+
+  function tipoOriginal() {
+    return (dadosOriginais?.tipo_pessoa || "F").toUpperCase();
+  }
+
+  function aplicarUiTipoPessoa() {
+    const sel = el("emp-tipo-pessoa");
+    const doc = el("emp-documento");
+    const lblDoc = el("emp-lbl-documento");
+    const btnCnpj = el("emp-btn-cnpj");
+    const hint = el("emp-tipo-hint");
+    if (!sel || !doc) return;
+
+    const orig = tipoOriginal();
+    const tipo = (sel.value || "F").toUpperCase();
+
+    if (orig === "J") {
+      sel.value = "J";
+      sel.disabled = true;
+      sel.classList.add("mp-readonly");
+      if (hint) hint.hidden = false;
+      if (lblDoc) lblDoc.textContent = "CNPJ";
+      doc.readOnly = true;
+      doc.classList.add("mp-readonly");
+      if (btnCnpj) btnCnpj.hidden = true;
+      doc.value = formatarDocumento(dadosOriginais?.documento || doc.value, "J");
+      return;
+    }
+
+    sel.disabled = false;
+    sel.classList.remove("mp-readonly");
+    if (hint) hint.hidden = true;
+
+    if (tipo === "J" && conversaoPjAtiva) {
+      if (lblDoc) lblDoc.textContent = "CNPJ";
+      doc.readOnly = false;
+      doc.classList.remove("mp-readonly");
+      if (btnCnpj) btnCnpj.hidden = false;
+      doc.value = mascaraCnpj(doc.value);
+    } else {
+      sel.value = "F";
+      conversaoPjAtiva = false;
+      if (lblDoc) lblDoc.textContent = "CPF";
+      doc.readOnly = true;
+      doc.classList.add("mp-readonly");
+      if (btnCnpj) btnCnpj.hidden = true;
+      doc.value = formatarDocumento(dadosOriginais?.documento || "", "F");
+    }
+  }
+
+  async function onTipoPessoaChange() {
+    const sel = el("emp-tipo-pessoa");
+    if (!sel || tipoOriginal() !== "F") return;
+
+    if (sel.value === "J") {
+      if (typeof Swal !== "undefined") {
+        const r = await Swal.fire({
+          icon: "warning",
+          title: "Alterar para Pessoa Jurídica?",
+          html:
+            "<p>Esta alteração <strong>não poderá ser desfeita</strong>.</p>" +
+            "<p>Informe o CNPJ da empresa e revise a razão social antes de salvar.</p>",
+          showCancelButton: true,
+          confirmButtonText: "Sim, alterar",
+          cancelButtonText: "Cancelar",
+          confirmButtonColor: "#021f81",
+        });
+        if (!r.isConfirmed) {
+          sel.value = "F";
+          conversaoPjAtiva = false;
+          aplicarUiTipoPessoa();
+          return;
+        }
+      }
+      conversaoPjAtiva = true;
+      el("emp-documento").value = "";
+      aplicarUiTipoPessoa();
+      el("emp-documento")?.focus();
+      return;
+    }
+
+    conversaoPjAtiva = false;
+    aplicarUiTipoPessoa();
   }
 
   function linhaSt(uf, ie) {
@@ -68,9 +176,10 @@
 
   function preencher(d) {
     dadosOriginais = d;
+    conversaoPjAtiva = false;
     el("emp-nome").value = d.nome || d.nome_fantasia || "";
     el("emp-tipo-pessoa").value = d.tipo_pessoa || "J";
-    el("emp-documento").value = d.documento || "";
+    el("emp-documento").value = formatarDocumento(d.documento || "", d.tipo_pessoa || "F");
     el("emp-razao").value = d.nome_completo || d.razao_social || "";
     el("emp-ie").value = d.inscricao_estadual || "";
     el("emp-ie-isento").checked = !!d.ie_isento;
@@ -110,6 +219,40 @@
       ph.hidden = false;
     }
     renderSegmentosNichos(d);
+    aplicarUiTipoPessoa();
+  }
+
+  async function buscarCnpj() {
+    const doc = soDigitos(el("emp-documento")?.value);
+    if (doc.length !== 14) {
+      if (typeof Swal !== "undefined") {
+        Swal.fire("Atenção", "Informe o CNPJ completo com 14 dígitos.", "warning");
+      }
+      return;
+    }
+    const btn = el("emp-btn-cnpj");
+    if (btn) btn.disabled = true;
+    try {
+      const r = await fetch(`${cfg.apiCnpj}?cnpj=${encodeURIComponent(doc)}`, {
+        headers: { Accept: "application/json" },
+      });
+      const j = await r.json();
+      if (!r.ok || !j.success) throw new Error(j.message || "Erro na consulta do CNPJ.");
+      const dados = j.dados || {};
+      if (dados.razao_social) el("emp-razao").value = dados.razao_social;
+      if (dados.nome_fantasia) el("emp-nome").value = dados.nome_fantasia;
+      if (dados.cep) el("emp-cep").value = dados.cep;
+      if (dados.logradouro) el("emp-logradouro").value = dados.logradouro;
+      if (dados.numero) el("emp-numero").value = dados.numero;
+      if (dados.complemento) el("emp-complemento").value = dados.complemento;
+      if (dados.bairro) el("emp-bairro").value = dados.bairro;
+      if (dados.cidade) el("emp-cidade").value = dados.cidade;
+      if (dados.uf) el("emp-uf").value = dados.uf;
+    } catch (err) {
+      if (typeof Swal !== "undefined") Swal.fire("Consulta CNPJ", err.message || "Falha na consulta.", "warning");
+    } finally {
+      if (btn) btn.disabled = false;
+    }
   }
 
   async function carregar() {
@@ -151,11 +294,13 @@
       }
     }
     const apelido = el("emp-nome").value.trim();
+    const tipoSel = (el("emp-tipo-pessoa")?.value || tipoOriginal()).toUpperCase();
     const body = {
       nome: apelido,
       nome_completo: el("emp-razao").value.trim(),
       razao_social: el("emp-razao").value.trim(),
       nome_fantasia: apelido,
+      tipo_pessoa: tipoSel,
       inscricao_estadual: el("emp-ie").value.trim(),
       inscricao_municipal: el("emp-im").value.trim(),
       ie_isento: el("emp-ie-isento").checked,
@@ -183,6 +328,16 @@
       site: el("emp-site").value.trim(),
       inscricoes_st: coletarSt(),
     };
+    if (tipoOriginal() === "F" && tipoSel === "J") {
+      const doc = soDigitos(el("emp-documento")?.value);
+      if (doc.length !== 14) {
+        if (typeof Swal !== "undefined") {
+          Swal.fire("Atenção", "Informe um CNPJ válido com 14 dígitos.", "warning");
+        }
+        return;
+      }
+      body.documento = doc;
+    }
     if (exigeNichos && boxSeg && window.SegNichos) {
       body.ids_segmentos_nichos = SegNichos.idsSelecionados(boxSeg);
     }
@@ -225,6 +380,11 @@
   document.addEventListener("DOMContentLoaded", function () {
     if (!el("form-empresa")) return;
     el("form-empresa")?.addEventListener("submit", salvar);
+    el("emp-tipo-pessoa")?.addEventListener("change", onTipoPessoaChange);
+    el("emp-documento")?.addEventListener("input", function () {
+      if (conversaoPjAtiva) this.value = mascaraCnpj(this.value);
+    });
+    el("emp-btn-cnpj")?.addEventListener("click", buscarCnpj);
     el("emp-btn-cep")?.addEventListener("click", buscarCep);
     el("emp-st-add")?.addEventListener("click", function () {
       el("emp-st-lista")?.appendChild(linhaSt("", ""));

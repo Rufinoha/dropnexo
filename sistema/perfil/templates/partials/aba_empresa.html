@@ -31,14 +31,20 @@
           </div>
           <div class="filter-group mp-c3">
             <label for="emp-tipo-pessoa">Tipo</label>
-            <select id="emp-tipo-pessoa" disabled class="mp-readonly">
+            <select id="emp-tipo-pessoa">
               <option value="J">Pessoa Jurídica</option>
               <option value="F">Pessoa Física</option>
             </select>
+            <p class="hint mp-tipo-hint" id="emp-tipo-hint" hidden>
+              Pessoa jurídica não pode voltar para pessoa física.
+            </p>
           </div>
           <div class="filter-group mp-c4">
-            <label for="emp-documento">CPF / CNPJ</label>
-            <input type="text" id="emp-documento" readonly class="mp-readonly" />
+            <label for="emp-documento" id="emp-lbl-documento">CPF / CNPJ</label>
+            <div class="input-com-botao mp-doc-wrap">
+              <input type="text" id="emp-documento" readonly class="mp-readonly" maxlength="18" />
+              <button type="button" class="mp-btn mp-btn--ghost mp-btn--sm" id="emp-btn-cnpj" hidden>Buscar CNPJ</button>
+            </div>
           </div>
           <div class="filter-group mp-c5">
             <label for="emp-razao" class="mp-label-with-tip">

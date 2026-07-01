@@ -757,3 +757,20 @@
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
+.mp-form-empresa .mp-doc-wrap {
+  display: flex;
+  gap: 0.5rem;
+  align-items: stretch;
+}
+
+.mp-form-empresa .mp-doc-wrap input {
+  flex: 1;
+  min-width: 0;
+}
+
+.mp-form-empresa .mp-tipo-hint {
+  margin: 0.25rem 0 0;
+  font-size: 0.8rem;
+  color: #64748b;
+}

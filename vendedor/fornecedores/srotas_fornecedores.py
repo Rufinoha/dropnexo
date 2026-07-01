@@ -11,6 +11,7 @@ from fornecedor.requisitos_vendedor import (
     carregar_requisitos,
     carregar_requisitos_raw,
     requisitos_tem_conteudo,
+    sql_fornecedor_elegivel_rede_vendedor,
 )
 from global_utils import Var_ConectarBanco, agora_utc, exigir_modulo, login_obrigatorio, exigir_permissao, url_imagem_produto
 from srotas_negocio import buscar_regra_precificacao, calcular_preco_venda, montar_snapshot_vendedor
@@ -293,8 +294,9 @@ def segmentos_rede():
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
+        elegivel = sql_fornecedor_elegivel_rede_vendedor("t")
         cur.execute(
-            """
+            f"""
             SELECT s.id, s.nome, COUNT(DISTINCT fs.id_tenant)::int
             FROM tbl_segmento s
             INNER JOIN tbl_fornecedor_segmento fs ON fs.id_segmento = s.id
@@ -302,12 +304,9 @@ def segmentos_rede():
                 AND t.id <> %s
                 AND t.ativo = TRUE
                 AND t.tipo_negocio IN ('fornecedor', 'hibrido')
+                AND {elegivel}
             WHERE s.ativo = TRUE
               AND s.id_tenant IS NULL
-              AND EXISTS (
-                    SELECT 1 FROM tbl_produto p
-                    WHERE p.id_tenant = t.id AND p.publicado = TRUE AND p.ativo = TRUE
-              )
             GROUP BY s.id, s.nome, s.ordem
             ORDER BY s.ordem NULLS LAST, s.nome
             """,
@@ -332,14 +331,12 @@ def rede():
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
+        elegivel = sql_fornecedor_elegivel_rede_vendedor("t")
         where = [
             "t.id <> %s",
             "t.ativo = TRUE",
             "t.tipo_negocio IN ('fornecedor', 'hibrido')",
-            """EXISTS (
-                SELECT 1 FROM tbl_produto p
-                WHERE p.id_tenant = t.id AND p.publicado = TRUE AND p.ativo = TRUE
-            )""",
+            elegivel,
         ]
         params: list = [id_vendedor]
         if busca:
@@ -362,7 +359,7 @@ def rede():
                    t.telefone_comercial, t.email_comercial,
                    v.id AS id_vinculo, COALESCE(v.status, 'nenhum'),
                    (SELECT COUNT(*)::int FROM tbl_produto p
-                    WHERE p.id_tenant = t.id AND p.publicado = TRUE AND p.ativo = TRUE),
+                    WHERE p.id_tenant = t.id AND p.ativo = TRUE),
                    v.mensagem_resposta
             FROM tbl_tenant t
             LEFT JOIN tbl_vinculo_vendedor_fornecedor v

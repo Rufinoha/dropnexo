@@ -77,6 +77,7 @@
     apiEmpresaSalvar: "{{ url_for('perfil.api_minha_empresa_salvar') }}",
     apiEmpresaLogo: "{{ url_for('perfil.api_minha_empresa_logo') }}",
     apiCepBase: "{{ url_for('perfil.api_minha_empresa_cep', cep='00000000') }}".replace("00000000", ""),
+    apiCnpj: "{{ url_for('cadastro.api_cadastro_cnpj') }}",
     apiCobranca: "{{ url_for('perfil.api_cobranca_config') }}",
     apiCobrancaSalvar: "{{ url_for('perfil.api_cobranca_config_salvar') }}",
     apiFaturas: "{{ url_for('perfil.api_faturas_listar') }}",
@@ -93,7 +94,7 @@
 <script defer src="{{ url_for('static', filename='script/Ssegmentos_nichos.js') }}"></script>
 <script defer src="{{ url_for('perfil.static', filename='script/Smeu_perfil_tabs.js') }}"></script>
 <script defer src="{{ url_for('perfil.static', filename='script/Smeu_perfil.js') }}"></script>
-<script defer src="{{ url_for('perfil.static', filename='script/Sempresa.js') }}"></script>
+<script defer src="{{ url_for('perfil.static', filename='script/Sempresa.js') }}?v=2"></script>
 <script defer src="{{ url_for('perfil.static', filename='script/Scobranca.js') }}"></script>
 <script defer src="{{ url_for('perfil.static', filename='script/Sfaturas.js') }}"></script>
 <script defer src="{{ url_for('perfil.static', filename='script/Scancelar_conta.js') }}"></script>

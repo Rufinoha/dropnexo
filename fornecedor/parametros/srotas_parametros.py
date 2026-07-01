@@ -11,7 +11,12 @@ from fornecedor.parametros.servico_precificacao import (
     salvar_modo_precificacao,
     salvar_regra_fornecedor,
 )
-from fornecedor.requisitos_vendedor import carregar_requisitos, salvar_requisitos
+from fornecedor.requisitos_vendedor import (
+    carregar_requisitos,
+    contar_produtos_ativos_fornecedor,
+    salvar_requisitos,
+    salvar_visivel_rede_vendedor,
+)
 from global_utils import Var_ConectarBanco, exigir_modulo, exigir_permissao, login_obrigatorio
 from srotas_plataforma import MODULO_FORNECEDOR
 
@@ -144,6 +149,66 @@ def parametros_precificacao_salvar():
     except ValueError as e:
         conn.rollback()
         return jsonify(success=False, message=str(e)), 400
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
+@fn_parametros_bp.get("/fornecedor/parametros/rede-visibilidade/dados")
+@login_obrigatorio()
+@exigir_modulo(MODULO_FORNECEDOR)
+@exigir_permissao(codigo="fn_parametros.ver")
+def parametros_rede_visibilidade_dados():
+    id_tenant = _id_tenant()
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        req = carregar_requisitos(cur, id_tenant)
+        qtd = contar_produtos_ativos_fornecedor(cur, id_tenant)
+        visivel = bool(req.get("visivel_rede_vendedor"))
+        return jsonify(
+            success=True,
+            visivel_rede_vendedor=visivel,
+            qtd_produtos_ativos=qtd,
+            aparece_na_rede=visivel and qtd > 0,
+        )
+    finally:
+        conn.close()
+
+
+@fn_parametros_bp.post("/fornecedor/parametros/rede-visibilidade")
+@login_obrigatorio()
+@exigir_modulo(MODULO_FORNECEDOR)
+@exigir_permissao(codigo="fn_parametros.editar")
+def parametros_rede_visibilidade_salvar():
+    id_tenant = _id_tenant()
+    body = request.get_json(silent=True) or {}
+    visivel = bool(body.get("visivel_rede_vendedor"))
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        salvar_visivel_rede_vendedor(cur, id_tenant, visivel)
+        qtd = contar_produtos_ativos_fornecedor(cur, id_tenant)
+        conn.commit()
+        msg = "Visibilidade na rede atualizada."
+        if visivel and qtd == 0:
+            msg = (
+                "Opção ativada. Você só aparecerá para vendedores quando tiver "
+                "ao menos 1 produto ativo no catálogo."
+            )
+        elif visivel:
+            msg = "Sua empresa está visível na rede de vendedores."
+        else:
+            msg = "Sua empresa foi ocultada da rede de vendedores."
+        return jsonify(
+            success=True,
+            message=msg,
+            visivel_rede_vendedor=visivel,
+            qtd_produtos_ativos=qtd,
+            aparece_na_rede=visivel and qtd > 0,
+        )
     except Exception as e:
         conn.rollback()
         return jsonify(success=False, message=str(e)), 500

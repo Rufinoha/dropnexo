@@ -205,8 +205,17 @@ def _mime_foto(caminho: str) -> str:
     ext = Path(caminho or "").suffix.lower()
     return MIME_POR_EXT_FOTO.get(ext, "application/octet-stream")
 
+
 def _so_digitos(valor: str) -> str:
     return re.sub(r"\D", "", valor or "")
+
+
+def _valida_documento_tenant(tipo_pessoa: str, documento: str) -> bool:
+    if tipo_pessoa == "F":
+        return len(documento) == 11
+    if tipo_pessoa == "J":
+        return len(documento) == 14
+    return False
 
 
 def _valida_uf(uf: str) -> bool:
@@ -724,10 +733,41 @@ def api_minha_empresa_salvar():
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
+        cur.execute("SELECT tipo_pessoa, documento FROM tbl_tenant WHERE id = %s", (id_tenant,))
+        row_tipo = cur.fetchone()
+        if not row_tipo:
+            return jsonify(success=False, message="Empresa não encontrada."), 404
+
+        tipo_atual = (row_tipo[0] or "F").strip().upper()
+        documento_atual = _so_digitos(row_tipo[1] or "")
+        tipo_solicitado = (dados.get("tipo_pessoa") or tipo_atual).strip().upper()
+        documento_solicitado = _so_digitos(dados.get("documento") or documento_atual)
+
+        if tipo_atual == "J" and tipo_solicitado == "F":
+            return jsonify(
+                success=False,
+                message="Não é permitido alterar de Pessoa Jurídica para Pessoa Física.",
+            ), 400
+
+        tipo_final = tipo_atual
+        documento_final = documento_atual
+        if tipo_atual == "F" and tipo_solicitado == "J":
+            if not _valida_documento_tenant("J", documento_solicitado):
+                return jsonify(success=False, message="Informe um CNPJ válido com 14 dígitos."), 400
+            cur.execute(
+                "SELECT 1 FROM tbl_tenant WHERE documento = %s AND id <> %s LIMIT 1",
+                (documento_solicitado, id_tenant),
+            )
+            if cur.fetchone():
+                return jsonify(success=False, message="Este CNPJ já está cadastrado."), 409
+            tipo_final = "J"
+            documento_final = documento_solicitado
+
         cur.execute(
             """
             UPDATE tbl_tenant SET
                 nome = %s, nome_completo = %s, razao_social = %s, nome_fantasia = %s,
+                tipo_pessoa = %s, documento = %s,
                 inscricao_estadual = %s, inscricao_municipal = %s, ie_isento = %s,
                 cnae_principal = %s, atividade_principal = %s, codigo_regime_tributario = %s,
                 tamanho_empresa = %s,
@@ -745,6 +785,8 @@ def api_minha_empresa_salvar():
                 nome_completo,
                 (dados.get("razao_social") or "").strip() or None,
                 nome_fantasia,
+                tipo_final,
+                documento_final,
                 (dados.get("inscricao_estadual") or "").strip() or None,
                 (dados.get("inscricao_municipal") or "").strip() or None,
                 bool(dados.get("ie_isento")),

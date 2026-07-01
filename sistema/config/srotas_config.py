@@ -719,6 +719,8 @@ def carregar_menu_sidebar() -> list[dict]:
 
     mod_ativo = garantir_modulo_sessao()
     ctx_filtro = ["comum", mod_ativo]
+    perfil_codigo = (session.get("perfil_codigo") or session.get("papel") or "").lower()
+    acesso_total_menu = bool(session.get("eh_desenvolvedor")) or perfil_codigo in ("dono", "admin")
 
     conn = None
     cur = None
@@ -726,7 +728,7 @@ def carregar_menu_sidebar() -> list[dict]:
         conn = Var_ConectarBanco()
         cur = conn.cursor()
 
-        if session.get("eh_desenvolvedor"):
+        if acesso_total_menu:
             cur.execute(
                 """
                 SELECT m.id, m.nome_menu, m.data_page, m.icone, m.nav_codigo, m.parent_id, m.pai

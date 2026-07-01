@@ -1,4 +1,45 @@
 .FnPar_Wrap { max-width: 1100px; }
+
+.FnPar_RedePainel {
+  margin-top: 16px;
+  padding: 16px 18px;
+  border: 1px solid rgba(2, 31, 129, 0.14);
+  border-radius: 14px;
+  background: linear-gradient(180deg, #f8faff 0%, #fff 100%);
+}
+
+.FnPar_RedeHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.FnPar_RedeHead h3 {
+  margin: 0 0 6px;
+  font-size: 16px;
+  color: #1c2e3c;
+}
+
+.FnPar_RedeDesc {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: #5c6570;
+  max-width: 52rem;
+}
+
+.FnPar_RedeSwitch { flex-shrink: 0; margin-top: 4px; }
+
+.FnPar_RedeStatus {
+  margin: 12px 0 0;
+  font-size: 13px;
+  color: #5c6570;
+}
+
+.FnPar_RedeStatus.is-on { color: #047857; font-weight: 600; }
+.FnPar_RedeStatus.is-warn { color: #b45309; font-weight: 600; }
+
 .FnPar_Grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; margin-top: 16px; }
 .FnPar_Card {
   text-align: left;
