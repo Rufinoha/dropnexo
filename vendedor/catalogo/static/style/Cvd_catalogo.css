@@ -135,10 +135,11 @@
   overflow: hidden;
 }
 
-.VdCat_VarResumo {
+.VdCat_VarResumo,
+.VdCat_VarChips {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
 }
 
 .VdCat_VarLinha {
@@ -164,6 +165,7 @@
 .VdCat_PrecoLbl {
   display: block;
   color: #94a3b8;
+  font-size: 0.68rem;
 }
 
 .VdCat_PrecoDrop {
@@ -176,154 +178,245 @@
   color: var(--marca-primary, #7b2cff);
 }
 
-.VdCat_Vazio {
-  text-align: center;
-  color: #64748b;
-  padding: 3rem 1rem;
+.VdCat_PrecoLucro {
+  font-weight: 700;
+  color: #047857;
 }
 
-/* Drawer lateral */
-.VdCat_Drawer[hidden] {
+.VdCat_Vazio,
+.VdCat_Loading {
+  text-align: center;
+  color: #64748b;
+  padding: 2rem 1rem;
+}
+
+body.VdCat_ModalAberto {
+  overflow: hidden;
+}
+
+/* Modal central */
+.VdCat_Modal[hidden] {
   display: none !important;
 }
 
-.VdCat_Drawer:not([hidden]) {
+.VdCat_Modal:not([hidden]) {
   position: fixed;
   inset: 0;
-  z-index: 300;
+  z-index: 400;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
 }
 
-.VdCat_DrawerBackdrop {
+.VdCat_ModalBackdrop {
   position: absolute;
   inset: 0;
-  background: rgba(15, 23, 42, 0.4);
+  background: rgba(15, 23, 42, 0.48);
+  backdrop-filter: blur(2px);
 }
 
-.VdCat_DrawerPanel {
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: min(480px, 100%);
-  height: 100%;
+.VdCat_ModalDialog {
+  position: relative;
+  width: min(920px, 100%);
+  max-height: min(92vh, 880px);
   background: #fff;
-  box-shadow: -8px 0 32px rgba(15, 23, 42, 0.12);
+  border-radius: 16px;
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.18);
   display: flex;
   flex-direction: column;
-  animation: vdCatSlideIn 0.22s ease-out;
+  overflow: hidden;
+  animation: vdCatModalIn 0.2s ease-out;
 }
 
-@keyframes vdCatSlideIn {
+@keyframes vdCatModalIn {
   from {
-    transform: translateX(100%);
+    opacity: 0;
+    transform: scale(0.96) translateY(8px);
   }
   to {
-    transform: translateX(0);
+    opacity: 1;
+    transform: scale(1) translateY(0);
   }
 }
 
-.VdCat_DrawerHead {
+.VdCat_ModalHead {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  padding: 1rem 1.15rem;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1.1rem 1.35rem;
   border-bottom: 1px solid #e5e7eb;
+  background: linear-gradient(180deg, #fafbff 0%, #fff 100%);
 }
 
-.VdCat_DrawerHead h2 {
+.VdCat_ModalKicker {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #64748b;
+  margin-bottom: 0.2rem;
+}
+
+.VdCat_ModalHead h2 {
   margin: 0;
-  font-size: 1.05rem;
+  font-size: 1.15rem;
+  line-height: 1.3;
   color: var(--marca-primary, #021f81);
 }
 
-.VdCat_DrawerBody {
+.VdCat_ModalBody {
   flex: 1;
   overflow: auto;
-  padding: 1rem 1.15rem 1.5rem;
+  padding: 1.25rem 1.35rem;
 }
 
-.VdCat_DetImg {
-  width: 100%;
-  max-height: 240px;
-  object-fit: contain;
-  border-radius: 10px;
+.VdCat_ModalGrid {
+  display: grid;
+  grid-template-columns: minmax(220px, 340px) 1fr;
+  gap: 1.35rem;
+  align-items: start;
+}
+
+.VdCat_ModalImgWrap {
   background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  overflow: hidden;
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.VdCat_ModalImgWrap--vazio {
+  font-size: 3rem;
+  color: #cbd5e1;
+}
+
+.VdCat_ModalImg {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.VdCat_ModalMeta {
+  margin: 0 0 0.85rem;
+  font-size: 0.82rem;
+  color: #64748b;
+}
+
+.VdCat_ModalDesc {
+  font-size: 0.9rem;
+  color: #334155;
+  line-height: 1.55;
   margin-bottom: 1rem;
 }
 
-.VdCat_DetMeta {
-  font-size: 0.82rem;
-  color: #64748b;
-  margin: 0 0 0.75rem;
+.VdCat_ModalDesc p {
+  margin: 0 0 0.65rem;
 }
 
-.VdCat_DetDesc {
-  font-size: 0.88rem;
-  color: #334155;
-  line-height: 1.5;
-  margin: 0 0 1rem;
+.VdCat_ModalDesc p:last-child {
+  margin-bottom: 0;
 }
 
-.VdCat_DetSecao h3 {
-  margin: 0 0 0.5rem;
+.VdCat_ModalSecao h3 {
+  margin: 0 0 0.35rem;
   font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: #64748b;
 }
 
-.VdCat_VarLista {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  margin: 0 0 1rem;
-  padding: 0;
-  list-style: none;
-}
-
-.VdCat_VarItem {
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
-  padding: 0.65rem 0.75rem;
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 0.35rem 0.75rem;
-  align-items: center;
-}
-
-.VdCat_VarItemRotulo {
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: #0f172a;
-}
-
-.VdCat_VarItemSku {
-  font-size: 0.72rem;
+.VdCat_ModalHint {
+  margin: 0 0 0.65rem;
+  font-size: 0.82rem;
   color: #94a3b8;
 }
 
-.VdCat_VarItemPrecos {
-  grid-column: 1;
+.VdCat_VarListaSimples {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.VdCat_VarListaSimples li {
   font-size: 0.78rem;
+  padding: 0.25rem 0.55rem;
+  border-radius: 999px;
+  background: #f1f5f9;
   color: #475569;
+  border: 1px solid #e2e8f0;
 }
 
-.VdCat_VarItemPrecos strong {
-  color: var(--marca-primary, #7b2cff);
+.VdCat_ModalFoot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.35rem;
+  border-top: 1px solid #e5e7eb;
+  background: #f8fafc;
 }
 
-.VdCat_VarItemAcao {
-  grid-column: 2;
-  grid-row: 1 / span 3;
+.VdCat_FootPrecos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem 1.75rem;
 }
 
-.VdCat_BadgeOk {
-  display: inline-block;
-  font-size: 0.72rem;
+.VdCat_FootPrecoBox strong {
+  display: block;
+  font-size: 1.05rem;
+  margin-top: 0.1rem;
+}
+
+.VdCat_FootAcao {
+  margin-left: auto;
+}
+
+.VdCat_BadgeIntegrado {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.85rem;
   font-weight: 700;
-  padding: 0.35rem 0.65rem;
+  padding: 0.55rem 1rem;
   border-radius: 999px;
   background: #ecfdf5;
   color: #047857;
+  border: 1px solid #a7f3d0;
+}
+
+@media (max-width: 720px) {
+  .VdCat_ModalGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .VdCat_ModalImgWrap {
+    max-height: 280px;
+    aspect-ratio: auto;
+  }
+
+  .VdCat_ModalFoot {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .VdCat_FootAcao {
+    margin-left: 0;
+  }
+
+  .VdCat_FootAcao .Cl_BtnSalvar {
+    width: 100%;
+  }
 }
 
 @media (max-width: 640px) {

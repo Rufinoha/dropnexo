@@ -4,6 +4,7 @@ from pathlib import Path
 
 from flask import Blueprint, jsonify, render_template, request, session
 
+from fornecedor.catalogo.srotas_catalogo import _sanitizar_descricao_html
 from fornecedor.parametros.servico_precificacao import (
     buscar_regra_fornecedor,
     calcular_preco_sugerido_revenda,
@@ -269,6 +270,7 @@ def produto_detalhe(id_produto: int):
             "id_produto": row[0],
             "nome": row[1],
             "descricao": row[2] or "",
+            "descricao_html": _sanitizar_descricao_html(row[2] or ""),
             "formato": row[3] or "S",
             "imagem_url": url_imagem_produto(row[4]),
             "id_fornecedor": row[6],
@@ -278,6 +280,71 @@ def produto_detalhe(id_produto: int):
         }
         produto = _montar_produto_agrupado(cur, id_produto, base, variantes)
         return jsonify(success=True, produto=produto)
+    finally:
+        conn.close()
+
+
+@vd_catalogo_bp.post("/vendedor/catalogo/ativar-produto")
+@login_obrigatorio()
+@exigir_modulo(MODULO_VENDEDOR)
+@exigir_permissao(codigo="vd_catalogo.editar")
+def ativar_produto():
+    """Integra o produto pai e todas as variações ativas (sem ativação parcial)."""
+    id_vendedor = session.get("id_tenant")
+    body = request.get_json(silent=True) or {}
+    try:
+        id_produto = int(body.get("id_produto"))
+    except (TypeError, ValueError):
+        return jsonify(success=False, message="Produto inválido."), 400
+
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT v.id, p.id, p.id_tenant,
+                   COALESCE(NULLIF(v.valor_drop, 0), NULLIF(p.valor_drop, 0), v.preco) AS preco_drop,
+                   p.id_categoria
+            FROM tbl_produto_variante v
+            JOIN tbl_produto p ON p.id = v.id_produto
+            JOIN tbl_vinculo_vendedor_fornecedor vinc
+                ON vinc.id_tenant_fornecedor = p.id_tenant
+               AND vinc.id_tenant_vendedor = %s AND vinc.status = 'ativo'
+            WHERE p.id = %s AND p.publicado = TRUE AND p.ativo = TRUE AND v.ativo = TRUE
+            """,
+            (id_vendedor, id_produto),
+        )
+        rows = cur.fetchall()
+        if not rows:
+            return jsonify(success=False, message="Produto indisponível ou fornecedor não aprovado."), 404
+
+        ativados = 0
+        for row in rows:
+            preco_forn = float(row[3] or 0)
+            precos = _precificar_variante(cur, int(row[2]), row[4], preco_forn)
+            preco_venda = precos["preco_sugerido"]
+            cur.execute(
+                """
+                INSERT INTO tbl_produto_vendedor
+                    (id_tenant_vendedor, id_tenant_fornecedor, id_variante, id_produto,
+                     preco_fornecedor, preco_venda, ativo, estoque_vitrine)
+                VALUES (%s, %s, %s, %s, %s, %s, TRUE, 0)
+                ON CONFLICT (id_tenant_vendedor, id_variante) DO UPDATE SET
+                    ativo = TRUE, preco_fornecedor = EXCLUDED.preco_fornecedor,
+                    preco_venda = CASE WHEN tbl_produto_vendedor.preco_manual THEN tbl_produto_vendedor.preco_venda
+                                  ELSE EXCLUDED.preco_venda END,
+                    atualizado_em = NOW()
+                """,
+                (id_vendedor, row[2], row[0], row[1], preco_forn, preco_venda),
+            )
+            ativados += 1
+        conn.commit()
+        msg = (
+            f"Produto integrado com {ativados} variação(ões) em Meus produtos."
+            if ativados > 1
+            else "Produto integrado em Meus produtos."
+        )
+        return jsonify(success=True, message=msg, ativados=ativados)
     finally:
         conn.close()
 

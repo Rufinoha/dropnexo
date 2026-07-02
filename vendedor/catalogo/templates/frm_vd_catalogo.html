@@ -2,12 +2,12 @@
 {% block title %}Catálogo — {{ MARCA_NOME }}{% endblock %}
 {% block topbar_title %}Catálogo (fornecedores aprovados){% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('vd_catalogo.static', filename='style/Cvd_catalogo.css') }}?v=1" />
+<link rel="stylesheet" href="{{ url_for('vd_catalogo.static', filename='style/Cvd_catalogo.css') }}?v=2" />
 {% endblock %}
 {% block content %}
 <div class="cl-page-principal VdCat_Page">
   <div class="VdCat_Hero">
-    <p class="VdCat_Desc">Produtos dos fornecedores com vínculo aprovado. Clique no card para ver detalhes e ativar na sua vitrine.</p>
+    <p class="VdCat_Desc">Produtos dos fornecedores com vínculo aprovado. Clique no card para ver detalhes e integrar na sua vitrine.</p>
     <div class="VdCat_Toolbar">
       <input type="search" id="vdCatBusca" class="VdCat_Busca" placeholder="Buscar produto, SKU ou fornecedor…" autocomplete="off" />
       <button type="button" id="vdCatBtnBuscar" class="Cl_BtnSalvar">Buscar</button>
@@ -22,18 +22,22 @@
   <p id="vdCatVazio" class="VdCat_Vazio" hidden>Nenhum produto encontrado. Aprove fornecedores antes.</p>
 </div>
 
-<div id="vdCatDrawer" class="VdCat_Drawer" hidden aria-hidden="true">
-  <div class="VdCat_DrawerBackdrop" id="vdCatDrawerBackdrop"></div>
-  <aside class="VdCat_DrawerPanel" role="dialog" aria-labelledby="vdCatDrawerTitulo">
-    <header class="VdCat_DrawerHead">
-      <h2 id="vdCatDrawerTitulo">Produto</h2>
-      <button type="button" class="Cl_BtnLink" id="vdCatDrawerFechar" aria-label="Fechar">Fechar</button>
+<div id="vdCatModal" class="VdCat_Modal" hidden aria-hidden="true">
+  <div class="VdCat_ModalBackdrop" id="vdCatModalBackdrop"></div>
+  <div class="VdCat_ModalDialog" role="dialog" aria-labelledby="vdCatModalTitulo" aria-modal="true">
+    <header class="VdCat_ModalHead">
+      <div>
+        <span class="VdCat_ModalKicker" id="vdCatModalForn"></span>
+        <h2 id="vdCatModalTitulo">Produto</h2>
+      </div>
+      <button type="button" class="Cl_BtnLink" id="vdCatModalFechar" aria-label="Fechar">Fechar</button>
     </header>
-    <div id="vdCatDrawerBody" class="VdCat_DrawerBody"></div>
-  </aside>
+    <div id="vdCatModalBody" class="VdCat_ModalBody"></div>
+    <footer id="vdCatModalFoot" class="VdCat_ModalFoot"></footer>
+  </div>
 </div>
 {% endblock %}
 {% block page_js %}
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-<script src="{{ url_for('vd_catalogo.static', filename='script/Svd_catalogo.js') }}?v=1"></script>
+<script src="{{ url_for('vd_catalogo.static', filename='script/Svd_catalogo.js') }}?v=2"></script>
 {% endblock %}

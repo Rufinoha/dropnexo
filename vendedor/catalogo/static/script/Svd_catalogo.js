@@ -7,16 +7,19 @@
     emEstoque: document.getElementById("vdCatEmEstoque"),
     grid: document.getElementById("vdCatGrid"),
     vazio: document.getElementById("vdCatVazio"),
-    drawer: document.getElementById("vdCatDrawer"),
-    backdrop: document.getElementById("vdCatDrawerBackdrop"),
-    drawerFechar: document.getElementById("vdCatDrawerFechar"),
-    drawerTitulo: document.getElementById("vdCatDrawerTitulo"),
-    drawerBody: document.getElementById("vdCatDrawerBody"),
+    modal: document.getElementById("vdCatModal"),
+    backdrop: document.getElementById("vdCatModalBackdrop"),
+    modalFechar: document.getElementById("vdCatModalFechar"),
+    modalForn: document.getElementById("vdCatModalForn"),
+    modalTitulo: document.getElementById("vdCatModalTitulo"),
+    modalBody: document.getElementById("vdCatModalBody"),
+    modalFoot: document.getElementById("vdCatModalFoot"),
   };
 
   if (!el.grid) return;
 
   let produtosCache = [];
+  let produtoAberto = null;
 
   function esc(s) {
     const d = document.createElement("div");
@@ -30,18 +33,27 @@
       : Number(v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
   }
 
-  function fmtPrecoSug(p) {
-    const min = p.preco_sugerido;
-    const max = p.preco_sugerido_max;
-    if (max && max !== min) return `${fmtMoeda(min)} – ${fmtMoeda(max)}`;
-    return fmtMoeda(min);
+  function fmtFaixa(min, max, fmt) {
+    if (max && max !== min) return `${fmt(min)} – ${fmt(max)}`;
+    return fmt(min);
   }
 
-  function renderVarResumo(p) {
+  function fmtPrecoSug(p) {
+    return fmtFaixa(p.preco_sugerido, p.preco_sugerido_max, fmtMoeda);
+  }
+
+  function fmtDrop(p) {
+    const drops = (p.variantes || []).map((v) => v.preco_fornecedor).filter((n) => n != null);
+    if (drops.length > 1) {
+      return fmtFaixa(Math.min(...drops), Math.max(...drops), fmtMoeda);
+    }
+    return fmtMoeda(p.preco_fornecedor);
+  }
+
+  function renderVarResumo(p, cls) {
     const resumo = p.atributos_resumo || [];
     if (!resumo.length) return "";
-    return `<div class="VdCat_VarResumo">${resumo
-      .slice(0, 2)
+    return `<div class="${cls || "VdCat_VarResumo"}">${resumo
       .map(
         (a) =>
           `<div class="VdCat_VarLinha"><span class="VdCat_VarNome">${esc(a.nome)}:</span> ${esc((a.valores || []).join(", "))}</div>`
@@ -72,7 +84,7 @@
           <div class="VdCat_Precos">
             <div>
               <span class="VdCat_PrecoLbl">Valor Drop</span>
-              <span class="VdCat_PrecoDrop">${fmtMoeda(p.preco_fornecedor)}</span>
+              <span class="VdCat_PrecoDrop">${fmtDrop(p)}</span>
             </div>
             <div>
               <span class="VdCat_PrecoLbl">Venda sugerida</span>
@@ -94,78 +106,129 @@
     el.grid.innerHTML = produtosCache.map(renderCard).join("");
   }
 
-  function fecharDrawer() {
-    if (!el.drawer) return;
-    el.drawer.hidden = true;
-    el.drawer.setAttribute("aria-hidden", "true");
+  function fecharModal() {
+    if (!el.modal) return;
+    el.modal.hidden = true;
+    el.modal.setAttribute("aria-hidden", "true");
+    produtoAberto = null;
+    document.body.classList.remove("VdCat_ModalAberto");
   }
 
-  function abrirDrawer() {
-    if (!el.drawer) return;
-    el.drawer.hidden = false;
-    el.drawer.setAttribute("aria-hidden", "false");
+  function abrirModal() {
+    if (!el.modal) return;
+    el.modal.hidden = false;
+    el.modal.setAttribute("aria-hidden", "false");
+    document.body.classList.add("VdCat_ModalAberto");
   }
 
-  function renderVarItem(v) {
-    const btn = v.ativado
-      ? '<span class="VdCat_BadgeOk">Integrado</span>'
-      : `<button type="button" class="Cl_BtnSalvar VdCat_BtnAtivar" data-variante="${v.id_variante}">Ativar</button>`;
+  function renderVarChips(p) {
+    const vars = p.variantes || [];
+    if (!vars.length) return "";
+    if (p.tem_variacoes && (p.atributos_resumo || []).length) {
+      return renderVarResumo(p, "VdCat_VarChips");
+    }
+    return `<ul class="VdCat_VarListaSimples">${vars
+      .map((v) => `<li>${esc(v.rotulo || v.sku || "Variação")}</li>`)
+      .join("")}</ul>`;
+  }
+
+  function renderFooter(p) {
+    const lucro = fmtFaixa(p.lucro_estimado, p.lucro_estimado_max || p.lucro_estimado, fmtMoeda);
+    const qtdVar = (p.variantes || []).length;
+    let btnHtml;
+    if (p.ativado) {
+      btnHtml = `<span class="VdCat_BadgeIntegrado">Integrado na vitrine</span>`;
+    } else {
+      const lbl =
+        qtdVar > 1 ? `Ativar produto (${qtdVar} variações)` : "Ativar produto";
+      btnHtml = `<button type="button" class="Cl_BtnSalvar VdCat_BtnAtivarPai" data-produto="${p.id_produto}">${lbl}</button>`;
+    }
     return `
-      <li class="VdCat_VarItem">
-        <div class="VdCat_VarItemRotulo">${esc(v.rotulo)}</div>
-        <div class="VdCat_VarItemSku">SKU ${esc(v.sku || "—")} · Estoque ${v.estoque ?? 0}</div>
-        <div class="VdCat_VarItemPrecos">
-          Drop ${fmtMoeda(v.preco_fornecedor)} · Sugerido <strong>${fmtMoeda(v.preco_sugerido)}</strong>
+      <div class="VdCat_FootPrecos">
+        <div class="VdCat_FootPrecoBox">
+          <span class="VdCat_PrecoLbl">Valor Drop</span>
+          <strong class="VdCat_PrecoDrop">${fmtDrop(p)}</strong>
         </div>
-        <div class="VdCat_VarItemAcao">${btn}</div>
-      </li>`;
+        <div class="VdCat_FootPrecoBox">
+          <span class="VdCat_PrecoLbl">Venda sugerida</span>
+          <strong class="VdCat_PrecoSug">${fmtPrecoSug(p)}</strong>
+        </div>
+        <div class="VdCat_FootPrecoBox">
+          <span class="VdCat_PrecoLbl">Lucro est.</span>
+          <strong class="VdCat_PrecoLucro">${lucro}</strong>
+        </div>
+      </div>
+      <div class="VdCat_FootAcao">${btnHtml}</div>`;
   }
 
   function renderDetalhe(p) {
-    if (el.drawerTitulo) el.drawerTitulo.textContent = p.nome || "Produto";
-    const img = p.imagem_url
-      ? `<img class="VdCat_DetImg" src="${esc(p.imagem_url)}" alt="" />`
-      : "";
-    const desc = p.descricao
-      ? `<p class="VdCat_DetDesc">${esc(p.descricao)}</p>`
-      : "";
-    const resumo = renderVarResumo(p);
-    const vars = (p.variantes || []).map(renderVarItem).join("");
+    produtoAberto = p;
+    if (el.modalForn) el.modalForn.textContent = p.fornecedor_nome || "";
+    if (el.modalTitulo) el.modalTitulo.textContent = p.nome || "Produto";
 
-    el.drawerBody.innerHTML = `
-      ${img}
-      <p class="VdCat_DetMeta">${esc(p.fornecedor_nome)}${p.estoque_total != null ? ` · Estoque total: ${p.estoque_total}` : ""}</p>
-      ${desc}
-      ${resumo ? `<div class="VdCat_DetSecao"><h3>Variações disponíveis</h3>${resumo}</div>` : ""}
-      <div class="VdCat_DetSecao">
-        <h3>${p.tem_variacoes ? "Escolha a variação" : "Produto"}</h3>
-        <ul class="VdCat_VarLista">${vars}</ul>
+    const img = p.imagem_url
+      ? `<div class="VdCat_ModalImgWrap"><img class="VdCat_ModalImg" src="${esc(p.imagem_url)}" alt="" /></div>`
+      : `<div class="VdCat_ModalImgWrap VdCat_ModalImgWrap--vazio">📦</div>`;
+
+    const descHtml = p.descricao_html || "";
+    const desc = descHtml
+      ? `<div class="VdCat_ModalDesc">${descHtml}</div>`
+      : "";
+
+    const meta = [
+      p.categoria ? esc(p.categoria) : "",
+      p.estoque_total != null ? `Estoque total: ${p.estoque_total}` : "",
+      p.qtd_variantes > 1 ? `${p.qtd_variantes} variações` : "",
+    ]
+      .filter(Boolean)
+      .join(" · ");
+
+    el.modalBody.innerHTML = `
+      <div class="VdCat_ModalGrid">
+        ${img}
+        <div class="VdCat_ModalInfo">
+          ${meta ? `<p class="VdCat_ModalMeta">${meta}</p>` : ""}
+          ${desc}
+          ${
+            p.tem_variacoes
+              ? `<div class="VdCat_ModalSecao">
+                  <h3>Variações incluídas</h3>
+                  <p class="VdCat_ModalHint">Ao ativar, todas as variações entram juntas na sua vitrine.</p>
+                  ${renderVarChips(p)}
+                </div>`
+              : ""
+          }
+        </div>
       </div>`;
+
+    if (el.modalFoot) el.modalFoot.innerHTML = renderFooter(p);
   }
 
   async function abrirProduto(idProduto) {
-    el.drawerBody.innerHTML = "<p>Carregando…</p>";
-    abrirDrawer();
+    if (el.modalBody) el.modalBody.innerHTML = '<p class="VdCat_Loading">Carregando…</p>';
+    if (el.modalFoot) el.modalFoot.innerHTML = "";
+    abrirModal();
     const r = await fetch(`/vendedor/catalogo/produto/${idProduto}`, { credentials: "same-origin" });
     const j = await r.json();
     if (!j.success) {
-      el.drawerBody.innerHTML = `<p>${esc(j.message || "Erro ao carregar.")}</p>`;
+      if (el.modalBody) el.modalBody.innerHTML = `<p>${esc(j.message || "Erro ao carregar.")}</p>`;
       return;
     }
-    renderDetalhe(j.produto);
+    const p = j.produto;
+    const lucros = (p.variantes || []).map((v) => (v.preco_sugerido || 0) - (v.preco_fornecedor || 0));
+    if (lucros.length) {
+      p.lucro_estimado = Math.min(...lucros.map((x) => Math.round(x * 100) / 100));
+      p.lucro_estimado_max = Math.max(...lucros.map((x) => Math.round(x * 100) / 100));
+    }
+    renderDetalhe(p);
   }
 
-  async function ativar(idVariante) {
-    const idProdutoAberto = produtosCache.find((p) =>
-      (p.variantes || []).some((v) => Number(v.id_variante) === Number(idVariante))
-    )?.id_produto;
-    const drawerAberto = el.drawer && !el.drawer.hidden;
-
-    const r = await fetch("/vendedor/catalogo/ativar", {
+  async function ativarProduto(idProduto) {
+    const r = await fetch("/vendedor/catalogo/ativar-produto", {
       method: "POST",
       credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id_variante: idVariante }),
+      body: JSON.stringify({ id_produto: idProduto }),
     });
     const j = await r.json();
     if (window.Swal) {
@@ -175,8 +238,8 @@
     }
     if (!j.success) return;
     await carregar();
-    if (drawerAberto && idProdutoAberto) {
-      await abrirProduto(idProdutoAberto);
+    if (el.modal && !el.modal.hidden) {
+      await abrirProduto(idProduto);
     }
   }
 
@@ -206,7 +269,7 @@
   el.emEstoque?.addEventListener("change", carregar);
 
   el.grid.addEventListener("click", (e) => {
-    if (e.target.closest(".VdCat_BtnAtivar, button")) return;
+    if (e.target.closest("button")) return;
     const card = e.target.closest(".VdCat_Card");
     if (!card) return;
     abrirProduto(card.getAttribute("data-produto"));
@@ -220,17 +283,16 @@
     abrirProduto(card.getAttribute("data-produto"));
   });
 
-  el.drawerBody?.addEventListener("click", (e) => {
-    const btn = e.target.closest(".VdCat_BtnAtivar");
+  el.modalFoot?.addEventListener("click", (e) => {
+    const btn = e.target.closest(".VdCat_BtnAtivarPai");
     if (!btn) return;
-    e.stopPropagation();
-    ativar(Number(btn.getAttribute("data-variante")));
+    ativarProduto(Number(btn.getAttribute("data-produto")));
   });
 
-  el.drawerFechar?.addEventListener("click", fecharDrawer);
-  el.backdrop?.addEventListener("click", fecharDrawer);
+  el.modalFechar?.addEventListener("click", fecharModal);
+  el.backdrop?.addEventListener("click", fecharModal);
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && el.drawer && !el.drawer.hidden) fecharDrawer();
+    if (e.key === "Escape" && el.modal && !el.modal.hidden) fecharModal();
   });
 
   carregar();
