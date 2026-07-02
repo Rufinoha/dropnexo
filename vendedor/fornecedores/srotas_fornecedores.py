@@ -13,8 +13,13 @@ from fornecedor.requisitos_vendedor import (
     requisitos_tem_conteudo,
     sql_fornecedor_elegivel_rede_vendedor,
 )
+from fornecedor.parametros.servico_precificacao import (
+    buscar_regra_fornecedor,
+    calcular_preco_sugerido_revenda,
+    pct_margem_revenda_efetiva,
+)
 from global_utils import Var_ConectarBanco, agora_utc, exigir_modulo, login_obrigatorio, exigir_permissao, url_imagem_produto
-from srotas_negocio import buscar_regra_precificacao, calcular_preco_venda, montar_snapshot_vendedor
+from srotas_negocio import montar_snapshot_vendedor
 from srotas_plataforma import MODULO_VENDEDOR
 
 _MOD_DIR = Path(__file__).resolve().parent
@@ -733,10 +738,11 @@ def loja_dados(id_fornecedor: int):
                 continue
 
             preco_forn = min(precos_drop) if precos_drop else 0.0
-            regra = buscar_regra_precificacao(cur, id_vendedor, row[4], row[5])
-            preco_sug = calcular_preco_venda(preco_forn, regra) if regra else preco_forn
+            regra_fn = buscar_regra_fornecedor(cur, id_fornecedor, row[5])
+            pct_revenda = pct_margem_revenda_efetiva(regra_fn)
+            preco_sug = calcular_preco_sugerido_revenda(preco_forn, pct_revenda)
             lucro = round(preco_sug - preco_forn, 2)
-            margem = round((lucro / preco_sug * 100), 1) if preco_sug > 0 else 0.0
+            margem = pct_revenda
             img_url = url_imagem_produto(row[3])
             if not img_url:
                 cur.execute(
@@ -852,8 +858,9 @@ def loja_ativar_produto():
         ativados = 0
         for row in rows:
             preco_forn = float(row[3] or 0)
-            regra = buscar_regra_precificacao(cur, id_vendedor, row[4], row[5])
-            preco_venda = calcular_preco_venda(preco_forn, regra) if regra else preco_forn
+            regra_fn = buscar_regra_fornecedor(cur, id_fornecedor, row[5])
+            pct_revenda = pct_margem_revenda_efetiva(regra_fn)
+            preco_venda = calcular_preco_sugerido_revenda(preco_forn, pct_revenda)
             cur.execute(
                 """
                 INSERT INTO tbl_produto_vendedor

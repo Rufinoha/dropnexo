@@ -42,6 +42,7 @@
     qs("#pctAjusteGlobal").value = g.pct_ajuste ?? 0;
     qs("#pctTaxasGlobal").value = g.pct_taxas ?? 0;
     qs("#pctComissaoGlobal").value = g.pct_comissao ?? 0;
+    qs("#pctMargemRevendaGlobal").value = g.pct_margem_revenda ?? 80;
   }
 
   function fmtMoeda(v) {
@@ -53,7 +54,7 @@
     if (!tbody) return;
     const cats = regras.filter((r) => r.escopo === "categoria");
     if (!cats.length) {
-      tbody.innerHTML = `<tr><td colspan="5">Nenhuma regra por categoria.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="6">Nenhuma regra por categoria.</td></tr>`;
       return;
     }
     tbody.innerHTML = cats
@@ -64,6 +65,7 @@
           <td>${r.pct_ajuste}</td>
           <td>${fmtMoeda(r.pct_taxas)}</td>
           <td>${r.pct_comissao}</td>
+          <td>${r.pct_margem_revenda ?? 80}</td>
         </tr>`
       )
       .join("");
@@ -119,6 +121,7 @@
       pct_ajuste: qs("#pctAjusteGlobal")?.value || 0,
       pct_taxas: qs("#pctTaxasGlobal")?.value || 0,
       pct_comissao: qs("#pctComissaoGlobal")?.value || 0,
+      pct_margem_revenda: qs("#pctMargemRevendaGlobal")?.value || 80,
     }).catch((e) => Swal.fire("Erro", e.message, "error"))
   );
 
@@ -131,6 +134,7 @@
       pct_ajuste: qs("#pctAjusteCat")?.value || 0,
       pct_taxas: qs("#pctTaxasCat")?.value || 0,
       pct_comissao: qs("#pctComissaoCat")?.value || 0,
+      pct_margem_revenda: qs("#pctMargemRevendaCat")?.value || 80,
     }).catch((e) => Swal.fire("Erro", e.message, "error"));
   });
 

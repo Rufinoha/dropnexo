@@ -5,6 +5,7 @@ from pathlib import Path
 from flask import Blueprint, jsonify, render_template, request, session
 
 from fornecedor.parametros.servico_precificacao import (
+    MARGEM_REVENDA_PADRAO,
     aplicar_precificacao_catalogo,
     listar_regras_fornecedor,
     obter_modo_precificacao,
@@ -118,11 +119,14 @@ def parametros_precificacao_salvar():
     id_cat = body.get("id_categoria")
     id_cat = int(id_cat) if id_cat not in (None, "") else None
 
-    def pct(k: str) -> float:
+    def pct(k: str, default: float = 0.0) -> float:
         try:
-            return float(body.get(k) or 0)
+            val = body.get(k)
+            if val in (None, ""):
+                return default
+            return float(val)
         except (TypeError, ValueError):
-            return 0.0
+            return default
 
     aplicar = bool(body.get("aplicar_agora", False))
     id_tenant = _id_tenant()
@@ -137,6 +141,7 @@ def parametros_precificacao_salvar():
             pct_ajuste=pct("pct_ajuste"),
             pct_taxas=pct("pct_taxas"),
             pct_comissao=pct("pct_comissao"),
+            pct_margem_revenda=pct("pct_margem_revenda", MARGEM_REVENDA_PADRAO),
         )
         resumo = {"atualizados": 0, "ignorados": 0}
         if aplicar:

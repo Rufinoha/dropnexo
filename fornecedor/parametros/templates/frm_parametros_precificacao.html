@@ -25,7 +25,7 @@
     </div>
 
     <div class="FnPar_Secao" id="secGlobal">
-      <p class="FnPar_Hint FnPar_Hint--sec">Mesma regra de ajuste, taxa fixa e comissão para todo o catálogo.</p>
+      <p class="FnPar_Hint FnPar_Hint--sec">Mesma regra de ajuste, taxa fixa, comissão e margem de revenda para todo o catálogo.</p>
       <div class="FnPar_GridForm">
         <div class="Cl_FormCampo">
           <label for="pctAjusteGlobal">Ajuste sobre o preço (%)</label>
@@ -40,6 +40,11 @@
         <div class="Cl_FormCampo">
           <label for="pctComissaoGlobal">Comissão (%)</label>
           <input type="number" id="pctComissaoGlobal" step="0.01" value="0" />
+        </div>
+        <div class="Cl_FormCampo">
+          <label for="pctMargemRevendaGlobal">Margem de revenda (%)</label>
+          <input type="number" id="pctMargemRevendaGlobal" step="0.01" min="0" value="80" />
+          <span class="FnPar_Hint">Sugerida ao vendedor sobre o valor Drop</span>
         </div>
       </div>
       <div class="FnPar_SecaoActions">
@@ -67,6 +72,10 @@
             <label for="pctComissaoCat">Comissão (%)</label>
             <input type="number" id="pctComissaoCat" step="0.01" value="0" />
           </div>
+          <div class="Cl_FormCampo">
+            <label for="pctMargemRevendaCat">Margem revenda (%)</label>
+            <input type="number" id="pctMargemRevendaCat" step="0.01" min="0" value="80" />
+          </div>
         </div>
         <div class="FnPar_CatActions">
           <button type="button" class="Cl_BtnIncluir" id="btnSalvarCategoria">Salvar categoria</button>
@@ -75,7 +84,7 @@
       <div class="Cl_TabelaPrincipal FnPar_TblWrap">
         <table>
           <thead>
-            <tr><th>Escopo</th><th>Categoria</th><th>Ajuste %</th><th>Taxas R$</th><th>Comissão %</th></tr>
+            <tr><th>Escopo</th><th>Categoria</th><th>Ajuste %</th><th>Taxas R$</th><th>Comissão %</th><th>Margem rev. %</th></tr>
           </thead>
           <tbody id="tblRegras"></tbody>
         </table>
@@ -88,6 +97,6 @@
     </footer>
   </div>
   <script src="{{ url_for('static', filename='script/global_utils.js') }}"></script>
-  <script src="{{ url_for('fn_parametros.static', filename='script/Sfn_parametros_precificacao.js') }}?v=3"></script>
+  <script src="{{ url_for('fn_parametros.static', filename='script/Sfn_parametros_precificacao.js') }}?v=4"></script>
 </body>
 </html>

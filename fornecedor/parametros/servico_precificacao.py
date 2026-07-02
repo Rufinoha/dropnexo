@@ -6,6 +6,8 @@ from typing import Any
 
 from global_utils import agora_utc
 
+MARGEM_REVENDA_PADRAO = 80.0
+
 
 def calcular_valor_drop(
     preco_base: float | Decimal,
@@ -23,6 +25,24 @@ def calcular_valor_drop(
     return round(apos_taxa * (1 + float(pct_comissao or 0) / 100), 2)
 
 
+def pct_margem_revenda_efetiva(regra: dict | None) -> float:
+    if regra and regra.get("pct_margem_revenda") is not None:
+        return float(regra["pct_margem_revenda"])
+    return MARGEM_REVENDA_PADRAO
+
+
+def calcular_preco_sugerido_revenda(
+    valor_drop: float | Decimal,
+    pct_margem_revenda: float = MARGEM_REVENDA_PADRAO,
+) -> float:
+    """Venda sugerida = valor Drop + margem % definida pelo fornecedor."""
+    base = float(valor_drop or 0)
+    if base <= 0:
+        return 0.0
+    pct = float(pct_margem_revenda if pct_margem_revenda is not None else MARGEM_REVENDA_PADRAO)
+    return round(base * (1 + pct / 100), 2)
+
+
 def _row_regra(row) -> dict:
     return {
         "id": row[0],
@@ -31,6 +51,7 @@ def _row_regra(row) -> dict:
         "pct_ajuste": float(row[3] or 0),
         "pct_taxas": float(row[4] or 0),
         "pct_comissao": float(row[5] or 0),
+        "pct_margem_revenda": float(row[6] if len(row) > 6 else MARGEM_REVENDA_PADRAO),
     }
 
 
@@ -66,7 +87,7 @@ def buscar_regra_fornecedor(
             return None
         cur.execute(
             """
-            SELECT id, escopo, id_categoria, pct_ajuste, pct_taxas, pct_comissao
+            SELECT id, escopo, id_categoria, pct_ajuste, pct_taxas, pct_comissao, pct_margem_revenda
             FROM tbl_fornecedor_precificacao
             WHERE id_tenant = %s AND escopo = 'categoria' AND id_categoria = %s AND ativo = TRUE
             LIMIT 1
@@ -77,7 +98,7 @@ def buscar_regra_fornecedor(
         return _row_regra(row) if row else None
     cur.execute(
         """
-        SELECT id, escopo, id_categoria, pct_ajuste, pct_taxas, pct_comissao
+        SELECT id, escopo, id_categoria, pct_ajuste, pct_taxas, pct_comissao, pct_margem_revenda
         FROM tbl_fornecedor_precificacao
         WHERE id_tenant = %s AND escopo = 'global' AND ativo = TRUE
         LIMIT 1
@@ -92,7 +113,7 @@ def listar_regras_fornecedor(cur, id_tenant: int) -> list[dict]:
     cur.execute(
         """
         SELECT fp.id, fp.escopo, fp.id_categoria, c.nome,
-               fp.pct_ajuste, fp.pct_taxas, fp.pct_comissao, fp.ativo
+               fp.pct_ajuste, fp.pct_taxas, fp.pct_comissao, fp.pct_margem_revenda, fp.ativo
         FROM tbl_fornecedor_precificacao fp
         LEFT JOIN tbl_categoria c ON c.id = fp.id_categoria
         WHERE fp.id_tenant = %s AND fp.ativo = TRUE
@@ -111,7 +132,8 @@ def listar_regras_fornecedor(cur, id_tenant: int) -> list[dict]:
                 "pct_ajuste": float(r[4] or 0),
                 "pct_taxas": float(r[5] or 0),
                 "pct_comissao": float(r[6] or 0),
-                "ativo": bool(r[7]),
+                "pct_margem_revenda": float(r[7] or MARGEM_REVENDA_PADRAO),
+                "ativo": bool(r[8]),
             }
         )
     return out
@@ -126,6 +148,7 @@ def salvar_regra_fornecedor(
     pct_ajuste: float,
     pct_taxas: float,
     pct_comissao: float,
+    pct_margem_revenda: float = MARGEM_REVENDA_PADRAO,
 ) -> int:
     escopo = (escopo or "global").strip().lower()
     if escopo not in ("global", "categoria"):
@@ -144,8 +167,9 @@ def salvar_regra_fornecedor(
     cur.execute(
         """
         INSERT INTO tbl_fornecedor_precificacao (
-            id_tenant, escopo, id_categoria, pct_ajuste, pct_taxas, pct_comissao, ativo, atualizado_em
-        ) VALUES (%s, %s, %s, %s, %s, %s, TRUE, %s)
+            id_tenant, escopo, id_categoria, pct_ajuste, pct_taxas, pct_comissao,
+            pct_margem_revenda, ativo, atualizado_em
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, TRUE, %s)
         RETURNING id
         """,
         (
@@ -155,6 +179,7 @@ def salvar_regra_fornecedor(
             pct_ajuste,
             pct_taxas,
             pct_comissao,
+            pct_margem_revenda,
             agora_utc(),
         ),
     )
