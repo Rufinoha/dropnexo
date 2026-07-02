@@ -52,13 +52,25 @@
 
 .VdParceiros_Badge {
   display: inline-block;
-  margin-top: 0.5rem;
   font-size: 0.72rem;
   font-weight: 700;
   padding: 0.15rem 0.5rem;
   border-radius: 999px;
   background: #f1f5f9;
   color: #475569;
+}
+
+.VdParceiros_CardFoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.VdParceiros_BtnDetalhe {
+  flex-shrink: 0;
+  font-size: 0.82rem;
 }
 
 .VdParceiros_Badge.is-aguardando {

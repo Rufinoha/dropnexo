@@ -81,10 +81,11 @@ def buscar_regra_fornecedor(
     id_tenant: int,
     id_categoria: int | None = None,
 ) -> dict | None:
-    modo = obter_modo_precificacao(cur, id_tenant)
-    if modo == "categoria":
-        if not id_categoria:
-            return None
+    """
+    Regra efetiva do produto: exceção por categoria (se cadastrada) → fallback na regra global.
+    O modo da UI (global/categoria) só define qual aba está ativa; não altera esta resolução.
+    """
+    if id_categoria:
         cur.execute(
             """
             SELECT id, escopo, id_categoria, pct_ajuste, pct_taxas, pct_comissao, pct_margem_revenda
@@ -95,7 +96,9 @@ def buscar_regra_fornecedor(
             (id_tenant, id_categoria),
         )
         row = cur.fetchone()
-        return _row_regra(row) if row else None
+        if row:
+            return _row_regra(row)
+
     cur.execute(
         """
         SELECT id, escopo, id_categoria, pct_ajuste, pct_taxas, pct_comissao, pct_margem_revenda

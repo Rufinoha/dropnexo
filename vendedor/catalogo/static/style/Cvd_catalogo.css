@@ -1,0 +1,334 @@
+/* Vendedor — Catálogo (fornecedores aprovados) */
+
+.VdCat_Page {
+  padding: 1rem 1.25rem 2rem;
+}
+
+.VdCat_Desc {
+  margin: 0 0 1rem;
+  color: #64748b;
+  font-size: 0.9rem;
+  max-width: 720px;
+}
+
+.VdCat_Toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem;
+  margin-bottom: 1.25rem;
+}
+
+.VdCat_Busca {
+  flex: 1;
+  min-width: 220px;
+  max-width: 420px;
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+
+.VdCat_ChkFiltro {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  color: #475569;
+  cursor: pointer;
+}
+
+.VdCat_Grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 1rem;
+}
+
+.VdCat_Card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  overflow: hidden;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  transition: box-shadow 0.15s, transform 0.15s, border-color 0.15s;
+}
+
+.VdCat_Card:hover {
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+  transform: translateY(-2px);
+  border-color: #c7d2fe;
+}
+
+.VdCat_Card.is-ativo {
+  border-color: #6ee7b7;
+}
+
+.VdCat_CardImg {
+  position: relative;
+  aspect-ratio: 1;
+  background: #f8fafc;
+}
+
+.VdCat_CardImg img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.VdCat_CardImgVazio {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  color: #cbd5e1;
+}
+
+.VdCat_CardBadge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #475569;
+  border: 1px solid #e2e8f0;
+}
+
+.VdCat_CardBadge.is-ok {
+  background: #ecfdf5;
+  color: #047857;
+  border-color: #a7f3d0;
+}
+
+.VdCat_CardBody {
+  padding: 0.75rem 0.85rem 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  flex: 1;
+}
+
+.VdCat_CardForn {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.VdCat_CardNome {
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 700;
+  line-height: 1.3;
+  color: #0f172a;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.VdCat_VarResumo {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.VdCat_VarLinha {
+  font-size: 0.68rem;
+  color: #64748b;
+  line-height: 1.35;
+}
+
+.VdCat_VarNome {
+  font-weight: 600;
+  color: #475569;
+}
+
+.VdCat_Precos {
+  margin-top: auto;
+  padding-top: 0.35rem;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.25rem 0.5rem;
+  font-size: 0.68rem;
+}
+
+.VdCat_PrecoLbl {
+  display: block;
+  color: #94a3b8;
+}
+
+.VdCat_PrecoDrop {
+  font-weight: 700;
+  color: #334155;
+}
+
+.VdCat_PrecoSug {
+  font-weight: 700;
+  color: var(--marca-primary, #7b2cff);
+}
+
+.VdCat_Vazio {
+  text-align: center;
+  color: #64748b;
+  padding: 3rem 1rem;
+}
+
+/* Drawer lateral */
+.VdCat_Drawer[hidden] {
+  display: none !important;
+}
+
+.VdCat_Drawer:not([hidden]) {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+}
+
+.VdCat_DrawerBackdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.4);
+}
+
+.VdCat_DrawerPanel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: min(480px, 100%);
+  height: 100%;
+  background: #fff;
+  box-shadow: -8px 0 32px rgba(15, 23, 42, 0.12);
+  display: flex;
+  flex-direction: column;
+  animation: vdCatSlideIn 0.22s ease-out;
+}
+
+@keyframes vdCatSlideIn {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.VdCat_DrawerHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.15rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.VdCat_DrawerHead h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  color: var(--marca-primary, #021f81);
+}
+
+.VdCat_DrawerBody {
+  flex: 1;
+  overflow: auto;
+  padding: 1rem 1.15rem 1.5rem;
+}
+
+.VdCat_DetImg {
+  width: 100%;
+  max-height: 240px;
+  object-fit: contain;
+  border-radius: 10px;
+  background: #f8fafc;
+  margin-bottom: 1rem;
+}
+
+.VdCat_DetMeta {
+  font-size: 0.82rem;
+  color: #64748b;
+  margin: 0 0 0.75rem;
+}
+
+.VdCat_DetDesc {
+  font-size: 0.88rem;
+  color: #334155;
+  line-height: 1.5;
+  margin: 0 0 1rem;
+}
+
+.VdCat_DetSecao h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
+}
+
+.VdCat_VarLista {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0 0 1rem;
+  padding: 0;
+  list-style: none;
+}
+
+.VdCat_VarItem {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 0.65rem 0.75rem;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.35rem 0.75rem;
+  align-items: center;
+}
+
+.VdCat_VarItemRotulo {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.VdCat_VarItemSku {
+  font-size: 0.72rem;
+  color: #94a3b8;
+}
+
+.VdCat_VarItemPrecos {
+  grid-column: 1;
+  font-size: 0.78rem;
+  color: #475569;
+}
+
+.VdCat_VarItemPrecos strong {
+  color: var(--marca-primary, #7b2cff);
+}
+
+.VdCat_VarItemAcao {
+  grid-column: 2;
+  grid-row: 1 / span 3;
+}
+
+.VdCat_BadgeOk {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.35rem 0.65rem;
+  border-radius: 999px;
+  background: #ecfdf5;
+  color: #047857;
+}
+
+@media (max-width: 640px) {
+  .VdCat_Grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.65rem;
+  }
+}

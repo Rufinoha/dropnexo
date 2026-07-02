@@ -1,34 +1,39 @@
 {% extends "frm_base.html" %}
 {% block title %}Catálogo — {{ MARCA_NOME }}{% endblock %}
 {% block topbar_title %}Catálogo (fornecedores aprovados){% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('vd_catalogo.static', filename='style/Cvd_catalogo.css') }}?v=1" />
+{% endblock %}
 {% block content %}
-<div class="cl-page-principal" style="padding:1rem;">
-  <input id="busca" placeholder="Buscar produto…" style="width:100%;max-width:360px;padding:8px;border:1px solid #e5e7eb;border-radius:8px"/>
-  <button type="button" id="btn" class="Cl_BtnPrincipal" style="margin-left:8px">Buscar</button>
-  <div id="grid" class="Forn_GridProdutos" style="margin-top:1rem;"></div>
+<div class="cl-page-principal VdCat_Page">
+  <div class="VdCat_Hero">
+    <p class="VdCat_Desc">Produtos dos fornecedores com vínculo aprovado. Clique no card para ver detalhes e ativar na sua vitrine.</p>
+    <div class="VdCat_Toolbar">
+      <input type="search" id="vdCatBusca" class="VdCat_Busca" placeholder="Buscar produto, SKU ou fornecedor…" autocomplete="off" />
+      <button type="button" id="vdCatBtnBuscar" class="Cl_BtnSalvar">Buscar</button>
+      <label class="VdCat_ChkFiltro">
+        <input type="checkbox" id="vdCatEmEstoque" />
+        <span>Somente com estoque</span>
+      </label>
+    </div>
+  </div>
+
+  <div id="vdCatGrid" class="VdCat_Grid" aria-live="polite"></div>
+  <p id="vdCatVazio" class="VdCat_Vazio" hidden>Nenhum produto encontrado. Aprove fornecedores antes.</p>
+</div>
+
+<div id="vdCatDrawer" class="VdCat_Drawer" hidden aria-hidden="true">
+  <div class="VdCat_DrawerBackdrop" id="vdCatDrawerBackdrop"></div>
+  <aside class="VdCat_DrawerPanel" role="dialog" aria-labelledby="vdCatDrawerTitulo">
+    <header class="VdCat_DrawerHead">
+      <h2 id="vdCatDrawerTitulo">Produto</h2>
+      <button type="button" class="Cl_BtnLink" id="vdCatDrawerFechar" aria-label="Fechar">Fechar</button>
+    </header>
+    <div id="vdCatDrawerBody" class="VdCat_DrawerBody"></div>
+  </aside>
 </div>
 {% endblock %}
 {% block page_js %}
-<link rel="stylesheet" href="{{ url_for('vd_fornecedores.static', filename='style/Cvd_fornecedores.css') }}" />
-<script>
-async function load(){
-  const busca = document.getElementById("busca").value;
-  const r = await fetch("/vendedor/catalogo/dados?busca="+encodeURIComponent(busca),{credentials:"same-origin"});
-  const j = await r.json();
-  const g = document.getElementById("grid");
-  g.innerHTML = (j.produtos||[]).map(p=>`
-    <div class="Forn_ProdCard">
-      ${p.imagem_url?`<img src="${p.imagem_url}" alt="">`:""}
-      <strong>${p.nome}</strong><br>${p.fornecedor_nome}<br>
-      Fornecedor: R$ ${p.preco_fornecedor} · Sugerido: R$ ${p.preco_sugerido}
-      ${p.ativado?'<br><em>Ativado</em>':`<br><button data-v="${p.id_variante}" class="Cl_BtnPrincipal" style="margin-top:6px">Ativar</button>`}
-    </div>`).join("")||"<p>Nenhum produto. Aprove fornecedores antes.</p>";
-  g.querySelectorAll("button[data-v]").forEach(b=>b.onclick=async()=>{
-    const r2=await fetch("/vendedor/catalogo/ativar",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({id_variante:+b.dataset.v})});
-    const j2=await r2.json(); alert(j2.message); if(j2.success) load();
-  });
-}
-document.getElementById("btn").onclick=load;
-load();
-</script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="{{ url_for('vd_catalogo.static', filename='script/Svd_catalogo.js') }}?v=1"></script>
 {% endblock %}

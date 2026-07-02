@@ -63,7 +63,10 @@
           <h3 class="VdParceiros_CardNome">${esc(v.nome)}</h3>
           <p class="VdParceiros_CardMeta">${esc(loc)}</p>
           <p class="VdParceiros_CardMeta">Solicitado: ${fmtData(v.solicitado_em)}</p>
-          <span class="VdParceiros_Badge ${st.cls}">${esc(st.label)}</span>
+          <div class="VdParceiros_CardFoot">
+            <span class="VdParceiros_Badge ${st.cls}">${esc(st.label)}</span>
+            <button type="button" class="Cl_BtnLink VdParceiros_BtnDetalhe" data-acao="detalhe" data-id="${v.id}">Ver detalhes</button>
+          </div>
         </article>`;
       })
       .join("");
@@ -127,12 +130,12 @@
       if (vin.status === "aguardando") {
         modalFooter.hidden = false;
         modalFooter.innerHTML = `
-          <button type="button" class="Cl_BtnPrincipal" id="vd_btnAprovar">Aprovar vínculo</button>
-          <button type="button" class="Cl_BtnSecundario" id="vd_btnRecusar">Recusar</button>
+          <button type="button" class="Cl_BtnSalvar" id="vd_btnAprovar">Aprovar vínculo</button>
+          <button type="button" class="Cl_BtnCancelar" id="vd_btnRecusar">Recusar</button>
           <div class="VdParceiros_RecusaBox" id="vd_recusaBox" hidden>
             <label for="vd_motivoRecusa">Motivo da recusa (será enviado ao vendedor)</label>
             <textarea id="vd_motivoRecusa" placeholder="Explique o motivo para o vendedor…"></textarea>
-            <button type="button" class="Cl_BtnSecundario" id="vd_btnConfirmarRecusa" style="margin-top:8px">Confirmar recusa</button>
+            <button type="button" class="Cl_BtnExcluir" id="vd_btnConfirmarRecusa" style="margin-top:8px">Confirmar recusa</button>
           </div>`;
       } else if (vin.status === "ativo") {
         modalFooter.hidden = false;
@@ -189,6 +192,14 @@
     dadosCache = j.dados || [];
     renderCards(dadosCache);
   }
+
+  lista.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-acao='detalhe']");
+    if (!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    carregarDetalhe(btn.getAttribute("data-id"));
+  });
 
   lista.addEventListener("dblclick", (e) => {
     const card = e.target.closest(".VdParceiros_Card");
