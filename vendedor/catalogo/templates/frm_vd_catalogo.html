@@ -2,24 +2,58 @@
 {% block title %}Catálogo — {{ MARCA_NOME }}{% endblock %}
 {% block topbar_title %}Catálogo (fornecedores aprovados){% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('vd_catalogo.static', filename='style/Cvd_catalogo.css') }}?v=2" />
+<link rel="stylesheet" href="{{ url_for('fn_catalogo.static', filename='style/Ccatalogos.css') }}?v=8" />
+<link rel="stylesheet" href="{{ url_for('vd_catalogo.static', filename='style/Cvd_catalogo.css') }}?v=6" />
 {% endblock %}
 {% block content %}
 <div class="cl-page-principal VdCat_Page">
-  <div class="VdCat_Hero">
-    <p class="VdCat_Desc">Produtos dos fornecedores com vínculo aprovado. Clique no card para ver detalhes e integrar na sua vitrine.</p>
-    <div class="VdCat_Toolbar">
-      <input type="search" id="vdCatBusca" class="VdCat_Busca" placeholder="Buscar produto, SKU ou fornecedor…" autocomplete="off" />
-      <button type="button" id="vdCatBtnBuscar" class="Cl_BtnSalvar">Buscar</button>
-      <label class="VdCat_ChkFiltro">
+  <div class="filter-panel VdCat_FilterPanel">
+    <div class="filter-group VdCat_FiltroBusca">
+      <label for="vdCatBusca">Busca</label>
+      <input type="search" id="vdCatBusca" placeholder="Nome, SKU ou fornecedor" autocomplete="off" />
+    </div>
+    <div class="filter-group VdCat_FiltroForn">
+      <label for="vdCatFornecedor">Fornecedor</label>
+      <select id="vdCatFornecedor">
+        <option value="">Todos</option>
+      </select>
+    </div>
+    <div class="filter-group filter-group--switch VdCat_FiltroSwitch">
+      <label class="Cl_Switch Cat_FiltroSwitch" for="vdCatEmEstoque">
+        <span class="filter-group-switch-label">Com estoque</span>
         <input type="checkbox" id="vdCatEmEstoque" />
-        <span>Somente com estoque</span>
+        <span class="Cl_SwitchSlider"></span>
       </label>
+    </div>
+    <div class="VdCat_FilterBtns">
+      <button type="button" id="vdCatBtnBuscar" class="Cl_botaoFiltro">Filtrar</button>
+      <button type="button" id="vdCatBtnLimpar" class="Cl_botaoFiltro">Limpar</button>
+    </div>
+    <div class="VdCat_CountBox" id="vdCatStats" hidden aria-live="polite">
+      <strong class="VdCat_CountNum" id="vdCatStatTotal">0</strong>
+      <span class="VdCat_CountLbl">produtos</span>
     </div>
   </div>
 
-  <div id="vdCatGrid" class="VdCat_Grid" aria-live="polite"></div>
-  <p id="vdCatVazio" class="VdCat_Vazio" hidden>Nenhum produto encontrado. Aprove fornecedores antes.</p>
+  <div class="VdCat_Layout">
+    <aside class="VdCat_Sidebar" aria-label="Filtrar por categoria">
+      <div class="VdCat_SidebarHead">
+        <h3>Categorias</h3>
+      </div>
+      <nav id="vdCatCategorias" class="VdCat_CatNav">
+        <button type="button" class="VdCat_CatBtn is-ativo" data-categoria="">Todas</button>
+      </nav>
+    </aside>
+
+    <main class="VdCat_Main">
+      <div id="vdCatGrid" class="VdCat_Grid" aria-live="polite"></div>
+      <div id="vdCatVazio" class="VdCat_Empty" hidden>
+        <div class="VdCat_EmptyIcon" aria-hidden="true">📦</div>
+        <p class="VdCat_EmptyTitle">Nenhum produto encontrado</p>
+        <p class="VdCat_EmptySub">Ajuste os filtros ou aprove fornecedores na rede.</p>
+      </div>
+    </main>
+  </div>
 </div>
 
 <div id="vdCatModal" class="VdCat_Modal" hidden aria-hidden="true">
@@ -39,5 +73,5 @@
 {% endblock %}
 {% block page_js %}
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-<script src="{{ url_for('vd_catalogo.static', filename='script/Svd_catalogo.js') }}?v=2"></script>
+<script src="{{ url_for('vd_catalogo.static', filename='script/Svd_catalogo.js') }}?v=5"></script>
 {% endblock %}

@@ -45,7 +45,14 @@ def _precificar_variante(cur, id_fornecedor: int, id_categoria: int | None, prec
     }
 
 
-def _where_catalogo(id_vendedor: int, busca: str, id_forn: str, id_seg: str, em_estoque: bool) -> tuple[list[str], list]:
+def _where_catalogo(
+    id_vendedor: int,
+    busca: str,
+    id_forn: str,
+    id_seg: str,
+    id_categoria: str,
+    em_estoque: bool,
+) -> tuple[list[str], list]:
     where = [
         "vinc.status = 'ativo'",
         "vinc.id_tenant_vendedor = %s",
@@ -60,6 +67,9 @@ def _where_catalogo(id_vendedor: int, busca: str, id_forn: str, id_seg: str, em_
     if id_seg:
         where.append("c.id_segmento = %s")
         params.append(int(id_seg))
+    if id_categoria:
+        where.append("p.id_categoria = %s")
+        params.append(int(id_categoria))
     if busca:
         where.append("(p.nome ILIKE %s OR var.sku ILIKE %s OR t.nome ILIKE %s)")
         like = f"%{busca}%"
@@ -105,6 +115,67 @@ def pagina():
     return render_template("frm_vd_catalogo.html", nav_ativo="vd_catalogo")
 
 
+@vd_catalogo_bp.get("/vendedor/catalogo/combos")
+@login_obrigatorio()
+@exigir_modulo(MODULO_VENDEDOR)
+@exigir_permissao(codigo="vd_catalogo.ver")
+def combos():
+    """Fornecedores conectados e categorias folha (vinculadas a produtos)."""
+    id_vendedor = session.get("id_tenant")
+    if not id_vendedor:
+        return jsonify(success=False, message="Sessão inválida."), 403
+
+    id_forn = (request.args.get("id_fornecedor") or "").strip()
+
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT t.id, COALESCE(NULLIF(TRIM(t.nome_fantasia), ''), t.nome),
+                   (SELECT COUNT(DISTINCT p.id)::int
+                    FROM tbl_produto p
+                    WHERE p.id_tenant = t.id AND p.publicado = TRUE AND p.ativo = TRUE)
+            FROM tbl_vinculo_vendedor_fornecedor vinc
+            JOIN tbl_tenant t ON t.id = vinc.id_tenant_fornecedor
+            WHERE vinc.id_tenant_vendedor = %s AND vinc.status = 'ativo'
+            ORDER BY 2
+            """,
+            (id_vendedor,),
+        )
+        fornecedores = [
+            {"id": r[0], "nome": r[1], "qtd_produtos": int(r[2] or 0)}
+            for r in cur.fetchall()
+        ]
+
+        cat_params: list = [id_vendedor]
+        cat_extra = ""
+        if id_forn:
+            cat_extra = " AND p.id_tenant = %s"
+            cat_params.append(int(id_forn))
+
+        cur.execute(
+            f"""
+            SELECT c.id, c.nome, COUNT(DISTINCT p.id)::int
+            FROM tbl_produto p
+            JOIN tbl_categoria c ON c.id = p.id_categoria
+            JOIN tbl_vinculo_vendedor_fornecedor vinc
+                ON vinc.id_tenant_fornecedor = p.id_tenant
+               AND vinc.id_tenant_vendedor = %s AND vinc.status = 'ativo'
+            WHERE p.publicado = TRUE AND p.ativo = TRUE AND p.id_categoria IS NOT NULL{cat_extra}
+            GROUP BY c.id, c.nome
+            HAVING COUNT(DISTINCT p.id) > 0
+            ORDER BY c.nome
+            """,
+            cat_params,
+        )
+        categorias = [{"id": r[0], "nome": r[1], "qtd": int(r[2] or 0)} for r in cur.fetchall()]
+
+        return jsonify(success=True, fornecedores=fornecedores, categorias=categorias)
+    finally:
+        conn.close()
+
+
 @vd_catalogo_bp.get("/vendedor/catalogo/dados")
 @login_obrigatorio()
 @exigir_modulo(MODULO_VENDEDOR)
@@ -116,9 +187,10 @@ def dados():
     busca = (request.args.get("busca") or "").strip()
     id_forn = (request.args.get("id_fornecedor") or "").strip()
     id_seg = (request.args.get("id_segmento") or "").strip()
+    id_categoria = (request.args.get("id_categoria") or "").strip()
     em_estoque = (request.args.get("em_estoque") or "").strip() == "1"
 
-    where, params = _where_catalogo(id_vendedor, busca, id_forn, id_seg, em_estoque)
+    where, params = _where_catalogo(id_vendedor, busca, id_forn, id_seg, id_categoria, em_estoque)
 
     conn = Var_ConectarBanco()
     try:
@@ -129,7 +201,8 @@ def dados():
                    COALESCE(NULLIF(var.valor_drop, 0), NULLIF(p.valor_drop, 0), var.preco) AS preco_drop,
                    COALESCE(var.imagem_url, p.imagem_url), COALESCE(e.quantidade, 0),
                    t.nome, p.id, p.id_categoria, c.id_segmento, p.id_tenant,
-                   LEFT(COALESCE(p.descricao, ''), 280), p.formato, pv.id AS id_pv
+                   LEFT(COALESCE(p.descricao, ''), 280), p.formato, pv.id AS id_pv,
+                   c.nome AS categoria_nome
             FROM tbl_vinculo_vendedor_fornecedor vinc
             JOIN tbl_produto p ON p.id_tenant = vinc.id_tenant_fornecedor
             JOIN tbl_produto_variante var ON var.id_produto = p.id
@@ -166,6 +239,7 @@ def dados():
                     "fornecedor_nome": r[8],
                     "formato": r[14] or "S",
                     "id_categoria": r[10],
+                    "categoria_nome": r[16] or "",
                 }
                 variantes_por_produto[id_produto] = []
 

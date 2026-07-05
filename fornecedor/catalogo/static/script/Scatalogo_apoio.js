@@ -74,7 +74,8 @@
 
   if (!el.nome) return;
 
-  const BASE = "/catalogos";
+  const BASE = window.CAT_APOIO_BASE || "/catalogos";
+  const APOIO_MODO = window.CAT_APOIO_MODO || "fornecedor";
   const CONDICOES = new Set(["", "NOVO", "USADO", "RECONDICIONADO"]);
 
   function util() {

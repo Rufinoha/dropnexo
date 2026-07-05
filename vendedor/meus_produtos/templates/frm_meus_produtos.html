@@ -1,74 +1,110 @@
 {% extends "frm_base.html" %}
+
 {% block title %}Meus produtos — {{ MARCA_NOME }}{% endblock %}
+
 {% set nav_ativo = 'produtos' %}
+
 {% block topbar_title %}Meus produtos{% endblock %}
+
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_crud.css') }}" />
-<link rel="stylesheet" href="{{ url_for('vd_meus_produtos.static', filename='style/Cprodutos.css') }}" />
+<link rel="stylesheet" href="{{ url_for('fn_catalogo.static', filename='style/Ccatalogos.css') }}?v=8" />
 {% endblock %}
+
 {% block content %}
-<div class="Cl_ConfigPage">
-  <div class="Cl_ConfigPageHeader">
-    <h2>Meus produtos</h2>
-    <p class="Cl_ConfigSub">Salve itens da <a href="{{ url_for('vd_fornecedores.pagina') }}">rede</a> ou <strong>monte kits</strong> combinando produtos de fornecedores.</p>
+
+<div class="Cl_ContainerApoio Cl_PainelPagina cl-page-principal">
+
+  <div class="cl-page-title Cat_PageHead">
+    <div class="Cat_PageHeadText">
+      <h2>Meus produtos</h2>
+      <p class="cl-page-desc">Produtos ativados da rede, kits e cadastros próprios — personalize a vitrine sem alterar o fornecedor.</p>
+    </div>
+    <div class="Cat_PageHeadActions">
+      <button type="button" class="Cl_botaoprimario" id="ob_btnIncluir">Novo produto</button>
+    </div>
   </div>
 
-  <div class="Prod_Tabs">
-    <button type="button" class="Prod_Tab Prod_Tab--ativo" data-tab="salvos">Salvos</button>
-    <button type="button" class="Prod_Tab" data-tab="kits">Meus kits</button>
-  </div>
-
-  <div id="painel_salvos">
-    <div class="Cl_ConfigToolbar">
-      <div class="Cl_FormCampo Prod_CampoBusca">
+  <div class="filter-panel">
+    <div class="filter-panel-fields">
+      <div class="filter-group">
         <label for="ob_filtroBusca">Busca</label>
-        <input type="text" id="ob_filtroBusca" placeholder="Produto, SKU ou fornecedor" />
+        <input type="text" id="ob_filtroBusca" placeholder="Nome ou SKU" autocomplete="off" />
       </div>
+      <div class="filter-group">
+        <label for="ob_filtroCategoria">Categoria</label>
+        <select id="ob_filtroCategoria"><option value="">Todas</option></select>
+      </div>
+      <div class="filter-group">
+        <label for="ob_filtroTipo">Tipo</label>
+        <select id="ob_filtroTipo">
+          <option value="">Todos</option>
+          <option value="simples">Produto Simples</option>
+          <option value="com_variacoes">Produto Com Variações</option>
+          <option value="kit">Kit</option>
+          <option value="somente_variacoes">Somente as Variações</option>
+        </select>
+      </div>
+      <div class="filter-group filter-group--switch">
+        <label class="Cl_Switch Cat_FiltroSwitch" for="ob_filtroAtivos">
+          <span class="filter-group-switch-label">Somente ativos</span>
+          <input type="checkbox" id="ob_filtroAtivos" checked />
+          <span class="Cl_SwitchSlider"></span>
+        </label>
+      </div>
+    </div>
+    <div class="filter-panel-actions">
       <button type="button" class="Cl_botaoFiltro" id="ob_btnFiltrar">Filtrar</button>
-    </div>
-    <div class="Cl_TabelaPrincipal">
-      <table>
-        <thead>
-          <tr>
-            <th class="Prod_ColImg"></th>
-            <th>Fornecedor</th>
-            <th>SKU</th>
-            <th>Produto</th>
-            <th>Preço</th>
-            <th>Estoque</th>
-            <th class="Cl_TableActions">Ações</th>
-          </tr>
-        </thead>
-        <tbody id="ob_listaProdutos"><tr><td colspan="7">Carregando…</td></tr></tbody>
-      </table>
-    </div>
-    <div class="Cl_Paginacao">
-      <button type="button" class="Cl_direcao" id="ob_btnAnterior" disabled>Anterior</button>
-      <span>Página <span id="ob_paginaAtual">1</span> de <span id="ob_totalPaginas">1</span></span>
-      <button type="button" class="Cl_direcao" id="ob_btnProximo" disabled>Próximo</button>
+      <button type="button" class="Cl_botaoFiltro" id="ob_btnLimpar">Limpar</button>
     </div>
   </div>
 
-  <div id="painel_kits" hidden>
-    <div class="Cl_ConfigActions">
-      <button type="button" class="Cl_BtnIncluir" id="ob_btnNovoKit">Novo kit</button>
-    </div>
-    <div class="Cl_TabelaPrincipal">
-      <table>
-        <thead>
-          <tr>
-            <th>Kit</th>
-            <th>Itens</th>
-            <th>Preço</th>
-            <th class="Cl_TableActions">Ações</th>
-          </tr>
-        </thead>
-        <tbody id="ob_listaKits"><tr><td colspan="4">Carregando…</td></tr></tbody>
-      </table>
-    </div>
+  <div class="Cl_TabelaPrincipal" id="content-area-Principal">
+    <table>
+      <thead>
+        <tr class="Cat_BulkHeadRow" id="ob_bulkRow" hidden>
+          <th colspan="6"></th>
+          <th colspan="3" class="Cat_BulkHeadCell">
+            <div class="Cat_BulkActions" id="ob_bulkActions" aria-label="Ações em lote"></div>
+          </th>
+        </tr>
+        <tr>
+          <th class="Cat_ColSel">
+            <input type="checkbox" id="ob_chkTodos" class="Cat_ChkSel" aria-label="Selecionar todos os produtos da página" title="Selecionar todos" />
+          </th>
+          <th class="Cat_ColExpand">
+            <button type="button" class="Cat_ExpandBtn" id="ob_btnToggleExpandTodos" aria-label="Expandir todos" aria-expanded="false" title="Expandir todos" hidden>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
+            </button>
+          </th>
+          <th class="Cat_ColImg">Imagem</th>
+          <th>produto</th>
+          <th>SKU</th>
+          <th>Unidade</th>
+          <th>Preço venda</th>
+          <th>Estoque</th>
+          <th class="col-acoes Cl_TableActions">Ações</th>
+        </tr>
+      </thead>
+      <tbody id="ob_listaProdutos">
+        <tr><td colspan="9">Carregando…</td></tr>
+      </tbody>
+    </table>
   </div>
+
+  <div class="Cl_Paginacao Cat_Paginacao">
+    <span class="Cat_FiltroResumo" id="ob_filtroResumo" hidden></span>
+    <button type="button" class="Cl_direcao" id="ob_btnPrimeiro" disabled>Primeiro</button>
+    <button type="button" class="Cl_direcao" id="ob_btnAnterior" disabled>Anterior</button>
+    <span>Página <strong id="ob_paginaAtual">1</strong> de <strong id="ob_totalPaginas">1</strong>
+      (<span id="ob_totalRegistros">0</span> registros)</span>
+    <button type="button" class="Cl_direcao" id="ob_btnProximo" disabled>Próximo</button>
+    <button type="button" class="Cl_direcao" id="ob_btnUltimo" disabled>Último</button>
+  </div>
+
 </div>
+
 {% endblock %}
+
 {% block page_js %}
-<script src="{{ url_for('vd_meus_produtos.static', filename='script/Smeus_produtos.js') }}"></script>
+<script defer src="{{ url_for('vd_meus_produtos.static', filename='script/Svd_meus_produtos_lista.js') }}?v=1"></script>
 {% endblock %}

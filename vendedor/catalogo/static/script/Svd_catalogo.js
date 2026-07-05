@@ -3,10 +3,15 @@
 
   const el = {
     busca: document.getElementById("vdCatBusca"),
+    fornecedor: document.getElementById("vdCatFornecedor"),
     btnBuscar: document.getElementById("vdCatBtnBuscar"),
+    btnLimpar: document.getElementById("vdCatBtnLimpar"),
     emEstoque: document.getElementById("vdCatEmEstoque"),
     grid: document.getElementById("vdCatGrid"),
     vazio: document.getElementById("vdCatVazio"),
+    catNav: document.getElementById("vdCatCategorias"),
+    stats: document.getElementById("vdCatStats"),
+    statTotal: document.getElementById("vdCatStatTotal"),
     modal: document.getElementById("vdCatModal"),
     backdrop: document.getElementById("vdCatModalBackdrop"),
     modalFechar: document.getElementById("vdCatModalFechar"),
@@ -20,6 +25,8 @@
 
   let produtosCache = [];
   let produtoAberto = null;
+  let categoriaAtiva = "";
+  let fornecedoresCache = [];
 
   function esc(s) {
     const d = document.createElement("div");
@@ -71,11 +78,15 @@
     const img = p.imagem_url
       ? `<img src="${esc(p.imagem_url)}" alt="" loading="lazy" />`
       : '<div class="VdCat_CardImgVazio">📦</div>';
+    const catOverlay = p.categoria_nome
+      ? `<span class="VdCat_CardCat">${esc(p.categoria_nome)}</span>`
+      : "";
     return `
       <article class="VdCat_Card${p.ativado ? " is-ativo" : ""}" data-produto="${p.id_produto}" tabindex="0">
         <div class="VdCat_CardImg">
           ${badgeCard(p)}
           ${img}
+          ${catOverlay}
         </div>
         <div class="VdCat_CardBody">
           <span class="VdCat_CardForn">${esc(p.fornecedor_nome)}</span>
@@ -95,15 +106,81 @@
       </article>`;
   }
 
+  function atualizarStats(total) {
+    if (!el.stats || !el.statTotal) return;
+    el.statTotal.textContent = String(total);
+    el.stats.hidden = false;
+  }
+
   function renderGrid(produtos) {
     produtosCache = produtos || [];
     if (!produtosCache.length) {
       el.grid.innerHTML = "";
       if (el.vazio) el.vazio.hidden = false;
+      atualizarStats(0);
       return;
     }
     if (el.vazio) el.vazio.hidden = true;
     el.grid.innerHTML = produtosCache.map(renderCard).join("");
+    atualizarStats(produtosCache.length);
+  }
+
+  function renderFornecedores(lista) {
+    if (!el.fornecedor) return;
+    fornecedoresCache = lista || [];
+    const val = el.fornecedor.value;
+    el.fornecedor.innerHTML = '<option value="">Todos</option>';
+    fornecedoresCache.forEach((f) => {
+      const o = document.createElement("option");
+      o.value = String(f.id);
+      const qtd = f.qtd_produtos ? ` (${f.qtd_produtos})` : "";
+      o.textContent = `${f.nome}${qtd}`;
+      el.fornecedor.appendChild(o);
+    });
+    if (val && fornecedoresCache.some((f) => String(f.id) === val)) {
+      el.fornecedor.value = val;
+    }
+  }
+
+  function renderCategorias(categorias) {
+    if (!el.catNav) return;
+    const cats = categorias || [];
+    el.catNav.innerHTML = "";
+
+    const btnTodas = document.createElement("button");
+    btnTodas.type = "button";
+    btnTodas.className = `VdCat_CatBtn${categoriaAtiva === "" ? " is-ativo" : ""}`;
+    btnTodas.dataset.categoria = "";
+    btnTodas.innerHTML = `<span class="VdCat_CatBtn__nome">Todas</span>`;
+    el.catNav.appendChild(btnTodas);
+
+    if (!cats.length) {
+      const msg = document.createElement("p");
+      msg.className = "VdCat_CatEmpty";
+      msg.textContent = "Nenhuma categoria com produtos neste filtro.";
+      el.catNav.appendChild(msg);
+      return;
+    }
+
+    cats.forEach((c) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = `VdCat_CatBtn${String(c.id) === categoriaAtiva ? " is-ativo" : ""}`;
+      btn.dataset.categoria = String(c.id);
+      btn.innerHTML = `<span class="VdCat_CatBtn__nome">${esc(c.nome)}</span><span class="VdCat_CatBtn__qtd">${c.qtd || 0}</span>`;
+      el.catNav.appendChild(btn);
+    });
+  }
+
+  async function carregarCombos() {
+    const params = new URLSearchParams();
+    const idForn = el.fornecedor?.value || "";
+    if (idForn) params.set("id_fornecedor", idForn);
+    const r = await fetch(`/vendedor/catalogo/combos?${params}`, { credentials: "same-origin" });
+    const j = await r.json();
+    if (!j.success) return;
+    renderFornecedores(j.fornecedores);
+    renderCategorias(j.categorias);
   }
 
   function fecharModal() {
@@ -139,8 +216,7 @@
     if (p.ativado) {
       btnHtml = `<span class="VdCat_BadgeIntegrado">Integrado na vitrine</span>`;
     } else {
-      const lbl =
-        qtdVar > 1 ? `Ativar produto (${qtdVar} variações)` : "Ativar produto";
+      const lbl = qtdVar > 1 ? `Ativar produto (${qtdVar} variações)` : "Ativar produto";
       btnHtml = `<button type="button" class="Cl_BtnSalvar VdCat_BtnAtivarPai" data-produto="${p.id_produto}">${lbl}</button>`;
     }
     return `
@@ -171,9 +247,7 @@
       : `<div class="VdCat_ModalImgWrap VdCat_ModalImgWrap--vazio">📦</div>`;
 
     const descHtml = p.descricao_html || "";
-    const desc = descHtml
-      ? `<div class="VdCat_ModalDesc">${descHtml}</div>`
-      : "";
+    const desc = descHtml ? `<div class="VdCat_ModalDesc">${descHtml}</div>` : "";
 
     const meta = [
       p.categoria ? esc(p.categoria) : "",
@@ -243,30 +317,65 @@
     }
   }
 
-  async function carregar() {
+  function montarParams() {
     const params = new URLSearchParams();
     const busca = (el.busca?.value || "").trim();
     if (busca) params.set("busca", busca);
+    const idForn = el.fornecedor?.value || "";
+    if (idForn) params.set("id_fornecedor", idForn);
+    if (categoriaAtiva) params.set("id_categoria", categoriaAtiva);
     if (el.emEstoque?.checked) params.set("em_estoque", "1");
-    el.grid.innerHTML = '<p class="VdCat_Vazio">Carregando…</p>';
-    const r = await fetch(`/vendedor/catalogo/dados?${params}`, { credentials: "same-origin" });
+    return params;
+  }
+
+  async function carregar() {
+    el.grid.innerHTML = '<p class="VdCat_Loading">Carregando catálogo…</p>';
+    if (el.vazio) el.vazio.hidden = true;
+    const r = await fetch(`/vendedor/catalogo/dados?${montarParams()}`, { credentials: "same-origin" });
     const j = await r.json();
     if (!j.success) {
       el.grid.innerHTML = "";
       if (el.vazio) {
         el.vazio.hidden = false;
-        el.vazio.textContent = j.message || "Erro ao carregar.";
+        el.vazio.querySelector(".VdCat_EmptyTitle").textContent = j.message || "Erro ao carregar.";
       }
       return;
     }
     renderGrid(j.produtos || []);
   }
 
-  el.btnBuscar?.addEventListener("click", carregar);
-  el.busca?.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") carregar();
+  async function aplicarFiltros(recarregarCats) {
+    if (recarregarCats) await carregarCombos();
+    await carregar();
+  }
+
+  el.btnBuscar?.addEventListener("click", () => aplicarFiltros(false));
+  el.btnLimpar?.addEventListener("click", () => {
+    if (el.busca) el.busca.value = "";
+    if (el.fornecedor) el.fornecedor.value = "";
+    if (el.emEstoque) el.emEstoque.checked = false;
+    categoriaAtiva = "";
+    aplicarFiltros(true);
   });
-  el.emEstoque?.addEventListener("change", carregar);
+  el.busca?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") aplicarFiltros(false);
+  });
+  el.emEstoque?.addEventListener("change", () => aplicarFiltros(false));
+
+  el.fornecedor?.addEventListener("change", () => {
+    categoriaAtiva = "";
+    aplicarFiltros(true);
+  });
+
+  el.catNav?.addEventListener("click", (e) => {
+    const btn = e.target.closest(".VdCat_CatBtn");
+    if (!btn) return;
+    categoriaAtiva = btn.dataset.categoria || "";
+    el.catNav.querySelectorAll(".VdCat_CatBtn").forEach((b) => {
+      b.classList.toggle("is-ativo", b === btn);
+    });
+    carregar();
+  });
 
   el.grid.addEventListener("click", (e) => {
     if (e.target.closest("button")) return;
@@ -295,5 +404,7 @@
     if (e.key === "Escape" && el.modal && !el.modal.hidden) fecharModal();
   });
 
-  carregar();
+  carregarCombos()
+    .then(() => carregar())
+    .catch(() => carregar());
 })();
