@@ -1,0 +1,145 @@
+.Prec_Page { max-width: 1100px; margin: 0 auto; padding: 1rem 1.25rem 2rem; }
+
+.Prec_Header { margin-bottom: 1.25rem; }
+
+.Prec_Layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 420px) 1fr;
+  gap: 1.25rem;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .Prec_Layout { grid-template-columns: 1fr; }
+}
+
+.Prec_Card {
+  background: var(--cl-surface, #fff);
+  border: 1px solid var(--cl-border, #e2e8f0);
+  border-radius: 10px;
+  padding: 1.25rem;
+}
+
+.Prec_Card h3 { margin: 0 0 1rem; font-size: 1.05rem; }
+
+.Prec_Label { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.35rem; }
+
+.Prec_Input {
+  width: 100%;
+  padding: 0.55rem 0.65rem;
+  margin-bottom: 0.85rem;
+  border: 1px solid var(--cl-border, #cbd5e1);
+  border-radius: 6px;
+  font-size: 0.95rem;
+  box-sizing: border-box;
+}
+
+.Prec_Fieldset {
+  border: 1px solid var(--cl-border, #e2e8f0);
+  border-radius: 8px;
+  padding: 0.75rem 1rem 1rem;
+  margin: 0 0 1rem;
+}
+
+.Prec_Fieldset legend { font-weight: 600; font-size: 0.9rem; padding: 0 0.25rem; }
+
+.Prec_Radio {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+  margin-bottom: 0.65rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.Prec_Radio:last-child { margin-bottom: 0; }
+
+.Prec_Radio input { margin-top: 0.2rem; flex-shrink: 0; }
+
+.Prec_Bloco { margin-bottom: 0.5rem; }
+
+.Prec_Hint {
+  font-size: 0.8rem;
+  color: var(--cl-muted, #64748b);
+  margin: -0.35rem 0 0.85rem;
+  line-height: 1.4;
+}
+
+.Prec_Acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin-top: 1rem;
+}
+
+.Prec_Msg {
+  margin-top: 0.75rem;
+  font-size: 0.9rem;
+  color: var(--cl-success, #15803d);
+}
+
+.Prec_Resumo {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.Prec_ResumoItem {
+  flex: 1 1 120px;
+  background: var(--cl-bg-subtle, #f8fafc);
+  border-radius: 8px;
+  padding: 0.75rem;
+  text-align: center;
+}
+
+.Prec_ResumoNum {
+  display: block;
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.Prec_ResumoLbl { font-size: 0.78rem; color: var(--cl-muted, #64748b); }
+
+.Prec_ResumoItem[data-tipo="sem_preco"] .Prec_ResumoNum { color: #b45309; }
+.Prec_ResumoItem[data-tipo="margem_baixa"] .Prec_ResumoNum { color: #c2410c; }
+.Prec_ResumoItem[data-tipo="sem_valor_drop"] .Prec_ResumoNum { color: #b91c1c; }
+
+.Prec_TabelaWrap { overflow-x: auto; }
+
+.Prec_Tabela {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.Prec_Tabela th,
+.Prec_Tabela td {
+  padding: 0.5rem 0.6rem;
+  border-bottom: 1px solid var(--cl-border, #e2e8f0);
+  text-align: left;
+}
+
+.Prec_Tabela th { font-weight: 600; background: var(--cl-bg-subtle, #f8fafc); }
+
+.Prec_Badge {
+  display: inline-block;
+  padding: 0.15rem 0.45rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.Prec_Badge--sem_preco { background: #fef3c7; color: #92400e; }
+.Prec_Badge--margem_baixa { background: #ffedd5; color: #9a3412; }
+.Prec_Badge--sem_valor_drop { background: #fee2e2; color: #991b1b; }
+
+.Prec_Vazio {
+  font-size: 0.9rem;
+  color: var(--cl-muted, #64748b);
+  margin: 0;
+}
+
+.Prec_ResumoItem[hidden],
+.Prec_Card--alertas [data-modo-only] { display: none !important; }

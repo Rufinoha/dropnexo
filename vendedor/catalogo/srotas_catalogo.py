@@ -10,6 +10,7 @@ from fornecedor.parametros.servico_precificacao import (
     calcular_preco_sugerido_revenda,
     pct_margem_revenda_efetiva,
 )
+from vendedor.precificacao.servico_precificacao_vendedor import precificar_na_integracao
 from global_utils import Var_ConectarBanco, exigir_modulo, exigir_permissao, login_obrigatorio, url_imagem_produto
 from srotas_plataforma import MODULO_VENDEDOR
 from vendedor.fornecedores.srotas_fornecedores import (
@@ -69,8 +70,11 @@ def _where_catalogo(
         where.append("c.id_segmento = %s")
         params.append(int(id_seg))
     if id_categoria:
-        where.append("p.id_categoria = %s")
-        params.append(int(id_categoria))
+        if id_categoria.strip().lower() == "sem":
+            where.append("p.id_categoria IS NULL")
+        else:
+            where.append("p.id_categoria = %s")
+            params.append(int(id_categoria))
     if busca:
         where.append("(p.nome ILIKE %s OR var.sku ILIKE %s OR t.nome ILIKE %s)")
         like = f"%{busca}%"
@@ -182,20 +186,42 @@ def combos():
 
         cur.execute(
             f"""
-            SELECT c.id, c.nome, COUNT(DISTINCT p.id)::int
+            SELECT c.id,
+                   COALESCE(NULLIF(TRIM(t.nome_fantasia), ''), t.nome) || ' · ' || c.nome,
+                   COUNT(DISTINCT p.id)::int,
+                   p.id_tenant
             FROM tbl_produto p
-            JOIN tbl_categoria c ON c.id = p.id_categoria
+            JOIN tbl_tenant t ON t.id = p.id_tenant
+            JOIN tbl_categoria c ON c.id = p.id_categoria AND c.id_tenant = p.id_tenant
             JOIN tbl_vinculo_vendedor_fornecedor vinc
                 ON vinc.id_tenant_fornecedor = p.id_tenant
                AND vinc.id_tenant_vendedor = %s AND vinc.status = 'ativo'
             WHERE p.publicado = TRUE AND p.ativo = TRUE AND p.id_categoria IS NOT NULL{cat_extra}
-            GROUP BY c.id, c.nome
+            GROUP BY c.id, c.nome, p.id_tenant, t.nome, t.nome_fantasia
             HAVING COUNT(DISTINCT p.id) > 0
-            ORDER BY c.nome
+            ORDER BY 2
             """,
             cat_params,
         )
-        categorias = [{"id": r[0], "nome": r[1], "qtd": int(r[2] or 0)} for r in cur.fetchall()]
+        categorias = [
+            {"id": r[0], "nome": r[1], "qtd": int(r[2] or 0), "id_fornecedor": int(r[3])}
+            for r in cur.fetchall()
+        ]
+
+        cur.execute(
+            f"""
+            SELECT COUNT(DISTINCT p.id)::int
+            FROM tbl_produto p
+            JOIN tbl_vinculo_vendedor_fornecedor vinc
+                ON vinc.id_tenant_fornecedor = p.id_tenant
+               AND vinc.id_tenant_vendedor = %s AND vinc.status = 'ativo'
+            WHERE p.publicado = TRUE AND p.ativo = TRUE AND p.id_categoria IS NULL{cat_extra}
+            """,
+            cat_params,
+        )
+        sem_cat = int(cur.fetchone()[0] or 0)
+        if sem_cat > 0:
+            categorias.append({"id": "sem", "nome": "Sem categoria", "qtd": sem_cat, "id_fornecedor": None})
 
         return jsonify(success=True, fornecedores=fornecedores, categorias=categorias)
     finally:
@@ -236,7 +262,7 @@ def dados():
             JOIN tbl_produto p ON p.id_tenant = vinc.id_tenant_fornecedor
             JOIN tbl_produto_variante var ON var.id_produto = p.id
             JOIN tbl_tenant t ON t.id = p.id_tenant
-            LEFT JOIN tbl_categoria c ON c.id = p.id_categoria
+            LEFT JOIN tbl_categoria c ON c.id = p.id_categoria AND c.id_tenant = p.id_tenant
             LEFT JOIN tbl_produto_variante_estoque e ON e.id_variante = var.id
             LEFT JOIN tbl_produto_vendedor pv
                 ON pv.id_variante = var.id AND pv.id_tenant_vendedor = %s
@@ -325,7 +351,7 @@ def produto_detalhe(id_produto: int):
             JOIN tbl_vinculo_vendedor_fornecedor vinc
                 ON vinc.id_tenant_fornecedor = p.id_tenant
                AND vinc.id_tenant_vendedor = %s AND vinc.status = 'ativo'
-            LEFT JOIN tbl_categoria c ON c.id = p.id_categoria
+            LEFT JOIN tbl_categoria c ON c.id = p.id_categoria AND c.id_tenant = p.id_tenant
             WHERE p.id = %s AND p.publicado = TRUE AND p.ativo = TRUE
             """,
             (id_vendedor, id_produto),
@@ -429,8 +455,9 @@ def ativar_produto():
         ativados = 0
         for row in rows:
             preco_forn = float(row[3] or 0)
-            precos = _precificar_variante(cur, int(row[2]), row[4], preco_forn)
-            preco_venda = precos["preco_sugerido"]
+            preco_venda = precificar_na_integracao(
+                cur, int(id_vendedor), int(row[2]), row[4], preco_forn
+            )
             cur.execute(
                 """
                 INSERT INTO tbl_produto_vendedor
@@ -493,8 +520,9 @@ def ativar():
 
         espelhar_depositos_fornecedor(cur, int(id_vendedor), int(row[2]), id_produto=int(row[1]))
         preco_forn = float(row[3] or 0)
-        precos = _precificar_variante(cur, int(row[2]), row[4], preco_forn)
-        preco_venda = precos["preco_sugerido"]
+        preco_venda = precificar_na_integracao(
+            cur, int(id_vendedor), int(row[2]), row[4], preco_forn
+        )
         cur.execute(
             """
             INSERT INTO tbl_produto_vendedor

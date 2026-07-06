@@ -5,6 +5,54 @@ from __future__ import annotations
 from global_utils import agora_utc
 
 
+def filtro_categoria_sem(id_categoria: str) -> bool:
+    return (id_categoria or "").strip().lower() == "sem"
+
+
+def sql_filtro_categoria_integrado(
+    id_categoria: str,
+    id_tenant: int,
+) -> tuple[str | None, list]:
+    """Fragmento SQL + params para filtrar produtos integrados por categoria do vendedor."""
+    cat = (id_categoria or "").strip()
+    if not cat:
+        return None, []
+    if filtro_categoria_sem(cat):
+        return (
+            """NOT EXISTS (
+                SELECT 1 FROM tbl_produto_vendedor pv_cat
+                WHERE pv_cat.id_produto = p.id AND pv_cat.id_tenant_vendedor = %s
+                  AND pv_cat.id_categoria_vendedor IS NOT NULL
+            )""",
+            [id_tenant],
+        )
+    try:
+        cid = int(cat)
+    except (TypeError, ValueError):
+        return None, []
+    return (
+        """EXISTS (
+            SELECT 1 FROM tbl_produto_vendedor pv_cat
+            WHERE pv_cat.id_produto = p.id AND pv_cat.id_tenant_vendedor = %s
+              AND pv_cat.id_categoria_vendedor = %s
+        )""",
+        [id_tenant, cid],
+    )
+
+
+def sql_filtro_categoria_proprio(id_categoria: str) -> tuple[str | None, list]:
+    """Fragmento SQL + params para filtrar produtos próprios por categoria."""
+    cat = (id_categoria or "").strip()
+    if not cat:
+        return None, []
+    if filtro_categoria_sem(cat):
+        return "p.id_categoria IS NULL", []
+    try:
+        return "p.id_categoria = %s", [int(cat)]
+    except (TypeError, ValueError):
+        return None, []
+
+
 def categoria_pertence_vendedor(cur, id_vendedor: int, id_categoria: int) -> bool:
     cur.execute(
         "SELECT 1 FROM tbl_categoria WHERE id = %s AND id_tenant = %s AND ativo = TRUE",

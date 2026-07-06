@@ -18,6 +18,7 @@ from fornecedor.parametros.servico_precificacao import (
     calcular_preco_sugerido_revenda,
     pct_margem_revenda_efetiva,
 )
+from vendedor.precificacao.servico_precificacao_vendedor import precificar_na_integracao
 from global_utils import Var_ConectarBanco, agora_utc, exigir_modulo, login_obrigatorio, exigir_permissao, url_imagem_produto
 from srotas_negocio import montar_snapshot_vendedor
 from srotas_plataforma import MODULO_VENDEDOR
@@ -913,9 +914,9 @@ def loja_ativar_produto():
         ativados = 0
         for row in rows:
             preco_forn = float(row[3] or 0)
-            regra_fn = buscar_regra_fornecedor(cur, id_fornecedor, row[5])
-            pct_revenda = pct_margem_revenda_efetiva(regra_fn)
-            preco_venda = calcular_preco_sugerido_revenda(preco_forn, pct_revenda)
+            preco_venda = precificar_na_integracao(
+                cur, int(id_vendedor), id_fornecedor, row[5], preco_forn
+            )
             cur.execute(
                 """
                 INSERT INTO tbl_produto_vendedor

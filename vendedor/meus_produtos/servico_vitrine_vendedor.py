@@ -2,11 +2,7 @@
 
 from __future__ import annotations
 
-from fornecedor.parametros.servico_precificacao import (
-    buscar_regra_fornecedor,
-    calcular_preco_sugerido_revenda,
-    pct_margem_revenda_efetiva,
-)
+from vendedor.precificacao.servico_precificacao_vendedor import precificar_na_integracao
 from global_utils import agora_utc
 
 MOTIVOS_PAUSA: dict[str, str] = {
@@ -163,12 +159,6 @@ def despausar_vitrine_fornecedor(cur, id_fornecedor: int) -> int:
     return int(cur.rowcount or 0)
 
 
-def _preco_sugerido_variante(cur, id_fornecedor: int, id_categoria: int | None, preco_drop: float) -> float:
-    regra = buscar_regra_fornecedor(cur, id_fornecedor, id_categoria)
-    pct = pct_margem_revenda_efetiva(regra)
-    return float(calcular_preco_sugerido_revenda(preco_drop, pct))
-
-
 def restaurar_vitrine_produto(cur, id_tenant_vendedor: int, id_produto: int) -> int:
     if not produto_integrado(cur, id_tenant_vendedor, id_produto):
         return 0
@@ -187,7 +177,9 @@ def restaurar_vitrine_produto(cur, id_tenant_vendedor: int, id_produto: int) -> 
     rows = cur.fetchall()
     n = 0
     for pv_id, _vid, id_forn, id_cat, preco_drop in rows:
-        preco_venda = _preco_sugerido_variante(cur, int(id_forn), id_cat, float(preco_drop or 0))
+        preco_venda = precificar_na_integracao(
+            cur, id_tenant_vendedor, int(id_forn), id_cat, float(preco_drop or 0)
+        )
         cur.execute(
             """
             UPDATE tbl_produto_vendedor SET
@@ -225,7 +217,9 @@ def restaurar_vitrine_variante(cur, id_tenant_vendedor: int, id_variante: int) -
     if not produto_integrado(cur, id_tenant_vendedor, int(row[1])):
         return False
 
-    preco_venda = _preco_sugerido_variante(cur, int(row[2]), row[3], float(row[4] or 0))
+    preco_venda = precificar_na_integracao(
+        cur, id_tenant_vendedor, int(row[2]), row[3], float(row[4] or 0)
+    )
     cur.execute(
         """
         UPDATE tbl_produto_vendedor SET

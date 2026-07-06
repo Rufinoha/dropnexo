@@ -86,109 +86,11 @@ def flatten_arvore_com_caminho(raiz: list[dict], prefixo: str = "") -> list[dict
 
 # ── Precificação e vínculos V2 ────────────────────────────────────────
 
-def calcular_preco_venda(preco_fornecedor: float | Decimal, regra: dict) -> float:
-    """Aplica percentuais sobre o preço do fornecedor (preço nunca altera no mestre)."""
-    base = float(preco_fornecedor or 0)
-    if base <= 0:
-        return 0.0
-    pct = (
-        float(regra.get("pct_marketplace") or 0)
-        + float(regra.get("pct_impostos") or 0)
-        + float(regra.get("pct_taxas") or 0)
-        + float(regra.get("pct_margem_lucro") or 0)
-    )
-    return round(base * (1 + pct / 100), 2)
-
-
-def buscar_regra_precificacao(cur, id_vendedor: int, id_segmento: int | None, id_categoria: int | None) -> dict | None:
-    if id_categoria:
-        cur.execute(
-            """
-            SELECT pct_marketplace, pct_impostos, pct_taxas, pct_margem_lucro
-            FROM tbl_vendedor_precificacao
-            WHERE id_tenant_vendedor = %s AND escopo = 'categoria' AND id_categoria = %s AND ativo = TRUE
-            LIMIT 1
-            """,
-            (id_vendedor, id_categoria),
-        )
-        row = cur.fetchone()
-        if row:
-            return _row_regra(row)
-    if id_segmento:
-        cur.execute(
-            """
-            SELECT pct_marketplace, pct_impostos, pct_taxas, pct_margem_lucro
-            FROM tbl_vendedor_precificacao
-            WHERE id_tenant_vendedor = %s AND escopo = 'segmento' AND id_segmento = %s AND ativo = TRUE
-            LIMIT 1
-            """,
-            (id_vendedor, id_segmento),
-        )
-        row = cur.fetchone()
-        if row:
-            return _row_regra(row)
-    cur.execute(
-        """
-        SELECT pct_marketplace, pct_impostos, pct_taxas, pct_margem_lucro
-        FROM tbl_vendedor_precificacao
-        WHERE id_tenant_vendedor = %s AND escopo = 'global' AND ativo = TRUE
-        LIMIT 1
-        """,
-        (id_vendedor,),
-    )
-    row = cur.fetchone()
-    return _row_regra(row) if row else None
-
-
-def _row_regra(row) -> dict:
-    return {
-        "pct_marketplace": float(row[0] or 0),
-        "pct_impostos": float(row[1] or 0),
-        "pct_taxas": float(row[2] or 0),
-        "pct_margem_lucro": float(row[3] or 0),
-    }
-
-
-def aplicar_precificacao_tenant(cur, id_vendedor: int, escopo: str, id_segmento: int | None, id_categoria: int | None) -> int:
-    regra = None
-    if escopo == "global":
-        regra = buscar_regra_precificacao(cur, id_vendedor, None, None)
-    elif escopo == "segmento" and id_segmento:
-        regra = buscar_regra_precificacao(cur, id_vendedor, id_segmento, None)
-    elif escopo == "categoria" and id_categoria:
-        regra = buscar_regra_precificacao(cur, id_vendedor, None, id_categoria)
-    if not regra:
-        return 0
-
-    where = ["pv.id_tenant_vendedor = %s", "pv.ativo = TRUE", "pv.preco_manual = FALSE"]
-    params: list[Any] = [id_vendedor]
-    if escopo == "segmento":
-        where.append("c.id_segmento = %s")
-        params.append(id_segmento)
-    elif escopo == "categoria":
-        where.append("p.id_categoria = %s")
-        params.append(id_categoria)
-
-    cur.execute(
-        f"""
-        SELECT pv.id, pv.preco_fornecedor
-        FROM tbl_produto_vendedor pv
-        JOIN tbl_produto p ON p.id = pv.id_produto
-        LEFT JOIN tbl_categoria c ON c.id = p.id_categoria
-        WHERE {' AND '.join(where)}
-        """,
-        params,
-    )
-    rows = cur.fetchall()
-    n = 0
-    for pid, preco_forn in rows:
-        novo = calcular_preco_venda(preco_forn, regra)
-        cur.execute(
-            "UPDATE tbl_produto_vendedor SET preco_venda = %s, atualizado_em = NOW() WHERE id = %s",
-            (novo, pid),
-        )
-        n += 1
-    return n
+from vendedor.precificacao.servico_precificacao_vendedor import (  # noqa: E402
+    aplicar_precificacao_tenant,
+    buscar_regra_precificacao,
+    calcular_preco_venda_vendedor as calcular_preco_venda,
+)
 
 
 def inativar_vinculo(cur, id_vinculo: int, id_fornecedor: int) -> None:

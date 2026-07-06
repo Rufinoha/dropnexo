@@ -8,6 +8,7 @@ from fornecedor.catalogo.srotas_catalogo import (
     _imagem_url_resposta,
     variante_dict,
 )
+from vendedor.meus_produtos.servico_categoria_vendedor import sql_filtro_categoria_proprio
 
 
 def buscar_produtos_proprios(
@@ -28,8 +29,10 @@ def buscar_produtos_proprios(
             like = f"%{busca}%"
             params.extend([like, like, like])
         if id_categoria:
-            where.append("p.id_categoria = %s")
-            params.append(int(id_categoria))
+            frag, frag_params = sql_filtro_categoria_proprio(id_categoria)
+            if frag:
+                where.append(frag)
+                params.extend(frag_params)
         if somente_ativos:
             where.append("p.ativo = TRUE")
             where.append("v.ativo = TRUE")
@@ -84,8 +87,10 @@ def buscar_produtos_proprios(
         like = f"%{busca}%"
         params.extend([like, like, like, like])
     if id_categoria:
-        where.append("p.id_categoria = %s")
-        params.append(int(id_categoria))
+        frag, frag_params = sql_filtro_categoria_proprio(id_categoria)
+        if frag:
+            where.append(frag)
+            params.extend(frag_params)
     if filtro_tipo == "simples":
         where.append("p.formato = 'S'")
     elif filtro_tipo == "com_variacoes":

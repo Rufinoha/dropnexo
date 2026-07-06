@@ -1,46 +1,109 @@
 {% extends "frm_base.html" %}
 {% block title %}Precificação — {{ MARCA_NOME }}{% endblock %}
+{% set nav_ativo = 'vd_precificacao' %}
 {% block topbar_title %}Precificação{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('vd_precificacao.static', filename='style/Cprecificacao.css') }}" />
+{% endblock %}
 {% block content %}
-<div class="cl-page-principal" style="padding:1rem;max-width:520px;">
-  <p class="cl-page-desc">Preço do fornecedor não muda aqui. Defina percentuais aplicados sobre o valor de origem em Meus vd_meus_produtos.</p>
-  <label>Escopo</label>
-  <select id="escopo" style="width:100%;padding:8px;margin:6px 0 12px">
-    <option value="global">Geral (todo o catálogo ativado)</option>
-    <option value="segmento">Por segmento</option>
-  </select>
-  <select id="id_segmento" hidden style="width:100%;padding:8px;margin-bottom:12px"></select>
-  <label>% Marketplace</label><input id="pct_marketplace" type="number" step="0.01" value="0" style="width:100%;padding:8px;margin:4px 0 12px"/>
-  <label>% Impostos</label><input id="pct_impostos" type="number" step="0.01" value="0" style="width:100%;padding:8px;margin:4px 0 12px"/>
-  <label>% Taxas</label><input id="pct_taxas" type="number" step="0.01" value="0" style="width:100%;padding:8px;margin:4px 0 12px"/>
-  <label>% Margem de lucro</label><input id="pct_margem_lucro" type="number" step="0.01" value="30" style="width:100%;padding:8px;margin:4px 0 12px"/>
-  <button type="button" id="aplicar" class="Cl_BtnPrincipal">Salvar e aplicar</button>
+<div class="Cl_ContainerApoio cl-page-principal Prec_Page">
+  <div class="Prec_Header">
+    <div class="cl-page-title Prec_HeaderText">
+      <h2>Precificação de venda</h2>
+      <p class="cl-page-desc">O valor Drop do fornecedor não muda aqui. Defina como calcular o preço de venda dos produtos ativos em Meus produtos.</p>
+    </div>
+  </div>
+
+  <div class="Prec_Layout">
+    <section class="Prec_Card Prec_Card--regra" aria-labelledby="prec_titulo_regra">
+      <h3 id="prec_titulo_regra">Regra de precificação</h3>
+
+      <label class="Prec_Label" for="escopo">Escopo</label>
+      <select id="escopo" class="Prec_Input">
+        <option value="global">Geral (todo o catálogo ativado)</option>
+        <option value="segmento">Por segmento</option>
+      </select>
+      <select id="id_segmento" class="Prec_Input Prec_Input--segmento" hidden></select>
+
+      <fieldset class="Prec_Fieldset">
+        <legend>Modo de precificação</legend>
+        <label class="Prec_Radio">
+          <input type="radio" name="modo" value="sugestao_fornecedor" checked />
+          <span><strong>Sugestão do fornecedor</strong> — usa o preço sugerido calculado pelo fornecedor sobre o valor Drop.</span>
+        </label>
+        <label class="Prec_Radio">
+          <input type="radio" name="modo" value="margem_drop" />
+          <span><strong>Margem sobre valor Drop</strong> — preço = valor Drop + sua margem de lucro (%).</span>
+        </label>
+      </fieldset>
+
+      <div id="prec_bloco_margem" class="Prec_Bloco" hidden>
+        <label class="Prec_Label" for="pct_margem_lucro">% Margem de lucro</label>
+        <input id="pct_margem_lucro" class="Prec_Input" type="number" step="0.01" min="0" value="30" />
+      </div>
+
+      <div id="prec_bloco_arredondamento" class="Prec_Bloco" hidden>
+        <label class="Prec_Label" for="arredondamento_centavos">Arredondamento de preço</label>
+        <select id="arredondamento_centavos" class="Prec_Input">
+          <option value="">Sem arredondamento especial</option>
+          <option value="90">Terminar em ,90</option>
+          <option value="99">Terminar em ,99</option>
+          <option value="0">Terminar em ,00</option>
+        </select>
+      </div>
+
+      <div id="prec_bloco_alerta_min" class="Prec_Bloco">
+        <label class="Prec_Label" for="margem_minima_alerta">Margem mínima para alertas (%)</label>
+        <input id="margem_minima_alerta" class="Prec_Input" type="number" step="0.01" min="0" value="30" />
+        <p class="Prec_Hint">Aplica-se ao modo sugestão do fornecedor: alerta quando a margem sugerida ficar abaixo deste valor.</p>
+      </div>
+
+      <div class="Prec_Acoes">
+        <button type="button" id="btn_salvar" class="Cl_BtnSecundario">Salvar regra</button>
+        <button type="button" id="btn_aplicar" class="Cl_BtnPrincipal">Aplicar agora</button>
+      </div>
+      <p id="prec_msg" class="Prec_Msg" role="status" hidden></p>
+    </section>
+
+    <section class="Prec_Card Prec_Card--alertas" aria-labelledby="prec_titulo_alertas">
+      <h3 id="prec_titulo_alertas">Alertas de preço</h3>
+      <p class="Prec_Hint" id="prec_alerta_desc">Produtos ativos em Meus produtos que precisam de atenção.</p>
+
+      <div id="prec_resumo" class="Prec_Resumo" aria-live="polite">
+        <div class="Prec_ResumoItem" data-tipo="sem_preco">
+          <span class="Prec_ResumoNum" id="res_sem_preco">0</span>
+          <span class="Prec_ResumoLbl">Sem preço sugerido</span>
+        </div>
+        <div class="Prec_ResumoItem" data-tipo="margem_baixa">
+          <span class="Prec_ResumoNum" id="res_margem_baixa">0</span>
+          <span class="Prec_ResumoLbl">Margem abaixo do mínimo</span>
+        </div>
+        <div class="Prec_ResumoItem" data-tipo="sem_valor_drop">
+          <span class="Prec_ResumoNum" id="res_sem_valor_drop">0</span>
+          <span class="Prec_ResumoLbl">Sem valor Drop</span>
+        </div>
+      </div>
+
+      <div id="prec_tabela_wrap" class="Prec_TabelaWrap" hidden>
+        <table class="Prec_Tabela" id="prec_tabela">
+          <thead>
+            <tr>
+              <th>Produto</th>
+              <th>SKU</th>
+              <th>Valor Drop</th>
+              <th>Sugestão</th>
+              <th>Margem</th>
+              <th>Alerta</th>
+            </tr>
+          </thead>
+          <tbody id="prec_tbody"></tbody>
+        </table>
+      </div>
+      <p id="prec_sem_alertas" class="Prec_Vazio">Nenhum alerta no momento.</p>
+    </section>
+  </div>
 </div>
 {% endblock %}
 {% block page_js %}
-<script>
-(async function(){
-  const r = await fetch("/vendedor/precificacao/dados",{credentials:"same-origin"});
-  const j = await r.json();
-  const sel = document.getElementById("id_segmento");
-  (j.segmentos||[]).forEach(s=>{ const o=document.createElement("option"); o.value=s.id; o.textContent=s.nome; sel.appendChild(o); });
-  const esc = document.getElementById("escopo");
-  esc.onchange = ()=>{ sel.hidden = esc.value!=="segmento"; };
-  const g = (j.regras||[]).find(x=>x.escopo==="global");
-  if(g){ ["pct_marketplace","pct_impostos","pct_taxas","pct_margem_lucro"].forEach(k=>{ const el=document.getElementById(k); if(el) el.value=g[k]; }); }
-  document.getElementById("aplicar").onclick = async ()=>{
-    const body = {
-      escopo: esc.value,
-      id_segmento: esc.value==="segmento"? sel.value : null,
-      pct_marketplace: +document.getElementById("pct_marketplace").value,
-      pct_impostos: +document.getElementById("pct_impostos").value,
-      pct_taxas: +document.getElementById("pct_taxas").value,
-      pct_margem_lucro: +document.getElementById("pct_margem_lucro").value,
-      aplicar_agora: true
-    };
-    const r2 = await fetch("/vendedor/precificacao/salvar",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
-    const j2 = await r2.json(); alert(j2.message);
-  };
-})();
-</script>
+<script src="{{ url_for('vd_precificacao.static', filename='script/Sprecificacao.js') }}"></script>
 {% endblock %}

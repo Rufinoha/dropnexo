@@ -38,6 +38,7 @@ from srotas_negocio import flatten_arvore_com_caminho, montar_arvore_categorias
 from vendedor.meus_produtos.servico_categoria_vendedor import (
     associar_categoria_produtos,
     categoria_pertence_vendedor,
+    sql_filtro_categoria_integrado,
 )
 from vendedor.meus_produtos.servico_fornecedor_apoio import montar_fornecedor_produto_apoio
 from vendedor.meus_produtos.servico_listagem_proprio import buscar_produtos_proprios
@@ -301,14 +302,10 @@ def dados():
                 like = f"%{busca}%"
                 params.extend([like, like, like, like])
             if id_categoria:
-                where.append(
-                    """EXISTS (
-                        SELECT 1 FROM tbl_produto_vendedor pv_cat
-                        WHERE pv_cat.id_produto = p.id AND pv_cat.id_tenant_vendedor = %s
-                          AND pv_cat.id_categoria_vendedor = %s
-                    )"""
-                )
-                params.extend([id_tenant, int(id_categoria)])
+                frag, frag_params = sql_filtro_categoria_integrado(id_categoria, id_tenant)
+                if frag:
+                    where.append(frag)
+                    params.extend(frag_params)
             if somente_ativos:
                 where.append("pv.ativo = TRUE")
             where_sql = " AND ".join(where)
@@ -389,14 +386,10 @@ def dados():
             like = f"%{busca}%"
             params.extend([like, like, like, id_tenant, like, like])
         if id_categoria:
-            where.append(
-                """EXISTS (
-                    SELECT 1 FROM tbl_produto_vendedor pv_cat
-                    WHERE pv_cat.id_produto = p.id AND pv_cat.id_tenant_vendedor = %s
-                      AND pv_cat.id_categoria_vendedor = %s
-                )"""
-            )
-            params.extend([id_tenant, int(id_categoria)])
+            frag, frag_params = sql_filtro_categoria_integrado(id_categoria, id_tenant)
+            if frag:
+                where.append(frag)
+                params.extend(frag_params)
         if filtro_tipo == "simples":
             where.append("p.formato = 'S'")
         elif filtro_tipo == "com_variacoes":

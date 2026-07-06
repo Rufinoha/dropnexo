@@ -310,7 +310,7 @@
     if (!r.ok || !j.success) return;
     const sel = el.filtroCategoria;
     const val = sel.value;
-    sel.innerHTML = '<option value="">Todas</option>';
+    sel.innerHTML = '<option value="">Todas</option><option value="sem">Sem Filtros</option>';
     (j.categorias || []).forEach((c) => {
       const o = document.createElement("option");
       o.value = c.id;
