@@ -16,12 +16,22 @@ from global_utils import (
 )
 from srotas_plataforma import MODULO_VENDEDOR
 from fornecedor.catalogo.srotas_catalogo import (
+    SQL_VARIANTE_LISTA,
     _catalogo_montar_linhas_pai,
     _imagem_url_resposta,
     estoque_kit_componentes,
     preco_sugerido_kit,
     variante_dict,
     variante_rede_valida,
+)
+from vendedor.meus_produtos.servico_vitrine_vendedor import (
+    CAMPOS_READONLY_INTEGRADO,
+    avaliar_pausa_variante,
+    estoque_efetivo,
+    estoque_real_variante,
+    produto_integrado,
+    restaurar_vitrine_produto,
+    restaurar_vitrine_variante,
 )
 
 _MOD_DIR = Path(__file__).resolve().parent
@@ -79,6 +89,37 @@ def pagina():
 def _kit_id_negativo(kit_id: int) -> int:
     """ID negativo na listagem para distinguir kits de produtos."""
     return -abs(int(kit_id))
+
+
+def _enriquecer_meta_pausa(cur, id_tenant: int, id_variante: int) -> dict:
+    pausado, motivo, msg = avaliar_pausa_variante(cur, id_tenant, id_variante)
+    return {
+        "pausado": pausado,
+        "pausado_motivo": motivo,
+        "pausado_msg": msg,
+        "estoque_real": estoque_real_variante(cur, id_variante),
+        "estoque": estoque_efetivo(cur, id_tenant, id_variante),
+    }
+
+
+def _enriquecer_variantes_vitrine(cur, id_tenant: int, variantes_por_produto: dict[int, list]) -> None:
+    for vars_p in variantes_por_produto.values():
+        for v in vars_p:
+            meta = _enriquecer_meta_pausa(cur, id_tenant, int(v["id"]))
+            v.update(meta)
+            if v.get("preco") is None and "preco_venda" in v:
+                v["preco"] = float(v["preco_venda"] or 0)
+
+
+def _enriquecer_estoque_produto_simples(cur, id_tenant: int, produto: dict) -> None:
+    if produto.get("formato") == "E":
+        return
+    cur.execute("SELECT id_variante_padrao FROM tbl_produto WHERE id = %s", (produto["id"],))
+    row = cur.fetchone()
+    if not row or not row[0]:
+        return
+    meta = _enriquecer_meta_pausa(cur, id_tenant, int(row[0]))
+    produto.update(meta)
 
 
 def _montar_linhas_kits(cur, id_tenant: int, busca: str, somente_ativos: bool) -> list[dict]:
@@ -237,6 +278,9 @@ def dados():
                 }
                 for r in cur.fetchall()
             ]
+            for linha in linhas:
+                meta = _enriquecer_meta_pausa(cur, id_tenant, int(linha["id"]))
+                linha.update(meta)
             total_paginas = max(1, (total + por_pagina - 1) // por_pagina)
             return jsonify(
                 success=True,
@@ -384,7 +428,12 @@ def dados():
                 )
                 for row in cur.fetchall():
                     v = variante_dict(row)
+                    v["preco"] = float(row[4] or 0)
                     variantes_por_produto.setdefault(v["id_produto"], []).append(v)
+
+        for p in dados:
+            _enriquecer_estoque_produto_simples(cur, id_tenant, p)
+        _enriquecer_variantes_vitrine(cur, id_tenant, variantes_por_produto)
 
         linhas = _catalogo_montar_linhas_pai(
             dados,
@@ -401,6 +450,22 @@ def dados():
             else:
                 linhas = linhas_kits
                 total_produtos = len(linhas_kits)
+
+        for linha in linhas:
+            if linha.get("tipo") == "variante" and "pausado" not in linha:
+                meta = _enriquecer_meta_pausa(cur, id_tenant, int(linha["id"]))
+                linha.update(meta)
+            elif linha.get("tipo") == "pai" and linha.get("formato") == "E":
+                vars_p = variantes_por_produto.get(int(linha["id"]), [])
+                linha["pausado"] = any(v.get("pausado") for v in vars_p)
+                if linha["pausado"]:
+                    motivos = [v.get("pausado_msg") for v in vars_p if v.get("pausado_msg")]
+                    linha["pausado_msg"] = motivos[0] if motivos else "Produto pausado na vitrine."
+            elif linha.get("tipo") == "pai" and linha.get("formato") == "S":
+                p = next((x for x in dados if x["id"] == linha["id"]), None)
+                if p:
+                    linha["pausado"] = bool(p.get("pausado"))
+                    linha["pausado_msg"] = p.get("pausado_msg") or ""
 
         total_paginas = max(1, (total_produtos + por_pagina - 1) // por_pagina)
         return jsonify(
@@ -558,6 +623,11 @@ def apoio_produto():
         img_vit = (vit[2] or "").strip() if vit and vit[2] else ""
         preco_venda = float(vit[3]) if vit and vit[3] is not None else float(r[4] or 0)
         ativo_vit = bool(vit[4]) if vit else bool(r[9])
+        integrado = produto_integrado(cur, id_tenant, pid)
+        estoque_meta: dict = {}
+        if r[24]:
+            estoque_meta = _enriquecer_meta_pausa(cur, id_tenant, int(r[24]))
+        quantidade = estoque_meta.get("estoque", int(r[25] or 0))
 
         return jsonify(
             success=True,
@@ -589,7 +659,11 @@ def apoio_produto():
                 "prazo_envio_dias": r[22],
                 "moq": int(r[23] or 1),
                 "id_variante_padrao": r[24],
-                "quantidade": int(r[25] or 0),
+                "quantidade": quantidade,
+                "estoque_real": estoque_meta.get("estoque_real", int(r[25] or 0)),
+                "pausado": estoque_meta.get("pausado", False),
+                "pausado_motivo": estoque_meta.get("pausado_motivo"),
+                "pausado_msg": estoque_meta.get("pausado_msg", ""),
                 "marca": r[26] or "",
                 "grupo": r[27] or "",
                 "valor_atacado": float(r[28]) if r[28] is not None else float(r[4] or 0),
@@ -607,6 +681,8 @@ def apoio_produto():
                 "valor_drop_manual": bool(r[41]),
                 "status_promocao": r[5] is not None and r[4] and float(r[5]) < float(r[4]),
                 "modo_vendedor": True,
+                "integrado": integrado,
+                "campos_readonly": sorted(CAMPOS_READONLY_INTEGRADO) if integrado else [],
             },
         )
     finally:
@@ -655,6 +731,230 @@ def salvar_vitrine():
             return jsonify(success=False, message="Produto não está na sua vitrine."), 404
         conn.commit()
         return jsonify(success=True, message="Vitrine atualizada.", id=pid)
+    finally:
+        conn.close()
+
+
+@vd_meus_produtos_bp.get("/meus-produtos/variantes/lista")
+@login_obrigatorio()
+@exigir_permissao(codigo="produtos.ver")
+def variantes_lista_vitrine():
+    id_tenant = _id_tenant_sessao()
+    pid = int(request.args.get("id_produto") or 0)
+    if not id_tenant or not pid:
+        return jsonify(success=False, message="Parâmetros inválidos."), 400
+
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            f"""
+            SELECT v.id, v.id_produto, v.sku,
+                   COALESCE(NULLIF(TRIM(pv.nome_vitrine), ''), v.nome_exibicao),
+                   pv.preco_venda, v.preco_promocional,
+                   v.preco_custo, v.atributos,
+                   COALESCE(NULLIF(TRIM(pv.imagem_url_vitrine), ''), img.caminho, v.imagem_url),
+                   pv.ativo, v.ordem,
+                   COALESCE(e.quantidade, 0),
+                   v.herda_pai, v.peso_liquido_kg, v.peso_bruto_kg, v.altura_cm, v.largura_cm,
+                   v.profundidade_cm, v.gtin, v.ncm, v.id_imagem_principal, v.descricao,
+                   v.valor_drop, COALESCE(v.valor_drop_manual, FALSE), v.promocao_validade,
+                   v.promocao_ate_zerar_estoque
+            FROM tbl_produto_vendedor pv
+            JOIN tbl_produto_variante v ON v.id = pv.id_variante
+            LEFT JOIN tbl_produto_variante_estoque e ON e.id_variante = v.id
+            LEFT JOIN tbl_produto_imagem img ON img.id = v.id_imagem_principal
+            WHERE pv.id_tenant_vendedor = %s AND pv.id_produto = %s
+            ORDER BY v.ordem, v.nome_exibicao
+            """,
+            (id_tenant, pid),
+        )
+        variantes = []
+        for row in cur.fetchall():
+            v = variante_dict(row)
+            v["preco"] = float(row[4] or 0)
+            v.update(_enriquecer_meta_pausa(cur, id_tenant, int(v["id"])))
+            variantes.append(v)
+        return jsonify(success=True, variantes=variantes, atributos=[])
+    finally:
+        conn.close()
+
+
+@vd_meus_produtos_bp.get("/meus-produtos/variante/editar")
+@login_obrigatorio()
+@exigir_permissao(codigo="produtos.editar")
+def variante_editar_pagina():
+    return render_template("frm_catalogo_variante_apoio.html", apoio_modo="vendedor")
+
+
+@vd_meus_produtos_bp.post("/meus-produtos/variante/apoio")
+@login_obrigatorio()
+@exigir_permissao(codigo="produtos.ver")
+def variante_apoio_vitrine():
+    id_tenant = _id_tenant_sessao()
+    body = request.get_json(silent=True) or {}
+    vid = int(body.get("id") or body.get("id_variante") or 0)
+    if not id_tenant or not vid:
+        return jsonify(success=False, message="ID inválido."), 400
+
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            f"""
+            {SQL_VARIANTE_LISTA}
+            INNER JOIN tbl_produto_vendedor pv ON pv.id_variante = v.id AND pv.id_tenant_vendedor = %s
+            WHERE v.id = %s
+            """,
+            (id_tenant, vid),
+        )
+        row = cur.fetchone()
+        if not row:
+            return jsonify(success=False, message="Variação não está na sua vitrine."), 404
+
+        cur.execute(
+            """
+            SELECT nome_vitrine, descricao_vitrine, imagem_url_vitrine, preco_venda, ativo
+            FROM tbl_produto_vendedor
+            WHERE id_tenant_vendedor = %s AND id_variante = %s
+            """,
+            (id_tenant, vid),
+        )
+        vit = cur.fetchone()
+        variante = variante_dict(row)
+        id_produto = int(variante["id_produto"])
+        integrado = produto_integrado(cur, id_tenant, id_produto)
+
+        nome_vit = (vit[0] or "").strip() if vit and vit[0] else ""
+        desc_vit = (vit[1] or "").strip() if vit and vit[1] else ""
+        img_vit = (vit[2] or "").strip() if vit and vit[2] else ""
+        preco_venda = float(vit[3]) if vit and vit[3] is not None else float(variante.get("preco") or 0)
+        ativo_vit = bool(vit[4]) if vit else bool(variante.get("ativo"))
+
+        variante["nome_exibicao"] = nome_vit or variante.get("nome_exibicao") or ""
+        variante["descricao"] = desc_vit or variante.get("descricao") or ""
+        variante["imagem_url"] = _imagem_url_resposta(img_vit or variante.get("imagem_caminho") or "")
+        variante["imagem_caminho"] = img_vit or variante.get("imagem_caminho") or ""
+        variante["preco"] = preco_venda
+        variante["ativo"] = ativo_vit
+        variante.update(_enriquecer_meta_pausa(cur, id_tenant, vid))
+        variante["quantidade"] = variante["estoque"]
+
+        cur.execute(
+            "SELECT id, sku, nome, descricao, formato FROM tbl_produto WHERE id = %s",
+            (id_produto,),
+        )
+        pai_row = cur.fetchone()
+        pai = {
+            "id": pai_row[0],
+            "sku": pai_row[1] or "",
+            "nome": pai_row[2] or "",
+            "descricao": pai_row[3] or "",
+            "formato": pai_row[4] or "E",
+        }
+
+        return jsonify(
+            success=True,
+            dados={
+                **variante,
+                "modo_vendedor": True,
+                "integrado": integrado,
+                "campos_readonly": sorted(CAMPOS_READONLY_INTEGRADO) if integrado else [],
+                "estoque_somente_leitura": integrado,
+            },
+            pai=pai,
+        )
+    finally:
+        conn.close()
+
+
+@vd_meus_produtos_bp.post("/meus-produtos/variante/salvar")
+@login_obrigatorio()
+@exigir_permissao(codigo="produtos.editar")
+def salvar_variante_vitrine():
+    if (resp := _exigir_edicao()) is not None:
+        return resp
+    id_tenant = _id_tenant_sessao()
+    body = request.get_json(silent=True) or {}
+    vid = int(body.get("id_variante") or body.get("id") or 0)
+    if not id_tenant or not vid:
+        return jsonify(success=False, message="Dados inválidos."), 400
+
+    nome = (body.get("nome_exibicao") or body.get("nome") or "").strip()
+    if not nome:
+        return jsonify(success=False, message="Informe o nome da variação."), 400
+
+    preco_venda = Decimal(str(body.get("preco") or 0))
+    descricao = (body.get("descricao") or "").strip()
+    imagem = (body.get("imagem_url") or body.get("imagem_caminho") or "").strip()
+    ativo = str(body.get("ativo", "true")).lower() in ("1", "true", "t", "yes", "sim")
+
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT pv.id_produto FROM tbl_produto_vendedor pv
+            WHERE pv.id_tenant_vendedor = %s AND pv.id_variante = %s
+            """,
+            (id_tenant, vid),
+        )
+        row = cur.fetchone()
+        if not row:
+            return jsonify(success=False, message="Variação não está na sua vitrine."), 404
+
+        integrado = produto_integrado(cur, id_tenant, int(row[0]))
+        if integrado:
+            cur.execute(
+                """
+                UPDATE tbl_produto_vendedor SET
+                    nome_vitrine = %s,
+                    descricao_vitrine = %s,
+                    imagem_url_vitrine = NULLIF(%s, ''),
+                    preco_venda = CASE WHEN preco_manual THEN preco_venda ELSE %s END,
+                    ativo = %s,
+                    atualizado_em = %s
+                WHERE id_tenant_vendedor = %s AND id_variante = %s
+                """,
+                (nome, descricao, imagem, preco_venda, ativo, agora_utc(), id_tenant, vid),
+            )
+        else:
+            return jsonify(success=False, message="Edição completa de variação própria ainda não disponível."), 501
+
+        conn.commit()
+        return jsonify(success=True, message="Variação atualizada na vitrine.", id_variante=vid)
+    finally:
+        conn.close()
+
+
+@vd_meus_produtos_bp.post("/meus-produtos/restaurar")
+@login_obrigatorio()
+@exigir_permissao(codigo="produtos.editar")
+def restaurar_vitrine():
+    if (resp := _exigir_edicao()) is not None:
+        return resp
+    id_tenant = _id_tenant_sessao()
+    body = request.get_json(silent=True) or {}
+    pid = int(body.get("id_produto") or body.get("id") or 0)
+    vid = int(body.get("id_variante") or 0)
+    if not id_tenant or (not pid and not vid):
+        return jsonify(success=False, message="Dados inválidos."), 400
+
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        if vid:
+            ok = restaurar_vitrine_variante(cur, id_tenant, vid)
+            if not ok:
+                return jsonify(success=False, message="Não foi possível restaurar a variação."), 404
+            msg = "Variação restaurada ao padrão do fornecedor."
+        else:
+            n = restaurar_vitrine_produto(cur, id_tenant, pid)
+            if n == 0:
+                return jsonify(success=False, message="Produto não integrado ou não encontrado."), 404
+            msg = f"Produto restaurado ({n} variação(ões))."
+        conn.commit()
+        return jsonify(success=True, message=msg)
     finally:
         conn.close()
 

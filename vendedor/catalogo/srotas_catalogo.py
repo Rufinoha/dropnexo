@@ -52,6 +52,7 @@ def _where_catalogo(
     id_seg: str,
     id_categoria: str,
     em_estoque: bool,
+    conexao: str = "",
 ) -> tuple[list[str], list]:
     where = [
         "vinc.status = 'ativo'",
@@ -76,6 +77,31 @@ def _where_catalogo(
         params.extend([like, like, like])
     if em_estoque:
         where.append("COALESCE(e.quantidade, 0) > 0")
+    conexao = (conexao or "").strip().lower()
+    if conexao == "conectados":
+        where.append(
+            """(
+            (SELECT COUNT(*) FROM tbl_produto_variante vx WHERE vx.id_produto = p.id AND vx.ativo = TRUE)
+            =
+            (SELECT COUNT(*) FROM tbl_produto_variante vx
+             INNER JOIN tbl_produto_vendedor pvx ON pvx.id_variante = vx.id AND pvx.id_tenant_vendedor = %s
+             WHERE vx.id_produto = p.id AND vx.ativo = TRUE)
+            AND (SELECT COUNT(*) FROM tbl_produto_variante vx WHERE vx.id_produto = p.id AND vx.ativo = TRUE) > 0
+            )"""
+        )
+        params.append(id_vendedor)
+    elif conexao == "nao_conectados":
+        where.append(
+            """EXISTS (
+            SELECT 1 FROM tbl_produto_variante vx
+            WHERE vx.id_produto = p.id AND vx.ativo = TRUE
+            AND NOT EXISTS (
+                SELECT 1 FROM tbl_produto_vendedor pvx
+                WHERE pvx.id_variante = vx.id AND pvx.id_tenant_vendedor = %s
+            )
+            )"""
+        )
+        params.append(id_vendedor)
     return where, params
 
 
@@ -189,8 +215,11 @@ def dados():
     id_seg = (request.args.get("id_segmento") or "").strip()
     id_categoria = (request.args.get("id_categoria") or "").strip()
     em_estoque = (request.args.get("em_estoque") or "").strip() == "1"
+    conexao = (request.args.get("conexao") or "").strip()
 
-    where, params = _where_catalogo(id_vendedor, busca, id_forn, id_seg, id_categoria, em_estoque)
+    where, params = _where_catalogo(
+        id_vendedor, busca, id_forn, id_seg, id_categoria, em_estoque, conexao
+    )
 
     conn = Var_ConectarBanco()
     try:

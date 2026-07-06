@@ -16,8 +16,14 @@
 .VdCat_FilterPanel {
   margin-top: 0;
   display: grid;
-  grid-template-columns: minmax(140px, 1.15fr) minmax(160px, 1fr) auto auto auto;
-  gap: 12px;
+  grid-template-columns:
+    minmax(120px, 1fr)
+    minmax(130px, 0.85fr)
+    minmax(128px, 0.72fr)
+    auto
+    auto
+    auto;
+  gap: 10px;
   align-items: end;
   flex-wrap: nowrap;
 }
@@ -635,20 +641,8 @@ body.VdCat_ModalAberto {
 /* Responsive */
 @media (max-width: 960px) {
   .VdCat_FilterPanel {
-    grid-template-columns: 1fr 1fr auto auto;
-  }
-
-  .VdCat_FilterPanel .VdCat_FiltroSwitch {
-    grid-column: 1 / 2;
-  }
-
-  .VdCat_FilterBtns {
-    grid-column: 2 / 4;
-    justify-content: flex-end;
-  }
-
-  .VdCat_CountBox {
-    grid-column: 4 / 5;
+    grid-template-columns: minmax(90px, 1fr) minmax(90px, 0.85fr) minmax(100px, 0.7fr) auto auto auto;
+    gap: 8px;
   }
 
   .VdCat_Layout {
@@ -709,8 +703,9 @@ body.VdCat_ModalAberto {
     grid-column: 1 / -1;
   }
 
-  .VdCat_FilterPanel .VdCat_FiltroForn {
-    grid-column: 1 / -1;
+  .VdCat_FilterPanel .VdCat_FiltroForn,
+  .VdCat_FilterPanel .VdCat_FiltroConexao {
+    grid-column: span 1;
   }
 
   .VdCat_FilterBtns {

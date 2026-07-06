@@ -3,7 +3,7 @@
 {% block topbar_title %}Catálogo (fornecedores aprovados){% endblock %}
 {% block head_extra %}
 <link rel="stylesheet" href="{{ url_for('fn_catalogo.static', filename='style/Ccatalogos.css') }}?v=8" />
-<link rel="stylesheet" href="{{ url_for('vd_catalogo.static', filename='style/Cvd_catalogo.css') }}?v=6" />
+<link rel="stylesheet" href="{{ url_for('vd_catalogo.static', filename='style/Cvd_catalogo.css') }}?v=7" />
 {% endblock %}
 {% block content %}
 <div class="cl-page-principal VdCat_Page">
@@ -16,6 +16,14 @@
       <label for="vdCatFornecedor">Fornecedor</label>
       <select id="vdCatFornecedor">
         <option value="">Todos</option>
+      </select>
+    </div>
+    <div class="filter-group VdCat_FiltroConexao">
+      <label for="vdCatConexao">Situação</label>
+      <select id="vdCatConexao">
+        <option value="">Todos</option>
+        <option value="conectados">Conectados</option>
+        <option value="nao_conectados">Não conectados</option>
       </select>
     </div>
     <div class="filter-group filter-group--switch VdCat_FiltroSwitch">
@@ -73,5 +81,5 @@
 {% endblock %}
 {% block page_js %}
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-<script src="{{ url_for('vd_catalogo.static', filename='script/Svd_catalogo.js') }}?v=5"></script>
+<script src="{{ url_for('vd_catalogo.static', filename='script/Svd_catalogo.js') }}?v=6"></script>
 {% endblock %}

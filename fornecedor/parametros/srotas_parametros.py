@@ -18,6 +18,10 @@ from fornecedor.requisitos_vendedor import (
     salvar_requisitos,
     salvar_visivel_rede_vendedor,
 )
+from vendedor.meus_produtos.servico_vitrine_vendedor import (
+    despausar_vitrine_fornecedor,
+    pausar_vitrine_fornecedor,
+)
 from global_utils import Var_ConectarBanco, exigir_modulo, exigir_permissao, login_obrigatorio
 from srotas_plataforma import MODULO_FORNECEDOR
 
@@ -195,6 +199,10 @@ def parametros_rede_visibilidade_salvar():
     try:
         cur = conn.cursor()
         salvar_visivel_rede_vendedor(cur, id_tenant, visivel)
+        if visivel:
+            despausar_vitrine_fornecedor(cur, id_tenant)
+        else:
+            pausar_vitrine_fornecedor(cur, id_tenant)
         qtd = contar_produtos_ativos_fornecedor(cur, id_tenant)
         conn.commit()
         msg = "Visibilidade na rede atualizada."

@@ -106,6 +106,12 @@
     return ativo === false ? '<span class="Cat_BadgeInativo">Inativo</span>' : "";
   }
 
+  function badgePausado(l) {
+    if (!l.pausado) return "";
+    const tip = escapeHtml(l.pausado_msg || "Produto pausado");
+    return `<span class="Cat_BadgePausado" title="${tip}">Pausado</span>`;
+  }
+
   function renderNomePai(l) {
     let badge;
     if (l.formato === "K") {
@@ -115,16 +121,17 @@
     } else {
       badge = '<span class="Cat_BadgeSimples">Simples</span>';
     }
-    return `<div class="Cat_PaiCell"><strong class="Cat_PaiNome">${escapeHtml(l.nome)}</strong>${badge}${badgeInativo(l.ativo)}</div>`;
+    return `<div class="Cat_PaiCell"><strong class="Cat_PaiNome">${escapeHtml(l.nome)}</strong>${badge}${badgeInativo(l.ativo)}${badgePausado(l)}</div>`;
   }
 
   function renderNomeVar(l) {
     const chips = renderAtributos(l.atributos);
     const inativo = badgeInativo(l.ativo);
+    const pausado = badgePausado(l);
     if (chips) {
-      return `<div class="Cat_VarCell"><span class="Cat_BadgeVarItem">Variação</span>${inativo}<div class="Cat_VarAttrs">${chips}</div></div>`;
+      return `<div class="Cat_VarCell"><span class="Cat_BadgeVarItem">Variação</span>${inativo}${pausado}<div class="Cat_VarAttrs">${chips}</div></div>`;
     }
-    return `<div class="Cat_VarCell"><span class="Cat_BadgeVarItem">Variação</span>${inativo}<span class="Cat_VarNome">${escapeHtml(l.nome)}</span></div>`;
+    return `<div class="Cat_VarCell"><span class="Cat_BadgeVarItem">Variação</span>${inativo}${pausado}<span class="Cat_VarNome">${escapeHtml(l.nome)}</span></div>`;
   }
 
   function idsPaisVisiveis() {
@@ -436,8 +443,15 @@
     abrirApoioProduto(id);
   }
 
-  function abrirVariante(_idVar, idProduto) {
-    abrirApoioProduto(idProduto);
+  function abrirVariante(idVar, idProduto) {
+    window.GlobalUtils?.abrirJanelaApoioModal({
+      rota: `${BASE}/variante/editar?id_variante=${idVar}&id_produto=${idProduto}`,
+      titulo: "Editar variação na vitrine",
+      largura: 920,
+      altura: 640,
+      nivel: 2,
+      id: idVar,
+    });
   }
 
   async function excluir(id) {

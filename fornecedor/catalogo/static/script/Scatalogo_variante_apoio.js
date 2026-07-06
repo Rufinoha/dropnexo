@@ -54,10 +54,48 @@
   };
   if (!el.nome_exibicao) return;
 
-  const BASE = "/catalogos";
+  const BASE = window.CAT_APOIO_BASE || "/catalogos";
+  const isVendedor = (window.CAT_APOIO_MODO || "fornecedor") === "vendedor";
+  let integrado = false;
+  let pausadoVitrine = false;
+  let pausadoMsg = "";
   const camposHerdaveis = document.querySelectorAll(
     "#preco, #valor_drop, #preco_promocional, #promocao_validade, #peso_liquido_kg, #peso_bruto_kg, #altura_cm, #largura_cm, #profundidade_cm, #gtin, #ncm"
   );
+
+  function syncModoVendedorUi() {
+    if (!isVendedor) return;
+    if (el.herda_pai?.closest(".Cat_HerdaPai")) el.herda_pai.closest(".Cat_HerdaPai").hidden = true;
+    if (el.hint_herda) el.hint_herda.hidden = true;
+    document.querySelectorAll('.Cat_Tab[data-tab="precos"], .Cat_Tab[data-tab="logistica"], .Cat_Tab[data-tab="midia"]').forEach((t) => {
+      t.hidden = integrado;
+    });
+    if (el.sku) el.sku.readOnly = integrado;
+    if (el.gtin) el.gtin.readOnly = integrado;
+    if (el.ncm) el.ncm.readOnly = integrado;
+    if (el.peso_liquido_kg) el.peso_liquido_kg.readOnly = integrado;
+    if (el.peso_bruto_kg) el.peso_bruto_kg.readOnly = integrado;
+    if (el.altura_cm) el.altura_cm.readOnly = integrado;
+    if (el.largura_cm) el.largura_cm.readOnly = integrado;
+    if (el.profundidade_cm) el.profundidade_cm.readOnly = integrado;
+    if (el.valor_drop) el.valor_drop.readOnly = true;
+    if (el.btnExcluir) el.btnExcluir.hidden = true;
+    if (el.quantidade) el.quantidade.readOnly = true;
+    const hint = document.getElementById("vdVarEstoqueHint");
+    if (!hint && el.tblEstoqueDepositosVar) {
+      const p = document.createElement("p");
+      p.id = "vdVarEstoqueHint";
+      p.className = "Cat_ImagemHint";
+      el.tblEstoqueDepositosVar.parentElement?.insertBefore(p, el.tblEstoqueDepositosVar);
+    }
+    const h = document.getElementById("vdVarEstoqueHint");
+    if (h) {
+      const qtd = Number(el.quantidade?.value || 0);
+      h.innerHTML = pausadoVitrine
+        ? `<strong class="Cat_AvisoPausa">Produto pausado:</strong> ${pausadoMsg || "Indisponível na vitrine."}`
+        : `Estoque do fornecedor (somente leitura): <strong>${qtd}</strong> un.`;
+    }
+  }
 
   function ativarTab(cod) {
     document.querySelectorAll(".Cat_Tab").forEach((t) => t.classList.toggle("is-active", t.dataset.tab === cod));
@@ -603,7 +641,11 @@
       galeriaPai = d.imagens_pai;
     }
     imagensVariante = Array.isArray(d.imagens_selecionadas) ? d.imagens_selecionadas.slice() : [];
+    integrado = !!d.integrado;
+    pausadoVitrine = !!d.pausado;
+    pausadoMsg = d.pausado_msg || "";
     syncHerdaUi();
+    syncModoVendedorUi();
   }
 
   async function carregar() {
@@ -615,10 +657,11 @@
     });
     const j = await r.json();
     if (!r.ok || !j.success) throw new Error(j.message || "Erro ao carregar.");
-    if (!j.dados?.imagens_pai?.length) await carregarGaleriaPai();
-    else galeriaPai = j.dados.imagens_pai;
+    if (!j.dados?.imagens_pai?.length && !isVendedor) await carregarGaleriaPai();
+    else if (j.dados?.imagens_pai?.length) galeriaPai = j.dados.imagens_pai;
     preencher(j.dados, j.pai);
-    await carregarEstoqueDepositos().catch(() => {});
+    if (!isVendedor) await carregarEstoqueDepositos().catch(() => {});
+    else syncModoVendedorUi();
     syncPromoUi();
   }
 
@@ -632,6 +675,27 @@
   }
 
   async function salvar() {
+    if (isVendedor) {
+      const body = {
+        id_variante: idVariante,
+        nome_exibicao: (el.nome_exibicao.value || "").trim(),
+        descricao: getDescricaoValue(),
+        preco: el.preco.value,
+        imagem_url: imagensVariante[0]?.caminho || imagensVariante[0]?.url || "",
+        ativo: !!el.ativo.checked,
+      };
+      const r = await fetch(`${BASE}/variante/salvar`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const j = await r.json();
+      if (!r.ok || !j.success) throw new Error(j.message || "Erro ao salvar.");
+      await Swal.fire("Sucesso", j.message, "success");
+      notificarPersistenciaVariante();
+      window.GlobalUtils?.fecharJanelaApoio(nivelModal);
+      return;
+    }
     const body = {
       id: idVariante,
       id_produto: idProduto,

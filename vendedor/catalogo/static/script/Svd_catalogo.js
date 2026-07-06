@@ -4,6 +4,7 @@
   const el = {
     busca: document.getElementById("vdCatBusca"),
     fornecedor: document.getElementById("vdCatFornecedor"),
+    conexao: document.getElementById("vdCatConexao"),
     btnBuscar: document.getElementById("vdCatBtnBuscar"),
     btnLimpar: document.getElementById("vdCatBtnLimpar"),
     emEstoque: document.getElementById("vdCatEmEstoque"),
@@ -323,6 +324,8 @@
     if (busca) params.set("busca", busca);
     const idForn = el.fornecedor?.value || "";
     if (idForn) params.set("id_fornecedor", idForn);
+    const cx = el.conexao?.value || "";
+    if (cx) params.set("conexao", cx);
     if (categoriaAtiva) params.set("id_categoria", categoriaAtiva);
     if (el.emEstoque?.checked) params.set("em_estoque", "1");
     return params;
@@ -353,6 +356,7 @@
   el.btnLimpar?.addEventListener("click", () => {
     if (el.busca) el.busca.value = "";
     if (el.fornecedor) el.fornecedor.value = "";
+    if (el.conexao) el.conexao.value = "";
     if (el.emEstoque) el.emEstoque.checked = false;
     categoriaAtiva = "";
     aplicarFiltros(true);

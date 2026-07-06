@@ -258,6 +258,28 @@
   border: 1px solid #fecaca;
 }
 
+.Cat_BadgePausado {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  background: #fff7ed;
+  color: #c2410c;
+  border: 1px solid #fed7aa;
+  margin-left: 4px;
+}
+
+.Cat_AvisoPausa {
+  color: #c2410c;
+}
+
+.Cat_BtnRestaurar {
+  margin-right: 8px;
+}
+
 .Cat_RowInativo td {
   opacity: 0.72;
 }

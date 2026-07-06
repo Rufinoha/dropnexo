@@ -76,6 +76,11 @@
 
   const BASE = window.CAT_APOIO_BASE || "/catalogos";
   const APOIO_MODO = window.CAT_APOIO_MODO || "fornecedor";
+  const isVendedor = APOIO_MODO === "vendedor";
+  let integrado = false;
+  let camposReadonly = new Set();
+  let pausadoVitrine = false;
+  let pausadoMsg = "";
   const CONDICOES = new Set(["", "NOVO", "USADO", "RECONDICIONADO"]);
 
   function util() {
@@ -158,6 +163,28 @@
   }
 
   function syncEstoqueUi() {
+    if (isVendedor) {
+      const comVariacao = formatoAtual() === "E";
+      if (el.avisoEstoqueVariacao) {
+        el.avisoEstoqueVariacao.hidden = !comVariacao;
+        if (comVariacao) {
+          el.avisoEstoqueVariacao.textContent =
+            "Produto com variações: abra cada variação (ícone editar) para ver o estoque do fornecedor.";
+        }
+      }
+      if (el.avisoEstoqueCadastro) el.avisoEstoqueCadastro.hidden = true;
+      if (el.painelEstoqueDepositos) el.painelEstoqueDepositos.hidden = true;
+      if (el.avisoEstoqueDeposito) {
+        el.avisoEstoqueDeposito.hidden = comVariacao;
+        if (!comVariacao) {
+          const qtd = Number(el.quantidade?.value || 0);
+          el.avisoEstoqueDeposito.innerHTML = pausadoVitrine
+            ? `<strong class="Cat_AvisoPausa">Produto pausado:</strong> ${escHtml(pausadoMsg || "Indisponível na vitrine.")}`
+            : `Estoque do fornecedor (somente leitura): <strong>${qtd}</strong> un.`;
+        }
+      }
+      return;
+    }
     const comVariacao = formatoAtual() === "E";
     const semProduto = !idProduto;
     if (el.avisoEstoqueVariacao) el.avisoEstoqueVariacao.hidden = !comVariacao;
@@ -303,6 +330,23 @@
 
   function syncFormatoUi() {
     const comVariacao = formatoAtual() === "E";
+    if (isVendedor) {
+      if (el.tabVariacoes) el.tabVariacoes.hidden = !comVariacao;
+      if (el.tabEstoque) el.tabEstoque.hidden = comVariacao;
+      if (el.formato) el.formato.disabled = integrado;
+      document.querySelectorAll('.Cat_Tab[data-tab="fornecedor"], .Cat_Tab[data-tab="tributacao"]').forEach((t) => {
+        t.hidden = true;
+      });
+      if (el.btnNovaVariante) el.btnNovaVariante.hidden = true;
+      if (el.btnAdicionarVariacao) el.btnAdicionarVariacao.hidden = true;
+      if (el.publicado) {
+        const pubLbl = el.publicado.closest("label");
+        if (pubLbl) pubLbl.hidden = true;
+      }
+      syncEstoqueUi();
+      if (comVariacao && idProduto) carregarVariantes().catch(() => {});
+      return;
+    }
     if (el.tabVariacoes) el.tabVariacoes.hidden = !comVariacao;
     if (el.tabEstoque) el.tabEstoque.hidden = comVariacao;
     if (el.avisoEstoqueVariacao) el.avisoEstoqueVariacao.hidden = !comVariacao;
@@ -724,7 +768,7 @@
         <td>${v.nome_exibicao || ""}</td>
         <td>${rotuloAttr(v.atributos) || v.nome_exibicao || "—"}</td>
         <td>${Number(v.preco || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</td>
-        <td>${v.estoque ?? 0}</td>
+        <td>${v.pausado ? `<span class="Cat_BadgePausado" title="${escHtml(v.pausado_msg || "")}">Pausado</span> ` : ""}${v.estoque ?? 0}</td>
         <td>${v.herda_pai !== false ? "Sim" : "Não"}</td>
         <td class="Cl_TableActions">
           <button type="button" class="Cl_BtnAcao btnEditVar" data-id="${v.id}">${u.gerarIconeTech("editar")}</button>
@@ -878,6 +922,67 @@
     await carregarVariantes();
   }
 
+  function aplicarReadonlyIntegrado() {
+    const map = {
+      sku: el.sku,
+      formato: el.formato,
+      valor_drop: el.valor_drop,
+      unidade: el.unidade,
+      condicao: el.condicao,
+      marca: el.marca,
+      peso_liquido_kg: el.peso_liquido_kg,
+      peso_bruto_kg: el.peso_bruto_kg,
+      largura_cm: el.largura_cm,
+      altura_cm: el.altura_cm,
+      profundidade_cm: el.profundidade_cm,
+      itens_por_caixa: el.itens_por_caixa,
+      gtin: el.gtin,
+      ncm: el.ncm,
+      quantidade: el.quantidade,
+    };
+    Object.entries(map).forEach(([k, input]) => {
+      if (!input) return;
+      const ro = integrado && camposReadonly.has(k);
+      input.readOnly = ro;
+      input.disabled = ro && input.tagName === "SELECT";
+    });
+  }
+
+  function garantirBtnRestaurar() {
+    if (!isVendedor || !integrado) return;
+    const foot = document.querySelector(".Cat_FooterBtns");
+    if (!foot || document.getElementById("btnRestaurarVitrine")) return;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.id = "btnRestaurarVitrine";
+    btn.className = "Cl_BtnExcluir Cat_BtnRestaurar";
+    btn.textContent = "Restaurar padrão";
+    btn.addEventListener("click", () => restaurarPadrao().catch((e) => Swal.fire("Erro", e.message, "error")));
+    foot.insertBefore(btn, foot.firstChild);
+  }
+
+  async function restaurarPadrao() {
+    if (!idProduto) return;
+    const c = await Swal.fire({
+      title: "Restaurar padrão do fornecedor?",
+      text: "Nome, descrição, imagem e preço da vitrine voltam ao padrão.",
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonText: "Sim, restaurar",
+    });
+    if (!c.isConfirmed) return;
+    const r = await fetch(`${BASE}/restaurar`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id_produto: idProduto }),
+    });
+    const j = await r.json();
+    if (!r.ok || !j.success) throw new Error(j.message || "Erro ao restaurar.");
+    await carregarApoio(idProduto);
+    await Swal.fire("Sucesso", j.message, "success");
+    window.parent.postMessage({ grupo: "atualizarTabela" }, "*");
+  }
+
   function condicaoParaSalvar() {
     const v = (el.condicao?.value || "").trim();
     return CONDICOES.has(v) ? v : "";
@@ -922,7 +1027,13 @@
     el.ativo.checked = d.ativo !== false;
     el.publicado.checked = !!d.publicado;
     el.btnExcluir.style.display = "inline-block";
+    integrado = !!d.integrado;
+    camposReadonly = new Set(d.campos_readonly || []);
+    pausadoVitrine = !!d.pausado;
+    pausadoMsg = d.pausado_msg || "";
     syncFormatoUi();
+    aplicarReadonlyIntegrado();
+    garantirBtnRestaurar();
     syncEstoqueUi();
     carregarImagens().then(syncAvisoImagens);
   }
@@ -944,6 +1055,33 @@
   }
 
   async function salvar() {
+    if (isVendedor) {
+      if (!idProduto) {
+        await Swal.fire("Atenção", "Cadastro de produto próprio em breve.", "info");
+        return;
+      }
+      const body = {
+        id: idProduto,
+        nome: (el.nome.value || "").trim(),
+        descricao: window.CatDescricaoEditor
+          ? CatDescricaoEditor.getValue()
+          : (el.descricao?.value || "").trim(),
+        preco: el.preco?.value,
+        imagem_url: imagemParaSalvar(),
+        ativo: !!el.ativo.checked,
+      };
+      const r = await fetch(`${BASE}/salvar`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const j = await r.json();
+      if (!r.ok || !j.success) throw new Error(j.message || "Erro ao salvar.");
+      await Swal.fire("Sucesso", j.message, "success");
+      window.parent.postMessage({ grupo: "atualizarTabela" }, "*");
+      window.GlobalUtils?.fecharJanelaApoio(nivelModal);
+      return;
+    }
     const preco = el.preco?.value;
     const pesoLiq = el.peso_liquido_kg?.value;
     const body = {
