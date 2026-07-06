@@ -82,3 +82,44 @@ def reservar_itens_pedido(cur, itens: list[tuple[int, int]]) -> None:
 def liberar_itens_pedido(cur, itens: list[tuple[int, int]]) -> None:
     for id_var, qtd in itens:
         liberar_reserva(cur, int(id_var), int(qtd))
+
+
+def baixar_estoque_expedicao(
+    cur,
+    id_variante: int,
+    quantidade: int,
+    *,
+    id_deposito: int | None = None,
+) -> None:
+    """Baixa física na expedição: reduz quantidade e libera a reserva."""
+    if quantidade <= 0:
+        return
+    _garantir_linha_estoque(cur, id_variante)
+    cur.execute(
+        """
+        UPDATE tbl_produto_variante_estoque
+        SET quantidade = GREATEST(0, quantidade - %s),
+            reservado = GREATEST(0, reservado - %s),
+            atualizado_em = NOW()
+        WHERE id_variante = %s
+        """,
+        (quantidade, quantidade, id_variante),
+    )
+    if id_deposito:
+        cur.execute(
+            """
+            UPDATE tbl_produto_estoque_deposito
+            SET quantidade = GREATEST(0, quantidade - %s), atualizado_em = NOW()
+            WHERE id_variante = %s AND id_deposito = %s
+            """,
+            (quantidade, id_variante, id_deposito),
+        )
+        from fornecedor.catalogo.servico_estoque_deposito import sincronizar_total_variante
+
+        sincronizar_total_variante(cur, id_variante)
+
+
+def baixar_itens_pedido(cur, itens: list[tuple[int, int, int | None]]) -> None:
+    """itens: (id_variante, quantidade, id_deposito opcional)."""
+    for id_var, qtd, id_dep in itens:
+        baixar_estoque_expedicao(cur, int(id_var), int(qtd), id_deposito=id_dep)

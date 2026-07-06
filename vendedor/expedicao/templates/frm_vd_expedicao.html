@@ -1,0 +1,59 @@
+{% extends "frm_base.html" %}
+{% block title %}Expedição — {{ MARCA_NOME }}{% endblock %}
+{% set nav_ativo = 'vd_expedicao' %}
+{% block topbar_title %}Expedição{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('vd_expedicao.static', filename='style/Cvd_expedicao.css') }}?v=1" />
+{% endblock %}
+{% block content %}
+<div class="Cl_ContainerApoio cl-page-principal ExPd_Page">
+  <div class="cl-page-title">
+    <h2>Acompanhar expedição</h2>
+    <p class="cl-page-desc">Pedidos pagos aguardando ou em trânsito para o cliente final.</p>
+  </div>
+
+  <div class="filter-panel ExPd_Filtros">
+    <div class="filter-group">
+      <label for="ex_pd_status">Situação</label>
+      <select id="ex_pd_status">
+        <option value="">Todas</option>
+        <option value="pago">Pago (aguardando envio)</option>
+        <option value="em_expedicao">Em expedição</option>
+        <option value="entregue">Entregue</option>
+      </select>
+    </div>
+    <button type="button" class="Cl_botaoFiltro" id="ex_pd_filtrar">Filtrar</button>
+  </div>
+
+  <div class="ExPd_TableWrap">
+    <table class="ExPd_Table">
+      <thead>
+        <tr>
+          <th>Pedido</th>
+          <th>Fornecedor</th>
+          <th>Cliente</th>
+          <th>Total</th>
+          <th>Situação</th>
+          <th>Rastreio</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="ex_pd_tbody"></tbody>
+    </table>
+    <p id="ex_pd_vazio" class="ExPd_Vazio" hidden>Nenhum pedido em expedição.</p>
+  </div>
+</div>
+
+<div id="ex_pd_modal" class="ExPd_Modal" hidden>
+  <div class="ExPd_ModalInner">
+    <header class="ExPd_ModalHead">
+      <h3 id="ex_pd_titulo">Pedido</h3>
+      <button type="button" class="ExPd_Close" id="ex_pd_fechar">×</button>
+    </header>
+    <div id="ex_pd_body" class="ExPd_Body"></div>
+  </div>
+</div>
+{% endblock %}
+{% block page_js %}
+<script src="{{ url_for('vd_expedicao.static', filename='script/Svd_expedicao.js') }}?v=1"></script>
+{% endblock %}

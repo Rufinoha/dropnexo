@@ -5,7 +5,12 @@ from pathlib import Path
 from flask import Blueprint, jsonify, render_template, request, session
 
 from global_utils import Var_ConectarBanco, exigir_modulo, exigir_permissao, login_obrigatorio
-from servico_pedido import listar_pedidos_fornecedor, obter_pedido
+from servico_pedido import (
+    listar_pedidos_fornecedor,
+    marcar_em_expedicao,
+    marcar_entregue,
+    obter_pedido,
+)
 from srotas_plataforma import MODULO_FORNECEDOR
 
 _MOD = Path(__file__).resolve().parent
@@ -26,6 +31,59 @@ def init_app(app):
 def _id_fornecedor() -> int | None:
     tid = session.get("id_tenant")
     return int(tid) if tid else None
+
+
+def _id_usuario() -> int | None:
+    uid = session.get("id_usuario")
+    return int(uid) if uid else None
+
+
+@fn_pedidos_bp.post("/fornecedor/pedidos/<int:id_pedido>/expedir")
+@login_obrigatorio()
+@exigir_modulo(MODULO_FORNECEDOR)
+@exigir_permissao(codigo="fn_pedidos.editar")
+def pedido_expedir(id_pedido: int):
+    id_f = _id_fornecedor()
+    if not id_f:
+        return jsonify(success=False, message="Sessão inválida."), 403
+    body = request.get_json(silent=True) or {}
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        marcar_em_expedicao(
+            cur,
+            id_pedido,
+            id_fornecedor=id_f,
+            codigo_rastreio=body.get("codigo_rastreio"),
+            transportadora=body.get("transportadora"),
+            id_usuario=_id_usuario(),
+        )
+        conn.commit()
+        return jsonify(success=True, message="Pedido marcado em expedição. Estoque baixado.")
+    except ValueError as e:
+        return jsonify(success=False, message=str(e)), 400
+    finally:
+        conn.close()
+
+
+@fn_pedidos_bp.post("/fornecedor/pedidos/<int:id_pedido>/entregue")
+@login_obrigatorio()
+@exigir_modulo(MODULO_FORNECEDOR)
+@exigir_permissao(codigo="fn_pedidos.editar")
+def pedido_entregue(id_pedido: int):
+    id_f = _id_fornecedor()
+    if not id_f:
+        return jsonify(success=False, message="Sessão inválida."), 403
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        marcar_entregue(cur, id_pedido, id_fornecedor=id_f, id_usuario=_id_usuario())
+        conn.commit()
+        return jsonify(success=True, message="Pedido marcado como entregue.")
+    except ValueError as e:
+        return jsonify(success=False, message=str(e)), 400
+    finally:
+        conn.close()
 
 
 @fn_pedidos_bp.get("/fornecedor/pedidos")

@@ -19,6 +19,8 @@
         <option value="">Todas</option>
         <option value="aguardando_pagamento">Aguardando pagamento</option>
         <option value="pago">Pago</option>
+        <option value="em_expedicao">Em expedição</option>
+        <option value="entregue">Entregue</option>
         <option value="cancelado">Cancelado</option>
       </select>
     </div>
@@ -51,9 +53,10 @@
       <button type="button" class="PdFn_Close" id="pd_fn_fechar">×</button>
     </header>
     <div id="pd_fn_body" class="PdFn_Body"></div>
+    <footer id="pd_fn_foot" class="PdFn_Foot"></footer>
   </div>
 </div>
 {% endblock %}
 {% block page_js %}
-<script src="{{ url_for('fn_pedidos.static', filename='script/Sfn_pedidos.js') }}?v=1"></script>
+<script src="{{ url_for('fn_pedidos.static', filename='script/Sfn_pedidos.js') }}?v=2"></script>
 {% endblock %}

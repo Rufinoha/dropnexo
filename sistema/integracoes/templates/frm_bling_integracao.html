@@ -103,6 +103,16 @@
       </div>
 
       <p class="Bl_Meta" id="bl_ultima_sync"></p>
+      <p class="Bl_Meta" id="bl_ultima_sync_pedidos" hidden></p>
+
+      <div class="Bl_PedidosImport" id="bl_pedidos_import_wrap" hidden>
+        <h3 class="Bl_EstoqueBlockTitle">Importar pedidos pagos</h3>
+        <p class="Bl_Hint">
+          Busca pedidos de venda <strong>confirmados/pagos</strong> no Bling dos últimos 30 dias e cria pedidos DropNexo
+          (somente SKUs ativos em Meus produtos).
+        </p>
+        <button type="button" class="Cl_botaoprimario" id="bl_btn_import_pedidos">Importar pedidos do Bling</button>
+      </div>
     </div>
 
     <div id="bl_pane_estoque" hidden>

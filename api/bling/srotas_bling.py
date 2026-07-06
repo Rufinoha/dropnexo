@@ -618,6 +618,56 @@ def sync_produtos():
         conn.close()
 
 
+@bling_bp.post("/api/integracoes/bling/sync/pedidos")
+@login_obrigatorio()
+def sync_pedidos():
+    if not _pode_bling_sync():
+        return jsonify(success=False, message="Sem permissão."), 403
+
+    body = request.get_json(silent=True) or {}
+    contexto = (body.get("contexto") or garantir_modulo_sessao() or "vendedor").strip()
+    if contexto != "vendedor":
+        return jsonify(success=False, message="Importação de pedidos Bling disponível apenas para vendedor."), 400
+
+    try:
+        dias = int(body.get("dias") or 30)
+    except (TypeError, ValueError):
+        dias = 30
+
+    id_tenant = session.get("id_tenant")
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT status FROM tbl_integracao_bling WHERE id_tenant = %s",
+            (id_tenant,),
+        )
+        row = cur.fetchone()
+        if not row or row[0] != "conectado":
+            return jsonify(success=False, message="Conecte o Bling antes de importar pedidos."), 400
+
+        from api.bling.sync_pedidos import importar_pedidos_bling
+
+        uid = session.get("id_usuario")
+        resultado = importar_pedidos_bling(
+            cur,
+            int(id_tenant),
+            contexto=contexto,
+            dias=dias,
+            id_usuario=int(uid) if uid else None,
+        )
+        conn.commit()
+        return jsonify(success=True, **resultado)
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 400
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
 @bling_bp.get("/api/integracoes/bling/categorias")
 @login_obrigatorio()
 def api_categorias_bling():

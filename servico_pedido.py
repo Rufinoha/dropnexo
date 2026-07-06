@@ -1,12 +1,14 @@
 # servico_pedido.py — pedidos B2B vendedor → fornecedor (Fase 0)
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from typing import Any
 
 from fornecedor.requisitos_vendedor import carregar_requisitos_raw
 from global_utils import agora_utc
 from servico_estoque_reserva import (
+    baixar_itens_pedido,
     liberar_itens_pedido,
     reservar_itens_pedido,
 )
@@ -14,6 +16,8 @@ from servico_estoque_reserva import (
 STATUS_RASCUNHO = "rascunho"
 STATUS_AGUARDANDO = "aguardando_pagamento"
 STATUS_PAGO = "pago"
+STATUS_EM_EXPEDICAO = "em_expedicao"
+STATUS_ENTREGUE = "entregue"
 STATUS_CANCELADO = "cancelado"
 
 
@@ -204,6 +208,22 @@ def obter_pedido(cur, id_pedido: int, *, id_vendedor: int | None = None, id_forn
         return None
     ped = _pedido_dict(row[:28], fornecedor_nome=row[28], vendedor_nome=row[29])
     ped["itens"] = listar_itens_pedido(cur, id_pedido)
+    cur.execute(
+        """
+        SELECT origem, id_bling_pedido, codigo_rastreio, transportadora,
+               expedido_em, entregue_em
+        FROM tbl_pedido WHERE id = %s
+        """,
+        (id_pedido,),
+    )
+    ex = cur.fetchone()
+    if ex:
+        ped["origem"] = ex[0] or "manual"
+        ped["id_bling_pedido"] = ex[1]
+        ped["codigo_rastreio"] = ex[2] or ""
+        ped["transportadora"] = ex[3] or ""
+        ped["expedido_em"] = ex[4].isoformat() if ex[4] else None
+        ped["entregue_em"] = ex[5].isoformat() if ex[5] else None
     return ped
 
 
@@ -658,3 +678,327 @@ def marcar_pedido_pago(
         id_usuario,
     )
     return True
+
+
+def _pedido_ja_importado_bling(
+    cur, id_vendedor: int, id_bling: str, id_fornecedor: int
+) -> int | None:
+    cur.execute(
+        """
+        SELECT id FROM tbl_pedido
+        WHERE id_tenant_vendedor = %s AND id_bling_pedido = %s
+          AND id_tenant_fornecedor = %s
+        LIMIT 1
+        """,
+        (id_vendedor, id_bling, id_fornecedor),
+    )
+    row = cur.fetchone()
+    return int(row[0]) if row else None
+
+
+def importar_pedido_bling(
+    cur,
+    id_vendedor: int,
+    id_bling_pedido: str,
+    dados: dict,
+    *,
+    id_usuario: int | None = None,
+) -> list[int]:
+    """Cria pedido(s) a partir do Bling (já pago). Retorna IDs criados."""
+    itens_parsed = dados.get("itens") or []
+    if not itens_parsed:
+        raise ValueError("Pedido Bling sem itens.")
+
+    por_fornecedor: dict[int, list[dict]] = {}
+    for raw in itens_parsed:
+        sku = (raw.get("sku") or "").strip()
+        qtd = int(raw.get("quantidade") or 0)
+        cur.execute(
+            """
+            SELECT pv.id, pv.id_tenant_fornecedor, pv.id_produto, pv.id_variante,
+                   pv.preco_fornecedor, pv.preco_venda,
+                   COALESCE(pv.nome_vitrine, p.nome), v.sku, p.id_deposito_expedicao
+            FROM tbl_produto_vendedor pv
+            JOIN tbl_produto_variante v ON v.id = pv.id_variante
+            JOIN tbl_produto p ON p.id = pv.id_produto
+            WHERE pv.id_tenant_vendedor = %s AND v.sku = %s AND pv.ativo = TRUE
+              AND v.ativo = TRUE AND p.ativo = TRUE
+            LIMIT 1
+            """,
+            (id_vendedor, sku),
+        )
+        vit = cur.fetchone()
+        if not vit:
+            raise ValueError(f"SKU {sku} não encontrado em Meus produtos.")
+        id_forn = int(vit[1])
+        if not vinculo_ativo(cur, id_vendedor, id_forn):
+            raise ValueError(f"Fornecedor do SKU {sku} sem vínculo ativo.")
+        por_fornecedor.setdefault(id_forn, []).append(
+            {
+                "id_produto_vendedor": vit[0],
+                "id_fornecedor": id_forn,
+                "id_produto": int(vit[2]),
+                "id_variante": int(vit[3]),
+                "valor_drop": _float(vit[4]),
+                "preco_venda": _float(vit[5]),
+                "nome": vit[6] or raw.get("nome") or sku,
+                "sku": vit[7] or sku,
+                "id_deposito": vit[8],
+                "quantidade": qtd,
+            }
+        )
+
+    cliente = dados.get("cliente") or {}
+    entrega = dados.get("entrega") or {}
+    obs_base = dados.get("observacoes") or ""
+    numero_bling = dados.get("numero_bling") or id_bling_pedido
+    ids_criados: list[int] = []
+
+    for id_forn, itens in por_fornecedor.items():
+        existente = _pedido_ja_importado_bling(cur, id_vendedor, id_bling_pedido, id_forn)
+        if existente:
+            continue
+
+        subtotal = sum(i["valor_drop"] * i["quantidade"] for i in itens)
+        taxa = _taxa_pedido_fornecedor(cur, id_forn)
+        total = subtotal + taxa
+        agora = agora_utc()
+        numero = _gerar_numero(cur, "PED", id_vendedor, "tbl_pedido", "id_tenant_vendedor")
+        obs = obs_base
+        if numero_bling:
+            prefix = f"Importado do Bling #{numero_bling}."
+            obs = f"{prefix} {obs}".strip() if obs else prefix
+
+        cur.execute(
+            """
+            INSERT INTO tbl_pedido (
+                numero, id_tenant_vendedor, id_tenant_fornecedor, origem,
+                status, status_pagamento,
+                cliente_nome, cliente_email, cliente_telefone, cliente_documento,
+                entrega_cep, entrega_logradouro, entrega_numero, entrega_complemento,
+                entrega_bairro, entrega_cidade, entrega_uf,
+                subtotal_produtos, valor_taxa_pedido, valor_frete, valor_total,
+                observacoes, confirmado_em, pago_em, id_bling_pedido
+            ) VALUES (
+                %s, %s, %s, 'bling',
+                %s, 'pago',
+                %s, %s, %s, %s,
+                %s, %s, %s, %s, %s, %s, %s,
+                %s, %s, %s, %s,
+                %s, %s, %s, %s
+            ) RETURNING id
+            """,
+            (
+                numero,
+                id_vendedor,
+                id_forn,
+                STATUS_PAGO,
+                cliente.get("nome") or "Cliente Bling",
+                cliente.get("email"),
+                cliente.get("telefone"),
+                cliente.get("documento"),
+                entrega.get("cep"),
+                entrega.get("logradouro"),
+                entrega.get("numero"),
+                entrega.get("complemento"),
+                entrega.get("bairro"),
+                entrega.get("cidade"),
+                entrega.get("uf"),
+                subtotal,
+                taxa,
+                _float(dados.get("valor_frete")),
+                total,
+                obs,
+                agora,
+                agora,
+                id_bling_pedido,
+            ),
+        )
+        id_pedido = int(cur.fetchone()[0])
+
+        for item in itens:
+            sub = item["valor_drop"] * item["quantidade"]
+            cur.execute(
+                """
+                INSERT INTO tbl_pedido_item (
+                    id_pedido, id_variante, id_produto, id_produto_vendedor,
+                    sku, nome_produto, quantidade, valor_drop, preco_venda, subtotal_drop,
+                    id_deposito_fornecedor
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    id_pedido,
+                    item["id_variante"],
+                    item["id_produto"],
+                    item["id_produto_vendedor"],
+                    item["sku"],
+                    item["nome"],
+                    item["quantidade"],
+                    item["valor_drop"],
+                    item["preco_venda"],
+                    sub,
+                    item["id_deposito"],
+                ),
+            )
+
+        itens_reserva = [(i["id_variante"], i["quantidade"]) for i in itens]
+        reservar_itens_pedido(cur, itens_reserva)
+
+        cur.execute(
+            """
+            INSERT INTO tbl_integracao_map (
+                id_tenant, provedor, contexto, entidade, id_bling, id_dropnexo, sku, meta
+            ) VALUES (%s, 'bling', 'vendedor', 'pedido', %s, %s, NULL, %s::jsonb)
+            ON CONFLICT (id_tenant, provedor, contexto, entidade, id_bling)
+            DO UPDATE SET id_dropnexo = EXCLUDED.id_dropnexo, atualizado_em = NOW()
+            """,
+            (
+                id_vendedor,
+                f"{id_bling_pedido}:{id_forn}",
+                id_pedido,
+                json.dumps({"numero_bling": numero_bling, "id_bling_pedido": id_bling_pedido}, ensure_ascii=False),
+            ),
+        )
+
+        registrar_historico(
+            cur,
+            id_pedido,
+            "importado_bling",
+            f"Pedido importado do Bling (#{numero_bling}). Estoque reservado.",
+            id_usuario,
+        )
+        ids_criados.append(id_pedido)
+
+    return ids_criados
+
+
+def marcar_em_expedicao(
+    cur,
+    id_pedido: int,
+    *,
+    id_fornecedor: int,
+    codigo_rastreio: str | None = None,
+    transportadora: str | None = None,
+    id_usuario: int | None = None,
+) -> None:
+    ped = obter_pedido(cur, id_pedido, id_fornecedor=id_fornecedor)
+    if not ped:
+        raise ValueError("Pedido não encontrado.")
+    if ped["status"] != STATUS_PAGO:
+        raise ValueError("Somente pedidos pagos podem ser expedidos.")
+
+    itens_baixa: list[tuple[int, int, int | None]] = []
+    for item in ped["itens"]:
+        id_dep = None
+        cur.execute(
+            """
+            SELECT id_deposito_fornecedor FROM tbl_pedido_item
+            WHERE id_pedido = %s AND id_variante = %s LIMIT 1
+            """,
+            (id_pedido, item["id_variante"]),
+        )
+        dep_row = cur.fetchone()
+        if dep_row and dep_row[0]:
+            id_dep = int(dep_row[0])
+        itens_baixa.append((item["id_variante"], item["quantidade"], id_dep))
+
+    baixar_itens_pedido(cur, itens_baixa)
+
+    agora = agora_utc()
+    cur.execute(
+        """
+        UPDATE tbl_pedido SET
+            status = %s,
+            codigo_rastreio = COALESCE(%s, codigo_rastreio),
+            transportadora = COALESCE(%s, transportadora),
+            expedido_em = %s,
+            atualizado_em = %s
+        WHERE id = %s
+        """,
+        (
+            STATUS_EM_EXPEDICAO,
+            (codigo_rastreio or "").strip() or None,
+            (transportadora or "").strip() or None,
+            agora,
+            agora,
+            id_pedido,
+        ),
+    )
+    det = "Pedido em expedição."
+    if codigo_rastreio:
+        det += f" Rastreio: {codigo_rastreio}."
+    registrar_historico(cur, id_pedido, "expedido", det, id_usuario)
+
+
+def marcar_entregue(
+    cur,
+    id_pedido: int,
+    *,
+    id_fornecedor: int | None = None,
+    id_vendedor: int | None = None,
+    id_usuario: int | None = None,
+) -> None:
+    ped = obter_pedido(cur, id_pedido, id_fornecedor=id_fornecedor, id_vendedor=id_vendedor)
+    if not ped:
+        raise ValueError("Pedido não encontrado.")
+    if ped["status"] not in (STATUS_EM_EXPEDICAO, STATUS_PAGO):
+        raise ValueError("Pedido deve estar pago ou em expedição.")
+
+    if ped["status"] == STATUS_PAGO:
+        marcar_em_expedicao(
+            cur,
+            id_pedido,
+            id_fornecedor=id_fornecedor or ped["id_tenant_fornecedor"],
+            id_usuario=id_usuario,
+        )
+
+    agora = agora_utc()
+    cur.execute(
+        """
+        UPDATE tbl_pedido SET
+            status = %s,
+            entregue_em = %s,
+            expedido_em = COALESCE(expedido_em, %s),
+            atualizado_em = %s
+        WHERE id = %s
+        """,
+        (STATUS_ENTREGUE, agora, agora, agora, id_pedido),
+    )
+    registrar_historico(cur, id_pedido, "entregue", "Pedido marcado como entregue.", id_usuario)
+
+
+def listar_pedidos_expedicao_vendedor(cur, id_vendedor: int) -> list[dict]:
+    cur.execute(
+        f"""
+        SELECT {_PEDIDO_COLS},
+               COALESCE(tf.nome_fantasia, tf.nome),
+               NULL
+        FROM tbl_pedido p
+        LEFT JOIN tbl_pedido_grupo g ON g.id = p.id_grupo
+        LEFT JOIN tbl_tenant tf ON tf.id = p.id_tenant_fornecedor
+        WHERE p.id_tenant_vendedor = %s
+          AND p.status IN (%s, %s, %s)
+        ORDER BY COALESCE(p.expedido_em, p.pago_em, p.criado_em) DESC, p.id DESC
+        """,
+        (id_vendedor, STATUS_PAGO, STATUS_EM_EXPEDICAO, STATUS_ENTREGUE),
+    )
+    rows = cur.fetchall()
+    out = []
+    for r in rows:
+        ped = _pedido_dict(r[:28], fornecedor_nome=r[28])
+        cur.execute(
+            """
+            SELECT codigo_rastreio, transportadora, expedido_em, entregue_em, origem
+            FROM tbl_pedido WHERE id = %s
+            """,
+            (ped["id"],),
+        )
+        ex = cur.fetchone()
+        if ex:
+            ped["codigo_rastreio"] = ex[0] or ""
+            ped["transportadora"] = ex[1] or ""
+            ped["expedido_em"] = ex[2].isoformat() if ex[2] else None
+            ped["entregue_em"] = ex[3].isoformat() if ex[3] else None
+            ped["origem"] = ex[4] or "manual"
+        out.append(ped)
+    return out

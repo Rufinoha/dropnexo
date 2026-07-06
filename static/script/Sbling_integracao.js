@@ -7,6 +7,9 @@
   const ctxInput = document.getElementById("bl_contexto_ativo");
   const logsEl = document.getElementById("bl_logs");
   const ultimaSync = document.getElementById("bl_ultima_sync");
+  const ultimaSyncPedidos = document.getElementById("bl_ultima_sync_pedidos");
+  const pedidosImportWrap = document.getElementById("bl_pedidos_import_wrap");
+  const btnImportPedidos = document.getElementById("bl_btn_import_pedidos");
   const btnSalvar = document.getElementById("bl_btn_salvar");
   const btnSalvarEstoque = document.getElementById("bl_btn_salvar_estoque");
   const paneConfig = document.getElementById("bl_pane_config");
@@ -129,6 +132,19 @@
       ultimaSync.textContent = cfg.ultima_sync_produtos
         ? `Última sync produtos: ${new Date(cfg.ultima_sync_produtos).toLocaleString("pt-BR")}`
         : "";
+    }
+    if (ultimaSyncPedidos) {
+      if (cfg.ultima_sync_pedidos) {
+        ultimaSyncPedidos.hidden = false;
+        ultimaSyncPedidos.textContent = `Última sync pedidos: ${new Date(cfg.ultima_sync_pedidos).toLocaleString("pt-BR")}`;
+      } else {
+        ultimaSyncPedidos.hidden = true;
+        ultimaSyncPedidos.textContent = "";
+      }
+    }
+    if (pedidosImportWrap) {
+      const ctx = estado.contexto_modulo || "";
+      pedidosImportWrap.hidden = ctx !== "vendedor" || !estado.conectado;
     }
     aplicarEstoqueTela();
   }
@@ -1249,6 +1265,40 @@
       await salvarEstoque();
     } catch (e) {
       Swal.fire({ icon: "error", title: "Erro", text: e.message, confirmButtonColor: "#021F81" });
+    }
+  });
+
+  btnImportPedidos?.addEventListener("click", async () => {
+    const ok = await Swal.fire({
+      title: "Importar pedidos pagos?",
+      text: "Serão importados pedidos confirmados do Bling (últimos 30 dias). SKUs devem existir em Meus produtos.",
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonText: "Importar",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#021F81",
+    });
+    if (!ok.isConfirmed) return;
+    btnImportPedidos.disabled = true;
+    try {
+      const r = await fetch("/api/integracoes/bling/sync/pedidos", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contexto: estado.contexto_modulo || "vendedor", dias: 30 }),
+      });
+      const j = await r.json();
+      await Swal.fire({
+        icon: j.success ? "success" : "error",
+        title: j.success ? "Importação concluída" : "Falha",
+        text: j.message || j.msg || "Erro desconhecido",
+        confirmButtonColor: "#021F81",
+      });
+      if (j.success) await carregarStatus();
+    } catch (e) {
+      Swal.fire({ icon: "error", title: "Erro", text: e.message, confirmButtonColor: "#021F81" });
+    } finally {
+      btnImportPedidos.disabled = false;
     }
   });
 
