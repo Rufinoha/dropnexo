@@ -719,6 +719,8 @@ def apoio_produto():
                 (pid, id_tenant),
             )
             r = cur.fetchone()
+            if not r:
+                return jsonify(success=False, message="Produto não encontrado."), 404
             return jsonify(
                 success=True,
                 dados={

@@ -1190,10 +1190,17 @@
   async function carregarApoio(id) {
     const r = await fetch(`${BASE}/apoio`, {
       method: "POST",
+      credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id }),
     });
-    const j = await r.json();
+    const texto = await r.text();
+    let j;
+    try {
+      j = JSON.parse(texto);
+    } catch {
+      throw new Error("Resposta inválida do servidor ao carregar o produto.");
+    }
     if (!r.ok || !j.success) throw new Error(j.message || "Erro.");
     preencherDados(j.dados);
   }

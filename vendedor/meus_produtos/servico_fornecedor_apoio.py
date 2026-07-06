@@ -55,7 +55,6 @@ def montar_fornecedor_produto_apoio(cur, id_vendedor: int, id_fornecedor: int) -
                t.email_comercial,
                t.site,
                COALESCE(v.status, 'nenhum'),
-               v.criado_em,
                (SELECT COUNT(*)::int FROM tbl_produto p
                 WHERE p.id_tenant = t.id AND p.ativo = TRUE AND p.publicado = TRUE)
         FROM tbl_tenant t
@@ -103,7 +102,7 @@ def montar_fornecedor_produto_apoio(cur, id_vendedor: int, id_fornecedor: int) -
         "email": (row[15] or "").strip(),
         "site": (row[16] or "").strip(),
         "status_vinculo": row[17] or "nenhum",
-        "qtd_produtos": int(row[19] or 0),
+        "qtd_produtos": int(row[18] or 0),
         "segmentos": segmentos,
         "contato": contato,
         "url_loja": f"/fornecedores/loja?id={int(row[0])}",
