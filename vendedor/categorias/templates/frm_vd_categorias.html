@@ -1,0 +1,69 @@
+{% extends "frm_base.html" %}
+{% block title %}Categorias — {{ MARCA_NOME }}{% endblock %}
+{% set nav_ativo = 'vd_categorias' %}
+{% block topbar_title %}Categorias{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('fn_categorias.static', filename='style/Cfn_categorias.css') }}?v=11" />
+<link rel="stylesheet" href="{{ url_for('fn_categorias.static', filename='style/Cfn_categorias_tree.css') }}?v=11" />
+{% endblock %}
+{% block content %}
+<div class="Cl_ContainerApoio cl-page-principal FnCat_Page">
+  <header class="FnCat_Hero FnCat_Hero--compact">
+    <div class="FnCat_HeroMain">
+      <h2>Categorias</h2>
+      <p class="FnCat_HeroDesc">Organize seus produtos próprios em até 3 níveis.</p>
+    </div>
+  </header>
+
+  <main class="FnCat_ArvorePanel FnCat_ArvorePanel--full">
+    <header class="FnCat_PanelHead">
+      <div class="FnCat_PanelHeadLeft">
+        <h3 class="FnCat_PanelHeadTitle">Árvore de categorias</h3>
+      </div>
+      <div class="FnCat_PanelHeadRight">
+        <button type="button" class="FnCat_BtnPrimary" id="vd_cat_btn_raiz">+ Categoria nível 1</button>
+      </div>
+    </header>
+    <div class="FnCatTree-scroll">
+      <div id="vd_cat_arvore" class="FnCatTree" aria-live="polite"></div>
+      <div id="vd_cat_arvore_vazio" class="FnCat_Empty" hidden>
+        <strong>Nenhuma categoria</strong>
+        <p>Crie a primeira categoria para seus produtos próprios.</p>
+        <button type="button" class="FnCat_BtnPrimary FnCat_BtnPrimary--outline" id="vd_cat_btn_raiz_empty">+ Categoria nível 1</button>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div id="vd_cat_menu_pop" class="FnCat_MenuPop" hidden role="menu"></div>
+
+<div id="vd_cat_modal" class="FnCat_Modal" hidden aria-hidden="true" role="dialog">
+  <div class="FnCat_ModalInner">
+    <header class="FnCat_ModalHead">
+      <h3 id="vd_cat_modal_titulo">Categoria</h3>
+      <button type="button" class="FnCat_ModalClose" id="vd_cat_modal_fechar" aria-label="Fechar">×</button>
+    </header>
+    <form id="vd_cat_form" class="FnCat_Form">
+      <input type="hidden" id="vd_cat_id" value="" />
+      <input type="hidden" id="vd_cat_parent_id" value="" />
+      <p id="vd_cat_ctx" class="FnCat_Ctx"></p>
+      <div class="FnCat_Field">
+        <label for="vd_cat_nome">Nome</label>
+        <input type="text" id="vd_cat_nome" maxlength="120" required />
+      </div>
+      <div class="FnCat_Field">
+        <label for="vd_cat_ordem">Ordem</label>
+        <input type="number" id="vd_cat_ordem" value="0" min="0" />
+      </div>
+      <div class="Cl_BotoesApoio FnCat_ModalFoot">
+        <button type="submit" class="Cl_BtnSalvar">Salvar</button>
+        <button type="button" class="Cl_BtnCancelar" id="vd_cat_btn_cancelar">Cancelar</button>
+        <button type="button" class="Cl_BtnExcluir" id="vd_cat_btn_excluir" hidden>Excluir</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+{% block page_js %}
+<script src="{{ url_for('vd_categorias.static', filename='script/Svd_categorias.js') }}"></script>
+{% endblock %}

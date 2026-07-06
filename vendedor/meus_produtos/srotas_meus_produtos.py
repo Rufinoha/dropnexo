@@ -19,11 +19,23 @@ from fornecedor.catalogo.srotas_catalogo import (
     SQL_VARIANTE_LISTA,
     _catalogo_montar_linhas_pai,
     _imagem_url_resposta,
+    descricao_efetiva_variante,
     estoque_kit_componentes,
+    merge_variante_exibicao,
     preco_sugerido_kit,
+    produto_pai_dict,
     variante_dict,
     variante_rede_valida,
 )
+from fornecedor.catalogo.servico_estoque_deposito import listar_estoque_por_deposito
+from fornecedor.catalogo.servico_imagens import (
+    listar_imagens_galeria_pai,
+    listar_imagens_variante_selecionadas,
+    listar_regras_atributo_imagem,
+    obter_imagem_modo,
+)
+from srotas_negocio import flatten_arvore_com_caminho, montar_arvore_categorias
+from vendedor.meus_produtos.servico_listagem_proprio import buscar_produtos_proprios
 from vendedor.meus_produtos.servico_vitrine_vendedor import (
     CAMPOS_READONLY_INTEGRADO,
     avaliar_pausa_variante,
@@ -122,6 +134,28 @@ def _enriquecer_estoque_produto_simples(cur, id_tenant: int, produto: dict) -> N
     produto.update(meta)
 
 
+def _exigir_produto_vitrine(cur, id_tenant_vendedor: int, id_produto: int) -> dict | None:
+    cur.execute(
+        """
+        SELECT 1 FROM tbl_produto_vendedor
+        WHERE id_tenant_vendedor = %s AND id_produto = %s
+        LIMIT 1
+        """,
+        (id_tenant_vendedor, id_produto),
+    )
+    if not cur.fetchone():
+        return None
+    cur.execute("SELECT id_tenant FROM tbl_produto WHERE id = %s", (id_produto,))
+    row = cur.fetchone()
+    if not row:
+        return None
+    id_owner = int(row[0])
+    return {
+        "integrado": id_owner != id_tenant_vendedor,
+        "id_fornecedor": id_owner,
+    }
+
+
 def _montar_linhas_kits(cur, id_tenant: int, busca: str, somente_ativos: bool) -> list[dict]:
     where = ["k.id_tenant = %s"]
     params: list = [id_tenant]
@@ -191,10 +225,11 @@ def dados():
     busca = (request.args.get("busca") or "").strip()
     id_categoria = (request.args.get("id_categoria") or "").strip()
     filtro_tipo = (request.args.get("tipo") or "").strip().lower()
+    filtro_origem = (request.args.get("origem") or "").strip().lower()
     somente_ativos = (request.args.get("ativos") or "sim").strip().lower() != "nao"
     offset = (pagina - 1) * por_pagina
 
-    if filtro_tipo == "kit":
+    if filtro_tipo == "kit" or filtro_origem == "kit":
         conn = Var_ConectarBanco()
         try:
             cur = conn.cursor()
@@ -216,6 +251,30 @@ def dados():
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
+
+        if filtro_origem == "proprio" and filtro_tipo != "kit":
+            _, _, linhas_prop = buscar_produtos_proprios(
+                cur,
+                id_tenant,
+                busca=busca,
+                id_categoria=id_categoria,
+                filtro_tipo=filtro_tipo,
+                somente_ativos=somente_ativos,
+            )
+            if filtro_tipo in ("", "kit"):
+                linhas_kits = _montar_linhas_kits(cur, id_tenant, busca, somente_ativos) if filtro_tipo in ("", "kit") else []
+                linhas_prop = linhas_kits + linhas_prop
+            total = len(linhas_prop)
+            linhas_pag = linhas_prop[offset : offset + por_pagina]
+            total_paginas = max(1, (total + por_pagina - 1) // por_pagina)
+            return jsonify(
+                success=True,
+                dados=[],
+                linhas=linhas_pag,
+                total=total,
+                pagina_atual=pagina,
+                total_paginas=total_paginas,
+            )
 
         if filtro_tipo == "somente_variacoes":
             where = ["pv.id_tenant_vendedor = %s", "p.formato = 'E'"]
@@ -291,8 +350,8 @@ def dados():
                 total_paginas=total_paginas,
             )
 
-        where = ["pv.id_tenant_vendedor = %s"]
-        params = [id_tenant]
+        where = ["pv.id_tenant_vendedor = %s", "p.id_tenant <> %s"]
+        params = [id_tenant, id_tenant]
         if busca:
             where.append(
                 """(
@@ -329,6 +388,12 @@ def dados():
             [id_tenant] + params,
         )
         total_produtos = int(cur.fetchone()[0] or 0)
+
+        paginar_sql = ""
+        paginar_params: list = []
+        if filtro_origem != "":
+            paginar_sql = " LIMIT %s OFFSET %s"
+            paginar_params = [por_pagina, offset]
 
         cur.execute(
             f"""
@@ -371,9 +436,9 @@ def dados():
             WHERE {where_sql}
             GROUP BY p.id, p.sku, p.nome, p.formato, p.unidade, c.nome, vp.imagem_url, p.imagem_url
             ORDER BY MAX(pv.atualizado_em) DESC, p.nome
-            LIMIT %s OFFSET %s
+            {paginar_sql}
             """,
-            [id_tenant, id_tenant, id_tenant, id_tenant, id_tenant, id_tenant, id_tenant] + params + [por_pagina, offset],
+            [id_tenant, id_tenant, id_tenant, id_tenant, id_tenant, id_tenant, id_tenant] + params + paginar_params,
         )
         dados = [
             {
@@ -452,6 +517,7 @@ def dados():
                 total_produtos = len(linhas_kits)
 
         for linha in linhas:
+            linha.setdefault("origem", "integrado")
             if linha.get("tipo") == "variante" and "pausado" not in linha:
                 meta = _enriquecer_meta_pausa(cur, id_tenant, int(linha["id"]))
                 linha.update(meta)
@@ -466,6 +532,22 @@ def dados():
                 if p:
                     linha["pausado"] = bool(p.get("pausado"))
                     linha["pausado_msg"] = p.get("pausado_msg") or ""
+
+        if filtro_origem == "" and filtro_tipo != "kit":
+            _, _, linhas_prop = buscar_produtos_proprios(
+                cur,
+                id_tenant,
+                busca=busca,
+                id_categoria=id_categoria,
+                filtro_tipo=filtro_tipo,
+                somente_ativos=somente_ativos,
+            )
+            linhas = linhas + linhas_prop
+
+        if filtro_origem == "" and filtro_tipo not in ("kit", "somente_variacoes"):
+            linhas.sort(key=lambda x: str(x.get("nome") or "").lower())
+            total_produtos = len(linhas)
+            linhas = linhas[offset : offset + por_pagina]
 
         total_paginas = max(1, (total_produtos + por_pagina - 1) // por_pagina)
         return jsonify(
@@ -492,16 +574,47 @@ def combos():
         cur = conn.cursor()
         cur.execute(
             """
-            SELECT DISTINCT c.id, c.nome
-            FROM tbl_categoria c
-            INNER JOIN tbl_produto p ON p.id_categoria = c.id
-            INNER JOIN tbl_produto_vendedor pv ON pv.id_produto = p.id AND pv.id_tenant_vendedor = %s
-            ORDER BY c.nome
+            SELECT id, nome, parent_id, ordem, COALESCE(nivel, 1), 0
+            FROM tbl_categoria
+            WHERE id_tenant = %s AND ativo = TRUE
+            ORDER BY ordem, nome
             """,
             (id_tenant,),
         )
-        categorias = [{"id": r[0], "nome": r[1]} for r in cur.fetchall()]
-        return jsonify(success=True, categorias=categorias, unidades=["UN", "CX", "KG", "PC", "PAR"])
+        arvore = montar_arvore_categorias(cur.fetchall())
+        categorias = [
+            {"id": c["id"], "nome": c["caminho"], "caminho": c["caminho"], "nivel": c["nivel"]}
+            for c in flatten_arvore_com_caminho(arvore)
+        ]
+        depositos = []
+        try:
+            cur.execute(
+                """
+                SELECT id, nome, cep, cidade, uf, espelho_somente_leitura
+                FROM tbl_deposito_expedicao
+                WHERE id_tenant = %s AND ativo = TRUE
+                ORDER BY principal DESC, nome
+                """,
+                (id_tenant,),
+            )
+            depositos = [
+                {
+                    "id": r[0],
+                    "nome": r[1] + (" (espelho)" if len(r) > 5 and r[5] else ""),
+                    "cep": r[2],
+                    "cidade": r[3],
+                    "uf": r[4],
+                }
+                for r in cur.fetchall()
+            ]
+        except Exception:
+            depositos = []
+        return jsonify(
+            success=True,
+            categorias=categorias,
+            depositos=depositos,
+            unidades=["UN", "CX", "KG", "PC", "PAR"],
+        )
     finally:
         conn.close()
 
@@ -548,6 +661,14 @@ def excluir_produto():
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
+        cur.execute("SELECT id_tenant FROM tbl_produto WHERE id = %s", (pid,))
+        row_owner = cur.fetchone()
+        if row_owner and int(row_owner[0]) == id_tenant:
+            cur.execute("DELETE FROM tbl_produto WHERE id = %s AND id_tenant = %s", (pid, id_tenant))
+            conn.commit()
+            if cur.rowcount == 0:
+                return jsonify(success=False, message="Produto não encontrado."), 404
+            return jsonify(success=True, message="Produto excluído.")
         cur.execute(
             "DELETE FROM tbl_produto_vendedor WHERE id_tenant_vendedor = %s AND id_produto = %s",
             (id_tenant, pid),
@@ -564,7 +685,7 @@ def excluir_produto():
 @login_obrigatorio()
 @exigir_permissao(codigo="produtos.ver")
 def apoio_produto():
-    """Carrega produto do fornecedor com overlay da vitrine do vendedor."""
+    """Carrega produto integrado (vitrine) ou próprio (cadastro completo)."""
     id_tenant = _id_tenant_sessao()
     pid = int((request.get_json(silent=True) or {}).get("id") or 0)
     if not id_tenant or not pid:
@@ -573,6 +694,83 @@ def apoio_produto():
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
+        cur.execute("SELECT id_tenant FROM tbl_produto WHERE id = %s", (pid,))
+        owner_row = cur.fetchone()
+        if not owner_row:
+            return jsonify(success=False, message="Produto não encontrado."), 404
+        if int(owner_row[0]) == id_tenant:
+            cur.execute(
+                """
+                SELECT p.id, p.sku, p.nome, p.descricao, p.preco, p.preco_promocional,
+                       p.unidade, p.id_categoria, p.imagem_url, p.ativo, p.publicado,
+                       p.formato, p.tipo, p.preco_custo, p.gtin, p.ncm, p.referencia,
+                       p.peso_liquido_kg, p.peso_bruto_kg, p.altura_cm, p.largura_cm, p.profundidade_cm,
+                       p.prazo_envio_dias, p.moq, p.id_variante_padrao,
+                       COALESCE(ve.quantidade, 0),
+                       p.marca, p.grupo, p.valor_atacado, p.valor_dropshipping,
+                       p.reposicao_estoque, p.dimensao_caixa_cm, p.peso_gramas, p.id_deposito_expedicao,
+                       p.condicao, p.cest, p.origem_fiscal, p.frete_gratis, p.volumes, p.producao, p.valor_drop,
+                       COALESCE(p.valor_drop_manual, FALSE)
+                FROM tbl_produto p
+                LEFT JOIN tbl_produto_variante_estoque ve ON ve.id_variante = p.id_variante_padrao
+                WHERE p.id = %s AND p.id_tenant = %s
+                """,
+                (pid, id_tenant),
+            )
+            r = cur.fetchone()
+            return jsonify(
+                success=True,
+                dados={
+                    "id": r[0],
+                    "sku": r[1] or "",
+                    "nome": r[2],
+                    "descricao": r[3] or "",
+                    "preco": float(r[4] or 0),
+                    "preco_promocional": float(r[5]) if r[5] is not None else None,
+                    "unidade": r[6] or "UN",
+                    "id_categoria": r[7],
+                    "imagem_url": _imagem_url_resposta(r[8]),
+                    "imagem_caminho": r[8] or "",
+                    "ativo": bool(r[9]),
+                    "publicado": bool(r[10]),
+                    "formato": r[11] or "S",
+                    "tipo": r[12] or "P",
+                    "preco_custo": float(r[13]) if r[13] is not None else None,
+                    "gtin": r[14] or "",
+                    "ncm": r[15] or "",
+                    "referencia": r[16] or "",
+                    "condicao": r[34] or r[16] or "",
+                    "peso_liquido_kg": float(r[17]) if r[17] is not None else None,
+                    "peso_bruto_kg": float(r[18]) if r[18] is not None else None,
+                    "altura_cm": float(r[19]) if r[19] is not None else None,
+                    "largura_cm": float(r[20]) if r[20] is not None else None,
+                    "profundidade_cm": float(r[21]) if r[21] is not None else None,
+                    "prazo_envio_dias": r[22],
+                    "moq": int(r[23] or 1),
+                    "id_variante_padrao": r[24],
+                    "quantidade": int(r[25] or 0),
+                    "marca": r[26] or "",
+                    "grupo": r[27] or "",
+                    "valor_atacado": float(r[28]) if r[28] is not None else float(r[4] or 0),
+                    "valor_dropshipping": float(r[29]) if r[29] is not None else None,
+                    "reposicao_estoque": bool(r[30]),
+                    "dimensao_caixa_cm": r[31] or "",
+                    "peso_gramas": int(r[32]) if r[32] is not None else None,
+                    "id_deposito": r[33],
+                    "cest": r[35] or "",
+                    "origem_fiscal": r[36] or "",
+                    "frete_gratis": bool(r[37]),
+                    "volumes": int(r[38]) if r[38] is not None else None,
+                    "producao": r[39] or "",
+                    "valor_drop": float(r[40]) if r[40] is not None else None,
+                    "valor_drop_manual": bool(r[41]),
+                    "status_promocao": r[5] is not None and r[4] and float(r[5]) < float(r[4]),
+                    "modo_vendedor": True,
+                    "integrado": False,
+                    "campos_readonly": [],
+                },
+            )
+
         cur.execute(
             """
             SELECT 1 FROM tbl_produto_vendedor
@@ -747,6 +945,13 @@ def variantes_lista_vitrine():
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
+        cur.execute("SELECT id_tenant FROM tbl_produto WHERE id = %s", (pid,))
+        owner = cur.fetchone()
+        if owner and int(owner[0]) == id_tenant:
+            from fornecedor.catalogo.srotas_catalogo import variantes_lista as fn_variantes_lista
+
+            return fn_variantes_lista()
+
         cur.execute(
             f"""
             SELECT v.id, v.id_produto, v.sku,
@@ -801,6 +1006,20 @@ def variante_apoio_vitrine():
     try:
         cur = conn.cursor()
         cur.execute(
+            """
+            SELECT p.id_tenant FROM tbl_produto_variante v
+            JOIN tbl_produto p ON p.id = v.id_produto
+            WHERE v.id = %s
+            """,
+            (vid,),
+        )
+        owner_row = cur.fetchone()
+        if owner_row and int(owner_row[0]) == id_tenant:
+            from fornecedor.catalogo.srotas_catalogo import variante_apoio as fn_variante_apoio
+
+            return fn_variante_apoio()
+
+        cur.execute(
             f"""
             {SQL_VARIANTE_LISTA}
             INNER JOIN tbl_produto_vendedor pv ON pv.id_variante = v.id AND pv.id_tenant_vendedor = %s
@@ -831,27 +1050,48 @@ def variante_apoio_vitrine():
         preco_venda = float(vit[3]) if vit and vit[3] is not None else float(variante.get("preco") or 0)
         ativo_vit = bool(vit[4]) if vit else bool(variante.get("ativo"))
 
+        cur.execute(
+            """
+            SELECT id, sku, nome, descricao, preco, preco_promocional, preco_custo,
+                   gtin, ncm, peso_liquido_kg, peso_bruto_kg, altura_cm, largura_cm,
+                   profundidade_cm, imagem_url, referencia, formato,
+                   valor_dropshipping, valor_drop, COALESCE(valor_drop_manual, FALSE)
+            FROM tbl_produto WHERE id = %s
+            """,
+            (id_produto,),
+        )
+        pai = produto_pai_dict(cur.fetchone())
+        variante["descricao_propria"] = (variante.get("descricao") or "").strip()
+        variante["descricao"] = descricao_efetiva_variante(
+            variante.get("descricao_propria"),
+            herda_pai=variante.get("herda_pai", True),
+            pai_descricao=pai.get("descricao", ""),
+            atributos=variante.get("atributos"),
+        )
+        variante = merge_variante_exibicao(variante, pai)
+        variante["imagens_pai"] = listar_imagens_galeria_pai(cur, id_produto)
+        variante["imagens_selecionadas"] = listar_imagens_variante_selecionadas(cur, vid, id_produto)
+        if img_vit:
+            variante["imagens_selecionadas"] = [
+                {
+                    "id": None,
+                    "caminho": img_vit,
+                    "url": _imagem_url_resposta(img_vit),
+                    "ordem": 0,
+                    "principal": True,
+                }
+            ]
+
         variante["nome_exibicao"] = nome_vit or variante.get("nome_exibicao") or ""
-        variante["descricao"] = desc_vit or variante.get("descricao") or ""
-        variante["imagem_url"] = _imagem_url_resposta(img_vit or variante.get("imagem_caminho") or "")
-        variante["imagem_caminho"] = img_vit or variante.get("imagem_caminho") or ""
+        if desc_vit:
+            variante["descricao"] = desc_vit
+        if img_vit:
+            variante["imagem_url"] = _imagem_url_resposta(img_vit)
+            variante["imagem_caminho"] = img_vit
         variante["preco"] = preco_venda
         variante["ativo"] = ativo_vit
         variante.update(_enriquecer_meta_pausa(cur, id_tenant, vid))
         variante["quantidade"] = variante["estoque"]
-
-        cur.execute(
-            "SELECT id, sku, nome, descricao, formato FROM tbl_produto WHERE id = %s",
-            (id_produto,),
-        )
-        pai_row = cur.fetchone()
-        pai = {
-            "id": pai_row[0],
-            "sku": pai_row[1] or "",
-            "nome": pai_row[2] or "",
-            "descricao": pai_row[3] or "",
-            "formato": pai_row[4] or "E",
-        }
 
         return jsonify(
             success=True,
@@ -923,6 +1163,110 @@ def salvar_variante_vitrine():
 
         conn.commit()
         return jsonify(success=True, message="Variação atualizada na vitrine.", id_variante=vid)
+    finally:
+        conn.close()
+
+
+@vd_meus_produtos_bp.get("/meus-produtos/imagens/lista")
+@login_obrigatorio()
+@exigir_permissao(codigo="produtos.ver")
+def imagens_lista_vitrine():
+    id_tenant = _id_tenant_sessao()
+    id_produto = int(request.args.get("id_produto") or 0)
+    if not id_tenant or not id_produto:
+        return jsonify(success=False, message="Produto inválido."), 400
+
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        ctx = _exigir_produto_vitrine(cur, id_tenant, id_produto)
+        if not ctx:
+            return jsonify(success=False, message="Produto não está na sua vitrine."), 404
+
+        imagens = listar_imagens_galeria_pai(cur, id_produto)
+        if not imagens:
+            cur.execute("SELECT imagem_url FROM tbl_produto WHERE id = %s", (id_produto,))
+            row = cur.fetchone()
+            if row and row[0]:
+                cam = row[0]
+                imagens.append(
+                    {
+                        "id": None,
+                        "caminho": cam,
+                        "url": _imagem_url_resposta(cam),
+                        "ordem": 0,
+                        "principal": True,
+                    }
+                )
+        return jsonify(
+            success=True,
+            imagens=imagens,
+            total=len(imagens),
+            somente_leitura=ctx["integrado"],
+            imagem_modo=obter_imagem_modo(cur, id_produto),
+            regras_atributo=listar_regras_atributo_imagem(cur, id_produto),
+        )
+    finally:
+        conn.close()
+
+
+@vd_meus_produtos_bp.get("/meus-produtos/estoque/depositos")
+@login_obrigatorio()
+@exigir_permissao(codigo="produtos.ver")
+def estoque_depositos_vitrine():
+    id_tenant = _id_tenant_sessao()
+    id_produto = int(request.args.get("id_produto") or 0)
+    id_variante = int(request.args.get("id_variante") or 0)
+    if not id_tenant or (not id_produto and not id_variante):
+        return jsonify(success=False, message="Produto ou variante inválido."), 400
+
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        if id_variante:
+            cur.execute(
+                """
+                SELECT v.id_produto, p.id_tenant
+                FROM tbl_produto_variante v
+                JOIN tbl_produto p ON p.id = v.id_produto
+                JOIN tbl_produto_vendedor pv ON pv.id_variante = v.id AND pv.id_tenant_vendedor = %s
+                WHERE v.id = %s
+                """,
+                (id_tenant, id_variante),
+            )
+            row = cur.fetchone()
+            if not row:
+                return jsonify(success=False, message="Variação não está na sua vitrine."), 404
+            id_produto = int(row[0])
+            id_fornecedor = int(row[1])
+        else:
+            ctx = _exigir_produto_vitrine(cur, id_tenant, id_produto)
+            if not ctx:
+                return jsonify(success=False, message="Produto não está na sua vitrine."), 404
+            id_fornecedor = int(ctx["id_fornecedor"])
+
+        pausado = False
+        if id_variante:
+            pausado, _, _ = avaliar_pausa_variante(cur, id_tenant, id_variante)
+
+        vid, depositos, integrado_bling = listar_estoque_por_deposito(
+            cur,
+            id_fornecedor,
+            id_produto,
+            id_variante=id_variante or None,
+        )
+        if pausado:
+            for d in depositos:
+                d["quantidade"] = 0
+
+        return jsonify(
+            success=True,
+            id_variante=vid,
+            integrado_bling=integrado_bling,
+            depositos=depositos,
+            somente_leitura=True,
+            pausado=pausado,
+        )
     finally:
         conn.close()
 

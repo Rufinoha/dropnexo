@@ -77,6 +77,11 @@
   const BASE = window.CAT_APOIO_BASE || "/catalogos";
   const APOIO_MODO = window.CAT_APOIO_MODO || "fornecedor";
   const isVendedor = APOIO_MODO === "vendedor";
+
+  function apiBase() {
+    if (isVendedor && !integrado) return "/catalogos";
+    return BASE;
+  }
   let integrado = false;
   let camposReadonly = new Set();
   let pausadoVitrine = false;
@@ -135,7 +140,7 @@
     });
     if (!r.isConfirmed || r.value === undefined || r.value === "") return;
     const vd = Math.max(0, parseFloat(r.value) || 0);
-    const resp = await fetch(`${BASE}/valor-drop/salvar`, {
+    const resp = await fetch(`${apiBase()}/valor-drop/salvar`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
@@ -163,30 +168,35 @@
   }
 
   function syncEstoqueUi() {
-    if (isVendedor) {
-      const comVariacao = formatoAtual() === "E";
+    const comVariacao = formatoAtual() === "E";
+    const semProduto = !idProduto;
+    if (isVendedor && integrado) {
       if (el.avisoEstoqueVariacao) {
         el.avisoEstoqueVariacao.hidden = !comVariacao;
         if (comVariacao) {
           el.avisoEstoqueVariacao.textContent =
-            "Produto com variações: abra cada variação (ícone editar) para ver o estoque do fornecedor.";
+            "Produto com variações: abra cada variação (ícone editar) para ver o estoque do fornecedor por depósito.";
         }
       }
       if (el.avisoEstoqueCadastro) el.avisoEstoqueCadastro.hidden = true;
-      if (el.painelEstoqueDepositos) el.painelEstoqueDepositos.hidden = true;
       if (el.avisoEstoqueDeposito) {
-        el.avisoEstoqueDeposito.hidden = comVariacao;
-        if (!comVariacao) {
-          const qtd = Number(el.quantidade?.value || 0);
-          el.avisoEstoqueDeposito.innerHTML = pausadoVitrine
-            ? `<strong class="Cat_AvisoPausa">Produto pausado:</strong> ${escHtml(pausadoMsg || "Indisponível na vitrine.")}`
-            : `Estoque do fornecedor (somente leitura): <strong>${qtd}</strong> un.`;
+        el.avisoEstoqueDeposito.hidden = comVariacao || semProduto;
+        if (!comVariacao && !semProduto && pausadoVitrine) {
+          el.avisoEstoqueDeposito.innerHTML = `<strong class="Cat_AvisoPausa">Produto pausado:</strong> ${escHtml(pausadoMsg || "Indisponível na vitrine.")}`;
         }
       }
+      if (el.painelEstoqueDepositos) el.painelEstoqueDepositos.hidden = semProduto || comVariacao;
+      if (!comVariacao && idProduto) carregarEstoqueDepositos().catch(() => {});
       return;
     }
-    const comVariacao = formatoAtual() === "E";
-    const semProduto = !idProduto;
+    if (isVendedor && !integrado) {
+      if (el.avisoEstoqueVariacao) el.avisoEstoqueVariacao.hidden = !comVariacao;
+      if (el.avisoEstoqueCadastro) el.avisoEstoqueCadastro.hidden = !semProduto || comVariacao;
+      if (el.painelEstoqueDepositos) el.painelEstoqueDepositos.hidden = semProduto || comVariacao;
+      if (el.avisoEstoqueDeposito) el.avisoEstoqueDeposito.hidden = comVariacao || semProduto;
+      if (!comVariacao && idProduto) carregarEstoqueDepositos().catch(() => {});
+      return;
+    }
     if (el.avisoEstoqueVariacao) el.avisoEstoqueVariacao.hidden = !comVariacao;
     if (el.avisoEstoqueCadastro) el.avisoEstoqueCadastro.hidden = !semProduto || comVariacao;
     if (el.painelEstoqueDepositos) el.painelEstoqueDepositos.hidden = semProduto || comVariacao;
@@ -242,11 +252,16 @@
 
   async function carregarEstoqueDepositos() {
     if (!idProduto || !el.tblEstoqueDepositos) return;
-    const r = await fetch(`${BASE}/estoque/depositos?id_produto=${idProduto}`, { credentials: "include" });
+    const params = new URLSearchParams({ id_produto: String(idProduto) });
+    const r = await fetch(`${apiBase()}/estoque/depositos?${params}`, { credentials: "include" });
     const j = await r.json();
     if (!r.ok || !j.success) throw new Error(j.message || "Erro ao carregar estoque.");
     integradoBling = !!j.integrado_bling;
     estoqueDepositos = j.depositos || [];
+    if (isVendedor && j.pausado && el.avisoEstoqueDeposito) {
+      el.avisoEstoqueDeposito.hidden = false;
+      el.avisoEstoqueDeposito.innerHTML = `<strong class="Cat_AvisoPausa">Produto pausado:</strong> estoque exibido como zero.`;
+    }
     renderEstoqueCards();
   }
 
@@ -298,7 +313,7 @@
     });
     if (!r.isConfirmed || r.value === undefined || r.value === "") return;
     const qtd = Math.max(0, parseInt(r.value, 10) || 0);
-    const resp = await fetch(`${BASE}/estoque/depositos/salvar`, {
+    const resp = await fetch(`${apiBase()}/estoque/depositos/salvar`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
@@ -322,6 +337,7 @@
   el.tblEstoqueDepositos?.addEventListener("dblclick", (ev) => {
     const card = ev.target.closest(".Cat_EstoqueDepCard");
     if (!card || !idProduto) return;
+    if (isVendedor && integrado) return;
     const idDep = parseInt(card.dataset.dep || "0", 10);
     if (!idDep) return;
     const dep = estoqueDepositos.find((d) => d.id_deposito === idDep);
@@ -330,25 +346,18 @@
 
   function syncFormatoUi() {
     const comVariacao = formatoAtual() === "E";
-    if (isVendedor) {
-      if (el.tabVariacoes) el.tabVariacoes.hidden = !comVariacao;
-      if (el.tabEstoque) el.tabEstoque.hidden = comVariacao;
-      if (el.formato) el.formato.disabled = integrado;
-      document.querySelectorAll('.Cat_Tab[data-tab="fornecedor"], .Cat_Tab[data-tab="tributacao"]').forEach((t) => {
-        t.hidden = true;
-      });
-      if (el.btnNovaVariante) el.btnNovaVariante.hidden = true;
-      if (el.btnAdicionarVariacao) el.btnAdicionarVariacao.hidden = true;
-      if (el.publicado) {
-        const pubLbl = el.publicado.closest("label");
-        if (pubLbl) pubLbl.hidden = true;
-      }
-      syncEstoqueUi();
-      if (comVariacao && idProduto) carregarVariantes().catch(() => {});
-      return;
-    }
     if (el.tabVariacoes) el.tabVariacoes.hidden = !comVariacao;
     if (el.tabEstoque) el.tabEstoque.hidden = comVariacao;
+    if (isVendedor) {
+      if (el.formato) el.formato.disabled = integrado;
+      if (el.btnNovaVariante) el.btnNovaVariante.hidden = integrado;
+      if (el.btnAdicionarVariacao) el.btnAdicionarVariacao.hidden = integrado;
+      if (el.publicado) {
+        const pubLbl = el.publicado.closest("label");
+        if (pubLbl) pubLbl.hidden = integrado;
+      }
+      syncModoImagemIntegrado();
+    }
     if (el.avisoEstoqueVariacao) el.avisoEstoqueVariacao.hidden = !comVariacao;
     syncEstoqueUi();
     if (el.painel_variantes) el.painel_variantes.style.display = comVariacao && idProduto ? "block" : "none";
@@ -363,8 +372,17 @@
     }
     if (comVariacao && idProduto) {
       carregarVariantes().catch(() => {});
-      carregarPresets().catch(() => {});
+      if (!isVendedor) carregarPresets().catch(() => {});
     }
+  }
+
+  function syncModoImagemIntegrado() {
+    if (!isVendedor) return;
+    const bloqueado = integrado;
+    if (el.btnImgLink) el.btnImgLink.disabled = bloqueado || !idProduto;
+    if (el.btnImgUpload) el.btnImgUpload.disabled = bloqueado || !idProduto;
+    if (el.img_link_url) el.img_link_url.readOnly = bloqueado;
+    if (el.arquivo_imagem) el.arquivo_imagem.disabled = bloqueado;
   }
 
   function indexarPresets(presets) {
@@ -442,7 +460,7 @@
   }
 
   async function carregarPresets() {
-    const r = await fetch(`${BASE}/variantes/presets`);
+    const r = await fetch(`${apiBase()}/variantes/presets`);
     const j = await r.json();
     if (!r.ok || !j.success) return;
     presetsCache = j.presets || [];
@@ -615,7 +633,7 @@
     renderGaleria();
     const ids = galeriaImagens.map((i) => i.id).filter(Boolean);
     if (!ids.length) return;
-    const r = await fetch(`${BASE}/imagens/ordenar`, {
+    const r = await fetch(`${apiBase()}/imagens/ordenar`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id_produto: idProduto, ids }),
@@ -632,7 +650,7 @@
       renderGaleria();
       return;
     }
-    const r = await fetch(`${BASE}/imagens/lista?id_produto=${idProduto}`);
+    const r = await fetch(`${apiBase()}/imagens/lista?id_produto=${idProduto}`);
     const j = await r.json();
     if (!r.ok || !j.success) return;
     galeriaImagens = j.imagens || [];
@@ -660,7 +678,7 @@
     if (!idProduto) throw new Error("Salve o produto antes de incluir imagens.");
     const url = (el.img_link_url?.value || "").trim();
     if (!url) throw new Error("Informe a URL da imagem.");
-    const r = await fetch(`${BASE}/imagens/link`, {
+    const r = await fetch(`${apiBase()}/imagens/link`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id_produto: idProduto, url }),
@@ -678,7 +696,7 @@
     const fd = new FormData();
     fd.append("id_produto", String(idProduto));
     fd.append("arquivo", f);
-    const r = await fetch(`${BASE}/imagens/upload`, { method: "POST", body: fd });
+    const r = await fetch(`${apiBase()}/imagens/upload`, { method: "POST", body: fd });
     const j = await r.json();
     if (!r.ok || !j.success) throw new Error(j.message || "Erro ao enviar.");
     if (el.arquivo_imagem) el.arquivo_imagem.value = "";
@@ -690,7 +708,7 @@
     const payload = { id_produto: idProduto };
     if (idImg) payload.id_imagem = idImg;
     else payload.limpar_principal = true;
-    const r = await fetch(`${BASE}/imagens/remover`, {
+    const r = await fetch(`${apiBase()}/imagens/remover`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -701,7 +719,7 @@
   }
 
   async function carregarCombos() {
-    const r = await fetch(`${BASE}/combos`);
+    const r = await fetch(isVendedor ? `${BASE}/combos` : `${apiBase()}/combos`);
     const j = await r.json();
     if (!r.ok || !j.success) throw new Error(j.message || "Erro nos combos.");
     if (el.lista_unidades) {
@@ -748,7 +766,7 @@
 
   async function carregarVariantes() {
     if (!idProduto || !el.lista_variantes) return;
-    const r = await fetch(`${BASE}/variantes/lista?id_produto=${idProduto}`);
+    const r = await fetch(`${apiBase()}/variantes/lista?id_produto=${idProduto}`);
     const j = await r.json();
     if (!r.ok || !j.success) return;
     atributosProduto = j.atributos || [];
@@ -768,7 +786,7 @@
         <td>${v.nome_exibicao || ""}</td>
         <td>${rotuloAttr(v.atributos) || v.nome_exibicao || "—"}</td>
         <td>${Number(v.preco || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</td>
-        <td>${v.pausado ? `<span class="Cat_BadgePausado" title="${escHtml(v.pausado_msg || "")}">Pausado</span> ` : ""}${v.estoque ?? 0}</td>
+        <td>${v.pausado ? `<span class="Cat_BadgePausado">Pausado</span> ` : ""}${v.estoque ?? 0}</td>
         <td>${v.herda_pai !== false ? "Sim" : "Não"}</td>
         <td class="Cl_TableActions">
           <button type="button" class="Cl_BtnAcao btnEditVar" data-id="${v.id}">${u.gerarIconeTech("editar")}</button>
@@ -781,7 +799,7 @@
 
   function abrirVariante(idVar) {
     window.GlobalUtils?.abrirJanelaApoioModal({
-      rota: `${BASE}/variante/editar?id_variante=${idVar}&id_produto=${idProduto}`,
+      rota: `${apiBase()}/variante/editar?id_variante=${idVar}&id_produto=${idProduto}`,
       titulo: "Detalhes da variação",
       largura: 920,
       altura: 640,
@@ -808,7 +826,7 @@
 
   async function aplicarPresetById(idPreset) {
     if (!(await confirmarRegenerarVariacoes("aplicar este modelo"))) return;
-    const r = await fetch(`${BASE}/variantes/aplicar-preset`, {
+    const r = await fetch(`${apiBase()}/variantes/aplicar-preset`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id_produto: idProduto, id_preset: Number(idPreset) }),
@@ -843,7 +861,7 @@
       .split(/[,;\n]+/)
       .map((s) => s.trim())
       .filter(Boolean);
-    const r = await fetch(`${BASE}/variantes/adicionar`, {
+    const r = await fetch(`${apiBase()}/variantes/adicionar`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id_produto: idProduto, nome, valores }),
@@ -875,7 +893,7 @@
       cancelButtonText: "Cancelar",
     });
     if (!c.isConfirmed) return;
-    const r = await fetch(`${BASE}/atributos/excluir`, {
+    const r = await fetch(`${apiBase()}/atributos/excluir`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id_produto: idProduto, nome }),
@@ -906,7 +924,7 @@
       }),
     });
     if (!form) return;
-    const r = await fetch(`${BASE}/variantes/salvar`, {
+    const r = await fetch(`${apiBase()}/variantes/salvar`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -938,14 +956,26 @@
       itens_por_caixa: el.itens_por_caixa,
       gtin: el.gtin,
       ncm: el.ncm,
+      cest: el.cest,
+      origem_fiscal: el.origem_fiscal,
+      volumes: el.volumes,
+      producao: el.producao,
+      preco_custo: el.preco_custo,
       quantidade: el.quantidade,
     };
     Object.entries(map).forEach(([k, input]) => {
       if (!input) return;
-      const ro = integrado && camposReadonly.has(k);
-      input.readOnly = ro;
-      input.disabled = ro && input.tagName === "SELECT";
+      const bloqueado = integrado && camposReadonly.has(k);
+      if (input.tagName === "SELECT") {
+        input.disabled = bloqueado;
+      } else {
+        input.readOnly = bloqueado;
+      }
+      input.classList.toggle("Cat_CampoHerdado", bloqueado);
     });
+    if (el.frete_gratis) el.frete_gratis.disabled = integrado;
+    if (el.id_categoria) el.id_categoria.disabled = integrado;
+    syncModoImagemIntegrado();
   }
 
   function garantirBtnRestaurar() {
@@ -1056,8 +1086,53 @@
 
   async function salvar() {
     if (isVendedor) {
-      if (!idProduto) {
-        await Swal.fire("Atenção", "Cadastro de produto próprio em breve.", "info");
+      if (!integrado) {
+        const preco = el.preco?.value;
+        const pesoLiq = el.peso_liquido_kg?.value;
+        const body = {
+          id: idProduto,
+          nome: (el.nome.value || "").trim(),
+          sku: (el.sku.value || "").trim(),
+          formato: formatoAtual(),
+          preco,
+          valor_atacado: preco,
+          unidade: (el.unidade.value || "UN").trim().slice(0, 20),
+          referencia: condicaoParaSalvar() || null,
+          condicao: condicaoParaSalvar() || null,
+          preco_custo: el.preco_custo?.value || null,
+          ncm: (el.ncm?.value || "").trim(),
+          cest: (el.cest?.value || "").trim() || null,
+          origem_fiscal: (el.origem_fiscal?.value || "").trim() || null,
+          volumes: el.volumes?.value || null,
+          producao: (el.producao?.value || "").trim() || null,
+          frete_gratis: !!el.frete_gratis?.checked,
+          descricao: window.CatDescricaoEditor
+            ? CatDescricaoEditor.getValue()
+            : (el.descricao?.value || "").trim(),
+          marca: (el.marca?.value || "").trim(),
+          peso_liquido_kg: pesoLiq || null,
+          peso_bruto_kg: el.peso_bruto_kg?.value || null,
+          altura_cm: el.altura_cm?.value || null,
+          largura_cm: el.largura_cm?.value || null,
+          profundidade_cm: el.profundidade_cm?.value || null,
+          gtin: (el.gtin?.value || "").trim(),
+          id_categoria: el.id_categoria?.value || null,
+          quantidade: el.quantidade?.value ?? 0,
+          imagem_url: imagemParaSalvar(),
+          ativo: !!el.ativo.checked,
+          publicado: !!el.publicado?.checked,
+          id_deposito: document.getElementById("id_deposito")?.value || null,
+        };
+        const r = await fetch("/catalogos/salvar", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const j = await r.json();
+        if (!r.ok || !j.success) throw new Error(j.message || "Erro ao salvar.");
+        await Swal.fire("Sucesso", j.message, "success");
+        window.parent.postMessage({ grupo: "atualizarTabela" }, "*");
+        window.GlobalUtils?.fecharJanelaApoio(nivelModal);
         return;
       }
       const body = {
@@ -1070,7 +1145,7 @@
         imagem_url: imagemParaSalvar(),
         ativo: !!el.ativo.checked,
       };
-      const r = await fetch(`${BASE}/salvar`, {
+      const r = await fetch(`${apiBase()}/salvar`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -1119,7 +1194,7 @@
       ativo: !!el.ativo.checked,
       publicado: !!el.publicado.checked,
     };
-    const r = await fetch(`${BASE}/salvar`, {
+    const r = await fetch(`${apiBase()}/salvar`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -1144,7 +1219,7 @@
       confirmButtonText: "Sim, excluir",
     });
     if (!c.isConfirmed) return;
-    const r = await fetch(`${BASE}/delete`, {
+    const r = await fetch(isVendedor ? `${BASE}/delete` : `${apiBase()}/delete`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: idProduto }),

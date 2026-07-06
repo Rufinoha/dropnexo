@@ -35,7 +35,11 @@ from global_utils import agora_utc, url_imagem_produto, usuario_tem_permissao
 
 
 def exigir_catalogo_escrita():
-    if session.get("eh_desenvolvedor") or usuario_tem_permissao("catalogos.editar"):
+    if (
+        session.get("eh_desenvolvedor")
+        or usuario_tem_permissao("catalogos.editar")
+        or usuario_tem_permissao("produtos.editar")
+    ):
         return None
     return jsonify(success=False, message="Sem permissão para editar catálogo."), 403
 
@@ -990,7 +994,7 @@ def _sincronizar_imagem_principal(cur, id_produto: int) -> None:
 @fn_catalogo_bp.get("/catalogos")
 @login_obrigatorio()
 @exigir_modulo("fornecedor")
-@exigir_permissao(codigo="catalogos.ver")
+@exigir_permissao(codigos=["catalogos.ver", "produtos.ver"])
 def pagina():
     id_tenant = session.get("id_tenant")
     bling_conectado = False
@@ -1101,7 +1105,7 @@ def _catalogo_montar_linhas_pai(
 
 @fn_catalogo_bp.get("/catalogos/dados")
 @login_obrigatorio()
-@exigir_permissao(codigo="catalogos.ver")
+@exigir_permissao(codigos=["catalogos.ver", "produtos.ver"])
 def catalogos_dados():
     id_tenant = session.get("id_tenant")
     pagina = max(1, int(request.args.get("pagina", 1)))
@@ -1300,7 +1304,7 @@ def catalogos_dados():
 
 @fn_catalogo_bp.get("/catalogos/combos")
 @login_obrigatorio()
-@exigir_permissao(codigo="catalogos.ver")
+@exigir_permissao(codigos=["catalogos.ver", "produtos.ver"])
 def catalogos_combos():
     from srotas_negocio import flatten_arvore_com_caminho, montar_arvore_categorias
 
@@ -1351,21 +1355,21 @@ def catalogos_combos():
 
 @fn_catalogo_bp.get("/catalogos/incluir")
 @login_obrigatorio()
-@exigir_permissao(codigo="catalogos.editar")
+@exigir_permissao(codigos=["catalogos.editar", "produtos.editar"])
 def catalogos_incluir():
     return render_template("frm_catalogo_apoio.html")
 
 
 @fn_catalogo_bp.get("/catalogos/editar")
 @login_obrigatorio()
-@exigir_permissao(codigo="catalogos.editar")
+@exigir_permissao(codigos=["catalogos.editar", "produtos.editar"])
 def catalogos_editar():
     return render_template("frm_catalogo_apoio.html")
 
 
 @fn_catalogo_bp.post("/catalogos/apoio")
 @login_obrigatorio()
-@exigir_permissao(codigo="catalogos.ver")
+@exigir_permissao(codigos=["catalogos.ver", "produtos.ver"])
 def catalogos_apoio():
     _id = int((request.get_json(silent=True) or {}).get("id") or 0)
     if not _id:
@@ -1450,7 +1454,7 @@ def catalogos_apoio():
 
 @fn_catalogo_bp.get("/catalogos/estoque/depositos")
 @login_obrigatorio()
-@exigir_permissao(codigo="catalogos.ver")
+@exigir_permissao(codigos=["catalogos.ver", "produtos.ver"])
 def catalogos_estoque_depositos():
     id_produto = int(request.args.get("id_produto") or 0)
     id_variante = int(request.args.get("id_variante") or 0)
@@ -1499,7 +1503,7 @@ def catalogos_estoque_depositos():
 
 @fn_catalogo_bp.post("/catalogos/estoque/depositos/salvar")
 @login_obrigatorio()
-@exigir_permissao(codigo="catalogos.editar")
+@exigir_permissao(codigos=["catalogos.editar", "produtos.editar"])
 def catalogos_estoque_deposito_salvar():
     if (resp := _exigir_catalogo_escrita()) is not None:
         return resp
@@ -1546,7 +1550,7 @@ def catalogos_estoque_deposito_salvar():
 
 @fn_catalogo_bp.post("/catalogos/valor-drop/salvar")
 @login_obrigatorio()
-@exigir_permissao(codigo="catalogos.editar")
+@exigir_permissao(codigos=["catalogos.editar", "produtos.editar"])
 def catalogos_valor_drop_salvar():
     if (resp := _exigir_catalogo_escrita()) is not None:
         return resp
@@ -1582,7 +1586,7 @@ def catalogos_valor_drop_salvar():
 
 @fn_catalogo_bp.post("/catalogos/salvar")
 @login_obrigatorio()
-@exigir_permissao(codigo="catalogos.editar")
+@exigir_permissao(codigos=["catalogos.editar", "produtos.editar"])
 def catalogos_salvar():
     if (resp := _exigir_catalogo_escrita()) is not None:
         return resp
@@ -1758,7 +1762,7 @@ def catalogos_salvar():
 
 @fn_catalogo_bp.post("/catalogos/delete")
 @login_obrigatorio()
-@exigir_permissao(codigo="catalogos.editar")
+@exigir_permissao(codigos=["catalogos.editar", "produtos.editar"])
 def catalogos_delete():
     if (resp := _exigir_catalogo_escrita()) is not None:
         return resp
@@ -1790,7 +1794,7 @@ def catalogos_delete():
 
 @fn_catalogo_bp.post("/catalogos/delete/lote")
 @login_obrigatorio()
-@exigir_permissao(codigo="catalogos.editar")
+@exigir_permissao(codigos=["catalogos.editar", "produtos.editar"])
 def catalogos_delete_lote():
     if (resp := _exigir_catalogo_escrita()) is not None:
         return resp
@@ -1839,7 +1843,7 @@ def catalogos_delete_lote():
 
 @fn_catalogo_bp.post("/catalogos/categoria/associar")
 @login_obrigatorio()
-@exigir_permissao(codigo="catalogos.editar")
+@exigir_permissao(codigos=["catalogos.editar", "produtos.editar"])
 def catalogos_categoria_associar():
     if (resp := _exigir_catalogo_escrita()) is not None:
         return resp
@@ -1893,7 +1897,7 @@ def catalogos_categoria_associar():
 
 @fn_catalogo_bp.post("/catalogos/rede/publicar")
 @login_obrigatorio()
-@exigir_permissao(codigo="catalogos.editar")
+@exigir_permissao(codigos=["catalogos.editar", "produtos.editar"])
 def catalogos_rede_publicar():
     if (resp := _exigir_catalogo_escrita()) is not None:
         return resp
@@ -1938,7 +1942,7 @@ def catalogos_rede_publicar():
 
 @fn_catalogo_bp.post("/catalogos/estoque/sincronizar")
 @login_obrigatorio()
-@exigir_permissao(codigo="catalogos.editar")
+@exigir_permissao(codigos=["catalogos.editar", "produtos.editar"])
 def catalogos_estoque_sincronizar():
     if (resp := _exigir_catalogo_escrita()) is not None:
         return resp
@@ -1979,7 +1983,7 @@ def catalogos_estoque_sincronizar():
 
 @fn_catalogo_bp.get("/catalogos/imagens/lista")
 @login_obrigatorio()
-@exigir_permissao(codigo="catalogos.ver")
+@exigir_permissao(codigos=["catalogos.ver", "produtos.ver"])
 def catalogos_imagens_lista():
     id_produto = int(request.args.get("id_produto") or 0)
     if not id_produto:
@@ -2040,7 +2044,7 @@ def catalogos_imagens_lista():
 
 @fn_catalogo_bp.post("/catalogos/imagens/link")
 @login_obrigatorio()
-@exigir_permissao(codigo="catalogos.editar")
+@exigir_permissao(codigos=["catalogos.editar", "produtos.editar"])
 def catalogos_imagens_link():
     if (resp := _exigir_catalogo_escrita()) is not None:
         return resp
@@ -2092,7 +2096,7 @@ def catalogos_imagens_link():
 
 @fn_catalogo_bp.post("/catalogos/imagens/upload")
 @login_obrigatorio()
-@exigir_permissao(codigo="catalogos.editar")
+@exigir_permissao(codigos=["catalogos.editar", "produtos.editar"])
 def catalogos_imagens_upload():
     if (resp := _exigir_catalogo_escrita()) is not None:
         return resp
@@ -2171,7 +2175,7 @@ def catalogos_imagens_upload():
 
 @fn_catalogo_bp.post("/catalogos/imagens/ordenar")
 @login_obrigatorio()
-@exigir_permissao(codigo="catalogos.editar")
+@exigir_permissao(codigos=["catalogos.editar", "produtos.editar"])
 def catalogos_imagens_ordenar():
     if (resp := _exigir_catalogo_escrita()) is not None:
         return resp
@@ -2218,7 +2222,7 @@ def catalogos_imagens_ordenar():
 
 @fn_catalogo_bp.post("/catalogos/imagens/atributo")
 @login_obrigatorio()
-@exigir_permissao(codigo="catalogos.editar")
+@exigir_permissao(codigos=["catalogos.editar", "produtos.editar"])
 def catalogos_imagens_atributo():
     if (resp := _exigir_catalogo_escrita()) is not None:
         return resp
@@ -2261,7 +2265,7 @@ def catalogos_imagens_atributo():
 
 @fn_catalogo_bp.post("/catalogos/imagens/remover")
 @login_obrigatorio()
-@exigir_permissao(codigo="catalogos.editar")
+@exigir_permissao(codigos=["catalogos.editar", "produtos.editar"])
 def catalogos_imagens_remover():
     if (resp := _exigir_catalogo_escrita()) is not None:
         return resp
@@ -2325,7 +2329,7 @@ def catalogos_imagens_remover():
 
 @fn_catalogo_bp.post("/catalogos/imagem/upload")
 @login_obrigatorio()
-@exigir_permissao(codigo="catalogos.editar")
+@exigir_permissao(codigos=["catalogos.editar", "produtos.editar"])
 def catalogos_imagem_upload():
     if (resp := _exigir_catalogo_escrita()) is not None:
         return resp
@@ -2391,7 +2395,7 @@ def catalogos_imagem_upload():
 
 @fn_catalogo_bp.get("/catalogos/importar")
 @login_obrigatorio()
-@exigir_permissao(codigo="catalogos.editar")
+@exigir_permissao(codigos=["catalogos.editar", "produtos.editar"])
 def catalogos_importar_pagina():
     from flask import redirect
 
@@ -2400,7 +2404,7 @@ def catalogos_importar_pagina():
 
 @fn_catalogo_bp.get("/catalogos/importar/modelo")
 @login_obrigatorio()
-@exigir_permissao(codigo="catalogos.editar")
+@exigir_permissao(codigos=["catalogos.editar", "produtos.editar"])
 def catalogos_importar_modelo():
     buf = io.StringIO()
     w = csv.writer(buf, delimiter=";")
@@ -2428,7 +2432,7 @@ def catalogos_importar_modelo():
 
 @fn_catalogo_bp.post("/catalogos/importar")
 @login_obrigatorio()
-@exigir_permissao(codigo="catalogos.editar")
+@exigir_permissao(codigos=["catalogos.editar", "produtos.editar"])
 def catalogos_importar():
     if (resp := _exigir_catalogo_escrita()) is not None:
         return resp
@@ -2606,7 +2610,7 @@ def catalogos_importar():
 
 @fn_catalogo_bp.post("/catalogos/categoria/salvar")
 @login_obrigatorio()
-@exigir_permissao(codigo="catalogos.editar")
+@exigir_permissao(codigos=["catalogos.editar", "produtos.editar"])
 def catalogos_categoria_salvar():
     if (resp := _exigir_catalogo_escrita()) is not None:
         return resp
@@ -2670,7 +2674,7 @@ def _exigir_catalogo_escrita():
 
 @fn_catalogo_bp.get("/catalogos/categorias/arvore")
 @login_obrigatorio()
-@exigir_permissao(codigo="catalogos.ver")
+@exigir_permissao(codigos=["catalogos.ver", "produtos.ver"])
 def categorias_arvore():
     from srotas_negocio import montar_arvore_categorias as categorias_arvore
 
@@ -2685,7 +2689,7 @@ def categorias_arvore():
 
 @fn_catalogo_bp.get("/catalogos/variantes/lista")
 @login_obrigatorio()
-@exigir_permissao(codigo="catalogos.ver")
+@exigir_permissao(codigos=["catalogos.ver", "produtos.ver"])
 def variantes_lista():
     id_produto = int(request.args.get("id_produto") or 0)
     id_tenant = session.get("id_tenant")
@@ -2737,7 +2741,7 @@ def variantes_lista():
 
 @fn_catalogo_bp.post("/catalogos/variantes/valor-drop/salvar")
 @login_obrigatorio()
-@exigir_permissao(codigo="catalogos.editar")
+@exigir_permissao(codigos=["catalogos.editar", "produtos.editar"])
 def catalogos_variante_valor_drop_salvar():
     if (resp := _exigir_catalogo_escrita()) is not None:
         return resp
@@ -2773,7 +2777,7 @@ def catalogos_variante_valor_drop_salvar():
 
 @fn_catalogo_bp.post("/catalogos/variantes/salvar")
 @login_obrigatorio()
-@exigir_permissao(codigo="catalogos.editar")
+@exigir_permissao(codigos=["catalogos.editar", "produtos.editar"])
 def variantes_salvar():
     if (resp := _exigir_catalogo_escrita()) is not None:
         return resp
@@ -3006,7 +3010,7 @@ def variantes_salvar():
 
 @fn_catalogo_bp.post("/catalogos/variantes/delete")
 @login_obrigatorio()
-@exigir_permissao(codigo="catalogos.editar")
+@exigir_permissao(codigos=["catalogos.editar", "produtos.editar"])
 def variantes_delete():
     if (resp := _exigir_catalogo_escrita()) is not None:
         return resp
@@ -3050,7 +3054,7 @@ def variantes_delete():
 
 @fn_catalogo_bp.post("/catalogos/atributos/salvar")
 @login_obrigatorio()
-@exigir_permissao(codigo="catalogos.editar")
+@exigir_permissao(codigos=["catalogos.editar", "produtos.editar"])
 def atributos_salvar():
     if (resp := _exigir_catalogo_escrita()) is not None:
         return resp
@@ -3088,7 +3092,7 @@ def atributos_salvar():
 
 @fn_catalogo_bp.post("/catalogos/atributos/excluir")
 @login_obrigatorio()
-@exigir_permissao(codigo="catalogos.editar")
+@exigir_permissao(codigos=["catalogos.editar", "produtos.editar"])
 def atributos_excluir():
     if (resp := _exigir_catalogo_escrita()) is not None:
         return resp
@@ -3128,7 +3132,7 @@ def atributos_excluir():
 
 @fn_catalogo_bp.post("/catalogos/variantes/adicionar")
 @login_obrigatorio()
-@exigir_permissao(codigo="catalogos.editar")
+@exigir_permissao(codigos=["catalogos.editar", "produtos.editar"])
 def variantes_adicionar():
     """Salva um atributo e gera/atualiza SKUs automaticamente."""
     if (resp := _exigir_catalogo_escrita()) is not None:
@@ -3172,7 +3176,7 @@ def variantes_adicionar():
 
 @fn_catalogo_bp.get("/catalogos/variantes/presets")
 @login_obrigatorio()
-@exigir_permissao(codigo="catalogos.ver")
+@exigir_permissao(codigos=["catalogos.ver", "produtos.ver"])
 def variantes_presets_lista():
     id_tenant = session.get("id_tenant")
     conn = Var_ConectarBanco()
@@ -3206,7 +3210,7 @@ def variantes_presets_lista():
 
 @fn_catalogo_bp.post("/catalogos/variantes/aplicar-preset")
 @login_obrigatorio()
-@exigir_permissao(codigo="catalogos.editar")
+@exigir_permissao(codigos=["catalogos.editar", "produtos.editar"])
 def variantes_aplicar_preset():
     if (resp := _exigir_catalogo_escrita()) is not None:
         return resp
@@ -3259,7 +3263,7 @@ def variantes_aplicar_preset():
 
 @fn_catalogo_bp.post("/catalogos/variantes/gerar")
 @login_obrigatorio()
-@exigir_permissao(codigo="catalogos.editar")
+@exigir_permissao(codigos=["catalogos.editar", "produtos.editar"])
 def variantes_gerar():
     if (resp := _exigir_catalogo_escrita()) is not None:
         return resp
@@ -3291,14 +3295,14 @@ def variantes_gerar():
 
 @fn_catalogo_bp.get("/catalogos/variante/editar")
 @login_obrigatorio()
-@exigir_permissao(codigo="catalogos.editar")
+@exigir_permissao(codigos=["catalogos.editar", "produtos.editar"])
 def variante_editar():
     return render_template("frm_catalogo_variante_apoio.html")
 
 
 @fn_catalogo_bp.post("/catalogos/variante/apoio")
 @login_obrigatorio()
-@exigir_permissao(codigo="catalogos.ver")
+@exigir_permissao(codigos=["catalogos.ver", "produtos.ver"])
 def variante_apoio():
     body = request.get_json(silent=True) or {}
     vid = int(body.get("id") or body.get("id_variante") or 0)

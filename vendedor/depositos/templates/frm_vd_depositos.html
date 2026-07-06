@@ -1,0 +1,100 @@
+{% extends "frm_base.html" %}
+{% block title %}Depósitos — {{ MARCA_NOME }}{% endblock %}
+{% set nav_ativo = 'vd_depositos' %}
+{% block topbar_title %}Depósitos de expedição{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('fn_depositos.static', filename='style/Cfn_depositos.css') }}" />
+{% endblock %}
+{% block content %}
+<div class="Cl_ContainerApoio cl-page-principal FnDep_Page">
+  <div class="FnDep_Header">
+    <div class="cl-page-title FnDep_HeaderText">
+      <h2>Filiais de expedição</h2>
+      <p class="cl-page-desc">Seus depósitos próprios e espelhos dos fornecedores integrados. Espelhos são somente leitura.</p>
+    </div>
+    <button type="button" class="Cl_BtnIncluir FnDep_BtnIncluir" id="vd_dep_btnIncluir">Incluir depósito</button>
+  </div>
+
+  <div id="vd_dep_grid" class="FnDep_Grid" aria-live="polite"></div>
+  <div id="vd_dep_vazio" class="FnDep_Vazio" hidden>
+    <div class="FnDep_VazioIco" aria-hidden="true">📦</div>
+    <p>Nenhum depósito cadastrado.</p>
+    <p class="FnDep_VazioHint">Integre produtos de fornecedores para ver depósitos espelhados, ou cadastre o seu.</p>
+  </div>
+</div>
+
+<div id="vd_dep_modal" class="FnDep_Modal" hidden aria-hidden="true" role="dialog" aria-labelledby="vd_dep_modalTitulo">
+  <div class="FnDep_ModalInner" role="document">
+    <header class="FnDep_ModalHead">
+      <div>
+        <h3 id="vd_dep_modalTitulo">Novo depósito</h3>
+        <p class="FnDep_ModalSub">Informe o CEP e busque o endereço. Depósitos espelhados do fornecedor não podem ser editados.</p>
+      </div>
+      <button type="button" class="FnDep_ModalClose" id="vd_dep_btnFechar" aria-label="Fechar">×</button>
+    </header>
+
+    <form id="vd_dep_form" class="FnDep_Form" autocomplete="off">
+      <input type="hidden" id="vd_dep_id" value="" />
+      <input type="hidden" id="vd_dep_espelho" value="" />
+
+      <section class="FnDep_Secao FnDep_Secao--cep">
+        <h4>1. Localização</h4>
+        <div class="FnDep_CepRow">
+          <div class="FnDep_Field FnDep_Field--cep">
+            <label for="vd_dep_cep">CEP</label>
+            <input type="text" id="vd_dep_cep" inputmode="numeric" placeholder="00000-000" maxlength="9" />
+          </div>
+          <button type="button" class="Cl_botaoFiltro" id="vd_dep_btnCep">Buscar CEP</button>
+        </div>
+      </section>
+
+      <section class="FnDep_Secao FnDep_Secao--endereco" id="vd_dep_secEndereco" hidden>
+        <h4>2. Endereço</h4>
+        <div class="FnDep_Field">
+          <label for="vd_dep_nome">Nome do depósito</label>
+          <input type="text" id="vd_dep_nome" placeholder="Filial São Paulo" maxlength="120" />
+        </div>
+        <div class="FnDep_FieldGrid">
+          <div class="FnDep_Field FnDep_Field--full">
+            <label for="vd_dep_logradouro">Logradouro</label>
+            <input type="text" id="vd_dep_logradouro" />
+          </div>
+          <div class="FnDep_Field">
+            <label for="vd_dep_numero">Número</label>
+            <input type="text" id="vd_dep_numero" placeholder="S/N" />
+          </div>
+          <div class="FnDep_Field">
+            <label for="vd_dep_complemento">Complemento</label>
+            <input type="text" id="vd_dep_complemento" />
+          </div>
+          <div class="FnDep_Field">
+            <label for="vd_dep_bairro">Bairro</label>
+            <input type="text" id="vd_dep_bairro" />
+          </div>
+          <div class="FnDep_Field">
+            <label for="vd_dep_cidade">Cidade</label>
+            <input type="text" id="vd_dep_cidade" />
+          </div>
+          <div class="FnDep_Field FnDep_Field--uf">
+            <label for="vd_dep_uf">UF</label>
+            <input type="text" id="vd_dep_uf" maxlength="2" />
+          </div>
+        </div>
+        <label class="FnDep_Check">
+          <input type="checkbox" id="vd_dep_principal" />
+          <span>Depósito principal (padrão para novos produtos)</span>
+        </label>
+      </section>
+
+      <div class="Cl_BotoesApoio FnDep_ModalFoot" id="vd_dep_secFoot" hidden>
+        <button type="submit" class="Cl_BtnSalvar" id="vd_dep_btnSalvar">Salvar depósito</button>
+        <button type="button" class="Cl_BtnCancelar" id="vd_dep_btnCancelar">Cancelar</button>
+        <button type="button" class="Cl_BtnExcluir" id="vd_dep_btnExcluir" hidden>Excluir</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+{% block page_js %}
+<script src="{{ url_for('vd_depositos.static', filename='script/Svd_depositos.js') }}"></script>
+{% endblock %}

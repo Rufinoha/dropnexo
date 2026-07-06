@@ -11,6 +11,7 @@
     filtroBusca: document.getElementById("ob_filtroBusca"),
     filtroCategoria: document.getElementById("ob_filtroCategoria"),
     filtroTipo: document.getElementById("ob_filtroTipo"),
+    filtroOrigem: document.getElementById("ob_filtroOrigem"),
     filtroAtivos: document.getElementById("ob_filtroAtivos"),
     filtroResumo: document.getElementById("ob_filtroResumo"),
     btnFiltrar: document.getElementById("ob_btnFiltrar"),
@@ -112,6 +113,14 @@
     return `<span class="Cat_BadgePausado" title="${tip}">Pausado</span>`;
   }
 
+  function badgeOrigem(l) {
+    if (l.formato === "K") return "";
+    const o = l.origem || "";
+    if (o === "integrado") return '<span class="Cat_BadgeIntegrado" title="Produto da rede">Rede</span>';
+    if (o === "proprio") return '<span class="Cat_BadgeProprio" title="Cadastro próprio">Próprio</span>';
+    return "";
+  }
+
   function renderNomePai(l) {
     let badge;
     if (l.formato === "K") {
@@ -121,7 +130,7 @@
     } else {
       badge = '<span class="Cat_BadgeSimples">Simples</span>';
     }
-    return `<div class="Cat_PaiCell"><strong class="Cat_PaiNome">${escapeHtml(l.nome)}</strong>${badge}${badgeInativo(l.ativo)}${badgePausado(l)}</div>`;
+    return `<div class="Cat_PaiCell"><strong class="Cat_PaiNome">${escapeHtml(l.nome)}</strong>${badge}${badgeOrigem(l)}${badgeInativo(l.ativo)}${badgePausado(l)}</div>`;
   }
 
   function renderNomeVar(l) {
@@ -252,6 +261,7 @@
       busca: (el.filtroBusca?.value || "").trim(),
       id_categoria: el.filtroCategoria?.value || "",
       tipo: el.filtroTipo?.value || "",
+      origem: el.filtroOrigem?.value || "",
       ativos: el.filtroAtivos?.checked ? "sim" : "nao",
     });
     return `${BASE}/dados?${p}`;
@@ -483,6 +493,7 @@
     el.filtroBusca.value = "";
     el.filtroCategoria.value = "";
     if (el.filtroTipo) el.filtroTipo.value = "";
+    if (el.filtroOrigem) el.filtroOrigem.value = "";
     if (el.filtroAtivos) el.filtroAtivos.checked = true;
     paginaAtual = 1;
     carregar().catch((e) => Swal.fire("Erro", e.message, "error"));

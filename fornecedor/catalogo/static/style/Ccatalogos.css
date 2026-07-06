@@ -272,6 +272,30 @@
   margin-left: 4px;
 }
 
+.Cat_BadgeIntegrado,
+.Cat_BadgeProprio {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-left: 4px;
+}
+
+.Cat_BadgeIntegrado {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+
+.Cat_BadgeProprio {
+  background: #f0fdf4;
+  color: #15803d;
+  border: 1px solid #bbf7d0;
+}
+
 .Cat_AvisoPausa {
   color: #c2410c;
 }

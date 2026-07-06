@@ -57,6 +57,11 @@
   const BASE = window.CAT_APOIO_BASE || "/catalogos";
   const isVendedor = (window.CAT_APOIO_MODO || "fornecedor") === "vendedor";
   let integrado = false;
+
+  function apiBase() {
+    if (isVendedor && !integrado) return "/catalogos";
+    return BASE;
+  }
   let pausadoVitrine = false;
   let pausadoMsg = "";
   const camposHerdaveis = document.querySelectorAll(
@@ -65,36 +70,38 @@
 
   function syncModoVendedorUi() {
     if (!isVendedor) return;
-    if (el.herda_pai?.closest(".Cat_HerdaPai")) el.herda_pai.closest(".Cat_HerdaPai").hidden = true;
-    if (el.hint_herda) el.hint_herda.hidden = true;
-    document.querySelectorAll('.Cat_Tab[data-tab="precos"], .Cat_Tab[data-tab="logistica"], .Cat_Tab[data-tab="midia"]').forEach((t) => {
-      t.hidden = integrado;
+    if (el.herda_pai) el.herda_pai.disabled = integrado;
+    const bloquear = integrado
+      ? ["sku", "valor_drop", "preco_promocional", "promocao_validade", "peso_liquido_kg", "peso_bruto_kg", "altura_cm", "largura_cm", "profundidade_cm", "gtin", "ncm"]
+      : [];
+    const map = {
+      sku: el.sku,
+      valor_drop: el.valor_drop,
+      preco_promocional: el.preco_promocional,
+      promocao_validade: el.promocao_validade,
+      peso_liquido_kg: el.peso_liquido_kg,
+      peso_bruto_kg: el.peso_bruto_kg,
+      altura_cm: el.altura_cm,
+      largura_cm: el.largura_cm,
+      profundidade_cm: el.profundidade_cm,
+      gtin: el.gtin,
+      ncm: el.ncm,
+    };
+    Object.entries(map).forEach(([k, inp]) => {
+      if (!inp) return;
+      const ro = bloquear.includes(k);
+      inp.readOnly = ro;
+      inp.classList.toggle("Cat_CampoHerdado", ro);
     });
-    if (el.sku) el.sku.readOnly = integrado;
-    if (el.gtin) el.gtin.readOnly = integrado;
-    if (el.ncm) el.ncm.readOnly = integrado;
-    if (el.peso_liquido_kg) el.peso_liquido_kg.readOnly = integrado;
-    if (el.peso_bruto_kg) el.peso_bruto_kg.readOnly = integrado;
-    if (el.altura_cm) el.altura_cm.readOnly = integrado;
-    if (el.largura_cm) el.largura_cm.readOnly = integrado;
-    if (el.profundidade_cm) el.profundidade_cm.readOnly = integrado;
-    if (el.valor_drop) el.valor_drop.readOnly = true;
-    if (el.btnExcluir) el.btnExcluir.hidden = true;
+    if (el.promocao_ate_zerar_estoque) el.promocao_ate_zerar_estoque.disabled = integrado || !!el.herda_pai?.checked;
+    if (el.btnExcluir) el.btnExcluir.hidden = integrado;
     if (el.quantidade) el.quantidade.readOnly = true;
-    const hint = document.getElementById("vdVarEstoqueHint");
-    if (!hint && el.tblEstoqueDepositosVar) {
-      const p = document.createElement("p");
-      p.id = "vdVarEstoqueHint";
-      p.className = "Cat_ImagemHint";
-      el.tblEstoqueDepositosVar.parentElement?.insertBefore(p, el.tblEstoqueDepositosVar);
+    if (integrado && el.hint_herda) {
+      el.hint_herda.textContent = el.herda_pai?.checked
+        ? "Cadastro do fornecedor: esta variação usa preço, peso, GTIN, descrição e imagens do produto pai."
+        : "Cadastro do fornecedor: esta variação tem valores e imagens próprios no catálogo do fornecedor.";
     }
-    const h = document.getElementById("vdVarEstoqueHint");
-    if (h) {
-      const qtd = Number(el.quantidade?.value || 0);
-      h.innerHTML = pausadoVitrine
-        ? `<strong class="Cat_AvisoPausa">Produto pausado:</strong> ${pausadoMsg || "Indisponível na vitrine."}`
-        : `Estoque do fornecedor (somente leitura): <strong>${qtd}</strong> un.`;
-    }
+    syncHerdaUi();
   }
 
   function ativarTab(cod) {
@@ -161,8 +168,9 @@
   function renderEstoqueCards() {
     if (!el.tblEstoqueDepositosVar) return;
     if (!estoqueDepositos.length) {
-      el.tblEstoqueDepositosVar.innerHTML =
-        '<p class="Cat_EstoqueDepEmpty">Nenhum depósito cadastrado. Cadastre em Fornecedor → Depósitos.</p>';
+      el.tblEstoqueDepositosVar.innerHTML = isVendedor
+        ? '<p class="Cat_EstoqueDepEmpty">Nenhum depósito do fornecedor com saldo para esta variação.</p>'
+        : '<p class="Cat_EstoqueDepEmpty">Nenhum depósito cadastrado. Cadastre em Fornecedor → Depósitos.</p>';
       return;
     }
     el.tblEstoqueDepositosVar.innerHTML = estoqueDepositos.map(cardDepositoHtml).join("");
@@ -171,13 +179,14 @@
   async function carregarEstoqueDepositos() {
     if (!idVariante || !el.tblEstoqueDepositosVar) return;
     const r = await fetch(
-      `${BASE}/estoque/depositos?id_produto=${idProduto}&id_variante=${idVariante}`,
+      `${apiBase()}/estoque/depositos?id_produto=${idProduto}&id_variante=${idVariante}`,
       { credentials: "include" }
     );
     const j = await r.json();
     if (!r.ok || !j.success) throw new Error(j.message || "Erro ao carregar estoque.");
     integradoBling = !!j.integrado_bling;
     estoqueDepositos = j.depositos || [];
+    if (isVendedor && j.pausado) pausadoVitrine = true;
     renderEstoqueCards();
     const total = estoqueDepositos.reduce((s, d) => s + (d.quantidade || 0), 0);
     if (el.quantidade) el.quantidade.value = String(total);
@@ -230,7 +239,7 @@
     });
     if (!r.isConfirmed || r.value === undefined || r.value === "") return;
     const qtd = Math.max(0, parseInt(r.value, 10) || 0);
-    const resp = await fetch(`${BASE}/estoque/depositos/salvar`, {
+    const resp = await fetch(`${apiBase()}/estoque/depositos/salvar`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
@@ -263,6 +272,7 @@
   }
 
   el.tblEstoqueDepositosVar?.addEventListener("dblclick", (ev) => {
+    if (isVendedor && integrado) return;
     const card = ev.target.closest(".Cat_EstoqueDepCard");
     if (!card || !idVariante) return;
     const idDep = parseInt(card.dataset.dep || "0", 10);
@@ -491,7 +501,7 @@
     });
     if (!r.isConfirmed || r.value === undefined || r.value === "") return;
     const vd = Math.max(0, parseFloat(r.value) || 0);
-    const resp = await fetch(`${BASE}/variantes/valor-drop/salvar`, {
+    const resp = await fetch(`${apiBase()}/variantes/valor-drop/salvar`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
@@ -572,10 +582,27 @@
   function syncHerdaUi() {
     const h = !!el.herda_pai?.checked;
     camposHerdaveis.forEach((inp) => {
+      const vitrineField = isVendedor && (inp.id === "preco" || inp.id === "valor_drop");
+      if (vitrineField) return;
       inp.disabled = h;
       inp.classList.toggle("Cat_CampoHerdado", h);
     });
-    syncDescricaoUi(h);
+    if (isVendedor) {
+      if (el.nome_exibicao) {
+        el.nome_exibicao.disabled = false;
+        el.nome_exibicao.classList.remove("Cat_CampoHerdado");
+      }
+      if (el.preco) {
+        el.preco.disabled = false;
+        el.preco.classList.remove("Cat_CampoHerdado");
+      }
+      if (el.ativo) el.ativo.disabled = false;
+      window.CatDescricaoEditor?.setReadOnly?.(false);
+      if (el.wrap_descricao) el.wrap_descricao.classList.remove("Cat_CampoHerdado");
+      if (el.hint_descricao_herda) el.hint_descricao_herda.hidden = !h;
+    } else {
+      syncDescricaoUi(h);
+    }
     syncValorDropUi();
     syncPromoUi();
     if (el.hint_herda) {
@@ -583,10 +610,10 @@
         ? "Valor, valor Drop, promoção, peso, GTIN, descrição e imagens seguem o cadastro do pai."
         : "Esta variante usa valores, descrição e imagens próprios.";
     }
-    if (el.painel_imagens_herda) el.painel_imagens_herda.hidden = !h;
-    if (el.painel_imagens_split) el.painel_imagens_split.hidden = h;
-    if (el.promocao_ate_zerar_estoque) el.promocao_ate_zerar_estoque.disabled = h;
-    if (!h) renderSplitImagens();
+    if (el.painel_imagens_herda) el.painel_imagens_herda.hidden = isVendedor ? true : !h;
+    if (el.painel_imagens_split) el.painel_imagens_split.hidden = isVendedor ? false : h;
+    if (el.promocao_ate_zerar_estoque) el.promocao_ate_zerar_estoque.disabled = h || (isVendedor && integrado);
+    if (isVendedor || !h) renderSplitImagens();
   }
 
   function rotuloAttr(atributos) {
@@ -598,7 +625,7 @@
 
   async function carregarGaleriaPai() {
     if (!idProduto) return;
-    const r = await fetch(`${BASE}/imagens/lista?id_produto=${idProduto}`);
+    const r = await fetch(`${apiBase()}/imagens/lista?id_produto=${idProduto}`);
     const j = await r.json();
     if (!r.ok || !j.success) throw new Error(j.message || "Erro ao carregar galeria.");
     galeriaPai = j.imagens || [];
@@ -657,11 +684,10 @@
     });
     const j = await r.json();
     if (!r.ok || !j.success) throw new Error(j.message || "Erro ao carregar.");
-    if (!j.dados?.imagens_pai?.length && !isVendedor) await carregarGaleriaPai();
-    else if (j.dados?.imagens_pai?.length) galeriaPai = j.dados.imagens_pai;
+    if (!j.dados?.imagens_pai?.length) await carregarGaleriaPai().catch(() => {});
+    else galeriaPai = j.dados.imagens_pai;
     preencher(j.dados, j.pai);
-    if (!isVendedor) await carregarEstoqueDepositos().catch(() => {});
-    else syncModoVendedorUi();
+    await carregarEstoqueDepositos().catch(() => {});
     syncPromoUi();
   }
 
@@ -675,13 +701,14 @@
   }
 
   async function salvar() {
-    if (isVendedor) {
+    if (isVendedor && integrado) {
+      const imgSel = imagensVariante[0] || galeriaPai[0];
       const body = {
         id_variante: idVariante,
         nome_exibicao: (el.nome_exibicao.value || "").trim(),
         descricao: getDescricaoValue(),
         preco: el.preco.value,
-        imagem_url: imagensVariante[0]?.caminho || imagensVariante[0]?.url || "",
+        imagem_url: imgSel?.caminho || imgSel?.url || "",
         ativo: !!el.ativo.checked,
       };
       const r = await fetch(`${BASE}/variante/salvar`, {
@@ -722,7 +749,7 @@
       id_imagem_principal: el.herda_pai?.checked ? null : imagensVariante[0]?.id || null,
       atributos: atributosCache,
     };
-    const r = await fetch(`${BASE}/variantes/salvar`, {
+    const r = await fetch(`${apiBase()}/variantes/salvar`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -742,7 +769,7 @@
       confirmButtonText: "Sim, excluir",
     });
     if (!c.isConfirmed) return;
-    const r = await fetch(`${BASE}/variantes/delete`, {
+    const r = await fetch(`${apiBase()}/variantes/delete`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: idVariante }),

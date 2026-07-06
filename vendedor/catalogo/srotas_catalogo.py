@@ -421,6 +421,11 @@ def ativar_produto():
         if not rows:
             return jsonify(success=False, message="Produto indisponível ou fornecedor não aprovado."), 404
 
+        id_fornecedor = int(rows[0][2])
+        from vendedor.meus_produtos.servico_deposito_vendedor import espelhar_depositos_fornecedor
+
+        espelhar_depositos_fornecedor(cur, int(id_vendedor), id_fornecedor, id_produto=id_produto)
+
         ativados = 0
         for row in rows:
             preco_forn = float(row[3] or 0)
@@ -484,6 +489,9 @@ def ativar():
         row = cur.fetchone()
         if not row:
             return jsonify(success=False, message="Produto indisponível ou fornecedor não aprovado."), 404
+        from vendedor.meus_produtos.servico_deposito_vendedor import espelhar_depositos_fornecedor
+
+        espelhar_depositos_fornecedor(cur, int(id_vendedor), int(row[2]), id_produto=int(row[1]))
         preco_forn = float(row[3] or 0)
         precos = _precificar_variante(cur, int(row[2]), row[4], preco_forn)
         preco_venda = precos["preco_sugerido"]
