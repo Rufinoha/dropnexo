@@ -3,7 +3,7 @@
 {% set nav_ativo = 'vd_pedidos' %}
 {% block topbar_title %}Pedidos{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('vd_pedidos.static', filename='style/Cvd_pedidos.css') }}?v=2" />
+<link rel="stylesheet" href="{{ url_for('vd_pedidos.static', filename='style/Cvd_pedidos.css') }}?v=3" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal Pd_Page">
@@ -49,51 +49,167 @@
 </div>
 
 <div id="pd_modal" class="Pd_Modal" hidden aria-hidden="true">
-  <div class="Pd_ModalInner" role="dialog" aria-labelledby="pd_modalTitulo">
-    <header class="Pd_ModalHead">
-      <h3 id="pd_modalTitulo">Novo pedido</h3>
+  <div class="Pd_ModalInner Pd_ModalInner--wizard" role="dialog" aria-labelledby="pd_modalTitulo">
+    <header class="Pd_WizHead">
+      <div class="Pd_WizHeadMain">
+        <h3 id="pd_modalTitulo">Novo pedido</h3>
+        <span class="Pd_WizHeadSub">Pedido manual B2B</span>
+      </div>
       <button type="button" class="Pd_ModalClose" id="pd_btnFechar" aria-label="Fechar">×</button>
     </header>
 
-    <div class="Pd_ModalBody">
-      <section class="Pd_Secao">
-        <h4>Cliente e entrega</h4>
-        <div class="Pd_Grid">
-          <div class="filter-group"><label for="pd_cliNome">Nome *</label><input id="pd_cliNome" type="text" /></div>
-          <div class="filter-group"><label for="pd_cliDoc">CPF/CNPJ</label><input id="pd_cliDoc" type="text" /></div>
-          <div class="filter-group"><label for="pd_cliEmail">E-mail</label><input id="pd_cliEmail" type="email" /></div>
-          <div class="filter-group"><label for="pd_cliTel">Telefone</label><input id="pd_cliTel" type="text" /></div>
-          <div class="filter-group"><label for="pd_cep">CEP</label><input id="pd_cep" type="text" maxlength="9" /></div>
-          <div class="filter-group Pd_Grid--full"><label for="pd_logradouro">Logradouro</label><input id="pd_logradouro" type="text" /></div>
-          <div class="filter-group"><label for="pd_numero">Número</label><input id="pd_numero" type="text" /></div>
-          <div class="filter-group"><label for="pd_compl">Complemento</label><input id="pd_compl" type="text" /></div>
-          <div class="filter-group"><label for="pd_bairro">Bairro</label><input id="pd_bairro" type="text" /></div>
-          <div class="filter-group"><label for="pd_cidade">Cidade</label><input id="pd_cidade" type="text" /></div>
-          <div class="filter-group"><label for="pd_uf">UF</label><input id="pd_uf" type="text" maxlength="2" /></div>
-        </div>
-      </section>
+    <div class="Pd_WizLayout">
+      <aside class="Pd_WizNav" aria-label="Etapas do pedido">
+        <nav class="Pd_WizNavList">
+          <button type="button" class="Pd_WizNavItem is-active" data-painel="produto">
+            <span class="Pd_WizNavIco"><i data-lucide="package"></i></span>
+            <span class="Pd_WizNavTxt">
+              <strong>Produto</strong>
+              <small id="pd_navProduto">Nenhum item</small>
+            </span>
+          </button>
+          <button type="button" class="Pd_WizNavItem" data-painel="cliente">
+            <span class="Pd_WizNavIco"><i data-lucide="user"></i></span>
+            <span class="Pd_WizNavTxt">
+              <strong>Cliente</strong>
+              <small id="pd_navCliente">Dados do comprador</small>
+            </span>
+          </button>
+          <button type="button" class="Pd_WizNavItem" data-painel="endereco">
+            <span class="Pd_WizNavIco"><i data-lucide="map-pin"></i></span>
+            <span class="Pd_WizNavTxt">
+              <strong>Endereço de entrega</strong>
+              <small id="pd_navEndereco">Destino da mercadoria</small>
+            </span>
+          </button>
+          <button type="button" class="Pd_WizNavItem" data-painel="frete">
+            <span class="Pd_WizNavIco"><i data-lucide="truck"></i></span>
+            <span class="Pd_WizNavTxt">
+              <strong>Frete</strong>
+              <small>Em breve</small>
+            </span>
+          </button>
+          <button type="button" class="Pd_WizNavItem" data-painel="valores">
+            <span class="Pd_WizNavIco"><i data-lucide="wallet"></i></span>
+            <span class="Pd_WizNavTxt">
+              <strong>Valores</strong>
+              <small id="pd_navValores">Resumo e pagamento</small>
+            </span>
+          </button>
+        </nav>
+      </aside>
 
-      <section class="Pd_Secao">
-        <h4>Produtos</h4>
-        <div class="Pd_BuscaRow">
-          <input type="search" id="pd_buscaProd" placeholder="Buscar em Meus produtos…" class="Pd_BuscaInput" />
-          <button type="button" class="Cl_botaoFiltro" id="pd_btnBuscaProd">Buscar</button>
-        </div>
-        <div id="pd_resultados" class="Pd_Resultados" hidden></div>
-        <table class="Pd_Table Pd_Table--itens">
-          <thead>
-            <tr><th>Produto</th><th>SKU</th><th>Drop</th><th>Qtd</th><th></th></tr>
-          </thead>
-          <tbody id="pd_itens"></tbody>
-        </table>
-        <p id="pd_itensVazio" class="Pd_Hint">Nenhum item adicionado.</p>
-      </section>
+      <div class="Pd_WizMain">
+        <section class="Pd_WizPane is-active" data-painel="produto">
+          <header class="Pd_WizPaneHead">
+            <span class="Pd_WizPaneIco"><i data-lucide="package"></i></span>
+            <div>
+              <h4>Produto</h4>
+              <p>Itens comprados e valores parciais do pedido.</p>
+            </div>
+          </header>
+          <div class="Pd_WizPaneBody">
+            <div class="Pd_BuscaRow">
+              <input type="search" id="pd_buscaProd" placeholder="Buscar em Meus produtos…" class="Pd_BuscaInput" />
+              <button type="button" class="Cl_botaoFiltro" id="pd_btnBuscaProd">Buscar</button>
+            </div>
+            <div id="pd_resultados" class="Pd_Resultados" hidden></div>
+            <table class="Pd_Table Pd_Table--itens">
+              <thead>
+                <tr><th>Produto</th><th>SKU</th><th>Drop</th><th>Qtd</th><th></th></tr>
+              </thead>
+              <tbody id="pd_itens"></tbody>
+            </table>
+            <p id="pd_itensVazio" class="Pd_Hint">Nenhum item adicionado.</p>
+            <div class="Pd_MiniResumo">
+              <span>Subtotal produtos</span>
+              <strong id="pd_subtotalMini">R$ 0,00</strong>
+            </div>
+          </div>
+        </section>
 
-      <section class="Pd_Resumo" id="pd_resumo">
-        <div><span>Subtotal produtos</span><strong id="pd_subtotal">R$ 0,00</strong></div>
-        <div id="pd_linhaTaxa" hidden><span>Taxa do fornecedor</span><strong id="pd_taxa">R$ 0,00</strong></div>
-        <div class="Pd_ResumoTotal"><span>Total a pagar</span><strong id="pd_total">R$ 0,00</strong></div>
-      </section>
+        <section class="Pd_WizPane" data-painel="cliente" hidden>
+          <header class="Pd_WizPaneHead">
+            <span class="Pd_WizPaneIco"><i data-lucide="user"></i></span>
+            <div>
+              <h4>Cliente</h4>
+              <p>Quem receberá o pedido (comprador final).</p>
+            </div>
+          </header>
+          <div class="Pd_WizPaneBody">
+            <div class="Pd_Grid">
+              <div class="filter-group"><label for="pd_cliNome">Nome *</label><input id="pd_cliNome" type="text" placeholder="Nome completo" /></div>
+              <div class="filter-group"><label for="pd_cliDoc">CPF/CNPJ</label><input id="pd_cliDoc" type="text" /></div>
+              <div class="filter-group"><label for="pd_cliEmail">E-mail</label><input id="pd_cliEmail" type="email" /></div>
+              <div class="filter-group"><label for="pd_cliTel">Telefone</label><input id="pd_cliTel" type="text" /></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="Pd_WizPane" data-painel="endereco" hidden>
+          <header class="Pd_WizPaneHead">
+            <span class="Pd_WizPaneIco"><i data-lucide="map-pin"></i></span>
+            <div>
+              <h4>Endereço de entrega</h4>
+              <p>Local onde o fornecedor enviará a mercadoria.</p>
+            </div>
+          </header>
+          <div class="Pd_WizPaneBody">
+            <div class="Pd_Grid">
+              <div class="filter-group"><label for="pd_cep">CEP</label><input id="pd_cep" type="text" maxlength="9" /></div>
+              <div class="filter-group Pd_Grid--full"><label for="pd_logradouro">Logradouro</label><input id="pd_logradouro" type="text" /></div>
+              <div class="filter-group"><label for="pd_numero">Número</label><input id="pd_numero" type="text" /></div>
+              <div class="filter-group"><label for="pd_compl">Complemento</label><input id="pd_compl" type="text" /></div>
+              <div class="filter-group"><label for="pd_bairro">Bairro</label><input id="pd_bairro" type="text" /></div>
+              <div class="filter-group"><label for="pd_cidade">Cidade</label><input id="pd_cidade" type="text" /></div>
+              <div class="filter-group"><label for="pd_uf">UF</label><input id="pd_uf" type="text" maxlength="2" /></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="Pd_WizPane" data-painel="frete" hidden>
+          <header class="Pd_WizPaneHead">
+            <span class="Pd_WizPaneIco"><i data-lucide="truck"></i></span>
+            <div>
+              <h4>Frete</h4>
+              <p>Cotação e escolha do transporte.</p>
+            </div>
+          </header>
+          <div class="Pd_WizPaneBody">
+            <div class="Pd_FretePlaceholder">
+              <i data-lucide="clock"></i>
+              <p><strong>Em breve</strong></p>
+              <p class="Pd_Hint">Integração com Melhor Envio, Correios e outros transportadores para cotar e escolher o frete neste passo.</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="Pd_WizPane" data-painel="valores" hidden>
+          <header class="Pd_WizPaneHead">
+            <span class="Pd_WizPaneIco"><i data-lucide="wallet"></i></span>
+            <div>
+              <h4>Valores</h4>
+              <p>Resumo financeiro e forma de pagamento ao fornecedor.</p>
+            </div>
+          </header>
+          <div class="Pd_WizPaneBody">
+            <div class="Pd_Resumo" id="pd_resumo">
+              <div><span>Subtotal produtos</span><strong id="pd_subtotal">R$ 0,00</strong></div>
+              <div id="pd_linhaTaxa" hidden><span>Taxa do fornecedor</span><strong id="pd_taxa">R$ 0,00</strong></div>
+              <div class="Pd_ResumoFrete"><span>Frete</span><strong id="pd_frete">R$ 0,00</strong></div>
+              <div class="Pd_ResumoTotal"><span>Total a pagar</span><strong id="pd_total">R$ 0,00</strong></div>
+            </div>
+
+            <div class="Pd_PaySection">
+              <h5>Forma de pagamento</h5>
+              <p class="Pd_Hint">Escolha como pagará o fornecedor após confirmar o pedido. A integração ativa do fornecedor é exibida abaixo.</p>
+              <div id="pd_payIntegracoes" class="Pd_PayIntegracoes">
+                <p class="Pd_Hint">Adicione produtos para ver as opções de pagamento.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
     </div>
 
     <footer class="Pd_ModalFoot">
@@ -136,5 +252,6 @@
 </div>
 {% endblock %}
 {% block page_js %}
-<script src="{{ url_for('vd_pedidos.static', filename='script/Svd_pedidos.js') }}?v=2"></script>
+<script src="{{ url_for('vd_pedidos.static', filename='script/Svd_pedidos.js') }}?v=3"></script>
+<script id="pd_cfg" type="application/json">{{ {"mp_icone": url_for("mercadopago.static", filename="imge/icone_mercadopago.png")}|tojson }}</script>
 {% endblock %}

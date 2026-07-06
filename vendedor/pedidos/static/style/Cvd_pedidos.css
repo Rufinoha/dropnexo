@@ -83,6 +83,355 @@
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.18);
 }
 
+.Pd_ModalInner--wizard {
+  width: min(1060px, 100%);
+  max-height: 94vh;
+  overflow: hidden;
+}
+
+.Pd_WizHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.85rem 1.25rem;
+  background: linear-gradient(135deg, #021f81 0%, #0a3a9e 100%);
+  color: #fff;
+  border-radius: 14px 14px 0 0;
+}
+
+.Pd_WizHeadMain h3 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.Pd_WizHeadSub {
+  display: block;
+  font-size: 0.78rem;
+  opacity: 0.85;
+  margin-top: 0.15rem;
+}
+
+.Pd_WizHead .Pd_ModalClose {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.Pd_WizHead .Pd_ModalClose:hover {
+  color: #fff;
+}
+
+.Pd_WizLayout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.Pd_WizNav {
+  width: 240px;
+  flex-shrink: 0;
+  background: #f8fafc;
+  border-right: 1px solid #e2e8f0;
+  overflow-y: auto;
+}
+
+.Pd_WizNavList {
+  display: flex;
+  flex-direction: column;
+  padding: 0.65rem 0;
+}
+
+.Pd_WizNavItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: none;
+  border-left: 3px solid transparent;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  color: #334155;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.Pd_WizNavItem:hover {
+  background: #f1f5f9;
+}
+
+.Pd_WizNavItem.is-active {
+  background: #fff;
+  border-left-color: #f5a623;
+  box-shadow: inset 0 0 0 1px #e8ecf2;
+}
+
+.Pd_WizNavIco {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: #e8f0ff;
+  color: #021f81;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.Pd_WizNavIco svg {
+  width: 16px;
+  height: 16px;
+}
+
+.Pd_WizNavItem.is-active .Pd_WizNavIco {
+  background: #021f81;
+  color: #fff;
+}
+
+.Pd_WizNavTxt {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.Pd_WizNavTxt strong {
+  font-size: 0.88rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.Pd_WizNavTxt small {
+  font-size: 0.72rem;
+  color: #64748b;
+  line-height: 1.3;
+}
+
+.Pd_WizMain {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  background: #fff;
+}
+
+.Pd_WizPane {
+  padding: 1.15rem 1.35rem 1.5rem;
+}
+
+.Pd_WizPaneHead {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin-bottom: 1.15rem;
+  padding-bottom: 0.85rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.Pd_WizPaneIco {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: #e8f0ff;
+  color: #021f81;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.Pd_WizPaneIco svg {
+  width: 20px;
+  height: 20px;
+}
+
+.Pd_WizPaneHead h4 {
+  margin: 0 0 0.2rem;
+  font-size: 1rem;
+}
+
+.Pd_WizPaneHead p {
+  margin: 0;
+  font-size: 0.82rem;
+  color: #64748b;
+}
+
+.Pd_WizPaneBody {
+  max-width: 720px;
+}
+
+.Pd_MiniResumo {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 1rem;
+  padding: 0.65rem 0.85rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 0.88rem;
+}
+
+.Pd_FretePlaceholder {
+  text-align: center;
+  padding: 2.5rem 1.5rem;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 12px;
+  color: #64748b;
+}
+
+.Pd_FretePlaceholder svg {
+  width: 36px;
+  height: 36px;
+  margin-bottom: 0.65rem;
+  color: #94a3b8;
+}
+
+.Pd_FretePlaceholder p {
+  margin: 0.25rem 0;
+}
+
+.Pd_ResumoFrete {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.35rem;
+  font-size: 0.88rem;
+  color: #64748b;
+}
+
+.Pd_PaySection {
+  margin-top: 1.25rem;
+}
+
+.Pd_PaySection h5 {
+  margin: 0 0 0.35rem;
+  font-size: 0.92rem;
+}
+
+.Pd_PayIntegracoes {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.Pd_PayCard {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 0.85rem 1rem;
+  background: #fff;
+}
+
+.Pd_PayCardHead {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin-bottom: 0.65rem;
+}
+
+.Pd_PayCardLogo {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  object-fit: contain;
+  background: #fff;
+  border: 1px solid #e8ecf2;
+  padding: 3px;
+}
+
+.Pd_PayCardNome {
+  font-weight: 700;
+  font-size: 0.88rem;
+}
+
+.Pd_PayCardForn {
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+.Pd_PayCardOff {
+  font-size: 0.82rem;
+  color: #b45309;
+  background: #fffbeb;
+  padding: 0.5rem 0.65rem;
+  border-radius: 8px;
+}
+
+.Pd_PayOpcoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.Pd_PayOpcao {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.75rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  background: #fff;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.Pd_PayOpcao input {
+  accent-color: #021f81;
+}
+
+.Pd_PayOpcao.is-selected {
+  border-color: #021f81;
+  background: #f0f4ff;
+}
+
+.Pd_PayOpcao--pix.is-selected { border-color: #32bcad; background: #ecfdf5; }
+.Pd_PayOpcao--cartao.is-selected { border-color: #009ee3; background: #eff6ff; }
+
+@media (max-width: 768px) {
+  .Pd_ModalInner--wizard {
+    max-height: 96vh;
+  }
+
+  .Pd_WizLayout {
+    flex-direction: column;
+  }
+
+  .Pd_WizNav {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid #e2e8f0;
+  }
+
+  .Pd_WizNavList {
+    flex-direction: row;
+    overflow-x: auto;
+    padding: 0.35rem;
+    gap: 0.25rem;
+  }
+
+  .Pd_WizNavItem {
+    flex-direction: column;
+    align-items: center;
+    min-width: 88px;
+    padding: 0.5rem 0.35rem;
+    border-left: none;
+    border-bottom: 3px solid transparent;
+    text-align: center;
+  }
+
+  .Pd_WizNavItem.is-active {
+    border-left: none;
+    border-bottom-color: #f5a623;
+  }
+
+  .Pd_WizNavTxt small {
+    display: none;
+  }
+}
+
+
 .Pd_ModalInner--det { width: min(720px, 100%); }
 
 .Pd_ModalHead {

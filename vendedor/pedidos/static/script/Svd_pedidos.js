@@ -34,6 +34,24 @@
   let ultimosProdutos = [];
   let pollPixTimer = null;
   let pedidoPagamentoAtual = null;
+  let painelAtivo = "produto";
+  /** @type {Record<number, string>} */
+  let meioPagamentoPorFornecedor = {};
+
+  let cfg = { mp_icone: "/static/api/mercadopago/imge/icone_mercadopago.png" };
+  try {
+    cfg = JSON.parse(document.getElementById("pd_cfg")?.textContent || "{}");
+  } catch {
+    /* defaults */
+  }
+
+  const elPayIntegracoes = document.getElementById("pd_payIntegracoes");
+  const elSubtotalMini = document.getElementById("pd_subtotalMini");
+  const elFrete = document.getElementById("pd_frete");
+  const elNavProduto = document.getElementById("pd_navProduto");
+  const elNavCliente = document.getElementById("pd_navCliente");
+  const elNavEndereco = document.getElementById("pd_navEndereco");
+  const elNavValores = document.getElementById("pd_navValores");
 
   const fmt = (v) =>
     Number(v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -84,6 +102,137 @@
     });
   }
 
+  function irPainel(id) {
+    painelAtivo = id;
+    document.querySelectorAll(".Pd_WizNavItem").forEach((btn) => {
+      btn.classList.toggle("is-active", btn.dataset.painel === id);
+    });
+    document.querySelectorAll(".Pd_WizPane").forEach((pane) => {
+      const on = pane.dataset.painel === id;
+      pane.hidden = !on;
+      pane.classList.toggle("is-active", on);
+    });
+    window.lucide?.createIcons?.();
+    if (id === "valores") renderPayIntegracoes();
+  }
+
+  function atualizarNavResumos() {
+    const qtd = carrinho.length;
+    const sub = carrinho.reduce((s, i) => s + i.valor_drop * i.quantidade, 0);
+    if (elNavProduto) {
+      elNavProduto.textContent = qtd
+        ? `${qtd} item(ns) · ${fmt(sub)}`
+        : "Nenhum item";
+    }
+
+    const nome = document.getElementById("pd_cliNome")?.value?.trim() || "";
+    if (elNavCliente) {
+      elNavCliente.textContent = nome || "Dados do comprador";
+    }
+
+    const cidade = document.getElementById("pd_cidade")?.value?.trim() || "";
+    const uf = document.getElementById("pd_uf")?.value?.trim() || "";
+    if (elNavEndereco) {
+      elNavEndereco.textContent =
+        cidade || uf ? [cidade, uf].filter(Boolean).join(" / ") : "Destino da mercadoria";
+    }
+
+    const fornecedores = [...new Set(carrinho.map((i) => i.id_fornecedor))];
+    let taxa = 0;
+    fornecedores.forEach((f) => {
+      taxa += Number(taxasPorFornecedor[f] || taxasPorFornecedor[String(f)] || 0);
+    });
+    if (elNavValores) {
+      elNavValores.textContent = qtd ? `Total ${fmt(sub + taxa)}` : "Resumo e pagamento";
+    }
+  }
+
+  async function renderPayIntegracoes() {
+    if (!elPayIntegracoes) return;
+    const fornecedores = [...new Set(carrinho.map((i) => i.id_fornecedor))];
+    if (!fornecedores.length) {
+      elPayIntegracoes.innerHTML =
+        '<p class="Pd_Hint">Adicione produtos para ver as opções de pagamento.</p>';
+      return;
+    }
+
+    elPayIntegracoes.innerHTML = '<p class="Pd_Hint">Carregando integrações…</p>';
+    const r = await fetch(
+      `/vendedor/pedidos/meios-pagamento/preview?fornecedores=${fornecedores.join(",")}`,
+      { credentials: "same-origin" }
+    );
+    const j = await r.json();
+    if (!j.success || !j.fornecedores?.length) {
+      elPayIntegracoes.innerHTML =
+        '<p class="Pd_Hint">Não foi possível carregar as formas de pagamento.</p>';
+      return;
+    }
+
+    elPayIntegracoes.innerHTML = j.fornecedores
+      .map((f) => {
+        const icone = f.icone_url || cfg.mp_icone;
+        if (!f.conectado) {
+          return `
+          <div class="Pd_PayCard" data-forn="${f.id_fornecedor}">
+            <div class="Pd_PayCardHead">
+              <img class="Pd_PayCardLogo" src="${esc(icone)}" alt="" />
+              <div>
+                <div class="Pd_PayCardNome">${esc(f.integracao_nome || "Mercado Pago")}</div>
+                <div class="Pd_PayCardForn">${esc(f.fornecedor_nome)}</div>
+              </div>
+            </div>
+            <p class="Pd_PayCardOff">Fornecedor ainda não conectou o Mercado Pago. O pedido poderá ser salvo, mas o pagamento ficará pendente.</p>
+          </div>`;
+        }
+
+        const pref = meioPagamentoPorFornecedor[f.id_fornecedor] || "";
+        const opcoes = [];
+        if (f.pix) {
+          opcoes.push(`
+            <label class="Pd_PayOpcao Pd_PayOpcao--pix${pref === "pix" ? " is-selected" : ""}">
+              <input type="radio" name="pd_meio_${f.id_fornecedor}" value="pix"${pref === "pix" || (!pref && !f.cartao) ? " checked" : ""} />
+              PIX
+            </label>`);
+        }
+        if (f.cartao) {
+          opcoes.push(`
+            <label class="Pd_PayOpcao Pd_PayOpcao--cartao${pref === "cartao" ? " is-selected" : ""}">
+              <input type="radio" name="pd_meio_${f.id_fornecedor}" value="cartao"${pref === "cartao" || (!pref && f.cartao && !f.pix) ? " checked" : ""} />
+              Cartão de crédito
+            </label>`);
+        }
+
+        return `
+        <div class="Pd_PayCard" data-forn="${f.id_fornecedor}">
+          <div class="Pd_PayCardHead">
+            <img class="Pd_PayCardLogo" src="${esc(icone)}" alt="" />
+            <div>
+              <div class="Pd_PayCardNome">${esc(f.integracao_nome || "Mercado Pago")}</div>
+              <div class="Pd_PayCardForn">${esc(f.fornecedor_nome)}</div>
+            </div>
+          </div>
+          <div class="Pd_PayOpcoes">${opcoes.join("") || '<span class="Pd_Hint">Nenhum meio habilitado.</span>'}</div>
+        </div>`;
+      })
+      .join("");
+
+    elPayIntegracoes.querySelectorAll('input[type="radio"]').forEach((inp) => {
+      inp.addEventListener("change", () => {
+        const card = inp.closest(".Pd_PayCard");
+        const idForn = +card?.dataset.forn;
+        if (idForn) meioPagamentoPorFornecedor[idForn] = inp.value;
+        card?.querySelectorAll(".Pd_PayOpcao").forEach((lbl) => {
+          lbl.classList.toggle("is-selected", lbl.querySelector("input")?.checked);
+        });
+      });
+      if (inp.checked) {
+        const card = inp.closest(".Pd_PayCard");
+        const idForn = +card?.dataset.forn;
+        if (idForn) meioPagamentoPorFornecedor[idForn] = inp.value;
+      }
+    });
+  }
+
   function atualizarResumo() {
     const sub = carrinho.reduce((s, i) => s + i.valor_drop * i.quantidade, 0);
     const fornecedores = [...new Set(carrinho.map((i) => i.id_fornecedor))];
@@ -91,11 +240,16 @@
     fornecedores.forEach((f) => {
       taxa += Number(taxasPorFornecedor[f] || taxasPorFornecedor[String(f)] || 0);
     });
+    const frete = 0;
     el.subtotal.textContent = fmt(sub);
+    if (elSubtotalMini) elSubtotalMini.textContent = fmt(sub);
     el.taxa.textContent = fmt(taxa);
-    el.total.textContent = fmt(sub + taxa);
+    el.total.textContent = fmt(sub + taxa + frete);
+    if (elFrete) elFrete.textContent = fmt(frete);
     el.linhaTaxa.hidden = taxa <= 0;
     el.itensVazio.hidden = carrinho.length > 0;
+    atualizarNavResumos();
+    if (painelAtivo === "valores") renderPayIntegracoes();
   }
 
   function renderItens() {
@@ -132,7 +286,7 @@
   function abrirModal() {
     idGrupo = null;
     carrinho = [];
-    taxasPorFornecedor = {};
+    meioPagamentoPorFornecedor = {};
     document.getElementById("pd_modalTitulo").textContent = "Novo pedido";
     ["pd_cliNome", "pd_cliDoc", "pd_cliEmail", "pd_cliTel", "pd_cep", "pd_logradouro",
       "pd_numero", "pd_compl", "pd_bairro", "pd_cidade", "pd_uf"].forEach((id) => {
@@ -143,6 +297,8 @@
     mostrarMsg("");
     el.modal.hidden = false;
     el.resultados.hidden = true;
+    irPainel("produto");
+    window.lucide?.createIcons?.();
   }
 
   function fecharModal() {
@@ -417,6 +573,15 @@
 
   document.getElementById("pd_btnNovo")?.addEventListener("click", abrirModal);
   document.getElementById("pd_btnFechar")?.addEventListener("click", fecharModal);
+
+  document.querySelectorAll(".Pd_WizNavItem").forEach((btn) => {
+    btn.addEventListener("click", () => irPainel(btn.dataset.painel));
+  });
+
+  ["pd_cliNome", "pd_cliDoc", "pd_cliEmail", "pd_cliTel", "pd_cep", "pd_logradouro",
+    "pd_numero", "pd_compl", "pd_bairro", "pd_cidade", "pd_uf"].forEach((id) => {
+    document.getElementById(id)?.addEventListener("input", atualizarNavResumos);
+  });
   document.getElementById("pd_detFechar")?.addEventListener("click", () => {
     el.detModal.hidden = true;
   });

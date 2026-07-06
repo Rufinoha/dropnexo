@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from flask import Blueprint, jsonify, render_template, request, session
+from flask import Blueprint, jsonify, render_template, request, session, url_for
+
+from api.mercadopago.cliente import meios_pagamento_fornecedor
 
 from global_utils import Var_ConectarBanco, exigir_modulo, exigir_permissao, login_obrigatorio
 from servico_pedido import (
@@ -197,6 +199,52 @@ def pedidos_cancelar():
         return jsonify(success=True, message="Pedido cancelado.")
     except ValueError as e:
         return jsonify(success=False, message=str(e)), 400
+    finally:
+        conn.close()
+
+
+@vd_pedidos_bp.get("/vendedor/pedidos/meios-pagamento/preview")
+@login_obrigatorio()
+@exigir_modulo(MODULO_VENDEDOR)
+@exigir_permissao(codigo="vd_pedidos.ver")
+def pedidos_meios_preview():
+    """Meios de pagamento por fornecedor (preview antes de confirmar o pedido)."""
+    id_v = _id_vendedor()
+    if not id_v:
+        return jsonify(success=False, message="Sessão inválida."), 403
+    raw = (request.args.get("fornecedores") or "").strip()
+    ids: list[int] = []
+    for part in raw.split(","):
+        part = part.strip()
+        if part.isdigit():
+            ids.append(int(part))
+    if not ids:
+        return jsonify(success=True, fornecedores=[])
+
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        mp_icone = url_for("mercadopago.static", filename="imge/icone_mercadopago.png")
+        out = []
+        for id_f in ids:
+            cur.execute(
+                "SELECT COALESCE(NULLIF(TRIM(nome_fantasia), ''), nome) FROM tbl_tenant WHERE id = %s",
+                (id_f,),
+            )
+            row = cur.fetchone()
+            nome = (row[0] if row else "") or f"Fornecedor #{id_f}"
+            meios = meios_pagamento_fornecedor(cur, id_f)
+            out.append(
+                {
+                    "id_fornecedor": id_f,
+                    "fornecedor_nome": nome,
+                    "integracao": "mercado-pago",
+                    "integracao_nome": "Mercado Pago",
+                    "icone_url": mp_icone,
+                    **meios,
+                }
+            )
+        return jsonify(success=True, fornecedores=out)
     finally:
         conn.close()
 
