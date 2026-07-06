@@ -5,11 +5,11 @@
   const el = {
     escopo: document.getElementById("escopo"),
     idSegmento: document.getElementById("id_segmento"),
+    wrapSegmento: document.getElementById("wrap_segmento"),
     pctMargem: document.getElementById("pct_margem_lucro"),
     arredondamento: document.getElementById("arredondamento_centavos"),
     margemMin: document.getElementById("margem_minima_alerta"),
     blocoMargem: document.getElementById("prec_bloco_margem"),
-    blocoArred: document.getElementById("prec_bloco_arredondamento"),
     blocoAlertaMin: document.getElementById("prec_bloco_alerta_min"),
     btnSalvar: document.getElementById("btn_salvar"),
     btnAplicar: document.getElementById("btn_aplicar"),
@@ -42,7 +42,6 @@
     const modo = modoSelecionado();
     const margem = modo === MODO_MARGEM;
     el.blocoMargem.hidden = !margem;
-    el.blocoArred.hidden = !margem;
     el.blocoAlertaMin.hidden = margem;
 
     el.resumoItens.forEach((item) => {
@@ -54,6 +53,11 @@
     el.alertaDesc.textContent = margem
       ? "Modo margem sobre Drop: alerta apenas quando o valor Drop estiver zerado ou ausente."
       : "Modo sugestão do fornecedor: alerta quando não houver preço sugerido ou a margem ficar abaixo do mínimo.";
+  }
+
+  function setBotoesCarregando(carregando) {
+    el.btnSalvar.disabled = carregando;
+    el.btnAplicar.disabled = carregando;
   }
 
   let regrasCache = [];
@@ -69,8 +73,15 @@
   }
 
   function aoMudarEscopo() {
-    el.idSegmento.hidden = el.escopo.value !== "segmento";
+    const seg = el.escopo.value === "segmento";
+    if (el.wrapSegmento) el.wrapSegmento.hidden = !seg;
     preencherFormulario(regraAtiva(), defaultsCache);
+  }
+
+  function mostrarMsg(texto, erro) {
+    el.msg.textContent = texto;
+    el.msg.hidden = !texto;
+    el.msg.classList.toggle("is-erro", !!erro);
   }
 
   function preencherFormulario(regra, defaults) {
@@ -134,11 +145,6 @@
     };
   }
 
-  function mostrarMsg(texto) {
-    el.msg.textContent = texto;
-    el.msg.hidden = !texto;
-  }
-
   async function carregar() {
     const r = await fetch("/vendedor/precificacao/dados", { credentials: "same-origin" });
     const j = await r.json();
@@ -168,44 +174,54 @@
 
   el.btnSalvar.addEventListener("click", async () => {
     mostrarMsg("");
-    const r = await fetch("/vendedor/precificacao/salvar", {
-      method: "POST",
-      credentials: "same-origin",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(corpoSalvar()),
-    });
-    const j = await r.json();
-    mostrarMsg(j.message || (j.success ? "Salvo." : "Erro ao salvar."));
-    if (j.alertas) renderAlertas(j.alertas);
+    setBotoesCarregando(true);
+    try {
+      const r = await fetch("/vendedor/precificacao/salvar", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(corpoSalvar()),
+      });
+      const j = await r.json();
+      mostrarMsg(j.message || (j.success ? "Salvo." : "Erro ao salvar."), !j.success);
+      if (j.alertas) renderAlertas(j.alertas);
+    } finally {
+      setBotoesCarregando(false);
+    }
   });
 
   el.btnAplicar.addEventListener("click", async () => {
     mostrarMsg("");
-    const salvar = await fetch("/vendedor/precificacao/salvar", {
-      method: "POST",
-      credentials: "same-origin",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(corpoSalvar()),
-    });
-    const js = await salvar.json();
-    if (!js.success) {
-      mostrarMsg(js.message || "Erro ao salvar regra.");
-      return;
-    }
+    setBotoesCarregando(true);
+    try {
+      const salvar = await fetch("/vendedor/precificacao/salvar", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(corpoSalvar()),
+      });
+      const js = await salvar.json();
+      if (!js.success) {
+        mostrarMsg(js.message || "Erro ao salvar regra.", true);
+        return;
+      }
 
-    const body = corpoSalvar();
-    const r = await fetch("/vendedor/precificacao/aplicar", {
-      method: "POST",
-      credentials: "same-origin",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        escopo: body.escopo,
-        id_segmento: body.id_segmento,
-      }),
-    });
-    const j = await r.json();
-    mostrarMsg(j.message || (j.success ? "Aplicado." : "Erro ao aplicar."));
-    if (j.alertas) renderAlertas(j.alertas);
+      const body = corpoSalvar();
+      const r = await fetch("/vendedor/precificacao/aplicar", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          escopo: body.escopo,
+          id_segmento: body.id_segmento,
+        }),
+      });
+      const j = await r.json();
+      mostrarMsg(j.message || (j.success ? "Aplicado." : "Erro ao aplicar."), !j.success);
+      if (j.alertas) renderAlertas(j.alertas);
+    } finally {
+      setBotoesCarregando(false);
+    }
   });
 
   carregar();

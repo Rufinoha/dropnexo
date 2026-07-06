@@ -1,145 +1,489 @@
-.Prec_Page { max-width: 1100px; margin: 0 auto; padding: 1rem 1.25rem 2rem; }
+/* Vendedor — Precificação v2 */
 
-.Prec_Header { margin-bottom: 1.25rem; }
+.Prec_Page {
+  --prec-primary: var(--marca-primary, #021f81);
+  --prec-accent: #7b2cff;
+  --prec-accent-soft: rgba(123, 44, 255, 0.12);
+  --prec-surface: #ffffff;
+  --prec-muted: #64748b;
+  --prec-border: #e2e8f0;
+  --prec-bg: #f4f7fc;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0.5rem 0 2.5rem;
+}
 
+/* ── Hero ─────────────────────────────────────────────── */
+.Prec_Hero {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 1.35rem;
+  padding: 1.25rem 1.35rem;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #f0f4ff 0%, #faf8ff 48%, #ffffff 100%);
+  border: 1px solid rgba(2, 31, 129, 0.1);
+  box-shadow: 0 8px 32px rgba(2, 31, 129, 0.06);
+}
+
+.Prec_HeroIcon {
+  flex-shrink: 0;
+  width: 52px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  background: linear-gradient(145deg, var(--prec-primary), var(--prec-accent));
+  color: #fff;
+  box-shadow: 0 8px 20px rgba(123, 44, 255, 0.28);
+}
+
+.Prec_HeroIcon svg {
+  width: 26px;
+  height: 26px;
+}
+
+.Prec_HeroText h2 {
+  margin: 0 0 0.35rem;
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.02em;
+}
+
+.Prec_HeroText p {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.5;
+  color: var(--prec-muted);
+  max-width: 42rem;
+}
+
+.Prec_HeroText strong {
+  color: var(--prec-primary);
+  font-weight: 700;
+}
+
+/* ── Layout ───────────────────────────────────────────── */
 .Prec_Layout {
   display: grid;
-  grid-template-columns: minmax(280px, 420px) 1fr;
+  grid-template-columns: minmax(300px, 440px) 1fr;
   gap: 1.25rem;
   align-items: start;
 }
 
-@media (max-width: 900px) {
-  .Prec_Layout { grid-template-columns: 1fr; }
+@media (max-width: 960px) {
+  .Prec_Layout {
+    grid-template-columns: 1fr;
+  }
 }
 
+/* ── Cards ────────────────────────────────────────────── */
 .Prec_Card {
-  background: var(--cl-surface, #fff);
-  border: 1px solid var(--cl-border, #e2e8f0);
-  border-radius: 10px;
-  padding: 1.25rem;
+  background: var(--prec-surface);
+  border: 1px solid var(--prec-border);
+  border-radius: 16px;
+  padding: 1.35rem 1.4rem 0;
+  box-shadow: 0 4px 24px rgba(15, 23, 42, 0.04);
+  overflow: hidden;
 }
 
-.Prec_Card h3 { margin: 0 0 1rem; font-size: 1.05rem; }
+.Prec_CardHead {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin-bottom: 1.15rem;
+}
 
-.Prec_Label { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.35rem; }
+.Prec_CardHead h3 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #0f172a;
+}
 
-.Prec_Input {
-  width: 100%;
-  padding: 0.55rem 0.65rem;
+.Prec_CardHeadIcon {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: #e8f0ff;
+  color: var(--prec-primary);
+}
+
+.Prec_CardHeadIcon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.Prec_CardHeadIcon--alert {
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+.Prec_Hint--head {
+  margin: 0.2rem 0 0;
+}
+
+/* ── Form ─────────────────────────────────────────────── */
+.Prec_Field {
   margin-bottom: 0.85rem;
-  border: 1px solid var(--cl-border, #cbd5e1);
-  border-radius: 6px;
-  font-size: 0.95rem;
+}
+
+.Prec_Field .Prec_Input,
+.Prec_Field input,
+.Prec_Field select {
+  width: 100%;
   box-sizing: border-box;
 }
 
-.Prec_Fieldset {
-  border: 1px solid var(--cl-border, #e2e8f0);
-  border-radius: 8px;
-  padding: 0.75rem 1rem 1rem;
-  margin: 0 0 1rem;
+.Prec_SectionLbl {
+  margin: 0.25rem 0 0.65rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--prec-muted);
 }
-
-.Prec_Fieldset legend { font-weight: 600; font-size: 0.9rem; padding: 0 0.25rem; }
-
-.Prec_Radio {
-  display: flex;
-  gap: 0.6rem;
-  align-items: flex-start;
-  margin-bottom: 0.65rem;
-  font-size: 0.9rem;
-  cursor: pointer;
-}
-
-.Prec_Radio:last-child { margin-bottom: 0; }
-
-.Prec_Radio input { margin-top: 0.2rem; flex-shrink: 0; }
-
-.Prec_Bloco { margin-bottom: 0.5rem; }
 
 .Prec_Hint {
   font-size: 0.8rem;
-  color: var(--cl-muted, #64748b);
-  margin: -0.35rem 0 0.85rem;
-  line-height: 1.4;
+  color: var(--prec-muted);
+  margin: 0.35rem 0 0;
+  line-height: 1.45;
+}
+
+/* ── Modo cards ───────────────────────────────────────── */
+.Prec_ModoGrid {
+  display: grid;
+  gap: 0.65rem;
+  margin-bottom: 1rem;
+}
+
+.Prec_ModoCard {
+  position: relative;
+  cursor: pointer;
+  display: block;
+}
+
+.Prec_ModoCard input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.Prec_ModoCardInner {
+  display: block;
+  padding: 0.9rem 1rem 0.95rem;
+  border-radius: 12px;
+  border: 2px solid var(--prec-border);
+  background: #fafbfc;
+  transition: border-color 0.2s, background 0.2s, box-shadow 0.2s, transform 0.15s;
+}
+
+.Prec_ModoCard:hover .Prec_ModoCardInner {
+  border-color: rgba(123, 44, 255, 0.35);
+  background: #fff;
+}
+
+.Prec_ModoCard input:checked + .Prec_ModoCardInner {
+  border-color: var(--prec-accent);
+  background: linear-gradient(135deg, #faf8ff 0%, #ffffff 100%);
+  box-shadow: 0 0 0 4px var(--prec-accent-soft), 0 8px 24px rgba(123, 44, 255, 0.1);
+}
+
+.Prec_ModoCard input:focus-visible + .Prec_ModoCardInner {
+  outline: 2px solid var(--prec-accent);
+  outline-offset: 2px;
+}
+
+.Prec_ModoTag {
+  display: inline-block;
+  margin-bottom: 0.4rem;
+  padding: 0.12rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: #e8f0ff;
+  color: var(--prec-primary);
+}
+
+.Prec_ModoTag--alt {
+  background: #f3e8ff;
+  color: #6b21a8;
+}
+
+.Prec_ModoCardInner strong {
+  display: block;
+  font-size: 0.95rem;
+  color: #0f172a;
+  margin-bottom: 0.25rem;
+}
+
+.Prec_ModoDesc {
+  display: block;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--prec-muted);
+}
+
+/* ── Blocos condicionais ──────────────────────────────── */
+.Prec_Bloco {
+  margin-bottom: 0.5rem;
+}
+
+.Prec_Bloco--grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+@media (max-width: 520px) {
+  .Prec_Bloco--grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Rodapé / botões globais ──────────────────────────── */
+.Prec_Foot {
+  margin: 1.15rem -1.4rem 0;
+  padding: 1rem 1.4rem 1.25rem;
+  border-top: 1px solid var(--prec-border);
+  background: linear-gradient(180deg, #fafbfc 0%, #f8fafc 100%);
 }
 
 .Prec_Acoes {
   display: flex;
   flex-wrap: wrap;
   gap: 0.65rem;
-  margin-top: 1rem;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.Prec_Acoes .Cl_BtnSalvar,
+.Prec_Acoes .Cl_BtnCancelar {
+  min-width: 9.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  font-weight: 600;
+}
+
+.Prec_BtnAplicar {
+  background: linear-gradient(135deg, var(--prec-primary) 0%, var(--prec-accent) 100%) !important;
+  border-color: transparent !important;
+  box-shadow: 0 6px 20px rgba(123, 44, 255, 0.28);
+}
+
+.Prec_BtnAplicar:hover:not(:disabled) {
+  box-shadow: 0 10px 28px rgba(123, 44, 255, 0.38) !important;
+  transform: translateY(-2px);
+}
+
+.Prec_BtnAplicar:disabled,
+.Prec_Acoes .Cl_BtnCancelar:disabled {
+  opacity: 0.65;
+  cursor: wait;
+  transform: none !important;
+}
+
+.Prec_BtnIcon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
 }
 
 .Prec_Msg {
-  margin-top: 0.75rem;
-  font-size: 0.9rem;
-  color: var(--cl-success, #15803d);
+  margin: 0 0 0.65rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #15803d;
 }
 
+.Prec_Msg.is-erro {
+  color: #b91c1c;
+}
+
+/* ── Alertas — KPIs ───────────────────────────────────── */
 .Prec_Resumo {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
   gap: 0.75rem;
-  margin-bottom: 1rem;
+  margin-bottom: 1.15rem;
+}
+
+@media (max-width: 720px) {
+  .Prec_Resumo {
+    grid-template-columns: 1fr;
+  }
 }
 
 .Prec_ResumoItem {
-  flex: 1 1 120px;
-  background: var(--cl-bg-subtle, #f8fafc);
-  border-radius: 8px;
-  padding: 0.75rem;
+  position: relative;
+  padding: 0.85rem 0.75rem 0.9rem;
+  border-radius: 12px;
   text-align: center;
+  background: #f8fafc;
+  border: 1px solid var(--prec-border);
+  overflow: hidden;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.Prec_ResumoItem::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: currentColor;
+  opacity: 0.5;
+}
+
+.Prec_ResumoItem[data-tipo="sem_preco"] {
+  color: #b45309;
+}
+
+.Prec_ResumoItem[data-tipo="margem_baixa"] {
+  color: #c2410c;
+}
+
+.Prec_ResumoItem[data-tipo="sem_valor_drop"] {
+  color: #b91c1c;
+}
+
+.Prec_ResumoIcon {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 800;
+  opacity: 0.7;
+  margin-bottom: 0.15rem;
 }
 
 .Prec_ResumoNum {
   display: block;
-  font-size: 1.5rem;
-  font-weight: 700;
-  line-height: 1.2;
+  font-size: 1.75rem;
+  font-weight: 800;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
 }
 
-.Prec_ResumoLbl { font-size: 0.78rem; color: var(--cl-muted, #64748b); }
+.Prec_ResumoLbl {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--prec-muted);
+  line-height: 1.3;
+}
 
 .Prec_ResumoItem[data-tipo="sem_preco"] .Prec_ResumoNum { color: #b45309; }
 .Prec_ResumoItem[data-tipo="margem_baixa"] .Prec_ResumoNum { color: #c2410c; }
 .Prec_ResumoItem[data-tipo="sem_valor_drop"] .Prec_ResumoNum { color: #b91c1c; }
 
-.Prec_TabelaWrap { overflow-x: auto; }
+/* ── Tabela ───────────────────────────────────────────── */
+.Prec_TabelaWrap {
+  overflow-x: auto;
+  border-radius: 10px;
+  border: 1px solid var(--prec-border);
+  margin-bottom: 1rem;
+}
 
 .Prec_Tabela {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.85rem;
+  font-size: 0.84rem;
 }
 
 .Prec_Tabela th,
 .Prec_Tabela td {
-  padding: 0.5rem 0.6rem;
-  border-bottom: 1px solid var(--cl-border, #e2e8f0);
+  padding: 0.55rem 0.75rem;
+  border-bottom: 1px solid var(--prec-border);
   text-align: left;
 }
 
-.Prec_Tabela th { font-weight: 600; background: var(--cl-bg-subtle, #f8fafc); }
+.Prec_Tabela th {
+  font-weight: 700;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--prec-muted);
+  background: #f8fafc;
+}
+
+.Prec_Tabela tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.Prec_Tabela tbody tr:hover td {
+  background: #faf8ff;
+}
+
+.Prec_Tabela td:nth-child(3),
+.Prec_Tabela td:nth-child(4),
+.Prec_Tabela td:nth-child(5) {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 
 .Prec_Badge {
   display: inline-block;
-  padding: 0.15rem 0.45rem;
-  border-radius: 4px;
-  font-size: 0.75rem;
-  font-weight: 600;
+  padding: 0.2rem 0.5rem;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .Prec_Badge--sem_preco { background: #fef3c7; color: #92400e; }
 .Prec_Badge--margem_baixa { background: #ffedd5; color: #9a3412; }
 .Prec_Badge--sem_valor_drop { background: #fee2e2; color: #991b1b; }
 
+/* ── Estado vazio ─────────────────────────────────────── */
 .Prec_Vazio {
-  font-size: 0.9rem;
-  color: var(--cl-muted, #64748b);
-  margin: 0;
+  text-align: center;
+  padding: 2rem 1rem 2.25rem;
 }
 
-.Prec_ResumoItem[hidden],
-.Prec_Card--alertas [data-modo-only] { display: none !important; }
+.Prec_VazioIcon {
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 0.85rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #ecfdf5, #d1fae5);
+  color: #059669;
+}
+
+.Prec_VazioIcon svg {
+  width: 28px;
+  height: 28px;
+}
+
+.Prec_VazioTitle {
+  margin: 0 0 0.3rem;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.Prec_VazioSub {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--prec-muted);
+}
+
+.Prec_ResumoItem[hidden] {
+  display: none !important;
+}

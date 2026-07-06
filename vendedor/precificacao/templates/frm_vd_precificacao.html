@@ -3,82 +3,125 @@
 {% set nav_ativo = 'vd_precificacao' %}
 {% block topbar_title %}Precificação{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('vd_precificacao.static', filename='style/Cprecificacao.css') }}" />
+<link rel="stylesheet" href="{{ url_for('vd_precificacao.static', filename='style/Cprecificacao.css') }}?v=2" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal Prec_Page">
-  <div class="Prec_Header">
-    <div class="cl-page-title Prec_HeaderText">
-      <h2>Precificação de venda</h2>
-      <p class="cl-page-desc">O valor Drop do fornecedor não muda aqui. Defina como calcular o preço de venda dos produtos ativos em Meus produtos.</p>
+  <header class="Prec_Hero">
+    <div class="Prec_HeroIcon" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+      </svg>
     </div>
-  </div>
+    <div class="Prec_HeroText">
+      <h2>Precificação de venda</h2>
+      <p>O valor Drop do fornecedor não muda aqui. Defina como calcular o preço de venda dos produtos ativos em <strong>Meus produtos</strong>.</p>
+    </div>
+  </header>
 
   <div class="Prec_Layout">
     <section class="Prec_Card Prec_Card--regra" aria-labelledby="prec_titulo_regra">
-      <h3 id="prec_titulo_regra">Regra de precificação</h3>
-
-      <label class="Prec_Label" for="escopo">Escopo</label>
-      <select id="escopo" class="Prec_Input">
-        <option value="global">Geral (todo o catálogo ativado)</option>
-        <option value="segmento">Por segmento</option>
-      </select>
-      <select id="id_segmento" class="Prec_Input Prec_Input--segmento" hidden></select>
-
-      <fieldset class="Prec_Fieldset">
-        <legend>Modo de precificação</legend>
-        <label class="Prec_Radio">
-          <input type="radio" name="modo" value="sugestao_fornecedor" checked />
-          <span><strong>Sugestão do fornecedor</strong> — usa o preço sugerido calculado pelo fornecedor sobre o valor Drop.</span>
-        </label>
-        <label class="Prec_Radio">
-          <input type="radio" name="modo" value="margem_drop" />
-          <span><strong>Margem sobre valor Drop</strong> — preço = valor Drop + sua margem de lucro (%).</span>
-        </label>
-      </fieldset>
-
-      <div id="prec_bloco_margem" class="Prec_Bloco" hidden>
-        <label class="Prec_Label" for="pct_margem_lucro">% Margem de lucro</label>
-        <input id="pct_margem_lucro" class="Prec_Input" type="number" step="0.01" min="0" value="30" />
+      <div class="Prec_CardHead">
+        <span class="Prec_CardHeadIcon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+        </span>
+        <h3 id="prec_titulo_regra">Regra de precificação</h3>
       </div>
 
-      <div id="prec_bloco_arredondamento" class="Prec_Bloco" hidden>
-        <label class="Prec_Label" for="arredondamento_centavos">Arredondamento de preço</label>
-        <select id="arredondamento_centavos" class="Prec_Input">
-          <option value="">Sem arredondamento especial</option>
-          <option value="90">Terminar em ,90</option>
-          <option value="99">Terminar em ,99</option>
-          <option value="0">Terminar em ,00</option>
+      <div class="filter-group Prec_Field">
+        <label for="escopo">Escopo</label>
+        <select id="escopo" class="Prec_Input">
+          <option value="global">Geral (todo o catálogo ativado)</option>
+          <option value="segmento">Por segmento</option>
         </select>
+      </div>
+      <div class="filter-group Prec_Field Prec_Field--segmento" id="wrap_segmento" hidden>
+        <label for="id_segmento">Segmento</label>
+        <select id="id_segmento" class="Prec_Input"></select>
+      </div>
+
+      <p class="Prec_SectionLbl">Modo de precificação</p>
+      <div class="Prec_ModoGrid" role="radiogroup" aria-label="Modo de precificação">
+        <label class="Prec_ModoCard">
+          <input type="radio" name="modo" value="sugestao_fornecedor" checked />
+          <span class="Prec_ModoCardInner">
+            <span class="Prec_ModoTag">Padrão</span>
+            <strong>Sugestão do fornecedor</strong>
+            <span class="Prec_ModoDesc">Usa o preço sugerido calculado pelo fornecedor sobre o valor Drop.</span>
+          </span>
+        </label>
+        <label class="Prec_ModoCard">
+          <input type="radio" name="modo" value="margem_drop" />
+          <span class="Prec_ModoCardInner">
+            <span class="Prec_ModoTag Prec_ModoTag--alt">Sua margem</span>
+            <strong>Margem sobre valor Drop</strong>
+            <span class="Prec_ModoDesc">Preço = valor Drop + sua margem de lucro (%), com arredondamento opcional.</span>
+          </span>
+        </label>
+      </div>
+
+      <div id="prec_bloco_margem" class="Prec_Bloco Prec_Bloco--grid" hidden>
+        <div class="filter-group Prec_Field">
+          <label for="pct_margem_lucro">% Margem de lucro</label>
+          <input id="pct_margem_lucro" class="Prec_Input" type="number" step="0.01" min="0" value="30" />
+        </div>
+        <div class="filter-group Prec_Field">
+          <label for="arredondamento_centavos">Arredondamento</label>
+          <select id="arredondamento_centavos" class="Prec_Input">
+            <option value="">Sem arredondamento especial</option>
+            <option value="90">Terminar em ,90</option>
+            <option value="99">Terminar em ,99</option>
+            <option value="0">Terminar em ,00</option>
+          </select>
+        </div>
       </div>
 
       <div id="prec_bloco_alerta_min" class="Prec_Bloco">
-        <label class="Prec_Label" for="margem_minima_alerta">Margem mínima para alertas (%)</label>
-        <input id="margem_minima_alerta" class="Prec_Input" type="number" step="0.01" min="0" value="30" />
-        <p class="Prec_Hint">Aplica-se ao modo sugestão do fornecedor: alerta quando a margem sugerida ficar abaixo deste valor.</p>
+        <div class="filter-group Prec_Field">
+          <label for="margem_minima_alerta">Margem mínima para alertas (%)</label>
+          <input id="margem_minima_alerta" class="Prec_Input" type="number" step="0.01" min="0" value="30" />
+          <p class="Prec_Hint">No modo sugestão: alerta quando a margem sugerida ficar abaixo deste valor.</p>
+        </div>
       </div>
 
-      <div class="Prec_Acoes">
-        <button type="button" id="btn_salvar" class="Cl_BtnSecundario">Salvar regra</button>
-        <button type="button" id="btn_aplicar" class="Cl_BtnPrincipal">Aplicar agora</button>
+      <div class="Prec_Foot">
+        <p id="prec_msg" class="Prec_Msg" role="status" hidden></p>
+        <div class="Prec_Acoes">
+          <button type="button" id="btn_salvar" class="Cl_BtnCancelar">Salvar regra</button>
+          <button type="button" id="btn_aplicar" class="Cl_BtnSalvar Prec_BtnAplicar">
+            <svg class="Prec_BtnIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" aria-hidden="true">
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+            </svg>
+            Aplicar agora
+          </button>
+        </div>
       </div>
-      <p id="prec_msg" class="Prec_Msg" role="status" hidden></p>
     </section>
 
     <section class="Prec_Card Prec_Card--alertas" aria-labelledby="prec_titulo_alertas">
-      <h3 id="prec_titulo_alertas">Alertas de preço</h3>
-      <p class="Prec_Hint" id="prec_alerta_desc">Produtos ativos em Meus produtos que precisam de atenção.</p>
+      <div class="Prec_CardHead">
+        <span class="Prec_CardHeadIcon Prec_CardHeadIcon--alert" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        </span>
+        <div>
+          <h3 id="prec_titulo_alertas">Alertas de preço</h3>
+          <p class="Prec_Hint Prec_Hint--head" id="prec_alerta_desc">Produtos ativos em Meus produtos que precisam de atenção.</p>
+        </div>
+      </div>
 
       <div id="prec_resumo" class="Prec_Resumo" aria-live="polite">
         <div class="Prec_ResumoItem" data-tipo="sem_preco">
+          <span class="Prec_ResumoIcon" aria-hidden="true">?</span>
           <span class="Prec_ResumoNum" id="res_sem_preco">0</span>
           <span class="Prec_ResumoLbl">Sem preço sugerido</span>
         </div>
         <div class="Prec_ResumoItem" data-tipo="margem_baixa">
+          <span class="Prec_ResumoIcon" aria-hidden="true">↓</span>
           <span class="Prec_ResumoNum" id="res_margem_baixa">0</span>
           <span class="Prec_ResumoLbl">Margem abaixo do mínimo</span>
         </div>
         <div class="Prec_ResumoItem" data-tipo="sem_valor_drop">
+          <span class="Prec_ResumoIcon" aria-hidden="true">∅</span>
           <span class="Prec_ResumoNum" id="res_sem_valor_drop">0</span>
           <span class="Prec_ResumoLbl">Sem valor Drop</span>
         </div>
@@ -99,11 +142,18 @@
           <tbody id="prec_tbody"></tbody>
         </table>
       </div>
-      <p id="prec_sem_alertas" class="Prec_Vazio">Nenhum alerta no momento.</p>
+
+      <div id="prec_sem_alertas" class="Prec_Vazio">
+        <div class="Prec_VazioIcon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+        </div>
+        <p class="Prec_VazioTitle">Tudo certo por aqui</p>
+        <p class="Prec_VazioSub">Nenhum produto ativo precisa de atenção no momento.</p>
+      </div>
     </section>
   </div>
 </div>
 {% endblock %}
 {% block page_js %}
-<script src="{{ url_for('vd_precificacao.static', filename='script/Sprecificacao.js') }}"></script>
+<script src="{{ url_for('vd_precificacao.static', filename='script/Sprecificacao.js') }}?v=2"></script>
 {% endblock %}
