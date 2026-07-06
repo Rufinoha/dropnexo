@@ -110,9 +110,11 @@
           .join("")
           .toUpperCase();
         const qtd = Number(f.qtd_produtos) || 0;
+        const qtdVitrine = Number(f.qtd_produtos_vitrine) || 0;
+        const conectado = (f.status_vinculo || "nenhum") === "ativo";
         return `
         <article class="Forn_Card ${st.cls}" data-id="${f.id}" data-nome="${attrEsc(f.nome)}"
-          data-status="${f.status_vinculo || "nenhum"}" tabindex="0" role="button"
+          data-status="${f.status_vinculo || "nenhum"}" data-qtd-vitrine="${qtdVitrine}" tabindex="0" role="button"
           aria-label="Abrir catálogo de ${esc(f.nome)}">
           <div class="Forn_CardTop">
             <div class="Forn_CardBrand">
@@ -133,6 +135,11 @@
           </div>
           <div class="Forn_CardFooter">
             <button type="button" class="Forn_CardBtn Forn_CardBtn--ghost" data-acao="loja">Ver catálogo</button>
+            ${
+              conectado
+                ? '<button type="button" class="Forn_CardBtn Forn_CardBtn--danger" data-acao="desconectar">Desconectar</button>'
+                : ""
+            }
             ${
               podeVinculo
                 ? '<button type="button" class="Forn_CardBtn Forn_CardBtn--primary" data-acao="vinculo">Solicitar vínculo</button>'
@@ -187,6 +194,113 @@
     }
   }
 
+  function htmlOpcoesProdutos(qtd) {
+    const label =
+      qtd === 1
+        ? "Você tem <strong>1 produto</strong> deste fornecedor em Meus produtos."
+        : `Você tem <strong>${qtd} produtos</strong> deste fornecedor em Meus produtos.`;
+    return `
+      <p style="text-align:left;margin:0 0 0.75rem;line-height:1.45">${label} O que deseja fazer?</p>
+      <div class="Forn_DesconectarOpcoes">
+        <label class="Forn_DesconectarOpt">
+          <input type="radio" name="acao_produtos" value="excluir" checked />
+          <span><strong>Excluir</strong> — remover da vitrine</span>
+        </label>
+        <label class="Forn_DesconectarOpt">
+          <input type="radio" name="acao_produtos" value="converter" />
+          <span><strong>Manter como produto próprio</strong> — sem vínculo com o fornecedor; você poderá editar todos os campos</span>
+        </label>
+      </div>`;
+  }
+
+  async function desconectarFornecedor(card) {
+    const id = Number(card.getAttribute("data-id"));
+    const nome = card.getAttribute("data-nome") || "fornecedor";
+    const qtdVitrine = Number(card.getAttribute("data-qtd-vitrine") || 0);
+    if (!id) return;
+
+    const avisoCatalogo =
+      "Os produtos deste fornecedor <strong>não aparecerão mais</strong> no catálogo da rede.";
+
+    if (!window.Swal) {
+      if (!confirm(`Desconectar de ${nome}? ${avisoCatalogo.replace(/<[^>]+>/g, "")}`)) return;
+      let acao = "excluir";
+      if (qtdVitrine > 0) {
+        const manter = confirm(
+          `Há ${qtdVitrine} produto(s) em Meus produtos. OK = manter como próprio; Cancelar = excluir.`
+        );
+        acao = manter ? "converter" : "excluir";
+      }
+      try {
+        const r = await fetch("/fornecedores/desconectar", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id_fornecedor: id, acao_produtos: acao }),
+        });
+        const j = await r.json();
+        alert(j.message || (j.success ? "Desconectado." : "Erro."));
+        if (j.success) carregar();
+      } catch (e) {
+        alert(e.message);
+      }
+      return;
+    }
+
+    const passo1 = await Swal.fire({
+      title: "Desconectar fornecedor?",
+      html: `<p style="text-align:left;margin:0;line-height:1.45">
+        Tem certeza que deseja desconectar de <strong>${esc(nome)}</strong>?<br><br>
+        ${avisoCatalogo}
+      </p>`,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Continuar",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#b91c1c",
+    });
+    if (!passo1.isConfirmed) return;
+
+    let acaoProdutos = "excluir";
+    if (qtdVitrine > 0) {
+      const passo2 = await Swal.fire({
+        title: "Produtos em Meus produtos",
+        html: htmlOpcoesProdutos(qtdVitrine),
+        icon: "question",
+        showCancelButton: true,
+        confirmButtonText: "Desconectar",
+        cancelButtonText: "Voltar",
+        confirmButtonColor: "#b91c1c",
+        focusConfirm: false,
+        preConfirm: () => {
+          const sel = document.querySelector('input[name="acao_produtos"]:checked');
+          if (!sel) {
+            Swal.showValidationMessage("Escolha o que fazer com os produtos.");
+            return false;
+          }
+          return sel.value;
+        },
+      });
+      if (!passo2.isConfirmed) return;
+      acaoProdutos = passo2.value;
+    }
+
+    try {
+      const r = await fetch("/fornecedores/desconectar", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id_fornecedor: id, acao_produtos: acaoProdutos }),
+      });
+      const j = await r.json();
+      if (!j.success) throw new Error(j.message || "Não foi possível desconectar.");
+      await Swal.fire("Desconectado", j.message, "success");
+      carregar();
+    } catch (e) {
+      Swal.fire("Erro", e.message, "error");
+    }
+  }
+
   grid.addEventListener("click", (e) => {
     const btnAcao = e.target.closest("[data-acao]");
     const card = e.target.closest(".Forn_Card");
@@ -201,6 +315,10 @@
       const nome = card.getAttribute("data-nome");
       if (acao === "vinculo") {
         solicitarVinculoCard(card);
+        return;
+      }
+      if (acao === "desconectar") {
+        desconectarFornecedor(card);
         return;
       }
       if (acao === "loja" && id) {

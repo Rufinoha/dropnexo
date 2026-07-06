@@ -1018,6 +1018,124 @@
     return CONDICOES.has(v) ? v : "";
   }
 
+  function rotuloVinculo(st) {
+    const map = {
+      ativo: { txt: "Conectado", cls: "is-ok" },
+      pendente: { txt: "Aguardando aprovação", cls: "is-pend" },
+      recusado: { txt: "Vínculo recusado", cls: "is-bad" },
+      nenhum: { txt: "Sem vínculo", cls: "is-muted" },
+    };
+    return map[st] || { txt: st || "—", cls: "is-muted" };
+  }
+
+  function renderPainelFornecedor(forn) {
+    const painel = document.getElementById("painelFornecedorVendedor");
+    if (!painel) return;
+    if (!isVendedor) {
+      painel.innerHTML =
+        '<div class="Cat_Placeholder Cat_FornPlaceholder"><p>Cadastro do seu catálogo — expedição nos depósitos cadastrados.</p></div>';
+      return;
+    }
+    if (!integrado) {
+      painel.innerHTML =
+        '<div class="Cat_Placeholder Cat_FornPlaceholder"><p><strong>Produto próprio</strong> — cadastrado por você, sem fornecedor de origem na rede.</p></div>';
+      return;
+    }
+    if (!forn) {
+      painel.innerHTML =
+        '<div class="Cat_Placeholder Cat_FornPlaceholder"><p>Fornecedor de origem não encontrado.</p></div>';
+      return;
+    }
+    const esc = (s) =>
+      String(s || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    const U = window.Util || {};
+    const doc =
+      forn.tipo_pessoa === "J" && U.formatarCNPJ
+        ? U.formatarCNPJ(forn.documento)
+        : forn.documento || "";
+    const vinc = rotuloVinculo(forn.status_vinculo);
+    const loc = [forn.cidade, forn.uf].filter(Boolean).join(" / ");
+    const segs = (forn.segmentos || [])
+      .map((s) => `<span class="Cat_FornChip">${esc(s)}</span>`)
+      .join("");
+    const contato = forn.contato || {};
+    const linhaContato = [];
+    if (contato.nome) linhaContato.push(`<strong>${esc(contato.nome)}</strong>`);
+    if (contato.email) {
+      linhaContato.push(
+        `<a href="mailto:${esc(contato.email)}" class="Cat_FornLink">${esc(contato.email)}</a>`
+      );
+    }
+    if (contato.whatsapp) {
+      const w = String(contato.whatsapp).replace(/\D/g, "");
+      linhaContato.push(
+        `<a href="https://wa.me/55${w}" target="_blank" rel="noopener" class="Cat_FornLink">${esc(contato.whatsapp)}</a>`
+      );
+    }
+    const site = forn.site
+      ? `<a href="${esc(forn.site.startsWith("http") ? forn.site : "https://" + forn.site)}" target="_blank" rel="noopener" class="Cat_FornLink">${esc(forn.site)}</a>`
+      : "—";
+
+    painel.innerHTML = `
+      <article class="Cat_FornCard">
+        <header class="Cat_FornHead">
+          <div class="Cat_FornAvatar" aria-hidden="true">${esc((forn.nome || "F").charAt(0).toUpperCase())}</div>
+          <div class="Cat_FornHeadText">
+            <span class="Cat_FornKicker">Fornecedor de origem</span>
+            <h3 class="Cat_FornNome">${esc(forn.nome)}</h3>
+            ${forn.razao_social && forn.razao_social !== forn.nome ? `<p class="Cat_FornRazao">${esc(forn.razao_social)}</p>` : ""}
+            ${loc ? `<p class="Cat_FornLoc">${esc(loc)}</p>` : ""}
+          </div>
+          <span class="Cat_FornVinculo ${vinc.cls}">${esc(vinc.txt)}</span>
+        </header>
+        <div class="Cat_FornGrid">
+          <div class="Cat_FornStat">
+            <span class="Cat_FornStatLbl">Produtos publicados</span>
+            <strong>${Number(forn.qtd_produtos || 0)}</strong>
+          </div>
+          <div class="Cat_FornStat">
+            <span class="Cat_FornStatLbl">CNPJ / documento</span>
+            <strong>${esc(doc || "—")}</strong>
+          </div>
+        </div>
+        ${segs ? `<div class="Cat_FornSegs">${segs}</div>` : ""}
+        <div class="Cat_FornInfoGrid">
+          <div class="Cat_FornInfo">
+            <span class="Cat_FornInfoLbl">E-mail comercial</span>
+            ${forn.email ? `<a href="mailto:${esc(forn.email)}" class="Cat_FornLink">${esc(forn.email)}</a>` : "<span>—</span>"}
+          </div>
+          <div class="Cat_FornInfo">
+            <span class="Cat_FornInfoLbl">Telefone</span>
+            <span>${esc(forn.telefone || forn.celular || "—")}</span>
+          </div>
+          <div class="Cat_FornInfo">
+            <span class="Cat_FornInfoLbl">Site</span>
+            ${site}
+          </div>
+          <div class="Cat_FornInfo Cat_FornInfo--full">
+            <span class="Cat_FornInfoLbl">Endereço</span>
+            <span>${esc(forn.endereco || "—")}</span>
+          </div>
+          ${
+            linhaContato.length
+              ? `<div class="Cat_FornInfo Cat_FornInfo--full Cat_FornContato">
+            <span class="Cat_FornInfoLbl">Contato responsável</span>
+            <div class="Cat_FornContatoLinha">${linhaContato.join(" · ")}</div>
+          </div>`
+              : ""
+          }
+        </div>
+        <footer class="Cat_FornFoot">
+          <p class="Cat_FornHint">O cadastro técnico do produto (SKU, estoque, tributação) é mantido pelo fornecedor. Você personaliza apenas a vitrine.</p>
+          <a class="Cl_botaoFiltro Cat_FornBtnLoja" href="${esc(forn.url_loja || "#")}" target="_blank" rel="noopener">Ver catálogo do fornecedor</a>
+        </footer>
+      </article>`;
+  }
+
   function preencherDados(d) {
     el.nome.value = d.nome || "";
     el.sku.value = d.sku || "";
@@ -1063,6 +1181,7 @@
     pausadoMsg = d.pausado_msg || "";
     syncFormatoUi();
     aplicarReadonlyIntegrado();
+    renderPainelFornecedor(d.fornecedor);
     garantirBtnRestaurar();
     syncEstoqueUi();
     carregarImagens().then(syncAvisoImagens);

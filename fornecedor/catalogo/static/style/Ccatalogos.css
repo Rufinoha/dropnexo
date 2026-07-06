@@ -544,3 +544,242 @@
   width: 100px;
   text-align: center;
 }
+
+/* Painel fornecedor (produto integrado — vendedor) */
+
+.Cat_FornPanel {
+  padding: 4px 0 8px;
+}
+
+.Cat_FornPlaceholder {
+  min-height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: #64748b;
+}
+
+.Cat_FornCard {
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+  overflow: hidden;
+}
+
+.Cat_FornHead {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid #eef2f7;
+}
+
+.Cat_FornAvatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #021f81, #3b5bdb);
+  color: #fff;
+  font-size: 1.25rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.Cat_FornHeadText {
+  flex: 1;
+  min-width: 0;
+}
+
+.Cat_FornKicker {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #64748b;
+  margin-bottom: 4px;
+}
+
+.Cat_FornNome {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.25;
+}
+
+.Cat_FornRazao,
+.Cat_FornLoc {
+  margin: 4px 0 0;
+  font-size: 0.88rem;
+  color: #64748b;
+}
+
+.Cat_FornVinculo {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.Cat_FornVinculo.is-ok {
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
+}
+
+.Cat_FornVinculo.is-pend {
+  background: #fffbeb;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
+
+.Cat_FornVinculo.is-bad {
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+}
+
+.Cat_FornVinculo.is-muted {
+  background: #f1f5f9;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
+}
+
+.Cat_FornGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 14px 20px 0;
+}
+
+.Cat_FornStat {
+  background: #fff;
+  border: 1px solid #e8edf4;
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.Cat_FornStatLbl {
+  display: block;
+  font-size: 11px;
+  color: #64748b;
+  margin-bottom: 4px;
+}
+
+.Cat_FornStat strong {
+  font-size: 0.95rem;
+  color: #0f172a;
+}
+
+.Cat_FornSegs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 12px 20px 0;
+}
+
+.Cat_FornChip {
+  display: inline-block;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+
+.Cat_FornInfoGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 16px;
+  padding: 16px 20px;
+}
+
+.Cat_FornInfo {
+  font-size: 0.9rem;
+  color: #334155;
+}
+
+.Cat_FornInfo--full {
+  grid-column: 1 / -1;
+}
+
+.Cat_FornInfoLbl {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #94a3b8;
+  margin-bottom: 4px;
+}
+
+.Cat_FornLink {
+  color: #021f81;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.Cat_FornLink:hover {
+  text-decoration: underline;
+}
+
+.Cat_FornContato {
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.Cat_FornContatoLinha {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  align-items: center;
+}
+
+.Cat_FornFoot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 20px 18px;
+  border-top: 1px solid #eef2f7;
+  background: rgba(248, 250, 252, 0.7);
+}
+
+.Cat_FornHint {
+  margin: 0;
+  flex: 1;
+  min-width: 200px;
+  font-size: 0.82rem;
+  color: #64748b;
+  line-height: 1.45;
+}
+
+.Cat_FornBtnLoja {
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+  .Cat_FornHead {
+    flex-wrap: wrap;
+  }
+
+  .Cat_FornGrid,
+  .Cat_FornInfoGrid {
+    grid-template-columns: 1fr;
+  }
+}

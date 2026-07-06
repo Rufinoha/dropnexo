@@ -21,6 +21,7 @@ from fornecedor.parametros.servico_precificacao import (
 from global_utils import Var_ConectarBanco, agora_utc, exigir_modulo, login_obrigatorio, exigir_permissao, url_imagem_produto
 from srotas_negocio import montar_snapshot_vendedor
 from srotas_plataforma import MODULO_VENDEDOR
+from vendedor.fornecedores.servico_desvincular_fornecedor import desconectar_fornecedor
 
 _MOD_DIR = Path(__file__).resolve().parent
 
@@ -426,6 +427,9 @@ def rede():
                    v.id AS id_vinculo, COALESCE(v.status, 'nenhum'),
                    (SELECT COUNT(*)::int FROM tbl_produto p
                     WHERE p.id_tenant = t.id AND p.ativo = TRUE),
+                   (SELECT COUNT(DISTINCT pv.id_produto)::int
+                    FROM tbl_produto_vendedor pv
+                    WHERE pv.id_tenant_vendedor = %s AND pv.id_tenant_fornecedor = t.id),
                    v.mensagem_resposta
             FROM tbl_tenant t
             LEFT JOIN tbl_vinculo_vendedor_fornecedor v
@@ -434,7 +438,7 @@ def rede():
             ORDER BY t.nome
             LIMIT 120
             """,
-            [id_vendedor] + params,
+            [id_vendedor, id_vendedor] + params,
         )
         cards = []
         for row in cur.fetchall():
@@ -465,9 +469,10 @@ def rede():
                     "segmentos": segmentos,
                     "ids_segmentos": ids_seg,
                     "qtd_produtos": int(row[8] or 0),
+                    "qtd_produtos_vitrine": int(row[9] or 0),
                     "status_vinculo": st,
                     "id_vinculo": row[6],
-                    "motivo_recusa": row[9] or "" if st == "recusado" else "",
+                    "motivo_recusa": row[10] or "" if st == "recusado" else "",
                 }
             )
         return jsonify(success=True, fornecedores=cards)
@@ -630,6 +635,52 @@ def solicitar_vinculo():
         return jsonify(success=True, message="Solicitação enviada. Aguardando aprovação do fornecedor.")
     finally:
         conn.close()
+
+
+@vd_fornecedores_bp.post("/fornecedores/desconectar")
+@login_obrigatorio()
+@exigir_modulo(MODULO_VENDEDOR)
+@exigir_permissao(codigo="fornecedores.ver")
+def desconectar():
+    id_vendedor = session.get("id_tenant")
+    if not id_vendedor:
+        return jsonify(success=False, message="Sessão inválida."), 403
+    body = request.get_json(silent=True) or {}
+    try:
+        id_forn = int(body.get("id_fornecedor"))
+    except (TypeError, ValueError):
+        return jsonify(success=False, message="Fornecedor inválido."), 400
+    acao = (body.get("acao_produtos") or "excluir").strip().lower()
+    if acao not in ("excluir", "converter"):
+        return jsonify(success=False, message="Ação inválida para os produtos."), 400
+
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        resultado = desconectar_fornecedor(cur, int(id_vendedor), id_forn, acao_produtos=acao)
+        conn.commit()
+        if acao == "converter" and resultado["produtos_convertidos"]:
+            msg = (
+                f"Fornecedor desconectado. {resultado['produtos_convertidos']} produto(s) "
+                "passaram a ser seus (cadastro completo)."
+            )
+        elif resultado["qtd_produtos_vitrine"]:
+            msg = (
+                f"Fornecedor desconectado. {resultado['qtd_produtos_vitrine']} produto(s) "
+                "foram removidos de Meus produtos."
+            )
+        else:
+            msg = "Fornecedor desconectado com sucesso."
+        return jsonify(success=True, message=msg, **resultado)
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 400
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
 
 @vd_fornecedores_bp.get("/fornecedores/<int:id_fornecedor>/loja/dados")
 @login_obrigatorio()

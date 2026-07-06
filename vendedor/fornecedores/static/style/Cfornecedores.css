@@ -372,11 +372,53 @@
 }
 
 .Forn_Card.is-active .Forn_CardFooter {
-  justify-content: center;
+  flex-wrap: wrap;
 }
 
 .Forn_Card.is-active .Forn_CardBtn--ghost {
-  flex: 1 1 100%;
+  flex: 1 1 calc(50% - 0.25rem);
+}
+
+.Forn_CardBtn--danger {
+  flex: 1 1 calc(50% - 0.25rem);
+  background: #fff;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+}
+
+.Forn_CardBtn--danger:hover {
+  background: #fef2f2;
+  border-color: #f87171;
+  color: #991b1b;
+}
+
+.Forn_DesconectarOpcoes {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  text-align: left;
+}
+
+.Forn_DesconectarOpt {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  cursor: pointer;
+  line-height: 1.4;
+  font-size: 0.88rem;
+}
+
+.Forn_DesconectarOpt:has(input:checked) {
+  border-color: #93c5fd;
+  background: #f8fbff;
+}
+
+.Forn_DesconectarOpt input {
+  margin-top: 0.2rem;
+  flex-shrink: 0;
 }
 
 .Forn_CardAcoes {

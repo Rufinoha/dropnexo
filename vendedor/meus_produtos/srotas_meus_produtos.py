@@ -35,6 +35,7 @@ from fornecedor.catalogo.servico_imagens import (
     obter_imagem_modo,
 )
 from srotas_negocio import flatten_arvore_com_caminho, montar_arvore_categorias
+from vendedor.meus_produtos.servico_fornecedor_apoio import montar_fornecedor_produto_apoio
 from vendedor.meus_produtos.servico_listagem_proprio import buscar_produtos_proprios
 from vendedor.meus_produtos.servico_vitrine_vendedor import (
     CAMPOS_READONLY_INTEGRADO,
@@ -822,6 +823,11 @@ def apoio_produto():
         preco_venda = float(vit[3]) if vit and vit[3] is not None else float(r[4] or 0)
         ativo_vit = bool(vit[4]) if vit else bool(r[9])
         integrado = produto_integrado(cur, id_tenant, pid)
+        fornecedor_apoio = None
+        if integrado:
+            cur.execute("SELECT id_tenant FROM tbl_produto WHERE id = %s", (pid,))
+            id_forn = int(cur.fetchone()[0])
+            fornecedor_apoio = montar_fornecedor_produto_apoio(cur, id_tenant, id_forn)
         estoque_meta: dict = {}
         if r[24]:
             estoque_meta = _enriquecer_meta_pausa(cur, id_tenant, int(r[24]))
@@ -881,6 +887,7 @@ def apoio_produto():
                 "modo_vendedor": True,
                 "integrado": integrado,
                 "campos_readonly": sorted(CAMPOS_READONLY_INTEGRADO) if integrado else [],
+                "fornecedor": fornecedor_apoio,
             },
         )
     finally:

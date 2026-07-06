@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_crud.css') }}" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.snow.css" />
   <link rel="stylesheet" href="{{ url_for('fn_catalogo.static', filename='style/Ccatalogo_apoio.css') }}?v=11" />
+  <link rel="stylesheet" href="{{ url_for('fn_catalogo.static', filename='style/Ccatalogos.css') }}?v=9" />
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </head>
 <body class="Cat_ApoioBody">
@@ -207,8 +208,10 @@
       </section>
 
       <section class="Cat_TabPanel" data-panel="fornecedor" hidden>
-        <div class="Cat_Placeholder">
-          <p>Vínculo com fornecedores e depósitos de expedição será configurado em breve.</p>
+        <div id="painelFornecedorVendedor" class="Cat_FornPanel" aria-live="polite">
+          <div class="Cat_Placeholder Cat_FornPlaceholder">
+            <p>Carregando dados do fornecedor…</p>
+          </div>
         </div>
       </section>
 
@@ -311,6 +314,6 @@
   {% endif %}
   <script src="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.js"></script>
   <script src="{{ url_for('fn_catalogo.static', filename='script/Scatalogo_descricao_editor.js') }}?v=1"></script>
-  <script src="{{ url_for('fn_catalogo.static', filename='script/Scatalogo_apoio.js') }}?v=23"></script>
+  <script src="{{ url_for('fn_catalogo.static', filename='script/Scatalogo_apoio.js') }}?v=24"></script>
 </body>
 </html>
