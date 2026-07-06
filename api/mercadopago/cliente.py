@@ -1,6 +1,7 @@
 # api/mercadopago/cliente.py — OAuth e cliente HTTP Mercado Pago
 from __future__ import annotations
 
+import json
 import logging
 import os
 import secrets
@@ -269,10 +270,10 @@ def atualizar_conta_info(cur, id_tenant: int, access_token: str) -> dict:
         cur.execute(
             """
             UPDATE tbl_integracao_mercadopago
-            SET mp_conta_info = %s, atualizado_em = %s
+            SET mp_conta_info = %s::jsonb, atualizado_em = %s
             WHERE id_tenant = %s
             """,
-            (info, agora_utc(), id_tenant),
+            (json.dumps(info, ensure_ascii=False), agora_utc(), id_tenant),
         )
     return info
 
