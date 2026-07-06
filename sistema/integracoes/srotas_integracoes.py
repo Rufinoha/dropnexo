@@ -86,7 +86,11 @@ def pagina_mercadopago():
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
-        conectado = mp_conectado(cur, int(id_tenant)) if id_tenant else False
+        if id_tenant:
+            try:
+                conectado = mp_conectado(cur, int(id_tenant))
+            except Exception:
+                conectado = False
     finally:
         conn.close()
     return render_template(
@@ -117,7 +121,10 @@ def hub_status():
         if id_tenant:
             from api.mercadopago.cliente import mp_conectado
 
-            mp_ok = mp_conectado(cur, int(id_tenant))
+            try:
+                mp_ok = mp_conectado(cur, int(id_tenant))
+            except Exception:
+                mp_ok = False
     finally:
         conn.close()
 

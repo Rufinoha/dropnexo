@@ -11,7 +11,7 @@ from urllib.parse import urlencode
 import requests
 
 from api.bling.tokens import criptografar_token, descriptografar_token
-from global_utils import Var_ConectarBanco, agora_utc, obter_base_url
+from global_utils import Var_ConectarBanco, agora_utc, is_modo_producao, obter_base_url
 
 _log = logging.getLogger(__name__)
 
@@ -25,16 +25,54 @@ def _env(key: str) -> str:
     return (os.getenv(key) or "").strip()
 
 
+def _mp_env(sufixo: str) -> str:
+    """Lê VAR_DEV ou VAR_PROD conforme MODO_PRODUCAO (padrão do .env DropNexo)."""
+    if is_modo_producao():
+        return _env(f"{sufixo}_PROD") or _env(f"{sufixo}_DEV")
+    return _env(f"{sufixo}_DEV") or _env(f"{sufixo}_PROD")
+
+
+def mp_client_id() -> str:
+    """
+    Client ID OAuth.
+    Prioriza CLIENT_ID (credenciais de produção — usado no OAuth mesmo em homolog).
+    """
+    return (
+        _env("CLIENT_ID")
+        or _mp_env("CLIENT_ID")
+        or _mp_env("APPLICATION_ID")
+        or _env("MP_CLIENT_ID")
+    )
+
+
+def mp_client_secret() -> str:
+    """
+    Client Secret OAuth.
+    Prioriza CLIENT_SECRET (credenciais de produção).
+    """
+    return (
+        _env("CLIENT_SECRET")
+        or _mp_env("CLIENT_SECRET")
+        or _env("MP_CLIENT_SECRET")
+        or _mp_env("ACCESS_TOKEN")
+    )
+
+
+def mp_public_key() -> str:
+    return _mp_env("PUBLIC_KEY")
+
+
 def mp_configurado() -> bool:
-    return bool(_env("MP_CLIENT_ID") and _env("MP_CLIENT_SECRET"))
+    return bool(mp_client_id() and mp_client_secret())
 
 
 def credenciais_mp() -> tuple[str, str]:
-    client_id = _env("MP_CLIENT_ID")
-    client_secret = _env("MP_CLIENT_SECRET")
+    client_id = mp_client_id()
+    client_secret = mp_client_secret()
     if not client_id or not client_secret:
         raise RuntimeError(
-            "Credenciais Mercado Pago incompletas. Configure MP_CLIENT_ID e MP_CLIENT_SECRET no .env."
+            "Credenciais Mercado Pago incompletas. Configure APPLICATION_ID_DEV e "
+            "ACCESS_TOKEN_DEV (ou CLIENT_SECRET_DEV) no .env."
         )
     return client_id, client_secret
 

@@ -62,7 +62,10 @@ def oauth_iniciar():
         return r
     if not mp_configurado():
         return redirect(
-            url_for("integracoes.pagina", erro="Mercado Pago indisponível. Configure MP_CLIENT_ID no servidor.")
+            url_for(
+                "integracoes.pagina",
+                erro="Mercado Pago indisponível. Configure APPLICATION_ID_DEV e ACCESS_TOKEN_DEV no servidor.",
+            )
         )
     state = gerar_state_oauth()
     session["mp_oauth_state"] = state
