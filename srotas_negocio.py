@@ -6,6 +6,7 @@ from decimal import Decimal
 from typing import Any
 
 from flask import render_template, session, url_for
+from srotas_plataforma import MODULO_FORNECEDOR, garantir_modulo_sessao
 
 from pathlib import Path
 
@@ -276,6 +277,27 @@ CATEGORIAS_INTEGRACOES = [
             {"slug": "conta-azul", "nome": "Conta Azul", "descricao": "Gestão financeira e emissão de notas.", "cor": "#0080FF", "iniciais": "CA"},
         ],
     },
+    {
+        "id": "financeiro",
+        "rotulo": "Opções financeiras",
+        "titulo": "Opções financeiras",
+        "subtitulo": "Receba pagamentos dos pedidos dos vendedores (PIX e cartão).",
+        "somente_fornecedor": True,
+        "itens": [
+            {
+                "slug": "mercado-pago",
+                "nome": "Mercado Pago",
+                "descricao": "PIX e cartão de crédito nos pedidos B2B.",
+                "cor": "#009EE3",
+                "iniciais": "MP",
+            },
+            {"slug": "pagbank", "nome": "PagBank", "descricao": "Recebimentos PagBank.", "cor": "#1BB99A", "iniciais": "PB"},
+            {"slug": "stripe", "nome": "Stripe", "descricao": "Pagamentos internacionais Stripe.", "cor": "#635BFF", "iniciais": "ST"},
+            {"slug": "asaas", "nome": "Asaas", "descricao": "Cobranças e recebimentos Asaas.", "cor": "#0030B9", "iniciais": "AS"},
+            {"slug": "pagar-me", "nome": "Pagar.me", "descricao": "Gateway Pagar.me.", "cor": "#65A300", "iniciais": "PM"},
+            {"slug": "paypal", "nome": "PayPal", "descricao": "Pagamentos PayPal.", "cor": "#003087", "iniciais": "PP"},
+        ],
+    },
 ]
 
 
@@ -323,9 +345,21 @@ def catalogo_com_urls(icones_base_url: str) -> list[dict]:
     return out
 
 
+def catalogo_integracoes_modulo(icones_base_url: str, modulo: str | None = None) -> list[dict]:
+    """Oculta Opções financeiras para módulo vendedor."""
+    cats = catalogo_com_urls(icones_base_url)
+    mod = modulo or garantir_modulo_sessao()
+    if mod != MODULO_FORNECEDOR:
+        cats = [c for c in cats if not c.get("somente_fornecedor")]
+    return cats
+
+
 def render_pagina_integracoes(*, nav_codigo: str, icones_base_url: str):
     return render_template(
         "frm_integracoes_hub.html",
         nav_codigo=nav_codigo,
-        categorias_json=json.dumps(catalogo_com_urls(icones_base_url), ensure_ascii=False),
+        categorias_json=json.dumps(
+            catalogo_integracoes_modulo(icones_base_url),
+            ensure_ascii=False,
+        ),
     )

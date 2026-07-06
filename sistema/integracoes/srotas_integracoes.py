@@ -4,7 +4,7 @@ from flask import Blueprint, jsonify, redirect, render_template, session, url_fo
 
 from global_utils import Var_ConectarBanco, login_obrigatorio, usuario_tem_permissao
 from srotas_plataforma import garantir_modulo_sessao
-from srotas_negocio import catalogo_com_urls, render_pagina_integracoes, url_icone_integracao
+from srotas_negocio import catalogo_com_urls, catalogo_integracoes_modulo, render_pagina_integracoes, url_icone_integracao
 
 _MOD_DIR = Path(__file__).resolve().parent
 
@@ -72,6 +72,30 @@ def pagina_bling():
     )
 
 
+@integracoes_bp.get("/integracoes/mercadopago")
+@login_obrigatorio()
+def pagina_mercadopago():
+    if not _pode_ver_integracoes():
+        return redirect(url_for("dashboard.index"))
+    if session.get("tenant_tipo_negocio") not in ("fornecedor", "hibrido") and not session.get("eh_desenvolvedor"):
+        return redirect(url_for("integracoes.pagina", erro="Opções financeiras são apenas para fornecedores."))
+    from api.mercadopago.cliente import mp_conectado
+
+    id_tenant = session.get("id_tenant")
+    conectado = False
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        conectado = mp_conectado(cur, int(id_tenant)) if id_tenant else False
+    finally:
+        conn.close()
+    return render_template(
+        "frm_mercadopago_integracao.html",
+        nav_codigo="integracoes",
+        mp_conectado=conectado,
+    )
+
+
 @integracoes_bp.get("/api/integracoes/hub/status")
 @login_obrigatorio()
 def hub_status():
@@ -80,6 +104,7 @@ def hub_status():
 
     id_tenant = session.get("id_tenant")
     bling_conectado = False
+    mp_ok = False
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
@@ -89,6 +114,10 @@ def hub_status():
         )
         row = cur.fetchone()
         bling_conectado = bool(row and row[0] == "conectado")
+        if id_tenant:
+            from api.mercadopago.cliente import mp_conectado
+
+            mp_ok = mp_conectado(cur, int(id_tenant))
     finally:
         conn.close()
 
@@ -101,6 +130,11 @@ def hub_status():
                 "config_url": url_for("integracoes.pagina_bling"),
                 "oauth_url": url_for("bling.oauth_iniciar"),
             },
+            "mercado-pago": {
+                "conectado": mp_ok,
+                "config_url": url_for("integracoes.pagina_mercadopago"),
+                "oauth_url": url_for("mercadopago.oauth_iniciar"),
+            },
         },
     )
 
@@ -110,4 +144,4 @@ def hub_status():
 def catalogo():
     if not _pode_ver_integracoes():
         return jsonify(success=False, message="Sem permissão."), 403
-    return jsonify(success=True, categorias=catalogo_com_urls(_icones_base_url()))
+    return jsonify(success=True, categorias=catalogo_integracoes_modulo(_icones_base_url()))

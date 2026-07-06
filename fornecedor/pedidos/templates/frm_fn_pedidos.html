@@ -1,0 +1,59 @@
+{% extends "frm_base.html" %}
+{% block title %}Pedidos — {{ MARCA_NOME }}{% endblock %}
+{% set nav_ativo = 'fn_pedidos' %}
+{% block topbar_title %}Pedidos recebidos{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('fn_pedidos.static', filename='style/Cfn_pedidos.css') }}?v=1" />
+{% endblock %}
+{% block content %}
+<div class="Cl_ContainerApoio cl-page-principal PdFn_Page">
+  <div class="cl-page-title">
+    <h2>Pedidos recebidos</h2>
+    <p class="cl-page-desc">Pedidos confirmados pelos vendedores da sua rede. O estoque já foi reservado ao confirmar.</p>
+  </div>
+
+  <div class="filter-panel PdFn_Filtros">
+    <div class="filter-group">
+      <label for="pd_fn_status">Situação</label>
+      <select id="pd_fn_status">
+        <option value="">Todas</option>
+        <option value="aguardando_pagamento">Aguardando pagamento</option>
+        <option value="pago">Pago</option>
+        <option value="cancelado">Cancelado</option>
+      </select>
+    </div>
+    <button type="button" class="Cl_botaoFiltro" id="pd_fn_filtrar">Filtrar</button>
+  </div>
+
+  <div class="PdFn_TableWrap">
+    <table class="PdFn_Table">
+      <thead>
+        <tr>
+          <th>Pedido</th>
+          <th>Vendedor</th>
+          <th>Cliente</th>
+          <th>Total</th>
+          <th>Situação</th>
+          <th>Data</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="pd_fn_tbody"></tbody>
+    </table>
+    <p id="pd_fn_vazio" class="PdFn_Vazio" hidden>Nenhum pedido recebido ainda.</p>
+  </div>
+</div>
+
+<div id="pd_fn_modal" class="PdFn_Modal" hidden>
+  <div class="PdFn_ModalInner">
+    <header class="PdFn_ModalHead">
+      <h3 id="pd_fn_titulo">Pedido</h3>
+      <button type="button" class="PdFn_Close" id="pd_fn_fechar">×</button>
+    </header>
+    <div id="pd_fn_body" class="PdFn_Body"></div>
+  </div>
+</div>
+{% endblock %}
+{% block page_js %}
+<script src="{{ url_for('fn_pedidos.static', filename='script/Sfn_pedidos.js') }}?v=1"></script>
+{% endblock %}

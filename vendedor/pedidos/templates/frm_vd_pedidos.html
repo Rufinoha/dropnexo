@@ -1,0 +1,140 @@
+{% extends "frm_base.html" %}
+{% block title %}Pedidos — {{ MARCA_NOME }}{% endblock %}
+{% set nav_ativo = 'vd_pedidos' %}
+{% block topbar_title %}Pedidos{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('vd_pedidos.static', filename='style/Cvd_pedidos.css') }}?v=2" />
+{% endblock %}
+{% block content %}
+<div class="Cl_ContainerApoio cl-page-principal Pd_Page">
+  <div class="Pd_Header">
+    <div class="cl-page-title">
+      <h2>Pedidos</h2>
+      <p class="cl-page-desc">Crie pedidos manuais para seus fornecedores. Ao confirmar, o estoque é reservado e o pagamento fica pendente.</p>
+    </div>
+    <button type="button" class="Cl_BtnIncluir" id="pd_btnNovo">Novo pedido</button>
+  </div>
+
+  <div class="filter-panel Pd_Filtros">
+    <div class="filter-group">
+      <label for="pd_filtroStatus">Situação</label>
+      <select id="pd_filtroStatus">
+        <option value="">Todas</option>
+        <option value="rascunho">Rascunho</option>
+        <option value="aguardando_pagamento">Aguardando pagamento</option>
+        <option value="pago">Pago</option>
+        <option value="cancelado">Cancelado</option>
+      </select>
+    </div>
+    <button type="button" class="Cl_botaoFiltro" id="pd_btnFiltrar">Filtrar</button>
+  </div>
+
+  <div class="Pd_TableWrap">
+    <table class="Pd_Table" id="pd_tabela">
+      <thead>
+        <tr>
+          <th>Pedido</th>
+          <th>Fornecedor</th>
+          <th>Cliente</th>
+          <th>Total</th>
+          <th>Situação</th>
+          <th>Data</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="pd_tbody"></tbody>
+    </table>
+    <p id="pd_vazio" class="Pd_Vazio" hidden>Nenhum pedido encontrado.</p>
+  </div>
+</div>
+
+<div id="pd_modal" class="Pd_Modal" hidden aria-hidden="true">
+  <div class="Pd_ModalInner" role="dialog" aria-labelledby="pd_modalTitulo">
+    <header class="Pd_ModalHead">
+      <h3 id="pd_modalTitulo">Novo pedido</h3>
+      <button type="button" class="Pd_ModalClose" id="pd_btnFechar" aria-label="Fechar">×</button>
+    </header>
+
+    <div class="Pd_ModalBody">
+      <section class="Pd_Secao">
+        <h4>Cliente e entrega</h4>
+        <div class="Pd_Grid">
+          <div class="filter-group"><label for="pd_cliNome">Nome *</label><input id="pd_cliNome" type="text" /></div>
+          <div class="filter-group"><label for="pd_cliDoc">CPF/CNPJ</label><input id="pd_cliDoc" type="text" /></div>
+          <div class="filter-group"><label for="pd_cliEmail">E-mail</label><input id="pd_cliEmail" type="email" /></div>
+          <div class="filter-group"><label for="pd_cliTel">Telefone</label><input id="pd_cliTel" type="text" /></div>
+          <div class="filter-group"><label for="pd_cep">CEP</label><input id="pd_cep" type="text" maxlength="9" /></div>
+          <div class="filter-group Pd_Grid--full"><label for="pd_logradouro">Logradouro</label><input id="pd_logradouro" type="text" /></div>
+          <div class="filter-group"><label for="pd_numero">Número</label><input id="pd_numero" type="text" /></div>
+          <div class="filter-group"><label for="pd_compl">Complemento</label><input id="pd_compl" type="text" /></div>
+          <div class="filter-group"><label for="pd_bairro">Bairro</label><input id="pd_bairro" type="text" /></div>
+          <div class="filter-group"><label for="pd_cidade">Cidade</label><input id="pd_cidade" type="text" /></div>
+          <div class="filter-group"><label for="pd_uf">UF</label><input id="pd_uf" type="text" maxlength="2" /></div>
+        </div>
+      </section>
+
+      <section class="Pd_Secao">
+        <h4>Produtos</h4>
+        <div class="Pd_BuscaRow">
+          <input type="search" id="pd_buscaProd" placeholder="Buscar em Meus produtos…" class="Pd_BuscaInput" />
+          <button type="button" class="Cl_botaoFiltro" id="pd_btnBuscaProd">Buscar</button>
+        </div>
+        <div id="pd_resultados" class="Pd_Resultados" hidden></div>
+        <table class="Pd_Table Pd_Table--itens">
+          <thead>
+            <tr><th>Produto</th><th>SKU</th><th>Drop</th><th>Qtd</th><th></th></tr>
+          </thead>
+          <tbody id="pd_itens"></tbody>
+        </table>
+        <p id="pd_itensVazio" class="Pd_Hint">Nenhum item adicionado.</p>
+      </section>
+
+      <section class="Pd_Resumo" id="pd_resumo">
+        <div><span>Subtotal produtos</span><strong id="pd_subtotal">R$ 0,00</strong></div>
+        <div id="pd_linhaTaxa" hidden><span>Taxa do fornecedor</span><strong id="pd_taxa">R$ 0,00</strong></div>
+        <div class="Pd_ResumoTotal"><span>Total a pagar</span><strong id="pd_total">R$ 0,00</strong></div>
+      </section>
+    </div>
+
+    <footer class="Pd_ModalFoot">
+      <p id="pd_msg" class="Pd_Msg" role="status" hidden></p>
+      <button type="button" class="Cl_BtnCancelar" id="pd_btnSalvar">Salvar rascunho</button>
+      <button type="button" class="Cl_BtnSalvar" id="pd_btnConfirmar">Confirmar pedido</button>
+    </footer>
+  </div>
+</div>
+
+<div id="pd_detModal" class="Pd_Modal" hidden>
+  <div class="Pd_ModalInner Pd_ModalInner--det" role="dialog">
+    <header class="Pd_ModalHead">
+      <h3 id="pd_detTitulo">Detalhe</h3>
+      <button type="button" class="Pd_ModalClose" id="pd_detFechar">×</button>
+    </header>
+    <div class="Pd_ModalBody" id="pd_detBody"></div>
+    <footer class="Pd_ModalFoot" id="pd_detFoot"></footer>
+  </div>
+</div>
+
+<div id="pd_payModal" class="Pd_Modal" hidden>
+  <div class="Pd_ModalInner Pd_ModalInner--pay" role="dialog" aria-labelledby="pd_payTitulo">
+    <header class="Pd_ModalHead">
+      <h3 id="pd_payTitulo">Pagamento PIX</h3>
+      <button type="button" class="Pd_ModalClose" id="pd_payFechar">×</button>
+    </header>
+    <div class="Pd_ModalBody Pd_PayBody">
+      <p class="Pd_Hint" id="pd_payHint">Escaneie o QR Code ou copie o código PIX abaixo.</p>
+      <div class="Pd_PixQr" id="pd_pixQrWrap" hidden>
+        <img id="pd_pixImg" alt="QR Code PIX" />
+      </div>
+      <div class="Pd_PixCopy">
+        <code id="pd_pixCode">—</code>
+        <button type="button" class="Cl_botaoFiltro" id="pd_pixCopiar">Copiar PIX</button>
+      </div>
+      <p class="Pd_Hint" id="pd_payStatus">Aguardando confirmação…</p>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block page_js %}
+<script src="{{ url_for('vd_pedidos.static', filename='script/Svd_pedidos.js') }}?v=2"></script>
+{% endblock %}

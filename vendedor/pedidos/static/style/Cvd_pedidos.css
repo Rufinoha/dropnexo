@@ -1,0 +1,266 @@
+.Pd_Page { max-width: 1200px; margin: 0 auto; padding-bottom: 2rem; }
+
+.Pd_Header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.Pd_Filtros {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-end;
+  margin-bottom: 1rem;
+}
+
+.Pd_TableWrap { overflow-x: auto; }
+
+.Pd_Table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.Pd_Table th,
+.Pd_Table td {
+  padding: 0.55rem 0.75rem;
+  border-bottom: 1px solid #e2e8f0;
+  text-align: left;
+}
+
+.Pd_Table th {
+  background: #f8fafc;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #64748b;
+}
+
+.Pd_Table tbody tr:hover td { background: #faf8ff; }
+
+.Pd_Badge {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.Pd_Badge--rascunho { background: #f1f5f9; color: #475569; }
+.Pd_Badge--aguardando_pagamento { background: #fef3c7; color: #92400e; }
+.Pd_Badge--pago { background: #d1fae5; color: #047857; }
+.Pd_Badge--cancelado { background: #fee2e2; color: #991b1b; }
+
+.Pd_Vazio { text-align: center; color: #64748b; padding: 2rem; }
+
+.Pd_Modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.Pd_Modal[hidden] { display: none !important; }
+
+.Pd_ModalInner {
+  background: #fff;
+  border-radius: 14px;
+  width: min(920px, 100%);
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.18);
+}
+
+.Pd_ModalInner--det { width: min(720px, 100%); }
+
+.Pd_ModalHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.Pd_ModalHead h3 { margin: 0; font-size: 1.1rem; }
+
+.Pd_ModalClose {
+  border: none;
+  background: transparent;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: #64748b;
+  line-height: 1;
+}
+
+.Pd_ModalBody {
+  padding: 1rem 1.25rem;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.Pd_ModalFoot {
+  padding: 1rem 1.25rem;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  justify-content: flex-end;
+  background: #fafbfc;
+}
+
+.Pd_Secao { margin-bottom: 1.25rem; }
+.Pd_Secao h4 { margin: 0 0 0.65rem; font-size: 0.95rem; }
+
+.Pd_Grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.65rem;
+}
+
+.Pd_Grid--full { grid-column: 1 / -1; }
+
+@media (max-width: 640px) {
+  .Pd_Grid { grid-template-columns: 1fr; }
+}
+
+.Pd_BuscaRow {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.65rem;
+}
+
+.Pd_BuscaInput {
+  flex: 1;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+}
+
+.Pd_Resultados {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  max-height: 160px;
+  overflow-y: auto;
+  margin-bottom: 0.65rem;
+}
+
+.Pd_ResProd {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.65rem;
+  border-bottom: 1px solid #f1f5f9;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.Pd_ResProd:hover { background: #f8fafc; }
+
+.Pd_Resumo {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 0.85rem 1rem;
+}
+
+.Pd_Resumo > div {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.35rem;
+  font-size: 0.88rem;
+}
+
+.Pd_ResumoTotal {
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid #e2e8f0;
+  font-size: 1rem !important;
+}
+
+.Pd_Hint { font-size: 0.82rem; color: #64748b; margin: 0.35rem 0 0; }
+.Pd_Msg { flex: 1 1 100%; margin: 0 0 0.35rem; font-size: 0.88rem; color: #15803d; }
+.Pd_Msg.is-erro { color: #b91c1c; }
+
+.Pd_BtnLink {
+  border: none;
+  background: none;
+  color: #021f81;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.82rem;
+}
+
+.Pd_BtnLink--danger { color: #b91c1c; }
+
+.Pd_DetGrid { display: grid; gap: 0.35rem; font-size: 0.88rem; margin-bottom: 1rem; }
+
+.Pd_PayActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.Pd_PayBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.45rem 0.85rem;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #0f172a;
+  font-weight: 600;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.Pd_PayBtn--pix { border-color: #32bcad; color: #0f766e; }
+.Pd_PayBtn--cartao { border-color: #009ee3; color: #0369a1; }
+.Pd_PayBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.Pd_ModalInner--pay { width: min(480px, 100%); }
+
+.Pd_PayBody { text-align: center; }
+
+.Pd_PixQr img {
+  max-width: 220px;
+  width: 100%;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  margin: 0.75rem auto;
+}
+
+.Pd_PixCopy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: stretch;
+  margin: 0.75rem 0;
+}
+
+.Pd_PixCopy code {
+  display: block;
+  word-break: break-all;
+  font-size: 0.72rem;
+  padding: 0.5rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  text-align: left;
+  max-height: 5rem;
+  overflow: auto;
+}

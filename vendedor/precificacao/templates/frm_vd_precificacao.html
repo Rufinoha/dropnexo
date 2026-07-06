@@ -3,22 +3,10 @@
 {% set nav_ativo = 'vd_precificacao' %}
 {% block topbar_title %}Precificação{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('vd_precificacao.static', filename='style/Cprecificacao.css') }}?v=2" />
+<link rel="stylesheet" href="{{ url_for('vd_precificacao.static', filename='style/Cprecificacao.css') }}?v=3" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal Prec_Page">
-  <header class="Prec_Hero">
-    <div class="Prec_HeroIcon" aria-hidden="true">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-        <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
-      </svg>
-    </div>
-    <div class="Prec_HeroText">
-      <h2>Precificação de venda</h2>
-      <p>O valor Drop do fornecedor não muda aqui. Defina como calcular o preço de venda dos produtos ativos em <strong>Meus produtos</strong>.</p>
-    </div>
-  </header>
-
   <div class="Prec_Layout">
     <section class="Prec_Card Prec_Card--regra" aria-labelledby="prec_titulo_regra">
       <div class="Prec_CardHead">

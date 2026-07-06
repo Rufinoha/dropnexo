@@ -1,0 +1,27 @@
+.PdFn_Page { max-width: 1200px; margin: 0 auto; padding-bottom: 2rem; }
+.PdFn_Filtros { display: flex; gap: 0.75rem; align-items: flex-end; margin-bottom: 1rem; }
+.PdFn_TableWrap { overflow-x: auto; }
+.PdFn_Table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.PdFn_Table th, .PdFn_Table td { padding: 0.55rem 0.75rem; border-bottom: 1px solid #e2e8f0; text-align: left; }
+.PdFn_Table th { background: #f8fafc; font-size: 0.72rem; text-transform: uppercase; color: #64748b; }
+.PdFn_Badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 999px; font-size: 0.72rem; font-weight: 700; }
+.PdFn_Badge--aguardando_pagamento { background: #fef3c7; color: #92400e; }
+.PdFn_Badge--pago { background: #d1fae5; color: #047857; }
+.PdFn_Badge--cancelado { background: #fee2e2; color: #991b1b; }
+.PdFn_Vazio { text-align: center; color: #64748b; padding: 2rem; }
+.PdFn_Modal { position: fixed; inset: 0; z-index: 1200; background: rgba(15,23,42,.45); display: flex; align-items: center; justify-content: center; padding: 1rem; }
+.PdFn_Modal[hidden] { display: none !important; }
+.PdFn_ModalInner { background: #fff; border-radius: 14px; width: min(720px,100%); max-height: 90vh; overflow: hidden; display: flex; flex-direction: column; }
+.PdFn_ModalHead { display: flex; justify-content: space-between; padding: 1rem 1.25rem; border-bottom: 1px solid #e2e8f0; }
+.PdFn_ModalHead h3 { margin: 0; }
+.PdFn_Close { border: none; background: none; font-size: 1.5rem; cursor: pointer; color: #64748b; }
+.PdFn_Body { padding: 1rem 1.25rem; overflow-y: auto; }
+.PdFn_BtnLink { border: none; background: none; color: #021f81; font-weight: 600; cursor: pointer; font-size: 0.82rem; }

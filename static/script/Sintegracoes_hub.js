@@ -24,6 +24,11 @@
       config_url: "/integracoes/bling",
       oauth_url: "/api/integracoes/bling/oauth/iniciar",
     },
+    "mercado-pago": {
+      conectado: false,
+      config_url: "/integracoes/mercadopago",
+      oauth_url: "/api/integracoes/mercadopago/oauth/iniciar",
+    },
   };
 
   const ICONES_CATEGORIA = {
@@ -31,9 +36,10 @@
     ecommerce: "shopping-bag",
     frete: "truck",
     erp: "layout-grid",
+    financeiro: "landmark",
   };
 
-  const INTEGRACOES_ATIVAS = new Set(["bling"]);
+  const INTEGRACOES_ATIVAS = new Set(["bling", "mercado-pago"]);
 
   async function carregarStatusHub() {
     try {
@@ -201,6 +207,7 @@
       const st = statusIntegracao(slug);
       let url = st.config_url || `/integracoes/${slug}`;
       if (dblclick && slug === "bling") url += "?aba=estoque";
+      if (slug === "mercado-pago") url = st.config_url || "/integracoes/mercadopago";
       window.location.href = url;
       return;
     }
@@ -281,7 +288,17 @@
       Swal.fire({
         icon: "success",
         title: "Conectado",
-        text: "Integração configurada com sucesso.",
+        text: "Integração Bling configurada com sucesso.",
+        confirmButtonColor: "#021F81",
+      });
+      window.history.replaceState({}, "", location.pathname);
+    } else if (params.get("conectado") === "mercadopago") {
+      categoriaAtiva = categorias.some((c) => c.id === "financeiro") ? "financeiro" : categoriaAtiva;
+      await carregarStatusHub();
+      Swal.fire({
+        icon: "success",
+        title: "Conectado",
+        text: "Mercado Pago configurado com sucesso.",
         confirmButtonColor: "#021F81",
       });
       window.history.replaceState({}, "", location.pathname);
