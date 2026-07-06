@@ -10,6 +10,45 @@ _DEP_COLS = """
 """
 
 
+def _depositos_do_produto(cur, id_fornecedor: int, id_produto: int) -> list[int]:
+    """Depósitos do fornecedor usados pelo produto (estoque, expedição ou principal)."""
+    ids: set[int] = set()
+    cur.execute(
+        """
+        SELECT DISTINCT ped.id_deposito
+        FROM tbl_produto_estoque_deposito ped
+        JOIN tbl_produto_variante v ON v.id = ped.id_variante
+        WHERE v.id_produto = %s
+        """,
+        (id_produto,),
+    )
+    ids.update(int(r[0]) for r in cur.fetchall() if r and r[0])
+
+    cur.execute(
+        "SELECT id_deposito_expedicao FROM tbl_produto WHERE id = %s AND id_tenant = %s",
+        (id_produto, id_fornecedor),
+    )
+    row = cur.fetchone()
+    if row and row[0]:
+        ids.add(int(row[0]))
+
+    if not ids:
+        cur.execute(
+            """
+            SELECT id FROM tbl_deposito_expedicao
+            WHERE id_tenant = %s AND ativo = TRUE
+            ORDER BY principal DESC, id
+            LIMIT 1
+            """,
+            (id_fornecedor,),
+        )
+        principal = cur.fetchone()
+        if principal and principal[0]:
+            ids.add(int(principal[0]))
+
+    return sorted(ids)
+
+
 def espelhar_depositos_fornecedor(
     cur,
     id_vendedor: int,
@@ -19,32 +58,34 @@ def espelhar_depositos_fornecedor(
 ) -> int:
     """
     Cria depósitos espelho (somente leitura) no vendedor.
-    Se id_produto informado, espelha só depósitos com estoque das variantes do produto.
-  """
-    params: list = [id_fornecedor]
-    filtro_prod = ""
+    Se id_produto informado, espelha depósitos usados pelo produto
+    (estoque por filial, depósito de expedição ou principal do fornecedor).
+    """
     if id_produto:
-        filtro_prod = """
-            AND d.id IN (
-                SELECT DISTINCT ped.id_deposito
-                FROM tbl_produto_estoque_deposito ped
-                JOIN tbl_produto_variante v ON v.id = ped.id_variante
-                WHERE v.id_produto = %s
-            )
-        """
-        params.append(id_produto)
-
-    cur.execute(
-        f"""
-        SELECT d.id, {_DEP_COLS}
-        FROM tbl_deposito_expedicao d
-        WHERE d.id_tenant = %s AND d.ativo = TRUE
-        {filtro_prod}
-        ORDER BY d.principal DESC, d.nome
-        """,
-        params,
-    )
-    rows = cur.fetchall()
+        ids_dep = _depositos_do_produto(cur, id_fornecedor, id_produto)
+        if not ids_dep:
+            return 0
+        cur.execute(
+            f"""
+            SELECT d.id, {_DEP_COLS}
+            FROM tbl_deposito_expedicao d
+            WHERE d.id_tenant = %s AND d.ativo = TRUE AND d.id = ANY(%s)
+            ORDER BY d.principal DESC, d.nome
+            """,
+            (id_fornecedor, ids_dep),
+        )
+        rows = cur.fetchall()
+    else:
+        cur.execute(
+            f"""
+            SELECT d.id, {_DEP_COLS}
+            FROM tbl_deposito_expedicao d
+            WHERE d.id_tenant = %s AND d.ativo = TRUE
+            ORDER BY d.principal DESC, d.nome
+            """,
+            (id_fornecedor,),
+        )
+        rows = cur.fetchall()
     criados = 0
     for row in rows:
         id_dep_forn = int(row[0])
@@ -89,3 +130,21 @@ def espelhar_depositos_fornecedor(
         )
         criados += 1
     return criados
+
+
+def sincronizar_espelhos_integrados(cur, id_vendedor: int) -> int:
+    """Garante espelhos para produtos já integrados (idempotente)."""
+    cur.execute(
+        """
+        SELECT DISTINCT pv.id_tenant_fornecedor, pv.id_produto
+        FROM tbl_produto_vendedor pv
+        WHERE pv.id_tenant_vendedor = %s AND pv.ativo = TRUE
+        """,
+        (id_vendedor,),
+    )
+    total = 0
+    for id_forn, id_prod in cur.fetchall():
+        total += espelhar_depositos_fornecedor(
+            cur, id_vendedor, int(id_forn), id_produto=int(id_prod)
+        )
+    return total

@@ -8,6 +8,7 @@ from flask import Blueprint, jsonify, render_template, request, session
 
 from global_utils import Var_ConectarBanco, agora_utc, exigir_modulo, exigir_permissao, login_obrigatorio
 from srotas_plataforma import MODULO_VENDEDOR
+from vendedor.meus_produtos.servico_deposito_vendedor import sincronizar_espelhos_integrados
 
 _MOD = Path(__file__).resolve().parent
 
@@ -90,6 +91,8 @@ def depositos_dados():
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
+        sincronizar_espelhos_integrados(cur, id_tenant)
+        conn.commit()
         cur.execute(
             f"""
             SELECT {_DEPOSITO_COLS}

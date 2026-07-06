@@ -35,6 +35,10 @@ from fornecedor.catalogo.servico_imagens import (
     obter_imagem_modo,
 )
 from srotas_negocio import flatten_arvore_com_caminho, montar_arvore_categorias
+from vendedor.meus_produtos.servico_categoria_vendedor import (
+    associar_categoria_produtos,
+    categoria_pertence_vendedor,
+)
 from vendedor.meus_produtos.servico_fornecedor_apoio import montar_fornecedor_produto_apoio
 from vendedor.meus_produtos.servico_listagem_proprio import buscar_produtos_proprios
 from vendedor.meus_produtos.servico_vitrine_vendedor import (
@@ -133,6 +137,18 @@ def _enriquecer_estoque_produto_simples(cur, id_tenant: int, produto: dict) -> N
         return
     meta = _enriquecer_meta_pausa(cur, id_tenant, int(row[0]))
     produto.update(meta)
+
+
+def _enriquecer_categoria_linhas(linhas: list[dict], dados: list[dict]) -> None:
+    mapa = {int(p["id"]): p for p in dados}
+    for linha in linhas:
+        if linha.get("tipo") != "pai":
+            continue
+        p = mapa.get(int(linha["id"]))
+        if not p:
+            continue
+        linha["categoria"] = p.get("categoria") or ""
+        linha["id_categoria"] = p.get("id_categoria")
 
 
 def _exigir_produto_vitrine(cur, id_tenant_vendedor: int, id_produto: int) -> dict | None:
@@ -285,8 +301,14 @@ def dados():
                 like = f"%{busca}%"
                 params.extend([like, like, like, like])
             if id_categoria:
-                where.append("p.id_categoria = %s")
-                params.append(int(id_categoria))
+                where.append(
+                    """EXISTS (
+                        SELECT 1 FROM tbl_produto_vendedor pv_cat
+                        WHERE pv_cat.id_produto = p.id AND pv_cat.id_tenant_vendedor = %s
+                          AND pv_cat.id_categoria_vendedor = %s
+                    )"""
+                )
+                params.extend([id_tenant, int(id_categoria)])
             if somente_ativos:
                 where.append("pv.ativo = TRUE")
             where_sql = " AND ".join(where)
@@ -367,8 +389,14 @@ def dados():
             like = f"%{busca}%"
             params.extend([like, like, like, id_tenant, like, like])
         if id_categoria:
-            where.append("p.id_categoria = %s")
-            params.append(int(id_categoria))
+            where.append(
+                """EXISTS (
+                    SELECT 1 FROM tbl_produto_vendedor pv_cat
+                    WHERE pv_cat.id_produto = p.id AND pv_cat.id_tenant_vendedor = %s
+                      AND pv_cat.id_categoria_vendedor = %s
+                )"""
+            )
+            params.extend([id_tenant, int(id_categoria)])
         if filtro_tipo == "simples":
             where.append("p.formato = 'S'")
         elif filtro_tipo == "com_variacoes":
@@ -410,7 +438,16 @@ def dados():
                    p.formato,
                    BOOL_OR(pv.ativo),
                    COALESCE(p.unidade, 'UN'),
-                   c.nome,
+                   (SELECT cv.nome
+                    FROM tbl_categoria cv
+                    INNER JOIN tbl_produto_vendedor pvc ON pvc.id_categoria_vendedor = cv.id
+                    WHERE pvc.id_produto = p.id AND pvc.id_tenant_vendedor = %s
+                    LIMIT 1),
+                   (SELECT pvc.id_categoria_vendedor
+                    FROM tbl_produto_vendedor pvc
+                    WHERE pvc.id_produto = p.id AND pvc.id_tenant_vendedor = %s
+                      AND pvc.id_categoria_vendedor IS NOT NULL
+                    LIMIT 1),
                    (SELECT COUNT(*) FROM tbl_produto_vendedor pv2
                     WHERE pv2.id_produto = p.id AND pv2.id_tenant_vendedor = %s{filtro_var_ativo}),
                    (SELECT COALESCE(MIN(pv3.preco_venda), 0) FROM tbl_produto_vendedor pv3
@@ -432,14 +469,13 @@ def dados():
                    )
             FROM tbl_produto p
             INNER JOIN tbl_produto_vendedor pv ON pv.id_produto = p.id AND pv.id_tenant_vendedor = %s
-            LEFT JOIN tbl_categoria c ON c.id = p.id_categoria
             LEFT JOIN tbl_produto_variante vp ON vp.id = p.id_variante_padrao
             WHERE {where_sql}
-            GROUP BY p.id, p.sku, p.nome, p.formato, p.unidade, c.nome, vp.imagem_url, p.imagem_url
+            GROUP BY p.id, p.sku, p.nome, p.formato, p.unidade, vp.imagem_url, p.imagem_url
             ORDER BY MAX(pv.atualizado_em) DESC, p.nome
             {paginar_sql}
             """,
-            [id_tenant, id_tenant, id_tenant, id_tenant, id_tenant, id_tenant, id_tenant] + params + paginar_params,
+            [id_tenant] * 9 + params + paginar_params,
         )
         dados = [
             {
@@ -451,12 +487,13 @@ def dados():
                 "ativo": bool(r[4]),
                 "unidade": r[5] or "UN",
                 "categoria": r[6] or "",
-                "qtd_variantes": int(r[7] or 0),
-                "preco_min": float(r[8] or 0),
-                "preco_max": float(r[9] or 0),
-                "preco": float(r[8] or 0),
-                "estoque": int(r[10] or 0),
-                "imagem_url": _imagem_url_resposta(r[11]),
+                "id_categoria": r[7],
+                "qtd_variantes": int(r[8] or 0),
+                "preco_min": float(r[9] or 0),
+                "preco_max": float(r[10] or 0),
+                "preco": float(r[9] or 0),
+                "estoque": int(r[11] or 0),
+                "imagem_url": _imagem_url_resposta(r[12]),
             }
             for r in cur.fetchall()
         ]
@@ -507,6 +544,7 @@ def dados():
             expandir_variantes=expandir_variantes,
             somente_ativos=somente_ativos,
         )
+        _enriquecer_categoria_linhas(linhas, dados)
 
         if filtro_tipo in ("", "kit"):
             linhas_kits = _montar_linhas_kits(cur, id_tenant, busca, somente_ativos)
@@ -825,6 +863,18 @@ def apoio_produto():
         preco_venda = float(vit[3]) if vit and vit[3] is not None else float(r[4] or 0)
         ativo_vit = bool(vit[4]) if vit else bool(r[9])
         integrado = produto_integrado(cur, id_tenant, pid)
+        id_categoria_vendedor = None
+        cur.execute(
+            """
+            SELECT id_categoria_vendedor FROM tbl_produto_vendedor
+            WHERE id_tenant_vendedor = %s AND id_produto = %s AND id_categoria_vendedor IS NOT NULL
+            LIMIT 1
+            """,
+            (id_tenant, pid),
+        )
+        cat_v = cur.fetchone()
+        if cat_v:
+            id_categoria_vendedor = cat_v[0]
         fornecedor_apoio = None
         if integrado:
             cur.execute("SELECT id_tenant FROM tbl_produto WHERE id = %s", (pid,))
@@ -845,7 +895,7 @@ def apoio_produto():
                 "preco": preco_venda,
                 "preco_promocional": float(r[5]) if r[5] is not None else None,
                 "unidade": r[6] or "UN",
-                "id_categoria": r[7],
+                "id_categoria": id_categoria_vendedor,
                 "imagem_url": _imagem_url_resposta(img_vit or r[8]),
                 "imagem_caminho": img_vit or r[8] or "",
                 "ativo": ativo_vit,
@@ -917,10 +967,17 @@ def salvar_vitrine():
     descricao = (body.get("descricao") or "").strip()
     imagem = (body.get("imagem_url") or "").strip()
     ativo = str(body.get("ativo", "true")).lower() in ("1", "true", "t", "yes", "sim")
+    id_categoria_raw = body.get("id_categoria")
+    try:
+        id_categoria = int(id_categoria_raw) if id_categoria_raw not in (None, "") else None
+    except (TypeError, ValueError):
+        id_categoria = None
 
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
+        if id_categoria is not None and not categoria_pertence_vendedor(cur, id_tenant, id_categoria):
+            return jsonify(success=False, message="Categoria inválida."), 400
         cur.execute(
             """
             UPDATE tbl_produto_vendedor SET
@@ -929,15 +986,61 @@ def salvar_vitrine():
                 imagem_url_vitrine = NULLIF(%s, ''),
                 preco_venda = CASE WHEN preco_manual THEN preco_venda ELSE %s END,
                 ativo = %s,
+                id_categoria_vendedor = %s,
                 atualizado_em = %s
             WHERE id_tenant_vendedor = %s AND id_produto = %s
             """,
-            (nome, descricao, imagem, preco_venda, ativo, agora_utc(), id_tenant, pid),
+            (nome, descricao, imagem, preco_venda, ativo, id_categoria, agora_utc(), id_tenant, pid),
         )
         if cur.rowcount == 0:
             return jsonify(success=False, message="Produto não está na sua vitrine."), 404
         conn.commit()
         return jsonify(success=True, message="Vitrine atualizada.", id=pid)
+    finally:
+        conn.close()
+
+
+@vd_meus_produtos_bp.post("/meus-produtos/categoria/associar")
+@login_obrigatorio()
+@exigir_permissao(codigo="produtos.editar")
+def categoria_associar():
+    if (resp := _exigir_edicao()) is not None:
+        return resp
+    id_tenant = _id_tenant_sessao()
+    body = request.get_json(silent=True) or {}
+    raw = body.get("ids") or []
+    ids: list[int] = []
+    for x in raw:
+        try:
+            ids.append(int(x))
+        except (TypeError, ValueError):
+            continue
+    ids = list(dict.fromkeys(ids))
+    if not ids:
+        return jsonify(success=False, message="Nenhum produto selecionado."), 400
+    id_categoria_raw = body.get("id_categoria")
+    try:
+        id_categoria = int(id_categoria_raw) if id_categoria_raw not in (None, "") else None
+    except (TypeError, ValueError):
+        id_categoria = None
+    if not id_categoria:
+        return jsonify(success=False, message="Selecione uma categoria."), 400
+
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        n = associar_categoria_produtos(cur, id_tenant, ids, id_categoria)
+        conn.commit()
+        if not n:
+            return jsonify(success=False, message="Nenhum produto atualizado."), 404
+        return jsonify(
+            success=True,
+            message=f"Categoria associada a {n} produto(s).",
+            atualizados=n,
+        )
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 400
     finally:
         conn.close()
 

@@ -100,6 +100,7 @@ def buscar_produtos_proprios(
         SELECT p.id, p.sku, p.nome, p.formato, p.publicado, p.ativo,
                COALESCE(p.unidade, 'UN'),
                c.nome AS categoria,
+               p.id_categoria,
                (SELECT COUNT(*) FROM tbl_produto_variante v WHERE v.id_produto = p.id{filtro_var_ativo}),
                (SELECT COALESCE(MIN(v.preco), 0) FROM tbl_produto_variante v WHERE v.id_produto = p.id{filtro_var_ativo}),
                (SELECT COALESCE(MAX(v.preco), 0) FROM tbl_produto_variante v WHERE v.id_produto = p.id{filtro_var_ativo}),
@@ -126,14 +127,15 @@ def buscar_produtos_proprios(
             "ativo": bool(r[5]),
             "unidade": r[6] or "UN",
             "categoria": r[7] or "",
-            "qtd_variantes": int(r[8] or 0),
-            "preco_min": float(r[9] or 0),
-            "preco_max": float(r[10] or 0),
-            "preco": float(r[9] or 0),
-            "estoque": int(r[11] or 0),
-            "imagem_url": _imagem_url_resposta(r[12]),
+            "id_categoria": r[8],
+            "qtd_variantes": int(r[9] or 0),
+            "preco_min": float(r[10] or 0),
+            "preco_max": float(r[11] or 0),
+            "preco": float(r[10] or 0),
+            "estoque": int(r[12] or 0),
+            "imagem_url": _imagem_url_resposta(r[13]),
             "origem": "proprio",
-            "_sort_ts": r[13],
+            "_sort_ts": r[14],
         }
         for r in cur.fetchall()
     ]
@@ -168,4 +170,9 @@ def buscar_produtos_proprios(
     )
     for linha in linhas:
         linha["origem"] = "proprio"
+    for p in dados:
+        for linha in linhas:
+            if linha.get("tipo") == "pai" and int(linha["id"]) == int(p["id"]):
+                linha["categoria"] = p.get("categoria") or ""
+                linha["id_categoria"] = p.get("id_categoria")
     return dados, variantes_por_produto, linhas

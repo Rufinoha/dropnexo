@@ -512,6 +512,41 @@
   background: rgba(185, 28, 28, 0.08);
 }
 
+.Cat_ColCategoria {
+  min-width: 120px;
+  max-width: 180px;
+}
+
+.Cat_CatPicker {
+  border: none;
+  background: transparent;
+  color: var(--marca-primary, #021f81);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0.15rem 0.25rem;
+  text-align: left;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.Cat_CatPicker:hover {
+  text-decoration: underline;
+}
+
+.Cat_CatPicker--vazio {
+  color: #94a3b8;
+  font-weight: 500;
+  font-style: italic;
+}
+
+.Cat_CatPicker--vazio:hover {
+  color: var(--marca-primary, #021f81);
+  font-style: normal;
+}
+
 
 
 

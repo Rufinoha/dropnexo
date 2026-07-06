@@ -6,6 +6,7 @@
   let linhasCompletas = [];
   const recolhidos = new Set();
   const selecionados = new Set();
+  let categoriasCache = [];
 
   const el = {
     filtroBusca: document.getElementById("ob_filtroBusca"),
@@ -169,25 +170,90 @@
   function initBulkActions() {
     if (!el.bulkActions || el.bulkActions.dataset.ready) return;
     el.bulkActions.dataset.ready = "1";
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "Cl_BtnAcao Cat_BulkBtn Cat_BulkBtn--danger";
-    btn.dataset.bulk = "excluir";
-    btn.title = "Excluir selecionados";
-    btn.setAttribute("aria-label", "Excluir selecionados");
-    window.Util?.gerarIconeTech?.({ dest: btn, nome: "excluir" });
-    el.bulkActions.appendChild(btn);
+    const acoes = [
+      { acao: "categoria", icon: "categorias", title: "Associar categoria" },
+      { acao: "excluir", icon: "excluir", title: "Excluir selecionados", danger: true },
+    ];
+    acoes.forEach((a) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = `Cl_BtnAcao Cat_BulkBtn${a.danger ? " Cat_BulkBtn--danger" : ""}`;
+      btn.dataset.bulk = a.acao;
+      btn.title = a.title;
+      btn.setAttribute("aria-label", a.title);
+      window.Util?.gerarIconeTech?.({ dest: btn, nome: a.icon });
+      el.bulkActions.appendChild(btn);
+    });
     el.bulkActions.addEventListener("click", async (ev) => {
-      const b = ev.target.closest("[data-bulk=excluir]");
+      const b = ev.target.closest("[data-bulk]");
       if (!b) return;
       const ids = [...selecionados];
       if (!ids.length) return;
       try {
-        await excluirLote(ids);
+        if (b.dataset.bulk === "excluir") await excluirLote(ids);
+        else if (b.dataset.bulk === "categoria") await associarCategoriaLote(ids);
       } catch (e) {
         await Swal.fire("Erro", e.message, "error");
       }
     });
+  }
+
+  async function associarCategoriaLote(ids) {
+    if (!categoriasCache.length) {
+      const r = await fetch(`${BASE}/combos`);
+      const j = await r.json();
+      if (!r.ok || !j.success) throw new Error(j.message || "Erro ao carregar categorias.");
+      categoriasCache = j.categorias || [];
+    }
+    if (!categoriasCache.length) {
+      throw new Error("Cadastre categorias em Categorias antes de associar.");
+    }
+    const opts = categoriasCache
+      .map((c) => `<option value="${c.id}">${escapeHtml(c.nome)}</option>`)
+      .join("");
+    const html = `<label style="display:block;text-align:left;font-size:13px;margin-bottom:6px;">Sua categoria</label>
+      <select id="swalCat" class="swal2-select" style="width:100%;max-width:100%;">${opts}</select>`;
+    const res = await Swal.fire({
+      title: "Associar categoria",
+      html,
+      showCancelButton: true,
+      confirmButtonText: "Associar",
+      cancelButtonText: "Cancelar",
+      focusConfirm: false,
+      preConfirm: () => {
+        const v = document.getElementById("swalCat")?.value;
+        if (!v) {
+          Swal.showValidationMessage("Selecione uma categoria.");
+          return false;
+        }
+        return v;
+      },
+    });
+    if (!res.isConfirmed) return;
+    const resp = await fetch(`${BASE}/categoria/associar`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids, id_categoria: res.value }),
+    });
+    const jj = await resp.json();
+    if (!resp.ok || !jj.success) throw new Error(jj.message || "Erro.");
+    selecionados.clear();
+    syncBulkBar();
+    await Swal.fire("Sucesso", jj.message, "success");
+    await carregar();
+  }
+
+  async function associarCategoriaUm(idProduto) {
+    await associarCategoriaLote([idProduto]);
+  }
+
+  function renderCategoriaCell(l) {
+    if (l.tipo !== "pai" || isKit(l)) return "—";
+    const nome = (l.categoria || "").trim();
+    if (!nome) {
+      return `<button type="button" class="Cat_CatPicker Cat_CatPicker--vazio" data-cat-prod="${l.id}" title="Escolher categoria">Escolher</button>`;
+    }
+    return `<button type="button" class="Cat_CatPicker" data-cat-prod="${l.id}" title="Alterar categoria">${escapeHtml(nome)}</button>`;
   }
 
   async function excluirLote(ids) {
@@ -251,6 +317,7 @@
       o.textContent = c.nome;
       sel.appendChild(o);
     });
+    categoriasCache = j.categorias || [];
     sel.value = val;
   }
 
@@ -313,6 +380,7 @@
       <td class="Cat_ColNome">${nomeCell}</td>
       <td class="Cat_ColSku">${escapeHtml(l.sku || "—")}</td>
       <td>${escapeHtml(l.unidade || "UN")}</td>
+      <td class="Cat_ColCategoria">${renderCategoriaCell(l)}</td>
       <td class="Cat_Preco">${preco}</td>
       <td class="Cat_ColEstoque">${renderEstoque(l)}</td>
       <td class="Cl_TableActions">${acoes}</td>
@@ -322,7 +390,7 @@
   function renderTabela() {
     const linhas = linhasVisiveis();
     if (!linhas.length) {
-      el.tbody.innerHTML = '<tr><td colspan="9">Nenhum produto encontrado.</td></tr>';
+      el.tbody.innerHTML = '<tr><td colspan="10">Nenhum produto encontrado.</td></tr>';
       atualizarBtnExpandTodos();
       syncBulkBar();
       renderPaginacao();
@@ -551,6 +619,11 @@
     const btn = ev.target.closest("button");
     if (!btn) return;
     try {
+      if (btn.classList.contains("Cat_CatPicker")) {
+        const pid = Number(btn.dataset.catProd || 0);
+        if (pid) await associarCategoriaUm(pid);
+        return;
+      }
       if (btn.classList.contains("btnEditVar")) {
         return abrirVariante(+btn.dataset.id, +btn.dataset.produto);
       }

@@ -906,6 +906,10 @@ def loja_ativar_produto():
         if not rows:
             return jsonify(success=False, message="Produto não encontrado."), 404
 
+        from vendedor.meus_produtos.servico_deposito_vendedor import espelhar_depositos_fornecedor
+
+        espelhar_depositos_fornecedor(cur, int(id_vendedor), id_fornecedor, id_produto=id_produto)
+
         ativados = 0
         for row in rows:
             preco_forn = float(row[3] or 0)

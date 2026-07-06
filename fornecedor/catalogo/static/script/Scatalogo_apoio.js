@@ -974,7 +974,7 @@
       input.classList.toggle("Cat_CampoHerdado", bloqueado);
     });
     if (el.frete_gratis) el.frete_gratis.disabled = integrado;
-    if (el.id_categoria) el.id_categoria.disabled = integrado;
+    if (el.id_categoria) el.id_categoria.disabled = integrado && !isVendedor;
     syncModoImagemIntegrado();
   }
 
@@ -1270,6 +1270,7 @@
         preco: el.preco?.value,
         imagem_url: imagemParaSalvar(),
         ativo: !!el.ativo.checked,
+        id_categoria: el.id_categoria?.value || null,
       };
       const r = await fetch(`${apiBase()}/salvar`, {
         method: "POST",
