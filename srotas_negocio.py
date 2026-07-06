@@ -313,7 +313,9 @@ def _arquivo_icone_api(slug: str) -> str | None:
 
 
 def url_icone_integracao(slug: str, *, icones_base_url: str = "") -> str:
-    """URL do ícone da integração (prioriza static/imge/icone_api/)."""
+    """URL do ícone da integração (prioriza static/imge/icone_api/ ou módulo api/)."""
+    if slug == "mercado-pago":
+        return url_for("mercadopago.static", filename="imge/icone_mercadopago.png")
     arquivo = _arquivo_icone_api(slug)
     if arquivo:
         return url_for("static", filename=f"imge/icone_api/{arquivo}")
@@ -330,15 +332,10 @@ def catalogo_com_urls(icones_base_url: str) -> list[dict]:
         for item in cat["itens"]:
             i = dict(item)
             slug = item["slug"]
-            arquivo_api = _arquivo_icone_api(slug)
-            if arquivo_api:
-                url_png = url_for("static", filename=f"imge/icone_api/{arquivo_api}")
-                i["icone_png"] = url_png
-                i["icone_svg"] = f"{base}{slug}.svg"
+            i["icone_png"] = url_icone_integracao(slug, icones_base_url=base)
+            i["icone_svg"] = f"{base}{slug}.svg"
+            if _arquivo_icone_api(slug) or slug == "mercado-pago":
                 i["icone_custom"] = True
-            else:
-                i["icone_png"] = f"{base}{slug}.png"
-                i["icone_svg"] = f"{base}{slug}.svg"
             itens.append(i)
         c["itens"] = itens
         out.append(c)

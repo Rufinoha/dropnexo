@@ -25,14 +25,19 @@
   width: 48px;
   height: 48px;
   border-radius: 12px;
-  background: linear-gradient(135deg, #009ee3, #00bcff);
-  color: #fff;
-  font-weight: 800;
-  font-size: 1rem;
+  overflow: hidden;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 6px 18px rgba(0, 158, 227, 0.35);
+  background: #fff;
+  box-shadow: 0 6px 18px rgba(0, 158, 227, 0.2);
+}
+
+.Mp_Logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .Mp_ConnBadge {
@@ -58,6 +63,17 @@
 .Mp_Hint { font-size: 0.85rem; color: #64748b; margin: 0 0 0.85rem; line-height: 1.45; }
 
 .Mp_Actions { display: flex; flex-wrap: wrap; gap: 0.65rem; }
+.Mp_Actions--foot { margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid #e2e8f0; }
+
+.Mp_ContaResumo {
+  font-size: 0.88rem;
+  color: #047857;
+  font-weight: 600;
+  margin: 0 0 1rem;
+  padding: 0.5rem 0.75rem;
+  background: #ecfdf5;
+  border-radius: 8px;
+}
 
 .Mp_Switches { display: flex; gap: 1.25rem; margin-bottom: 1rem; flex-wrap: wrap; }
 

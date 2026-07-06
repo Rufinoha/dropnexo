@@ -3,7 +3,7 @@
 {% block title %}Mercado Pago — Integrações — {{ MARCA_NOME }}{% endblock %}
 {% block topbar_title %}Mercado Pago{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('static', filename='style/Cmercadopago_integracao.css') }}?v=2" />
+<link rel="stylesheet" href="{{ url_for('static', filename='style/Cmercadopago_integracao.css') }}?v=3" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal Mp_Wrap">
@@ -13,7 +13,9 @@
         <i data-lucide="arrow-left"></i> Integrações
       </a>
       <div class="Mp_TitleRow">
-        <div class="Mp_Logo" aria-hidden="true">MP</div>
+        <div class="Mp_Logo" aria-hidden="true">
+          <img src="{{ url_for('mercadopago.static', filename='imge/icone_mercadopago.png') }}" alt="" width="48" height="48" />
+        </div>
         <div>
           <h2>Mercado Pago</h2>
           <p class="cl-page-desc">Receba pagamentos dos pedidos dos vendedores via PIX e cartão. O valor cai na <strong>sua</strong> conta MP — o DropNexo não intermedia.</p>
@@ -27,22 +29,38 @@
 
   <section class="Mp_Card Mp_Card--alert" id="mp_alert_servidor" hidden>
     <h3>Integração indisponível no servidor</h3>
-    <p class="Mp_Hint">O administrador ainda não configurou <code>APPLICATION_ID_DEV</code> e <code>ACCESS_TOKEN_DEV</code> no <code>.env</code> da plataforma. Sem isso, nenhum fornecedor consegue conectar.</p>
+    <p class="Mp_Hint">O administrador ainda não configurou as credenciais OAuth do app DropNexo no servidor. Peça ao suporte antes de conectar.</p>
   </section>
 
-  <section class="Mp_Card Mp_Card--info" id="mp_sec_guia">
-    <h3>Como conectar (fornecedor)</h3>
-    <ol class="Mp_Passos">
-      <li>Peça ao administrador do DropNexo para cadastrar o app OAuth no <a href="https://www.mercadopago.com.br/developers/panel/app" target="_blank" rel="noopener">painel de desenvolvedores</a>.</li>
-      <li>Clique em <strong>Conectar conta</strong> abaixo e autorize com a <strong>sua conta Mercado Pago</strong> (a que receberá os pagamentos).</li>
-      <li>Escolha PIX e/ou cartão e salve.</li>
-      <li>Pronto: vendedores da sua rede poderão pagar pedidos usando sua conta.</li>
-    </ol>
+  {# —— Desconectado: guia mínima + conectar —— #}
+  <section class="Mp_Card Mp_Card--info" id="mp_sec_guia" {% if mp_conectado %}hidden{% endif %}>
+    <h3>Conectar sua conta</h3>
+    <p class="Mp_Hint">Autorize com a conta Mercado Pago que <strong>receberá</strong> os pagamentos dos pedidos. Depois de conectar, escolha PIX e/ou cartão.</p>
+    <div class="Mp_Actions">
+      <a href="{{ url_for('mercadopago.oauth_iniciar') }}" class="Cl_botaoprimario" id="mp_btn_conectar">Conectar conta</a>
+    </div>
   </section>
 
-  <section class="Mp_Card Mp_Card--info" id="mp_sec_urls">
-    <h3>URLs para o painel do Mercado Pago</h3>
-    <p class="Mp_Hint">O administrador do DropNexo deve cadastrar estas URLs no app OAuth (uma vez só, para toda a plataforma).</p>
+  {# —— Conectado: só meios de pagamento + desconectar —— #}
+  <section class="Mp_Card" id="mp_painel_config" {% if not mp_conectado %}hidden{% endif %}>
+    <p id="mp_conta_info" class="Mp_ContaResumo" hidden></p>
+    <h3>Meios de pagamento aceitos</h3>
+    <p class="Mp_Hint">O vendedor escolherá entre as opções habilitadas ao pagar o pedido.</p>
+    <div class="Mp_Switches">
+      <label class="Mp_Switch"><input type="checkbox" id="mp_aceita_pix" checked /> PIX</label>
+      <label class="Mp_Switch"><input type="checkbox" id="mp_aceita_cartao" checked /> Cartão de crédito</label>
+    </div>
+    <p id="mp_msg" class="Mp_Msg" hidden></p>
+    <div class="Mp_Actions Mp_Actions--foot">
+      <button type="button" class="Cl_BtnCancelar" id="mp_btn_desconectar">Desconectar</button>
+    </div>
+  </section>
+
+  {# —— Admin/dev: só antes de conectar (setup da plataforma) —— #}
+  {% if session.get('eh_desenvolvedor') %}
+  <section class="Mp_Card Mp_Card--dev" id="mp_sec_dev" {% if mp_conectado %}hidden{% endif %}>
+    <h3>Administrador — setup da plataforma</h3>
+    <p class="Mp_Hint">Cadastre o app OAuth no <a href="https://www.mercadopago.com.br/developers/panel/app" target="_blank" rel="noopener">painel Mercado Pago</a> e configure o <code>.env</code> do servidor.</p>
     <div class="Mp_UrlRow">
       <span class="Mp_UrlLabel">Redirect OAuth</span>
       <code id="mp_redirect_uri" class="Mp_Code">—</code>
@@ -53,53 +71,11 @@
       <code id="mp_webhook_url" class="Mp_Code">—</code>
       <button type="button" class="Mp_CopyBtn" data-copy="mp_webhook_url">Copiar</button>
     </div>
-    <p class="Mp_Hint Mp_Hint--sm">Em desenvolvimento local, use um túnel (ex.: ngrok) e ajuste <code>BASE_HOM</code> no <code>.env</code> para a URL pública.</p>
-  </section>
-
-  <section class="Mp_Card" id="mp_sec_conexao">
-    <p class="Mp_Hint">Somente contas de <strong>fornecedor</strong>. Os vendedores pagarão usando sua conta conectada.</p>
-    <div class="Mp_Actions">
-      <a href="{{ url_for('mercadopago.oauth_iniciar') }}" class="Cl_botaoprimario" id="mp_btn_conectar" {% if mp_conectado %}hidden{% endif %}>Conectar conta</a>
-      <button type="button" class="Cl_BtnCancelar" id="mp_btn_desconectar" {% if not mp_conectado %}hidden{% endif %}>Desconectar</button>
-    </div>
-  </section>
-
-  <section class="Mp_Card" id="mp_painel_config" {% if not mp_conectado %}hidden{% endif %}>
-    <h3>Meios de pagamento aceitos</h3>
-    <p class="Mp_Hint">O vendedor escolherá entre as opções habilitadas ao pagar o pedido.</p>
-    <div class="Mp_Switches">
-      <label class="Mp_Switch"><input type="checkbox" id="mp_aceita_pix" checked /> PIX</label>
-      <label class="Mp_Switch"><input type="checkbox" id="mp_aceita_cartao" checked /> Cartão de crédito</label>
-    </div>
-    <div class="Mp_Actions">
-      <button type="button" class="Cl_BtnSalvar" id="mp_btn_salvar">Salvar</button>
-    </div>
-    <p id="mp_msg" class="Mp_Msg" hidden></p>
-  </section>
-
-  <section class="Mp_Card Mp_Card--info" id="mp_sec_conta" hidden>
-    <h3>Conta conectada</h3>
-    <p id="mp_conta_info" class="Mp_Hint">—</p>
-  </section>
-
-  {% if session.get('eh_desenvolvedor') %}
-  <section class="Mp_Card Mp_Card--dev" id="mp_sec_dev">
-    <h3>Administrador — credenciais no .env</h3>
-    <p class="Mp_Hint">São do <strong>app OAuth DropNexo</strong> (não da conta do fornecedor). Cada fornecedor conecta a conta dele depois.</p>
-    <ol class="Mp_Passos">
-      <li>Acesse <a href="https://www.mercadopago.com.br/developers/panel/app" target="_blank" rel="noopener">mercadopago.com.br/developers</a> → <strong>Criar aplicação</strong>.</li>
-      <li>Tipo: pagamentos online / checkout com OAuth.</li>
-      <li>Em <strong>Credenciais de teste</strong>, copie <em>Client ID</em> (número da aplicação) e o <em>Client Secret</em> ou use os valores já no <code>.env</code>:
-        <pre class="Mp_Code Mp_Code--block">APPLICATION_ID_DEV=6565434416513988
-ACCESS_TOKEN_DEV=...   # ou CLIENT_SECRET_DEV=... se tiver o secret do painel</pre>
-      </li>
-      <li>Reinicie a aplicação e teste como fornecedor.</li>
-    </ol>
     <p class="Mp_Hint" id="mp_dev_status">—</p>
   </section>
   {% endif %}
 </div>
 {% endblock %}
 {% block page_js %}
-<script src="{{ url_for('static', filename='script/Smercadopago_integracao.js') }}?v=2"></script>
+<script src="{{ url_for('static', filename='script/Smercadopago_integracao.js') }}?v=3"></script>
 {% endblock %}

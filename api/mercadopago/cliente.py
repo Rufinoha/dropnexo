@@ -296,7 +296,16 @@ def carregar_config_mp(cur, id_tenant: int) -> dict:
             "mp_user_id": None,
             "conta": {},
         }
-    conta = row[2] if isinstance(row[2], dict) else {}
+    raw_conta = row[2]
+    if isinstance(raw_conta, dict):
+        conta = raw_conta
+    elif isinstance(raw_conta, str) and raw_conta.strip():
+        try:
+            conta = json.loads(raw_conta)
+        except json.JSONDecodeError:
+            conta = {}
+    else:
+        conta = {}
     return {
         "status": row[0],
         "mp_user_id": row[1],

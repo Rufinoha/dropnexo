@@ -19,7 +19,7 @@ from api.mercadopago.cliente import (
     trocar_code_por_tokens,
     url_autorizacao,
 )
-from global_utils import Var_ConectarBanco, login_obrigatorio, obter_url_site_publico, usuario_tem_permissao
+from global_utils import Var_ConectarBanco, login_obrigatorio, obter_base_url, usuario_tem_permissao
 
 _log = logging.getLogger(__name__)
 
