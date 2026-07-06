@@ -271,6 +271,124 @@ def listar_pedidos_fornecedor(cur, id_fornecedor: int, status: str | None = None
     return [_pedido_dict(r[:28], vendedor_nome=r[29]) for r in cur.fetchall()]
 
 
+def _parse_atributos_variante(raw) -> dict[str, str]:
+    if isinstance(raw, dict):
+        data = raw
+    elif raw:
+        try:
+            data = json.loads(raw) if isinstance(raw, str) else raw
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return {}
+        if not isinstance(data, dict):
+            return {}
+    else:
+        return {}
+    out: dict[str, str] = {}
+    for chave, valor in data.items():
+        nome = str(chave or "").strip()
+        val = str(valor or "").strip()
+        if nome and val:
+            out[nome] = val
+    return out
+
+
+def _rotulo_variacao(formato: str, nome_exibicao: str, atributos: dict[str, str]) -> str:
+    if atributos:
+        return ", ".join(f"{k}: {v}" for k, v in atributos.items())
+    if (formato or "S") == "E" and nome_exibicao and nome_exibicao.strip().lower() not in ("padrão", "padrao", ""):
+        return nome_exibicao.strip()
+    return ""
+
+
+def _fmt_moeda_br(valor: float) -> str:
+    return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def combobox_produtos_pedido(
+    cur,
+    id_vendedor: int,
+    termo: str = "",
+    *,
+    limite: int = 20,
+    id_fornecedor: int | None = None,
+) -> list[dict]:
+    """Variantes vendáveis (filhos) em Meus produtos — formato ComboBusca."""
+    termo = (termo or "").strip()
+    if len(termo) < 3:
+        return []
+
+    where = [
+        "pv.id_tenant_vendedor = %s",
+        "pv.ativo = TRUE",
+        "v.ativo = TRUE",
+        "p.ativo = TRUE",
+        # Somente filhos vendáveis: simples (S) ou variações (E), nunca o pai placeholder
+        """(
+            p.formato = 'S'
+            OR (
+                p.formato = 'E'
+                AND NOT (
+                    v.id = p.id_variante_padrao
+                    AND EXISTS (
+                        SELECT 1 FROM tbl_produto_variante v2
+                        WHERE v2.id_produto = p.id AND v2.ativo AND v2.id <> v.id
+                    )
+                )
+            )
+        )""",
+    ]
+    params: list[Any] = [id_vendedor]
+    if id_fornecedor:
+        where.append("pv.id_tenant_fornecedor = %s")
+        params.append(id_fornecedor)
+    where.append("(p.nome ILIKE %s OR v.sku ILIKE %s OR COALESCE(pv.nome_vitrine, '') ILIKE %s OR v.nome_exibicao ILIKE %s)")
+    like = f"%{termo}%"
+    params.extend([like, like, like, like])
+
+    cur.execute(
+        f"""
+        SELECT pv.id_variante, pv.id_produto, pv.id_tenant_fornecedor,
+               COALESCE(NULLIF(TRIM(pv.nome_vitrine), ''), p.nome),
+               v.sku, v.nome_exibicao, v.atributos, p.formato,
+               pv.preco_fornecedor, pv.preco_venda,
+               COALESCE(tf.nome_fantasia, tf.nome),
+               GREATEST(0, COALESCE(ve.quantidade, 0) - COALESCE(ve.reservado, 0))
+        FROM tbl_produto_vendedor pv
+        JOIN tbl_produto_variante v ON v.id = pv.id_variante
+        JOIN tbl_produto p ON p.id = pv.id_produto
+        JOIN tbl_tenant tf ON tf.id = pv.id_tenant_fornecedor
+        LEFT JOIN tbl_produto_variante_estoque ve ON ve.id_variante = v.id
+        WHERE {' AND '.join(where)}
+        ORDER BY COALESCE(pv.nome_vitrine, p.nome), v.nome_exibicao, v.sku
+        LIMIT %s
+        """,
+        params + [limite],
+    )
+
+    out: list[dict] = []
+    for r in cur.fetchall():
+        atributos = _parse_atributos_variante(r[6])
+        formato = r[7] or "S"
+        preco_venda = _float(r[9])
+        out.append(
+            {
+                "id": r[0],
+                "id_variante": r[0],
+                "id_produto": r[1],
+                "id_fornecedor": r[2],
+                "nome": r[3] or "",
+                "variacao": _rotulo_variacao(formato, r[5] or "", atributos),
+                "sku": r[4] or "",
+                "preco_venda": preco_venda,
+                "preco_venda_label": _fmt_moeda_br(preco_venda),
+                "valor_drop": _float(r[8]),
+                "fornecedor_nome": r[10] or "",
+                "estoque_disponivel": int(r[11] or 0),
+            }
+        )
+    return out
+
+
 def buscar_produtos_pedido(cur, id_vendedor: int, termo: str = "", id_fornecedor: int | None = None) -> list[dict]:
     termo = (termo or "").strip()
     where = [

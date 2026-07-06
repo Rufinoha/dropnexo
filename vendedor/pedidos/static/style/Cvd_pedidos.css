@@ -480,11 +480,39 @@
 
 .Pd_Grid--full { grid-column: 1 / -1; }
 
+.Pd_CepRow .Pd_CepInputRow {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.Pd_CepRow .Pd_CepInputRow input {
+  flex: 1;
+  max-width: 160px;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+}
+
+.Pd_CepRow .Pd_CepInputRow .Cl_botaoFiltro {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+
 @media (max-width: 640px) {
   .Pd_Grid { grid-template-columns: 1fr; }
 }
 
-.Pd_BuscaRow {
+.Pd_ProdComboWrap {
+  margin-bottom: 1rem;
+  max-width: 520px;
+}
+
+.Pd_ProdComboWrap .Cl_SelectLike {
+  width: 100%;
+}
+
   display: flex;
   gap: 0.5rem;
   margin-bottom: 0.65rem;

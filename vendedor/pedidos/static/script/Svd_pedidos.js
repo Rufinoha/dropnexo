@@ -19,7 +19,6 @@
     detTitulo: document.getElementById("pd_detTitulo"),
     itens: document.getElementById("pd_itens"),
     itensVazio: document.getElementById("pd_itensVazio"),
-    resultados: document.getElementById("pd_resultados"),
     msg: document.getElementById("pd_msg"),
     subtotal: document.getElementById("pd_subtotal"),
     taxa: document.getElementById("pd_taxa"),
@@ -31,7 +30,7 @@
   let idGrupo = null;
   let carrinho = [];
   let taxasPorFornecedor = {};
-  let ultimosProdutos = [];
+  let comboProd = null;
   let pollPixTimer = null;
   let pedidoPagamentoAtual = null;
   let painelAtivo = "produto";
@@ -252,6 +251,50 @@
     if (painelAtivo === "valores") renderPayIntegracoes();
   }
 
+  function limparComboProduto() {
+    const display = document.querySelector("#pd_combo_produto .Cl_SelectDisplay");
+    const hidden = document.getElementById("pd_produto_id");
+    if (display) display.value = "";
+    if (hidden) hidden.value = "";
+  }
+
+  function adicionarProdutoCombo(item) {
+    if (!item?.id_variante) return;
+    const ex = carrinho.find((x) => x.id_variante === item.id_variante);
+    if (ex) ex.quantidade += 1;
+    else {
+      carrinho.push({
+        id_variante: item.id_variante,
+        id_fornecedor: item.id_fornecedor,
+        nome: item.nome,
+        sku: item.sku,
+        valor_drop: item.valor_drop,
+        fornecedor_nome: item.fornecedor_nome,
+        quantidade: 1,
+      });
+    }
+    renderItens();
+    limparComboProduto();
+  }
+
+  function initComboProduto() {
+    if (!window.Util?.combobox_personalisado) return null;
+    if (comboProd) return comboProd;
+    comboProd = Util.combobox_personalisado({
+      seletor: "#pd_combo_produto",
+      caracteres: 3,
+      rota: "/vendedor/pedidos/produtos/combobox",
+      limite: 20,
+      campoOcultoId: "pd_produto_id",
+      col_l1: ["nome", false],
+      col_l2: ["variacao", "Variação"],
+      col_l3: ["sku", "SKU"],
+      col_l4: ["preco_venda_label", "Preço de venda"],
+      onSelect: adicionarProdutoCombo,
+    });
+    return comboProd;
+  }
+
   function renderItens() {
     el.itens.innerHTML = carrinho
       .map(
@@ -294,15 +337,59 @@
       if (f) f.value = "";
     });
     renderItens();
+    limparComboProduto();
     mostrarMsg("");
     el.modal.hidden = false;
-    el.resultados.hidden = true;
     irPainel("produto");
     window.lucide?.createIcons?.();
   }
 
   function fecharModal() {
     el.modal.hidden = true;
+  }
+
+  function soDigitos(v) {
+    return String(v || "").replace(/\D/g, "");
+  }
+
+  async function buscarCep() {
+    const cepEl = document.getElementById("pd_cep");
+    const cep = soDigitos(cepEl?.value);
+    if (cep.length !== 8) {
+      if (window.Swal) {
+        Swal.fire({ icon: "warning", title: "CEP", text: "Informe um CEP com 8 dígitos.", confirmButtonColor: "#021F81" });
+      } else {
+        mostrarMsg("Informe um CEP com 8 dígitos.", true);
+      }
+      return;
+    }
+    const btn = document.getElementById("pd_btnCep");
+    if (btn) btn.disabled = true;
+    try {
+      const r = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+      const j = await r.json();
+      if (j.erro) throw new Error("CEP não encontrado.");
+      const set = (id, val) => {
+        const f = document.getElementById(id);
+        if (f) f.value = val || "";
+      };
+      set("pd_logradouro", j.logradouro);
+      set("pd_bairro", j.bairro);
+      set("pd_cidade", j.localidade);
+      set("pd_uf", j.uf);
+      if (j.complemento) set("pd_compl", j.complemento);
+      atualizarNavResumos();
+      document.getElementById("pd_numero")?.focus();
+    } catch (e) {
+      const msg = e.message || "Não foi possível buscar o CEP.";
+      if (window.Swal) {
+        Swal.fire({ icon: "error", title: "CEP", text: msg, confirmButtonColor: "#021F81" });
+      } else {
+        mostrarMsg(msg, true);
+      }
+    } finally {
+      if (btn) btn.disabled = false;
+    }
   }
 
   function corpoPedido() {
@@ -325,38 +412,6 @@
       },
       itens: carrinho.map((i) => ({ id_variante: i.id_variante, quantidade: i.quantidade })),
     };
-  }
-
-  async function buscarProdutos() {
-    const q = document.getElementById("pd_buscaProd")?.value || "";
-    const r = await fetch(`/vendedor/pedidos/produtos?q=${encodeURIComponent(q)}`, {
-      credentials: "same-origin",
-    });
-    const j = await r.json();
-    if (!j.success) return;
-    const prods = j.produtos || [];
-    ultimosProdutos = prods;
-    el.resultados.hidden = prods.length === 0;
-    el.resultados.innerHTML = prods
-      .map(
-        (p, idx) => `
-      <div class="Pd_ResProd" data-idx="${idx}">
-        <span>${esc(p.nome)} <small>(${esc(p.sku)}) — ${esc(p.fornecedor_nome)}</small></span>
-        <span>${fmt(p.valor_drop)} · est. ${p.estoque_disponivel}</span>
-      </div>`
-      )
-      .join("");
-    el.resultados.querySelectorAll(".Pd_ResProd").forEach((row) => {
-      row.addEventListener("click", () => {
-        const p = ultimosProdutos[+row.dataset.idx];
-        if (!p) return;
-        const ex = carrinho.find((x) => x.id_variante === p.id_variante);
-        if (ex) ex.quantidade += 1;
-        else carrinho.push({ ...p, quantidade: 1 });
-        renderItens();
-        el.resultados.hidden = true;
-      });
-    });
   }
 
   async function salvar(confirmar) {
@@ -595,7 +650,14 @@
     });
   });
   document.getElementById("pd_btnFiltrar")?.addEventListener("click", carregarLista);
-  document.getElementById("pd_btnBuscaProd")?.addEventListener("click", buscarProdutos);
+  initComboProduto();
+  document.getElementById("pd_btnCep")?.addEventListener("click", buscarCep);
+  document.getElementById("pd_cep")?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      buscarCep();
+    }
+  });
   document.getElementById("pd_btnSalvar")?.addEventListener("click", () => salvar(false));
   document.getElementById("pd_btnConfirmar")?.addEventListener("click", () => salvar(true));
 

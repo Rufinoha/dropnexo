@@ -10,6 +10,7 @@ from global_utils import Var_ConectarBanco, exigir_modulo, exigir_permissao, log
 from servico_pedido import (
     buscar_produtos_pedido,
     cancelar_pedido,
+    combobox_produtos_pedido,
     confirmar_grupo,
     confirmar_pedido,
     listar_fornecedores_pedido,
@@ -76,6 +77,30 @@ def pedidos_dados():
             fornecedores=listar_fornecedores_pedido(cur, id_v),
             taxas_fornecedor=_taxas_fornecedores_map(cur, id_v),
         )
+    finally:
+        conn.close()
+
+
+@vd_pedidos_bp.get("/vendedor/pedidos/produtos/combobox")
+@login_obrigatorio()
+@exigir_modulo(MODULO_VENDEDOR)
+@exigir_permissao(codigo="vd_pedidos.ver")
+def pedidos_produtos_combobox():
+    id_v = _id_vendedor()
+    if not id_v:
+        return jsonify(sucesso=False, mensagem="Sessão inválida."), 403
+    termo = (request.args.get("filtro") or "").strip()
+    try:
+        limite = min(40, max(1, int(request.args.get("limitar") or 20)))
+    except (TypeError, ValueError):
+        limite = 20
+    id_forn = request.args.get("id_fornecedor")
+    id_forn_i = int(id_forn) if id_forn and str(id_forn).isdigit() else None
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        dados = combobox_produtos_pedido(cur, id_v, termo, limite=limite, id_fornecedor=id_forn_i)
+        return jsonify(sucesso=True, dados=dados)
     finally:
         conn.close()
 
