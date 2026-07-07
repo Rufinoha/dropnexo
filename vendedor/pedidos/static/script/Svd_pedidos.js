@@ -210,7 +210,7 @@
       ["pago", "em_expedicao", "entregue"].includes(stV(p))
     );
 
-    bloqueadoTotal = bloqueadoIntegracao;
+    bloqueadoTotal = false;
     somenteLeitura = bloqueadoIntegracao;
 
     elWizMain?.classList.toggle("is-readonly", bloqueadoIntegracao);
@@ -278,17 +278,24 @@
     return j.grupo;
   }
 
+  async function carregarContextoPedido(idPed) {
+    const r = await fetch(`/vendedor/pedidos/${idPed}/contexto`, { credentials: "same-origin" });
+    const j = await parseJsonResp(r);
+    if (!j.success) throw new Error(j.message || "Erro ao carregar pedido.");
+    return j.grupo;
+  }
+
   async function abrirModalEdicao(opts = {}) {
-    const { idGrupo: gid, painelInicial = "produto", idPedidoFoco = null, tipoAnexo = null } = opts;
-    if (!gid) return;
+    const { idGrupo: gid, idPedido: idPed, painelInicial = "produto", idPedidoFoco = null, tipoAnexo = null } = opts;
+    if (!gid && !idPed) return;
 
     mostrarMsg("");
-    pedidoFocoAnexo = idPedidoFoco;
+    pedidoFocoAnexo = idPedidoFoco || idPed || null;
     tipoAnexoFoco = tipoAnexo;
 
     let grupo;
     try {
-      grupo = await carregarGrupo(gid);
+      grupo = gid ? await carregarGrupo(gid) : await carregarContextoPedido(idPed);
     } catch (e) {
       if (window.Swal) {
         Swal.fire({ icon: "error", title: "Pedido", text: e.message, confirmButtonColor: "#021F81" });
@@ -323,8 +330,11 @@
   function renderBlocoAnexo(ped, tipo, rotulo) {
     const lista = (ped.anexos || []).filter((a) => a.tipo === tipo);
     const inpId = `pd_anexo_inp_${ped.id}_${tipo}`;
+    const st = stV(ped);
     const podeEnviar =
-      (ped.origem || "manual") === "manual" && stV(ped) !== "cancelado" && !bloqueadoTotal;
+      st !== "cancelado" &&
+      !["pago", "em_expedicao", "entregue"].includes(st) &&
+      ((ped.origem || "manual") === "manual" || ["importado", "aguardando_pagamento"].includes(st));
     return `
       <div class="Pd_AnexoBloco" id="pd_anexo_${ped.id}_${tipo}">
         <h5>${esc(rotulo)}</h5>
@@ -1088,7 +1098,7 @@
       }
     }
 
-    const podePagar = aguardando && !bloqueadoTotal && !pedidoPago && !comprovanteEnviado;
+    const podePagar = (aguardando || importado) && !pedidoPago && !comprovanteEnviado;
     const idPed = ped?.id || 0;
     const payRow = `
       <div class="Pd_PayRow">
@@ -1619,8 +1629,13 @@
     try {
       const r = await fetch(`/vendedor/pedidos/${idPed}`, { credentials: "same-origin" });
       const j = await parseJsonResp(r);
-      if (j.success && j.pedido?.id_grupo) {
-        await abrirModalEdicao({ idGrupo: j.pedido.id_grupo, painelInicial: "valores" });
+      if (j.success) {
+        const idG = j.pedido?.id_grupo;
+        if (idG) {
+          await abrirModalEdicao({ idGrupo: idG, painelInicial: "valores" });
+        } else {
+          await abrirModalEdicao({ idPedido: idPed, painelInicial: "valores" });
+        }
       }
     } catch {
       /* ok */
@@ -1668,24 +1683,41 @@
     const acao = btn.dataset.acao;
     const idPed = +btn.dataset.id;
     const idG = +btn.dataset.grupo;
-    if (!idG) {
+    if (!idG && !idPed) {
       if (window.Swal) {
-        Swal.fire({ icon: "info", title: "Pedido", text: "Grupo do pedido indisponível.", confirmButtonColor: "#021F81" });
+        Swal.fire({ icon: "info", title: "Pedido", text: "Pedido indisponível.", confirmButtonColor: "#021F81" });
       }
       return;
     }
     if (acao === "editar") {
       const st = btn.dataset.status || "";
       const painel = ["importado", "aguardando_pagamento", "pago"].includes(st) ? "valores" : "produto";
-      abrirModalEdicao({ idGrupo: idG, painelInicial: painel, idPedidoFoco: idPed });
+      abrirModalEdicao({
+        idGrupo: idG || null,
+        idPedido: idG ? null : idPed,
+        painelInicial: painel,
+        idPedidoFoco: idPed,
+      });
       return;
     }
     if (acao === "nf") {
-      abrirModalEdicao({ idGrupo: idG, painelInicial: "anexos", idPedidoFoco: idPed, tipoAnexo: "nf" });
+      abrirModalEdicao({
+        idGrupo: idG || null,
+        idPedido: idG ? null : idPed,
+        painelInicial: "anexos",
+        idPedidoFoco: idPed,
+        tipoAnexo: "nf",
+      });
       return;
     }
     if (acao === "etiqueta") {
-      abrirModalEdicao({ idGrupo: idG, painelInicial: "anexos", idPedidoFoco: idPed, tipoAnexo: "etiqueta" });
+      abrirModalEdicao({
+        idGrupo: idG || null,
+        idPedido: idG ? null : idPed,
+        painelInicial: "anexos",
+        idPedidoFoco: idPed,
+        tipoAnexo: "etiqueta",
+      });
     }
   });
 

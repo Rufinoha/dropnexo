@@ -19,6 +19,7 @@ from servico_pedido import (
     listar_anexos_pedido,
     listar_fornecedores_pedido,
     listar_pedidos_vendedor,
+    obter_contexto_pedido_vendedor,
     obter_grupo_pedido,
     obter_pedido,
     registrar_anexo_pedido,
@@ -176,6 +177,31 @@ def pedido_detalhe(id_pedido: int):
     except Exception:
         import logging
         logging.getLogger(__name__).exception("Erro ao obter pedido %s", id_pedido)
+        return jsonify(success=False, message="Erro ao carregar pedido."), 500
+    finally:
+        conn.close()
+
+
+@vd_pedidos_bp.get("/vendedor/pedidos/<int:id_pedido>/contexto")
+@login_obrigatorio()
+@exigir_modulo(MODULO_VENDEDOR)
+@exigir_permissao(codigo="vd_pedidos.ver")
+def pedido_contexto(id_pedido: int):
+    id_v = _id_vendedor()
+    if not id_v:
+        return jsonify(success=False, message="Sessão inválida."), 403
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        grupo = obter_contexto_pedido_vendedor(cur, id_v, id_pedido)
+        if not grupo:
+            return jsonify(success=False, message="Pedido não encontrado."), 404
+        for ped in grupo.get("pedidos") or []:
+            ped["anexos"] = listar_anexos_pedido(cur, ped["id"], id_vendedor=id_v)
+        return jsonify(success=True, grupo=grupo)
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception("Erro ao obter contexto pedido %s", id_pedido)
         return jsonify(success=False, message="Erro ao carregar pedido."), 500
     finally:
         conn.close()

@@ -1259,28 +1259,14 @@ def listar_pedidos_expedicao_vendedor(cur, id_vendedor: int) -> list[dict]:
     return out
 
 
-def obter_grupo_pedido(cur, id_vendedor: int, id_grupo: int) -> dict | None:
-    cur.execute(
-        "SELECT id, numero FROM tbl_pedido_grupo WHERE id = %s AND id_tenant_vendedor = %s",
-        (id_grupo, id_vendedor),
-    )
-    row_grupo = cur.fetchone()
-    if not row_grupo:
-        return None
-
-    cur.execute(
-        """
-        SELECT p.id, p.status_vendedor, p.status_comprador, p.status_pagamento, p.meio_pagamento, p.origem, p.valor_total,
-               p.id_tenant_fornecedor, COALESCE(tf.nome_fantasia, tf.nome), p.numero, p.pago_em,
-               p.pix_manual_payload, p.pix_manual_txid
-        FROM tbl_pedido p
-        LEFT JOIN tbl_tenant tf ON tf.id = p.id_tenant_fornecedor
-        WHERE p.id_grupo = %s AND p.id_tenant_vendedor = %s
-        ORDER BY p.id
-        """,
-        (id_grupo, id_vendedor),
-    )
-    pedidos_rows = cur.fetchall()
+def _montar_contexto_pedidos(
+    cur,
+    id_vendedor: int,
+    pedidos_rows: list,
+    *,
+    id_grupo: int | None,
+    numero_grupo: str,
+) -> dict | None:
     if not pedidos_rows:
         return None
 
@@ -1339,8 +1325,8 @@ def obter_grupo_pedido(cur, id_vendedor: int, id_grupo: int) -> dict | None:
     )
 
     return {
-        "id_grupo": int(id_grupo),
-        "numero_grupo": row_grupo[1],
+        "id_grupo": int(id_grupo) if id_grupo else None,
+        "numero_grupo": numero_grupo,
         "editavel": editavel,
         "bloqueado_total": bloqueado_total,
         "status": next(iter(statuses)) if len(statuses) == 1 else "misto",
@@ -1362,6 +1348,68 @@ def obter_grupo_pedido(cur, id_vendedor: int, id_grupo: int) -> dict | None:
         "itens": itens,
         "pedidos": pedidos,
     }
+
+
+_SQL_PEDIDOS_RESUMO = """
+    SELECT p.id, p.status_vendedor, p.status_comprador, p.status_pagamento, p.meio_pagamento, p.origem, p.valor_total,
+           p.id_tenant_fornecedor, COALESCE(tf.nome_fantasia, tf.nome), p.numero, p.pago_em,
+           p.pix_manual_payload, p.pix_manual_txid
+    FROM tbl_pedido p
+    LEFT JOIN tbl_tenant tf ON tf.id = p.id_tenant_fornecedor
+"""
+
+
+def obter_grupo_pedido(cur, id_vendedor: int, id_grupo: int) -> dict | None:
+    cur.execute(
+        "SELECT id, numero FROM tbl_pedido_grupo WHERE id = %s AND id_tenant_vendedor = %s",
+        (id_grupo, id_vendedor),
+    )
+    row_grupo = cur.fetchone()
+    if not row_grupo:
+        return None
+
+    cur.execute(
+        f"""
+        {_SQL_PEDIDOS_RESUMO}
+        WHERE p.id_grupo = %s AND p.id_tenant_vendedor = %s
+        ORDER BY p.id
+        """,
+        (id_grupo, id_vendedor),
+    )
+    return _montar_contexto_pedidos(
+        cur,
+        id_vendedor,
+        cur.fetchall(),
+        id_grupo=int(id_grupo),
+        numero_grupo=row_grupo[1],
+    )
+
+
+def obter_contexto_pedido_vendedor(cur, id_vendedor: int, id_pedido: int) -> dict | None:
+    """Carrega pedido manual (grupo) ou avulso (ex.: importado do Bling)."""
+    ped = obter_pedido(cur, id_pedido, id_vendedor=id_vendedor)
+    if not ped:
+        return None
+    if ped.get("id_grupo"):
+        return obter_grupo_pedido(cur, id_vendedor, int(ped["id_grupo"]))
+
+    cur.execute(
+        f"""
+        {_SQL_PEDIDOS_RESUMO}
+        WHERE p.id = %s AND p.id_tenant_vendedor = %s
+        """,
+        (id_pedido, id_vendedor),
+    )
+    row = cur.fetchone()
+    if not row:
+        return None
+    return _montar_contexto_pedidos(
+        cur,
+        id_vendedor,
+        [row],
+        id_grupo=None,
+        numero_grupo=ped["numero"],
+    )
 
 
 _TABELA_ANEXO_OK: bool | None = None
