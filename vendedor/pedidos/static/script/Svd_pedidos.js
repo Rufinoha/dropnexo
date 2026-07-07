@@ -278,20 +278,28 @@
   }
 
   function initComboProduto() {
-    if (!window.Util?.combobox_personalisado) return null;
+    if (!window.Util?.combobox_personalisado) {
+      console.warn("[Pedidos] Util.combobox_personalisado ainda não carregou (global_utils.js).");
+      return null;
+    }
     if (comboProd) return comboProd;
-    comboProd = Util.combobox_personalisado({
-      seletor: "#pd_combo_produto",
-      caracteres: 3,
-      rota: "/vendedor/pedidos/produtos/combobox",
-      limite: 20,
-      campoOcultoId: "pd_produto_id",
-      col_l1: ["nome", false],
-      col_l2: ["variacao", "Variação"],
-      col_l3: ["sku", "SKU"],
-      col_l4: ["preco_venda_label", "Preço de venda"],
-      onSelect: adicionarProdutoCombo,
-    });
+    try {
+      comboProd = Util.combobox_personalisado({
+        seletor: "#pd_combo_produto",
+        caracteres: 3,
+        rota: "/vendedor/pedidos/produtos/combobox",
+        limite: 20,
+        campoOcultoId: "pd_produto_id",
+        col_l1: ["nome", false],
+        col_l2: ["variacao", "Variação"],
+        col_l3: ["sku", "SKU"],
+        col_l4: ["preco_venda_label", "Preço de venda"],
+        onSelect: adicionarProdutoCombo,
+      });
+    } catch (e) {
+      console.error("[Pedidos] Falha ao iniciar ComboBusca:", e);
+      return null;
+    }
     return comboProd;
   }
 
@@ -339,6 +347,7 @@
     renderItens();
     limparComboProduto();
     mostrarMsg("");
+    if (!comboProd) initComboProduto();
     el.modal.hidden = false;
     irPainel("produto");
     window.lucide?.createIcons?.();
@@ -650,7 +659,6 @@
     });
   });
   document.getElementById("pd_btnFiltrar")?.addEventListener("click", carregarLista);
-  initComboProduto();
   document.getElementById("pd_btnCep")?.addEventListener("click", buscarCep);
   document.getElementById("pd_cep")?.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
@@ -665,9 +673,9 @@
     if (e.target === el.modal) fecharModal();
   });
 
-  carregarLista();
-
-  (function tratarRetornoPagamento() {
+  function bootPedidos() {
+    initComboProduto();
+    carregarLista();
     const params = new URLSearchParams(location.search);
     const pg = params.get("pagamento");
     const idPed = params.get("id_pedido");
@@ -686,5 +694,27 @@
     } else if (idPed) {
       abrirDetalhe(+idPed);
     }
-  })();
+  }
+
+  function agendarBootPedidos() {
+    let tentativas = 0;
+    const tentar = () => {
+      if (!window.Util?.combobox_personalisado) {
+        if (++tentativas < 50) {
+          setTimeout(tentar, 40);
+        } else {
+          console.error("[Pedidos] global_utils.js não carregou — combobox indisponível.");
+        }
+        return;
+      }
+      bootPedidos();
+    };
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", tentar, { once: true });
+    } else {
+      tentar();
+    }
+  }
+
+  agendarBootPedidos();
 })();

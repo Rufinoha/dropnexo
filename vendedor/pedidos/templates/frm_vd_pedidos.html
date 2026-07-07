@@ -110,9 +110,9 @@
           </header>
           <div class="Pd_WizPaneBody">
             <div class="filter-group Pd_ProdComboWrap">
-              <label for="pd_combo_produto">Adicionar produto</label>
-              <div id="pd_combo_produto" class="Cl_SelectLike">
-                <input type="text" class="Cl_SelectDisplay" placeholder="Buscar em Meus produtos…" autocomplete="off" readonly />
+              <label id="pd_combo_produto_label">Adicionar produto</label>
+              <div id="pd_combo_produto" class="Cl_SelectLike" role="combobox" aria-labelledby="pd_combo_produto_label" aria-haspopup="listbox">
+                <input type="text" id="pd_combo_produto_display" class="Cl_SelectDisplay" placeholder="Buscar em Meus produtos…" autocomplete="off" readonly />
                 <div class="Cl_Caret"></div>
                 <div class="Cl_ComboPanel" aria-hidden="true">
                   <div class="Cl_ComboSearch">
@@ -268,6 +268,6 @@
 </div>
 {% endblock %}
 {% block page_js %}
-<script src="{{ url_for('vd_pedidos.static', filename='script/Svd_pedidos.js') }}?v=5"></script>
+<script defer src="{{ url_for('vd_pedidos.static', filename='script/Svd_pedidos.js') }}?v=6"></script>
 <script id="pd_cfg" type="application/json">{{ {"mp_icone": url_for("mercadopago.static", filename="imge/icone_mercadopago.png")}|tojson }}</script>
 {% endblock %}
