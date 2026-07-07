@@ -20,6 +20,7 @@ from global_utils import agora_utc, is_modo_producao, obter_base_url
 _log = logging.getLogger(__name__)
 
 ME_OAUTH_TIMEOUT = (5, 20)
+ME_API_TIMEOUT = (10, 60)
 
 ME_OAUTH_SCOPES = (
     "shipping-calculate cart-read cart-write shipping-checkout "
@@ -402,30 +403,141 @@ def opcoes_cotacao_me(cur, id_tenant: int) -> dict[str, bool]:
     }
 
 
-def calcular_frete(access_token: str, payload: dict[str, Any]) -> list[Any]:
-    """POST /me/shipment/calculate — cotação por produtos."""
-    headers = {
+def _headers_me(access_token: str) -> dict[str, str]:
+    return {
         "Authorization": f"Bearer {access_token}",
         "Accept": "application/json",
         "Content-Type": "application/json",
         "User-Agent": me_user_agent(),
     }
+
+
+def _me_request(
+    access_token: str,
+    method: str,
+    path: str,
+    *,
+    json_body: dict | list | None = None,
+    timeout: tuple[int, int] = ME_API_TIMEOUT,
+) -> Any:
+    url = f"{me_api_base()}/{path.lstrip('/')}"
     try:
-        r = requests.post(
-            f"{me_api_base()}/me/shipment/calculate",
-            headers=headers,
-            json=payload,
-            timeout=ME_OAUTH_TIMEOUT,
+        r = requests.request(
+            method.upper(),
+            url,
+            headers=_headers_me(access_token),
+            json=json_body,
+            timeout=timeout,
         )
     except requests.Timeout as e:
-        raise RuntimeError("Melhor Envio demorou para cotar o frete. Tente novamente.") from e
+        raise RuntimeError("Melhor Envio demorou para responder. Tente novamente.") from e
     except requests.RequestException as e:
-        raise RuntimeError(f"Falha de rede ao cotar frete: {e}") from e
+        raise RuntimeError(f"Falha de rede ao contactar Melhor Envio: {e}") from e
     if r.status_code >= 400:
-        raise RuntimeError(f"Melhor Envio cotação falhou ({r.status_code}): {r.text[:500]}")
-    data = r.json()
+        raise RuntimeError(f"Melhor Envio falhou ({r.status_code}): {r.text[:500]}")
+    if not r.content:
+        return {}
+    try:
+        return r.json()
+    except ValueError:
+        return r.content
+
+
+def calcular_frete(access_token: str, payload: dict[str, Any]) -> list[Any]:
+    """POST /me/shipment/calculate — cotação por produtos."""
+    data = _me_request(access_token, "POST", "/me/shipment/calculate", json_body=payload)
     if not isinstance(data, list):
         raise RuntimeError("Resposta inesperada do Melhor Envio na cotação.")
+    return data
+
+
+def adicionar_ao_carrinho(access_token: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """POST /me/cart — insere etiqueta no carrinho."""
+    data = _me_request(access_token, "POST", "/me/cart", json_body=payload)
+    if not isinstance(data, dict):
+        raise RuntimeError("Resposta inesperada ao adicionar frete ao carrinho.")
+    return data
+
+
+def checkout_etiquetas(access_token: str, order_ids: list[str]) -> dict[str, Any]:
+    """POST /me/shipment/checkout — paga etiquetas com saldo ME."""
+    ids = [str(x).strip() for x in order_ids if str(x).strip()]
+    if not ids:
+        raise ValueError("Nenhuma etiqueta para checkout.")
+    data = _me_request(
+        access_token,
+        "POST",
+        "/me/shipment/checkout",
+        json_body={"orders": ids},
+    )
+    if not isinstance(data, dict):
+        raise RuntimeError("Resposta inesperada no checkout Melhor Envio.")
+    return data
+
+
+def gerar_etiquetas(access_token: str, order_ids: list[str]) -> dict[str, Any]:
+    """POST /me/shipment/generate — gera etiquetas pagas."""
+    ids = [str(x).strip() for x in order_ids if str(x).strip()]
+    if not ids:
+        raise ValueError("Nenhuma etiqueta para gerar.")
+    data = _me_request(
+        access_token,
+        "POST",
+        "/me/shipment/generate",
+        json_body={"orders": ids},
+    )
+    if not isinstance(data, dict):
+        raise RuntimeError("Resposta inesperada na geração de etiquetas.")
+    return data
+
+
+def imprimir_etiquetas(
+    access_token: str,
+    order_ids: list[str],
+    *,
+    mode: str = "public",
+) -> dict[str, Any]:
+    """POST /me/shipment/print — retorna link de impressão."""
+    ids = [str(x).strip() for x in order_ids if str(x).strip()]
+    if not ids:
+        raise ValueError("Nenhuma etiqueta para imprimir.")
+    data = _me_request(
+        access_token,
+        "POST",
+        "/me/shipment/print",
+        json_body={"orders": ids, "mode": mode},
+    )
+    if not isinstance(data, dict):
+        raise RuntimeError("Resposta inesperada na impressão de etiquetas.")
+    return data
+
+
+def baixar_url_me(access_token: str, url: str) -> bytes:
+    """Baixa PDF da etiqueta (link retornado pelo /shipment/print)."""
+    if not url:
+        raise ValueError("URL de impressão vazia.")
+    try:
+        r = requests.get(
+            url,
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "User-Agent": me_user_agent(),
+                "Accept": "application/pdf,*/*",
+            },
+            timeout=ME_API_TIMEOUT,
+        )
+    except requests.RequestException as e:
+        raise RuntimeError(f"Falha ao baixar PDF da etiqueta: {e}") from e
+    if r.status_code >= 400:
+        raise RuntimeError(f"Download da etiqueta falhou ({r.status_code}).")
+    return r.content
+
+
+def obter_pedido_me(access_token: str, order_id: str) -> dict[str, Any]:
+    """GET /me/orders/{id} — detalhes da etiqueta."""
+    data = _me_request(access_token, "GET", f"/me/orders/{order_id}")
+    if not isinstance(data, dict):
+        return {}
     return data
 
 

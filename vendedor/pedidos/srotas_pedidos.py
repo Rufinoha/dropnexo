@@ -27,8 +27,12 @@ from servico_pedido import (
 )
 from servico_pedido_mp import iniciar_pagamento, meios_pagamento_pedido, sincronizar_pagamento_pedido
 from servico_melhor_envio import (
+    contratar_etiqueta_pedido,
     cotar_frete_pedido,
+    definir_modo_frete_manual,
+    definir_modo_frete_melhor_envio,
     escolher_frete_pedido,
+    salvar_frete_manual,
     status_melhor_envio_vendedor,
 )
 from srotas_plataforma import MODULO_VENDEDOR
@@ -413,6 +417,107 @@ def pedidos_frete_escolher(id_pedido: int):
         return jsonify(success=False, message=str(e)), 400
     except RuntimeError as e:
         return jsonify(success=False, message=str(e)), 502
+    finally:
+        conn.close()
+
+
+@vd_pedidos_bp.post("/vendedor/pedidos/<int:id_pedido>/frete/modo")
+@login_obrigatorio()
+@exigir_modulo(MODULO_VENDEDOR)
+@exigir_permissao(codigo="vd_pedidos.editar")
+def pedidos_frete_modo(id_pedido: int):
+    id_v = _id_vendedor()
+    if not id_v:
+        return jsonify(success=False, message="Sessão inválida."), 403
+    body = request.get_json(silent=True) or {}
+    modo = (body.get("modo") or "").strip().lower()
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        if modo == "manual":
+            res = definir_modo_frete_manual(
+                cur,
+                id_v,
+                id_pedido,
+                valor_frete=body.get("valor_frete"),
+                codigo_rastreio=body.get("codigo_rastreio"),
+                transportadora=body.get("transportadora"),
+            )
+        elif modo in ("melhor_envio", "me"):
+            res = definir_modo_frete_melhor_envio(cur, id_v, id_pedido)
+        else:
+            return jsonify(success=False, message="Modo inválido. Use manual ou melhor_envio."), 400
+        conn.commit()
+        return jsonify(success=True, message="Modo de frete atualizado.", **res)
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 400
+    finally:
+        conn.close()
+
+
+@vd_pedidos_bp.post("/vendedor/pedidos/<int:id_pedido>/frete/manual")
+@login_obrigatorio()
+@exigir_modulo(MODULO_VENDEDOR)
+@exigir_permissao(codigo="vd_pedidos.editar")
+def pedidos_frete_manual_salvar(id_pedido: int):
+    id_v = _id_vendedor()
+    if not id_v:
+        return jsonify(success=False, message="Sessão inválida."), 403
+    body = request.get_json(silent=True) or {}
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        res = salvar_frete_manual(
+            cur,
+            id_v,
+            id_pedido,
+            valor_frete=body.get("valor_frete"),
+            codigo_rastreio=body.get("codigo_rastreio"),
+            transportadora=body.get("transportadora"),
+        )
+        conn.commit()
+        return jsonify(success=True, message="Frete manual salvo.", **res)
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 400
+    finally:
+        conn.close()
+
+
+@vd_pedidos_bp.post("/vendedor/pedidos/<int:id_pedido>/frete/contratar-etiqueta")
+@login_obrigatorio()
+@exigir_modulo(MODULO_VENDEDOR)
+@exigir_permissao(codigo="vd_pedidos.editar")
+def pedidos_frete_contratar_etiqueta(id_pedido: int):
+    id_v = _id_vendedor()
+    if not id_v:
+        return jsonify(success=False, message="Sessão inválida."), 403
+    body = request.get_json(silent=True) or {}
+    forcar = bool(body.get("forcar"))
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        res = contratar_etiqueta_pedido(
+            cur,
+            id_v,
+            id_pedido,
+            id_usuario=_id_usuario(),
+            forcar=forcar,
+        )
+        conn.commit()
+        if res.get("ignorado"):
+            return jsonify(success=True, message=res.get("message") or "Nada a fazer.", **res)
+        return jsonify(success=True, message=res.get("message") or "Etiqueta gerada.", **res)
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 400
+    except RuntimeError as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 502
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 500
     finally:
         conn.close()
 

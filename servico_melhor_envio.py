@@ -2,17 +2,29 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
+import time
+from pathlib import Path
 from typing import Any
 
 from api.melhor_envio.cliente import (
+    adicionar_ao_carrinho,
+    baixar_url_me,
     calcular_frete,
+    checkout_etiquetas,
+    gerar_etiquetas,
+    imprimir_etiquetas,
     me_conectado,
     obter_access_token_valido,
+    obter_pedido_me,
     opcoes_cotacao_me,
 )
 from global_utils import agora_utc
-from servico_pedido import STATUS_RASCUNHO, obter_pedido
+from servico_pedido import STATUS_RASCUNHO, obter_pedido, registrar_anexo_pedido, registrar_historico
+
+_log = logging.getLogger(__name__)
+_RAIZ_UPLOAD = Path(__file__).resolve().parent
 
 _COLUNAS_ME_OK: bool | None = None
 
@@ -336,12 +348,111 @@ def limpar_frete_pedido(cur, id_pedido: int) -> None:
     )
 
 
+def definir_modo_frete_manual(
+    cur,
+    id_vendedor: int,
+    id_pedido: int,
+    *,
+    valor_frete: float | None = None,
+    codigo_rastreio: str | None = None,
+    transportadora: str | None = None,
+) -> dict:
+    """Etiqueta própria (PDF) — não usa integração Melhor Envio."""
+    if not _pedido_tem_colunas_me(cur):
+        raise ValueError("Execute a migração SQL 066_pedido_melhor_envio no banco.")
+    ped = obter_pedido(cur, id_pedido, id_vendedor=id_vendedor)
+    if not ped:
+        raise ValueError("Pedido não encontrado.")
+    if ped["status"] != STATUS_RASCUNHO:
+        raise ValueError("Só é possível alterar o frete em pedidos em rascunho.")
+
+    vf = round(_float(valor_frete), 2) if valor_frete is not None else _float(ped.get("valor_frete"))
+    rastreio = (codigo_rastreio or "").strip() or None
+    transp = (transportadora or "").strip() or None
+
+    cur.execute(
+        """
+        UPDATE tbl_pedido SET
+            valor_frete = %s,
+            me_service_id = NULL,
+            me_preco_cotado = NULL,
+            me_prazo_dias = NULL,
+            me_cotacao_json = NULL,
+            me_order_id = NULL,
+            me_protocol = NULL,
+            me_etiqueta_status = 'manual',
+            codigo_rastreio = COALESCE(%s, codigo_rastreio),
+            transportadora = COALESCE(%s, transportadora),
+            atualizado_em = %s
+        WHERE id = %s AND id_tenant_vendedor = %s
+        """,
+        (vf, rastreio, transp, agora_utc(), id_pedido, id_vendedor),
+    )
+    return {
+        "id_pedido": id_pedido,
+        "frete_modo": "manual",
+        "valor_frete": vf,
+        "codigo_rastreio": rastreio or "",
+        "transportadora": transp or "",
+    }
+
+
+def definir_modo_frete_melhor_envio(cur, id_vendedor: int, id_pedido: int) -> dict:
+    """Volta ao fluxo Melhor Envio (cotação integrada)."""
+    if not _pedido_tem_colunas_me(cur):
+        raise ValueError("Execute a migração SQL 066_pedido_melhor_envio no banco.")
+    ped = obter_pedido(cur, id_pedido, id_vendedor=id_vendedor)
+    if not ped:
+        raise ValueError("Pedido não encontrado.")
+    if ped["status"] != STATUS_RASCUNHO:
+        raise ValueError("Só é possível alterar o frete em pedidos em rascunho.")
+
+    cur.execute(
+        """
+        UPDATE tbl_pedido SET
+            valor_frete = 0,
+            me_service_id = NULL,
+            me_preco_cotado = NULL,
+            me_prazo_dias = NULL,
+            me_cotacao_json = NULL,
+            me_order_id = NULL,
+            me_protocol = NULL,
+            me_etiqueta_status = NULL,
+            atualizado_em = %s
+        WHERE id = %s AND id_tenant_vendedor = %s
+        """,
+        (agora_utc(), id_pedido, id_vendedor),
+    )
+    return {"id_pedido": id_pedido, "frete_modo": "melhor_envio"}
+
+
+def salvar_frete_manual(
+    cur,
+    id_vendedor: int,
+    id_pedido: int,
+    *,
+    valor_frete: float | None = None,
+    codigo_rastreio: str | None = None,
+    transportadora: str | None = None,
+) -> dict:
+    """Atualiza campos opcionais do frete manual (referência / rastreio)."""
+    return definir_modo_frete_manual(
+        cur,
+        id_vendedor,
+        id_pedido,
+        valor_frete=valor_frete,
+        codigo_rastreio=codigo_rastreio,
+        transportadora=transportadora,
+    )
+
+
 def frete_resumo_pedido(cur, id_pedido: int) -> dict:
     if not _pedido_tem_colunas_me(cur):
         return {}
     cur.execute(
         """
-        SELECT valor_frete, me_service_id, me_preco_cotado, me_prazo_dias, me_cotacao_json, me_etiqueta_status
+        SELECT valor_frete, me_service_id, me_preco_cotado, me_prazo_dias, me_cotacao_json,
+               me_etiqueta_status, me_order_id, me_protocol, codigo_rastreio, transportadora
         FROM tbl_pedido WHERE id = %s
         """,
         (id_pedido,),
@@ -363,8 +474,395 @@ def frete_resumo_pedido(cur, id_pedido: int) -> dict:
         "me_preco_cotado": _float(row[2]) if row[2] is not None else None,
         "me_prazo_dias": row[3],
         "me_etiqueta_status": row[5] or "",
+        "me_order_id": row[6] or "",
+        "me_protocol": row[7] or "",
+        "codigo_rastreio": row[8] or "",
+        "transportadora": row[9] or "",
         "frete_nome": (cotacao.get("name") if cotacao else "") or "",
-        "transportadora": (
+        "frete_transportadora": (
             cotacao.get("company", {}).get("name") if isinstance(cotacao.get("company"), dict) else ""
         ),
+        "frete_modo": "manual" if (row[5] or "") == "manual" else ("melhor_envio" if row[1] else ""),
     }
+
+
+def _so_digitos(val: str | None) -> str:
+    return re.sub(r"\D", "", val or "")
+
+
+def _telefone_me(val: str | None) -> str:
+    d = _so_digitos(val)
+    return d[:11] if d else "11999999999"
+
+
+def _doc_pf_pj(documento: str | None) -> tuple[str, str]:
+    d = _so_digitos(documento)
+    if len(d) == 14:
+        return "", d
+    if len(d) == 11:
+        return d, ""
+    return d, ""
+
+
+def _deposito_origem_pedido(cur, id_pedido: int, id_fornecedor: int) -> dict[str, Any]:
+    cur.execute(
+        """
+        SELECT d.id, d.cep, d.logradouro, d.numero, d.complemento, d.bairro, d.cidade, d.uf,
+               d.remetente_nome, d.remetente_documento,
+               t.documento, t.razao_social, t.nome_fantasia, t.nome,
+               t.email_comercial, t.telefone_comercial, t.celular_comercial,
+               t.inscricao_estadual, t.ie_isento
+        FROM tbl_pedido_item pi
+        JOIN tbl_deposito_expedicao d ON d.id = pi.id_deposito_fornecedor
+        JOIN tbl_tenant t ON t.id = d.id_tenant
+        WHERE pi.id_pedido = %s AND d.ativo = TRUE
+        LIMIT 1
+        """,
+        (id_pedido,),
+    )
+    row = cur.fetchone()
+    if not row:
+        cur.execute(
+            """
+            SELECT d.id, d.cep, d.logradouro, d.numero, d.complemento, d.bairro, d.cidade, d.uf,
+                   d.remetente_nome, d.remetente_documento,
+                   t.documento, t.razao_social, t.nome_fantasia, t.nome,
+                   t.email_comercial, t.telefone_comercial, t.celular_comercial,
+                   t.inscricao_estadual, t.ie_isento
+            FROM tbl_deposito_expedicao d
+            JOIN tbl_tenant t ON t.id = d.id_tenant
+            WHERE d.id_tenant = %s AND d.ativo = TRUE
+            ORDER BY d.principal DESC, d.id
+            LIMIT 1
+            """,
+            (id_fornecedor,),
+        )
+        row = cur.fetchone()
+    if not row:
+        raise ValueError("Depósito de expedição do fornecedor não encontrado.")
+    doc_pf, doc_pj = _doc_pf_pj(row[9] or row[10])
+    ie = (row[17] or "").strip()
+    if row[18]:
+        ie = "ISENTO"
+    nome = (row[8] or row[12] or row[13] or row[11] or "Remetente").strip()
+    return {
+        "name": nome[:255],
+        "email": (row[14] or "contato@dropnexo.com.br").strip(),
+        "phone": _telefone_me(row[15] or row[16]),
+        "document": doc_pf,
+        "company_document": doc_pj,
+        "state_register": ie or "ISENTO",
+        "address": (row[2] or "").strip(),
+        "complement": (row[4] or "").strip(),
+        "number": (row[3] or "S/N").strip()[:20],
+        "district": (row[5] or "").strip(),
+        "city": (row[6] or "").strip(),
+        "postal_code": _cep_digitos(row[1]),
+        "state_abbr": (row[7] or "").strip()[:2].upper(),
+        "country_id": "BR",
+    }
+
+
+def _destinatario_pedido(ped: dict) -> dict[str, Any]:
+    doc_pf, doc_pj = _doc_pf_pj(ped.get("cliente_documento"))
+    if not doc_pf and not doc_pj:
+        doc_pf = "00000000000"
+    return {
+        "name": (ped.get("cliente_nome") or "Destinatário").strip()[:255],
+        "email": (ped.get("cliente_email") or "cliente@email.com").strip(),
+        "phone": _telefone_me(ped.get("cliente_telefone")),
+        "document": doc_pf,
+        "company_document": doc_pj,
+        "state_register": "ISENTO",
+        "address": (ped.get("entrega_logradouro") or "").strip(),
+        "complement": (ped.get("entrega_complemento") or "").strip(),
+        "number": (ped.get("entrega_numero") or "S/N").strip()[:20],
+        "district": (ped.get("entrega_bairro") or "").strip(),
+        "city": (ped.get("entrega_cidade") or "").strip(),
+        "postal_code": _cep_digitos(ped.get("entrega_cep")),
+        "state_abbr": (ped.get("entrega_uf") or "").strip()[:2].upper(),
+        "country_id": "BR",
+    }
+
+
+def _montar_payload_carrinho(
+    cur,
+    id_pedido: int,
+    ped: dict,
+    *,
+    service_id: int,
+) -> dict[str, Any]:
+    id_forn = int(ped["id_tenant_fornecedor"])
+    produtos = _produtos_me_pedido(cur, id_pedido)
+    me_opts = opcoes_cotacao_me(cur, int(ped["id_tenant_vendedor"]))
+    insurance = round(sum(_float(p.get("insurance_value", 0)) * int(p.get("quantity", 1)) for p in produtos), 2)
+    volumes = [
+        {
+            "height": p["height"],
+            "width": p["width"],
+            "length": p["length"],
+            "weight": round(_float(p["weight"]) * int(p["quantity"]), 3),
+        }
+        for p in produtos
+    ]
+    if len(volumes) > 1:
+        volumes = [
+            {
+                "height": max(v["height"] for v in volumes),
+                "width": max(v["width"] for v in volumes),
+                "length": max(v["length"] for v in volumes),
+                "weight": round(sum(v["weight"] for v in volumes), 3),
+            }
+        ]
+    decl_produtos = [
+        {
+            "name": (p.get("nome") or p.get("id") or "Produto")[:255],
+            "quantity": str(int(p["quantity"])),
+            "unitary_value": str(round(_float(p.get("insurance_value", 0.01)), 2)),
+        }
+        for p in produtos
+    ]
+    return {
+        "service": int(service_id),
+        "from": _deposito_origem_pedido(cur, id_pedido, id_forn),
+        "to": _destinatario_pedido(ped),
+        "products": decl_produtos,
+        "volumes": volumes,
+        "options": {
+            "platform": "DropNexo",
+            "reminder": f"Pedido {ped.get('numero') or id_pedido}",
+            "insurance_value": max(insurance, 0.01),
+            "receipt": me_opts["receipt"],
+            "own_hand": me_opts["own_hand"],
+            "reverse": False,
+            "non_commercial": True,
+            "tags": [{"tag": f"dropnexo-pedido-{id_pedido}", "url": ""}],
+        },
+    }
+
+
+def _atualizar_status_etiqueta(
+    cur,
+    id_pedido: int,
+    *,
+    status: str,
+    me_order_id: str | None = None,
+    me_protocol: str | None = None,
+    codigo_rastreio: str | None = None,
+    transportadora: str | None = None,
+) -> None:
+    cur.execute(
+        """
+        UPDATE tbl_pedido SET
+            me_etiqueta_status = %s,
+            me_order_id = COALESCE(NULLIF(%s, ''), me_order_id),
+            me_protocol = COALESCE(NULLIF(%s, ''), me_protocol),
+            codigo_rastreio = COALESCE(NULLIF(%s, ''), codigo_rastreio),
+            transportadora = COALESCE(NULLIF(%s, ''), transportadora),
+            atualizado_em = %s
+        WHERE id = %s
+        """,
+        (
+            status,
+            me_order_id or "",
+            me_protocol or "",
+            codigo_rastreio or "",
+            transportadora or "",
+            agora_utc(),
+            id_pedido,
+        ),
+    )
+
+
+def _salvar_pdf_etiqueta_anexo(
+    cur,
+    id_vendedor: int,
+    id_pedido: int,
+    pdf_bytes: bytes,
+    *,
+    id_usuario: int | None = None,
+) -> dict | None:
+    if not pdf_bytes or len(pdf_bytes) < 100:
+        return None
+    pasta = _RAIZ_UPLOAD / "upload" / f"tenant{id_vendedor}" / "pedidos"
+    pasta.mkdir(parents=True, exist_ok=True)
+    nome_arquivo = f"{id_pedido}_etiqueta_me_{int(time.time())}.pdf"
+    destino = pasta / nome_arquivo
+    destino.write_bytes(pdf_bytes)
+    caminho_db = f"upload/tenant{id_vendedor}/pedidos/{nome_arquivo}"
+    try:
+        return registrar_anexo_pedido(
+            cur,
+            id_vendedor,
+            id_pedido,
+            "etiqueta",
+            f"etiqueta_melhor_envio_{id_pedido}.pdf",
+            caminho_db,
+            len(pdf_bytes),
+            id_usuario=id_usuario,
+        )
+    except ValueError as e:
+        _log.warning("Anexo etiqueta ME pedido %s: %s", id_pedido, e)
+        return None
+
+
+def _extrair_url_impressao(resposta_print: dict) -> str:
+    if not resposta_print:
+        return ""
+    if isinstance(resposta_print.get("url"), str):
+        return resposta_print["url"].strip()
+    link = resposta_print.get("link")
+    if isinstance(link, str):
+        return link.strip()
+    for val in resposta_print.values():
+        if isinstance(val, dict) and isinstance(val.get("url"), str):
+            return val["url"].strip()
+    return ""
+
+
+def contratar_etiqueta_pedido(
+    cur,
+    id_vendedor: int,
+    id_pedido: int,
+    *,
+    id_usuario: int | None = None,
+    forcar: bool = False,
+) -> dict[str, Any]:
+    """Compra, gera e anexa etiqueta ME após pagamento do pedido."""
+    if not _pedido_tem_colunas_me(cur):
+        raise ValueError("Execute a migração SQL 066_pedido_melhor_envio no banco.")
+    if not me_conectado(cur, id_vendedor):
+        raise ValueError("Conecte sua conta Melhor Envio em Integrações → Frete.")
+
+    cur.execute(
+        """
+        SELECT me_service_id, me_etiqueta_status, me_order_id, numero
+        FROM tbl_pedido
+        WHERE id = %s AND id_tenant_vendedor = %s
+        """,
+        (id_pedido, id_vendedor),
+    )
+    row = cur.fetchone()
+    if not row:
+        raise ValueError("Pedido não encontrado.")
+    service_id, etiq_status, me_order_existente, numero = row
+    if not service_id:
+        return {"ignorado": True, "message": "Pedido sem frete Melhor Envio selecionado."}
+    if etiq_status == "gerada" and me_order_existente and not forcar:
+        return {"ignorado": True, "message": "Etiqueta já gerada.", "me_order_id": me_order_existente}
+    if etiq_status not in ("pendente", "erro", None, "") and not forcar:
+        return {"ignorado": True, "message": f"Status de etiqueta: {etiq_status}."}
+
+    ped = obter_pedido(cur, id_pedido, id_vendedor=id_vendedor)
+    if not ped:
+        raise ValueError("Pedido não encontrado.")
+
+    token = obter_access_token_valido(cur, id_vendedor)
+    order_id = str(me_order_existente or "").strip()
+
+    try:
+        if not order_id:
+            payload = _montar_payload_carrinho(cur, id_pedido, ped, service_id=int(service_id))
+            cart = adicionar_ao_carrinho(token, payload)
+            order_id = str(cart.get("id") or "").strip()
+            protocolo = str(cart.get("protocol") or "").strip()
+            if not order_id:
+                raise RuntimeError("Melhor Envio não retornou ID da etiqueta.")
+            _atualizar_status_etiqueta(
+                cur, id_pedido, status="pendente", me_order_id=order_id, me_protocol=protocolo
+            )
+
+        try:
+            checkout_etiquetas(token, [order_id])
+        except RuntimeError as e:
+            msg_l = str(e).lower()
+            if "pago" not in msg_l and "paid" not in msg_l and "checkout" not in msg_l:
+                raise
+
+        gerar_etiquetas(token, [order_id])
+        detalhe = obter_pedido_me(token, order_id)
+        tracking = (
+            (detalhe.get("tracking") or detalhe.get("self_tracking") or "").strip()
+            if detalhe
+            else ""
+        )
+        protocolo = (detalhe.get("protocol") or "").strip() if detalhe else ""
+        transportadora = ""
+        if isinstance(detalhe.get("service"), dict):
+            comp = detalhe["service"].get("company")
+            if isinstance(comp, dict):
+                transportadora = (comp.get("name") or "").strip()
+
+        print_resp = imprimir_etiquetas(token, [order_id], mode="public")
+        url_pdf = _extrair_url_impressao(print_resp)
+        anexo = None
+        if url_pdf:
+            pdf = baixar_url_me(token, url_pdf)
+            anexo = _salvar_pdf_etiqueta_anexo(cur, id_vendedor, id_pedido, pdf, id_usuario=id_usuario)
+
+        _atualizar_status_etiqueta(
+            cur,
+            id_pedido,
+            status="gerada",
+            me_order_id=order_id,
+            me_protocol=protocolo,
+            codigo_rastreio=tracking,
+            transportadora=transportadora or "Melhor Envio",
+        )
+        msg = f"Etiqueta Melhor Envio gerada para o pedido {numero or id_pedido}."
+        if tracking:
+            msg += f" Rastreio: {tracking}."
+        registrar_historico(cur, id_pedido, "etiqueta_me", msg, id_usuario)
+        return {
+            "ok": True,
+            "me_order_id": order_id,
+            "me_protocol": protocolo,
+            "codigo_rastreio": tracking,
+            "anexo": anexo,
+            "message": msg,
+        }
+    except Exception as e:
+        _log.exception("Falha etiqueta ME pedido %s", id_pedido)
+        _atualizar_status_etiqueta(cur, id_pedido, status="erro")
+        registrar_historico(
+            cur,
+            id_pedido,
+            "etiqueta_me_erro",
+            f"Falha ao gerar etiqueta ME: {str(e)[:400]}",
+            id_usuario,
+        )
+        raise
+
+
+def tentar_contratar_etiqueta_apos_pagamento(
+    cur,
+    id_pedido: int,
+    *,
+    id_usuario: int | None = None,
+) -> dict[str, Any] | None:
+    """Chamado após pagamento confirmado — não interrompe o fluxo em caso de erro."""
+    if not _pedido_tem_colunas_me(cur):
+        return None
+    cur.execute(
+        """
+        SELECT id_tenant_vendedor, me_service_id, me_etiqueta_status
+        FROM tbl_pedido WHERE id = %s
+        """,
+        (id_pedido,),
+    )
+    row = cur.fetchone()
+    if not row:
+        return None
+    id_vendedor, service_id, etiq_status = int(row[0]), row[1], row[2] or ""
+    if not service_id or etiq_status in ("manual",):
+        return None
+    if etiq_status not in ("pendente", "erro", ""):
+        return None
+    if not me_conectado(cur, id_vendedor):
+        _log.info("ME etiqueta: vendedor %s não conectado (pedido %s).", id_vendedor, id_pedido)
+        return None
+    try:
+        return contratar_etiqueta_pedido(cur, id_vendedor, id_pedido, id_usuario=id_usuario)
+    except Exception as e:
+        _log.warning("ME etiqueta automática pedido %s: %s", id_pedido, e)
+        return {"ok": False, "message": str(e)}

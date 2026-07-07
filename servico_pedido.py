@@ -832,6 +832,12 @@ def marcar_pedido_pago(
         detalhe or "Pagamento confirmado via Mercado Pago.",
         id_usuario,
     )
+    try:
+        from servico_melhor_envio import tentar_contratar_etiqueta_apos_pagamento
+
+        tentar_contratar_etiqueta_apos_pagamento(cur, id_pedido, id_usuario=id_usuario)
+    except Exception:
+        pass
     return True
 
 

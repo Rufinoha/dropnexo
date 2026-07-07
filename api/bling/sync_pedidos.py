@@ -1,6 +1,7 @@
 # api/bling/sync_pedidos.py — importação de pedidos pagos Bling → DropNexo (vendedor)
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -71,12 +72,119 @@ def obter_pedido_bling(id_tenant: int, id_bling_pedido: str) -> dict:
     return body.get("data") or {}
 
 
+def _opcoes_vendedor(cur, id_tenant: int) -> dict:
+    cur.execute(
+        """
+        SELECT opcoes FROM tbl_integracao_bling_config
+        WHERE id_tenant = %s AND contexto = 'vendedor' AND ativo = TRUE
+        """,
+        (id_tenant,),
+    )
+    row = cur.fetchone()
+    if not row or not row[0]:
+        return {}
+    raw = row[0]
+    if isinstance(raw, dict):
+        return raw
+    if isinstance(raw, str) and raw.strip():
+        try:
+            return json.loads(raw) or {}
+        except json.JSONDecodeError:
+            return {}
+    return {}
+
+
+def pedidos_importacao_auto_ativa(cur, id_tenant: int) -> bool:
+    if not _modo_permite_importar(cur, id_tenant, "vendedor"):
+        return False
+    opcoes = _opcoes_vendedor(cur, id_tenant)
+    return opcoes.get("pedidos_importar_auto") is True
+
+
+def _importar_um_pedido(
+    cur,
+    id_tenant: int,
+    id_bling: str,
+    *,
+    contexto: str,
+    id_usuario: int | None,
+) -> tuple[list[int], str | None]:
+    """Retorna (ids_pedidos_criados, motivo_ignorado)."""
+    det = obter_pedido_bling(id_tenant, id_bling)
+    if not pedido_bling_importavel(det):
+        return [], "situacao_invalida"
+    parsed = parse_pedido_bling(det)
+    if not parsed["itens"]:
+        return [], "sem_itens"
+    novos = importar_pedido_bling(
+        cur,
+        id_tenant,
+        id_bling,
+        parsed,
+        id_usuario=id_usuario,
+    )
+    if novos:
+        return novos, None
+    return [], "ja_importado_ou_sem_match"
+
+
+def importar_pedido_bling_por_id(
+    cur,
+    id_tenant: int,
+    id_bling_pedido: str,
+    *,
+    contexto: str = "vendedor",
+    id_usuario: int | None = None,
+) -> dict[str, Any]:
+    if contexto != "vendedor":
+        raise ValueError("Importação de pedidos Bling disponível apenas para o perfil vendedor.")
+    if not _modo_permite_importar(cur, id_tenant, contexto):
+        raise ValueError("Modo de pedidos não permite importação.")
+
+    id_bling = str(id_bling_pedido or "").strip()
+    if not id_bling:
+        raise ValueError("ID do pedido Bling inválido.")
+
+    try:
+        novos, motivo = _importar_um_pedido(cur, id_tenant, id_bling, contexto=contexto, id_usuario=id_usuario)
+    except ValueError as e:
+        _registrar_log(cur, id_tenant, contexto, "aviso", f"Pedido Bling #{id_bling}", str(e))
+        return {"importados": 0, "ignorado": True, "message": str(e)}
+    except Exception as e:
+        _registrar_log(cur, id_tenant, contexto, "erro", f"Pedido Bling #{id_bling}", str(e)[:500])
+        raise
+
+    if novos:
+        agora = agora_utc()
+        cur.execute(
+            """
+            UPDATE tbl_integracao_bling_config
+            SET ultima_sync_pedidos = %s, atualizado_em = %s
+            WHERE id_tenant = %s AND contexto = %s
+            """,
+            (agora, agora, id_tenant, contexto),
+        )
+        msg = f"Pedido Bling #{id_bling} importado."
+        _registrar_log(cur, id_tenant, contexto, "ok", msg)
+        return {"importados": len(novos), "ignorado": False, "message": msg, "pedidos_ids": novos}
+
+    msg = {
+        "situacao_invalida": "Situação do pedido no Bling não permite importação.",
+        "sem_itens": "Pedido sem itens.",
+        "ja_importado_ou_sem_match": "Pedido já importado ou SKU não encontrado em Meus produtos.",
+    }.get(motivo or "", "Pedido ignorado.")
+    _registrar_log(cur, id_tenant, contexto, "aviso", f"Pedido Bling #{id_bling}", msg)
+    return {"importados": 0, "ignorado": True, "message": msg}
+
+
 def importar_pedidos_bling(
     cur,
     id_tenant: int,
     *,
     contexto: str = "vendedor",
     dias: int = 30,
+    data_inicial: str | None = None,
+    data_final: str | None = None,
     id_usuario: int | None = None,
 ) -> dict[str, Any]:
     if contexto != "vendedor":
@@ -84,8 +192,22 @@ def importar_pedidos_bling(
     if not _modo_permite_importar(cur, id_tenant, contexto):
         raise ValueError("Modo de pedidos não permite importação. Ajuste em Integrações → Bling → Pedidos.")
 
-    fim = datetime.now(timezone.utc).date()
-    ini = fim - timedelta(days=max(1, min(int(dias or 30), 90)))
+    hoje = datetime.now(timezone.utc).date()
+    if data_inicial:
+        try:
+            ini = datetime.strptime(str(data_inicial)[:10], "%Y-%m-%d").date()
+        except ValueError:
+            raise ValueError("Data do pedido inválida. Use o formato AAAA-MM-DD.")
+        if data_final:
+            try:
+                fim = datetime.strptime(str(data_final)[:10], "%Y-%m-%d").date()
+            except ValueError:
+                raise ValueError("Data final inválida.")
+        else:
+            fim = hoje
+    else:
+        fim = hoje
+        ini = fim - timedelta(days=max(1, min(int(dias or 30), 90)))
 
     importados = 0
     ignorados = 0
@@ -109,26 +231,16 @@ def importar_pedidos_bling(
                 ignorados += 1
                 continue
             try:
-                det = obter_pedido_bling(id_tenant, id_bling)
-                if not pedido_bling_importavel(det):
-                    ignorados += 1
-                    continue
-                parsed = parse_pedido_bling(det)
-                if not parsed["itens"]:
-                    ignorados += 1
-                    continue
-                novos = importar_pedido_bling(
-                    cur,
-                    id_tenant,
-                    id_bling,
-                    parsed,
-                    id_usuario=id_usuario,
+                novos, motivo = _importar_um_pedido(
+                    cur, id_tenant, id_bling, contexto=contexto, id_usuario=id_usuario
                 )
                 if novos:
                     importados += len(novos)
                     ids_criados.extend(novos)
                 else:
                     ignorados += 1
+                    if motivo and motivo not in ("ja_importado_ou_sem_match", "situacao_invalida"):
+                        _registrar_log(cur, id_tenant, contexto, "aviso", f"Pedido Bling #{id_bling}", motivo)
             except ValueError as e:
                 ignorados += 1
                 _registrar_log(cur, id_tenant, contexto, "aviso", f"Pedido Bling #{id_bling}", str(e))

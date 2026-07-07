@@ -12,7 +12,11 @@
   const pedidosImportWrap = document.getElementById("bl_pedidos_import_wrap");
   const btnImportPedidos = document.getElementById("bl_btn_import_pedidos");
   const chkPedidosImportar = document.getElementById("bl_pedidos_importar");
+  const chkPedidosImportarAuto = document.getElementById("bl_pedidos_importar_auto");
   const chkPedidosExportarStatus = document.getElementById("bl_pedidos_exportar_status");
+  const inputDataPedido = document.getElementById("bl_data_pedido");
+  const syncVisualPedidos = document.getElementById("bl_sync_visual_pedidos");
+  const EH_DEV = !!(window.OSB_SHELL?.ehDesenvolvedor);
   const btnSalvar = document.getElementById("bl_btn_salvar");
   const btnSalvarEstoque = document.getElementById("bl_btn_salvar_estoque");
   const paneConfig = document.getElementById("bl_pane_config");
@@ -77,6 +81,7 @@
   }
 
   function pickTab(tab) {
+    if (tab === "logs" && !EH_DEV) tab = "config";
     tabAtiva = tab;
     document.querySelectorAll(".Bl_SubTab").forEach((b) => {
       b.classList.toggle("is-active", b.dataset.blTab === tab);
@@ -116,6 +121,21 @@
     atualizarAnimacaoEstoque();
   }
 
+  function hojeIso() {
+    const d = new Date();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const dia = String(d.getDate()).padStart(2, "0");
+    return `${d.getFullYear()}-${m}-${dia}`;
+  }
+
+  function atualizarAnimacaoPedidos() {
+    if (!syncVisualPedidos) return;
+    const ativo = chkPedidosImportarAuto?.checked === true;
+    syncVisualPedidos.classList.toggle("inativo", !ativo);
+    syncVisualPedidos.classList.toggle("sync-in", ativo);
+    syncVisualPedidos.setAttribute("aria-hidden", ativo ? "false" : "true");
+  }
+
   function aplicarConfigTela() {
     const cfg = cfgAtual();
     if (BL_PAPEL === "pedidos") {
@@ -124,13 +144,21 @@
       if (chkPedidosImportar) {
         chkPedidosImportar.checked = modo === "importar" || modo === "atualizar";
       }
+      if (chkPedidosImportarAuto) {
+        chkPedidosImportarAuto.checked = !!opcoes.pedidos_importar_auto;
+      }
       if (chkPedidosExportarStatus) {
         chkPedidosExportarStatus.checked =
           opcoes.pedidos_exportar_status !== undefined ? !!opcoes.pedidos_exportar_status : true;
       }
-      if (pedidosImportWrap) {
-        pedidosImportWrap.hidden = !estado.conectado || !(chkPedidosImportar?.checked);
+      if (inputDataPedido) {
+        inputDataPedido.value = opcoes.pedidos_data_inicial || inputDataPedido.value || hojeIso();
       }
+      if (pedidosImportWrap) {
+        const manual = chkPedidosImportar?.checked !== false;
+        pedidosImportWrap.hidden = !estado.conectado || !manual;
+      }
+      atualizarAnimacaoPedidos();
     } else {
       const map = {
         bl_modo_imagem: cfg.modo_imagem,
@@ -1224,13 +1252,18 @@
     if (BL_PAPEL === "pedidos") {
       const importar = chkPedidosImportar?.checked !== false;
       const exportar = chkPedidosExportarStatus?.checked !== false;
+      const auto = chkPedidosImportarAuto?.checked === true;
       let pedidos_modo = "importar";
       if (importar && exportar) pedidos_modo = "atualizar";
       else if (exportar) pedidos_modo = "exportar";
       body = {
         contexto: ctx,
         pedidos_modo,
-        opcoes: { pedidos_exportar_status: exportar },
+        opcoes: {
+          pedidos_exportar_status: exportar,
+          pedidos_importar_auto: auto,
+          pedidos_data_inicial: inputDataPedido?.value || hojeIso(),
+        },
       };
     } else {
       body = {
@@ -1278,6 +1311,14 @@
   chkReceber?.addEventListener("change", atualizarAnimacaoEstoque);
   chkBaixa?.addEventListener("change", atualizarAnimacaoEstoque);
   chkPedidosImportar?.addEventListener("change", aplicarConfigTela);
+  chkPedidosImportarAuto?.addEventListener("change", () => {
+    atualizarAnimacaoPedidos();
+    salvarConfig().catch(() => {});
+  });
+
+  if (inputDataPedido && !inputDataPedido.value) inputDataPedido.value = hojeIso();
+
+  if (!EH_DEV && paneLogs) paneLogs.hidden = true;
 
   btnSalvar?.addEventListener("click", async () => {
     try {
@@ -1298,7 +1339,7 @@
   btnImportPedidos?.addEventListener("click", async () => {
     const ok = await Swal.fire({
       title: "Importar pedidos pagos?",
-      text: "Serão importados pedidos confirmados do Bling (últimos 30 dias). SKUs devem existir em Meus produtos.",
+      text: `Serão importados pedidos confirmados no Bling a partir de ${inputDataPedido?.value || hojeIso()}. SKUs devem existir em Meus produtos.`,
       icon: "question",
       showCancelButton: true,
       confirmButtonText: "Importar",
@@ -1312,7 +1353,10 @@
         method: "POST",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contexto: estado.contexto_modulo || "vendedor", dias: 30 }),
+        body: JSON.stringify({
+          contexto: estado.contexto_modulo || "vendedor",
+          data_inicial: inputDataPedido?.value || hojeIso(),
+        }),
       });
       const j = await r.json();
       await Swal.fire({

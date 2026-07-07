@@ -214,6 +214,21 @@ def processar_fila_webhook(cur, fila_id: int) -> dict[str, Any]:
             envelope = {}
 
     recurso = (recurso or _extrair_recurso_acao(envelope)[0]).lower()
+    acao = (acao or _extrair_recurso_acao(envelope)[1]).lower()
+
+    from api.bling.webhook_pedidos import eh_recurso_pedido, processar_webhook_pedido_fila
+
+    if eh_recurso_pedido(recurso, envelope):
+        return processar_webhook_pedido_fila(
+            cur,
+            fila_id,
+            id_tenant=int(id_tenant) if id_tenant else None,
+            company_id=company_id,
+            envelope=envelope,
+            recurso=recurso,
+            acao=acao,
+        )
+
     if not _eh_recurso_estoque(recurso, envelope):
         chaves = ",".join(sorted(envelope.keys()))[:120]
         cur.execute(

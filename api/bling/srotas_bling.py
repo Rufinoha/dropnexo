@@ -655,6 +655,7 @@ def sync_pedidos():
         dias = int(body.get("dias") or 30)
     except (TypeError, ValueError):
         dias = 30
+    data_inicial = (body.get("data_inicial") or body.get("data_pedido") or "").strip() or None
 
     id_tenant = session.get("id_tenant")
     conn = Var_ConectarBanco()
@@ -676,6 +677,7 @@ def sync_pedidos():
             int(id_tenant),
             contexto=contexto,
             dias=dias,
+            data_inicial=data_inicial,
             id_usuario=int(uid) if uid else None,
         )
         conn.commit()
