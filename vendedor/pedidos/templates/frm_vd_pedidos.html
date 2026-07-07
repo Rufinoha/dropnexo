@@ -3,7 +3,7 @@
 {% set nav_ativo = 'vd_pedidos' %}
 {% block topbar_title %}Pedidos{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('vd_pedidos.static', filename='style/Cvd_pedidos.css') }}?v=15" />
+<link rel="stylesheet" href="{{ url_for('vd_pedidos.static', filename='style/Cvd_pedidos.css') }}?v=16" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal Pd_Page">
@@ -237,7 +237,16 @@
             <div class="Pd_Resumo" id="pd_resumo">
               <div><span>Subtotal produtos</span><strong id="pd_subtotal">R$ 0,00</strong></div>
               <div id="pd_linhaTaxa" hidden><span>Taxa do fornecedor</span><strong id="pd_taxa">R$ 0,00</strong></div>
-              <div class="Pd_ResumoFrete"><span>Frete (referência)</span><strong id="pd_frete">R$ 0,00</strong></div>
+              <div class="Pd_ResumoFrete" id="pd_linhaFreteRef">
+                <span class="Pd_ResumoFreteLabel" title="Valor informativo do frete pago pelo cliente no canal (ex.: Bling). Não compõe o pagamento ao fornecedor.">
+                  <i data-lucide="info" class="Pd_ResumoFreteIco" aria-hidden="true"></i>
+                  <span>
+                    Frete (referência)
+                    <small class="Pd_ResumoFreteHint">não entra no total</small>
+                  </span>
+                </span>
+                <strong id="pd_frete">R$ 0,00</strong>
+              </div>
               <div class="Pd_ResumoTotal"><span>Total ao fornecedor</span><strong id="pd_total">R$ 0,00</strong></div>
             </div>
 
@@ -264,6 +273,6 @@
 {% endblock %}
 {% block page_js %}
 <script defer src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
-<script defer src="{{ url_for('vd_pedidos.static', filename='script/Svd_pedidos.js') }}?v=17"></script>
+<script defer src="{{ url_for('vd_pedidos.static', filename='script/Svd_pedidos.js') }}?v=18"></script>
 <script id="pd_cfg" type="application/json">{{ {"mp_icone": url_for("mercadopago.static", filename="imge/icone_mercadopago.png")}|tojson }}</script>
 {% endblock %}

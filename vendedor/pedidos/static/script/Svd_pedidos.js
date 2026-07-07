@@ -1065,7 +1065,7 @@
     } else if (comprovanteEnviado && isPixManual) {
       statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pendente">Comprovante enviado — aguardando validação do fornecedor</div>`;
     } else if (importado) {
-      statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pendente">${badge("importado")} Cliente já pagou no canal — prepare frete e pague o fornecedor · ${fmt(ped.valor_total)}</div>`;
+      statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pendente">${badge("importado")} Cliente já pagou no canal — prepare frete e pague o fornecedor · ${fmt(totalFornecedorPedido(ped))}</div>`;
     } else if (aguardando) {
     } else if (rascunho) {
       statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pendente">${badge("rascunho")} Confirme o pedido para pagar</div>`;
@@ -1301,6 +1301,24 @@
     }
   }
 
+  function totalFornecedorPedido(ped) {
+    if (!ped) return 0;
+    const idForn = Number(ped.id_fornecedor);
+    const sub = carrinho
+      .filter((i) => Number(i.id_fornecedor) === idForn)
+      .reduce((s, i) => s + Number(i.valor_drop || 0) * Number(i.quantidade || 0), 0);
+    const taxa = Number(taxasPorFornecedor[idForn] || taxasPorFornecedor[String(idForn)] || 0);
+    return sub + taxa;
+  }
+
+  function freteReferenciaValor() {
+    let frete = Object.values(fretePorPedido).reduce((s, f) => s + Number(f.valor || 0), 0);
+    if (frete <= 0 && pedidosGrupo?.length) {
+      frete = pedidosGrupo.reduce((s, p) => s + Number(p.valor_frete || 0), 0);
+    }
+    return frete;
+  }
+
   function atualizarResumo() {
     const sub = carrinho.reduce((s, i) => s + i.valor_drop * i.quantidade, 0);
     const fornecedores = [...new Set(carrinho.map((i) => i.id_fornecedor))];
@@ -1308,16 +1326,20 @@
     fornecedores.forEach((f) => {
       taxa += Number(taxasPorFornecedor[f] || taxasPorFornecedor[String(f)] || 0);
     });
-    const frete = Object.values(fretePorPedido).reduce((s, f) => s + Number(f.valor || 0), 0);
+    const freteRef = freteReferenciaValor();
+    const totalFornecedor = sub + taxa;
     el.subtotal.textContent = fmt(sub);
     if (elSubtotalMini) elSubtotalMini.textContent = fmt(sub);
     el.taxa.textContent = fmt(taxa);
-    el.total.textContent = fmt(sub + taxa);
-    if (elFrete) elFrete.textContent = fmt(frete);
+    el.total.textContent = fmt(totalFornecedor);
+    if (elFrete) elFrete.textContent = fmt(freteRef);
     el.linhaTaxa.hidden = taxa <= 0;
     el.itensVazio.hidden = carrinho.length > 0;
     atualizarNavResumos();
-    if (painelAtivo === "valores") renderPayIntegracoes();
+    if (painelAtivo === "valores") {
+      renderPayIntegracoes();
+      window.lucide?.createIcons?.();
+    }
   }
 
   function limparComboProduto() {
