@@ -153,6 +153,52 @@ _PEDIDO_COLS = """
     p.observacoes, p.confirmado_em, p.pago_em, p.criado_em, g.numero
 """
 
+_COLUNAS_EXPEDICAO_OK: bool | None = None
+
+
+def _pedido_tem_colunas_expedicao(cur) -> bool:
+    global _COLUNAS_EXPEDICAO_OK
+    if _COLUNAS_EXPEDICAO_OK is not None:
+        return _COLUNAS_EXPEDICAO_OK
+    cur.execute(
+        """
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'tbl_pedido'
+          AND column_name = 'id_bling_pedido'
+        LIMIT 1
+        """
+    )
+    _COLUNAS_EXPEDICAO_OK = cur.fetchone() is not None
+    return _COLUNAS_EXPEDICAO_OK
+
+
+def _enriquecer_pedido_expedicao(cur, id_pedido: int, ped: dict) -> None:
+    ped.setdefault("origem", "manual")
+    ped.setdefault("id_bling_pedido", None)
+    ped.setdefault("codigo_rastreio", "")
+    ped.setdefault("transportadora", "")
+    ped.setdefault("expedido_em", None)
+    ped.setdefault("entregue_em", None)
+    if not _pedido_tem_colunas_expedicao(cur):
+        return
+    cur.execute(
+        """
+        SELECT id_bling_pedido, codigo_rastreio, transportadora,
+               expedido_em, entregue_em
+        FROM tbl_pedido WHERE id = %s
+        """,
+        (id_pedido,),
+    )
+    ex = cur.fetchone()
+    if not ex:
+        return
+    ped["id_bling_pedido"] = ex[0]
+    ped["codigo_rastreio"] = ex[1] or ""
+    ped["transportadora"] = ex[2] or ""
+    ped["expedido_em"] = ex[3].isoformat() if ex[3] else None
+    ped["entregue_em"] = ex[4].isoformat() if ex[4] else None
+
 
 def listar_itens_pedido(cur, id_pedido: int) -> list[dict]:
     cur.execute(
@@ -208,22 +254,7 @@ def obter_pedido(cur, id_pedido: int, *, id_vendedor: int | None = None, id_forn
         return None
     ped = _pedido_dict(row[:28], fornecedor_nome=row[28], vendedor_nome=row[29])
     ped["itens"] = listar_itens_pedido(cur, id_pedido)
-    cur.execute(
-        """
-        SELECT origem, id_bling_pedido, codigo_rastreio, transportadora,
-               expedido_em, entregue_em
-        FROM tbl_pedido WHERE id = %s
-        """,
-        (id_pedido,),
-    )
-    ex = cur.fetchone()
-    if ex:
-        ped["origem"] = ex[0] or "manual"
-        ped["id_bling_pedido"] = ex[1]
-        ped["codigo_rastreio"] = ex[2] or ""
-        ped["transportadora"] = ex[3] or ""
-        ped["expedido_em"] = ex[4].isoformat() if ex[4] else None
-        ped["entregue_em"] = ex[5].isoformat() if ex[5] else None
+    _enriquecer_pedido_expedicao(cur, id_pedido, ped)
     return ped
 
 

@@ -423,16 +423,31 @@
     };
   }
 
+  async function parseJsonResp(r) {
+    const txt = await r.text();
+    try {
+      return JSON.parse(txt);
+    } catch {
+      throw new Error(r.status >= 500 ? "Erro interno no servidor. Tente novamente." : "Resposta inválida do servidor.");
+    }
+  }
+
   async function salvar(confirmar) {
     mostrarMsg("");
     const body = corpoPedido();
-    const r = await fetch("/vendedor/pedidos/salvar", {
-      method: "POST",
-      credentials: "same-origin",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    const j = await r.json();
+    let j;
+    try {
+      const r = await fetch("/vendedor/pedidos/salvar", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      j = await parseJsonResp(r);
+    } catch (e) {
+      mostrarMsg(e.message || "Erro ao salvar.", true);
+      return null;
+    }
     if (!j.success) {
       mostrarMsg(j.message || "Erro ao salvar.", true);
       return null;
@@ -443,13 +458,19 @@
       await carregarLista();
       return j;
     }
-    const rc = await fetch("/vendedor/pedidos/confirmar", {
-      method: "POST",
-      credentials: "same-origin",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id_grupo: j.id_grupo }),
-    });
-    const jc = await rc.json();
+    let jc;
+    try {
+      const rc = await fetch("/vendedor/pedidos/confirmar", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id_grupo: j.id_grupo }),
+      });
+      jc = await parseJsonResp(rc);
+    } catch (e) {
+      mostrarMsg(e.message || "Erro ao confirmar.", true);
+      return null;
+    }
     if (!jc.success) {
       mostrarMsg(jc.message || "Erro ao confirmar.", true);
       return null;
@@ -668,10 +689,6 @@
   });
   document.getElementById("pd_btnSalvar")?.addEventListener("click", () => salvar(false));
   document.getElementById("pd_btnConfirmar")?.addEventListener("click", () => salvar(true));
-
-  el.modal?.addEventListener("click", (e) => {
-    if (e.target === el.modal) fecharModal();
-  });
 
   function bootPedidos() {
     initComboProduto();

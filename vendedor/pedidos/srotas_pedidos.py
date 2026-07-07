@@ -142,6 +142,10 @@ def pedido_detalhe(id_pedido: int):
         if not ped:
             return jsonify(success=False, message="Pedido não encontrado."), 404
         return jsonify(success=True, pedido=ped)
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception("Erro ao obter pedido %s", id_pedido)
+        return jsonify(success=False, message="Erro ao carregar pedido."), 500
     finally:
         conn.close()
 
@@ -193,6 +197,11 @@ def pedidos_confirmar():
     except ValueError as e:
         conn.rollback()
         return jsonify(success=False, message=str(e)), 400
+    except Exception:
+        conn.rollback()
+        import logging
+        logging.getLogger(__name__).exception("Erro ao confirmar pedido")
+        return jsonify(success=False, message="Erro interno ao confirmar o pedido."), 500
     finally:
         conn.close()
 
