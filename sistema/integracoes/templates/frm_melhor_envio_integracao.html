@@ -3,7 +3,7 @@
 {% block title %}Melhor Envio — Integrações — {{ MARCA_NOME }}{% endblock %}
 {% block topbar_title %}Melhor Envio{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('static', filename='style/Cmercadopago_integracao.css') }}?v=3" />
+<link rel="stylesheet" href="{{ url_for('static', filename='style/Cmercadopago_integracao.css') }}?v=4" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal Mp_Wrap">
@@ -46,8 +46,26 @@
     <h3>Preferências de cotação</h3>
     <p class="Mp_Hint">Serviços adicionais incluídos ao cotar frete nos pedidos (quando disponíveis na transportadora).</p>
     <div class="Mp_Switches">
-      <label class="Mp_Switch"><input type="checkbox" id="me_opcao_recebimento" /> Aviso de recebimento</label>
-      <label class="Mp_Switch"><input type="checkbox" id="me_opcao_maos_proprias" /> Mãos próprias</label>
+      <div class="Mp_SwitchRow">
+        <div class="Mp_SwitchText">
+          <strong>Aviso de recebimento</strong>
+          <span>Incluir nas cotações quando a transportadora oferecer</span>
+        </div>
+        <label class="Cl_Switch Mp_Switch" title="Aviso de recebimento">
+          <input type="checkbox" id="me_opcao_recebimento" checked />
+          <span class="Cl_SwitchSlider"></span>
+        </label>
+      </div>
+      <div class="Mp_SwitchRow">
+        <div class="Mp_SwitchText">
+          <strong>Mãos próprias</strong>
+          <span>Entrega somente ao destinatário (Correios)</span>
+        </div>
+        <label class="Cl_Switch Mp_Switch" title="Mãos próprias">
+          <input type="checkbox" id="me_opcao_maos_proprias" />
+          <span class="Cl_SwitchSlider"></span>
+        </label>
+      </div>
     </div>
     <p id="me_msg" class="Mp_Msg" hidden></p>
 
@@ -67,5 +85,5 @@
 </div>
 {% endblock %}
 {% block page_js %}
-<script src="{{ url_for('static', filename='script/Smelhor_envio_integracao.js') }}?v=3"></script>
+<script src="{{ url_for('static', filename='script/Smelhor_envio_integracao.js') }}?v=4"></script>
 {% endblock %}

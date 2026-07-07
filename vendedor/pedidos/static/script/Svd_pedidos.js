@@ -17,6 +17,8 @@
 
   const stV = (p) => (typeof p === "string" ? p : p?.status_vendedor || p?.status || "");
   const stC = (p) => (typeof p === "string" ? p : p?.status_comprador || "pendente");
+  const freteEditavelPedido = (ped) =>
+    ["rascunho", "importado", "aguardando_pagamento"].includes(stV(ped));
 
   const STATUS_LABEL = STATUS_LABEL_VENDEDOR;
 
@@ -705,7 +707,7 @@
   }
 
   function renderFreteModoTabs(ped, modo) {
-    const dis = editavelCampos ? "" : "disabled";
+    const dis = freteEditavelPedido(ped) ? "" : "disabled";
     const meHint = meFreteConectado ? "" : ' title="Conecte o Melhor Envio em Integrações → Frete"';
     return `
       <div class="Pd_FreteModo" role="tablist" aria-label="Forma de envio">
@@ -717,7 +719,7 @@
   function renderFreteManual(ped) {
     const etiquetas = (ped.anexos || []).filter((a) => a.tipo === "etiqueta");
     const inpId = `pd_frete_etq_inp_${ped.id}`;
-    const pode = editavelCampos && stV(ped) === "rascunho";
+    const pode = freteEditavelPedido(ped);
     const valorRef = Number(ped.valor_frete || fretePorPedido[ped.id]?.valor || 0);
     return `
       <div class="Pd_FreteManual">
@@ -764,7 +766,7 @@
     }
     return `
       <div class="Pd_FreteMeHead">
-        <button type="button" class="Cl_botaoFiltro" data-cotar="${ped.id}" ${editavelCampos ? "" : "disabled"}>Cotar</button>
+        <button type="button" class="Cl_botaoFiltro" data-cotar="${ped.id}" ${freteEditavelPedido(ped) ? "" : "disabled"}>Cotar</button>
       </div>
       <div class="Pd_FreteOpcoes">${opcoesHtml}</div>`;
   }
@@ -863,7 +865,7 @@
         try {
           await setFreteModo(idPed, modo);
           await renderFretePainel();
-          if (modo === "me" && meFreteConectado && editavelCampos) {
+          if (modo === "me" && meFreteConectado && freteEditavelPedido(pedidosGrupo.find((p) => p.id === idPed) || {})) {
             await cotarFretePedido(idPed);
           }
         } catch (e) {
@@ -941,8 +943,9 @@
     }
     await carregarStatusMeFrete();
     await renderFretePainel();
-    if (pedidosGrupo.length && meFreteConectado && editavelCampos) {
+    if (pedidosGrupo.length && meFreteConectado) {
       for (const ped of pedidosGrupo) {
+        if (!freteEditavelPedido(ped)) continue;
         if (inferirModoFrete(ped) !== "me") continue;
         if (!fretePorPedido[ped.id]?.opcoes?.length && !fretePorPedido[ped.id]?.escolhido) {
           await cotarFretePedido(ped.id);

@@ -1563,6 +1563,7 @@ def _montar_contexto_pedidos(
 
     statuses = {p["status_vendedor"] for p in pedidos}
     editavel = statuses == {STATUS_RASCUNHO}
+    frete_editavel = any(_frete_editavel_status(p["status_vendedor"]) for p in pedidos)
     bloqueado_total = any(
         (p.get("origem") or "manual") != "manual"
         or p["status_vendedor"] in (STATUS_PAGO, STATUS_EM_EXPEDICAO, STATUS_ENTREGUE, STATUS_CANCELADO)
@@ -1573,6 +1574,7 @@ def _montar_contexto_pedidos(
         "id_grupo": int(id_grupo) if id_grupo else None,
         "numero_grupo": numero_grupo,
         "editavel": editavel,
+        "frete_editavel": frete_editavel,
         "bloqueado_total": bloqueado_total,
         "status": next(iter(statuses)) if len(statuses) == 1 else "misto",
         "cliente": {

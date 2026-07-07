@@ -13,6 +13,17 @@
   };
 
   let salvando = false;
+  const PREF_RECEB_KEY = "me_recebimento_padrao";
+
+  function aplicarPadraoRecebimento(on, recebimentoAtivo) {
+    if (!on || !el.opcaoRecebimento) return recebimentoAtivo;
+    if (recebimentoAtivo) return true;
+    if (sessionStorage.getItem(PREF_RECEB_KEY) === "1") return false;
+    el.opcaoRecebimento.checked = true;
+    sessionStorage.setItem(PREF_RECEB_KEY, "1");
+    salvarPreferencias();
+    return true;
+  }
 
   function setConectado(on) {
     if (el.badge) {
@@ -76,7 +87,8 @@
       const on = j.status === "conectado";
       setConectado(on);
       setServidorConfigurado(!!j.configurado_servidor);
-      if (el.opcaoRecebimento) el.opcaoRecebimento.checked = !!j.opcao_recebimento;
+      const recebimento = aplicarPadraoRecebimento(on, !!j.opcao_recebimento);
+      if (el.opcaoRecebimento) el.opcaoRecebimento.checked = recebimento;
       if (el.opcaoMaosProprias) el.opcaoMaosProprias.checked = !!j.opcao_maos_proprias;
 
       const conta = j.conta || {};
@@ -94,7 +106,10 @@
     }
   }
 
-  el.opcaoRecebimento?.addEventListener("change", salvarPreferencias);
+  el.opcaoRecebimento?.addEventListener("change", () => {
+    sessionStorage.setItem(PREF_RECEB_KEY, "1");
+    salvarPreferencias();
+  });
   el.opcaoMaosProprias?.addEventListener("change", salvarPreferencias);
 
   el.btnDesconectar?.addEventListener("click", async () => {

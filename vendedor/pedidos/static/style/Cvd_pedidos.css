@@ -1082,10 +1082,10 @@
 .Pd_AnexoItens a:hover { text-decoration: underline; }
 
 .Pd_WizMain.is-readonly .Pd_QtdInput,
-.Pd_WizMain.is-readonly .Pd_WizPane:not([data-painel="anexos"]) input:not([type="file"]),
-.Pd_WizMain.is-readonly .Pd_WizPane:not([data-painel="anexos"]) select,
-.Pd_WizMain.is-readonly .Pd_WizPane:not([data-painel="anexos"]) textarea,
-.Pd_WizMain.is-readonly .Pd_WizPane:not([data-painel="anexos"]) .Cl_SelectDisplay,
+.Pd_WizMain.is-readonly .Pd_WizPane:not([data-painel="anexos"]):not([data-painel="frete"]) input:not([type="file"]),
+.Pd_WizMain.is-readonly .Pd_WizPane:not([data-painel="anexos"]):not([data-painel="frete"]) select,
+.Pd_WizMain.is-readonly .Pd_WizPane:not([data-painel="anexos"]):not([data-painel="frete"]) textarea,
+.Pd_WizMain.is-readonly .Pd_WizPane:not([data-painel="anexos"]):not([data-painel="frete"]) .Cl_SelectDisplay,
 .Pd_WizMain.is-readonly .Pd_ProdComboWrap,
 .Pd_WizMain.is-readonly [data-rm] {
   pointer-events: none;

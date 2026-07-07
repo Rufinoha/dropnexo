@@ -129,6 +129,16 @@ def oauth_callback():
             access = tokens.get("access_token") or ""
             if access:
                 atualizar_conta_info(cur, int(id_tenant), access)
+            try:
+                cfg = carregar_config_me(cur, int(id_tenant))
+                salvar_preferencias_me(
+                    cur,
+                    int(id_tenant),
+                    opcao_recebimento=True,
+                    opcao_maos_proprias=bool(cfg.get("opcao_maos_proprias")),
+                )
+            except RuntimeError:
+                pass
             conn.commit()
         finally:
             conn.close()
