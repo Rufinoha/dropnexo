@@ -129,16 +129,97 @@ def _taxa_pedido_fornecedor(cur, id_fornecedor: int) -> float:
     return 0.0
 
 
+_COLUNAS_EXPEDICAO_OK: bool | None = None
+_PEDIDO_COL_CACHE: set[str] | None = None
+
+
+def _pedido_colunas(cur) -> set[str]:
+    global _PEDIDO_COL_CACHE
+    if _PEDIDO_COL_CACHE is not None:
+        return _PEDIDO_COL_CACHE
+    cur.execute(
+        """
+        SELECT column_name FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'tbl_pedido'
+        """
+    )
+    _PEDIDO_COL_CACHE = {r[0] for r in cur.fetchall()}
+    return _PEDIDO_COL_CACHE
+
+
+def _pedido_col_expr(cur, col: str, pg_type: str) -> str:
+    if col in _pedido_colunas(cur):
+        return f"p.{col}"
+    return f"NULL::{pg_type} AS {col}"
+
+
+def pedido_tem_status_dual(cur) -> bool:
+    return "status_vendedor" in _pedido_colunas(cur)
+
+
+def col_status_vendedor(cur) -> str:
+    return "status_vendedor" if pedido_tem_status_dual(cur) else "status"
+
+
+def _normalizar_status_pedido(origem: str, sv: str, sc: str | None) -> tuple[str, str]:
+    """Compatível com schema antigo (só status) e pedidos Bling já gravados."""
+    origem_l = (origem or "manual").strip().lower()
+    status_v = (sv or "").strip()
+    status_c = (sc or "").strip()
+    if not status_c:
+        status_c = STATUS_COMPRADOR_PAGO if origem_l == "bling" else STATUS_COMPRADOR_PENDENTE
+    if origem_l == "bling" and status_v == STATUS_PAGO and status_c == STATUS_COMPRADOR_PAGO:
+        status_v = STATUS_IMPORTADO
+    return status_v, status_c
+
+
+def pedido_cols_sql(cur) -> str:
+    cv = col_status_vendedor(cur)
+    cols = _pedido_colunas(cur)
+    if pedido_tem_status_dual(cur) and "status_comprador" in cols:
+        status_cols = f"p.{cv}, p.status_comprador, p.status_pagamento"
+    else:
+        status_cols = f"p.{cv}, NULL::varchar AS status_comprador, p.status_pagamento"
+    return f"""
+    p.id, p.id_grupo, p.numero, p.id_tenant_vendedor, p.id_tenant_fornecedor,
+    p.origem, {status_cols},
+    p.cliente_nome, p.cliente_email, p.cliente_telefone, p.cliente_documento,
+    p.entrega_cep, p.entrega_logradouro, p.entrega_numero, p.entrega_complemento,
+    p.entrega_bairro, p.entrega_cidade, p.entrega_uf,
+    p.subtotal_produtos, p.valor_taxa_pedido, p.valor_frete, p.valor_total,
+    p.observacoes, p.confirmado_em, p.pago_em, p.criado_em, g.numero
+"""
+
+
+def sql_pedidos_resumo(cur) -> str:
+    cv = col_status_vendedor(cur)
+    cols = _pedido_colunas(cur)
+    if pedido_tem_status_dual(cur) and "status_comprador" in cols:
+        status_cols = f"p.{cv}, p.status_comprador"
+    else:
+        status_cols = f"p.{cv}, NULL::varchar AS status_comprador"
+    meio = _pedido_col_expr(cur, "meio_pagamento", "varchar")
+    pix_payload = _pedido_col_expr(cur, "pix_manual_payload", "text")
+    pix_txid = _pedido_col_expr(cur, "pix_manual_txid", "varchar")
+    return f"""
+    SELECT p.id, {status_cols}, p.status_pagamento, {meio}, p.origem, p.valor_total,
+           p.id_tenant_fornecedor, COALESCE(tf.nome_fantasia, tf.nome), p.numero, p.pago_em,
+           {pix_payload}, {pix_txid}
+    FROM tbl_pedido p
+    LEFT JOIN tbl_tenant tf ON tf.id = p.id_tenant_fornecedor
+"""
+
+
 def _pedido_dict(row, fornecedor_nome: str | None = None, vendedor_nome: str | None = None) -> dict:
-    sv = row[6]
-    sc = row[7]
+    origem = row[5]
+    sv, sc = _normalizar_status_pedido(origem, row[6], row[7])
     return {
         "id": row[0],
         "id_grupo": row[1],
         "numero": row[2],
         "id_tenant_vendedor": row[3],
         "id_tenant_fornecedor": row[4],
-        "origem": row[5],
+        "origem": origem,
         "status_vendedor": sv,
         "status_comprador": sc,
         "status": sv,
@@ -168,17 +249,8 @@ def _pedido_dict(row, fornecedor_nome: str | None = None, vendedor_nome: str | N
     }
 
 
-_PEDIDO_COLS = """
-    p.id, p.id_grupo, p.numero, p.id_tenant_vendedor, p.id_tenant_fornecedor,
-    p.origem, p.status_vendedor, p.status_comprador, p.status_pagamento,
-    p.cliente_nome, p.cliente_email, p.cliente_telefone, p.cliente_documento,
-    p.entrega_cep, p.entrega_logradouro, p.entrega_numero, p.entrega_complemento,
-    p.entrega_bairro, p.entrega_cidade, p.entrega_uf,
-    p.subtotal_produtos, p.valor_taxa_pedido, p.valor_frete, p.valor_total,
-    p.observacoes, p.confirmado_em, p.pago_em, p.criado_em, g.numero
-"""
-
-_COLUNAS_EXPEDICAO_OK: bool | None = None
+# Legado: manter nome para imports externos que referenciem _PEDIDO_COLS
+_PEDIDO_COLS = ""
 
 
 def _pedido_tem_colunas_expedicao(cur) -> bool:
@@ -263,7 +335,7 @@ def obter_pedido(cur, id_pedido: int, *, id_vendedor: int | None = None, id_forn
         params.append(id_fornecedor)
     cur.execute(
         f"""
-        SELECT {_PEDIDO_COLS},
+        SELECT {pedido_cols_sql(cur)},
                COALESCE(tf.nome_fantasia, tf.nome),
                COALESCE(tv.nome_fantasia, tv.nome)
         FROM tbl_pedido p
@@ -287,11 +359,11 @@ def listar_pedidos_vendedor(cur, id_vendedor: int, status: str | None = None) ->
     where = ["p.id_tenant_vendedor = %s"]
     params: list[Any] = [id_vendedor]
     if status:
-        where.append("p.status_vendedor = %s")
+        where.append(f"p.{col_status_vendedor(cur)} = %s")
         params.append(status)
     cur.execute(
         f"""
-        SELECT {_PEDIDO_COLS},
+        SELECT {pedido_cols_sql(cur)},
                COALESCE(tf.nome_fantasia, tf.nome),
                NULL
         FROM tbl_pedido p
@@ -306,14 +378,15 @@ def listar_pedidos_vendedor(cur, id_vendedor: int, status: str | None = None) ->
 
 
 def listar_pedidos_fornecedor(cur, id_fornecedor: int, status: str | None = None) -> list[dict]:
-    where = ["p.id_tenant_fornecedor = %s", "p.status_vendedor NOT IN ('rascunho', 'importado')"]
+    cv = col_status_vendedor(cur)
+    where = [f"p.id_tenant_fornecedor = %s", f"p.{cv} NOT IN ('rascunho', 'importado')"]
     params: list[Any] = [id_fornecedor]
     if status:
-        where.append("p.status_vendedor = %s")
+        where.append(f"p.{cv} = %s")
         params.append(status)
     cur.execute(
         f"""
-        SELECT {_PEDIDO_COLS},
+        SELECT {pedido_cols_sql(cur)},
                NULL,
                COALESCE(tv.nome_fantasia, tv.nome)
         FROM tbl_pedido p
@@ -583,9 +656,10 @@ def salvar_rascunho(
         id_grupo = int(cur.fetchone()[0])
 
     ids_fornecedores_ativos = set(por_fornecedor.keys())
+    cv = col_status_vendedor(cur)
     cur.execute(
-        """
-        SELECT id, id_tenant_fornecedor, status_vendedor FROM tbl_pedido
+        f"""
+        SELECT id, id_tenant_fornecedor, {cv} FROM tbl_pedido
         WHERE id_grupo = %s AND id_tenant_vendedor = %s
         """,
         (id_grupo, id_vendedor),
@@ -614,7 +688,7 @@ def salvar_rascunho(
         if row_ped:
             id_pedido = int(row_ped[0])
             cur.execute(
-                "SELECT status_vendedor FROM tbl_pedido WHERE id = %s",
+                f"SELECT {cv} FROM tbl_pedido WHERE id = %s",
                 (id_pedido,),
             )
             if cur.fetchone()[0] != STATUS_RASCUNHO:
@@ -730,10 +804,11 @@ def salvar_rascunho(
 
 
 def confirmar_grupo(cur, id_vendedor: int, id_grupo: int, id_usuario: int | None = None) -> list[int]:
+    cv = col_status_vendedor(cur)
     cur.execute(
-        """
+        f"""
         SELECT id FROM tbl_pedido
-        WHERE id_grupo = %s AND id_tenant_vendedor = %s AND status_vendedor = %s
+        WHERE id_grupo = %s AND id_tenant_vendedor = %s AND {cv} = %s
         """,
         (id_grupo, id_vendedor, STATUS_RASCUNHO),
     )
@@ -758,10 +833,11 @@ def confirmar_pedido(cur, id_vendedor: int, id_pedido: int, id_usuario: int | No
     reservar_itens_pedido(cur, itens_reserva)
 
     agora = agora_utc()
+    cv = col_status_vendedor(cur)
     cur.execute(
-        """
+        f"""
         UPDATE tbl_pedido SET
-            status_vendedor = %s,
+            {cv} = %s,
             status_pagamento = 'pendente',
             confirmado_em = %s,
             atualizado_em = %s
@@ -801,10 +877,11 @@ def cancelar_pedido(
         liberar_itens_pedido(cur, itens)
 
     agora = agora_utc()
+    cv = col_status_vendedor(cur)
     cur.execute(
-        """
+        f"""
         UPDATE tbl_pedido SET
-            status_vendedor = %s,
+            {cv} = %s,
             status_pagamento = 'cancelado',
             cancelado_em = %s,
             atualizado_em = %s
@@ -825,23 +902,25 @@ def marcar_pedido_pago(
     detalhe: str | None = None,
 ) -> bool:
     """Marca pedido como pago. Retorna False se já estava pago."""
+    cv = col_status_vendedor(cur)
     cur.execute(
-        "SELECT status_vendedor, status_pagamento FROM tbl_pedido WHERE id = %s",
+        f"SELECT {cv}, status_pagamento, origem FROM tbl_pedido WHERE id = %s",
         (id_pedido,),
     )
     row = cur.fetchone()
     if not row:
         raise ValueError("Pedido não encontrado.")
-    if row[0] == STATUS_PAGO:
+    sv, _ = _normalizar_status_pedido(row[2] or "", row[0], None)
+    if sv == STATUS_PAGO:
         return False
-    if not _status_vendedor_pagavel(row[0]):
+    if not _status_vendedor_pagavel(sv):
         raise ValueError("Somente pedidos importados ou aguardando pagamento podem ser marcados como pagos.")
 
     agora = agora_utc()
     cur.execute(
-        """
+        f"""
         UPDATE tbl_pedido SET
-            status_vendedor = %s,
+            {cv} = %s,
             status_pagamento = 'pago',
             pago_em = %s,
             mp_payment_id = COALESCE(%s, mp_payment_id),
@@ -1007,51 +1086,99 @@ def importar_pedido_bling(
             prefix = f"Importado do Bling #{numero_bling}."
             obs = f"{prefix} {obs}".strip() if obs else prefix
 
-        cur.execute(
-            """
-            INSERT INTO tbl_pedido (
-                numero, id_tenant_vendedor, id_tenant_fornecedor, origem,
-                status_vendedor, status_comprador, status_pagamento,
-                cliente_nome, cliente_email, cliente_telefone, cliente_documento,
-                entrega_cep, entrega_logradouro, entrega_numero, entrega_complemento,
-                entrega_bairro, entrega_cidade, entrega_uf,
-                subtotal_produtos, valor_taxa_pedido, valor_frete, valor_total,
-                observacoes, confirmado_em, id_bling_pedido
-            ) VALUES (
-                %s, %s, %s, 'bling',
-                %s, %s, 'pendente',
-                %s, %s, %s, %s,
-                %s, %s, %s, %s, %s, %s, %s,
-                %s, %s, %s, %s,
-                %s, %s, %s
-            ) RETURNING id
-            """,
-            (
-                numero,
-                id_vendedor,
-                id_forn,
-                STATUS_IMPORTADO,
-                STATUS_COMPRADOR_PAGO,
-                cliente.get("nome") or "Cliente Bling",
-                cliente.get("email"),
-                cliente.get("telefone"),
-                cliente.get("documento"),
-                entrega.get("cep"),
-                entrega.get("logradouro"),
-                entrega.get("numero"),
-                entrega.get("complemento"),
-                entrega.get("bairro"),
-                entrega.get("cidade"),
-                entrega.get("uf"),
-                subtotal,
-                taxa,
-                _float(dados.get("valor_frete")),
-                total,
-                obs,
-                agora,
-                id_bling_pedido,
-            ),
-        )
+        cv = col_status_vendedor(cur)
+        cols = _pedido_colunas(cur)
+        if pedido_tem_status_dual(cur) and "status_comprador" in cols:
+            cur.execute(
+                f"""
+                INSERT INTO tbl_pedido (
+                    numero, id_tenant_vendedor, id_tenant_fornecedor, origem,
+                    {cv}, status_comprador, status_pagamento,
+                    cliente_nome, cliente_email, cliente_telefone, cliente_documento,
+                    entrega_cep, entrega_logradouro, entrega_numero, entrega_complemento,
+                    entrega_bairro, entrega_cidade, entrega_uf,
+                    subtotal_produtos, valor_taxa_pedido, valor_frete, valor_total,
+                    observacoes, confirmado_em, id_bling_pedido
+                ) VALUES (
+                    %s, %s, %s, 'bling',
+                    %s, %s, 'pendente',
+                    %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s,
+                    %s, %s, %s
+                ) RETURNING id
+                """,
+                (
+                    numero,
+                    id_vendedor,
+                    id_forn,
+                    STATUS_IMPORTADO,
+                    STATUS_COMPRADOR_PAGO,
+                    cliente.get("nome") or "Cliente Bling",
+                    cliente.get("email"),
+                    cliente.get("telefone"),
+                    cliente.get("documento"),
+                    entrega.get("cep"),
+                    entrega.get("logradouro"),
+                    entrega.get("numero"),
+                    entrega.get("complemento"),
+                    entrega.get("bairro"),
+                    entrega.get("cidade"),
+                    entrega.get("uf"),
+                    subtotal,
+                    taxa,
+                    _float(dados.get("valor_frete")),
+                    total,
+                    obs,
+                    agora,
+                    id_bling_pedido,
+                ),
+            )
+        else:
+            cur.execute(
+                f"""
+                INSERT INTO tbl_pedido (
+                    numero, id_tenant_vendedor, id_tenant_fornecedor, origem,
+                    {cv}, status_pagamento,
+                    cliente_nome, cliente_email, cliente_telefone, cliente_documento,
+                    entrega_cep, entrega_logradouro, entrega_numero, entrega_complemento,
+                    entrega_bairro, entrega_cidade, entrega_uf,
+                    subtotal_produtos, valor_taxa_pedido, valor_frete, valor_total,
+                    observacoes, confirmado_em, id_bling_pedido
+                ) VALUES (
+                    %s, %s, %s, 'bling',
+                    %s, 'pendente',
+                    %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s,
+                    %s, %s, %s
+                ) RETURNING id
+                """,
+                (
+                    numero,
+                    id_vendedor,
+                    id_forn,
+                    STATUS_AGUARDANDO,
+                    cliente.get("nome") or "Cliente Bling",
+                    cliente.get("email"),
+                    cliente.get("telefone"),
+                    cliente.get("documento"),
+                    entrega.get("cep"),
+                    entrega.get("logradouro"),
+                    entrega.get("numero"),
+                    entrega.get("complemento"),
+                    entrega.get("bairro"),
+                    entrega.get("cidade"),
+                    entrega.get("uf"),
+                    subtotal,
+                    taxa,
+                    _float(dados.get("valor_frete")),
+                    total,
+                    obs,
+                    agora,
+                    id_bling_pedido,
+                ),
+            )
         id_pedido = int(cur.fetchone()[0])
 
         for item in itens:
@@ -1147,10 +1274,11 @@ def marcar_em_expedicao(
     baixar_itens_pedido(cur, itens_baixa)
 
     agora = agora_utc()
+    cv = col_status_vendedor(cur)
     cur.execute(
-        """
+        f"""
         UPDATE tbl_pedido SET
-            status_vendedor = %s,
+            {cv} = %s,
             codigo_rastreio = COALESCE(%s, codigo_rastreio),
             transportadora = COALESCE(%s, transportadora),
             expedido_em = %s,
@@ -1202,10 +1330,11 @@ def marcar_entregue(
         )
 
     agora = agora_utc()
+    cv = col_status_vendedor(cur)
     cur.execute(
-        """
+        f"""
         UPDATE tbl_pedido SET
-            status_vendedor = %s,
+            {cv} = %s,
             entregue_em = %s,
             expedido_em = COALESCE(expedido_em, %s),
             atualizado_em = %s
@@ -1223,16 +1352,17 @@ def marcar_entregue(
 
 
 def listar_pedidos_expedicao_vendedor(cur, id_vendedor: int) -> list[dict]:
+    cv = col_status_vendedor(cur)
     cur.execute(
         f"""
-        SELECT {_PEDIDO_COLS},
+        SELECT {pedido_cols_sql(cur)},
                COALESCE(tf.nome_fantasia, tf.nome),
                NULL
         FROM tbl_pedido p
         LEFT JOIN tbl_pedido_grupo g ON g.id = p.id_grupo
         LEFT JOIN tbl_tenant tf ON tf.id = p.id_tenant_fornecedor
         WHERE p.id_tenant_vendedor = %s
-          AND p.status_vendedor IN (%s, %s, %s)
+          AND p.{cv} IN (%s, %s, %s)
         ORDER BY COALESCE(p.expedido_em, p.pago_em, p.criado_em) DESC, p.id DESC
         """,
         (id_vendedor, STATUS_PAGO, STATUS_EM_EXPEDICAO, STATUS_ENTREGUE),
@@ -1277,6 +1407,7 @@ def _montar_contexto_pedidos(
     itens: list[dict] = []
     pedidos: list[dict] = []
     for pid, sv, sc, status_pag, meio_pag, origem, valor_total, id_forn, forn_nome, numero, pago_em, pix_payload, pix_txid in pedidos_rows:
+        sv, sc = _normalizar_status_pedido(origem or "manual", sv, sc)
         frete_info = {}
         try:
             from servico_melhor_envio import frete_resumo_pedido
@@ -1350,15 +1481,6 @@ def _montar_contexto_pedidos(
     }
 
 
-_SQL_PEDIDOS_RESUMO = """
-    SELECT p.id, p.status_vendedor, p.status_comprador, p.status_pagamento, p.meio_pagamento, p.origem, p.valor_total,
-           p.id_tenant_fornecedor, COALESCE(tf.nome_fantasia, tf.nome), p.numero, p.pago_em,
-           p.pix_manual_payload, p.pix_manual_txid
-    FROM tbl_pedido p
-    LEFT JOIN tbl_tenant tf ON tf.id = p.id_tenant_fornecedor
-"""
-
-
 def obter_grupo_pedido(cur, id_vendedor: int, id_grupo: int) -> dict | None:
     cur.execute(
         "SELECT id, numero FROM tbl_pedido_grupo WHERE id = %s AND id_tenant_vendedor = %s",
@@ -1370,7 +1492,7 @@ def obter_grupo_pedido(cur, id_vendedor: int, id_grupo: int) -> dict | None:
 
     cur.execute(
         f"""
-        {_SQL_PEDIDOS_RESUMO}
+        {sql_pedidos_resumo(cur)}
         WHERE p.id_grupo = %s AND p.id_tenant_vendedor = %s
         ORDER BY p.id
         """,
@@ -1395,7 +1517,7 @@ def obter_contexto_pedido_vendedor(cur, id_vendedor: int, id_pedido: int) -> dic
 
     cur.execute(
         f"""
-        {_SQL_PEDIDOS_RESUMO}
+        {sql_pedidos_resumo(cur)}
         WHERE p.id = %s AND p.id_tenant_vendedor = %s
         """,
         (id_pedido, id_vendedor),
