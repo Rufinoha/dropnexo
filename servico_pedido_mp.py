@@ -16,7 +16,15 @@ from api.mercadopago.cliente import (
     obter_pagamento_mp,
 )
 from global_utils import agora_utc, obter_base_url
-from servico_pedido import STATUS_AGUARDANDO, STATUS_PAGO, marcar_pedido_pago, obter_pedido
+from servico_pedido import (
+    STATUS_AGUARDANDO,
+    STATUS_IMPORTADO,
+    STATUS_PAGO,
+    _status_vendedor_pagavel,
+    marcar_pedido_pago,
+    obter_pedido,
+    status_vendedor_pedido,
+)
 
 _log = logging.getLogger(__name__)
 
@@ -70,8 +78,8 @@ def _validar_pedido_pagamento(cur, id_vendedor: int, id_pedido: int) -> dict:
     ped = obter_pedido(cur, id_pedido, id_vendedor=id_vendedor)
     if not ped:
         raise ValueError("Pedido não encontrado.")
-    if ped["status"] != STATUS_AGUARDANDO:
-        raise ValueError("Somente pedidos aguardando pagamento podem ser pagos.")
+    if not _status_vendedor_pagavel(status_vendedor_pedido(ped)):
+        raise ValueError("Somente pedidos importados ou aguardando pagamento podem ser pagos.")
     if ped["valor_total"] <= 0:
         raise ValueError("Valor do pedido inválido.")
     return ped
@@ -312,8 +320,8 @@ def sincronizar_pagamento_pedido(cur, id_vendedor: int, id_pedido: int) -> dict[
     ped = obter_pedido(cur, id_pedido, id_vendedor=id_vendedor)
     if not ped:
         raise ValueError("Pedido não encontrado.")
-    if ped["status"] == STATUS_PAGO:
-        return {"status": STATUS_PAGO, "mp_status": "approved"}
+    if status_vendedor_pedido(ped) == STATUS_PAGO:
+        return {"status": STATUS_PAGO, "status_vendedor": STATUS_PAGO, "mp_status": "approved"}
 
     cur.execute(
         """
@@ -326,7 +334,8 @@ def sincronizar_pagamento_pedido(cur, id_vendedor: int, id_pedido: int) -> dict[
     row = cur.fetchone()
     if not row or not row[0]:
         return {
-            "status": ped["status"],
+            "status": status_vendedor_pedido(ped),
+            "status_vendedor": status_vendedor_pedido(ped),
             "mp_status": row[2] if row else None,
             "meio_pagamento": row[1] if row else None,
             "checkout_url": row[3] if row else None,

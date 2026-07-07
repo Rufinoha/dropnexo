@@ -54,9 +54,22 @@
 }
 
 .Pd_Badge--rascunho { background: #f1f5f9; color: #475569; }
+.Pd_Badge--importado { background: #e0e7ff; color: #3730a3; }
 .Pd_Badge--aguardando_pagamento { background: #fef3c7; color: #92400e; }
 .Pd_Badge--pago { background: #d1fae5; color: #047857; }
 .Pd_Badge--cancelado { background: #fee2e2; color: #991b1b; }
+.Pd_Badge--em_expedicao { background: #dbeafe; color: #1d4ed8; }
+.Pd_Badge--entregue { background: #ccfbf1; color: #0f766e; }
+
+.Pd_Badge--c_pendente { background: #f1f5f9; color: #64748b; }
+.Pd_Badge--c_pago { background: #d1fae5; color: #047857; }
+.Pd_Badge--c_cancelado { background: #fee2e2; color: #991b1b; }
+
+.Pd_StatusPair {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
 
 .Pd_Vazio { text-align: center; color: #64748b; padding: 2rem; }
 

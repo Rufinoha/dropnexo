@@ -1,11 +1,12 @@
 (function () {
   const LABEL = {
-    aguardando_pagamento: "Aguardando pagamento",
-    pago: "Pago",
+    aguardando_pagamento: "Aguardando pagamento do vendedor",
+    pago: "Pago — pode expedir",
     em_expedicao: "Em expedição",
     entregue: "Entregue",
     cancelado: "Cancelado",
   };
+  const stV = (p) => p?.status_vendedor || p?.status || "";
   const tbody = document.getElementById("pd_fn_tbody");
   const vazio = document.getElementById("pd_fn_vazio");
   const modal = document.getElementById("pd_fn_modal");
@@ -36,7 +37,7 @@
         <td>${esc(p.vendedor_nome || "")}</td>
         <td>${esc(p.cliente_nome || "")}</td>
         <td>${fmt(p.valor_total)}</td>
-        <td>${badge(p.status)}</td>
+        <td>${badge(stV(p))}</td>
         <td>${p.criado_em ? new Date(p.criado_em).toLocaleDateString("pt-BR") : "—"}</td>
         <td><button type="button" class="PdFn_BtnLink" data-id="${p.id}">Ver</button></td>
       </tr>`
@@ -53,7 +54,7 @@
     foot.innerHTML = "";
     const comprovantes = (p.anexos || []).filter((a) => a.tipo === "comprovante_pix");
     if (
-      p.status === "aguardando_pagamento" &&
+      stV(p) === "aguardando_pagamento" && &&
       p.meio_pagamento === "pix_manual" &&
       (p.status_pagamento === "comprovante_enviado" || comprovantes.length)
     ) {
@@ -76,7 +77,7 @@
       document.getElementById("pd_fn_btn_rej_pix")?.addEventListener("click", () => rejeitarPix(p.id));
       return;
     }
-    if (p.status === "pago") {
+    if (stV(p) === "pago") {
       foot.innerHTML = `
         <div class="PdFn_ExpForm">
           <label>Transportadora <input type="text" id="pd_fn_transportadora" placeholder="Opcional" /></label>
@@ -84,7 +85,7 @@
           <button type="button" class="Cl_botaoprimario" id="pd_fn_btn_expedir">Marcar em expedição</button>
         </div>`;
       document.getElementById("pd_fn_btn_expedir")?.addEventListener("click", () => expedir(p.id));
-    } else if (p.status === "em_expedicao") {
+    } else if (stV(p) === "em_expedicao") {
       foot.innerHTML = `<button type="button" class="Cl_botaoprimario" id="pd_fn_btn_entregue">Marcar entregue</button>`;
       document.getElementById("pd_fn_btn_entregue")?.addEventListener("click", () => entregue(p.id));
     }
@@ -162,7 +163,7 @@
       <p><strong>Cliente:</strong> ${esc(p.cliente_nome)} — ${esc(p.cliente_telefone || "")}</p>
       <p><strong>Entrega:</strong> ${esc(p.entrega_logradouro || "")} ${esc(p.entrega_numero || "")}, ${esc(p.entrega_cidade || "")}-${esc(p.entrega_uf || "")}</p>
       <p><strong>Total:</strong> ${fmt(p.valor_total)} ${p.valor_taxa_pedido > 0 ? `(incl. taxa ${fmt(p.valor_taxa_pedido)})` : ""}</p>
-      <p>${badge(p.status)}</p>
+      <p>${badge(stV(p))}</p>
       ${p.codigo_rastreio ? `<p><strong>Rastreio:</strong> ${esc(p.codigo_rastreio)}</p>` : ""}
       <table class="PdFn_Table" style="margin-top:1rem"><thead><tr><th>Produto</th><th>Qtd</th><th>Drop</th></tr></thead>
       <tbody>${(p.itens || []).map((i) => `<tr><td>${esc(i.nome_produto)}</td><td>${i.quantidade}</td><td>${fmt(i.subtotal_drop)}</td></tr>`).join("")}</tbody></table>`;

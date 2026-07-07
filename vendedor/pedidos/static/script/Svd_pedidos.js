@@ -1,12 +1,24 @@
 (function () {
-  const STATUS_LABEL = {
+  const STATUS_LABEL_VENDEDOR = {
     rascunho: "Rascunho",
+    importado: "Importado",
     aguardando_pagamento: "Aguardando pagamento",
     pago: "Pago",
     cancelado: "Cancelado",
     em_expedicao: "Em expedição",
     entregue: "Entregue",
   };
+
+  const STATUS_LABEL_COMPRADOR = {
+    pendente: "Pendente",
+    pago: "Pago",
+    cancelado: "Cancelado",
+  };
+
+  const stV = (p) => (typeof p === "string" ? p : p?.status_vendedor || p?.status || "");
+  const stC = (p) => (typeof p === "string" ? p : p?.status_comprador || "pendente");
+
+  const STATUS_LABEL = STATUS_LABEL_VENDEDOR;
 
   const el = {
     tbody: document.getElementById("pd_tbody"),
@@ -92,8 +104,14 @@
     el.msg.classList.toggle("is-erro", !!erro);
   }
 
-  function badge(status) {
-    return `<span class="Pd_Badge Pd_Badge--${status}">${STATUS_LABEL[status] || status}</span>`;
+  function badge(status, tipo = "vendedor") {
+    const labels = tipo === "comprador" ? STATUS_LABEL_COMPRADOR : STATUS_LABEL_VENDEDOR;
+    const cls = tipo === "comprador" ? `Pd_Badge Pd_Badge--c_${status}` : `Pd_Badge Pd_Badge--${status}`;
+    return `<span class="${cls}">${labels[status] || status}</span>`;
+  }
+
+  function badgesPedido(p) {
+    return `<span class="Pd_StatusPair">${badge(stC(p), "comprador")}${badge(stV(p), "vendedor")}</span>`;
   }
 
   async function carregarLista() {
@@ -113,10 +131,11 @@
         <td>${esc(p.fornecedor_nome || "")}</td>
         <td>${esc(p.cliente_nome || "")}</td>
         <td>${fmt(p.valor_total)}</td>
-        <td>${badge(p.status)}</td>
+        <td>${badge(stC(p), "comprador")}</td>
+        <td>${badge(stV(p), "vendedor")}</td>
         <td>${p.criado_em ? new Date(p.criado_em).toLocaleDateString("pt-BR") : "—"}</td>
         <td class="Cl_TableActions Pd_Acoes">
-          ${icoBtn("editar", p.status === "rascunho" ? "Editar pedido" : "Ver pedido", "Pd_BtnEdit", `data-acao="editar" data-id="${p.id}" data-grupo="${p.id_grupo || ""}" data-status="${esc(p.status)}"`)}
+          ${icoBtn("editar", stV(p) === "rascunho" ? "Editar pedido" : "Ver pedido", "Pd_BtnEdit", `data-acao="editar" data-id="${p.id}" data-grupo="${p.id_grupo || ""}" data-status="${esc(stV(p))}"`)}
           ${icoBtn("nf_hub", "Incluir NF", "Pd_BtnNf", `data-acao="nf" data-id="${p.id}" data-grupo="${p.id_grupo || ""}"`)}
           ${icoBtn("etiqueta", "Incluir etiqueta", "Pd_BtnEtq", `data-acao="etiqueta" data-id="${p.id}" data-grupo="${p.id_grupo || ""}"`)}
         </td>
@@ -188,7 +207,7 @@
     editavelCampos = grupo ? !!grupo.editavel : true;
     const bloqueadoIntegracao = pedidosGrupo.some((p) => (p.origem || "manual") !== "manual");
     const bloqueadoPago = pedidosGrupo.some((p) =>
-      ["pago", "em_expedicao", "entregue"].includes(p.status)
+      ["pago", "em_expedicao", "entregue"].includes(stV(p))
     );
 
     bloqueadoTotal = bloqueadoIntegracao;
@@ -206,7 +225,7 @@
     const podeCancelar =
       pedidosGrupo.some(
         (p) =>
-          (p.status === "rascunho" || p.status === "aguardando_pagamento") &&
+          (stV(p) === "rascunho" || stV(p) === "aguardando_pagamento") &&
           (p.origem || "manual") === "manual"
       ) && !bloqueadoIntegracao;
     if (elBtnCancelar) elBtnCancelar.hidden = !podeCancelar;
@@ -305,7 +324,7 @@
     const lista = (ped.anexos || []).filter((a) => a.tipo === tipo);
     const inpId = `pd_anexo_inp_${ped.id}_${tipo}`;
     const podeEnviar =
-      (ped.origem || "manual") === "manual" && ped.status !== "cancelado" && !bloqueadoTotal;
+      (ped.origem || "manual") === "manual" && stV(ped) !== "cancelado" && !bloqueadoTotal;
     return `
       <div class="Pd_AnexoBloco" id="pd_anexo_${ped.id}_${tipo}">
         <h5>${esc(rotulo)}</h5>
@@ -351,7 +370,7 @@
         <div class="Pd_AnexoCardHead">
           <div>
             <strong>${esc(p.numero)}</strong>
-            <br><small>${esc(p.fornecedor_nome || "")} · ${badge(p.status)}</small>
+            <br><small>${esc(p.fornecedor_nome || "")} · ${badge(stV(p))} · Comprador: ${badge(stC(p), "comprador")}</small>
           </div>
         </div>
         ${renderBlocoAnexo(p, "nf", "Nota fiscal")}
@@ -600,14 +619,14 @@
       txt = `Etiqueta gerada${rastreio ? ` — rastreio <strong>${esc(rastreio)}</strong>` : ""}${proto ? ` <small>(${esc(proto)})</small>` : ""}`;
     } else if (st === "erro") {
       txt = "Falha ao gerar etiqueta no Melhor Envio.";
-    } else if (st === "pendente" && ped.status === "pago") {
+    } else if (st === "pendente" && stV(ped) === "pago") {
       txt = "Gerando etiqueta no Melhor Envio…";
     } else if (st === "pendente") {
       txt = "Etiqueta será gerada após o pagamento.";
     }
     if (!txt) return "";
     const retry =
-      st === "erro" && ["pago", "em_expedicao"].includes(ped.status)
+      st === "erro" && ["pago", "em_expedicao"].includes(stV(ped))
         ? `<button type="button" class="Cl_botaoFiltro Pd_BtnEtiquetaRetry" data-etiqueta-retry="${ped.id}">Tentar novamente</button>`
         : "";
     return `<p class="Pd_EtiquetaStatus Pd_EtiquetaStatus--${esc(st || "pendente")}">${txt}${retry}</p>`;
@@ -687,7 +706,7 @@
   function renderFreteManual(ped) {
     const etiquetas = (ped.anexos || []).filter((a) => a.tipo === "etiqueta");
     const inpId = `pd_frete_etq_inp_${ped.id}`;
-    const pode = editavelCampos && ped.status === "rascunho";
+    const pode = editavelCampos && stV(ped) === "rascunho";
     const valorRef = Number(ped.valor_frete || fretePorPedido[ped.id]?.valor || 0);
     return `
       <div class="Pd_FreteManual">
@@ -1021,9 +1040,10 @@
     const isPixManual = integracao === "pix-manual";
     const k = payKey(idForn, integracao);
     const pref = meioPagamentoPorFornecedor[k] || "";
-    const pedidoPago = ped && ["pago", "em_expedicao", "entregue"].includes(ped.status);
-    const aguardando = ped?.status === "aguardando_pagamento";
-    const rascunho = ped?.status === "rascunho";
+    const pedidoPago = ped && ["pago", "em_expedicao", "entregue"].includes(stV(ped));
+    const aguardando = stV(ped) === "aguardando_pagamento";
+    const importado = stV(ped) === "importado";
+    const rascunho = stV(ped) === "rascunho";
     const comprovanteEnviado = ped?.status_pagamento === "comprovante_enviado";
     const pixManualAtivo = ped?.meio_pagamento === "pix_manual" || ped?.pix_manual_payload;
 
@@ -1033,8 +1053,9 @@
       statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pago">${badge("pago")} Pagamento confirmado${quando ? ` · ${esc(quando)}` : ""}</div>`;
     } else if (comprovanteEnviado && isPixManual) {
       statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pendente">Comprovante enviado — aguardando validação do fornecedor</div>`;
+    } else if (importado) {
+      statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pendente">${badge("importado")} Cliente já pagou no canal — prepare frete e pague o fornecedor · ${fmt(ped.valor_total)}</div>`;
     } else if (aguardando) {
-      statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pendente">${badge(ped.status)} ${fmt(ped.valor_total)}</div>`;
     } else if (rascunho) {
       statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pendente">${badge("rascunho")} Confirme o pedido para pagar</div>`;
     }
@@ -1204,6 +1225,7 @@
   async function atualizarGrupoAposPagamento(idPed) {
     const ped = pedidosGrupo.find((p) => p.id === idPed);
     if (ped) {
+      ped.status_vendedor = "pago";
       ped.status = "pago";
       ped.status_pagamento = "pago";
     }
@@ -1222,7 +1244,7 @@
 
   async function pagarCard(idForn, integracao, idPed) {
     const ped = pedidosGrupo.find((p) => p.id === idPed);
-    if (!ped || ped.status !== "aguardando_pagamento") return;
+    if (!ped || !["importado", "aguardando_pagamento"].includes(stV(ped))) return;
 
     const k = payKey(idForn, integracao);
     const meio = meioPagamentoPorFornecedor[k] || (integracao === "pix-manual" ? "pix_manual" : "pix");
@@ -1568,7 +1590,7 @@
   async function cancelarPedidoGrupo() {
     const cancelaveis = pedidosGrupo.filter(
       (p) =>
-        (p.status === "rascunho" || p.status === "aguardando_pagamento") &&
+        (stV(p) === "rascunho" || stV(p) === "aguardando_pagamento") &&
         (p.origem || "manual") === "manual"
     );
     if (!cancelaveis.length) return;
@@ -1654,7 +1676,7 @@
     }
     if (acao === "editar") {
       const st = btn.dataset.status || "";
-      const painel = st === "aguardando_pagamento" || st === "pago" ? "valores" : "produto";
+      const painel = ["importado", "aguardando_pagamento", "pago"].includes(st) ? "valores" : "produto";
       abrirModalEdicao({ idGrupo: idG, painelInicial: painel, idPedidoFoco: idPed });
       return;
     }

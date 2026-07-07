@@ -21,7 +21,7 @@ from api.melhor_envio.cliente import (
     opcoes_cotacao_me,
 )
 from global_utils import agora_utc
-from servico_pedido import STATUS_RASCUNHO, obter_pedido, registrar_anexo_pedido, registrar_historico
+from servico_pedido import STATUS_RASCUNHO, _frete_editavel_status, obter_pedido, registrar_anexo_pedido, registrar_historico, status_vendedor_pedido
 
 _log = logging.getLogger(__name__)
 _RAIZ_UPLOAD = Path(__file__).resolve().parent
@@ -224,8 +224,8 @@ def cotar_frete_pedido(cur, id_vendedor: int, id_pedido: int) -> dict:
     ped = obter_pedido(cur, id_pedido, id_vendedor=id_vendedor)
     if not ped:
         raise ValueError("Pedido não encontrado.")
-    if ped["status"] != STATUS_RASCUNHO:
-        raise ValueError("Só é possível cotar frete em pedidos em rascunho.")
+    if not _frete_editavel_status(status_vendedor_pedido(ped)):
+        raise ValueError("Só é possível cotar frete em pedidos em rascunho, importados ou aguardando pagamento.")
 
     cep_dest = _cep_digitos(ped.get("entrega_cep"))
     if len(cep_dest) != 8:
@@ -281,8 +281,8 @@ def escolher_frete_pedido(
     ped = obter_pedido(cur, id_pedido, id_vendedor=id_vendedor)
     if not ped:
         raise ValueError("Pedido não encontrado.")
-    if ped["status"] != STATUS_RASCUNHO:
-        raise ValueError("Só é possível escolher frete em pedidos em rascunho.")
+    if not _frete_editavel_status(status_vendedor_pedido(ped)):
+        raise ValueError("Só é possível escolher frete em pedidos em rascunho, importados ou aguardando pagamento.")
 
     if opcao_raw:
         opcao = opcao_raw
@@ -363,8 +363,8 @@ def definir_modo_frete_manual(
     ped = obter_pedido(cur, id_pedido, id_vendedor=id_vendedor)
     if not ped:
         raise ValueError("Pedido não encontrado.")
-    if ped["status"] != STATUS_RASCUNHO:
-        raise ValueError("Só é possível alterar o frete em pedidos em rascunho.")
+    if not _frete_editavel_status(status_vendedor_pedido(ped)):
+        raise ValueError("Só é possível alterar o frete em pedidos em rascunho, importados ou aguardando pagamento.")
 
     vf = round(_float(valor_frete), 2) if valor_frete is not None else _float(ped.get("valor_frete"))
     rastreio = (codigo_rastreio or "").strip() or None
@@ -404,8 +404,8 @@ def definir_modo_frete_melhor_envio(cur, id_vendedor: int, id_pedido: int) -> di
     ped = obter_pedido(cur, id_pedido, id_vendedor=id_vendedor)
     if not ped:
         raise ValueError("Pedido não encontrado.")
-    if ped["status"] != STATUS_RASCUNHO:
-        raise ValueError("Só é possível alterar o frete em pedidos em rascunho.")
+    if not _frete_editavel_status(status_vendedor_pedido(ped)):
+        raise ValueError("Só é possível alterar o frete em pedidos em rascunho, importados ou aguardando pagamento.")
 
     cur.execute(
         """

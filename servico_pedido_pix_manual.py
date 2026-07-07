@@ -6,10 +6,13 @@ from api.pix_manual.payload import gerar_payload_pix, normalizar_txid
 from global_utils import agora_utc
 from servico_pedido import (
     STATUS_AGUARDANDO,
+    STATUS_IMPORTADO,
     STATUS_PAGO,
+    _status_vendedor_pagavel,
     marcar_pedido_pago,
     obter_pedido,
     registrar_historico,
+    status_vendedor_pedido,
 )
 
 
@@ -29,8 +32,8 @@ def iniciar_pix_manual(cur, id_vendedor: int, id_pedido: int) -> dict:
     ped = obter_pedido(cur, id_pedido, id_vendedor=id_vendedor)
     if not ped:
         raise ValueError("Pedido não encontrado.")
-    if ped["status"] != STATUS_AGUARDANDO:
-        raise ValueError("Somente pedidos aguardando pagamento podem usar PIX manual.")
+    if not _status_vendedor_pagavel(status_vendedor_pedido(ped)):
+        raise ValueError("Somente pedidos importados ou aguardando pagamento podem usar PIX manual.")
 
     id_forn = int(ped["id_tenant_fornecedor"])
     if not pix_manual_ativo(cur, id_forn):
@@ -80,7 +83,7 @@ def marcar_comprovante_enviado(cur, id_pedido: int, *, id_vendedor: int | None =
         raise ValueError("Pedido não encontrado.")
     if ped.get("meio_pagamento") != "pix_manual":
         raise ValueError("Pedido não usa PIX manual.")
-    if ped["status"] != STATUS_AGUARDANDO:
+    if not _status_vendedor_pagavel(status_vendedor_pedido(ped)):
         raise ValueError("Pedido não está aguardando pagamento.")
     cur.execute(
         """
@@ -106,7 +109,7 @@ def confirmar_pix_manual(
         raise ValueError("Pedido não encontrado.")
     if ped.get("meio_pagamento") != "pix_manual":
         raise ValueError("Este pedido não foi pago via PIX manual.")
-    if ped["status"] != STATUS_AGUARDANDO:
+    if not _status_vendedor_pagavel(status_vendedor_pedido(ped)):
         raise ValueError("Pedido não está aguardando confirmação de pagamento.")
     if ped.get("status_pagamento") not in ("comprovante_enviado", "pendente"):
         raise ValueError("Situação de pagamento inválida para confirmação.")

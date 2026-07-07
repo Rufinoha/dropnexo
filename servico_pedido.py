@@ -14,11 +14,32 @@ from servico_estoque_reserva import (
 )
 
 STATUS_RASCUNHO = "rascunho"
+STATUS_IMPORTADO = "importado"
 STATUS_AGUARDANDO = "aguardando_pagamento"
 STATUS_PAGO = "pago"
 STATUS_EM_EXPEDICAO = "em_expedicao"
 STATUS_ENTREGUE = "entregue"
 STATUS_CANCELADO = "cancelado"
+
+STATUS_COMPRADOR_PENDENTE = "pendente"
+STATUS_COMPRADOR_PAGO = "pago"
+STATUS_COMPRADOR_CANCELADO = "cancelado"
+
+
+def status_vendedor_pedido(ped: dict) -> str:
+    return (ped.get("status_vendedor") or ped.get("status") or "").strip()
+
+
+def status_comprador_pedido(ped: dict) -> str:
+    return (ped.get("status_comprador") or STATUS_COMPRADOR_PENDENTE).strip()
+
+
+def _frete_editavel_status(st: str) -> bool:
+    return st in (STATUS_RASCUNHO, STATUS_IMPORTADO, STATUS_AGUARDANDO)
+
+
+def _status_vendedor_pagavel(st: str) -> bool:
+    return st in (STATUS_IMPORTADO, STATUS_AGUARDANDO)
 
 
 def _float(v) -> float:
@@ -109,6 +130,8 @@ def _taxa_pedido_fornecedor(cur, id_fornecedor: int) -> float:
 
 
 def _pedido_dict(row, fornecedor_nome: str | None = None, vendedor_nome: str | None = None) -> dict:
+    sv = row[6]
+    sc = row[7]
     return {
         "id": row[0],
         "id_grupo": row[1],
@@ -116,28 +139,30 @@ def _pedido_dict(row, fornecedor_nome: str | None = None, vendedor_nome: str | N
         "id_tenant_vendedor": row[3],
         "id_tenant_fornecedor": row[4],
         "origem": row[5],
-        "status": row[6],
-        "status_pagamento": row[7],
-        "cliente_nome": row[8] or "",
-        "cliente_email": row[9] or "",
-        "cliente_telefone": row[10] or "",
-        "cliente_documento": row[11] or "",
-        "entrega_cep": row[12] or "",
-        "entrega_logradouro": row[13] or "",
-        "entrega_numero": row[14] or "",
-        "entrega_complemento": row[15] or "",
-        "entrega_bairro": row[16] or "",
-        "entrega_cidade": row[17] or "",
-        "entrega_uf": row[18] or "",
-        "subtotal_produtos": _float(row[19]),
-        "valor_taxa_pedido": _float(row[20]),
-        "valor_frete": _float(row[21]),
-        "valor_total": _float(row[22]),
-        "observacoes": row[23] or "",
-        "confirmado_em": row[24].isoformat() if row[24] else None,
-        "pago_em": row[25].isoformat() if row[25] else None,
-        "criado_em": row[26].isoformat() if row[26] else None,
-        "numero_grupo": row[27] if len(row) > 27 else None,
+        "status_vendedor": sv,
+        "status_comprador": sc,
+        "status": sv,
+        "status_pagamento": row[8],
+        "cliente_nome": row[9] or "",
+        "cliente_email": row[10] or "",
+        "cliente_telefone": row[11] or "",
+        "cliente_documento": row[12] or "",
+        "entrega_cep": row[13] or "",
+        "entrega_logradouro": row[14] or "",
+        "entrega_numero": row[15] or "",
+        "entrega_complemento": row[16] or "",
+        "entrega_bairro": row[17] or "",
+        "entrega_cidade": row[18] or "",
+        "entrega_uf": row[19] or "",
+        "subtotal_produtos": _float(row[20]),
+        "valor_taxa_pedido": _float(row[21]),
+        "valor_frete": _float(row[22]),
+        "valor_total": _float(row[23]),
+        "observacoes": row[24] or "",
+        "confirmado_em": row[25].isoformat() if row[25] else None,
+        "pago_em": row[26].isoformat() if row[26] else None,
+        "criado_em": row[27].isoformat() if row[27] else None,
+        "numero_grupo": row[28] if len(row) > 28 else None,
         "fornecedor_nome": fornecedor_nome,
         "vendedor_nome": vendedor_nome,
     }
@@ -145,7 +170,7 @@ def _pedido_dict(row, fornecedor_nome: str | None = None, vendedor_nome: str | N
 
 _PEDIDO_COLS = """
     p.id, p.id_grupo, p.numero, p.id_tenant_vendedor, p.id_tenant_fornecedor,
-    p.origem, p.status, p.status_pagamento,
+    p.origem, p.status_vendedor, p.status_comprador, p.status_pagamento,
     p.cliente_nome, p.cliente_email, p.cliente_telefone, p.cliente_documento,
     p.entrega_cep, p.entrega_logradouro, p.entrega_numero, p.entrega_complemento,
     p.entrega_bairro, p.entrega_cidade, p.entrega_uf,
@@ -252,7 +277,7 @@ def obter_pedido(cur, id_pedido: int, *, id_vendedor: int | None = None, id_forn
     row = cur.fetchone()
     if not row:
         return None
-    ped = _pedido_dict(row[:28], fornecedor_nome=row[28], vendedor_nome=row[29])
+    ped = _pedido_dict(row[:29], fornecedor_nome=row[29], vendedor_nome=row[30])
     ped["itens"] = listar_itens_pedido(cur, id_pedido)
     _enriquecer_pedido_expedicao(cur, id_pedido, ped)
     return ped
@@ -262,7 +287,7 @@ def listar_pedidos_vendedor(cur, id_vendedor: int, status: str | None = None) ->
     where = ["p.id_tenant_vendedor = %s"]
     params: list[Any] = [id_vendedor]
     if status:
-        where.append("p.status = %s")
+        where.append("p.status_vendedor = %s")
         params.append(status)
     cur.execute(
         f"""
@@ -277,14 +302,14 @@ def listar_pedidos_vendedor(cur, id_vendedor: int, status: str | None = None) ->
         """,
         params,
     )
-    return [_pedido_dict(r[:28], fornecedor_nome=r[28]) for r in cur.fetchall()]
+    return [_pedido_dict(r[:29], fornecedor_nome=r[29]) for r in cur.fetchall()]
 
 
 def listar_pedidos_fornecedor(cur, id_fornecedor: int, status: str | None = None) -> list[dict]:
-    where = ["p.id_tenant_fornecedor = %s", "p.status <> 'rascunho'"]
+    where = ["p.id_tenant_fornecedor = %s", "p.status_vendedor NOT IN ('rascunho', 'importado')"]
     params: list[Any] = [id_fornecedor]
     if status:
-        where.append("p.status = %s")
+        where.append("p.status_vendedor = %s")
         params.append(status)
     cur.execute(
         f"""
@@ -299,7 +324,7 @@ def listar_pedidos_fornecedor(cur, id_fornecedor: int, status: str | None = None
         """,
         params,
     )
-    return [_pedido_dict(r[:28], vendedor_nome=r[29]) for r in cur.fetchall()]
+    return [_pedido_dict(r[:29], vendedor_nome=r[30]) for r in cur.fetchall()]
 
 
 def _parse_atributos_variante(raw) -> dict[str, str]:
@@ -560,7 +585,7 @@ def salvar_rascunho(
     ids_fornecedores_ativos = set(por_fornecedor.keys())
     cur.execute(
         """
-        SELECT id, id_tenant_fornecedor, status FROM tbl_pedido
+        SELECT id, id_tenant_fornecedor, status_vendedor FROM tbl_pedido
         WHERE id_grupo = %s AND id_tenant_vendedor = %s
         """,
         (id_grupo, id_vendedor),
@@ -589,7 +614,7 @@ def salvar_rascunho(
         if row_ped:
             id_pedido = int(row_ped[0])
             cur.execute(
-                "SELECT status FROM tbl_pedido WHERE id = %s",
+                "SELECT status_vendedor FROM tbl_pedido WHERE id = %s",
                 (id_pedido,),
             )
             if cur.fetchone()[0] != STATUS_RASCUNHO:
@@ -708,7 +733,7 @@ def confirmar_grupo(cur, id_vendedor: int, id_grupo: int, id_usuario: int | None
     cur.execute(
         """
         SELECT id FROM tbl_pedido
-        WHERE id_grupo = %s AND id_tenant_vendedor = %s AND status = %s
+        WHERE id_grupo = %s AND id_tenant_vendedor = %s AND status_vendedor = %s
         """,
         (id_grupo, id_vendedor, STATUS_RASCUNHO),
     )
@@ -724,7 +749,7 @@ def confirmar_pedido(cur, id_vendedor: int, id_pedido: int, id_usuario: int | No
     ped = obter_pedido(cur, id_pedido, id_vendedor=id_vendedor)
     if not ped:
         raise ValueError("Pedido não encontrado.")
-    if ped["status"] != STATUS_RASCUNHO:
+    if status_vendedor_pedido(ped) != STATUS_RASCUNHO:
         raise ValueError("Somente pedidos em rascunho podem ser confirmados.")
     if not ped["itens"]:
         raise ValueError("Pedido sem itens.")
@@ -736,7 +761,7 @@ def confirmar_pedido(cur, id_vendedor: int, id_pedido: int, id_usuario: int | No
     cur.execute(
         """
         UPDATE tbl_pedido SET
-            status = %s,
+            status_vendedor = %s,
             status_pagamento = 'pendente',
             confirmado_em = %s,
             atualizado_em = %s
@@ -765,12 +790,13 @@ def cancelar_pedido(
     ped = obter_pedido(cur, id_pedido, id_vendedor=id_vendedor, id_fornecedor=id_fornecedor)
     if not ped:
         raise ValueError("Pedido não encontrado.")
-    if ped["status"] == STATUS_CANCELADO:
+    st = status_vendedor_pedido(ped)
+    if st == STATUS_CANCELADO:
         return
-    if ped["status"] == STATUS_PAGO:
+    if st == STATUS_PAGO:
         raise ValueError("Pedido pago não pode ser cancelado por aqui.")
 
-    if ped["status"] in (STATUS_AGUARDANDO,):
+    if st in (STATUS_AGUARDANDO, STATUS_IMPORTADO):
         itens = [(i["id_variante"], i["quantidade"]) for i in ped["itens"]]
         liberar_itens_pedido(cur, itens)
 
@@ -778,7 +804,7 @@ def cancelar_pedido(
     cur.execute(
         """
         UPDATE tbl_pedido SET
-            status = %s,
+            status_vendedor = %s,
             status_pagamento = 'cancelado',
             cancelado_em = %s,
             atualizado_em = %s
@@ -800,7 +826,7 @@ def marcar_pedido_pago(
 ) -> bool:
     """Marca pedido como pago. Retorna False se já estava pago."""
     cur.execute(
-        "SELECT status, status_pagamento FROM tbl_pedido WHERE id = %s",
+        "SELECT status_vendedor, status_pagamento FROM tbl_pedido WHERE id = %s",
         (id_pedido,),
     )
     row = cur.fetchone()
@@ -808,14 +834,14 @@ def marcar_pedido_pago(
         raise ValueError("Pedido não encontrado.")
     if row[0] == STATUS_PAGO:
         return False
-    if row[0] != STATUS_AGUARDANDO:
-        raise ValueError("Somente pedidos aguardando pagamento podem ser marcados como pagos.")
+    if not _status_vendedor_pagavel(row[0]):
+        raise ValueError("Somente pedidos importados ou aguardando pagamento podem ser marcados como pagos.")
 
     agora = agora_utc()
     cur.execute(
         """
         UPDATE tbl_pedido SET
-            status = %s,
+            status_vendedor = %s,
             status_pagamento = 'pago',
             pago_em = %s,
             mp_payment_id = COALESCE(%s, mp_payment_id),
@@ -985,26 +1011,27 @@ def importar_pedido_bling(
             """
             INSERT INTO tbl_pedido (
                 numero, id_tenant_vendedor, id_tenant_fornecedor, origem,
-                status, status_pagamento,
+                status_vendedor, status_comprador, status_pagamento,
                 cliente_nome, cliente_email, cliente_telefone, cliente_documento,
                 entrega_cep, entrega_logradouro, entrega_numero, entrega_complemento,
                 entrega_bairro, entrega_cidade, entrega_uf,
                 subtotal_produtos, valor_taxa_pedido, valor_frete, valor_total,
-                observacoes, confirmado_em, pago_em, id_bling_pedido
+                observacoes, confirmado_em, id_bling_pedido
             ) VALUES (
                 %s, %s, %s, 'bling',
-                %s, 'pago',
+                %s, %s, 'pendente',
                 %s, %s, %s, %s,
                 %s, %s, %s, %s, %s, %s, %s,
                 %s, %s, %s, %s,
-                %s, %s, %s, %s
+                %s, %s, %s
             ) RETURNING id
             """,
             (
                 numero,
                 id_vendedor,
                 id_forn,
-                STATUS_PAGO,
+                STATUS_IMPORTADO,
+                STATUS_COMPRADOR_PAGO,
                 cliente.get("nome") or "Cliente Bling",
                 cliente.get("email"),
                 cliente.get("telefone"),
@@ -1021,7 +1048,6 @@ def importar_pedido_bling(
                 _float(dados.get("valor_frete")),
                 total,
                 obs,
-                agora,
                 agora,
                 id_bling_pedido,
             ),
@@ -1100,7 +1126,7 @@ def marcar_em_expedicao(
     ped = obter_pedido(cur, id_pedido, id_fornecedor=id_fornecedor)
     if not ped:
         raise ValueError("Pedido não encontrado.")
-    if ped["status"] != STATUS_PAGO:
+    if status_vendedor_pedido(ped) != STATUS_PAGO:
         raise ValueError("Somente pedidos pagos podem ser expedidos.")
 
     itens_baixa: list[tuple[int, int, int | None]] = []
@@ -1124,7 +1150,7 @@ def marcar_em_expedicao(
     cur.execute(
         """
         UPDATE tbl_pedido SET
-            status = %s,
+            status_vendedor = %s,
             codigo_rastreio = COALESCE(%s, codigo_rastreio),
             transportadora = COALESCE(%s, transportadora),
             expedido_em = %s,
@@ -1163,10 +1189,11 @@ def marcar_entregue(
     ped = obter_pedido(cur, id_pedido, id_fornecedor=id_fornecedor, id_vendedor=id_vendedor)
     if not ped:
         raise ValueError("Pedido não encontrado.")
-    if ped["status"] not in (STATUS_EM_EXPEDICAO, STATUS_PAGO):
+    st = status_vendedor_pedido(ped)
+    if st not in (STATUS_EM_EXPEDICAO, STATUS_PAGO):
         raise ValueError("Pedido deve estar pago ou em expedição.")
 
-    if ped["status"] == STATUS_PAGO:
+    if st == STATUS_PAGO:
         marcar_em_expedicao(
             cur,
             id_pedido,
@@ -1178,7 +1205,7 @@ def marcar_entregue(
     cur.execute(
         """
         UPDATE tbl_pedido SET
-            status = %s,
+            status_vendedor = %s,
             entregue_em = %s,
             expedido_em = COALESCE(expedido_em, %s),
             atualizado_em = %s
@@ -1205,7 +1232,7 @@ def listar_pedidos_expedicao_vendedor(cur, id_vendedor: int) -> list[dict]:
         LEFT JOIN tbl_pedido_grupo g ON g.id = p.id_grupo
         LEFT JOIN tbl_tenant tf ON tf.id = p.id_tenant_fornecedor
         WHERE p.id_tenant_vendedor = %s
-          AND p.status IN (%s, %s, %s)
+          AND p.status_vendedor IN (%s, %s, %s)
         ORDER BY COALESCE(p.expedido_em, p.pago_em, p.criado_em) DESC, p.id DESC
         """,
         (id_vendedor, STATUS_PAGO, STATUS_EM_EXPEDICAO, STATUS_ENTREGUE),
@@ -1213,7 +1240,7 @@ def listar_pedidos_expedicao_vendedor(cur, id_vendedor: int) -> list[dict]:
     rows = cur.fetchall()
     out = []
     for r in rows:
-        ped = _pedido_dict(r[:28], fornecedor_nome=r[28])
+        ped = _pedido_dict(r[:29], fornecedor_nome=r[29])
         cur.execute(
             """
             SELECT codigo_rastreio, transportadora, expedido_em, entregue_em, origem
@@ -1243,7 +1270,7 @@ def obter_grupo_pedido(cur, id_vendedor: int, id_grupo: int) -> dict | None:
 
     cur.execute(
         """
-        SELECT p.id, p.status, p.status_pagamento, p.meio_pagamento, p.origem, p.valor_total,
+        SELECT p.id, p.status_vendedor, p.status_comprador, p.status_pagamento, p.meio_pagamento, p.origem, p.valor_total,
                p.id_tenant_fornecedor, COALESCE(tf.nome_fantasia, tf.nome), p.numero, p.pago_em,
                p.pix_manual_payload, p.pix_manual_txid
         FROM tbl_pedido p
@@ -1263,7 +1290,7 @@ def obter_grupo_pedido(cur, id_vendedor: int, id_grupo: int) -> dict | None:
 
     itens: list[dict] = []
     pedidos: list[dict] = []
-    for pid, status, status_pag, meio_pag, origem, valor_total, id_forn, forn_nome, numero, pago_em, pix_payload, pix_txid in pedidos_rows:
+    for pid, sv, sc, status_pag, meio_pag, origem, valor_total, id_forn, forn_nome, numero, pago_em, pix_payload, pix_txid in pedidos_rows:
         frete_info = {}
         try:
             from servico_melhor_envio import frete_resumo_pedido
@@ -1275,7 +1302,9 @@ def obter_grupo_pedido(cur, id_vendedor: int, id_grupo: int) -> dict | None:
             {
                 "id": int(pid),
                 "numero": numero,
-                "status": status,
+                "status_vendedor": sv,
+                "status_comprador": sc,
+                "status": sv,
                 "status_pagamento": status_pag or "",
                 "meio_pagamento": meio_pag or "",
                 "origem": origem or "manual",
@@ -1301,11 +1330,11 @@ def obter_grupo_pedido(cur, id_vendedor: int, id_grupo: int) -> dict | None:
                 }
             )
 
-    statuses = {p["status"] for p in pedidos}
+    statuses = {p["status_vendedor"] for p in pedidos}
     editavel = statuses == {STATUS_RASCUNHO}
     bloqueado_total = any(
         (p.get("origem") or "manual") != "manual"
-        or p["status"] in (STATUS_PAGO, STATUS_EM_EXPEDICAO, STATUS_ENTREGUE, STATUS_CANCELADO)
+        or p["status_vendedor"] in (STATUS_PAGO, STATUS_EM_EXPEDICAO, STATUS_ENTREGUE, STATUS_CANCELADO)
         for p in pedidos
     )
 
@@ -1405,7 +1434,7 @@ def registrar_anexo_pedido(
     ped = obter_pedido(cur, id_pedido, id_vendedor=id_vendedor)
     if not ped:
         raise ValueError("Pedido não encontrado.")
-    if ped["status"] == STATUS_CANCELADO:
+    if status_vendedor_pedido(ped) == STATUS_CANCELADO:
         raise ValueError("Pedido cancelado não aceita anexos.")
     cur.execute(
         """
