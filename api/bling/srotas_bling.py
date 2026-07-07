@@ -215,7 +215,7 @@ def api_status():
 
         cur.execute(
             """
-            SELECT status, resumo, criado_em FROM tbl_integracao_log
+            SELECT status, resumo, detalhe, criado_em FROM tbl_integracao_log
             WHERE id_tenant = %s AND provedor = 'bling'
             ORDER BY criado_em DESC LIMIT 8
             """,
@@ -225,7 +225,8 @@ def api_status():
             {
                 "status": r[0],
                 "resumo": r[1],
-                "criado_em": r[2].isoformat() if r[2] else None,
+                "detalhe": r[2] or "",
+                "criado_em": r[3].isoformat() if r[3] else None,
             }
             for r in cur.fetchall()
         ]

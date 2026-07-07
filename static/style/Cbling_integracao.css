@@ -274,6 +274,13 @@
   color: #92400e;
 }
 
+.Bl_LogDetalhe {
+  display: block;
+  margin-top: 0.25rem;
+  color: #64748b;
+  font-weight: 400;
+}
+
 /* --- Painel contexto + abas --- */
 .Bl_ContextPanel {
   padding-top: 0.85rem;

@@ -1230,6 +1230,7 @@
           (l) =>
             `<li class="Bl_LogItem${l.status === "erro" ? " is-erro" : l.status === "aviso" ? " is-aviso" : ""}">` +
             `<strong>${l.status}</strong> — ${l.resumo || ""}` +
+            (l.detalhe ? `<br><small class="Bl_LogDetalhe">${escHtml(l.detalhe)}</small>` : "") +
             (l.criado_em ? ` <span>(${new Date(l.criado_em).toLocaleString("pt-BR")})</span>` : "") +
             `</li>`
         )
