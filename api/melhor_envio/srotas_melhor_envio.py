@@ -22,6 +22,7 @@ from api.melhor_envio.cliente import (
     url_autorizacao,
     verificar_assinatura_webhook,
     webhook_url,
+    diagnostico_oauth_me,
 )
 from global_utils import Var_ConectarBanco, login_obrigatorio, usuario_tem_permissao
 from srotas_plataforma import garantir_modulo_sessao
@@ -64,6 +65,20 @@ def _exigir_vendedor():
             )
         )
     return redirect(url_for("integracoes.pagina", erro="Melhor Envio é apenas para vendedores."))
+
+
+@me_bp.get("/api/integracoes/melhor-envio/oauth/diagnostico")
+@login_obrigatorio()
+def oauth_diagnostico():
+    if not _pode_integracoes():
+        return jsonify(success=False, message="Sem permissão."), 403
+    if (r := _exigir_vendedor()) is not None:
+        return r
+    try:
+        d = diagnostico_oauth_me()
+        return jsonify(success=True, diagnostico=d)
+    except Exception as e:
+        return jsonify(success=False, message=str(e)[:200]), 500
 
 
 @me_bp.get("/api/integracoes/melhor-envio/oauth/iniciar")

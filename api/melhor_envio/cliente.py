@@ -10,7 +10,7 @@ import os
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
 import requests
 
@@ -101,16 +101,64 @@ def gerar_state_oauth() -> str:
 
 def url_autorizacao(state: str) -> str:
     client_id, _ = credenciais_me()
-    qs = urlencode(
+    redirect_uri = redirect_uri_oauth()
+    params = urlencode(
         {
             "client_id": client_id,
             "response_type": "code",
-            "redirect_uri": redirect_uri_oauth(),
+            "redirect_uri": redirect_uri,
             "state": state,
-            "scope": ME_OAUTH_SCOPES,
         }
     )
-    return f"{me_auth_base()}/oauth/authorize?{qs}"
+    # ME documenta scopes separados por espaço; %20 evita '+' que alguns parsers rejeitam.
+    scope_qs = f"scope={quote(ME_OAUTH_SCOPES, safe='')}"
+    return f"{me_auth_base()}/oauth/authorize?{params}&{scope_qs}"
+
+
+def diagnostico_oauth_me() -> dict[str, Any]:
+    """Dados para conferir configuração (sem expor o secret)."""
+    from global_utils import is_modo_producao, obter_base_url
+
+    out: dict[str, Any] = {
+        "modo_producao": is_modo_producao(),
+        "base_url": obter_base_url(),
+        "auth_base": me_auth_base(),
+        "api_base": me_api_base(),
+        "client_id": me_client_id(),
+        "redirect_uri": redirect_uri_oauth(),
+        "user_agent": me_user_agent(),
+        "configurado": me_configurado(),
+        "scopes": ME_OAUTH_SCOPES,
+    }
+    if me_configurado():
+        out["teste_credenciais"] = testar_credenciais_me_oauth()
+    return out
+
+
+def testar_credenciais_me_oauth() -> dict[str, Any]:
+    """
+    POST /oauth/token com code inválido.
+    invalid_grant → client_id + secret OK; invalid_client → credencial errada.
+    """
+    try:
+        _post_token(
+            {
+                "grant_type": "authorization_code",
+                "code": "dropnexo-teste-credencial-invalido",
+                "redirect_uri": redirect_uri_oauth(),
+            }
+        )
+        return {"ok": True, "mensagem": "Resposta inesperada, mas credenciais foram aceitas."}
+    except RuntimeError as e:
+        msg = str(e).lower()
+        if "invalid_grant" in msg or "invalid_code" in msg or "code" in msg:
+            return {"ok": True, "mensagem": "Client ID e Secret aceitos pelo Melhor Envio."}
+        if "invalid_client" in msg or "client authentication failed" in msg:
+            return {
+                "ok": False,
+                "mensagem": "Client ID ou Secret rejeitados. Confira o .env do servidor e o app no painel ME.",
+            }
+        return {"ok": None, "mensagem": str(e)[:240]}
 
 
 def _post_token(body: dict[str, str]) -> dict[str, Any]:
