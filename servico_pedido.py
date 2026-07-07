@@ -1151,3 +1151,187 @@ def listar_pedidos_expedicao_vendedor(cur, id_vendedor: int) -> list[dict]:
             ped["origem"] = ex[4] or "manual"
         out.append(ped)
     return out
+
+
+def obter_grupo_pedido(cur, id_vendedor: int, id_grupo: int) -> dict | None:
+    cur.execute(
+        "SELECT id, numero FROM tbl_pedido_grupo WHERE id = %s AND id_tenant_vendedor = %s",
+        (id_grupo, id_vendedor),
+    )
+    row_grupo = cur.fetchone()
+    if not row_grupo:
+        return None
+
+    cur.execute(
+        """
+        SELECT p.id, p.status, p.id_tenant_fornecedor, COALESCE(tf.nome_fantasia, tf.nome), p.numero
+        FROM tbl_pedido p
+        LEFT JOIN tbl_tenant tf ON tf.id = p.id_tenant_fornecedor
+        WHERE p.id_grupo = %s AND p.id_tenant_vendedor = %s
+        ORDER BY p.id
+        """,
+        (id_grupo, id_vendedor),
+    )
+    pedidos_rows = cur.fetchall()
+    if not pedidos_rows:
+        return None
+
+    ref = obter_pedido(cur, int(pedidos_rows[0][0]), id_vendedor=id_vendedor)
+    if not ref:
+        return None
+
+    itens: list[dict] = []
+    pedidos: list[dict] = []
+    for pid, status, id_forn, forn_nome, numero in pedidos_rows:
+        pedidos.append(
+            {
+                "id": int(pid),
+                "numero": numero,
+                "status": status,
+                "id_fornecedor": int(id_forn),
+                "fornecedor_nome": forn_nome or "",
+            }
+        )
+        for item in listar_itens_pedido(cur, int(pid)):
+            itens.append(
+                {
+                    "id_variante": item["id_variante"],
+                    "id_fornecedor": int(id_forn),
+                    "fornecedor_nome": forn_nome or "",
+                    "nome": item["nome_produto"],
+                    "sku": item["sku"],
+                    "valor_drop": item["valor_drop"],
+                    "quantidade": item["quantidade"],
+                }
+            )
+
+    statuses = {p["status"] for p in pedidos}
+    editavel = statuses == {STATUS_RASCUNHO}
+
+    return {
+        "id_grupo": int(id_grupo),
+        "numero_grupo": row_grupo[1],
+        "editavel": editavel,
+        "status": next(iter(statuses)) if len(statuses) == 1 else "misto",
+        "cliente": {
+            "nome": ref["cliente_nome"],
+            "documento": ref["cliente_documento"],
+            "email": ref["cliente_email"],
+            "telefone": ref["cliente_telefone"],
+        },
+        "entrega": {
+            "cep": ref["entrega_cep"],
+            "logradouro": ref["entrega_logradouro"],
+            "numero": ref["entrega_numero"],
+            "complemento": ref["entrega_complemento"],
+            "bairro": ref["entrega_bairro"],
+            "cidade": ref["entrega_cidade"],
+            "uf": ref["entrega_uf"],
+        },
+        "itens": itens,
+        "pedidos": pedidos,
+    }
+
+
+_TABELA_ANEXO_OK: bool | None = None
+
+
+def _tem_tabela_anexo(cur) -> bool:
+    global _TABELA_ANEXO_OK
+    if _TABELA_ANEXO_OK is not None:
+        return _TABELA_ANEXO_OK
+    cur.execute(
+        """
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = 'tbl_pedido_anexo'
+        LIMIT 1
+        """
+    )
+    _TABELA_ANEXO_OK = cur.fetchone() is not None
+    return _TABELA_ANEXO_OK
+
+
+def listar_anexos_pedido(cur, id_pedido: int, *, id_vendedor: int | None = None) -> list[dict]:
+    if not _tem_tabela_anexo(cur):
+        return []
+    ped = obter_pedido(cur, id_pedido, id_vendedor=id_vendedor)
+    if not ped:
+        raise ValueError("Pedido não encontrado.")
+    cur.execute(
+        """
+        SELECT id, tipo, nome_original, caminho, tamanho_bytes, criado_em
+        FROM tbl_pedido_anexo
+        WHERE id_pedido = %s
+        ORDER BY tipo, criado_em DESC, id DESC
+        """,
+        (id_pedido,),
+    )
+    return [
+        {
+            "id": r[0],
+            "tipo": r[1],
+            "nome_original": r[2],
+            "caminho": r[3],
+            "tamanho_bytes": int(r[4] or 0),
+            "criado_em": r[5].isoformat() if r[5] else None,
+        }
+        for r in cur.fetchall()
+    ]
+
+
+def registrar_anexo_pedido(
+    cur,
+    id_vendedor: int,
+    id_pedido: int,
+    tipo: str,
+    nome_original: str,
+    caminho: str,
+    tamanho_bytes: int,
+    id_usuario: int | None = None,
+) -> dict:
+    if not _tem_tabela_anexo(cur):
+        raise ValueError("Anexos ainda não disponíveis. Execute a migração SQL 063_pedido_anexo.")
+    tipo = (tipo or "").strip().lower()
+    if tipo not in ("nf", "etiqueta"):
+        raise ValueError("Tipo de anexo inválido.")
+    ped = obter_pedido(cur, id_pedido, id_vendedor=id_vendedor)
+    if not ped:
+        raise ValueError("Pedido não encontrado.")
+    if ped["status"] == STATUS_CANCELADO:
+        raise ValueError("Pedido cancelado não aceita anexos.")
+    cur.execute(
+        """
+        INSERT INTO tbl_pedido_anexo (id_pedido, tipo, nome_original, caminho, tamanho_bytes, id_usuario)
+        VALUES (%s, %s, %s, %s, %s, %s)
+        RETURNING id, tipo, nome_original, caminho, tamanho_bytes, criado_em
+        """,
+        (id_pedido, tipo, nome_original, caminho, tamanho_bytes, id_usuario),
+    )
+    row = cur.fetchone()
+    return {
+        "id": row[0],
+        "tipo": row[1],
+        "nome_original": row[2],
+        "caminho": row[3],
+        "tamanho_bytes": int(row[4] or 0),
+        "criado_em": row[5].isoformat() if row[5] else None,
+    }
+
+
+def excluir_anexo_pedido(cur, id_vendedor: int, id_anexo: int) -> dict:
+    if not _tem_tabela_anexo(cur):
+        raise ValueError("Anexos ainda não disponíveis.")
+    cur.execute(
+        """
+        SELECT a.id, a.id_pedido, a.caminho
+        FROM tbl_pedido_anexo a
+        JOIN tbl_pedido p ON p.id = a.id_pedido
+        WHERE a.id = %s AND p.id_tenant_vendedor = %s
+        """,
+        (id_anexo, id_vendedor),
+    )
+    row = cur.fetchone()
+    if not row:
+        raise ValueError("Anexo não encontrado.")
+    cur.execute("DELETE FROM tbl_pedido_anexo WHERE id = %s", (id_anexo,))
+    return {"id": row[0], "id_pedido": row[1], "caminho": row[2]}

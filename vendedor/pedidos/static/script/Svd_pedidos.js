@@ -34,8 +34,20 @@
   let pollPixTimer = null;
   let pedidoPagamentoAtual = null;
   let painelAtivo = "produto";
+  let somenteLeitura = false;
+  /** @type {Array<{id:number,numero:string,status:string,fornecedor_nome:string,anexos?:Array}>} */
+  let pedidosGrupo = [];
+  let pedidoFocoAnexo = null;
+  let tipoAnexoFoco = null;
   /** @type {Record<number, string>} */
   let meioPagamentoPorFornecedor = {};
+
+  const util = () => window.Util || {};
+
+  const icoBtn = (nome, title, cls, attrs = "") => {
+    const html = util().gerarIconeTech?.(nome) || "";
+    return `<button type="button" class="Cl_BtnAcao ${cls}" title="${esc(title)}" ${attrs}>${html}</button>`;
+  };
 
   let cfg = { mp_icone: "/static/api/mercadopago/imge/icone_mercadopago.png" };
   try {
@@ -51,6 +63,12 @@
   const elNavCliente = document.getElementById("pd_navCliente");
   const elNavEndereco = document.getElementById("pd_navEndereco");
   const elNavValores = document.getElementById("pd_navValores");
+  const elNavAnexos = document.getElementById("pd_navAnexos");
+  const elAnexosLista = document.getElementById("pd_anexosLista");
+  const elAnexosAviso = document.getElementById("pd_anexosAviso");
+  const elWizMain = document.querySelector(".Pd_WizMain");
+  const elBtnSalvar = document.getElementById("pd_btnSalvar");
+  const elBtnConfirmar = document.getElementById("pd_btnConfirmar");
 
   const fmt = (v) =>
     Number(v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -90,15 +108,17 @@
         <td>${fmt(p.valor_total)}</td>
         <td>${badge(p.status)}</td>
         <td>${p.criado_em ? new Date(p.criado_em).toLocaleDateString("pt-BR") : "—"}</td>
-        <td><button type="button" class="Pd_BtnLink" data-ver="${p.id}">Ver</button></td>
+        <td class="Cl_TableActions Pd_Acoes">
+          ${icoBtn("editar", p.status === "rascunho" ? "Editar pedido" : "Ver pedido", "Pd_BtnEdit", `data-acao="editar" data-id="${p.id}" data-grupo="${p.id_grupo || ""}" data-status="${esc(p.status)}"`)}
+          ${icoBtn("nf_hub", "Incluir NF", "Pd_BtnNf", `data-acao="nf" data-id="${p.id}" data-grupo="${p.id_grupo || ""}"`)}
+          ${icoBtn("etiqueta", "Incluir etiqueta", "Pd_BtnEtq", `data-acao="etiqueta" data-id="${p.id}" data-grupo="${p.id_grupo || ""}"`)}
+        </td>
       </tr>`
       )
       .join("");
 
     el.vazio.hidden = rows.length > 0;
-    el.tbody.querySelectorAll("[data-ver]").forEach((btn) => {
-      btn.addEventListener("click", () => abrirDetalhe(+btn.dataset.ver));
-    });
+    window.lucide?.createIcons?.();
   }
 
   function irPainel(id) {
@@ -113,6 +133,230 @@
     });
     window.lucide?.createIcons?.();
     if (id === "valores") renderPayIntegracoes();
+    if (id === "anexos") renderAnexos();
+  }
+
+  function aplicarModoLeitura(ativo) {
+    somenteLeitura = !!ativo;
+    elWizMain?.classList.toggle("is-readonly", somenteLeitura);
+    if (elBtnSalvar) elBtnSalvar.hidden = somenteLeitura;
+    if (elBtnConfirmar) elBtnConfirmar.hidden = somenteLeitura;
+  }
+
+  function preencherFormulario(grupo) {
+    const c = grupo.cliente || {};
+    const e = grupo.entrega || {};
+    const set = (id, val) => {
+      const f = document.getElementById(id);
+      if (f) f.value = val || "";
+    };
+    set("pd_cliNome", c.nome);
+    set("pd_cliDoc", c.documento);
+    set("pd_cliEmail", c.email);
+    set("pd_cliTel", c.telefone);
+    set("pd_cep", e.cep);
+    set("pd_logradouro", e.logradouro);
+    set("pd_numero", e.numero);
+    set("pd_compl", e.complemento);
+    set("pd_bairro", e.bairro);
+    set("pd_cidade", e.cidade);
+    set("pd_uf", e.uf);
+    carrinho = (grupo.itens || []).map((i) => ({
+      id_variante: i.id_variante,
+      id_fornecedor: i.id_fornecedor,
+      nome: i.nome,
+      sku: i.sku,
+      valor_drop: i.valor_drop,
+      fornecedor_nome: i.fornecedor_nome,
+      quantidade: i.quantidade,
+    }));
+    pedidosGrupo = grupo.pedidos || [];
+    renderItens();
+    atualizarNavResumos();
+    atualizarNavAnexos();
+  }
+
+  function atualizarNavAnexos() {
+    if (!elNavAnexos) return;
+    const qtd = pedidosGrupo.reduce((s, p) => s + (p.anexos?.length || 0), 0);
+    elNavAnexos.textContent = qtd ? `${qtd} arquivo(s)` : "NF e etiqueta";
+  }
+
+  async function carregarGrupo(idG) {
+    const r = await fetch(`/vendedor/pedidos/grupo/${idG}`, { credentials: "same-origin" });
+    const j = await parseJsonResp(r);
+    if (!j.success) throw new Error(j.message || "Erro ao carregar pedido.");
+    return j.grupo;
+  }
+
+  async function abrirModalEdicao(opts = {}) {
+    const { idGrupo: gid, painelInicial = "produto", idPedidoFoco = null, tipoAnexo = null } = opts;
+    if (!gid) return;
+
+    mostrarMsg("");
+    pedidoFocoAnexo = idPedidoFoco;
+    tipoAnexoFoco = tipoAnexo;
+
+    let grupo;
+    try {
+      grupo = await carregarGrupo(gid);
+    } catch (e) {
+      if (window.Swal) {
+        Swal.fire({ icon: "error", title: "Pedido", text: e.message, confirmButtonColor: "#021F81" });
+      } else {
+        mostrarMsg(e.message, true);
+      }
+      return;
+    }
+
+    idGrupo = grupo.id_grupo;
+    meioPagamentoPorFornecedor = {};
+    aplicarModoLeitura(!grupo.editavel);
+    preencherFormulario(grupo);
+
+    const titulo = grupo.editavel
+      ? `Editar pedido ${grupo.numero_grupo || ""}`.trim()
+      : `Pedido ${grupo.numero_grupo || ""}`.trim();
+    document.getElementById("pd_modalTitulo").textContent = titulo;
+
+    if (!comboProd) initComboProduto();
+    limparComboProduto();
+    el.modal.hidden = false;
+    irPainel(painelInicial);
+
+    if (painelInicial === "anexos" && pedidoFocoAnexo) {
+      requestAnimationFrame(() => {
+        document.getElementById(`pd_anexo_card_${pedidoFocoAnexo}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    }
+  }
+
+  function renderBlocoAnexo(ped, tipo, rotulo) {
+    const lista = (ped.anexos || []).filter((a) => a.tipo === tipo);
+    const uploadDisabled = ped.status === "cancelado" ? "disabled" : "";
+    return `
+      <div class="Pd_AnexoBloco" id="pd_anexo_${ped.id}_${tipo}">
+        <h5>${esc(rotulo)}</h5>
+        <div class="Pd_AnexoUpload">
+          <input type="file" accept=".pdf,.xml,.png,.jpg,.jpeg,.webp" data-upload-anexo="${ped.id}" data-tipo="${tipo}" ${uploadDisabled} />
+          <span class="Pd_Hint">PDF, XML ou imagem — máx. 5 MB</span>
+        </div>
+        <ul class="Pd_AnexoItens">
+          ${lista.length
+            ? lista
+                .map(
+                  (a) => `
+            <li>
+              <a href="/vendedor/pedidos/anexos/arquivo?caminho=${encodeURIComponent(a.caminho)}" target="_blank" rel="noopener">${esc(a.nome_original)}</a>
+              <button type="button" class="Pd_BtnLink Pd_BtnLink--danger" data-del-anexo="${a.id}">Remover</button>
+            </li>`
+                )
+                .join("")
+            : '<li class="Pd_Hint">Nenhum arquivo.</li>'}
+        </ul>
+      </div>`;
+  }
+
+  function renderAnexos() {
+    if (!elAnexosLista) return;
+    if (!pedidosGrupo.length) {
+      elAnexosLista.innerHTML =
+        '<p class="Pd_Hint">Confirme o pedido ou abra um pedido existente para anexar NF e etiqueta.</p>';
+      if (elAnexosAviso) {
+        elAnexosAviso.hidden = false;
+        elAnexosAviso.textContent =
+          "Anexos ficam vinculados a cada pedido do fornecedor após o primeiro salvamento.";
+      }
+      return;
+    }
+    if (elAnexosAviso) elAnexosAviso.hidden = true;
+    elAnexosLista.innerHTML = pedidosGrupo
+      .map(
+        (p) => `
+      <article class="Pd_AnexoCard" id="pd_anexo_card_${p.id}">
+        <div class="Pd_AnexoCardHead">
+          <div>
+            <strong>${esc(p.numero)}</strong>
+            <br><small>${esc(p.fornecedor_nome || "")} · ${badge(p.status)}</small>
+          </div>
+        </div>
+        ${renderBlocoAnexo(p, "nf", "Nota fiscal")}
+        ${renderBlocoAnexo(p, "etiqueta", "Etiqueta de envio")}
+      </article>`
+      )
+      .join("");
+
+    elAnexosLista.querySelectorAll("[data-upload-anexo]").forEach((inp) => {
+      inp.addEventListener("change", () => enviarAnexo(inp));
+    });
+    elAnexosLista.querySelectorAll("[data-del-anexo]").forEach((btn) => {
+      btn.addEventListener("click", () => excluirAnexo(+btn.dataset.delAnexo));
+    });
+
+    if (tipoAnexoFoco && pedidoFocoAnexo) {
+      document.getElementById(`pd_anexo_${pedidoFocoAnexo}_${tipoAnexoFoco}`)?.classList.add("is-focus");
+    }
+    window.lucide?.createIcons?.();
+  }
+
+  async function enviarAnexo(input) {
+    const idPed = +input.dataset.uploadAnexo;
+    const tipo = input.dataset.tipo;
+    const file = input.files?.[0];
+    if (!idPed || !tipo || !file) return;
+    const fd = new FormData();
+    fd.append("tipo", tipo);
+    fd.append("arquivo", file);
+    input.disabled = true;
+    try {
+      const r = await fetch(`/vendedor/pedidos/${idPed}/anexos`, {
+        method: "POST",
+        credentials: "same-origin",
+        body: fd,
+      });
+      const j = await parseJsonResp(r);
+      if (!j.success) throw new Error(j.message || "Erro ao enviar.");
+      const ped = pedidosGrupo.find((p) => p.id === idPed);
+      if (ped) {
+        ped.anexos = ped.anexos || [];
+        ped.anexos.push(j.anexo);
+      }
+      renderAnexos();
+      atualizarNavAnexos();
+      if (window.Swal) {
+        Swal.fire({ icon: "success", title: "Anexo", text: j.message, timer: 1800, showConfirmButton: false });
+      }
+    } catch (e) {
+      if (window.Swal) {
+        Swal.fire({ icon: "error", title: "Anexo", text: e.message, confirmButtonColor: "#021F81" });
+      } else {
+        mostrarMsg(e.message, true);
+      }
+    } finally {
+      input.value = "";
+      input.disabled = false;
+    }
+  }
+
+  async function excluirAnexo(idAnexo) {
+    if (!confirm("Remover este anexo?")) return;
+    try {
+      const r = await fetch(`/vendedor/pedidos/anexos/${idAnexo}`, {
+        method: "DELETE",
+        credentials: "same-origin",
+      });
+      const j = await parseJsonResp(r);
+      if (!j.success) throw new Error(j.message || "Erro ao remover.");
+      pedidosGrupo.forEach((p) => {
+        p.anexos = (p.anexos || []).filter((a) => a.id !== idAnexo);
+      });
+      renderAnexos();
+      atualizarNavAnexos();
+    } catch (e) {
+      if (window.Swal) {
+        Swal.fire({ icon: "error", title: "Anexo", text: e.message, confirmButtonColor: "#021F81" });
+      }
+    }
   }
 
   function atualizarNavResumos() {
@@ -337,7 +581,11 @@
   function abrirModal() {
     idGrupo = null;
     carrinho = [];
+    pedidosGrupo = [];
+    pedidoFocoAnexo = null;
+    tipoAnexoFoco = null;
     meioPagamentoPorFornecedor = {};
+    aplicarModoLeitura(false);
     document.getElementById("pd_modalTitulo").textContent = "Novo pedido";
     ["pd_cliNome", "pd_cliDoc", "pd_cliEmail", "pd_cliTel", "pd_cep", "pd_logradouro",
       "pd_numero", "pd_compl", "pd_bairro", "pd_cidade", "pd_uf"].forEach((id) => {
@@ -434,7 +682,10 @@
 
   async function salvar(confirmar) {
     mostrarMsg("");
+    if (somenteLeitura) return null;
     const body = corpoPedido();
+    if (elBtnSalvar) elBtnSalvar.disabled = true;
+    if (elBtnConfirmar) elBtnConfirmar.disabled = true;
     let j;
     try {
       const r = await fetch("/vendedor/pedidos/salvar", {
@@ -446,16 +697,29 @@
       j = await parseJsonResp(r);
     } catch (e) {
       mostrarMsg(e.message || "Erro ao salvar.", true);
+      if (elBtnSalvar) elBtnSalvar.disabled = false;
+      if (elBtnConfirmar) elBtnConfirmar.disabled = false;
       return null;
     }
     if (!j.success) {
       mostrarMsg(j.message || "Erro ao salvar.", true);
+      if (elBtnSalvar) elBtnSalvar.disabled = false;
+      if (elBtnConfirmar) elBtnConfirmar.disabled = false;
       return null;
     }
     idGrupo = j.id_grupo;
+    try {
+      const grupo = await carregarGrupo(idGrupo);
+      pedidosGrupo = grupo.pedidos || [];
+      atualizarNavAnexos();
+    } catch {
+      /* anexos opcionais */
+    }
     if (!confirmar) {
       mostrarMsg(j.message || "Rascunho salvo.");
       await carregarLista();
+      if (elBtnSalvar) elBtnSalvar.disabled = false;
+      if (elBtnConfirmar) elBtnConfirmar.disabled = false;
       return j;
     }
     let jc;
@@ -469,13 +733,23 @@
       jc = await parseJsonResp(rc);
     } catch (e) {
       mostrarMsg(e.message || "Erro ao confirmar.", true);
+      if (elBtnSalvar) elBtnSalvar.disabled = false;
+      if (elBtnConfirmar) elBtnConfirmar.disabled = false;
       return null;
     }
     if (!jc.success) {
       mostrarMsg(jc.message || "Erro ao confirmar.", true);
+      if (window.Swal) {
+        Swal.fire({ icon: "error", title: "Confirmar", text: jc.message, confirmButtonColor: "#021F81" });
+      }
+      if (elBtnSalvar) elBtnSalvar.disabled = false;
+      if (elBtnConfirmar) elBtnConfirmar.disabled = false;
       return null;
     }
     mostrarMsg(jc.message || "Pedido confirmado.");
+    if (window.Swal) {
+      Swal.fire({ icon: "success", title: "Confirmado", text: jc.message, timer: 2000, showConfirmButton: false });
+    }
     await carregarLista();
     setTimeout(fecharModal, 1200);
     return jc;
@@ -504,16 +778,40 @@
       bConf.className = "Cl_BtnSalvar";
       bConf.textContent = "Confirmar";
       bConf.onclick = async () => {
-        await fetch("/vendedor/pedidos/confirmar", {
-          method: "POST",
-          credentials: "same-origin",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id_pedido: p.id }),
-        });
-        el.detModal.hidden = true;
-        carregarLista();
+        bConf.disabled = true;
+        try {
+          const rc = await fetch("/vendedor/pedidos/confirmar", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id_pedido: p.id }),
+          });
+          const jc = await parseJsonResp(rc);
+          if (!jc.success) throw new Error(jc.message || "Erro ao confirmar.");
+          el.detModal.hidden = true;
+          await carregarLista();
+          if (window.Swal) {
+            Swal.fire({ icon: "success", title: "Confirmado", text: jc.message, confirmButtonColor: "#021F81" });
+          }
+        } catch (e) {
+          if (window.Swal) {
+            Swal.fire({ icon: "error", title: "Confirmar", text: e.message, confirmButtonColor: "#021F81" });
+          }
+        } finally {
+          bConf.disabled = false;
+        }
       };
       el.detFoot.appendChild(bConf);
+
+      const bEdit = document.createElement("button");
+      bEdit.type = "button";
+      bEdit.className = "Cl_BtnCancelar";
+      bEdit.textContent = "Editar";
+      bEdit.onclick = () => {
+        el.detModal.hidden = true;
+        if (p.id_grupo) abrirModalEdicao({ idGrupo: p.id_grupo, painelInicial: "produto" });
+      };
+      el.detFoot.prepend(bEdit);
     }
     if (p.status === "rascunho" || p.status === "aguardando_pagamento") {
       const bCan = document.createElement("button");
@@ -689,6 +987,36 @@
   });
   document.getElementById("pd_btnSalvar")?.addEventListener("click", () => salvar(false));
   document.getElementById("pd_btnConfirmar")?.addEventListener("click", () => salvar(true));
+
+  el.tbody?.addEventListener("click", (ev) => {
+    const btn = ev.target.closest("button[data-acao]");
+    if (!btn) return;
+    const acao = btn.dataset.acao;
+    const idPed = +btn.dataset.id;
+    const idG = +btn.dataset.grupo;
+    if (!idG) {
+      if (window.Swal) {
+        Swal.fire({ icon: "info", title: "Pedido", text: "Grupo do pedido indisponível.", confirmButtonColor: "#021F81" });
+      }
+      return;
+    }
+    if (acao === "editar") {
+      const st = btn.dataset.status || "";
+      if (st === "aguardando_pagamento") {
+        abrirDetalhe(idPed);
+        return;
+      }
+      abrirModalEdicao({ idGrupo: idG, painelInicial: "produto", idPedidoFoco: idPed });
+      return;
+    }
+    if (acao === "nf") {
+      abrirModalEdicao({ idGrupo: idG, painelInicial: "anexos", idPedidoFoco: idPed, tipoAnexo: "nf" });
+      return;
+    }
+    if (acao === "etiqueta") {
+      abrirModalEdicao({ idGrupo: idG, painelInicial: "anexos", idPedidoFoco: idPed, tipoAnexo: "etiqueta" });
+    }
+  });
 
   function bootPedidos() {
     initComboProduto();

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+import time
 
-from flask import Blueprint, jsonify, render_template, request, session, url_for
+from flask import Blueprint, jsonify, render_template, request, send_file, session, url_for
 
 from api.mercadopago.cliente import meios_pagamento_fornecedor
 
@@ -13,9 +14,13 @@ from servico_pedido import (
     combobox_produtos_pedido,
     confirmar_grupo,
     confirmar_pedido,
+    excluir_anexo_pedido,
+    listar_anexos_pedido,
     listar_fornecedores_pedido,
     listar_pedidos_vendedor,
+    obter_grupo_pedido,
     obter_pedido,
+    registrar_anexo_pedido,
     salvar_rascunho,
     taxas_fornecedores_vendedor,
 )
@@ -23,6 +28,9 @@ from servico_pedido_mp import iniciar_pagamento, meios_pagamento_pedido, sincron
 from srotas_plataforma import MODULO_VENDEDOR
 
 _MOD = Path(__file__).resolve().parent
+_RAIZ = _MOD.parent.parent
+MAX_BYTES_ANEXO = 5 * 1024 * 1024
+_EXT_ANEXO = {".pdf", ".png", ".jpg", ".jpeg", ".webp", ".xml"}
 vd_pedidos_bp = Blueprint(
     "vd_pedidos",
     __name__,
@@ -57,6 +65,19 @@ def pedidos():
 
 def _taxas_fornecedores_map(cur, id_vendedor: int) -> dict:
     return {str(k): v for k, v in taxas_fornecedores_vendedor(cur, id_vendedor).items()}
+
+
+def _extensao_anexo(nome: str) -> str:
+    import os
+
+    ext = os.path.splitext(nome or "")[1].lower()
+    return ext if ext in _EXT_ANEXO else ""
+
+
+def _pasta_anexos_tenant(id_tenant: int) -> Path:
+    pasta = _RAIZ / "upload" / f"tenant{id_tenant}" / "pedidos"
+    pasta.mkdir(parents=True, exist_ok=True)
+    return pasta
 
 
 @vd_pedidos_bp.get("/vendedor/pedidos/dados")
@@ -148,6 +169,156 @@ def pedido_detalhe(id_pedido: int):
         return jsonify(success=False, message="Erro ao carregar pedido."), 500
     finally:
         conn.close()
+
+
+@vd_pedidos_bp.get("/vendedor/pedidos/grupo/<int:id_grupo>")
+@login_obrigatorio()
+@exigir_modulo(MODULO_VENDEDOR)
+@exigir_permissao(codigo="vd_pedidos.ver")
+def pedido_grupo(id_grupo: int):
+    id_v = _id_vendedor()
+    if not id_v:
+        return jsonify(success=False, message="Sessão inválida."), 403
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        grupo = obter_grupo_pedido(cur, id_v, id_grupo)
+        if not grupo:
+            return jsonify(success=False, message="Grupo de pedido não encontrado."), 404
+        for ped in grupo.get("pedidos") or []:
+            ped["anexos"] = listar_anexos_pedido(cur, ped["id"], id_vendedor=id_v)
+        return jsonify(success=True, grupo=grupo)
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception("Erro ao obter grupo %s", id_grupo)
+        return jsonify(success=False, message="Erro ao carregar pedido."), 500
+    finally:
+        conn.close()
+
+
+@vd_pedidos_bp.get("/vendedor/pedidos/<int:id_pedido>/anexos")
+@login_obrigatorio()
+@exigir_modulo(MODULO_VENDEDOR)
+@exigir_permissao(codigo="vd_pedidos.ver")
+def pedido_anexos_lista(id_pedido: int):
+    id_v = _id_vendedor()
+    if not id_v:
+        return jsonify(success=False, message="Sessão inválida."), 403
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        anexos = listar_anexos_pedido(cur, id_pedido, id_vendedor=id_v)
+        return jsonify(success=True, anexos=anexos)
+    except ValueError as e:
+        return jsonify(success=False, message=str(e)), 400
+    finally:
+        conn.close()
+
+
+@vd_pedidos_bp.post("/vendedor/pedidos/<int:id_pedido>/anexos")
+@login_obrigatorio()
+@exigir_modulo(MODULO_VENDEDOR)
+@exigir_permissao(codigo="vd_pedidos.editar")
+def pedido_anexos_upload(id_pedido: int):
+    id_v = _id_vendedor()
+    if not id_v:
+        return jsonify(success=False, message="Sessão inválida."), 403
+    tipo = (request.form.get("tipo") or "").strip().lower()
+    arquivo = request.files.get("arquivo")
+    if not arquivo or not arquivo.filename:
+        return jsonify(success=False, message="Selecione um arquivo."), 400
+    ext = _extensao_anexo(arquivo.filename)
+    if not ext:
+        return jsonify(success=False, message="Use PDF, XML, PNG ou JPG."), 400
+    stream = arquivo.stream
+    stream.seek(0, 2)
+    tamanho = stream.tell()
+    stream.seek(0)
+    if tamanho <= 0:
+        return jsonify(success=False, message="Arquivo vazio."), 400
+    if tamanho > MAX_BYTES_ANEXO:
+        return jsonify(success=False, message="Arquivo deve ter no máximo 5 MB."), 400
+
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        ped = obter_pedido(cur, id_pedido, id_vendedor=id_v)
+        if not ped:
+            return jsonify(success=False, message="Pedido não encontrado."), 404
+        pasta = _pasta_anexos_tenant(id_v)
+        nome_safe = Path(arquivo.filename).name
+        destino = pasta / f"{id_pedido}_{tipo}_{int(time.time())}{ext}"
+        arquivo.save(str(destino))
+        caminho_db = f"upload/tenant{id_v}/pedidos/{destino.name}"
+        anexo = registrar_anexo_pedido(
+            cur,
+            id_v,
+            id_pedido,
+            tipo,
+            nome_safe,
+            caminho_db,
+            tamanho,
+            id_usuario=_id_usuario(),
+        )
+        conn.commit()
+        return jsonify(success=True, message="Anexo enviado.", anexo=anexo)
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 400
+    finally:
+        conn.close()
+
+
+@vd_pedidos_bp.delete("/vendedor/pedidos/anexos/<int:id_anexo>")
+@login_obrigatorio()
+@exigir_modulo(MODULO_VENDEDOR)
+@exigir_permissao(codigo="vd_pedidos.editar")
+def pedido_anexo_excluir(id_anexo: int):
+    id_v = _id_vendedor()
+    if not id_v:
+        return jsonify(success=False, message="Sessão inválida."), 403
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        info = excluir_anexo_pedido(cur, id_v, id_anexo)
+        caminho = (info.get("caminho") or "").replace("\\", "/")
+        if caminho and ".." not in caminho.split("/"):
+            arquivo = _RAIZ.joinpath(*caminho.split("/"))
+            if arquivo.is_file():
+                try:
+                    arquivo.unlink()
+                except OSError:
+                    pass
+        conn.commit()
+        return jsonify(success=True, message="Anexo removido.")
+    except ValueError as e:
+        return jsonify(success=False, message=str(e)), 400
+    finally:
+        conn.close()
+
+
+@vd_pedidos_bp.get("/vendedor/pedidos/anexos/arquivo")
+@login_obrigatorio()
+@exigir_modulo(MODULO_VENDEDOR)
+@exigir_permissao(codigo="vd_pedidos.ver")
+def pedido_anexo_arquivo():
+    import mimetypes
+    import os
+
+    id_v = _id_vendedor()
+    if not id_v:
+        return jsonify(success=False, message="Sessão inválida."), 403
+    caminho = (request.args.get("caminho") or "").strip().replace("\\", "/")
+    if not caminho or ".." in caminho.split("/"):
+        return jsonify(success=False, message="Caminho inválido."), 400
+    prefixo = f"upload/tenant{id_v}/pedidos/"
+    if not caminho.lower().startswith(prefixo.lower()):
+        return jsonify(success=False, message="Arquivo não permitido."), 403
+    arquivo = _RAIZ / caminho.replace("/", os.sep)
+    if not arquivo.is_file():
+        return jsonify(success=False, message="Arquivo não encontrado."), 404
+    mime, _ = mimetypes.guess_type(str(arquivo))
+    return send_file(arquivo, mimetype=mime or "application/octet-stream", max_age=3600)
 
 
 @vd_pedidos_bp.post("/vendedor/pedidos/salvar")

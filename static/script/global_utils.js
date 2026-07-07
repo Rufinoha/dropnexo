@@ -178,15 +178,10 @@ GlobalUtils.abrirJanelaApoioModal = function ({
   overlay.appendChild(modal);
   document.body.appendChild(overlay);
 
-  // Fechar no X
+  // Fechar somente pelo botão X (política global — ver bloqueio de backdrop no fim do arquivo)
   header.querySelector("button").onclick = () => {
     GlobalUtils.fecharJanelaApoio(nivel);
   };
-
-  // Fechar clicando fora
-  overlay.addEventListener("mousedown", (ev) => {
-    if (ev.target === overlay) GlobalUtils.fecharJanelaApoio(nivel);
-  });
 
   // Fechar no ESC
   const escHandler = (ev) => {
@@ -1889,4 +1884,43 @@ const MAP = {
   api.refresh = refresh;
 
   return api;
+})();
+
+// === Política global: modais não fecham ao clicar fora (somente botão X / ações explícitas) ===
+(function () {
+  const BACKDROP_SELECTOR = [
+    ".imp-backdrop",
+    ".VdCat_ModalBackdrop",
+    ".Mk_ModalBackdrop",
+    ".FnInt_Overlay",
+    ".apoio-overlay",
+    ".nv-overlay",
+    '[id^="modalApoioOverlay_"]',
+    ".Pd_Modal",
+    ".FnDep_Modal",
+    ".FnCat_Modal",
+    ".FnVar_Modal",
+    ".VdParceiros_Modal",
+    ".Mk_Modal",
+  ].join(",");
+
+  function ehCliqueBackdrop(ev) {
+    const el = ev.target;
+    if (!el || el.nodeType !== 1 || typeof el.matches !== "function") return false;
+    if (!el.matches(BACKDROP_SELECTOR)) return false;
+    if (el.closest("[data-fechar-backdrop='1']")) return false;
+    return true;
+  }
+
+  function bloquearFecharBackdrop(ev) {
+    if (!ehCliqueBackdrop(ev)) return;
+    ev.stopPropagation();
+    ev.stopImmediatePropagation();
+  }
+
+  document.addEventListener("click", bloquearFecharBackdrop, true);
+  document.addEventListener("mousedown", bloquearFecharBackdrop, true);
+
+  window.GlobalUtils = window.GlobalUtils || {};
+  window.GlobalUtils.modalSomenteBotaoFechar = true;
 })();

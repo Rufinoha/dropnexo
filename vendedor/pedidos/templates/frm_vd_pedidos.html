@@ -3,7 +3,7 @@
 {% set nav_ativo = 'vd_pedidos' %}
 {% block topbar_title %}Pedidos{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('vd_pedidos.static', filename='style/Cvd_pedidos.css') }}?v=5" />
+<link rel="stylesheet" href="{{ url_for('vd_pedidos.static', filename='style/Cvd_pedidos.css') }}?v=8" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal Pd_Page">
@@ -39,7 +39,7 @@
           <th>Total</th>
           <th>Situação</th>
           <th>Data</th>
-          <th></th>
+          <th class="Pd_ColAcoes">Ações</th>
         </tr>
       </thead>
       <tbody id="pd_tbody"></tbody>
@@ -94,6 +94,13 @@
             <span class="Pd_WizNavTxt">
               <strong>Valores</strong>
               <small id="pd_navValores">Resumo e pagamento</small>
+            </span>
+          </button>
+          <button type="button" class="Pd_WizNavItem" data-painel="anexos">
+            <span class="Pd_WizNavIco"><i data-lucide="paperclip"></i></span>
+            <span class="Pd_WizNavTxt">
+              <strong>Anexos</strong>
+              <small id="pd_navAnexos">NF e etiqueta</small>
             </span>
           </button>
         </nav>
@@ -225,6 +232,22 @@
             </div>
           </div>
         </section>
+
+        <section class="Pd_WizPane" data-painel="anexos" hidden>
+          <header class="Pd_WizPaneHead">
+            <span class="Pd_WizPaneIco"><i data-lucide="paperclip"></i></span>
+            <div>
+              <h4>Anexos</h4>
+              <p>Nota fiscal e etiqueta de envio por pedido do fornecedor.</p>
+            </div>
+          </header>
+          <div class="Pd_WizPaneBody">
+            <p id="pd_anexosAviso" class="Pd_Hint" hidden></p>
+            <div id="pd_anexosLista" class="Pd_AnexosLista">
+              <p class="Pd_Hint">Salve ou abra um pedido existente para anexar arquivos.</p>
+            </div>
+          </div>
+        </section>
       </div>
     </div>
 
@@ -268,6 +291,6 @@
 </div>
 {% endblock %}
 {% block page_js %}
-<script defer src="{{ url_for('vd_pedidos.static', filename='script/Svd_pedidos.js') }}?v=7"></script>
+<script defer src="{{ url_for('vd_pedidos.static', filename='script/Svd_pedidos.js') }}?v=8"></script>
 <script id="pd_cfg" type="application/json">{{ {"mp_icone": url_for("mercadopago.static", filename="imge/icone_mercadopago.png")}|tojson }}</script>
 {% endblock %}
