@@ -12,6 +12,7 @@ from api.pix_manual.cliente import (
     salvar_config_pix_manual,
 )
 from global_utils import Var_ConectarBanco, login_obrigatorio
+from srotas_plataforma import MODULO_FORNECEDOR, garantir_modulo_sessao
 
 _MOD = Path(__file__).resolve().parent
 pix_manual_bp = Blueprint(
@@ -33,11 +34,11 @@ def _id_tenant() -> int | None:
 
 
 def _exigir_fornecedor():
-    if session.get("tenant_tipo_negocio") not in ("fornecedor", "hibrido") and not session.get(
-        "eh_desenvolvedor"
-    ):
-        return jsonify(success=False, message="Apenas fornecedores."), 403
-    return None
+    if session.get("eh_desenvolvedor"):
+        return None
+    if garantir_modulo_sessao() == MODULO_FORNECEDOR:
+        return None
+    return jsonify(success=False, message="Apenas fornecedores."), 403
 
 
 @pix_manual_bp.get("/api/integracoes/pix-manual/status")

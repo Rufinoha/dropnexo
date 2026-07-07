@@ -17,7 +17,7 @@
         <div>
           <h2>Bling ERP</h2>
           <p class="cl-page-desc">
-            Configuração da integração com o Bling.
+            {{ bling_subtitulo|default('Configuração da integração com o Bling.') }}
             <a href="{{ url_for('bling.ajuda_bling') }}" class="Bl_ManualLink" target="_blank" rel="noopener">Ver manual de conexão</a>
           </p>
         </div>
@@ -48,8 +48,8 @@
   <section class="Bl_Card Bl_ContextPanel" id="bl_painel_config" {% if not bling_conectado %}hidden{% endif %}>
     <nav class="Bl_SubTabs" id="bl_subtabs" aria-label="Seções Bling">
       <button type="button" class="Bl_SubTab is-active" data-bl-tab="config">Configurações</button>
-      <button type="button" class="Bl_SubTab" data-bl-tab="estoque">Estoque</button>
-      <button type="button" class="Bl_SubTab" data-bl-tab="categorias">Categorias</button>
+      <button type="button" class="Bl_SubTab" data-bl-tab="estoque" data-bl-modulo="fornecedor" {% if bling_papel == 'pedidos' %}hidden{% endif %}>Estoque</button>
+      <button type="button" class="Bl_SubTab" data-bl-tab="categorias" data-bl-modulo="fornecedor" {% if bling_papel == 'pedidos' %}hidden{% endif %}>Categorias</button>
       <button type="button" class="Bl_SubTab" data-bl-tab="logs">Últimos logs</button>
     </nav>
 
@@ -58,21 +58,21 @@
       <input type="hidden" id="bl_contexto_ativo" value="" />
 
       <div class="Bl_Grid2">
-        <label class="Bl_Field">
+        <label class="Bl_Field" data-bl-campo="catalogo" {% if bling_papel == 'pedidos' %}hidden{% endif %}>
           <span>Modo das imagens</span>
           <select id="bl_modo_imagem">
             <option value="link">Manter como link</option>
             <option value="download">Baixar para o servidor</option>
           </select>
         </label>
-        <label class="Bl_Field">
+        <label class="Bl_Field" data-bl-campo="catalogo" {% if bling_papel == 'pedidos' %}hidden{% endif %}>
           <span>Fonte principal</span>
           <select id="bl_fonte">
             <option value="bling">Bling</option>
             <option value="dropnexo">DropNexo</option>
           </select>
         </label>
-        <label class="Bl_Field">
+        <label class="Bl_Field" data-bl-campo="catalogo" {% if bling_papel == 'pedidos' %}hidden{% endif %}>
           <span>Produtos</span>
           <select id="bl_produtos_modo">
             <option value="importar">Importar</option>
@@ -80,7 +80,7 @@
             <option value="atualizar">Atualizar (ambos)</option>
           </select>
         </label>
-        <label class="Bl_Field">
+        <label class="Bl_Field" data-bl-campo="catalogo" {% if bling_papel == 'pedidos' %}hidden{% endif %}>
           <span>Estoque</span>
           <select id="bl_estoque_modo">
             <option value="importar">Importar</option>
@@ -88,7 +88,7 @@
             <option value="atualizar">Atualizar (ambos)</option>
           </select>
         </label>
-        <label class="Bl_Field">
+        <label class="Bl_Field" data-bl-campo="pedidos" {% if bling_papel == 'catalogo' %}hidden{% endif %}>
           <span>Pedidos</span>
           <select id="bl_pedidos_modo">
             <option value="importar">Importar</option>
@@ -102,10 +102,10 @@
         <button type="button" class="Cl_BtnSalvar" id="bl_btn_salvar">Salvar</button>
       </div>
 
-      <p class="Bl_Meta" id="bl_ultima_sync"></p>
+      <p class="Bl_Meta" id="bl_ultima_sync" {% if bling_papel == 'pedidos' %}hidden{% endif %}></p>
       <p class="Bl_Meta" id="bl_ultima_sync_pedidos" hidden></p>
 
-      <div class="Bl_PedidosImport" id="bl_pedidos_import_wrap" hidden>
+      <div class="Bl_PedidosImport" id="bl_pedidos_import_wrap" {% if bling_papel != 'pedidos' %}hidden{% endif %}>
         <h3 class="Bl_EstoqueBlockTitle">Importar pedidos pagos</h3>
         <p class="Bl_Hint">
           Busca pedidos de venda <strong>confirmados/pagos</strong> no Bling dos últimos 30 dias e cria pedidos DropNexo

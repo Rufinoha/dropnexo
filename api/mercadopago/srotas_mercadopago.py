@@ -20,6 +20,7 @@ from api.mercadopago.cliente import (
     url_autorizacao,
 )
 from global_utils import Var_ConectarBanco, login_obrigatorio, obter_base_url, usuario_tem_permissao
+from srotas_plataforma import MODULO_FORNECEDOR, garantir_modulo_sessao
 
 _log = logging.getLogger(__name__)
 
@@ -48,7 +49,9 @@ def _pode_integracoes() -> bool:
 
 
 def _exigir_fornecedor():
-    if session.get("tenant_tipo_negocio") in ("fornecedor", "hibrido") or session.get("eh_desenvolvedor"):
+    if session.get("eh_desenvolvedor"):
+        return None
+    if garantir_modulo_sessao() == MODULO_FORNECEDOR:
         return None
     return redirect(url_for("integracoes.pagina", erro="Opções financeiras são apenas para fornecedores."))
 
@@ -116,7 +119,7 @@ def oauth_callback():
 def desconectar():
     if not _pode_integracoes():
         return jsonify(success=False, message="Sem permissão."), 403
-    if session.get("tenant_tipo_negocio") not in ("fornecedor", "hibrido") and not session.get("eh_desenvolvedor"):
+    if garantir_modulo_sessao() != MODULO_FORNECEDOR and not session.get("eh_desenvolvedor"):
         return jsonify(success=False, message="Apenas fornecedores."), 403
     id_tenant = session.get("id_tenant")
     conn = Var_ConectarBanco()
@@ -152,7 +155,7 @@ def status():
 def config_salvar():
     if not _pode_integracoes():
         return jsonify(success=False, message="Sem permissão."), 403
-    if session.get("tenant_tipo_negocio") not in ("fornecedor", "hibrido") and not session.get("eh_desenvolvedor"):
+    if garantir_modulo_sessao() != MODULO_FORNECEDOR and not session.get("eh_desenvolvedor"):
         return jsonify(success=False, message="Apenas fornecedores."), 403
     body = request.get_json(silent=True) or {}
     id_tenant = session.get("id_tenant")

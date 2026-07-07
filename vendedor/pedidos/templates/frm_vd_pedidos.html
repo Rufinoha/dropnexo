@@ -3,7 +3,7 @@
 {% set nav_ativo = 'vd_pedidos' %}
 {% block topbar_title %}Pedidos{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('vd_pedidos.static', filename='style/Cvd_pedidos.css') }}?v=10" />
+<link rel="stylesheet" href="{{ url_for('vd_pedidos.static', filename='style/Cvd_pedidos.css') }}?v=11" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal Pd_Page">
@@ -199,11 +199,11 @@
             </div>
           </header>
           <div class="Pd_WizPaneBody">
-            <div class="Pd_FretePlaceholder">
-              <i data-lucide="clock"></i>
-              <p><strong>Em breve</strong></p>
-              <p class="Pd_Hint">Integração com Melhor Envio, Correios e outros transportadores para cotar e escolher o frete neste passo.</p>
+            <p id="pd_freteAviso" class="Pd_Hint" hidden></p>
+            <div id="pd_freteConteudo" class="Pd_FreteConteudo">
+              <p class="Pd_Hint">Salve o rascunho e informe o endereço para cotar o frete via Melhor Envio.</p>
             </div>
+            <p class="Pd_Hint Pd_FreteNota">O frete é contratado na sua conta Melhor Envio e não entra no pagamento ao fornecedor.</p>
           </div>
         </section>
 
@@ -235,8 +235,8 @@
             <div class="Pd_Resumo" id="pd_resumo">
               <div><span>Subtotal produtos</span><strong id="pd_subtotal">R$ 0,00</strong></div>
               <div id="pd_linhaTaxa" hidden><span>Taxa do fornecedor</span><strong id="pd_taxa">R$ 0,00</strong></div>
-              <div class="Pd_ResumoFrete"><span>Frete</span><strong id="pd_frete">R$ 0,00</strong></div>
-              <div class="Pd_ResumoTotal"><span>Total a pagar</span><strong id="pd_total">R$ 0,00</strong></div>
+              <div class="Pd_ResumoFrete"><span>Frete (Melhor Envio)</span><strong id="pd_frete">R$ 0,00</strong></div>
+              <div class="Pd_ResumoTotal"><span>Total ao fornecedor</span><strong id="pd_total">R$ 0,00</strong></div>
             </div>
 
             <div class="Pd_PaySection">
@@ -262,6 +262,6 @@
 {% endblock %}
 {% block page_js %}
 <script defer src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
-<script defer src="{{ url_for('vd_pedidos.static', filename='script/Svd_pedidos.js') }}?v=11"></script>
+<script defer src="{{ url_for('vd_pedidos.static', filename='script/Svd_pedidos.js') }}?v=12"></script>
 <script id="pd_cfg" type="application/json">{{ {"mp_icone": url_for("mercadopago.static", filename="imge/icone_mercadopago.png")}|tojson }}</script>
 {% endblock %}

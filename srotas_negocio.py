@@ -6,7 +6,7 @@ from decimal import Decimal
 from typing import Any
 
 from flask import render_template, session, url_for
-from srotas_plataforma import MODULO_FORNECEDOR, garantir_modulo_sessao
+from srotas_plataforma import MODULO_FORNECEDOR, MODULO_VENDEDOR, garantir_modulo_sessao
 
 from pathlib import Path
 
@@ -227,62 +227,27 @@ def montar_snapshot_vendedor(cur, id_vendedor: int, id_usuario: int | None) -> d
 
 # ── Hub de integrações ────────────────────────────────────────────────
 
+HUB_COPY_INTEGRACOES = {
+    MODULO_FORNECEDOR: {
+        "titulo": "Integrações",
+        "descricao": "Receba pagamentos dos vendedores e sincronize seu catálogo com ERPs.",
+    },
+    MODULO_VENDEDOR: {
+        "titulo": "Integrações",
+        "descricao": "Importe pedidos das suas lojas, contrate fretes e acompanhe envios.",
+    },
+}
+
+_MOD_VENDEDOR = [MODULO_VENDEDOR]
+_MOD_FORNECEDOR = [MODULO_FORNECEDOR]
+
 CATEGORIAS_INTEGRACOES = [
     {
-        "id": "marketplace",
-        "rotulo": "Marketplace",
-        "titulo": "Marketplace",
-        "subtitulo": "Centralize vendas de múltiplos marketplaces automaticamente.",
-        "itens": [
-            {"slug": "mercado-livre", "nome": "Mercado Livre", "descricao": "Anúncios, pedidos e estoque do Mercado Livre.", "cor": "#FFE600", "iniciais": "ML"},
-            {"slug": "amazon", "nome": "Amazon", "descricao": "Vendas e logística da Amazon no seu painel.", "cor": "#FF9900", "iniciais": "AZ"},
-            {"slug": "magazine-luiza", "nome": "Magazine Luiza", "descricao": "Integração com o marketplace Magalu.", "cor": "#0086FF", "iniciais": "MG"},
-            {"slug": "shopee", "nome": "Shopee", "descricao": "Pedidos e catálogo da Shopee em um só lugar.", "cor": "#EE4D2D", "iniciais": "SH"},
-            {"slug": "americanas", "nome": "Americanas", "descricao": "Marketplace Americanas / B2W.", "cor": "#E60014", "iniciais": "AM"},
-            {"slug": "casas-bahia", "nome": "Casas Bahia", "descricao": "Vendas e estoque Casas Bahia / Via.", "cor": "#0033A0", "iniciais": "CB"},
-        ],
-    },
-    {
-        "id": "ecommerce",
-        "rotulo": "E-commerce",
-        "titulo": "Plataforma de e-commerce",
-        "subtitulo": "Conecte sua loja virtual e sincronize pedidos e produtos.",
-        "itens": [
-            {"slug": "tray", "nome": "Tray", "descricao": "Loja Tray — pedidos, produtos e estoque.", "cor": "#7B2CFF", "iniciais": "TR"},
-            {"slug": "loja-integrada", "nome": "Loja Integrada", "descricao": "Integração com a Loja Integrada.", "cor": "#00AEEF", "iniciais": "LI"},
-            {"slug": "nuvemshop", "nome": "Nuvemshop", "descricao": "Sincronize sua Nuvemshop com o DropNexo.", "cor": "#2C3E50", "iniciais": "NV"},
-            {"slug": "beezoo", "nome": "Beezoo", "descricao": "Conector para lojas Beezoo.", "cor": "#F5A623", "iniciais": "BZ"},
-            {"slug": "bagy", "nome": "Bagy", "descricao": "Integração com a plataforma Bagy.", "cor": "#111827", "iniciais": "BG"},
-        ],
-    },
-    {
-        "id": "frete",
-        "rotulo": "Frete",
-        "titulo": "Frete e logística",
-        "subtitulo": "Cotações, etiquetas e rastreio de envios.",
-        "itens": [
-            {"slug": "melhor-envio", "nome": "Melhor Envio", "descricao": "Cotação e compra de fretes em um clique.", "cor": "#00B2A9", "iniciais": "ME"},
-            {"slug": "correios", "nome": "Correios", "descricao": "PAC, SEDEX e serviços dos Correios.", "cor": "#FFD100", "iniciais": "CR"},
-            {"slug": "frenet", "nome": "Frenet", "descricao": "Gateway de fretes para e-commerce.", "cor": "#0057A8", "iniciais": "FR"},
-        ],
-    },
-    {
-        "id": "erp",
-        "rotulo": "ERP",
-        "titulo": "ERP e gestão",
-        "subtitulo": "Sincronize financeiro, estoque e notas fiscais.",
-        "itens": [
-            {"slug": "bling", "nome": "Bling", "descricao": "ERP Bling — pedidos, NF-e e estoque.", "cor": "#28A745", "iniciais": "BL"},
-            {"slug": "olist", "nome": "Olist", "descricao": "Hub Olist para marketplaces e lojas.", "cor": "#6C2EB9", "iniciais": "OL"},
-            {"slug": "conta-azul", "nome": "Conta Azul", "descricao": "Gestão financeira e emissão de notas.", "cor": "#0080FF", "iniciais": "CA"},
-        ],
-    },
-    {
         "id": "financeiro",
-        "rotulo": "Opções financeiras",
-        "titulo": "Opções financeiras",
-        "subtitulo": "Receba pagamentos dos pedidos dos vendedores (PIX e cartão).",
-        "somente_fornecedor": True,
+        "rotulo": "Recebimentos",
+        "titulo": "Recebimentos",
+        "subtitulo": "Formas de pagamento dos pedidos B2B (PIX e cartão).",
+        "modulos": _MOD_FORNECEDOR,
         "itens": [
             {
                 "slug": "mercado-pago",
@@ -290,6 +255,7 @@ CATEGORIAS_INTEGRACOES = [
                 "descricao": "PIX e cartão de crédito nos pedidos B2B.",
                 "cor": "#009EE3",
                 "iniciais": "MP",
+                "modulos": _MOD_FORNECEDOR,
             },
             {
                 "slug": "pix-manual",
@@ -297,15 +263,98 @@ CATEGORIAS_INTEGRACOES = [
                 "descricao": "Sua chave PIX — o vendedor paga e envia o comprovante.",
                 "cor": "#32BCAD",
                 "iniciais": "PX",
+                "modulos": _MOD_FORNECEDOR,
             },
-            {"slug": "pagbank", "nome": "PagBank", "descricao": "Recebimentos PagBank.", "cor": "#1BB99A", "iniciais": "PB"},
-            {"slug": "stripe", "nome": "Stripe", "descricao": "Pagamentos internacionais Stripe.", "cor": "#635BFF", "iniciais": "ST"},
-            {"slug": "asaas", "nome": "Asaas", "descricao": "Cobranças e recebimentos Asaas.", "cor": "#0030B9", "iniciais": "AS"},
-            {"slug": "pagar-me", "nome": "Pagar.me", "descricao": "Gateway Pagar.me.", "cor": "#65A300", "iniciais": "PM"},
-            {"slug": "paypal", "nome": "PayPal", "descricao": "Pagamentos PayPal.", "cor": "#003087", "iniciais": "PP"},
+            {"slug": "pagbank", "nome": "PagBank", "descricao": "Recebimentos PagBank.", "cor": "#1BB99A", "iniciais": "PB", "modulos": _MOD_FORNECEDOR},
+            {"slug": "stripe", "nome": "Stripe", "descricao": "Pagamentos internacionais Stripe.", "cor": "#635BFF", "iniciais": "ST", "modulos": _MOD_FORNECEDOR},
+            {"slug": "asaas", "nome": "Asaas", "descricao": "Cobranças e recebimentos Asaas.", "cor": "#0030B9", "iniciais": "AS", "modulos": _MOD_FORNECEDOR},
+            {"slug": "pagar-me", "nome": "Pagar.me", "descricao": "Gateway Pagar.me.", "cor": "#65A300", "iniciais": "PM", "modulos": _MOD_FORNECEDOR},
+            {"slug": "paypal", "nome": "PayPal", "descricao": "Pagamentos PayPal.", "cor": "#003087", "iniciais": "PP", "modulos": _MOD_FORNECEDOR},
+        ],
+    },
+    {
+        "id": "catalogo",
+        "rotulo": "Catálogo e ERP",
+        "titulo": "Catálogo e ERP",
+        "subtitulo": "Sincronize produtos, estoque, categorias e NF-e.",
+        "modulos": _MOD_FORNECEDOR,
+        "itens": [
+            {
+                "slug": "bling",
+                "nome": "Bling",
+                "descricao": "Importe produtos, estoque e categorias do seu Bling.",
+                "cor": "#28A745",
+                "iniciais": "BL",
+                "modulos": _MOD_FORNECEDOR,
+                "papel": "catalogo",
+            },
+            {"slug": "olist", "nome": "Olist", "descricao": "Hub Olist para marketplaces e lojas.", "cor": "#6C2EB9", "iniciais": "OL", "modulos": _MOD_FORNECEDOR},
+            {"slug": "conta-azul", "nome": "Conta Azul", "descricao": "Gestão financeira e emissão de notas.", "cor": "#0080FF", "iniciais": "CA", "modulos": _MOD_FORNECEDOR},
+        ],
+    },
+    {
+        "id": "pedidos",
+        "rotulo": "Pedidos",
+        "titulo": "Pedidos e lojas",
+        "subtitulo": "Importe pedidos de marketplaces, e-commerce e ERP.",
+        "modulos": _MOD_VENDEDOR,
+        "itens": [
+            {"slug": "mercado-livre", "nome": "Mercado Livre", "descricao": "Pedidos e anúncios do Mercado Livre.", "cor": "#FFE600", "iniciais": "ML", "modulos": _MOD_VENDEDOR},
+            {"slug": "amazon", "nome": "Amazon", "descricao": "Pedidos da Amazon no seu painel.", "cor": "#FF9900", "iniciais": "AZ", "modulos": _MOD_VENDEDOR},
+            {"slug": "magazine-luiza", "nome": "Magazine Luiza", "descricao": "Pedidos do marketplace Magalu.", "cor": "#0086FF", "iniciais": "MG", "modulos": _MOD_VENDEDOR},
+            {"slug": "shopee", "nome": "Shopee", "descricao": "Pedidos da Shopee em um só lugar.", "cor": "#EE4D2D", "iniciais": "SH", "modulos": _MOD_VENDEDOR},
+            {"slug": "americanas", "nome": "Americanas", "descricao": "Pedidos Americanas / B2W.", "cor": "#E60014", "iniciais": "AM", "modulos": _MOD_VENDEDOR},
+            {"slug": "casas-bahia", "nome": "Casas Bahia", "descricao": "Pedidos Casas Bahia / Via.", "cor": "#0033A0", "iniciais": "CB", "modulos": _MOD_VENDEDOR},
+            {"slug": "tray", "nome": "Tray", "descricao": "Pedidos da sua loja Tray.", "cor": "#7B2CFF", "iniciais": "TR", "modulos": _MOD_VENDEDOR},
+            {"slug": "loja-integrada", "nome": "Loja Integrada", "descricao": "Pedidos da Loja Integrada.", "cor": "#00AEEF", "iniciais": "LI", "modulos": _MOD_VENDEDOR},
+            {"slug": "nuvemshop", "nome": "Nuvemshop", "descricao": "Pedidos da sua Nuvemshop.", "cor": "#2C3E50", "iniciais": "NV", "modulos": _MOD_VENDEDOR},
+            {"slug": "beezoo", "nome": "Beezoo", "descricao": "Pedidos de lojas Beezoo.", "cor": "#F5A623", "iniciais": "BZ", "modulos": _MOD_VENDEDOR},
+            {"slug": "bagy", "nome": "Bagy", "descricao": "Pedidos da plataforma Bagy.", "cor": "#111827", "iniciais": "BG", "modulos": _MOD_VENDEDOR},
+            {
+                "slug": "bling",
+                "nome": "Bling",
+                "descricao": "Importe pedidos de venda pagos do seu Bling.",
+                "cor": "#28A745",
+                "iniciais": "BL",
+                "modulos": _MOD_VENDEDOR,
+                "papel": "pedidos",
+            },
+        ],
+    },
+    {
+        "id": "frete",
+        "rotulo": "Frete",
+        "titulo": "Frete e logística",
+        "subtitulo": "Cote fretes, contrate etiquetas e acompanhe rastreios.",
+        "modulos": _MOD_VENDEDOR,
+        "itens": [
+            {
+                "slug": "melhor-envio",
+                "nome": "Melhor Envio",
+                "descricao": "Cote e contrate fretes; o fornecedor só imprime a etiqueta.",
+                "cor": "#00B2A9",
+                "iniciais": "ME",
+                "modulos": _MOD_VENDEDOR,
+            },
+            {"slug": "correios", "nome": "Correios", "descricao": "PAC, SEDEX e serviços dos Correios.", "cor": "#FFD100", "iniciais": "CR", "modulos": _MOD_VENDEDOR},
+            {"slug": "frenet", "nome": "Frenet", "descricao": "Gateway de fretes para e-commerce.", "cor": "#0057A8", "iniciais": "FR", "modulos": _MOD_VENDEDOR},
         ],
     },
 ]
+
+
+def _visivel_integracao_modulo(entidade: dict, modulo: str) -> bool:
+    mods = entidade.get("modulos")
+    if mods:
+        return modulo in mods
+    if entidade.get("somente_fornecedor"):
+        return modulo == MODULO_FORNECEDOR
+    return True
+
+
+def hub_copy_integracoes(modulo: str | None = None) -> dict[str, str]:
+    mod = modulo or garantir_modulo_sessao()
+    return dict(HUB_COPY_INTEGRACOES.get(mod, HUB_COPY_INTEGRACOES[MODULO_VENDEDOR]))
 
 
 def _arquivo_icone_api(slug: str) -> str | None:
@@ -323,6 +372,8 @@ def url_icone_integracao(slug: str, *, icones_base_url: str = "") -> str:
     """URL do ícone da integração (prioriza static/imge/icone_api/ ou módulo api/)."""
     if slug == "mercado-pago":
         return url_for("mercadopago.static", filename="imge/icone_mercadopago.png")
+    if slug == "melhor-envio":
+        return url_for("melhor_envio.static", filename="imge/icone_melhorenvio.png")
     arquivo = _arquivo_icone_api(slug)
     if arquivo:
         return url_for("static", filename=f"imge/icone_api/{arquivo}")
@@ -341,8 +392,10 @@ def catalogo_com_urls(icones_base_url: str) -> list[dict]:
             slug = item["slug"]
             i["icone_png"] = url_icone_integracao(slug, icones_base_url=base)
             i["icone_svg"] = f"{base}{slug}.svg"
-            if _arquivo_icone_api(slug) or slug == "mercado-pago":
+            if _arquivo_icone_api(slug) or slug in ("mercado-pago", "melhor-envio"):
                 i["icone_custom"] = True
+            if item.get("papel"):
+                i["bling_papel"] = item["papel"]
             itens.append(i)
         c["itens"] = itens
         out.append(c)
@@ -350,20 +403,32 @@ def catalogo_com_urls(icones_base_url: str) -> list[dict]:
 
 
 def catalogo_integracoes_modulo(icones_base_url: str, modulo: str | None = None) -> list[dict]:
-    """Oculta Opções financeiras para módulo vendedor."""
-    cats = catalogo_com_urls(icones_base_url)
+    """Catálogo filtrado pelo módulo ativo (fornecedor ou vendedor)."""
     mod = modulo or garantir_modulo_sessao()
-    if mod != MODULO_FORNECEDOR:
-        cats = [c for c in cats if not c.get("somente_fornecedor")]
-    return cats
+    cats_out: list[dict] = []
+    for cat in catalogo_com_urls(icones_base_url):
+        if not _visivel_integracao_modulo(cat, mod):
+            continue
+        itens = [i for i in cat.get("itens", []) if _visivel_integracao_modulo(i, mod)]
+        if not itens:
+            continue
+        c = dict(cat)
+        c["itens"] = itens
+        cats_out.append(c)
+    return cats_out
 
 
 def render_pagina_integracoes(*, nav_codigo: str, icones_base_url: str):
+    mod = garantir_modulo_sessao()
+    copy = hub_copy_integracoes(mod)
     return render_template(
         "frm_integracoes_hub.html",
         nav_codigo=nav_codigo,
+        hub_titulo=copy["titulo"],
+        hub_descricao=copy["descricao"],
+        modulo_ativo=mod,
         categorias_json=json.dumps(
-            catalogo_integracoes_modulo(icones_base_url),
+            catalogo_integracoes_modulo(icones_base_url, mod),
             ensure_ascii=False,
         ),
     )

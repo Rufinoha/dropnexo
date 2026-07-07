@@ -334,6 +334,33 @@ def carregar_config_me(cur, id_tenant: int) -> dict:
     }
 
 
+def calcular_frete(access_token: str, payload: dict[str, Any]) -> list[Any]:
+    """POST /me/shipment/calculate — cotação por produtos."""
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "User-Agent": me_user_agent(),
+    }
+    try:
+        r = requests.post(
+            f"{me_api_base()}/me/shipment/calculate",
+            headers=headers,
+            json=payload,
+            timeout=ME_OAUTH_TIMEOUT,
+        )
+    except requests.Timeout as e:
+        raise RuntimeError("Melhor Envio demorou para cotar o frete. Tente novamente.") from e
+    except requests.RequestException as e:
+        raise RuntimeError(f"Falha de rede ao cotar frete: {e}") from e
+    if r.status_code >= 400:
+        raise RuntimeError(f"Melhor Envio cotação falhou ({r.status_code}): {r.text[:500]}")
+    data = r.json()
+    if not isinstance(data, list):
+        raise RuntimeError("Resposta inesperada do Melhor Envio na cotação.")
+    return data
+
+
 def verificar_assinatura_webhook(corpo: bytes, assinatura: str) -> bool:
     """Valida X-ME-Signature (HMAC-SHA256 + base64)."""
     if not assinatura or not corpo:

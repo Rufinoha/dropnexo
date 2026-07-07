@@ -1,4 +1,4 @@
--- Integração Melhor Envio (fornecedor — cotação, etiquetas e rastreio)
+-- Integração Melhor Envio (vendedor — cotação, contratação de etiqueta e rastreio)
 
 CREATE TABLE IF NOT EXISTS tbl_integracao_melhor_envio (
     id_tenant INTEGER PRIMARY KEY REFERENCES tbl_tenant(id) ON DELETE CASCADE,
@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS tbl_integracao_melhor_envio (
 );
 
 COMMENT ON TABLE tbl_integracao_melhor_envio IS
-    'OAuth Melhor Envio por fornecedor — frete B2B (cotação, etiqueta, rastreio).';
+    'OAuth Melhor Envio por vendedor — frete B2B (cotação, etiqueta, rastreio).';
 
 ALTER TABLE tbl_pedido ADD COLUMN IF NOT EXISTS me_order_id VARCHAR(64);
 ALTER TABLE tbl_pedido ADD COLUMN IF NOT EXISTS me_protocol VARCHAR(80);

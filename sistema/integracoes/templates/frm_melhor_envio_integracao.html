@@ -13,10 +13,12 @@
         <i data-lucide="arrow-left"></i> Integrações
       </a>
       <div class="Mp_TitleRow">
-        <div class="Mp_Logo" aria-hidden="true" style="background:#00B2A9;color:#fff;font-weight:800;display:flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:12px;">ME</div>
+        <div class="Mp_Logo" aria-hidden="true">
+          <img src="{{ icone_melhor_envio }}" alt="" width="48" height="48" />
+        </div>
         <div>
           <h2>Melhor Envio</h2>
-          <p class="cl-page-desc">Cotação de fretes, compra de etiquetas e rastreio automático dos pedidos expedidos.</p>
+          <p class="cl-page-desc">Conecte sua conta para cotar e contratar fretes nos pedidos. O fornecedor apenas imprime a etiqueta.</p>
         </div>
       </div>
     </div>
@@ -32,7 +34,7 @@
 
   <section class="Mp_Card Mp_Card--info" id="me_sec_guia" {% if me_conectado %}hidden{% endif %}>
     <h3>Conectar sua conta</h3>
-    <p class="Mp_Hint">Autorize com a conta Melhor Envio que <strong>comprará as etiquetas</strong> e terá saldo para envios.</p>
+    <p class="Mp_Hint">Autorize com a conta Melhor Envio que <strong>pagará as etiquetas</strong> dos seus pedidos.</p>
     <div class="Mp_Actions">
       <a href="{{ url_for('melhor_envio.oauth_iniciar') }}" class="Cl_botaoprimario" id="me_btn_conectar">Conectar conta</a>
     </div>
@@ -41,7 +43,7 @@
   <section class="Mp_Card" id="me_painel_config" {% if not me_conectado %}hidden{% endif %}>
     <p id="me_conta_info" class="Mp_ContaResumo" hidden></p>
     <h3>Conta conectada</h3>
-    <p class="Mp_Hint">Os vendedores poderão cotar fretes nos pedidos. Na expedição, você gera etiquetas com esta conta.</p>
+    <p class="Mp_Hint">Use no passo <strong>Frete</strong> dos pedidos para cotar e contratar envios com sua conta Melhor Envio.</p>
     <div class="Mp_Actions Mp_Actions--foot">
       <button type="button" class="Cl_BtnCancelar" id="me_btn_desconectar">Desconectar</button>
     </div>

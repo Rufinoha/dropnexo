@@ -23,6 +23,7 @@ from api.melhor_envio.cliente import (
     webhook_url,
 )
 from global_utils import Var_ConectarBanco, login_obrigatorio, usuario_tem_permissao
+from srotas_plataforma import garantir_modulo_sessao
 
 _log = logging.getLogger(__name__)
 
@@ -32,6 +33,8 @@ me_bp = Blueprint(
     "melhor_envio",
     __name__,
     root_path=str(_MOD),
+    static_folder="static",
+    static_url_path="/static/api/melhor_envio",
 )
 
 
@@ -47,10 +50,19 @@ def _pode_integracoes() -> bool:
     )
 
 
-def _exigir_fornecedor():
-    if session.get("tenant_tipo_negocio") in ("fornecedor", "hibrido") or session.get("eh_desenvolvedor"):
+def _exigir_vendedor():
+    if session.get("eh_desenvolvedor"):
         return None
-    return redirect(url_for("integracoes.pagina", erro="Frete Melhor Envio é apenas para fornecedores."))
+    if garantir_modulo_sessao() == "vendedor":
+        return None
+    if session.get("tenant_tipo_negocio") == "hibrido":
+        return redirect(
+            url_for(
+                "integracoes.pagina",
+                erro="Conecte o Melhor Envio no módulo Vendedor (troque o perfil no topo).",
+            )
+        )
+    return redirect(url_for("integracoes.pagina", erro="Melhor Envio é apenas para vendedores."))
 
 
 @me_bp.get("/api/integracoes/melhor-envio/oauth/iniciar")
@@ -58,7 +70,7 @@ def _exigir_fornecedor():
 def oauth_iniciar():
     if not _pode_integracoes():
         return jsonify(success=False, message="Sem permissão."), 403
-    if (r := _exigir_fornecedor()) is not None:
+    if (r := _exigir_vendedor()) is not None:
         return r
     if not me_configurado():
         return redirect(
@@ -116,8 +128,8 @@ def oauth_callback():
 def desconectar():
     if not _pode_integracoes():
         return jsonify(success=False, message="Sem permissão."), 403
-    if session.get("tenant_tipo_negocio") not in ("fornecedor", "hibrido") and not session.get("eh_desenvolvedor"):
-        return jsonify(success=False, message="Apenas fornecedores."), 403
+    if garantir_modulo_sessao() != "vendedor" and not session.get("eh_desenvolvedor"):
+        return jsonify(success=False, message="Apenas vendedores."), 403
     id_tenant = session.get("id_tenant")
     conn = Var_ConectarBanco()
     try:

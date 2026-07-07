@@ -38,6 +38,13 @@
   let tipoAnexoFoco = null;
   /** @type {Record<string, string>} */
   let meioPagamentoPorFornecedor = {};
+  /** @type {Record<number, {opcoes?: Array, escolhido?: object, valor?: number, nome?: string}>} */
+  let fretePorPedido = {};
+  let meFreteConectado = false;
+  let freteDirty = false;
+
+  const elFreteConteudo = document.getElementById("pd_freteConteudo");
+  const elFreteAviso = document.getElementById("pd_freteAviso");
 
   const util = () => window.Util || {};
 
@@ -119,6 +126,29 @@
     window.lucide?.createIcons?.();
   }
 
+  function limparFreteLocal() {
+    fretePorPedido = {};
+    freteDirty = true;
+    atualizarResumo();
+  }
+
+  function sincronizarFreteDoGrupo() {
+    fretePorPedido = {};
+    (pedidosGrupo || []).forEach((p) => {
+      if (p.valor_frete > 0 || p.me_service_id) {
+        fretePorPedido[p.id] = {
+          valor: Number(p.valor_frete || p.me_preco_cotado || 0),
+          escolhido: { id: p.me_service_id, nome: p.frete_nome || "" },
+          nome: p.frete_nome || "",
+          transportadora: p.transportadora || "",
+          prazo: p.me_prazo_dias,
+        };
+      }
+    });
+    freteDirty = false;
+    atualizarResumo();
+  }
+
   function irPainel(id) {
     painelAtivo = id;
     document.querySelectorAll(".Pd_WizNavItem").forEach((btn) => {
@@ -130,6 +160,7 @@
       pane.classList.toggle("is-active", on);
     });
     window.lucide?.createIcons?.();
+    if (id === "frete") prepararFrete();
     if (id === "valores") renderPayIntegracoes();
     if (id === "anexos") renderAnexos();
   }
@@ -190,6 +221,7 @@
       quantidade: i.quantidade,
     }));
     pedidosGrupo = grupo.pedidos || [];
+    sincronizarFreteDoGrupo();
     renderItens();
     atualizarNavResumos();
     atualizarNavAnexos();
@@ -418,6 +450,193 @@
 
   function payKey(idForn, integracao) {
     return `${idForn}:${integracao}`;
+  }
+
+  async function carregarStatusMeFrete() {
+    try {
+      const r = await fetch("/vendedor/pedidos/frete/melhor-envio/status", { credentials: "same-origin" });
+      const j = await r.json();
+      meFreteConectado = !!(j.success && j.conectado);
+      return j;
+    } catch {
+      meFreteConectado = false;
+      return { conectado: false };
+    }
+  }
+
+  function mostrarFreteAviso(msg, isErro) {
+    if (!elFreteAviso) return;
+    if (!msg) {
+      elFreteAviso.hidden = true;
+      elFreteAviso.textContent = "";
+      return;
+    }
+    elFreteAviso.hidden = false;
+    elFreteAviso.textContent = msg;
+    elFreteAviso.classList.toggle("Pd_Msg--erro", !!isErro);
+  }
+
+  function renderFreteOpcoes(ped, opcoes) {
+    const sel = fretePorPedido[ped.id]?.escolhido?.id;
+    return (opcoes || [])
+      .map((o) => {
+        const checked = sel === o.id ? "checked" : "";
+        const prazo = o.prazo_dias != null ? `${o.prazo_dias} dia(s)` : "Prazo sob consulta";
+        const transp = o.transportadora ? `${o.transportadora} · ` : "";
+        return `
+        <label class="Pd_FreteOpcao${checked ? " is-selected" : ""}">
+          <input type="radio" name="frete_${ped.id}" value="${o.id}" data-ped="${ped.id}" ${checked} />
+          <span class="Pd_FreteOpcaoInfo">
+            <strong>${esc(o.nome)}</strong>
+            <small>${esc(transp)}${esc(prazo)}</small>
+          </span>
+          <span class="Pd_FreteOpcaoPreco">${fmt(o.preco)}</span>
+        </label>`;
+      })
+      .join("");
+  }
+
+  function bindFreteOpcoes() {
+    elFreteConteudo?.querySelectorAll('input[type="radio"][data-ped]').forEach((inp) => {
+      inp.addEventListener("change", () => escolherFrete(+inp.dataset.ped, +inp.value));
+    });
+  }
+
+  async function cotarFretePedido(idPed) {
+    const btn = elFreteConteudo?.querySelector(`[data-cotar="${idPed}"]`);
+    if (btn) btn.disabled = true;
+    mostrarFreteAviso("");
+    try {
+      const r = await fetch(`/vendedor/pedidos/${idPed}/frete/cotar`, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+      });
+      const j = await parseJsonResp(r);
+      if (!j.success) throw new Error(j.message || "Erro ao cotar frete.");
+      fretePorPedido[idPed] = { ...(fretePorPedido[idPed] || {}), opcoes: j.opcoes || [] };
+      const card = elFreteConteudo?.querySelector(`[data-frete-ped="${idPed}"]`);
+      const box = card?.querySelector(".Pd_FreteOpcoes");
+      const ped = pedidosGrupo.find((p) => p.id === idPed);
+      if (box && ped) {
+        box.innerHTML = renderFreteOpcoes(ped, j.opcoes);
+        bindFreteOpcoes();
+      }
+    } catch (e) {
+      mostrarFreteAviso(e.message || "Erro ao cotar frete.", true);
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  async function escolherFrete(idPed, serviceId) {
+    const opcoes = fretePorPedido[idPed]?.opcoes || [];
+    const opcao = opcoes.find((o) => o.id === serviceId);
+    mostrarFreteAviso("");
+    try {
+      const r = await fetch(`/vendedor/pedidos/${idPed}/frete/escolher`, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ service_id: serviceId, opcao: opcao?.raw }),
+      });
+      const j = await parseJsonResp(r);
+      if (!j.success) throw new Error(j.message || "Erro ao salvar frete.");
+      fretePorPedido[idPed] = {
+        ...(fretePorPedido[idPed] || {}),
+        valor: Number(j.valor_frete || 0),
+        escolhido: { id: serviceId, nome: j.nome || "" },
+        nome: j.nome || "",
+        prazo: j.me_prazo_dias,
+      };
+      const ped = pedidosGrupo.find((p) => p.id === idPed);
+      if (ped) {
+        ped.valor_frete = fretePorPedido[idPed].valor;
+        ped.me_service_id = serviceId;
+      }
+      elFreteConteudo?.querySelectorAll(`[data-frete-ped="${idPed}"] .Pd_FreteOpcao`).forEach((lbl) => {
+        lbl.classList.toggle("is-selected", +lbl.querySelector("input")?.value === serviceId);
+      });
+      atualizarResumo();
+    } catch (e) {
+      mostrarFreteAviso(e.message || "Erro ao salvar frete.", true);
+    }
+  }
+
+  async function renderFretePainel() {
+    if (!elFreteConteudo) return;
+    if (!carrinho.length) {
+      elFreteConteudo.innerHTML = '<p class="Pd_Hint">Adicione produtos ao pedido.</p>';
+      return;
+    }
+    if (!meFreteConectado) {
+      elFreteConteudo.innerHTML =
+        '<p class="Pd_Hint">Conecte o <strong>Melhor Envio</strong> em Integrações → Frete para cotar etiquetas.</p>';
+      return;
+    }
+    if (!pedidosGrupo.length) {
+      elFreteConteudo.innerHTML =
+        '<p class="Pd_Hint">Salve o rascunho para gerar os pedidos por fornecedor e cotar o frete.</p>';
+      return;
+    }
+    const cep = soDigitos(document.getElementById("pd_cep")?.value);
+    if (cep.length !== 8) {
+      elFreteConteudo.innerHTML =
+        '<p class="Pd_Hint">Informe o CEP de entrega no passo <strong>Endereço</strong>.</p>';
+      return;
+    }
+
+    elFreteConteudo.innerHTML = pedidosGrupo
+      .map((ped) => {
+        const frete = fretePorPedido[ped.id];
+        const escolhido = frete?.escolhido;
+        const opcoesHtml = frete?.opcoes?.length
+          ? renderFreteOpcoes(ped, frete.opcoes)
+          : escolhido
+            ? `<p class="Pd_Hint">Frete selecionado: <strong>${esc(escolhido.nome || frete.nome || "")}</strong> — ${fmt(frete.valor || 0)}</p>`
+            : '<p class="Pd_Hint">Clique em Cotar para ver as opções.</p>';
+        return `
+        <article class="Pd_FreteCard" data-frete-ped="${ped.id}">
+          <div class="Pd_FreteCardHead">
+            <div>
+              <h5>${esc(ped.fornecedor_nome || "Fornecedor")}</h5>
+              <small class="Pd_Hint">Pedido ${esc(ped.numero || "")}</small>
+            </div>
+            <button type="button" class="Cl_botaoFiltro" data-cotar="${ped.id}" ${editavelCampos ? "" : "disabled"}>Cotar</button>
+          </div>
+          <div class="Pd_FreteOpcoes">${opcoesHtml}</div>
+        </article>`;
+      })
+      .join("");
+
+    elFreteConteudo.querySelectorAll("[data-cotar]").forEach((btn) => {
+      btn.addEventListener("click", () => cotarFretePedido(+btn.dataset.cotar));
+    });
+    bindFreteOpcoes();
+    window.lucide?.createIcons?.();
+  }
+
+  async function prepararFrete() {
+    mostrarFreteAviso("");
+    if (!carrinho.length) {
+      if (elFreteConteudo) {
+        elFreteConteudo.innerHTML = '<p class="Pd_Hint">Adicione produtos ao pedido.</p>';
+      }
+      return;
+    }
+    if (editavelCampos && (!idGrupo || freteDirty)) {
+      const salvo = await salvar(false);
+      if (!salvo) return;
+    }
+    await carregarStatusMeFrete();
+    await renderFretePainel();
+    if (pedidosGrupo.length && meFreteConectado && editavelCampos) {
+      for (const ped of pedidosGrupo) {
+        if (!fretePorPedido[ped.id]?.opcoes?.length && !fretePorPedido[ped.id]?.escolhido) {
+          await cotarFretePedido(ped.id);
+        }
+      }
+    }
   }
 
   async function renderPayIntegracoes() {
@@ -774,11 +993,11 @@
     fornecedores.forEach((f) => {
       taxa += Number(taxasPorFornecedor[f] || taxasPorFornecedor[String(f)] || 0);
     });
-    const frete = 0;
+    const frete = Object.values(fretePorPedido).reduce((s, f) => s + Number(f.valor || 0), 0);
     el.subtotal.textContent = fmt(sub);
     if (elSubtotalMini) elSubtotalMini.textContent = fmt(sub);
     el.taxa.textContent = fmt(taxa);
-    el.total.textContent = fmt(sub + taxa + frete);
+    el.total.textContent = fmt(sub + taxa);
     if (elFrete) elFrete.textContent = fmt(frete);
     el.linhaTaxa.hidden = taxa <= 0;
     el.itensVazio.hidden = carrinho.length > 0;
@@ -809,6 +1028,7 @@
       });
     }
     renderItens();
+    limparFreteLocal();
     limparComboProduto();
   }
 
@@ -855,14 +1075,15 @@
     el.itens.querySelectorAll("[data-rm]").forEach((b) => {
       b.addEventListener("click", () => {
         carrinho.splice(+b.dataset.rm, 1);
+        limparFreteLocal();
         renderItens();
-        atualizarResumo();
       });
     });
     el.itens.querySelectorAll(".Pd_QtdInput").forEach((inp) => {
       inp.addEventListener("change", () => {
         const idx = +inp.dataset.idx;
         carrinho[idx].quantidade = Math.max(1, +inp.value || 1);
+        limparFreteLocal();
         atualizarResumo();
       });
     });
@@ -873,6 +1094,8 @@
     idGrupo = null;
     carrinho = [];
     pedidosGrupo = [];
+    fretePorPedido = {};
+    freteDirty = false;
     pedidoFocoAnexo = null;
     tipoAnexoFoco = null;
     meioPagamentoPorFornecedor = {};
@@ -929,6 +1152,7 @@
       set("pd_cidade", j.localidade);
       set("pd_uf", j.uf);
       if (j.complemento) set("pd_compl", j.complemento);
+      limparFreteLocal();
       atualizarNavResumos();
       document.getElementById("pd_numero")?.focus();
     } catch (e) {
@@ -1005,6 +1229,7 @@
     try {
       const grupo = await carregarGrupo(idGrupo);
       pedidosGrupo = grupo.pedidos || [];
+      sincronizarFreteDoGrupo();
       atualizarNavAnexos();
     } catch {
       /* anexos opcionais */
@@ -1115,7 +1340,12 @@
 
   ["pd_cliNome", "pd_cliDoc", "pd_cliEmail", "pd_cliTel", "pd_cep", "pd_logradouro",
     "pd_numero", "pd_compl", "pd_bairro", "pd_cidade", "pd_uf"].forEach((id) => {
-    document.getElementById(id)?.addEventListener("input", atualizarNavResumos);
+    document.getElementById(id)?.addEventListener("input", () => {
+      if (["pd_cep", "pd_logradouro", "pd_numero", "pd_compl", "pd_bairro", "pd_cidade", "pd_uf"].includes(id)) {
+        limparFreteLocal();
+      }
+      atualizarNavResumos();
+    });
   });
   document.getElementById("pd_btnFiltrar")?.addEventListener("click", carregarLista);
   document.getElementById("pd_btnCep")?.addEventListener("click", buscarCep);

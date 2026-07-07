@@ -42,12 +42,22 @@
   };
 
   const ICONES_CATEGORIA = {
-    marketplace: "store",
-    ecommerce: "shopping-bag",
-    frete: "truck",
-    erp: "layout-grid",
     financeiro: "landmark",
+    catalogo: "package",
+    pedidos: "shopping-cart",
+    frete: "truck",
   };
+
+  function configUrlIntegracao(item) {
+    const st = statusIntegracao(item.slug);
+    if (item.slug === "bling" && item.bling_papel) {
+      return `/integracoes/bling?papel=${encodeURIComponent(item.bling_papel)}`;
+    }
+    if (item.slug === "mercado-pago") return st.config_url || "/integracoes/mercadopago";
+    if (item.slug === "pix-manual") return st.config_url || "/integracoes/pix-manual";
+    if (item.slug === "melhor-envio") return st.config_url || "/integracoes/melhor-envio";
+    return st.config_url || `/integracoes/${item.slug}`;
+  }
 
   const INTEGRACOES_ATIVAS = new Set(["bling", "mercado-pago", "pix-manual", "melhor-envio"]);
 
@@ -195,7 +205,7 @@
     return `
       <div class="FnInt_CardWrap${conectado ? " is-connected" : ""}${!ativa ? " is-soon" : ""}${picked ? " is-picked" : ""}" data-slug="${slug}" role="listitem">
         ${soonSeal}
-        <button type="button" class="FnInt_Card" data-slug="${slug}" data-nome="${item.nome}" data-ativa="${ativa ? "1" : "0"}" data-conectado="${conectado ? "1" : "0"}"${!ativa ? ' title="Em breve"' : ""}>
+        <button type="button" class="FnInt_Card" data-slug="${slug}" data-nome="${item.nome}" data-ativa="${ativa ? "1" : "0"}" data-conectado="${conectado ? "1" : "0"}" data-bling-papel="${item.bling_papel || ""}"${!ativa ? ' title="Em breve"' : ""}>
           <div class="FnInt_CardIcon" style="--int-cor:${item.cor || "#475569"}">
             <img src="${item.icone_png}" alt="" loading="eager" decoding="async"
               onload="this.parentElement.classList.remove('is-fallback')"
@@ -230,7 +240,7 @@
     }
   }
 
-  function abrirIntegracao(slug, nome, conectado, ativa, dblclick = false) {
+  function abrirIntegracao(slug, nome, conectado, ativa, dblclick = false, blingPapel = "") {
     if (!ativa) {
       Swal.fire({
         title: nome,
@@ -241,21 +251,22 @@
       });
       return;
     }
-    if (slug === "pix-manual") {
-      const st = statusIntegracao(slug);
-      window.location.href = st.config_url || "/integracoes/pix-manual";
+    const cat = categorias.find((c) => c.id === categoriaAtiva);
+    const item =
+      cat?.itens?.find((i) => i.slug === slug && (!blingPapel || i.bling_papel === blingPapel)) ||
+      cat?.itens?.find((i) => i.slug === slug) ||
+      { slug, nome, descricao: "", bling_papel: blingPapel };
+
+    if (slug === "pix-manual" || slug === "melhor-envio") {
+      window.location.href = configUrlIntegracao(item);
       return;
     }
     if (conectado) {
-      const st = statusIntegracao(slug);
-      let url = st.config_url || `/integracoes/${slug}`;
-      if (dblclick && slug === "bling") url += "?aba=estoque";
-      if (slug === "mercado-pago") url = st.config_url || "/integracoes/mercadopago";
+      let url = configUrlIntegracao(item);
+      if (dblclick && slug === "bling" && item.bling_papel === "catalogo") url += (url.includes("?") ? "&" : "?") + "aba=estoque";
       window.location.href = url;
       return;
     }
-    const cat = categorias.find((c) => c.id === categoriaAtiva);
-    const item = cat?.itens?.find((i) => i.slug === slug) || { slug, nome, descricao: "" };
     abrirModalCard(item);
   }
 
@@ -293,7 +304,8 @@
         card.dataset.nome || "Integração",
         card.dataset.conectado === "1",
         card.dataset.ativa === "1",
-        false
+        false,
+        card.dataset.blingPapel || ""
       );
       clickTimer = null;
     }, 260);
@@ -312,7 +324,8 @@
       card.dataset.nome || "Integração",
       card.dataset.conectado === "1",
       card.dataset.ativa === "1",
-      true
+      true,
+      card.dataset.blingPapel || ""
     );
   });
 
@@ -326,7 +339,11 @@
 
     const params = new URLSearchParams(location.search);
     if (params.get("conectado") === "bling") {
-      categoriaAtiva = categorias.some((c) => c.id === "erp") ? "erp" : categoriaAtiva;
+      categoriaAtiva = categorias.some((c) => c.id === "catalogo")
+        ? "catalogo"
+        : categorias.some((c) => c.id === "pedidos")
+          ? "pedidos"
+          : categoriaAtiva;
       await carregarStatusHub();
       Swal.fire({
         icon: "success",
@@ -358,7 +375,6 @@
     }
     const erroParam = params.get("erro");
     if (erroParam) {
-      categoriaAtiva = categorias.some((c) => c.id === "erp") ? "erp" : categoriaAtiva;
       Swal.fire({
         icon: "error",
         title: "Não foi possível conectar",

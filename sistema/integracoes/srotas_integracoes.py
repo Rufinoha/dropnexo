@@ -1,10 +1,10 @@
 from pathlib import Path
 
-from flask import Blueprint, jsonify, redirect, render_template, session, url_for
+from flask import Blueprint, jsonify, redirect, render_template, request, session, url_for
 
 from global_utils import Var_ConectarBanco, login_obrigatorio, usuario_tem_permissao
-from srotas_plataforma import garantir_modulo_sessao
-from srotas_negocio import catalogo_com_urls, catalogo_integracoes_modulo, render_pagina_integracoes, url_icone_integracao
+from srotas_plataforma import MODULO_FORNECEDOR, MODULO_VENDEDOR, garantir_modulo_sessao
+from srotas_negocio import catalogo_integracoes_modulo, render_pagina_integracoes, url_icone_integracao
 
 _MOD_DIR = Path(__file__).resolve().parent
 
@@ -34,6 +34,20 @@ def _pode_ver_integracoes() -> bool:
     )
 
 
+def _redir_hub(erro: str):
+    return redirect(url_for("integracoes.pagina", erro=erro))
+
+
+def _exigir_modulo(*modulos: str):
+    if session.get("eh_desenvolvedor"):
+        return None
+    if garantir_modulo_sessao() in modulos:
+        return None
+    labels = {"fornecedor": "fornecedores", "vendedor": "vendedores"}
+    esperado = " ou ".join(labels.get(m, m) for m in modulos)
+    return _redir_hub(f"Esta integração está disponível apenas para {esperado}.")
+
+
 @integracoes_bp.get("/integracoes")
 @login_obrigatorio()
 def pagina():
@@ -58,17 +72,35 @@ def _bling_conectado(id_tenant: int | None) -> bool:
         conn.close()
 
 
+def _bling_papel_padrao() -> str:
+    return "pedidos" if garantir_modulo_sessao() == MODULO_VENDEDOR else "catalogo"
+
+
 @integracoes_bp.get("/integracoes/bling")
 @login_obrigatorio()
 def pagina_bling():
     if not _pode_ver_integracoes():
         return redirect(url_for("dashboard.index"))
+    papel = (request.args.get("papel") or _bling_papel_padrao()).strip().lower()
+    if papel not in ("catalogo", "pedidos"):
+        papel = _bling_papel_padrao()
+    if papel == "catalogo" and (r := _exigir_modulo(MODULO_FORNECEDOR)) is not None:
+        return r
+    if papel == "pedidos" and (r := _exigir_modulo(MODULO_VENDEDOR)) is not None:
+        return r
     bling_conectado = _bling_conectado(session.get("id_tenant"))
+    subtitulo = (
+        "Importe pedidos de venda pagos do seu Bling."
+        if papel == "pedidos"
+        else "Sincronize produtos, estoque e categorias do seu Bling."
+    )
     return render_template(
         "frm_bling_integracao.html",
         nav_codigo="integracoes",
         icone_bling=url_icone_integracao("bling", icones_base_url=_icones_base_url()),
         bling_conectado=bling_conectado,
+        bling_papel=papel,
+        bling_subtitulo=subtitulo,
     )
 
 
@@ -77,8 +109,8 @@ def pagina_bling():
 def pagina_mercadopago():
     if not _pode_ver_integracoes():
         return redirect(url_for("dashboard.index"))
-    if session.get("tenant_tipo_negocio") not in ("fornecedor", "hibrido") and not session.get("eh_desenvolvedor"):
-        return redirect(url_for("integracoes.pagina", erro="Opções financeiras são apenas para fornecedores."))
+    if (r := _exigir_modulo(MODULO_FORNECEDOR)) is not None:
+        return r
     from api.mercadopago.cliente import mp_conectado
 
     id_tenant = session.get("id_tenant")
@@ -105,8 +137,8 @@ def pagina_mercadopago():
 def pagina_pix_manual():
     if not _pode_ver_integracoes():
         return redirect(url_for("dashboard.index"))
-    if session.get("tenant_tipo_negocio") not in ("fornecedor", "hibrido") and not session.get("eh_desenvolvedor"):
-        return redirect(url_for("integracoes.pagina", erro="Opções financeiras são apenas para fornecedores."))
+    if (r := _exigir_modulo(MODULO_FORNECEDOR)) is not None:
+        return r
     from api.pix_manual.cliente import pix_manual_ativo
 
     id_tenant = session.get("id_tenant")
@@ -133,8 +165,8 @@ def pagina_pix_manual():
 def pagina_melhor_envio():
     if not _pode_ver_integracoes():
         return redirect(url_for("dashboard.index"))
-    if session.get("tenant_tipo_negocio") not in ("fornecedor", "hibrido") and not session.get("eh_desenvolvedor"):
-        return redirect(url_for("integracoes.pagina", erro="Frete Melhor Envio é apenas para fornecedores."))
+    if (r := _exigir_modulo(MODULO_VENDEDOR)) is not None:
+        return r
     from api.melhor_envio.cliente import me_conectado
 
     id_tenant = session.get("id_tenant")
@@ -153,6 +185,7 @@ def pagina_melhor_envio():
         "frm_melhor_envio_integracao.html",
         nav_codigo="integracoes",
         me_conectado=conectado,
+        icone_melhor_envio=url_icone_integracao("melhor-envio", icones_base_url=_icones_base_url()),
     )
 
 
@@ -163,64 +196,75 @@ def hub_status():
         return jsonify(success=False, message="Sem permissão."), 403
 
     id_tenant = session.get("id_tenant")
-    bling_conectado = False
-    mp_ok = False
-    pix_ok = False
-    me_ok = False
-    conn = Var_ConectarBanco()
-    try:
-        cur = conn.cursor()
-        cur.execute(
-            "SELECT status FROM tbl_integracao_bling WHERE id_tenant = %s",
-            (id_tenant,),
-        )
-        row = cur.fetchone()
-        bling_conectado = bool(row and row[0] == "conectado")
-        if id_tenant:
-            from api.mercadopago.cliente import mp_conectado
-            from api.pix_manual.cliente import pix_manual_ativo
-            from api.melhor_envio.cliente import me_conectado
+    modulo = garantir_modulo_sessao()
+    bling_conectado = _bling_conectado(id_tenant)
+    integracoes: dict = {}
 
-            try:
-                mp_ok = mp_conectado(cur, int(id_tenant))
-            except Exception:
-                mp_ok = False
-            try:
-                pix_ok = pix_manual_ativo(cur, int(id_tenant))
-            except Exception:
-                pix_ok = False
-            try:
-                me_ok = me_conectado(cur, int(id_tenant))
-            except Exception:
-                me_ok = False
-    finally:
-        conn.close()
+    if modulo == MODULO_FORNECEDOR:
+        mp_ok = False
+        pix_ok = False
+        conn = Var_ConectarBanco()
+        try:
+            cur = conn.cursor()
+            if id_tenant:
+                from api.mercadopago.cliente import mp_conectado
+                from api.pix_manual.cliente import pix_manual_ativo
+
+                try:
+                    mp_ok = mp_conectado(cur, int(id_tenant))
+                except Exception:
+                    mp_ok = False
+                try:
+                    pix_ok = pix_manual_ativo(cur, int(id_tenant))
+                except Exception:
+                    pix_ok = False
+        finally:
+            conn.close()
+        integracoes["bling"] = {
+            "conectado": bling_conectado,
+            "config_url": url_for("integracoes.pagina_bling", papel="catalogo"),
+            "oauth_url": url_for("bling.oauth_iniciar"),
+        }
+        integracoes["mercado-pago"] = {
+            "conectado": mp_ok,
+            "config_url": url_for("integracoes.pagina_mercadopago"),
+            "oauth_url": url_for("mercadopago.oauth_iniciar"),
+        }
+        integracoes["pix-manual"] = {
+            "conectado": pix_ok,
+            "config_url": url_for("integracoes.pagina_pix_manual"),
+            "oauth_url": "",
+        }
+
+    if modulo == MODULO_VENDEDOR:
+        me_ok = False
+        conn = Var_ConectarBanco()
+        try:
+            cur = conn.cursor()
+            if id_tenant:
+                from api.melhor_envio.cliente import me_conectado
+
+                try:
+                    me_ok = me_conectado(cur, int(id_tenant))
+                except Exception:
+                    me_ok = False
+        finally:
+            conn.close()
+        integracoes["bling"] = {
+            "conectado": bling_conectado,
+            "config_url": url_for("integracoes.pagina_bling", papel="pedidos"),
+            "oauth_url": url_for("bling.oauth_iniciar"),
+        }
+        integracoes["melhor-envio"] = {
+            "conectado": me_ok,
+            "config_url": url_for("integracoes.pagina_melhor_envio"),
+            "oauth_url": url_for("melhor_envio.oauth_iniciar"),
+        }
 
     return jsonify(
         success=True,
-        contexto_modulo=garantir_modulo_sessao(),
-        integracoes={
-            "bling": {
-                "conectado": bling_conectado,
-                "config_url": url_for("integracoes.pagina_bling"),
-                "oauth_url": url_for("bling.oauth_iniciar"),
-            },
-            "mercado-pago": {
-                "conectado": mp_ok,
-                "config_url": url_for("integracoes.pagina_mercadopago"),
-                "oauth_url": url_for("mercadopago.oauth_iniciar"),
-            },
-            "pix-manual": {
-                "conectado": pix_ok,
-                "config_url": url_for("integracoes.pagina_pix_manual"),
-                "oauth_url": "",
-            },
-            "melhor-envio": {
-                "conectado": me_ok,
-                "config_url": url_for("integracoes.pagina_melhor_envio"),
-                "oauth_url": url_for("melhor_envio.oauth_iniciar"),
-            },
-        },
+        contexto_modulo=modulo,
+        integracoes=integracoes,
     )
 
 
@@ -229,4 +273,8 @@ def hub_status():
 def catalogo():
     if not _pode_ver_integracoes():
         return jsonify(success=False, message="Sem permissão."), 403
-    return jsonify(success=True, categorias=catalogo_integracoes_modulo(_icones_base_url()))
+    return jsonify(
+        success=True,
+        contexto_modulo=garantir_modulo_sessao(),
+        categorias=catalogo_integracoes_modulo(_icones_base_url()),
+    )

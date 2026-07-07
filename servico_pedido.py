@@ -625,6 +625,12 @@ def salvar_rascunho(
                 ),
             )
             cur.execute("DELETE FROM tbl_pedido_item WHERE id_pedido = %s", (id_pedido,))
+            try:
+                from servico_melhor_envio import limpar_frete_pedido
+
+                limpar_frete_pedido(cur, id_pedido)
+            except Exception:
+                pass
         else:
             numero = _gerar_numero(cur, "PED", id_vendedor, "tbl_pedido", "id_tenant_vendedor")
             cur.execute(
@@ -1185,6 +1191,13 @@ def obter_grupo_pedido(cur, id_vendedor: int, id_grupo: int) -> dict | None:
     itens: list[dict] = []
     pedidos: list[dict] = []
     for pid, status, status_pag, meio_pag, origem, valor_total, id_forn, forn_nome, numero, pago_em, pix_payload, pix_txid in pedidos_rows:
+        frete_info = {}
+        try:
+            from servico_melhor_envio import frete_resumo_pedido
+
+            frete_info = frete_resumo_pedido(cur, int(pid))
+        except Exception:
+            frete_info = {}
         pedidos.append(
             {
                 "id": int(pid),
@@ -1199,6 +1212,7 @@ def obter_grupo_pedido(cur, id_vendedor: int, id_grupo: int) -> dict | None:
                 "pago_em": pago_em.isoformat() if pago_em else None,
                 "pix_manual_payload": pix_payload or "",
                 "pix_manual_txid": pix_txid or "",
+                **frete_info,
             }
         )
         for item in listar_itens_pedido(cur, int(pid)):

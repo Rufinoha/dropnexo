@@ -26,6 +26,11 @@ from servico_pedido import (
     taxas_fornecedores_vendedor,
 )
 from servico_pedido_mp import iniciar_pagamento, meios_pagamento_pedido, sincronizar_pagamento_pedido
+from servico_melhor_envio import (
+    cotar_frete_pedido,
+    escolher_frete_pedido,
+    status_melhor_envio_vendedor,
+)
 from srotas_plataforma import MODULO_VENDEDOR
 
 _MOD = Path(__file__).resolve().parent
@@ -341,6 +346,73 @@ def pedidos_salvar():
         return jsonify(success=True, message="Rascunho salvo.", **res)
     except ValueError as e:
         return jsonify(success=False, message=str(e)), 400
+    finally:
+        conn.close()
+
+
+@vd_pedidos_bp.get("/vendedor/pedidos/frete/melhor-envio/status")
+@login_obrigatorio()
+@exigir_modulo(MODULO_VENDEDOR)
+@exigir_permissao(codigo="vd_pedidos.ver")
+def pedidos_frete_me_status():
+    id_v = _id_vendedor()
+    if not id_v:
+        return jsonify(success=False, message="Sessão inválida."), 403
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        st = status_melhor_envio_vendedor(cur, id_v)
+        return jsonify(success=True, **st)
+    finally:
+        conn.close()
+
+
+@vd_pedidos_bp.post("/vendedor/pedidos/<int:id_pedido>/frete/cotar")
+@login_obrigatorio()
+@exigir_modulo(MODULO_VENDEDOR)
+@exigir_permissao(codigo="vd_pedidos.editar")
+def pedidos_frete_cotar(id_pedido: int):
+    id_v = _id_vendedor()
+    if not id_v:
+        return jsonify(success=False, message="Sessão inválida."), 403
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        res = cotar_frete_pedido(cur, id_v, id_pedido)
+        conn.commit()
+        return jsonify(success=True, **res)
+    except ValueError as e:
+        return jsonify(success=False, message=str(e)), 400
+    except RuntimeError as e:
+        return jsonify(success=False, message=str(e)), 502
+    finally:
+        conn.close()
+
+
+@vd_pedidos_bp.post("/vendedor/pedidos/<int:id_pedido>/frete/escolher")
+@login_obrigatorio()
+@exigir_modulo(MODULO_VENDEDOR)
+@exigir_permissao(codigo="vd_pedidos.editar")
+def pedidos_frete_escolher(id_pedido: int):
+    id_v = _id_vendedor()
+    if not id_v:
+        return jsonify(success=False, message="Sessão inválida."), 403
+    body = request.get_json(silent=True) or {}
+    try:
+        service_id = int(body.get("service_id"))
+    except (TypeError, ValueError):
+        return jsonify(success=False, message="Informe service_id da opção de frete."), 400
+    opcao_raw = body.get("opcao") if isinstance(body.get("opcao"), dict) else None
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        res = escolher_frete_pedido(cur, id_v, id_pedido, service_id, opcao_raw=opcao_raw)
+        conn.commit()
+        return jsonify(success=True, message="Frete selecionado.", **res)
+    except ValueError as e:
+        return jsonify(success=False, message=str(e)), 400
+    except RuntimeError as e:
+        return jsonify(success=False, message=str(e)), 502
     finally:
         conn.close()
 
