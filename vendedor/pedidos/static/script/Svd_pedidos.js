@@ -567,6 +567,7 @@
       const j = await parseJsonResp(r);
       if (!j.success) throw new Error(j.message || "Erro ao cotar frete.");
       fretePorPedido[idPed] = { ...(fretePorPedido[idPed] || {}), opcoes: j.opcoes || [] };
+      if (j.aviso) mostrarFreteAviso(j.aviso, false);
       const card = elFreteConteudo?.querySelector(`[data-frete-ped="${idPed}"]`);
       const box = card?.querySelector(".Pd_FreteOpcoes");
       const ped = pedidosGrupo.find((p) => p.id === idPed);

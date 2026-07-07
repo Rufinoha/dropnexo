@@ -180,6 +180,24 @@ def _produtos_me_pedido(cur, id_pedido: int) -> list[dict[str, Any]]:
     return produtos
 
 
+def _extrair_erros_me(resposta: list[Any]) -> list[str]:
+    erros: list[str] = []
+    for item in resposta:
+        if not isinstance(item, dict):
+            continue
+        err = item.get("error")
+        if err:
+            if isinstance(err, dict):
+                txt = err.get("message") or err.get("description") or str(err)
+            else:
+                txt = str(err)
+            nome = item.get("name") or item.get("company", {}).get("name") if isinstance(item.get("company"), dict) else ""
+            erros.append(f"{nome}: {txt}".strip(": ") if nome else txt)
+        elif not item.get("id") and item.get("message"):
+            erros.append(str(item["message"]))
+    return list(dict.fromkeys(erros))[:6]
+
+
 def _normalizar_opcoes_me(resposta: list[Any]) -> list[dict[str, Any]]:
     opcoes: list[dict[str, Any]] = []
     for item in resposta:
@@ -206,6 +224,49 @@ def _normalizar_opcoes_me(resposta: list[Any]) -> list[dict[str, Any]]:
         )
     opcoes.sort(key=lambda o: o["preco"])
     return opcoes
+
+
+def _cotar_me_com_fallback_receipt(
+    token: str,
+    payload: dict[str, Any],
+    *,
+    receipt_ativo: bool,
+) -> tuple[list[dict[str, Any]], list[Any], str | None]:
+    """Cota no ME; se receipt ligado bloquear tudo, tenta sem aviso de recebimento."""
+    resposta = calcular_frete(token, payload)
+    opcoes = _normalizar_opcoes_me(resposta)
+    if opcoes or not receipt_ativo:
+        return opcoes, resposta, None
+
+    opts = dict(payload.get("options") or {})
+    if not opts.get("receipt"):
+        return opcoes, resposta, None
+
+    payload_sem_receipt = {**payload, "options": {**opts, "receipt": False}}
+    resposta2 = calcular_frete(token, payload_sem_receipt)
+    opcoes2 = _normalizar_opcoes_me(resposta2)
+    if opcoes2:
+        return (
+            opcoes2,
+            resposta2,
+            "Nenhuma transportadora ofereceu aviso de recebimento nesta rota; exibindo cotações sem esse serviço.",
+        )
+    return opcoes, resposta2 or resposta, None
+
+
+def _mensagem_sem_opcoes_me(resposta: list[Any], *, receipt_ativo: bool) -> str:
+    erros = _extrair_erros_me(resposta)
+    msg = "Nenhuma transportadora retornou preço para este pedido."
+    if erros:
+        msg += " " + " · ".join(erros)
+    else:
+        msg += (
+            " Confira no painel Melhor Envio se há transportadoras habilitadas para a rota "
+            "(Integrações → Transportadoras) e se peso/dimensões dos produtos estão em kg e cm."
+        )
+    if receipt_ativo:
+        msg += " O aviso de recebimento estava ligado nas preferências; tente desativá-lo em Integrações → Melhor Envio."
+    return msg
 
 
 def status_melhor_envio_vendedor(cur, id_vendedor: int) -> dict:
@@ -254,17 +315,22 @@ def cotar_frete_pedido(cur, id_vendedor: int, id_pedido: int) -> dict:
     }
 
     token = obter_access_token_valido(cur, id_vendedor)
-    resposta = calcular_frete(token, payload)
-    opcoes = _normalizar_opcoes_me(resposta)
+    receipt_ativo = bool(me_opts["receipt"])
+    opcoes, resposta, aviso = _cotar_me_com_fallback_receipt(
+        token, payload, receipt_ativo=receipt_ativo
+    )
     if not opcoes:
-        raise ValueError("Nenhuma opção de frete retornada para este pedido.")
+        raise ValueError(_mensagem_sem_opcoes_me(resposta, receipt_ativo=receipt_ativo))
 
-    return {
+    out = {
         "id_pedido": id_pedido,
         "cep_origem": cep_orig,
         "cep_destino": cep_dest,
         "opcoes": opcoes,
     }
+    if aviso:
+        out["aviso"] = aviso
+    return out
 
 
 def escolher_frete_pedido(
