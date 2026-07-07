@@ -17,17 +17,67 @@ _SITUACOES_BLOQUEADAS = frozenset(
 )
 
 
-def pedido_bling_importavel(pedido: dict) -> bool:
+def _situacao_id(raw: Any) -> int | None:
+    if raw is None or raw == "":
+        return None
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return None
+
+
+def extrair_situacao_pedido(pedido: dict, *, id_tenant: int | None = None) -> tuple[str, int | None]:
+    """Retorna (rótulo em minúsculas, id da situação ou None)."""
+    raw = pedido.get("situacao")
+    if isinstance(raw, str):
+        return raw.strip().lower(), None
+    if not isinstance(raw, dict):
+        return "", None
+
+    sid = _situacao_id(raw.get("id"))
+    nome = (raw.get("valor") or raw.get("nome") or raw.get("descricao") or "").strip()
+    if not nome and sid is not None and id_tenant is not None:
+        from api.bling.sync_pedido_status import _listar_situacoes_venda
+
+        for sit in _listar_situacoes_venda(id_tenant):
+            if _situacao_id(sit.get("id")) == sid:
+                nome = (sit.get("nome") or sit.get("descricao") or sit.get("valor") or "").strip()
+                break
+    return nome.lower(), sid
+
+
+def descricao_situacao_pedido(pedido: dict, *, id_tenant: int | None = None) -> str:
+    """Texto legível da situação para logs e mensagens."""
+    nome, sid = extrair_situacao_pedido(pedido, id_tenant=id_tenant)
+    partes: list[str] = []
+    if nome:
+        partes.append(nome)
+    if sid is not None:
+        partes.append(f"id={sid}")
+    if not partes:
+        raw = pedido.get("situacao")
+        if raw not in (None, "", {}):
+            partes.append(str(raw)[:160])
+    return " · ".join(partes) if partes else "(sem situação)"
+
+
+def _situacao_bloqueada(nome: str) -> bool:
+    if not nome:
+        return False
+    if nome in _SITUACOES_BLOQUEADAS:
+        return True
+    return "cancel" in nome
+
+
+def pedido_bling_importavel(pedido: dict, *, id_tenant: int | None = None) -> bool:
     """True se o pedido no Bling está pago/confirmado o suficiente para importar."""
     if not pedido:
         return False
-    situacao = pedido.get("situacao") or {}
-    valor = (situacao.get("valor") or situacao.get("nome") or "").strip().lower()
-    if not valor:
-        return False
-    if valor in _SITUACOES_BLOQUEADAS:
-        return False
-    if "cancel" in valor:
+    nome, sid = extrair_situacao_pedido(pedido, id_tenant=id_tenant)
+    if nome:
+        if _situacao_bloqueada(nome):
+            return False
+    elif sid is None:
         return False
     itens = pedido.get("itens") or []
     return bool(itens)
@@ -106,5 +156,5 @@ def parse_pedido_bling(pedido: dict) -> dict[str, Any]:
         "valor_total_bling": total,
         "valor_frete": frete,
         "observacoes": obs,
-        "situacao": (pedido.get("situacao") or {}).get("valor") or "",
+        "situacao": extrair_situacao_pedido(pedido, id_tenant=None)[0],
     }

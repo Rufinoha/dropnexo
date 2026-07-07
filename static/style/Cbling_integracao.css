@@ -257,11 +257,44 @@
 }
 
 .Bl_LogItem {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
   font-size: 0.82rem;
   padding: 0.45rem 0.6rem;
   border-radius: 8px;
   background: #f8fafc;
   color: #475569;
+  min-width: 0;
+}
+
+.Bl_LogStatus {
+  flex: 0 0 auto;
+  font-weight: 700;
+  text-transform: lowercase;
+}
+
+.Bl_LogStatus::after {
+  content: "—";
+  margin-left: 0.4rem;
+  font-weight: 400;
+  color: #94a3b8;
+}
+
+.Bl_LogCorpo {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.Bl_LogData {
+  flex: 0 0 auto;
+  margin-left: auto;
+  font-size: 0.76rem;
+  color: #94a3b8;
+  white-space: nowrap;
 }
 
 .Bl_LogItem.is-erro {
@@ -275,9 +308,8 @@
 }
 
 .Bl_LogDetalhe {
-  display: block;
-  margin-top: 0.25rem;
-  color: #64748b;
+  display: inline;
+  color: inherit;
   font-weight: 400;
 }
 

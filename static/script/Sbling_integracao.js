@@ -1229,9 +1229,13 @@
         .map(
           (l) =>
             `<li class="Bl_LogItem${l.status === "erro" ? " is-erro" : l.status === "aviso" ? " is-aviso" : ""}">` +
-            `<strong>${l.status}</strong> — ${l.resumo || ""}` +
-            (l.detalhe ? `<br><small class="Bl_LogDetalhe">${escHtml(l.detalhe)}</small>` : "") +
-            (l.criado_em ? ` <span>(${new Date(l.criado_em).toLocaleString("pt-BR")})</span>` : "") +
+            `<span class="Bl_LogStatus">${escHtml(l.status)}</span>` +
+            `<span class="Bl_LogCorpo">${escHtml(l.resumo || "")}` +
+            (l.detalhe ? ` — ${escHtml(l.detalhe)}` : "") +
+            `</span>` +
+            (l.criado_em
+              ? `<span class="Bl_LogData">${new Date(l.criado_em).toLocaleString("pt-BR")}</span>`
+              : "") +
             `</li>`
         )
         .join("") || '<li class="Bl_LogItem">Nenhum log ainda.</li>';

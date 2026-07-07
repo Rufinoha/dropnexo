@@ -5,7 +5,11 @@ import json
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from api.bling.campos_pedido import parse_pedido_bling, pedido_bling_importavel
+from api.bling.campos_pedido import (
+    descricao_situacao_pedido,
+    parse_pedido_bling,
+    pedido_bling_importavel,
+)
 from api.bling.cliente import api_request
 from global_utils import agora_utc
 from servico_pedido import importar_pedido_bling
@@ -108,14 +112,14 @@ def _importar_um_pedido(
     *,
     contexto: str,
     id_usuario: int | None,
-) -> tuple[list[int], str | None]:
-    """Retorna (ids_pedidos_criados, motivo_ignorado)."""
+) -> tuple[list[int], str | None, str | None]:
+    """Retorna (ids_pedidos_criados, motivo_ignorado, detalhe_extra)."""
     det = obter_pedido_bling(id_tenant, id_bling)
-    if not pedido_bling_importavel(det):
-        return [], "situacao_invalida"
+    if not pedido_bling_importavel(det, id_tenant=id_tenant):
+        return [], "situacao_invalida", descricao_situacao_pedido(det, id_tenant=id_tenant)
     parsed = parse_pedido_bling(det)
     if not parsed["itens"]:
-        return [], "sem_itens"
+        return [], "sem_itens", None
     novos = importar_pedido_bling(
         cur,
         id_tenant,
@@ -124,8 +128,8 @@ def _importar_um_pedido(
         id_usuario=id_usuario,
     )
     if novos:
-        return novos, None
-    return [], "ja_importado_ou_sem_match"
+        return novos, None, None
+    return [], "ja_importado_ou_sem_match", None
 
 
 def importar_pedido_bling_por_id(
@@ -146,7 +150,9 @@ def importar_pedido_bling_por_id(
         raise ValueError("ID do pedido Bling inválido.")
 
     try:
-        novos, motivo = _importar_um_pedido(cur, id_tenant, id_bling, contexto=contexto, id_usuario=id_usuario)
+        novos, motivo, detalhe_extra = _importar_um_pedido(
+            cur, id_tenant, id_bling, contexto=contexto, id_usuario=id_usuario
+        )
     except ValueError as e:
         _registrar_log(cur, id_tenant, contexto, "aviso", f"Pedido Bling #{id_bling}", str(e))
         return {"importados": 0, "ignorado": True, "message": str(e)}
@@ -173,7 +179,12 @@ def importar_pedido_bling_por_id(
         "sem_itens": "Pedido sem itens.",
         "ja_importado_ou_sem_match": "Pedido já importado ou SKU não encontrado em Meus produtos.",
     }.get(motivo or "", "Pedido ignorado.")
-    _registrar_log(cur, id_tenant, contexto, "aviso", f"Pedido Bling #{id_bling}", msg)
+    detalhe_log = (
+        f"{msg} · Situação: {detalhe_extra}"
+        if motivo == "situacao_invalida" and detalhe_extra
+        else msg
+    )
+    _registrar_log(cur, id_tenant, contexto, "aviso", f"Pedido Bling #{id_bling}", detalhe_log)
     return {"importados": 0, "ignorado": True, "message": msg}
 
 
@@ -231,7 +242,7 @@ def importar_pedidos_bling(
                 ignorados += 1
                 continue
             try:
-                novos, motivo = _importar_um_pedido(
+                novos, motivo, detalhe_extra = _importar_um_pedido(
                     cur, id_tenant, id_bling, contexto=contexto, id_usuario=id_usuario
                 )
                 if novos:
@@ -239,7 +250,16 @@ def importar_pedidos_bling(
                     ids_criados.extend(novos)
                 else:
                     ignorados += 1
-                    if motivo and motivo not in ("ja_importado_ou_sem_match", "situacao_invalida"):
+                    if motivo == "situacao_invalida" and detalhe_extra:
+                        _registrar_log(
+                            cur,
+                            id_tenant,
+                            contexto,
+                            "aviso",
+                            f"Pedido Bling #{id_bling}",
+                            f"Situação no Bling: {detalhe_extra}",
+                        )
+                    elif motivo and motivo not in ("ja_importado_ou_sem_match", "situacao_invalida"):
                         _registrar_log(cur, id_tenant, contexto, "aviso", f"Pedido Bling #{id_bling}", motivo)
             except ValueError as e:
                 ignorados += 1
