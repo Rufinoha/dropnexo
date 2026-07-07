@@ -115,6 +115,97 @@ def url_autorizacao(state: str) -> str:
     return f"{me_auth_base()}/oauth/authorize?{params}&{scope_qs}"
 
 
+def _probe_me_client_ambiente(auth_base: str) -> dict[str, Any]:
+    """Verifica se o client_id atual é reconhecido nesse host ME (sem expor secret)."""
+    client_id, client_secret = credenciais_me()
+    redirect_uri = redirect_uri_oauth()
+    auth_url = (
+        f"{auth_base.rstrip('/')}/oauth/authorize?"
+        f"client_id={quote(client_id)}&response_type=code"
+        f"&redirect_uri={quote(redirect_uri, safe='')}&state=dropnexo-probe&scope=cart-read"
+    )
+    auth_ok = False
+    auth_status = 0
+    try:
+        r_auth = requests.get(auth_url, allow_redirects=False, timeout=ME_OAUTH_TIMEOUT)
+        auth_status = r_auth.status_code
+        auth_ok = r_auth.status_code in (302, 303) or (
+            r_auth.status_code == 200 and "login" in (r_auth.text or "").lower()
+        )
+    except requests.RequestException:
+        pass
+
+    token_ok = False
+    token_status = 0
+    token_erro = ""
+    try:
+        r_tok = requests.post(
+            f"{auth_base.rstrip('/')}/oauth/token",
+            data={
+                "grant_type": "authorization_code",
+                "code": "dropnexo-probe-credencial",
+                "redirect_uri": redirect_uri,
+                "client_id": client_id,
+                "client_secret": client_secret,
+            },
+            headers={"Accept": "application/json", "User-Agent": me_user_agent()},
+            timeout=ME_OAUTH_TIMEOUT,
+        )
+        token_status = r_tok.status_code
+        body = (r_tok.text or "").lower()
+        token_erro = (r_tok.json().get("error") if r_tok.content else "") or ""
+        token_ok = "invalid_client" not in body and "client authentication failed" not in body
+    except (requests.RequestException, ValueError):
+        pass
+
+    reconhecido = auth_ok or token_ok
+    return {
+        "auth_base": auth_base,
+        "client_id_reconhecido": reconhecido,
+        "auth_status": auth_status,
+        "token_status": token_status,
+        "token_erro": token_erro,
+    }
+
+
+def detectar_ambiente_me_credenciais() -> dict[str, Any]:
+    """Descobre se o par client_id/secret pertence a produção ou sandbox."""
+    prod = _probe_me_client_ambiente("https://melhorenvio.com.br")
+    sand = _probe_me_client_ambiente("https://sandbox.melhorenvio.com.br")
+    ambiente_credencial = "desconhecido"
+    if prod["client_id_reconhecido"] and not sand["client_id_reconhecido"]:
+        ambiente_credencial = "producao"
+    elif sand["client_id_reconhecido"] and not prod["client_id_reconhecido"]:
+        ambiente_credencial = "sandbox"
+    elif prod["client_id_reconhecido"] and sand["client_id_reconhecido"]:
+        ambiente_credencial = "ambos"
+    ambiente_ativo = "producao" if is_modo_producao() else "sandbox"
+    mismatch = (
+        ambiente_credencial in ("sandbox", "producao")
+        and ambiente_credencial != ambiente_ativo
+    )
+    dica = ""
+    if mismatch and ambiente_credencial == "sandbox":
+        dica = (
+            "Este Client ID foi criado no SANDBOX (sandbox.melhorenvio.com.br), mas o servidor "
+            "está em modo produção. Crie um app novo em https://melhorenvio.com.br e use "
+            "ME_CLIENT_ID_PROD / ME_CLIENT_SECRET_PROD, ou use as credenciais sandbox em DEV."
+        )
+    elif mismatch and ambiente_credencial == "producao":
+        dica = (
+            "Este Client ID é de PRODUÇÃO, mas o servidor está em modo desenvolvimento. "
+            "Use ME_CLIENT_ID_DEV / ME_CLIENT_SECRET_DEV do sandbox para testes locais."
+        )
+    return {
+        "ambiente_credencial": ambiente_credencial,
+        "ambiente_servidor": ambiente_ativo,
+        "incompativel": mismatch,
+        "dica": dica,
+        "producao": prod,
+        "sandbox": sand,
+    }
+
+
 def diagnostico_oauth_me() -> dict[str, Any]:
     """Dados para conferir configuração (sem expor o secret)."""
     from global_utils import is_modo_producao, obter_base_url
@@ -131,6 +222,7 @@ def diagnostico_oauth_me() -> dict[str, Any]:
         "scopes": ME_OAUTH_SCOPES,
     }
     if me_configurado():
+        out["ambiente_credenciais"] = detectar_ambiente_me_credenciais()
         out["teste_credenciais"] = testar_credenciais_me_oauth()
     return out
 

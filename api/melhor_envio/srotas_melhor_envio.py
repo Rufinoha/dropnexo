@@ -272,10 +272,14 @@ def webhook():
     corpo = request.get_data()
     assinatura = request.headers.get("X-ME-Signature") or ""
 
+    assinatura_valida = True
     if corpo and assinatura and me_configurado():
-        if not verificar_assinatura_webhook(corpo, assinatura):
-            _log.warning("ME webhook: assinatura inválida")
-            return jsonify(success=False, message="assinatura_invalida"), 401
+        assinatura_valida = verificar_assinatura_webhook(corpo, assinatura)
+        if not assinatura_valida:
+            # ME exige HTTP 200 no cadastro do webhook; não processar evento sem assinatura válida.
+            _log.warning(
+                "ME webhook: assinatura inválida (confira ME_CLIENT_SECRET no servidor)"
+            )
 
     payload: dict = {}
     if corpo:
@@ -285,7 +289,7 @@ def webhook():
             _log.warning("ME webhook: corpo JSON inválido")
             return jsonify(success=True), 200
 
-    if payload.get("event"):
+    if assinatura_valida and payload.get("event"):
         conn = Var_ConectarBanco()
         try:
             cur = conn.cursor()
