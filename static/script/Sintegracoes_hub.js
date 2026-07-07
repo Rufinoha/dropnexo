@@ -29,6 +29,16 @@
       config_url: "/integracoes/mercadopago",
       oauth_url: "/api/integracoes/mercadopago/oauth/iniciar",
     },
+    "pix-manual": {
+      conectado: false,
+      config_url: "/integracoes/pix-manual",
+      oauth_url: "",
+    },
+    "melhor-envio": {
+      conectado: false,
+      config_url: "/integracoes/melhor-envio",
+      oauth_url: "/api/integracoes/melhor-envio/oauth/iniciar",
+    },
   };
 
   const ICONES_CATEGORIA = {
@@ -39,7 +49,33 @@
     financeiro: "landmark",
   };
 
-  const INTEGRACOES_ATIVAS = new Set(["bling", "mercado-pago"]);
+  const INTEGRACOES_ATIVAS = new Set(["bling", "mercado-pago", "pix-manual", "melhor-envio"]);
+
+  function seloEmBreveHtml(slug) {
+    const uid = (slug || "x").replace(/[^a-z0-9]/gi, "");
+    return `
+    <span class="FnInt_SoonSeal" title="Disponível em breve">
+      <svg class="FnInt_SoonSeal__svg" viewBox="0 0 72 72" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <defs>
+          <linearGradient id="fnIntSoonGrad-${uid}" x1="8%" y1="6%" x2="92%" y2="94%">
+            <stop offset="0%" stop-color="#f87171"/>
+            <stop offset="45%" stop-color="#dc2626"/>
+            <stop offset="100%" stop-color="#991b1b"/>
+          </linearGradient>
+          <filter id="fnIntSoonShadow-${uid}" x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="0" dy="1.5" stdDeviation="1.2" flood-color="#7f1d1d" flood-opacity="0.45"/>
+          </filter>
+        </defs>
+        <path fill="url(#fnIntSoonGrad-${uid})" filter="url(#fnIntSoonShadow-${uid})"
+          d="M36,4 L43,9.92 L52,8.29 L55.09,16.91 L63.71,20 L62.08,29.01 L68,36 L62.08,42.99 L63.71,52 L55.09,55.09 L52,63.71 L43,62.08 L36,68 L29.01,62.08 L20,63.71 L16.91,55.09 L8.29,52 L9.92,42.99 L4,36 L9.92,29.01 L8.29,20 L16.91,16.91 L20,8.29 L29.01,9.92 Z"/>
+        <circle cx="36" cy="36" r="17.5" fill="rgba(127,29,29,0.18)"/>
+        <text x="36" y="31.5" text-anchor="middle" fill="#fff" font-size="7.2" font-weight="800"
+          font-family="system-ui,-apple-system,'Segoe UI',sans-serif" letter-spacing="0.08em">EM</text>
+        <text x="36" y="41.5" text-anchor="middle" fill="#fff" font-size="6.4" font-weight="800"
+          font-family="system-ui,-apple-system,'Segoe UI',sans-serif" letter-spacing="0.06em">BREVE</text>
+      </svg>
+    </span>`;
+  }
 
   async function carregarStatusHub() {
     try {
@@ -154,10 +190,12 @@
     const conectado = !!st.conectado;
     const picked = itemModalAberto?.slug === slug;
     const badge = conectado ? `<span class="FnInt_Badge FnInt_Badge--on">Conectado</span>` : "";
+    const soonSeal = !ativa ? seloEmBreveHtml(slug) : "";
 
     return `
-      <div class="FnInt_CardWrap${conectado ? " is-connected" : ""}${picked ? " is-picked" : ""}" data-slug="${slug}" role="listitem">
-        <button type="button" class="FnInt_Card" data-slug="${slug}" data-nome="${item.nome}" data-ativa="${ativa ? "1" : "0"}" data-conectado="${conectado ? "1" : "0"}">
+      <div class="FnInt_CardWrap${conectado ? " is-connected" : ""}${!ativa ? " is-soon" : ""}${picked ? " is-picked" : ""}" data-slug="${slug}" role="listitem">
+        ${soonSeal}
+        <button type="button" class="FnInt_Card" data-slug="${slug}" data-nome="${item.nome}" data-ativa="${ativa ? "1" : "0"}" data-conectado="${conectado ? "1" : "0"}"${!ativa ? ' title="Em breve"' : ""}>
           <div class="FnInt_CardIcon" style="--int-cor:${item.cor || "#475569"}">
             <img src="${item.icone_png}" alt="" loading="eager" decoding="async"
               onload="this.parentElement.classList.remove('is-fallback')"
@@ -201,6 +239,11 @@
         confirmButtonText: "Entendi",
         confirmButtonColor: "#021F81",
       });
+      return;
+    }
+    if (slug === "pix-manual") {
+      const st = statusIntegracao(slug);
+      window.location.href = st.config_url || "/integracoes/pix-manual";
       return;
     }
     if (conectado) {
@@ -299,6 +342,16 @@
         icon: "success",
         title: "Conectado",
         text: "Mercado Pago configurado com sucesso.",
+        confirmButtonColor: "#021F81",
+      });
+      window.history.replaceState({}, "", location.pathname);
+    } else if (params.get("conectado") === "melhorenvio") {
+      categoriaAtiva = categorias.some((c) => c.id === "frete") ? "frete" : categoriaAtiva;
+      await carregarStatusHub();
+      Swal.fire({
+        icon: "success",
+        title: "Conectado",
+        text: "Melhor Envio configurado com sucesso.",
         confirmButtonColor: "#021F81",
       });
       window.history.replaceState({}, "", location.pathname);

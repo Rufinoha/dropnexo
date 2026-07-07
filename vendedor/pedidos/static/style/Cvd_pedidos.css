@@ -433,7 +433,58 @@
   justify-content: flex-end;
 }
 
-.Pd_ModalFoot #pd_btnCancelar { margin-right: auto; }
+.Pd_PixDual {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  text-align: left;
+  margin-top: 0.5rem;
+}
+
+@media (max-width: 640px) {
+  .Pd_PixDual { grid-template-columns: 1fr; }
+}
+
+.Pd_PixDualCol strong {
+  display: block;
+  font-size: 0.78rem;
+  margin-bottom: 0.35rem;
+  color: #475569;
+}
+
+.Pd_PayCardLogo--txt {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  font-weight: 800;
+  font-size: 0.72rem;
+}
+
+.Pd_ComprovanteUpload { margin-top: 0.75rem; }
+
+.Mp_Logo--pix {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: #32bcad;
+  color: #fff;
+  font-weight: 800;
+}
+
+.Mp_FormGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem 1rem;
+  margin: 1rem 0;
+}
+
+.Mp_FormGrid--full { grid-column: 1 / -1; }
 
 .Pd_PayOpcao {
   display: inline-flex;

@@ -5,7 +5,8 @@ import time
 
 from flask import Blueprint, jsonify, render_template, request, send_file, session, url_for
 
-from api.mercadopago.cliente import meios_pagamento_fornecedor
+from servico_meios_pagamento import listar_meios_fornecedor
+from servico_pedido_pix_manual import iniciar_pix_manual, marcar_comprovante_enviado
 
 from global_utils import Var_ConectarBanco, exigir_modulo, exigir_permissao, login_obrigatorio
 from servico_pedido import (
@@ -260,6 +261,8 @@ def pedido_anexos_upload(id_pedido: int):
             tamanho,
             id_usuario=_id_usuario(),
         )
+        if tipo == "comprovante_pix":
+            marcar_comprovante_enviado(cur, id_pedido, id_vendedor=id_v)
         conn.commit()
         return jsonify(success=True, message="Anexo enviado.", anexo=anexo)
     except ValueError as e:
@@ -438,15 +441,12 @@ def pedidos_meios_preview():
             )
             row = cur.fetchone()
             nome = (row[0] if row else "") or f"Fornecedor #{id_f}"
-            meios = meios_pagamento_fornecedor(cur, id_f)
+            integracoes = listar_meios_fornecedor(cur, id_f, icone_mp=mp_icone)
             out.append(
                 {
                     "id_fornecedor": id_f,
                     "fornecedor_nome": nome,
-                    "integracao": "mercado-pago",
-                    "integracao_nome": "Mercado Pago",
-                    "icone_url": mp_icone,
-                    **meios,
+                    "integracoes": integracoes,
                 }
             )
         return jsonify(success=True, fornecedores=out)
@@ -490,15 +490,20 @@ def pedidos_pagar():
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
-        result = iniciar_pagamento(
-            cur,
-            id_v,
-            id_pedido,
-            meio,
-            email_sessao=session.get("email"),
-        )
+        if meio == "pix_manual":
+            result = iniciar_pix_manual(cur, id_v, id_pedido)
+            msg = "PIX manual gerado."
+        else:
+            result = iniciar_pagamento(
+                cur,
+                id_v,
+                id_pedido,
+                meio,
+                email_sessao=session.get("email"),
+            )
+            msg = "Pagamento iniciado."
         conn.commit()
-        return jsonify(success=True, message="Pagamento iniciado.", **result)
+        return jsonify(success=True, message=msg, **result)
     except ValueError as e:
         return jsonify(success=False, message=str(e)), 400
     except RuntimeError as e:

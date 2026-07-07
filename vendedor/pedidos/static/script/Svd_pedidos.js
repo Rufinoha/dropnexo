@@ -36,7 +36,7 @@
   let pedidosGrupo = [];
   let pedidoFocoAnexo = null;
   let tipoAnexoFoco = null;
-  /** @type {Record<number, string>} */
+  /** @type {Record<string, string>} */
   let meioPagamentoPorFornecedor = {};
 
   const util = () => window.Util || {};
@@ -416,6 +416,10 @@
     }
   }
 
+  function payKey(idForn, integracao) {
+    return `${idForn}:${integracao}`;
+  }
+
   async function renderPayIntegracoes() {
     if (!elPayIntegracoes) return;
     pararPollPix();
@@ -429,33 +433,43 @@
 
     elPayIntegracoes.innerHTML = '<p class="Pd_Hint">Carregando integrações…</p>';
 
-    /** @type {Array<{ped?: object, preview?: object, meios?: object}>} */
+    const idsForn = pedidosGrupo.length
+      ? [...new Set(pedidosGrupo.map((p) => p.id_fornecedor))]
+      : idsFornCarrinho;
+
+    const r = await fetch(
+      `/vendedor/pedidos/meios-pagamento/preview?fornecedores=${idsForn.join(",")}`,
+      { credentials: "same-origin" }
+    );
+    const j = await r.json();
+    if (!j.success) {
+      elPayIntegracoes.innerHTML = '<p class="Pd_Hint">Não foi possível carregar as formas de pagamento.</p>';
+      return;
+    }
+
+    const mapaForn = {};
+    (j.fornecedores || []).forEach((f) => {
+      mapaForn[f.id_fornecedor] = f;
+    });
+
+    /** @type {Array<{ped?: object, integ: object, forn?: object}>} */
     const cards = [];
 
     if (pedidosGrupo.length) {
       for (const ped of pedidosGrupo) {
-        let meios = { conectado: false, pix: false, cartao: false };
-        if (ped.status === "aguardando_pagamento") {
-          const r = await fetch(`/vendedor/pedidos/${ped.id}/meios-pagamento`, {
-            credentials: "same-origin",
-          });
-          const j = await r.json();
-          if (j.success) meios = j;
-        }
-        cards.push({ ped, meios });
+        const forn = mapaForn[ped.id_fornecedor];
+        (forn?.integracoes || []).forEach((integ) => cards.push({ ped, integ, forn }));
       }
     } else {
-      const r = await fetch(
-        `/vendedor/pedidos/meios-pagamento/preview?fornecedores=${idsFornCarrinho.join(",")}`,
-        { credentials: "same-origin" }
-      );
-      const j = await r.json();
-      if (!j.success || !j.fornecedores?.length) {
-        elPayIntegracoes.innerHTML =
-          '<p class="Pd_Hint">Não foi possível carregar as formas de pagamento.</p>';
-        return;
-      }
-      j.fornecedores.forEach((f) => cards.push({ preview: f, meios: f }));
+      (j.fornecedores || []).forEach((forn) => {
+        (forn.integracoes || []).forEach((integ) => cards.push({ integ, forn }));
+      });
+    }
+
+    if (!cards.length) {
+      elPayIntegracoes.innerHTML =
+        '<p class="Pd_Hint">Nenhuma forma de pagamento disponível. O fornecedor precisa conectar Mercado Pago ou configurar PIX manual.</p>';
+      return;
     }
 
     elPayIntegracoes.innerHTML = cards.map((c) => renderPayCard(c)).join("");
@@ -463,99 +477,190 @@
     elPayIntegracoes.querySelectorAll('input[type="radio"]').forEach((inp) => {
       inp.addEventListener("change", () => {
         const card = inp.closest(".Pd_PayCard");
-        const idForn = +card?.dataset.forn;
-        if (idForn) meioPagamentoPorFornecedor[idForn] = inp.value;
+        const k = card?.dataset.payKey;
+        if (k) meioPagamentoPorFornecedor[k] = inp.value;
         card?.querySelectorAll(".Pd_PayOpcao").forEach((lbl) => {
           lbl.classList.toggle("is-selected", lbl.querySelector("input")?.checked);
         });
       });
       if (inp.checked) {
         const card = inp.closest(".Pd_PayCard");
-        const idForn = +card?.dataset.forn;
-        if (idForn) meioPagamentoPorFornecedor[idForn] = inp.value;
+        const k = card?.dataset.payKey;
+        if (k) meioPagamentoPorFornecedor[k] = inp.value;
       }
     });
 
-    elPayIntegracoes.querySelectorAll("[data-pagar-forn]").forEach((btn) => {
-      btn.addEventListener("click", () => pagarFornecedor(+btn.dataset.pagarForn));
+    elPayIntegracoes.querySelectorAll("[data-pagar]").forEach((btn) => {
+      btn.addEventListener("click", () =>
+        pagarCard(+btn.dataset.pagar, btn.dataset.integ, +btn.dataset.ped)
+      );
+    });
+
+    elPayIntegracoes.querySelectorAll("[data-upload-comprovante]").forEach((inp) => {
+      inp.addEventListener("change", () => enviarComprovantePix(inp));
+    });
+
+    cards.forEach(({ ped }) => {
+      if (ped?.pix_manual_payload && document.getElementById(`pd_pixm_${ped.id}`)) {
+        mostrarPixManualInline(ped.id, {
+          payload: ped.pix_manual_payload,
+          txid: ped.pix_manual_txid,
+          numero_pedido: ped.numero,
+        });
+      }
     });
   }
 
-  function renderPayCard({ ped, preview, meios }) {
-    const idForn = ped?.id_fornecedor ?? preview?.id_fornecedor;
-    const fornNome = ped?.fornecedor_nome ?? preview?.fornecedor_nome ?? "";
-    const icone = preview?.icone_url || meios?.icone_url || cfg.mp_icone;
-    const conectado = meios?.conectado ?? preview?.conectado;
-    const pix = meios?.pix ?? preview?.pix;
-    const cartao = meios?.cartao ?? preview?.cartao;
-    const pref = meioPagamentoPorFornecedor[idForn] || "";
+  function renderPayCard({ ped, integ, forn }) {
+    const idForn = ped?.id_fornecedor ?? forn?.id_fornecedor;
+    const fornNome = ped?.fornecedor_nome ?? forn?.fornecedor_nome ?? "";
+    const integracao = integ.integracao || "mercado-pago";
+    const nomeInteg = integ.integracao_nome || "Pagamento";
+    const icone = integ.icone_url || (integracao === "mercado-pago" ? cfg.mp_icone : "");
+    const isPixManual = integracao === "pix-manual";
+    const k = payKey(idForn, integracao);
+    const pref = meioPagamentoPorFornecedor[k] || "";
     const pedidoPago = ped && ["pago", "em_expedicao", "entregue"].includes(ped.status);
     const aguardando = ped?.status === "aguardando_pagamento";
     const rascunho = ped?.status === "rascunho";
+    const comprovanteEnviado = ped?.status_pagamento === "comprovante_enviado";
+    const pixManualAtivo = ped?.meio_pagamento === "pix_manual" || ped?.pix_manual_payload;
 
     let statusHtml = "";
     if (pedidoPago) {
-      const quando = ped.pago_em
-        ? new Date(ped.pago_em).toLocaleString("pt-BR")
-        : "";
+      const quando = ped.pago_em ? new Date(ped.pago_em).toLocaleString("pt-BR") : "";
       statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pago">${badge("pago")} Pagamento confirmado${quando ? ` · ${esc(quando)}` : ""}</div>`;
+    } else if (comprovanteEnviado && isPixManual) {
+      statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pendente">Comprovante enviado — aguardando validação do fornecedor</div>`;
     } else if (aguardando) {
-      statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pendente">${badge(ped.status)} Aguardando pagamento · ${fmt(ped.valor_total)}</div>`;
+      statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pendente">${badge(ped.status)} ${fmt(ped.valor_total)}</div>`;
     } else if (rascunho) {
       statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pendente">${badge("rascunho")} Confirme o pedido para pagar</div>`;
     }
 
-    if (!conectado) {
-      return `
-        <div class="Pd_PayCard" data-forn="${idForn}">
-          <div class="Pd_PayCardHead">
-            <img class="Pd_PayCardLogo" src="${esc(icone)}" alt="" />
-            <div>
-              <div class="Pd_PayCardNome">${esc(meios?.integracao_nome || preview?.integracao_nome || "Mercado Pago")}</div>
-              <div class="Pd_PayCardForn">${esc(fornNome)}${ped?.numero ? ` · ${esc(ped.numero)}` : ""}</div>
-            </div>
-          </div>
-          ${statusHtml ? `<div class="Pd_PayRow">${statusHtml}</div>` : ""}
-          <p class="Pd_PayCardOff">Fornecedor ainda não conectou o Mercado Pago.</p>
-        </div>`;
-    }
+    const logoHtml = icone
+      ? `<img class="Pd_PayCardLogo" src="${esc(icone)}" alt="" />`
+      : `<span class="Pd_PayCardLogo Pd_PayCardLogo--txt" style="background:#32BCAD;color:#fff">PX</span>`;
 
     const opcoes = [];
-    if (pix) {
+    if (isPixManual) {
       opcoes.push(`
-        <label class="Pd_PayOpcao Pd_PayOpcao--pix${pref === "pix" ? " is-selected" : ""}">
-          <input type="radio" name="pd_meio_${idForn}" value="pix"${pref === "pix" || (!pref && !cartao) ? " checked" : ""} ${aguardando || rascunho || !ped ? "" : "disabled"} />
-          PIX
+        <label class="Pd_PayOpcao Pd_PayOpcao--pix${pref === "pix_manual" || !pref ? " is-selected" : ""}">
+          <input type="radio" name="pd_meio_${k}" value="pix_manual"${pref === "pix_manual" || !pref ? " checked" : ""} />
+          PIX Manual
         </label>`);
-    }
-    if (cartao) {
-      opcoes.push(`
-        <label class="Pd_PayOpcao Pd_PayOpcao--cartao${pref === "cartao" ? " is-selected" : ""}">
-          <input type="radio" name="pd_meio_${idForn}" value="cartao"${pref === "cartao" || (!pref && cartao && !pix) ? " checked" : ""} ${aguardando || rascunho || !ped ? "" : "disabled"} />
-          Cartão de crédito
-        </label>`);
+    } else {
+      if (integ.pix) {
+        opcoes.push(`
+          <label class="Pd_PayOpcao Pd_PayOpcao--pix${pref === "pix" ? " is-selected" : ""}">
+            <input type="radio" name="pd_meio_${k}" value="pix"${pref === "pix" || (!pref && !integ.cartao) ? " checked" : ""} />
+            PIX
+          </label>`);
+      }
+      if (integ.cartao) {
+        opcoes.push(`
+          <label class="Pd_PayOpcao Pd_PayOpcao--cartao${pref === "cartao" ? " is-selected" : ""}">
+            <input type="radio" name="pd_meio_${k}" value="cartao"${pref === "cartao" || (!pref && integ.cartao && !integ.pix) ? " checked" : ""} />
+            Cartão de crédito
+          </label>`);
+      }
     }
 
-    const podePagar = aguardando && !bloqueadoTotal && !pedidoPago;
+    const podePagar = aguardando && !bloqueadoTotal && !pedidoPago && !comprovanteEnviado;
+    const idPed = ped?.id || 0;
     const payRow = `
       <div class="Pd_PayRow">
         ${statusHtml || ""}
-        ${podePagar ? `<button type="button" class="Cl_BtnSalvar Pd_BtnPagar" data-pagar-forn="${idForn}">Pagar agora</button>` : ""}
-      </div>
-      ${podePagar ? `<div class="Pd_PixInline" id="pd_pix_${ped.id}" hidden></div>` : ""}`;
+        ${podePagar ? `<button type="button" class="Cl_BtnSalvar Pd_BtnPagar" data-pagar="${idForn}" data-integ="${esc(integracao)}" data-ped="${idPed}">Pagar agora</button>` : ""}
+      </div>`;
+
+    const pixBox = isPixManual && ped && (pixManualAtivo || podePagar)
+      ? `<div class="Pd_PixInline" id="pd_pixm_${ped.id}" ${pixManualAtivo ? "" : "hidden"}></div>
+         ${pixManualAtivo && !pedidoPago && !comprovanteEnviado ? `
+         <div class="Pd_ComprovanteUpload">
+           <label class="Pd_Hint">Após pagar, anexe o comprovante:</label>
+           <input type="file" class="Pd_AnexoInput" accept=".pdf,.png,.jpg,.jpeg,.webp" data-upload-comprovante="${ped.id}" />
+         </div>` : ""}`
+      : isPixManual
+        ? ""
+        : podePagar
+          ? `<div class="Pd_PixInline" id="pd_pix_${idPed}" hidden></div>`
+          : "";
 
     return `
-      <div class="Pd_PayCard" data-forn="${idForn}">
+      <div class="Pd_PayCard" data-forn="${idForn}" data-pay-key="${esc(k)}" data-integ="${esc(integracao)}">
         <div class="Pd_PayCardHead">
-          <img class="Pd_PayCardLogo" src="${esc(icone)}" alt="" />
+          ${logoHtml}
           <div>
-            <div class="Pd_PayCardNome">${esc(meios?.integracao_nome || preview?.integracao_nome || "Mercado Pago")}</div>
+            <div class="Pd_PayCardNome">${esc(nomeInteg)}</div>
             <div class="Pd_PayCardForn">${esc(fornNome)}${ped?.numero ? ` · ${esc(ped.numero)}` : ""}</div>
           </div>
         </div>
         ${(aguardando || rascunho || !ped) && opcoes.length ? `<div class="Pd_PayOpcoes">${opcoes.join("")}</div>` : ""}
         ${payRow}
+        ${pixBox}
       </div>`;
+  }
+
+  function mostrarPixManualInline(idPed, dados) {
+    const box = document.getElementById(`pd_pixm_${idPed}`);
+    if (!box || !dados?.payload) return;
+    box.hidden = false;
+    const ref = dados.txid || dados.numero_pedido || "";
+    box.innerHTML = `
+      <p class="Pd_Hint">Referência no PIX: <strong>${esc(ref)}</strong></p>
+      <div class="Pd_PixDual">
+        <div class="Pd_PixDualCol">
+          <strong>1 — QR Code</strong>
+          <canvas id="pd_pixm_qr_${idPed}"></canvas>
+        </div>
+        <div class="Pd_PixDualCol">
+          <strong>2 — Copia e cola</strong>
+          <code id="pd_pixm_code_${idPed}">${esc(dados.payload)}</code>
+          <button type="button" class="Cl_botaoFiltro" data-copiar-pixm="${idPed}">Copiar código</button>
+        </div>
+      </div>
+      <p class="Pd_Hint">Pague o valor exato e anexe o comprovante abaixo. O fornecedor validará manualmente.</p>`;
+
+    const canvas = document.getElementById(`pd_pixm_qr_${idPed}`);
+    if (canvas && window.QRCode) {
+      window.QRCode.toCanvas(canvas, dados.payload, { width: 180, margin: 1 }, () => {});
+    }
+
+    box.querySelector("[data-copiar-pixm]")?.addEventListener("click", () => {
+      navigator.clipboard?.writeText(dados.payload || "");
+      if (window.Swal) Swal.fire({ icon: "success", title: "Copiado", timer: 1200, showConfirmButton: false });
+    });
+  }
+
+  async function enviarComprovantePix(input) {
+    const idPed = +input.dataset.uploadComprovante;
+    const file = input.files?.[0];
+    if (!idPed || !file) return;
+    const fd = new FormData();
+    fd.append("tipo", "comprovante_pix");
+    fd.append("arquivo", file);
+    input.disabled = true;
+    try {
+      const r = await fetch(`/vendedor/pedidos/${idPed}/anexos`, {
+        method: "POST",
+        credentials: "same-origin",
+        body: fd,
+      });
+      const j = await parseJsonResp(r);
+      if (!j.success) throw new Error(j.message || "Erro ao enviar comprovante.");
+      const ped = pedidosGrupo.find((p) => p.id === idPed);
+      if (ped) ped.status_pagamento = "comprovante_enviado";
+      if (window.Swal) {
+        Swal.fire({ icon: "success", title: "Comprovante enviado", text: "Aguardando validação do fornecedor.", confirmButtonColor: "#021F81" });
+      }
+      renderPayIntegracoes();
+    } catch (e) {
+      if (window.Swal) Swal.fire({ icon: "error", title: "Comprovante", text: e.message, confirmButtonColor: "#021F81" });
+    } finally {
+      input.value = "";
+      input.disabled = false;
+    }
   }
 
   function mostrarPixInline(idPed, dados) {
@@ -614,12 +719,13 @@
     if (painelAtivo === "valores") renderPayIntegracoes();
   }
 
-  async function pagarFornecedor(idForn) {
-    const ped = pedidosGrupo.find((p) => p.id_fornecedor === idForn);
+  async function pagarCard(idForn, integracao, idPed) {
+    const ped = pedidosGrupo.find((p) => p.id === idPed);
     if (!ped || ped.status !== "aguardando_pagamento") return;
 
-    const meio = meioPagamentoPorFornecedor[idForn] || "pix";
-    const btn = elPayIntegracoes?.querySelector(`[data-pagar-forn="${idForn}"]`);
+    const k = payKey(idForn, integracao);
+    const meio = meioPagamentoPorFornecedor[k] || (integracao === "pix-manual" ? "pix_manual" : "pix");
+    const btn = elPayIntegracoes?.querySelector(`[data-pagar="${idForn}"][data-integ="${integracao}"]`);
     if (btn) btn.disabled = true;
 
     try {
@@ -627,17 +733,24 @@
         method: "POST",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id_pedido: ped.id, meio }),
+        body: JSON.stringify({ id_pedido: idPed, meio }),
       });
       const j = await parseJsonResp(r);
       if (!j.success) throw new Error(j.message || "Erro ao iniciar pagamento.");
 
+      if (meio === "pix_manual") {
+        ped.meio_pagamento = "pix_manual";
+        ped.pix_manual_payload = j.payload;
+        ped.pix_manual_txid = j.txid;
+        mostrarPixManualInline(idPed, j);
+        return;
+      }
       if (meio === "pix") {
-        pedidoPagamentoAtual = ped.id;
-        mostrarPixInline(ped.id, j);
+        pedidoPagamentoAtual = idPed;
+        mostrarPixInline(idPed, j);
         pararPollPix();
-        pollPixTimer = setInterval(() => pollPixInline(ped.id), 5000);
-        pollPixInline(ped.id);
+        pollPixTimer = setInterval(() => pollPixInline(idPed), 5000);
+        pollPixInline(idPed);
         return;
       }
       if (j.checkout_url) {

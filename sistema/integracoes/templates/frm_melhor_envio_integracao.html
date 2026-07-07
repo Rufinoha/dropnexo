@@ -1,0 +1,70 @@
+{% set nav_ativo = nav_codigo %}
+{% extends "frm_base.html" %}
+{% block title %}Melhor Envio — Integrações — {{ MARCA_NOME }}{% endblock %}
+{% block topbar_title %}Melhor Envio{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('static', filename='style/Cmercadopago_integracao.css') }}?v=3" />
+{% endblock %}
+{% block content %}
+<div class="Cl_ContainerApoio cl-page-principal Mp_Wrap">
+  <div class="cl-page-title Mp_PageHead">
+    <div class="Mp_PageHeadMain">
+      <a href="{{ url_for('integracoes.pagina') }}" class="Mp_BackLink">
+        <i data-lucide="arrow-left"></i> Integrações
+      </a>
+      <div class="Mp_TitleRow">
+        <div class="Mp_Logo" aria-hidden="true" style="background:#00B2A9;color:#fff;font-weight:800;display:flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:12px;">ME</div>
+        <div>
+          <h2>Melhor Envio</h2>
+          <p class="cl-page-desc">Cotação de fretes, compra de etiquetas e rastreio automático dos pedidos expedidos.</p>
+        </div>
+      </div>
+    </div>
+    <div class="Mp_ConnBadge {{ 'is-on' if me_conectado else 'is-off' }}" id="me_status_badge">
+      {{ 'Conectado' if me_conectado else 'Desconectado' }}
+    </div>
+  </div>
+
+  <section class="Mp_Card Mp_Card--alert" id="me_alert_servidor" hidden>
+    <h3>Integração indisponível no servidor</h3>
+    <p class="Mp_Hint">Configure <code>ME_CLIENT_ID_PROD</code> e <code>ME_CLIENT_SECRET_PROD</code> no <code>.env</code> do servidor.</p>
+  </section>
+
+  <section class="Mp_Card Mp_Card--info" id="me_sec_guia" {% if me_conectado %}hidden{% endif %}>
+    <h3>Conectar sua conta</h3>
+    <p class="Mp_Hint">Autorize com a conta Melhor Envio que <strong>comprará as etiquetas</strong> e terá saldo para envios.</p>
+    <div class="Mp_Actions">
+      <a href="{{ url_for('melhor_envio.oauth_iniciar') }}" class="Cl_botaoprimario" id="me_btn_conectar">Conectar conta</a>
+    </div>
+  </section>
+
+  <section class="Mp_Card" id="me_painel_config" {% if not me_conectado %}hidden{% endif %}>
+    <p id="me_conta_info" class="Mp_ContaResumo" hidden></p>
+    <h3>Conta conectada</h3>
+    <p class="Mp_Hint">Os vendedores poderão cotar fretes nos pedidos. Na expedição, você gera etiquetas com esta conta.</p>
+    <div class="Mp_Actions Mp_Actions--foot">
+      <button type="button" class="Cl_BtnCancelar" id="me_btn_desconectar">Desconectar</button>
+    </div>
+  </section>
+
+  {% if session.get('eh_desenvolvedor') %}
+  <section class="Mp_Card Mp_Card--dev" id="me_sec_dev">
+    <h3>URLs da integração</h3>
+    <div class="Mp_UrlRow">
+      <span class="Mp_UrlLabel">Redirect OAuth</span>
+      <code id="me_redirect_uri" class="Mp_Code">—</code>
+      <button type="button" class="Mp_CopyBtn" data-copy="me_redirect_uri">Copiar</button>
+    </div>
+    <div class="Mp_UrlRow">
+      <span class="Mp_UrlLabel">Webhook (etiquetas)</span>
+      <code id="me_webhook_url" class="Mp_Code">—</code>
+      <button type="button" class="Mp_CopyBtn" data-copy="me_webhook_url">Copiar</button>
+    </div>
+    <p class="Mp_Hint" id="me_dev_status">—</p>
+  </section>
+  {% endif %}
+</div>
+{% endblock %}
+{% block page_js %}
+<script src="{{ url_for('static', filename='script/Smelhor_envio_integracao.js') }}?v=1"></script>
+{% endblock %}

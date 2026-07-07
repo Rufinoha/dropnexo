@@ -51,6 +51,31 @@
   function renderAcoes(p) {
     if (!foot) return;
     foot.innerHTML = "";
+    const comprovantes = (p.anexos || []).filter((a) => a.tipo === "comprovante_pix");
+    if (
+      p.status === "aguardando_pagamento" &&
+      p.meio_pagamento === "pix_manual" &&
+      (p.status_pagamento === "comprovante_enviado" || comprovantes.length)
+    ) {
+      const links = comprovantes
+        .map(
+          (a) =>
+            `<li><a href="/vendedor/pedidos/anexos/arquivo?caminho=${encodeURIComponent(a.caminho)}" target="_blank">${a.nome_original}</a></li>`
+        )
+        .join("");
+      foot.innerHTML = `
+        <div class="PdFn_PayValid">
+          <p><strong>PIX manual</strong> — valide o comprovante:</p>
+          <ul>${links || "<li>Comprovante pendente de anexo</li>"}</ul>
+          <div class="PdFn_PayValidBtns">
+            <button type="button" class="Cl_botaoprimario" id="pd_fn_btn_conf_pix">Confirmar pagamento</button>
+            <button type="button" class="Cl_BtnExcluir" id="pd_fn_btn_rej_pix">Rejeitar comprovante</button>
+          </div>
+        </div>`;
+      document.getElementById("pd_fn_btn_conf_pix")?.addEventListener("click", () => confirmarPix(p.id));
+      document.getElementById("pd_fn_btn_rej_pix")?.addEventListener("click", () => rejeitarPix(p.id));
+      return;
+    }
     if (p.status === "pago") {
       foot.innerHTML = `
         <div class="PdFn_ExpForm">
@@ -95,6 +120,34 @@
       modal.hidden = true;
       carregar();
     }
+  }
+
+  async function confirmarPix(id) {
+    const r = await fetch(`/fornecedor/pedidos/${id}/pagamento/confirmar`, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+    const j = await r.json();
+    if (window.Swal) await Swal.fire(j.success ? "Pago" : "Erro", j.message, j.success ? "success" : "error");
+    if (j.success) {
+      modal.hidden = true;
+      carregar();
+    }
+  }
+
+  async function rejeitarPix(id) {
+    const motivo = prompt("Motivo da rejeição (opcional):") || "";
+    const r = await fetch(`/fornecedor/pedidos/${id}/pagamento/rejeitar`, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ motivo }),
+    });
+    const j = await r.json();
+    if (window.Swal) await Swal.fire(j.success ? "Rejeitado" : "Erro", j.message, j.success ? "info" : "error");
+    if (j.success) abrir(id);
   }
 
   async function abrir(id) {

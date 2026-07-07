@@ -1164,8 +1164,9 @@ def obter_grupo_pedido(cur, id_vendedor: int, id_grupo: int) -> dict | None:
 
     cur.execute(
         """
-        SELECT p.id, p.status, p.status_pagamento, p.origem, p.valor_total,
-               p.id_tenant_fornecedor, COALESCE(tf.nome_fantasia, tf.nome), p.numero, p.pago_em
+        SELECT p.id, p.status, p.status_pagamento, p.meio_pagamento, p.origem, p.valor_total,
+               p.id_tenant_fornecedor, COALESCE(tf.nome_fantasia, tf.nome), p.numero, p.pago_em,
+               p.pix_manual_payload, p.pix_manual_txid
         FROM tbl_pedido p
         LEFT JOIN tbl_tenant tf ON tf.id = p.id_tenant_fornecedor
         WHERE p.id_grupo = %s AND p.id_tenant_vendedor = %s
@@ -1183,18 +1184,21 @@ def obter_grupo_pedido(cur, id_vendedor: int, id_grupo: int) -> dict | None:
 
     itens: list[dict] = []
     pedidos: list[dict] = []
-    for pid, status, status_pag, origem, valor_total, id_forn, forn_nome, numero, pago_em in pedidos_rows:
+    for pid, status, status_pag, meio_pag, origem, valor_total, id_forn, forn_nome, numero, pago_em, pix_payload, pix_txid in pedidos_rows:
         pedidos.append(
             {
                 "id": int(pid),
                 "numero": numero,
                 "status": status,
                 "status_pagamento": status_pag or "",
+                "meio_pagamento": meio_pag or "",
                 "origem": origem or "manual",
                 "valor_total": _float(valor_total),
                 "id_fornecedor": int(id_forn),
                 "fornecedor_nome": forn_nome or "",
                 "pago_em": pago_em.isoformat() if pago_em else None,
+                "pix_manual_payload": pix_payload or "",
+                "pix_manual_txid": pix_txid or "",
             }
         )
         for item in listar_itens_pedido(cur, int(pid)):
@@ -1262,10 +1266,16 @@ def _tem_tabela_anexo(cur) -> bool:
     return _TABELA_ANEXO_OK
 
 
-def listar_anexos_pedido(cur, id_pedido: int, *, id_vendedor: int | None = None) -> list[dict]:
+def listar_anexos_pedido(
+    cur,
+    id_pedido: int,
+    *,
+    id_vendedor: int | None = None,
+    id_fornecedor: int | None = None,
+) -> list[dict]:
     if not _tem_tabela_anexo(cur):
         return []
-    ped = obter_pedido(cur, id_pedido, id_vendedor=id_vendedor)
+    ped = obter_pedido(cur, id_pedido, id_vendedor=id_vendedor, id_fornecedor=id_fornecedor)
     if not ped:
         raise ValueError("Pedido não encontrado.")
     cur.execute(
@@ -1303,7 +1313,7 @@ def registrar_anexo_pedido(
     if not _tem_tabela_anexo(cur):
         raise ValueError("Anexos ainda não disponíveis. Execute a migração SQL 063_pedido_anexo.")
     tipo = (tipo or "").strip().lower()
-    if tipo not in ("nf", "etiqueta"):
+    if tipo not in ("nf", "etiqueta", "comprovante_pix"):
         raise ValueError("Tipo de anexo inválido.")
     ped = obter_pedido(cur, id_pedido, id_vendedor=id_vendedor)
     if not ped:

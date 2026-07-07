@@ -9,6 +9,8 @@ from flask.json.provider import DefaultJSONProvider
 
 from api.bling.srotas_bling import init_app as api_bling_init
 from api.mercadopago.srotas_mercadopago import init_app as api_mercadopago_init
+from api.pix_manual.srotas_pix_manual import init_app as api_pix_manual_init
+from api.melhor_envio.srotas_melhor_envio import init_app as api_melhor_envio_init
 from api.brevo.srotas_brevo import init_app as api_brevo_init
 from api.efi.srotas_efi import init_app as api_efi_init
 from api.whatsapp.srotas_whatsapp import init_app as api_whatsapp_init
@@ -53,6 +55,8 @@ api_whatsapp_init(app)
 api_efi_init(app)
 api_bling_init(app)
 api_mercadopago_init(app)
+api_pix_manual_init(app)
+api_melhor_envio_init(app)
 registrar_modulos(app)
 registrar_templates_modulos(app)
 

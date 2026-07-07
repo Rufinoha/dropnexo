@@ -122,6 +122,95 @@
   align-items: start;
 }
 
+.FnInt_CardWrap {
+  position: relative;
+}
+
+/* Selo "Em breve" — carimbo no canto (sem imagem) */
+.FnInt_SoonSeal {
+  position: absolute;
+  top: -10px;
+  right: -8px;
+  z-index: 3;
+  width: 58px;
+  height: 58px;
+  pointer-events: none;
+  transform: rotate(14deg);
+  transform-origin: center center;
+  animation: FnInt_sealIn 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.FnInt_SoonSeal__svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 3px 6px rgba(127, 29, 29, 0.28));
+}
+
+.FnInt_CardWrap.is-soon .FnInt_Card {
+  background: linear-gradient(180deg, #fafbfc 0%, #ffffff 55%);
+  border-color: #e8ecf2;
+  box-shadow: none;
+  cursor: default;
+}
+
+.FnInt_CardWrap.is-soon .FnInt_CardIcon {
+  opacity: 0.72;
+  filter: grayscale(0.35) saturate(0.85);
+}
+
+.FnInt_CardWrap.is-soon .FnInt_CardNome {
+  color: #64748b;
+}
+
+.FnInt_CardWrap.is-soon .FnInt_CardDesc {
+  color: #94a3b8;
+}
+
+.FnInt_CardWrap.is-soon .FnInt_Card:hover {
+  border-color: #e2e8f0;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.04);
+  transform: none;
+}
+
+.FnInt_CardWrap.is-soon:hover .FnInt_SoonSeal {
+  animation: FnInt_sealWiggle 0.55s ease-in-out;
+}
+
+@keyframes FnInt_sealIn {
+  from {
+    opacity: 0;
+    transform: rotate(0deg) scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: rotate(14deg) scale(1);
+  }
+}
+
+@keyframes FnInt_sealWiggle {
+  0%,
+  100% {
+    transform: rotate(14deg) scale(1);
+  }
+  25% {
+    transform: rotate(10deg) scale(1.04);
+  }
+  75% {
+    transform: rotate(18deg) scale(1.04);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .FnInt_SoonSeal {
+    animation: none;
+  }
+
+  .FnInt_CardWrap.is-soon:hover .FnInt_SoonSeal {
+    animation: none;
+  }
+}
+
 .FnInt_CardWrap.is-connected .FnInt_Card {
   border-color: #bbf7d0;
   background: linear-gradient(180deg, #f0fdf4 0%, #ffffff 48%);

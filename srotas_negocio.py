@@ -291,6 +291,13 @@ CATEGORIAS_INTEGRACOES = [
                 "cor": "#009EE3",
                 "iniciais": "MP",
             },
+            {
+                "slug": "pix-manual",
+                "nome": "PIX Manual",
+                "descricao": "Sua chave PIX — o vendedor paga e envia o comprovante.",
+                "cor": "#32BCAD",
+                "iniciais": "PX",
+            },
             {"slug": "pagbank", "nome": "PagBank", "descricao": "Recebimentos PagBank.", "cor": "#1BB99A", "iniciais": "PB"},
             {"slug": "stripe", "nome": "Stripe", "descricao": "Pagamentos internacionais Stripe.", "cor": "#635BFF", "iniciais": "ST"},
             {"slug": "asaas", "nome": "Asaas", "descricao": "Cobranças e recebimentos Asaas.", "cor": "#0030B9", "iniciais": "AS"},

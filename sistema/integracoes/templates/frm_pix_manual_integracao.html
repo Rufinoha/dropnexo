@@ -1,0 +1,66 @@
+{% set nav_ativo = nav_codigo %}
+{% extends "frm_base.html" %}
+{% block title %}PIX Manual — Integrações — {{ MARCA_NOME }}{% endblock %}
+{% block topbar_title %}PIX Manual{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('static', filename='style/Cmercadopago_integracao.css') }}?v=3" />
+{% endblock %}
+{% block content %}
+<div class="Cl_ContainerApoio cl-page-principal Mp_Wrap">
+  <div class="cl-page-title Mp_PageHead">
+    <div class="Mp_PageHeadMain">
+      <a href="{{ url_for('integracoes.pagina') }}" class="Mp_BackLink">
+        <i data-lucide="arrow-left"></i> Integrações
+      </a>
+      <div class="Mp_TitleRow">
+        <div class="Mp_Logo Mp_Logo--pix" aria-hidden="true">PX</div>
+        <div>
+          <h2>PIX Manual</h2>
+          <p class="cl-page-desc">Informe sua chave PIX. O vendedor paga, anexa o comprovante e você valida manualmente.</p>
+        </div>
+      </div>
+    </div>
+    <div class="Mp_ConnBadge {{ 'is-on' if pix_manual_ativo else 'is-off' }}" id="pxm_status_badge">
+      {{ 'Ativo' if pix_manual_ativo else 'Inativo' }}
+    </div>
+  </div>
+
+  <section class="Mp_Card">
+    <h3>Chave PIX do fornecedor</h3>
+    <p class="Mp_Hint">O QR Code e o copia e cola incluirão o <strong>número do pedido</strong> como referência (TXID).</p>
+    <div class="Mp_FormGrid">
+      <div class="filter-group">
+        <label for="pxm_tipo">Tipo de chave</label>
+        <select id="pxm_tipo">
+          <option value="aleatoria">Chave aleatória</option>
+          <option value="cpf">CPF</option>
+          <option value="cnpj">CNPJ</option>
+          <option value="email">E-mail</option>
+          <option value="telefone">Telefone</option>
+        </select>
+      </div>
+      <div class="filter-group Mp_FormGrid--full">
+        <label for="pxm_chave">Chave PIX *</label>
+        <input id="pxm_chave" type="text" placeholder="Sua chave PIX" />
+      </div>
+      <div class="filter-group">
+        <label for="pxm_nome">Nome do beneficiário *</label>
+        <input id="pxm_nome" type="text" maxlength="25" placeholder="Como no banco" />
+      </div>
+      <div class="filter-group">
+        <label for="pxm_cidade">Cidade *</label>
+        <input id="pxm_cidade" type="text" maxlength="15" placeholder="Ex.: São Paulo" />
+      </div>
+    </div>
+    <label class="Mp_Switch"><input type="checkbox" id="pxm_ativo" checked /> Ativar PIX manual nos pedidos</label>
+    <p id="pxm_msg" class="Mp_Msg" hidden></p>
+    <div class="Mp_Actions Mp_Actions--foot">
+      <button type="button" class="Cl_BtnSalvar" id="pxm_btn_salvar">Salvar</button>
+      <button type="button" class="Cl_BtnCancelar" id="pxm_btn_desativar">Desativar</button>
+    </div>
+  </section>
+</div>
+{% endblock %}
+{% block page_js %}
+<script src="{{ url_for('static', filename='script/Spix_manual_integracao.js') }}?v=1"></script>
+{% endblock %}

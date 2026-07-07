@@ -6,11 +6,13 @@ from flask import Blueprint, jsonify, render_template, request, session
 
 from global_utils import Var_ConectarBanco, exigir_modulo, exigir_permissao, login_obrigatorio
 from servico_pedido import (
+    listar_anexos_pedido,
     listar_pedidos_fornecedor,
     marcar_em_expedicao,
     marcar_entregue,
     obter_pedido,
 )
+from servico_pedido_pix_manual import confirmar_pix_manual, rejeitar_comprovante_pix
 from srotas_plataforma import MODULO_FORNECEDOR
 
 _MOD = Path(__file__).resolve().parent
@@ -125,6 +127,54 @@ def pedido_detalhe(id_pedido: int):
         ped = obter_pedido(cur, id_pedido, id_fornecedor=id_f)
         if not ped:
             return jsonify(success=False, message="Pedido não encontrado."), 404
+        ped["anexos"] = listar_anexos_pedido(cur, id_pedido, id_fornecedor=id_f)
         return jsonify(success=True, pedido=ped)
+    finally:
+        conn.close()
+
+
+@fn_pedidos_bp.post("/fornecedor/pedidos/<int:id_pedido>/pagamento/confirmar")
+@login_obrigatorio()
+@exigir_modulo(MODULO_FORNECEDOR)
+@exigir_permissao(codigo="fn_pedidos.editar")
+def pedido_confirmar_pix(id_pedido: int):
+    id_f = _id_fornecedor()
+    if not id_f:
+        return jsonify(success=False, message="Sessão inválida."), 403
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        confirmar_pix_manual(cur, id_pedido, id_fornecedor=id_f, id_usuario=_id_usuario())
+        conn.commit()
+        return jsonify(success=True, message="Pagamento confirmado. Pedido liberado.")
+    except ValueError as e:
+        return jsonify(success=False, message=str(e)), 400
+    finally:
+        conn.close()
+
+
+@fn_pedidos_bp.post("/fornecedor/pedidos/<int:id_pedido>/pagamento/rejeitar")
+@login_obrigatorio()
+@exigir_modulo(MODULO_FORNECEDOR)
+@exigir_permissao(codigo="fn_pedidos.editar")
+def pedido_rejeitar_pix(id_pedido: int):
+    id_f = _id_fornecedor()
+    if not id_f:
+        return jsonify(success=False, message="Sessão inválida."), 403
+    body = request.get_json(silent=True) or {}
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        rejeitar_comprovante_pix(
+            cur,
+            id_pedido,
+            id_fornecedor=id_f,
+            id_usuario=_id_usuario(),
+            motivo=body.get("motivo"),
+        )
+        conn.commit()
+        return jsonify(success=True, message="Comprovante rejeitado. Solicite novo envio ao vendedor.")
+    except ValueError as e:
+        return jsonify(success=False, message=str(e)), 400
     finally:
         conn.close()
