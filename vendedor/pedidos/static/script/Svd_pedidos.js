@@ -13,10 +13,6 @@
     vazio: document.getElementById("pd_vazio"),
     filtro: document.getElementById("pd_filtroStatus"),
     modal: document.getElementById("pd_modal"),
-    detModal: document.getElementById("pd_detModal"),
-    detBody: document.getElementById("pd_detBody"),
-    detFoot: document.getElementById("pd_detFoot"),
-    detTitulo: document.getElementById("pd_detTitulo"),
     itens: document.getElementById("pd_itens"),
     itensVazio: document.getElementById("pd_itensVazio"),
     msg: document.getElementById("pd_msg"),
@@ -24,7 +20,6 @@
     taxa: document.getElementById("pd_taxa"),
     total: document.getElementById("pd_total"),
     linhaTaxa: document.getElementById("pd_linhaTaxa"),
-    cliNome: document.getElementById("pd_cliNome"),
   };
 
   let idGrupo = null;
@@ -34,6 +29,8 @@
   let pollPixTimer = null;
   let pedidoPagamentoAtual = null;
   let painelAtivo = "produto";
+  let bloqueadoTotal = false;
+  let editavelCampos = true;
   let somenteLeitura = false;
   /** @type {Array<{id:number,numero:string,status:string,fornecedor_nome:string,anexos?:Array}>} */
   let pedidosGrupo = [];
@@ -69,6 +66,7 @@
   const elWizMain = document.querySelector(".Pd_WizMain");
   const elBtnSalvar = document.getElementById("pd_btnSalvar");
   const elBtnConfirmar = document.getElementById("pd_btnConfirmar");
+  const elBtnCancelar = document.getElementById("pd_btnCancelar");
 
   const fmt = (v) =>
     Number(v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -136,11 +134,32 @@
     if (id === "anexos") renderAnexos();
   }
 
-  function aplicarModoLeitura(ativo) {
-    somenteLeitura = !!ativo;
-    elWizMain?.classList.toggle("is-readonly", somenteLeitura);
-    if (elBtnSalvar) elBtnSalvar.hidden = somenteLeitura;
-    if (elBtnConfirmar) elBtnConfirmar.hidden = somenteLeitura;
+  function aplicarEstadoWizard(grupo) {
+    editavelCampos = grupo ? !!grupo.editavel : true;
+    const bloqueadoIntegracao = pedidosGrupo.some((p) => (p.origem || "manual") !== "manual");
+    const bloqueadoPago = pedidosGrupo.some((p) =>
+      ["pago", "em_expedicao", "entregue"].includes(p.status)
+    );
+
+    bloqueadoTotal = bloqueadoIntegracao;
+    somenteLeitura = bloqueadoIntegracao;
+
+    elWizMain?.classList.toggle("is-readonly", bloqueadoIntegracao);
+    elWizMain?.classList.toggle(
+      "is-campos-readonly",
+      !editavelCampos || bloqueadoPago || bloqueadoIntegracao
+    );
+
+    if (elBtnSalvar) elBtnSalvar.hidden = !editavelCampos;
+    if (elBtnConfirmar) elBtnConfirmar.hidden = !editavelCampos;
+
+    const podeCancelar =
+      pedidosGrupo.some(
+        (p) =>
+          (p.status === "rascunho" || p.status === "aguardando_pagamento") &&
+          (p.origem || "manual") === "manual"
+      ) && !bloqueadoIntegracao;
+    if (elBtnCancelar) elBtnCancelar.hidden = !podeCancelar;
   }
 
   function preencherFormulario(grupo) {
@@ -211,8 +230,8 @@
 
     idGrupo = grupo.id_grupo;
     meioPagamentoPorFornecedor = {};
-    aplicarModoLeitura(!grupo.editavel);
     preencherFormulario(grupo);
+    aplicarEstadoWizard(grupo);
 
     const titulo = grupo.editavel
       ? `Editar pedido ${grupo.numero_grupo || ""}`.trim()
@@ -233,12 +252,16 @@
 
   function renderBlocoAnexo(ped, tipo, rotulo) {
     const lista = (ped.anexos || []).filter((a) => a.tipo === tipo);
-    const uploadDisabled = ped.status === "cancelado" ? "disabled" : "";
+    const inpId = `pd_anexo_inp_${ped.id}_${tipo}`;
+    const podeEnviar =
+      (ped.origem || "manual") === "manual" && ped.status !== "cancelado" && !bloqueadoTotal;
     return `
       <div class="Pd_AnexoBloco" id="pd_anexo_${ped.id}_${tipo}">
         <h5>${esc(rotulo)}</h5>
         <div class="Pd_AnexoUpload">
-          <input type="file" accept=".pdf,.xml,.png,.jpg,.jpeg,.webp" data-upload-anexo="${ped.id}" data-tipo="${tipo}" ${uploadDisabled} />
+          <input type="file" id="${inpId}" class="Pd_AnexoInput" hidden accept=".pdf,.xml,.png,.jpg,.jpeg,.webp" data-upload-anexo="${ped.id}" data-tipo="${tipo}" ${podeEnviar ? "" : "disabled"} />
+          ${podeEnviar ? `<label for="${inpId}" class="Cl_botaoFiltro Pd_AnexoBtn">Escolher arquivo</label>` : ""}
+          <span class="Pd_AnexoFileName" data-anexo-label="${ped.id}_${tipo}">Nenhum arquivo escolhido</span>
           <span class="Pd_Hint">PDF, XML ou imagem — máx. 5 MB</span>
         </div>
         <ul class="Pd_AnexoItens">
@@ -304,6 +327,8 @@
     const tipo = input.dataset.tipo;
     const file = input.files?.[0];
     if (!idPed || !tipo || !file) return;
+    const labelEl = document.querySelector(`[data-anexo-label="${idPed}_${tipo}"]`);
+    if (labelEl) labelEl.textContent = file.name;
     const fd = new FormData();
     fd.append("tipo", tipo);
     fd.append("arquivo", file);
@@ -327,6 +352,7 @@
         Swal.fire({ icon: "success", title: "Anexo", text: j.message, timer: 1800, showConfirmButton: false });
       }
     } catch (e) {
+      if (labelEl) labelEl.textContent = "Nenhum arquivo escolhido";
       if (window.Swal) {
         Swal.fire({ icon: "error", title: "Anexo", text: e.message, confirmButtonColor: "#021F81" });
       } else {
@@ -392,72 +418,47 @@
 
   async function renderPayIntegracoes() {
     if (!elPayIntegracoes) return;
-    const fornecedores = [...new Set(carrinho.map((i) => i.id_fornecedor))];
-    if (!fornecedores.length) {
+    pararPollPix();
+
+    const idsFornCarrinho = [...new Set(carrinho.map((i) => i.id_fornecedor))];
+    if (!idsFornCarrinho.length && !pedidosGrupo.length) {
       elPayIntegracoes.innerHTML =
         '<p class="Pd_Hint">Adicione produtos para ver as opções de pagamento.</p>';
       return;
     }
 
     elPayIntegracoes.innerHTML = '<p class="Pd_Hint">Carregando integrações…</p>';
-    const r = await fetch(
-      `/vendedor/pedidos/meios-pagamento/preview?fornecedores=${fornecedores.join(",")}`,
-      { credentials: "same-origin" }
-    );
-    const j = await r.json();
-    if (!j.success || !j.fornecedores?.length) {
-      elPayIntegracoes.innerHTML =
-        '<p class="Pd_Hint">Não foi possível carregar as formas de pagamento.</p>';
-      return;
+
+    /** @type {Array<{ped?: object, preview?: object, meios?: object}>} */
+    const cards = [];
+
+    if (pedidosGrupo.length) {
+      for (const ped of pedidosGrupo) {
+        let meios = { conectado: false, pix: false, cartao: false };
+        if (ped.status === "aguardando_pagamento") {
+          const r = await fetch(`/vendedor/pedidos/${ped.id}/meios-pagamento`, {
+            credentials: "same-origin",
+          });
+          const j = await r.json();
+          if (j.success) meios = j;
+        }
+        cards.push({ ped, meios });
+      }
+    } else {
+      const r = await fetch(
+        `/vendedor/pedidos/meios-pagamento/preview?fornecedores=${idsFornCarrinho.join(",")}`,
+        { credentials: "same-origin" }
+      );
+      const j = await r.json();
+      if (!j.success || !j.fornecedores?.length) {
+        elPayIntegracoes.innerHTML =
+          '<p class="Pd_Hint">Não foi possível carregar as formas de pagamento.</p>';
+        return;
+      }
+      j.fornecedores.forEach((f) => cards.push({ preview: f, meios: f }));
     }
 
-    elPayIntegracoes.innerHTML = j.fornecedores
-      .map((f) => {
-        const icone = f.icone_url || cfg.mp_icone;
-        if (!f.conectado) {
-          return `
-          <div class="Pd_PayCard" data-forn="${f.id_fornecedor}">
-            <div class="Pd_PayCardHead">
-              <img class="Pd_PayCardLogo" src="${esc(icone)}" alt="" />
-              <div>
-                <div class="Pd_PayCardNome">${esc(f.integracao_nome || "Mercado Pago")}</div>
-                <div class="Pd_PayCardForn">${esc(f.fornecedor_nome)}</div>
-              </div>
-            </div>
-            <p class="Pd_PayCardOff">Fornecedor ainda não conectou o Mercado Pago. O pedido poderá ser salvo, mas o pagamento ficará pendente.</p>
-          </div>`;
-        }
-
-        const pref = meioPagamentoPorFornecedor[f.id_fornecedor] || "";
-        const opcoes = [];
-        if (f.pix) {
-          opcoes.push(`
-            <label class="Pd_PayOpcao Pd_PayOpcao--pix${pref === "pix" ? " is-selected" : ""}">
-              <input type="radio" name="pd_meio_${f.id_fornecedor}" value="pix"${pref === "pix" || (!pref && !f.cartao) ? " checked" : ""} />
-              PIX
-            </label>`);
-        }
-        if (f.cartao) {
-          opcoes.push(`
-            <label class="Pd_PayOpcao Pd_PayOpcao--cartao${pref === "cartao" ? " is-selected" : ""}">
-              <input type="radio" name="pd_meio_${f.id_fornecedor}" value="cartao"${pref === "cartao" || (!pref && f.cartao && !f.pix) ? " checked" : ""} />
-              Cartão de crédito
-            </label>`);
-        }
-
-        return `
-        <div class="Pd_PayCard" data-forn="${f.id_fornecedor}">
-          <div class="Pd_PayCardHead">
-            <img class="Pd_PayCardLogo" src="${esc(icone)}" alt="" />
-            <div>
-              <div class="Pd_PayCardNome">${esc(f.integracao_nome || "Mercado Pago")}</div>
-              <div class="Pd_PayCardForn">${esc(f.fornecedor_nome)}</div>
-            </div>
-          </div>
-          <div class="Pd_PayOpcoes">${opcoes.join("") || '<span class="Pd_Hint">Nenhum meio habilitado.</span>'}</div>
-        </div>`;
-      })
-      .join("");
+    elPayIntegracoes.innerHTML = cards.map((c) => renderPayCard(c)).join("");
 
     elPayIntegracoes.querySelectorAll('input[type="radio"]').forEach((inp) => {
       inp.addEventListener("change", () => {
@@ -474,6 +475,183 @@
         if (idForn) meioPagamentoPorFornecedor[idForn] = inp.value;
       }
     });
+
+    elPayIntegracoes.querySelectorAll("[data-pagar-forn]").forEach((btn) => {
+      btn.addEventListener("click", () => pagarFornecedor(+btn.dataset.pagarForn));
+    });
+  }
+
+  function renderPayCard({ ped, preview, meios }) {
+    const idForn = ped?.id_fornecedor ?? preview?.id_fornecedor;
+    const fornNome = ped?.fornecedor_nome ?? preview?.fornecedor_nome ?? "";
+    const icone = preview?.icone_url || meios?.icone_url || cfg.mp_icone;
+    const conectado = meios?.conectado ?? preview?.conectado;
+    const pix = meios?.pix ?? preview?.pix;
+    const cartao = meios?.cartao ?? preview?.cartao;
+    const pref = meioPagamentoPorFornecedor[idForn] || "";
+    const pedidoPago = ped && ["pago", "em_expedicao", "entregue"].includes(ped.status);
+    const aguardando = ped?.status === "aguardando_pagamento";
+    const rascunho = ped?.status === "rascunho";
+
+    let statusHtml = "";
+    if (pedidoPago) {
+      const quando = ped.pago_em
+        ? new Date(ped.pago_em).toLocaleString("pt-BR")
+        : "";
+      statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pago">${badge("pago")} Pagamento confirmado${quando ? ` · ${esc(quando)}` : ""}</div>`;
+    } else if (aguardando) {
+      statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pendente">${badge(ped.status)} Aguardando pagamento · ${fmt(ped.valor_total)}</div>`;
+    } else if (rascunho) {
+      statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pendente">${badge("rascunho")} Confirme o pedido para pagar</div>`;
+    }
+
+    if (!conectado) {
+      return `
+        <div class="Pd_PayCard" data-forn="${idForn}">
+          <div class="Pd_PayCardHead">
+            <img class="Pd_PayCardLogo" src="${esc(icone)}" alt="" />
+            <div>
+              <div class="Pd_PayCardNome">${esc(meios?.integracao_nome || preview?.integracao_nome || "Mercado Pago")}</div>
+              <div class="Pd_PayCardForn">${esc(fornNome)}${ped?.numero ? ` · ${esc(ped.numero)}` : ""}</div>
+            </div>
+          </div>
+          ${statusHtml ? `<div class="Pd_PayRow">${statusHtml}</div>` : ""}
+          <p class="Pd_PayCardOff">Fornecedor ainda não conectou o Mercado Pago.</p>
+        </div>`;
+    }
+
+    const opcoes = [];
+    if (pix) {
+      opcoes.push(`
+        <label class="Pd_PayOpcao Pd_PayOpcao--pix${pref === "pix" ? " is-selected" : ""}">
+          <input type="radio" name="pd_meio_${idForn}" value="pix"${pref === "pix" || (!pref && !cartao) ? " checked" : ""} ${aguardando || rascunho || !ped ? "" : "disabled"} />
+          PIX
+        </label>`);
+    }
+    if (cartao) {
+      opcoes.push(`
+        <label class="Pd_PayOpcao Pd_PayOpcao--cartao${pref === "cartao" ? " is-selected" : ""}">
+          <input type="radio" name="pd_meio_${idForn}" value="cartao"${pref === "cartao" || (!pref && cartao && !pix) ? " checked" : ""} ${aguardando || rascunho || !ped ? "" : "disabled"} />
+          Cartão de crédito
+        </label>`);
+    }
+
+    const podePagar = aguardando && !bloqueadoTotal && !pedidoPago;
+    const payRow = `
+      <div class="Pd_PayRow">
+        ${statusHtml || ""}
+        ${podePagar ? `<button type="button" class="Cl_BtnSalvar Pd_BtnPagar" data-pagar-forn="${idForn}">Pagar agora</button>` : ""}
+      </div>
+      ${podePagar ? `<div class="Pd_PixInline" id="pd_pix_${ped.id}" hidden></div>` : ""}`;
+
+    return `
+      <div class="Pd_PayCard" data-forn="${idForn}">
+        <div class="Pd_PayCardHead">
+          <img class="Pd_PayCardLogo" src="${esc(icone)}" alt="" />
+          <div>
+            <div class="Pd_PayCardNome">${esc(meios?.integracao_nome || preview?.integracao_nome || "Mercado Pago")}</div>
+            <div class="Pd_PayCardForn">${esc(fornNome)}${ped?.numero ? ` · ${esc(ped.numero)}` : ""}</div>
+          </div>
+        </div>
+        ${(aguardando || rascunho || !ped) && opcoes.length ? `<div class="Pd_PayOpcoes">${opcoes.join("")}</div>` : ""}
+        ${payRow}
+      </div>`;
+  }
+
+  function mostrarPixInline(idPed, dados) {
+    const box = document.getElementById(`pd_pix_${idPed}`);
+    if (!box) return;
+    box.hidden = false;
+    box.innerHTML = `
+      <p class="Pd_Hint">Escaneie o QR Code ou copie o código PIX</p>
+      ${dados.qr_code_base64 ? `<img src="data:image/png;base64,${dados.qr_code_base64}" alt="QR PIX" />` : ""}
+      <code>${esc(dados.qr_code || "—")}</code>
+      <button type="button" class="Cl_botaoFiltro" data-copiar-pix="${idPed}">Copiar PIX</button>
+      <p class="Pd_Hint" id="pd_pixSt_${idPed}">Aguardando confirmação do PIX…</p>`;
+    box.querySelector("[data-copiar-pix]")?.addEventListener("click", () => {
+      const code = dados.qr_code || "";
+      if (!code) return;
+      navigator.clipboard?.writeText(code).then(() => {
+        const st = document.getElementById(`pd_pixSt_${idPed}`);
+        if (st) st.textContent = "Código PIX copiado.";
+      });
+    });
+  }
+
+  async function pollPixInline(idPed) {
+    const r = await fetch(`/vendedor/pedidos/${idPed}/pagamento/status`, { credentials: "same-origin" });
+    const j = await r.json();
+    if (!j.success) return;
+    const stEl = document.getElementById(`pd_pixSt_${idPed}`);
+    if (j.status === "pago") {
+      if (stEl) stEl.textContent = "Pagamento confirmado!";
+      pararPollPix();
+      await atualizarGrupoAposPagamento(idPed);
+      if (window.Swal) {
+        Swal.fire({ icon: "success", title: "Pago", text: "Pagamento confirmado.", timer: 2000, showConfirmButton: false });
+      }
+    } else if (stEl) {
+      stEl.textContent = "Aguardando confirmação do PIX…";
+    }
+  }
+
+  async function atualizarGrupoAposPagamento(idPed) {
+    const ped = pedidosGrupo.find((p) => p.id === idPed);
+    if (ped) {
+      ped.status = "pago";
+      ped.status_pagamento = "pago";
+    }
+    await carregarLista();
+    if (idGrupo) {
+      try {
+        const grupo = await carregarGrupo(idGrupo);
+        pedidosGrupo = grupo.pedidos || [];
+        aplicarEstadoWizard(grupo);
+      } catch {
+        /* ok */
+      }
+    }
+    if (painelAtivo === "valores") renderPayIntegracoes();
+  }
+
+  async function pagarFornecedor(idForn) {
+    const ped = pedidosGrupo.find((p) => p.id_fornecedor === idForn);
+    if (!ped || ped.status !== "aguardando_pagamento") return;
+
+    const meio = meioPagamentoPorFornecedor[idForn] || "pix";
+    const btn = elPayIntegracoes?.querySelector(`[data-pagar-forn="${idForn}"]`);
+    if (btn) btn.disabled = true;
+
+    try {
+      const r = await fetch("/vendedor/pedidos/pagar", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id_pedido: ped.id, meio }),
+      });
+      const j = await parseJsonResp(r);
+      if (!j.success) throw new Error(j.message || "Erro ao iniciar pagamento.");
+
+      if (meio === "pix") {
+        pedidoPagamentoAtual = ped.id;
+        mostrarPixInline(ped.id, j);
+        pararPollPix();
+        pollPixTimer = setInterval(() => pollPixInline(ped.id), 5000);
+        pollPixInline(ped.id);
+        return;
+      }
+      if (j.checkout_url) {
+        window.location.href = j.checkout_url;
+      }
+    } catch (e) {
+      if (window.Swal) {
+        Swal.fire({ icon: "error", title: "Pagamento", text: e.message, confirmButtonColor: "#021F81" });
+      } else {
+        mostrarMsg(e.message, true);
+      }
+    } finally {
+      if (btn) btn.disabled = false;
+    }
   }
 
   function atualizarResumo() {
@@ -585,7 +763,9 @@
     pedidoFocoAnexo = null;
     tipoAnexoFoco = null;
     meioPagamentoPorFornecedor = {};
-    aplicarModoLeitura(false);
+    bloqueadoTotal = false;
+    editavelCampos = true;
+    aplicarEstadoWizard(null);
     document.getElementById("pd_modalTitulo").textContent = "Novo pedido";
     ["pd_cliNome", "pd_cliDoc", "pd_cliEmail", "pd_cliTel", "pd_cep", "pd_logradouro",
       "pd_numero", "pd_compl", "pd_bairro", "pd_cidade", "pd_uf"].forEach((id) => {
@@ -602,6 +782,7 @@
   }
 
   function fecharModal() {
+    pararPollPix();
     el.modal.hidden = true;
   }
 
@@ -682,7 +863,7 @@
 
   async function salvar(confirmar) {
     mostrarMsg("");
-    if (somenteLeitura) return null;
+    if (bloqueadoTotal || !editavelCampos) return null;
     const body = corpoPedido();
     if (elBtnSalvar) elBtnSalvar.disabled = true;
     if (elBtnConfirmar) elBtnConfirmar.disabled = true;
@@ -748,92 +929,60 @@
     }
     mostrarMsg(jc.message || "Pedido confirmado.");
     if (window.Swal) {
-      Swal.fire({ icon: "success", title: "Confirmado", text: jc.message, timer: 2000, showConfirmButton: false });
+      Swal.fire({ icon: "success", title: "Confirmado", text: jc.message, timer: 1800, showConfirmButton: false });
+    }
+    try {
+      const grupo = await carregarGrupo(idGrupo);
+      pedidosGrupo = grupo.pedidos || [];
+      aplicarEstadoWizard(grupo);
+    } catch {
+      /* ok */
     }
     await carregarLista();
-    setTimeout(fecharModal, 1200);
+    irPainel("valores");
+    if (elBtnSalvar) elBtnSalvar.disabled = false;
+    if (elBtnConfirmar) elBtnConfirmar.disabled = false;
     return jc;
   }
 
-  async function abrirDetalhe(id) {
-    const r = await fetch(`/vendedor/pedidos/${id}`, { credentials: "same-origin" });
-    const j = await r.json();
-    if (!j.success) return;
-    const p = j.pedido;
-    pedidoPagamentoAtual = p.id;
-    el.detTitulo.textContent = `Pedido ${p.numero}`;
-    el.detBody.innerHTML = `
-      <div class="Pd_DetGrid">
-        <div><strong>Fornecedor:</strong> ${esc(p.fornecedor_nome || "")}</div>
-        <div><strong>Cliente:</strong> ${esc(p.cliente_nome)}</div>
-        <div><strong>Situação:</strong> ${badge(p.status)}</div>
-        <div><strong>Total:</strong> ${fmt(p.valor_total)} (produtos ${fmt(p.subtotal_produtos)}${p.valor_taxa_pedido > 0 ? ` + taxa ${fmt(p.valor_taxa_pedido)}` : ""})</div>
-      </div>
-      <table class="Pd_Table"><thead><tr><th>Produto</th><th>Qtd</th><th>Drop</th></tr></thead>
-      <tbody>${(p.itens || []).map((i) => `<tr><td>${esc(i.nome_produto)}</td><td>${i.quantidade}</td><td>${fmt(i.subtotal_drop)}</td></tr>`).join("")}</tbody></table>`;
-
-    el.detFoot.innerHTML = "";
-    if (p.status === "rascunho") {
-      const bConf = document.createElement("button");
-      bConf.className = "Cl_BtnSalvar";
-      bConf.textContent = "Confirmar";
-      bConf.onclick = async () => {
-        bConf.disabled = true;
-        try {
-          const rc = await fetch("/vendedor/pedidos/confirmar", {
-            method: "POST",
-            credentials: "same-origin",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ id_pedido: p.id }),
-          });
-          const jc = await parseJsonResp(rc);
-          if (!jc.success) throw new Error(jc.message || "Erro ao confirmar.");
-          el.detModal.hidden = true;
-          await carregarLista();
-          if (window.Swal) {
-            Swal.fire({ icon: "success", title: "Confirmado", text: jc.message, confirmButtonColor: "#021F81" });
-          }
-        } catch (e) {
-          if (window.Swal) {
-            Swal.fire({ icon: "error", title: "Confirmar", text: e.message, confirmButtonColor: "#021F81" });
-          }
-        } finally {
-          bConf.disabled = false;
-        }
-      };
-      el.detFoot.appendChild(bConf);
-
-      const bEdit = document.createElement("button");
-      bEdit.type = "button";
-      bEdit.className = "Cl_BtnCancelar";
-      bEdit.textContent = "Editar";
-      bEdit.onclick = () => {
-        el.detModal.hidden = true;
-        if (p.id_grupo) abrirModalEdicao({ idGrupo: p.id_grupo, painelInicial: "produto" });
-      };
-      el.detFoot.prepend(bEdit);
-    }
-    if (p.status === "rascunho" || p.status === "aguardando_pagamento") {
-      const bCan = document.createElement("button");
-      bCan.className = "Cl_BtnExcluir";
-      bCan.textContent = "Cancelar pedido";
-      bCan.onclick = async () => {
-        if (!confirm("Cancelar este pedido?")) return;
-        await fetch("/vendedor/pedidos/cancelar", {
+  async function cancelarPedidoGrupo() {
+    const cancelaveis = pedidosGrupo.filter(
+      (p) =>
+        (p.status === "rascunho" || p.status === "aguardando_pagamento") &&
+        (p.origem || "manual") === "manual"
+    );
+    if (!cancelaveis.length) return;
+    if (!confirm("Cancelar este(s) pedido(s)?")) return;
+    try {
+      for (const p of cancelaveis) {
+        const r = await fetch("/vendedor/pedidos/cancelar", {
           method: "POST",
           credentials: "same-origin",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ id_pedido: p.id }),
         });
-        el.detModal.hidden = true;
-        carregarLista();
-      };
-      el.detFoot.appendChild(bCan);
+        const j = await parseJsonResp(r);
+        if (!j.success) throw new Error(j.message || "Erro ao cancelar.");
+      }
+      fecharModal();
+      await carregarLista();
+    } catch (e) {
+      if (window.Swal) {
+        Swal.fire({ icon: "error", title: "Cancelar", text: e.message, confirmButtonColor: "#021F81" });
+      }
     }
-    if (p.status === "aguardando_pagamento") {
-      await renderPagamento(p);
+  }
+
+  async function abrirAposRetornoPagamento(idPed) {
+    try {
+      const r = await fetch(`/vendedor/pedidos/${idPed}`, { credentials: "same-origin" });
+      const j = await parseJsonResp(r);
+      if (j.success && j.pedido?.id_grupo) {
+        await abrirModalEdicao({ idGrupo: j.pedido.id_grupo, painelInicial: "valores" });
+      }
+    } catch {
+      /* ok */
     }
-    el.detModal.hidden = false;
   }
 
   function pararPollPix() {
@@ -843,119 +992,9 @@
     }
   }
 
-  function fecharPayModal() {
-    pararPollPix();
-    document.getElementById("pd_payModal").hidden = true;
-  }
-
-  async function pollPixStatus(idPedido) {
-    const r = await fetch(`/vendedor/pedidos/${idPedido}/pagamento/status`, { credentials: "same-origin" });
-    const j = await r.json();
-    if (!j.success) return;
-    const stEl = document.getElementById("pd_payStatus");
-    if (j.status === "pago") {
-      if (stEl) stEl.textContent = "Pagamento confirmado!";
-      pararPollPix();
-      setTimeout(() => {
-        fecharPayModal();
-        el.detModal.hidden = true;
-        carregarLista();
-        if (window.Swal) {
-          Swal.fire({ icon: "success", title: "Pago", text: "Pedido pago com sucesso.", confirmButtonColor: "#021F81" });
-        }
-      }, 800);
-    } else if (stEl) {
-      stEl.textContent = "Aguardando confirmação do PIX…";
-    }
-  }
-
-  function abrirModalPix(dados) {
-    const modal = document.getElementById("pd_payModal");
-    const img = document.getElementById("pd_pixImg");
-    const wrap = document.getElementById("pd_pixQrWrap");
-    const code = document.getElementById("pd_pixCode");
-    const stEl = document.getElementById("pd_payStatus");
-
-    if (code) code.textContent = dados.qr_code || "—";
-    if (dados.qr_code_base64 && img) {
-      img.src = `data:image/png;base64,${dados.qr_code_base64}`;
-      if (wrap) wrap.hidden = false;
-    } else if (wrap) {
-      wrap.hidden = true;
-    }
-    if (stEl) stEl.textContent = "Aguardando confirmação do PIX…";
-    modal.hidden = false;
-
-    pararPollPix();
-    pollPixTimer = setInterval(() => pollPixStatus(pedidoPagamentoAtual), 5000);
-    pollPixStatus(pedidoPagamentoAtual);
-  }
-
-  async function iniciarPagamento(idPedido, meio) {
-    const r = await fetch("/vendedor/pedidos/pagar", {
-      method: "POST",
-      credentials: "same-origin",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id_pedido: idPedido, meio }),
-    });
-    const j = await r.json();
-    if (!j.success) {
-      mostrarMsg(j.message || "Erro ao iniciar pagamento.", true);
-      if (window.Swal) Swal.fire({ icon: "error", title: "Pagamento", text: j.message, confirmButtonColor: "#021F81" });
-      return;
-    }
-    if (meio === "pix") {
-      abrirModalPix(j);
-      return;
-    }
-    if (j.checkout_url) {
-      window.location.href = j.checkout_url;
-    }
-  }
-
-  async function renderPagamento(p) {
-    const r = await fetch(`/vendedor/pedidos/${p.id}/meios-pagamento`, { credentials: "same-origin" });
-    const j = await r.json();
-    if (!j.success) {
-      const aviso = document.createElement("p");
-      aviso.className = "Pd_Hint";
-      aviso.textContent = j.message || "Pagamento indisponível.";
-      el.detFoot.prepend(aviso);
-      return;
-    }
-    if (!j.conectado) {
-      const aviso = document.createElement("p");
-      aviso.className = "Pd_Hint";
-      aviso.textContent = "Fornecedor ainda não conectou o Mercado Pago.";
-      el.detFoot.prepend(aviso);
-      return;
-    }
-
-    const box = document.createElement("div");
-    box.className = "Pd_PayActions";
-    box.innerHTML = `<span class="Pd_Hint" style="flex:1 1 100%">Pagar ${fmt(j.valor_total)} ao fornecedor:</span>`;
-
-    if (j.pix) {
-      const bPix = document.createElement("button");
-      bPix.type = "button";
-      bPix.className = "Pd_PayBtn Pd_PayBtn--pix";
-      bPix.textContent = "Pagar com PIX";
-      bPix.onclick = () => iniciarPagamento(p.id, "pix");
-      box.appendChild(bPix);
-    }
-    if (j.cartao) {
-      const bCard = document.createElement("button");
-      bCard.type = "button";
-      bCard.className = "Pd_PayBtn Pd_PayBtn--cartao";
-      bCard.textContent = "Pagar com cartão";
-      bCard.onclick = () => iniciarPagamento(p.id, "cartao");
-      box.appendChild(bCard);
-    }
-    el.detFoot.prepend(box);
-  }
-
   document.getElementById("pd_btnNovo")?.addEventListener("click", abrirModal);
   document.getElementById("pd_btnFechar")?.addEventListener("click", fecharModal);
+  elBtnCancelar?.addEventListener("click", cancelarPedidoGrupo);
 
   document.querySelectorAll(".Pd_WizNavItem").forEach((btn) => {
     btn.addEventListener("click", () => irPainel(btn.dataset.painel));
@@ -964,18 +1003,6 @@
   ["pd_cliNome", "pd_cliDoc", "pd_cliEmail", "pd_cliTel", "pd_cep", "pd_logradouro",
     "pd_numero", "pd_compl", "pd_bairro", "pd_cidade", "pd_uf"].forEach((id) => {
     document.getElementById(id)?.addEventListener("input", atualizarNavResumos);
-  });
-  document.getElementById("pd_detFechar")?.addEventListener("click", () => {
-    el.detModal.hidden = true;
-  });
-  document.getElementById("pd_payFechar")?.addEventListener("click", fecharPayModal);
-  document.getElementById("pd_pixCopiar")?.addEventListener("click", () => {
-    const code = document.getElementById("pd_pixCode")?.textContent || "";
-    if (!code || code === "—") return;
-    navigator.clipboard?.writeText(code).then(() => {
-      const st = document.getElementById("pd_payStatus");
-      if (st) st.textContent = "Código PIX copiado.";
-    });
   });
   document.getElementById("pd_btnFiltrar")?.addEventListener("click", carregarLista);
   document.getElementById("pd_btnCep")?.addEventListener("click", buscarCep);
@@ -1002,11 +1029,8 @@
     }
     if (acao === "editar") {
       const st = btn.dataset.status || "";
-      if (st === "aguardando_pagamento") {
-        abrirDetalhe(idPed);
-        return;
-      }
-      abrirModalEdicao({ idGrupo: idG, painelInicial: "produto", idPedidoFoco: idPed });
+      const painel = st === "aguardando_pagamento" || st === "pago" ? "valores" : "produto";
+      abrirModalEdicao({ idGrupo: idG, painelInicial: painel, idPedidoFoco: idPed });
       return;
     }
     if (acao === "nf") {
@@ -1034,10 +1058,10 @@
     const m = msgs[pg] || { icon: "info", title: "Retorno", text: "Verifique o status do pedido." };
     if (window.Swal) {
       Swal.fire({ ...m, confirmButtonColor: "#021F81" }).then(() => {
-        if (idPed) abrirDetalhe(+idPed);
+        if (idPed) abrirAposRetornoPagamento(+idPed);
       });
     } else if (idPed) {
-      abrirDetalhe(+idPed);
+      abrirAposRetornoPagamento(+idPed);
     }
   }
 

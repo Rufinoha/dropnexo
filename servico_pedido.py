@@ -1164,7 +1164,8 @@ def obter_grupo_pedido(cur, id_vendedor: int, id_grupo: int) -> dict | None:
 
     cur.execute(
         """
-        SELECT p.id, p.status, p.id_tenant_fornecedor, COALESCE(tf.nome_fantasia, tf.nome), p.numero
+        SELECT p.id, p.status, p.status_pagamento, p.origem, p.valor_total,
+               p.id_tenant_fornecedor, COALESCE(tf.nome_fantasia, tf.nome), p.numero, p.pago_em
         FROM tbl_pedido p
         LEFT JOIN tbl_tenant tf ON tf.id = p.id_tenant_fornecedor
         WHERE p.id_grupo = %s AND p.id_tenant_vendedor = %s
@@ -1182,14 +1183,18 @@ def obter_grupo_pedido(cur, id_vendedor: int, id_grupo: int) -> dict | None:
 
     itens: list[dict] = []
     pedidos: list[dict] = []
-    for pid, status, id_forn, forn_nome, numero in pedidos_rows:
+    for pid, status, status_pag, origem, valor_total, id_forn, forn_nome, numero, pago_em in pedidos_rows:
         pedidos.append(
             {
                 "id": int(pid),
                 "numero": numero,
                 "status": status,
+                "status_pagamento": status_pag or "",
+                "origem": origem or "manual",
+                "valor_total": _float(valor_total),
                 "id_fornecedor": int(id_forn),
                 "fornecedor_nome": forn_nome or "",
+                "pago_em": pago_em.isoformat() if pago_em else None,
             }
         )
         for item in listar_itens_pedido(cur, int(pid)):
@@ -1207,11 +1212,17 @@ def obter_grupo_pedido(cur, id_vendedor: int, id_grupo: int) -> dict | None:
 
     statuses = {p["status"] for p in pedidos}
     editavel = statuses == {STATUS_RASCUNHO}
+    bloqueado_total = any(
+        (p.get("origem") or "manual") != "manual"
+        or p["status"] in (STATUS_PAGO, STATUS_EM_EXPEDICAO, STATUS_ENTREGUE, STATUS_CANCELADO)
+        for p in pedidos
+    )
 
     return {
         "id_grupo": int(id_grupo),
         "numero_grupo": row_grupo[1],
         "editavel": editavel,
+        "bloqueado_total": bloqueado_total,
         "status": next(iter(statuses)) if len(statuses) == 1 else "misto",
         "cliente": {
             "nome": ref["cliente_nome"],

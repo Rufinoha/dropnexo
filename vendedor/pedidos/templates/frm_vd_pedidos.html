@@ -3,7 +3,7 @@
 {% set nav_ativo = 'vd_pedidos' %}
 {% block topbar_title %}Pedidos{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('vd_pedidos.static', filename='style/Cvd_pedidos.css') }}?v=8" />
+<link rel="stylesheet" href="{{ url_for('vd_pedidos.static', filename='style/Cvd_pedidos.css') }}?v=10" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal Pd_Page">
@@ -89,18 +89,18 @@
               <small>Em breve</small>
             </span>
           </button>
-          <button type="button" class="Pd_WizNavItem" data-painel="valores">
-            <span class="Pd_WizNavIco"><i data-lucide="wallet"></i></span>
-            <span class="Pd_WizNavTxt">
-              <strong>Valores</strong>
-              <small id="pd_navValores">Resumo e pagamento</small>
-            </span>
-          </button>
           <button type="button" class="Pd_WizNavItem" data-painel="anexos">
             <span class="Pd_WizNavIco"><i data-lucide="paperclip"></i></span>
             <span class="Pd_WizNavTxt">
               <strong>Anexos</strong>
               <small id="pd_navAnexos">NF e etiqueta</small>
+            </span>
+          </button>
+          <button type="button" class="Pd_WizNavItem" data-painel="valores">
+            <span class="Pd_WizNavIco"><i data-lucide="wallet"></i></span>
+            <span class="Pd_WizNavTxt">
+              <strong>Valores</strong>
+              <small id="pd_navValores">Resumo e pagamento</small>
             </span>
           </button>
         </nav>
@@ -207,6 +207,22 @@
           </div>
         </section>
 
+        <section class="Pd_WizPane" data-painel="anexos" hidden>
+          <header class="Pd_WizPaneHead">
+            <span class="Pd_WizPaneIco"><i data-lucide="paperclip"></i></span>
+            <div>
+              <h4>Anexos</h4>
+              <p>Nota fiscal e etiqueta de envio por pedido do fornecedor.</p>
+            </div>
+          </header>
+          <div class="Pd_WizPaneBody">
+            <p id="pd_anexosAviso" class="Pd_Hint" hidden></p>
+            <div id="pd_anexosLista" class="Pd_AnexosLista">
+              <p class="Pd_Hint">Salve ou abra um pedido existente para anexar arquivos.</p>
+            </div>
+          </div>
+        </section>
+
         <section class="Pd_WizPane" data-painel="valores" hidden>
           <header class="Pd_WizPaneHead">
             <span class="Pd_WizPaneIco"><i data-lucide="wallet"></i></span>
@@ -225,26 +241,10 @@
 
             <div class="Pd_PaySection">
               <h5>Forma de pagamento</h5>
-              <p class="Pd_Hint">Escolha como pagará o fornecedor após confirmar o pedido. A integração ativa do fornecedor é exibida abaixo.</p>
+              <p class="Pd_Hint">Escolha PIX ou cartão e use <strong>Pagar agora</strong> após confirmar o pedido. O status do pagamento aparece neste painel.</p>
               <div id="pd_payIntegracoes" class="Pd_PayIntegracoes">
                 <p class="Pd_Hint">Adicione produtos para ver as opções de pagamento.</p>
               </div>
-            </div>
-          </div>
-        </section>
-
-        <section class="Pd_WizPane" data-painel="anexos" hidden>
-          <header class="Pd_WizPaneHead">
-            <span class="Pd_WizPaneIco"><i data-lucide="paperclip"></i></span>
-            <div>
-              <h4>Anexos</h4>
-              <p>Nota fiscal e etiqueta de envio por pedido do fornecedor.</p>
-            </div>
-          </header>
-          <div class="Pd_WizPaneBody">
-            <p id="pd_anexosAviso" class="Pd_Hint" hidden></p>
-            <div id="pd_anexosLista" class="Pd_AnexosLista">
-              <p class="Pd_Hint">Salve ou abra um pedido existente para anexar arquivos.</p>
             </div>
           </div>
         </section>
@@ -253,44 +253,14 @@
 
     <footer class="Pd_ModalFoot">
       <p id="pd_msg" class="Pd_Msg" role="status" hidden></p>
+      <button type="button" class="Cl_BtnExcluir" id="pd_btnCancelar" hidden>Cancelar pedido</button>
       <button type="button" class="Cl_BtnCancelar" id="pd_btnSalvar">Salvar rascunho</button>
       <button type="button" class="Cl_BtnSalvar" id="pd_btnConfirmar">Confirmar pedido</button>
     </footer>
   </div>
 </div>
-
-<div id="pd_detModal" class="Pd_Modal" hidden>
-  <div class="Pd_ModalInner Pd_ModalInner--det" role="dialog">
-    <header class="Pd_ModalHead">
-      <h3 id="pd_detTitulo">Detalhe</h3>
-      <button type="button" class="Pd_ModalClose" id="pd_detFechar">×</button>
-    </header>
-    <div class="Pd_ModalBody" id="pd_detBody"></div>
-    <footer class="Pd_ModalFoot" id="pd_detFoot"></footer>
-  </div>
-</div>
-
-<div id="pd_payModal" class="Pd_Modal" hidden>
-  <div class="Pd_ModalInner Pd_ModalInner--pay" role="dialog" aria-labelledby="pd_payTitulo">
-    <header class="Pd_ModalHead">
-      <h3 id="pd_payTitulo">Pagamento PIX</h3>
-      <button type="button" class="Pd_ModalClose" id="pd_payFechar">×</button>
-    </header>
-    <div class="Pd_ModalBody Pd_PayBody">
-      <p class="Pd_Hint" id="pd_payHint">Escaneie o QR Code ou copie o código PIX abaixo.</p>
-      <div class="Pd_PixQr" id="pd_pixQrWrap" hidden>
-        <img id="pd_pixImg" alt="QR Code PIX" />
-      </div>
-      <div class="Pd_PixCopy">
-        <code id="pd_pixCode">—</code>
-        <button type="button" class="Cl_botaoFiltro" id="pd_pixCopiar">Copiar PIX</button>
-      </div>
-      <p class="Pd_Hint" id="pd_payStatus">Aguardando confirmação…</p>
-    </div>
-  </div>
-</div>
 {% endblock %}
 {% block page_js %}
-<script defer src="{{ url_for('vd_pedidos.static', filename='script/Svd_pedidos.js') }}?v=8"></script>
+<script defer src="{{ url_for('vd_pedidos.static', filename='script/Svd_pedidos.js') }}?v=10"></script>
 <script id="pd_cfg" type="application/json">{{ {"mp_icone": url_for("mercadopago.static", filename="imge/icone_mercadopago.png")}|tojson }}</script>
 {% endblock %}

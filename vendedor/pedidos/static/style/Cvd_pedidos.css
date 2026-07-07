@@ -361,7 +361,79 @@
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
+  align-items: center;
 }
+
+.Pd_PayRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 0.65rem;
+}
+
+.Pd_PayStatus {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.Pd_PayStatus--pago { color: #047857; }
+.Pd_PayStatus--pendente { color: #92400e; }
+.Pd_PayStatus--erro { color: #991b1b; }
+
+.Pd_PixInline {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px dashed #e2e8f0;
+  text-align: center;
+}
+
+.Pd_PixInline img {
+  max-width: 180px;
+  width: 100%;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  margin: 0.5rem auto;
+}
+
+.Pd_PixInline code {
+  display: block;
+  word-break: break-all;
+  font-size: 0.72rem;
+  padding: 0.5rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  text-align: left;
+  max-height: 4rem;
+  overflow: auto;
+  margin: 0.5rem 0;
+}
+
+.Pd_WizMain.is-campos-readonly .Pd_WizPane[data-painel="produto"] .Pd_QtdInput,
+.Pd_WizMain.is-campos-readonly .Pd_WizPane[data-painel="produto"] input,
+.Pd_WizMain.is-campos-readonly .Pd_WizPane[data-painel="cliente"] input,
+.Pd_WizMain.is-campos-readonly .Pd_WizPane[data-painel="endereco"] input,
+.Pd_WizMain.is-campos-readonly .Pd_WizPane[data-painel="endereco"] button,
+.Pd_WizMain.is-campos-readonly .Pd_ProdComboWrap,
+.Pd_WizMain.is-campos-readonly [data-rm] {
+  pointer-events: none;
+  opacity: 0.92;
+}
+
+.Pd_ModalFoot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.Pd_ModalFoot #pd_btnCancelar { margin-right: auto; }
 
 .Pd_PayOpcao {
   display: inline-flex;
@@ -699,11 +771,30 @@
 .Pd_AnexoUpload {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: 0.5rem 0.75rem;
   align-items: center;
 }
 
-.Pd_AnexoUpload input[type="file"] { max-width: 100%; font-size: 0.82rem; }
+.Pd_AnexoBtn {
+  margin: 0;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.Pd_AnexoFileName {
+  font-size: 0.84rem;
+  color: #475569;
+  flex: 1 1 160px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.Pd_AnexoUpload .Pd_Hint {
+  flex: 1 1 100%;
+  margin: 0;
+}
 
 .Pd_AnexoItens { list-style: none; margin: 0.5rem 0 0; padding: 0; }
 
@@ -720,10 +811,12 @@
 .Pd_AnexoItens a:hover { text-decoration: underline; }
 
 .Pd_WizMain.is-readonly .Pd_QtdInput,
-.Pd_WizMain.is-readonly input:not([type="file"]),
-.Pd_WizMain.is-readonly select,
-.Pd_WizMain.is-readonly textarea,
-.Pd_WizMain.is-readonly .Cl_SelectDisplay {
+.Pd_WizMain.is-readonly .Pd_WizPane:not([data-painel="anexos"]) input:not([type="file"]),
+.Pd_WizMain.is-readonly .Pd_WizPane:not([data-painel="anexos"]) select,
+.Pd_WizMain.is-readonly .Pd_WizPane:not([data-painel="anexos"]) textarea,
+.Pd_WizMain.is-readonly .Pd_WizPane:not([data-painel="anexos"]) .Cl_SelectDisplay,
+.Pd_WizMain.is-readonly .Pd_ProdComboWrap,
+.Pd_WizMain.is-readonly [data-rm] {
   pointer-events: none;
   background: #f8fafc;
   opacity: 0.92;
