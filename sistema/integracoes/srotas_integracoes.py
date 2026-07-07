@@ -167,7 +167,7 @@ def pagina_melhor_envio():
         return redirect(url_for("dashboard.index"))
     if (r := _exigir_modulo(MODULO_VENDEDOR)) is not None:
         return r
-    from api.melhor_envio.cliente import me_conectado, me_configurado, redirect_uri_oauth
+    from api.melhor_envio.cliente import me_conectado
 
     id_tenant = session.get("id_tenant")
     conectado = False
@@ -185,8 +185,6 @@ def pagina_melhor_envio():
         "frm_melhor_envio_integracao.html",
         nav_codigo="integracoes",
         me_conectado=conectado,
-        me_callback_url=redirect_uri_oauth(),
-        me_servidor_configurado=me_configurado(),
         icone_melhor_envio=url_icone_integracao("melhor-envio", icones_base_url=_icones_base_url()),
     )
 

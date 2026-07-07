@@ -151,7 +151,7 @@ def testar_credenciais_me_oauth() -> dict[str, Any]:
         return {"ok": True, "mensagem": "Resposta inesperada, mas credenciais foram aceitas."}
     except RuntimeError as e:
         msg = str(e).lower()
-        if "invalid_grant" in msg or "invalid_code" in msg or "code" in msg:
+        if "invalid_grant" in msg:
             return {"ok": True, "mensagem": "Client ID e Secret aceitos pelo Melhor Envio."}
         if "invalid_client" in msg or "client authentication failed" in msg:
             return {
@@ -166,14 +166,13 @@ def _post_token(body: dict[str, str]) -> dict[str, Any]:
     payload = {"client_id": client_id, "client_secret": client_secret, **body}
     headers = {
         "Accept": "application/json",
-        "Content-Type": "application/json",
         "User-Agent": me_user_agent(),
     }
     try:
         r = requests.post(
             f"{me_auth_base()}/oauth/token",
             headers=headers,
-            json=payload,
+            data=payload,
             timeout=ME_OAUTH_TIMEOUT,
         )
     except requests.Timeout as e:

@@ -10,8 +10,6 @@
     opcaoRecebimento: document.getElementById("me_opcao_recebimento"),
     opcaoMaosProprias: document.getElementById("me_opcao_maos_proprias"),
     msg: document.getElementById("me_msg"),
-    diagCred: document.getElementById("me_diag_cred"),
-    callbackUrl: document.getElementById("me_callback_url"),
   };
 
   let salvando = false;
@@ -70,24 +68,6 @@
     }
   }
 
-  async function carregarDiagnostico() {
-    try {
-      const r = await fetch("/api/integracoes/melhor-envio/oauth/diagnostico", { credentials: "same-origin" });
-      const j = await r.json();
-      if (!j.success || !j.diagnostico) return;
-      const d = j.diagnostico;
-      if (el.callbackUrl && d.redirect_uri) el.callbackUrl.textContent = d.redirect_uri;
-      if (el.diagCred && d.teste_credenciais) {
-        const t = d.teste_credenciais;
-        el.diagCred.hidden = false;
-        el.diagCred.textContent = `Servidor (${d.modo_producao ? "produção" : "homologação"}): ${t.mensagem || ""}`;
-        el.diagCred.classList.toggle("Mp_Hint--warn", t.ok === false);
-      }
-    } catch {
-      /* silencioso */
-    }
-  }
-
   async function carregarStatus() {
     try {
       const r = await fetch("/api/integracoes/melhor-envio/status", { credentials: "same-origin" });
@@ -138,5 +118,4 @@
   });
 
   carregarStatus();
-  carregarDiagnostico();
 })();

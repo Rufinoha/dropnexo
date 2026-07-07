@@ -35,14 +35,6 @@
   <section class="Mp_Card Mp_Card--info" id="me_sec_guia" {% if me_conectado %}hidden{% endif %}>
     <h3>Conectar sua conta</h3>
     <p class="Mp_Hint">Autorize com a conta Melhor Envio que <strong>pagará as etiquetas</strong> dos seus pedidos. Você será redirecionado ao site do Melhor Envio para confirmar o acesso.</p>
-    {% if me_servidor_configurado %}
-    <div class="Mp_CallbackBox" id="me_diag_box">
-      <p class="Mp_Hint"><strong>URL de callback</strong> — cadastre no painel do Melhor Envio (<a href="https://melhorenvio.com.br/painel/gerenciar/tokens" target="_blank" rel="noopener">Gerenciar tokens</a>) <em>exatamente</em> assim (sem barra no final):</p>
-      <code class="Mp_CallbackUrl" id="me_callback_url">{{ me_callback_url }}</code>
-      <p class="Mp_Hint Mp_Hint--warn">Os dois campos de URL no formulário do ME (testes e redirecionamento) devem ser <strong>idênticos</strong> a esta URL.</p>
-      <p class="Mp_Hint" id="me_diag_cred" hidden></p>
-    </div>
-    {% endif %}
     <div class="Mp_Actions">
       <a href="{{ url_for('melhor_envio.oauth_iniciar') }}" class="Cl_botaoprimario" id="me_btn_conectar">Conectar conta</a>
     </div>
@@ -75,5 +67,5 @@
 </div>
 {% endblock %}
 {% block page_js %}
-<script src="{{ url_for('static', filename='script/Smelhor_envio_integracao.js') }}?v=2"></script>
+<script src="{{ url_for('static', filename='script/Smelhor_envio_integracao.js') }}?v=3"></script>
 {% endblock %}
