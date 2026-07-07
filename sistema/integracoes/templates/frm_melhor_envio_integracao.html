@@ -28,13 +28,13 @@
   </div>
 
   <section class="Mp_Card Mp_Card--alert" id="me_alert_servidor" hidden>
-    <h3>Integração indisponível no servidor</h3>
-    <p class="Mp_Hint">Configure <code>ME_CLIENT_ID_PROD</code> e <code>ME_CLIENT_SECRET_PROD</code> no <code>.env</code> do servidor.</p>
+    <h3>Integração indisponível</h3>
+    <p class="Mp_Hint">O Melhor Envio ainda não está habilitado neste ambiente. Entre em contato com o suporte DropNexo.</p>
   </section>
 
   <section class="Mp_Card Mp_Card--info" id="me_sec_guia" {% if me_conectado %}hidden{% endif %}>
     <h3>Conectar sua conta</h3>
-    <p class="Mp_Hint">Autorize com a conta Melhor Envio que <strong>pagará as etiquetas</strong> dos seus pedidos.</p>
+    <p class="Mp_Hint">Autorize com a conta Melhor Envio que <strong>pagará as etiquetas</strong> dos seus pedidos. Você será redirecionado ao site do Melhor Envio para confirmar o acesso.</p>
     <div class="Mp_Actions">
       <a href="{{ url_for('melhor_envio.oauth_iniciar') }}" class="Cl_botaoprimario" id="me_btn_conectar">Conectar conta</a>
     </div>
@@ -42,31 +42,30 @@
 
   <section class="Mp_Card" id="me_painel_config" {% if not me_conectado %}hidden{% endif %}>
     <p id="me_conta_info" class="Mp_ContaResumo" hidden></p>
-    <h3>Conta conectada</h3>
-    <p class="Mp_Hint">Use no passo <strong>Frete</strong> dos pedidos para cotar e contratar envios com sua conta Melhor Envio.</p>
+
+    <h3>Preferências de cotação</h3>
+    <p class="Mp_Hint">Serviços adicionais incluídos ao cotar frete nos pedidos (quando disponíveis na transportadora).</p>
+    <div class="Mp_Switches">
+      <label class="Mp_Switch"><input type="checkbox" id="me_opcao_recebimento" /> Aviso de recebimento</label>
+      <label class="Mp_Switch"><input type="checkbox" id="me_opcao_maos_proprias" /> Mãos próprias</label>
+    </div>
+    <p id="me_msg" class="Mp_Msg" hidden></p>
+
+    <h3 style="margin-top:1.25rem">Como funciona</h3>
+    <ol class="Mp_Hint Mp_ListaPassos">
+      <li>No pedido, preencha produtos e endereço de entrega.</li>
+      <li>No passo <strong>Frete</strong>, escolha a transportadora e o valor.</li>
+      <li>Após o pagamento ao fornecedor, a etiqueta é contratada na sua conta Melhor Envio.</li>
+      <li>O fornecedor imprime a etiqueta anexada ao pedido e despacha.</li>
+    </ol>
+
     <div class="Mp_Actions Mp_Actions--foot">
+      <a href="{{ url_for('vd_pedidos.pedidos') }}" class="Cl_botaoFiltro">Ir para pedidos</a>
       <button type="button" class="Cl_BtnCancelar" id="me_btn_desconectar">Desconectar</button>
     </div>
   </section>
-
-  {% if session.get('eh_desenvolvedor') %}
-  <section class="Mp_Card Mp_Card--dev" id="me_sec_dev">
-    <h3>URLs da integração</h3>
-    <div class="Mp_UrlRow">
-      <span class="Mp_UrlLabel">Redirect OAuth</span>
-      <code id="me_redirect_uri" class="Mp_Code">—</code>
-      <button type="button" class="Mp_CopyBtn" data-copy="me_redirect_uri">Copiar</button>
-    </div>
-    <div class="Mp_UrlRow">
-      <span class="Mp_UrlLabel">Webhook (etiquetas)</span>
-      <code id="me_webhook_url" class="Mp_Code">—</code>
-      <button type="button" class="Mp_CopyBtn" data-copy="me_webhook_url">Copiar</button>
-    </div>
-    <p class="Mp_Hint" id="me_dev_status">—</p>
-  </section>
-  {% endif %}
 </div>
 {% endblock %}
 {% block page_js %}
-<script src="{{ url_for('static', filename='script/Smelhor_envio_integracao.js') }}?v=1"></script>
+<script src="{{ url_for('static', filename='script/Smelhor_envio_integracao.js') }}?v=2"></script>
 {% endblock %}

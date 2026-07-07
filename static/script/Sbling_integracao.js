@@ -3,13 +3,16 @@
   const btnConectar = document.getElementById("bl_btn_conectar");
   const btnDesconectar = document.getElementById("bl_btn_desconectar");
   const painelConfig = document.getElementById("bl_painel_config");
-  const tituloModulo = document.getElementById("bl_titulo_modulo");
   const ctxInput = document.getElementById("bl_contexto_ativo");
+  const papelInput = document.getElementById("bl_papel");
+  const BL_PAPEL = (papelInput?.value || "catalogo").trim();
   const logsEl = document.getElementById("bl_logs");
   const ultimaSync = document.getElementById("bl_ultima_sync");
   const ultimaSyncPedidos = document.getElementById("bl_ultima_sync_pedidos");
   const pedidosImportWrap = document.getElementById("bl_pedidos_import_wrap");
   const btnImportPedidos = document.getElementById("bl_btn_import_pedidos");
+  const chkPedidosImportar = document.getElementById("bl_pedidos_importar");
+  const chkPedidosExportarStatus = document.getElementById("bl_pedidos_exportar_status");
   const btnSalvar = document.getElementById("bl_btn_salvar");
   const btnSalvarEstoque = document.getElementById("bl_btn_salvar_estoque");
   const paneConfig = document.getElementById("bl_pane_config");
@@ -26,7 +29,7 @@
 
   let estado = {
     conectado: false,
-    contexto_modulo: "fornecedor",
+    contexto_modulo: BL_PAPEL === "pedidos" ? "vendedor" : "fornecedor",
     configs: [],
     depositos: { vinculados: 0, pendentes: 0 },
     webhook_url: "",
@@ -115,36 +118,45 @@
 
   function aplicarConfigTela() {
     const cfg = cfgAtual();
-    const map = {
-      bl_modo_imagem: cfg.modo_imagem,
-      bl_fonte: cfg.fonte_principal,
-      bl_produtos_modo: cfg.produtos_modo,
-      bl_estoque_modo: cfg.estoque_modo,
-      bl_pedidos_modo: cfg.pedidos_modo,
-    };
-    Object.entries(map).forEach(([id, val]) => {
-      const el = document.getElementById(id);
-      if (el && val) el.value = val;
-    });
-    if (ctxInput) ctxInput.value = estado.contexto_modulo || "";
-    if (tituloModulo) tituloModulo.textContent = "Configurações";
-    if (ultimaSync) {
-      ultimaSync.textContent = cfg.ultima_sync_produtos
-        ? `Última sync produtos: ${new Date(cfg.ultima_sync_produtos).toLocaleString("pt-BR")}`
-        : "";
+    if (BL_PAPEL === "pedidos") {
+      const opcoes = cfg.opcoes || {};
+      const modo = cfg.pedidos_modo || "atualizar";
+      if (chkPedidosImportar) {
+        chkPedidosImportar.checked = modo === "importar" || modo === "atualizar";
+      }
+      if (chkPedidosExportarStatus) {
+        chkPedidosExportarStatus.checked =
+          opcoes.pedidos_exportar_status !== undefined ? !!opcoes.pedidos_exportar_status : true;
+      }
+      if (pedidosImportWrap) {
+        pedidosImportWrap.hidden = !estado.conectado || !(chkPedidosImportar?.checked);
+      }
+    } else {
+      const map = {
+        bl_modo_imagem: cfg.modo_imagem,
+        bl_fonte: cfg.fonte_principal,
+        bl_produtos_modo: cfg.produtos_modo,
+        bl_estoque_modo: cfg.estoque_modo,
+      };
+      Object.entries(map).forEach(([id, val]) => {
+        const el = document.getElementById(id);
+        if (el && val) el.value = val;
+      });
+      if (ultimaSync) {
+        ultimaSync.textContent = cfg.ultima_sync_produtos
+          ? `Última sync produtos: ${new Date(cfg.ultima_sync_produtos).toLocaleString("pt-BR")}`
+          : "";
+      }
     }
+    if (ctxInput) ctxInput.value = estado.contexto_modulo || "";
     if (ultimaSyncPedidos) {
       if (cfg.ultima_sync_pedidos) {
         ultimaSyncPedidos.hidden = false;
-        ultimaSyncPedidos.textContent = `Última sync pedidos: ${new Date(cfg.ultima_sync_pedidos).toLocaleString("pt-BR")}`;
+        ultimaSyncPedidos.textContent = `Última importação: ${new Date(cfg.ultima_sync_pedidos).toLocaleString("pt-BR")}`;
       } else {
-        ultimaSyncPedidos.hidden = true;
+        ultimaSyncPedidos.hidden = BL_PAPEL !== "pedidos";
         ultimaSyncPedidos.textContent = "";
       }
-    }
-    if (pedidosImportWrap) {
-      const ctx = estado.contexto_modulo || "";
-      pedidosImportWrap.hidden = ctx !== "vendedor" || !estado.conectado;
     }
     aplicarEstoqueTela();
   }
@@ -1173,7 +1185,8 @@
   }
 
   function renderStatus(data) {
-    estado = data;
+    estado = { ...estado, ...data };
+    estado.contexto_modulo = BL_PAPEL === "pedidos" ? "vendedor" : "fornecedor";
     const on = !!data.conectado;
     if (badge) {
       badge.textContent = on ? "Conectado" : "Desconectado";
@@ -1206,15 +1219,28 @@
   }
 
   async function salvarConfig() {
-    const ctx = estado.contexto_modulo;
-    const body = {
-      contexto: ctx,
-      fonte_principal: document.getElementById("bl_fonte")?.value,
-      modo_imagem: document.getElementById("bl_modo_imagem")?.value,
-      produtos_modo: document.getElementById("bl_produtos_modo")?.value,
-      estoque_modo: document.getElementById("bl_estoque_modo")?.value,
-      pedidos_modo: document.getElementById("bl_pedidos_modo")?.value,
-    };
+    const ctx = BL_PAPEL === "pedidos" ? "vendedor" : "fornecedor";
+    let body;
+    if (BL_PAPEL === "pedidos") {
+      const importar = chkPedidosImportar?.checked !== false;
+      const exportar = chkPedidosExportarStatus?.checked !== false;
+      let pedidos_modo = "importar";
+      if (importar && exportar) pedidos_modo = "atualizar";
+      else if (exportar) pedidos_modo = "exportar";
+      body = {
+        contexto: ctx,
+        pedidos_modo,
+        opcoes: { pedidos_exportar_status: exportar },
+      };
+    } else {
+      body = {
+        contexto: ctx,
+        fonte_principal: document.getElementById("bl_fonte")?.value,
+        modo_imagem: document.getElementById("bl_modo_imagem")?.value,
+        produtos_modo: document.getElementById("bl_produtos_modo")?.value,
+        estoque_modo: document.getElementById("bl_estoque_modo")?.value,
+      };
+    }
     const r = await fetch("/api/integracoes/bling/config/salvar", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1251,6 +1277,7 @@
 
   chkReceber?.addEventListener("change", atualizarAnimacaoEstoque);
   chkBaixa?.addEventListener("change", atualizarAnimacaoEstoque);
+  chkPedidosImportar?.addEventListener("change", aplicarConfigTela);
 
   btnSalvar?.addEventListener("click", async () => {
     try {

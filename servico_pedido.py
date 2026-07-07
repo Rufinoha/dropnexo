@@ -1083,6 +1083,12 @@ def marcar_em_expedicao(
     if codigo_rastreio:
         det += f" Rastreio: {codigo_rastreio}."
     registrar_historico(cur, id_pedido, "expedido", det, id_usuario)
+    try:
+        from api.bling.sync_pedido_status import exportar_status_pedido_bling
+
+        exportar_status_pedido_bling(cur, id_pedido, evento="expedido")
+    except Exception:
+        pass
 
 
 def marcar_entregue(
@@ -1120,6 +1126,12 @@ def marcar_entregue(
         (STATUS_ENTREGUE, agora, agora, agora, id_pedido),
     )
     registrar_historico(cur, id_pedido, "entregue", "Pedido marcado como entregue.", id_usuario)
+    try:
+        from api.bling.sync_pedido_status import exportar_status_pedido_bling
+
+        exportar_status_pedido_bling(cur, id_pedido, evento="entregue")
+    except Exception:
+        pass
 
 
 def listar_pedidos_expedicao_vendedor(cur, id_vendedor: int) -> list[dict]:

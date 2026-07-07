@@ -16,6 +16,7 @@ from api.melhor_envio.cliente import (
     me_conectado,
     obter_access_token_valido,
     redirect_uri_oauth,
+    salvar_preferencias_me,
     salvar_tokens,
     trocar_code_por_tokens,
     url_autorizacao,
@@ -118,7 +119,7 @@ def oauth_callback():
             conn.close()
         session.pop("me_oauth_state", None)
         session.pop("me_oauth_tenant", None)
-        return redirect(url_for("integracoes.pagina", conectado="melhorenvio"))
+        return redirect(url_for("integracoes.pagina_melhor_envio", conectado="1"))
     except Exception as e:
         return redirect(url_for("integracoes.pagina", erro=str(e)[:120]))
 
@@ -151,10 +152,34 @@ def status():
     try:
         cur = conn.cursor()
         cfg = carregar_config_me(cur, int(id_tenant))
-        cfg["webhook_url"] = webhook_url()
-        cfg["redirect_uri"] = redirect_uri_oauth()
         cfg["configurado_servidor"] = me_configurado()
         return jsonify(success=True, **cfg)
+    finally:
+        conn.close()
+
+
+@me_bp.post("/api/integracoes/melhor-envio/config/salvar")
+@login_obrigatorio()
+def config_salvar():
+    if not _pode_integracoes():
+        return jsonify(success=False, message="Sem permissão."), 403
+    if garantir_modulo_sessao() != "vendedor" and not session.get("eh_desenvolvedor"):
+        return jsonify(success=False, message="Apenas vendedores."), 403
+    body = request.get_json(silent=True) or {}
+    id_tenant = session.get("id_tenant")
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        salvar_preferencias_me(
+            cur,
+            int(id_tenant),
+            opcao_recebimento=bool(body.get("opcao_recebimento")),
+            opcao_maos_proprias=bool(body.get("opcao_maos_proprias")),
+        )
+        conn.commit()
+        return jsonify(success=True, message="Preferências salvas.")
+    except RuntimeError as e:
+        return jsonify(success=False, message=str(e)), 400
     finally:
         conn.close()
 

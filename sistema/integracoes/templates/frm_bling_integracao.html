@@ -3,7 +3,7 @@
 {% block title %}Bling — Integrações — {{ MARCA_NOME }}{% endblock %}
 {% block topbar_title %}Integração Bling{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('static', filename='style/Cbling_integracao.css') }}?v=14" />
+<link rel="stylesheet" href="{{ url_for('static', filename='style/Cbling_integracao.css') }}?v=15" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal Bl_Wrap">
@@ -18,6 +18,7 @@
           <h2>Bling ERP</h2>
           <p class="cl-page-desc">
             {{ bling_subtitulo|default('Configuração da integração com o Bling.') }}
+            <span class="Bl_ModuloTag">{{ 'Pedidos' if bling_papel == 'pedidos' else 'Catálogo' }}</span>
             <a href="{{ url_for('bling.ajuda_bling') }}" class="Bl_ManualLink" target="_blank" rel="noopener">Ver manual de conexão</a>
           </p>
         </div>
@@ -54,25 +55,71 @@
     </nav>
 
     <div id="bl_pane_config">
-      <h3 id="bl_titulo_modulo">Configurações</h3>
-      <input type="hidden" id="bl_contexto_ativo" value="" />
+      {% if bling_papel == 'pedidos' %}
+      <h3>Pedidos de venda</h3>
+      <p class="Bl_Hint">Esta tela é do <strong>módulo Vendedor</strong>: importar pedidos pagos do Bling e enviar atualizações de status de volta ao ERP.</p>
+      <input type="hidden" id="bl_contexto_ativo" value="vendedor" />
+      <input type="hidden" id="bl_papel" value="pedidos" />
+
+      <div class="Bl_SyncGrid Bl_SyncGrid--pedidos">
+        <label class="Bl_SyncCard">
+          <span class="Bl_SyncCardBody">
+            <strong>Importar pedidos pagos</strong>
+            <small>Bling → DropNexo. Pedidos confirmados no Bling viram pedidos na rede.</small>
+          </span>
+          <span class="Cl_Switch">
+            <input type="checkbox" id="bl_pedidos_importar" checked />
+            <span class="Cl_SwitchSlider"></span>
+          </span>
+        </label>
+        <label class="Bl_SyncCard">
+          <span class="Bl_SyncCardBody">
+            <strong>Enviar status ao Bling</strong>
+            <small>DropNexo → Bling. Expedição e entrega atualizam a situação no pedido de venda.</small>
+          </span>
+          <span class="Cl_Switch">
+            <input type="checkbox" id="bl_pedidos_exportar_status" checked />
+            <span class="Cl_SwitchSlider"></span>
+          </span>
+        </label>
+      </div>
+
+      <div class="Bl_Actions Bl_Actions--config">
+        <button type="button" class="Cl_BtnSalvar" id="bl_btn_salvar">Salvar</button>
+      </div>
+
+      <p class="Bl_Meta" id="bl_ultima_sync_pedidos" hidden></p>
+
+      <div class="Bl_PedidosImport" id="bl_pedidos_import_wrap">
+        <h3 class="Bl_EstoqueBlockTitle">Importar agora</h3>
+        <p class="Bl_Hint">
+          Busca pedidos de venda <strong>confirmados/pagos</strong> no Bling dos últimos 30 dias e cria pedidos DropNexo
+          (somente SKUs ativos em Meus produtos).
+        </p>
+        <button type="button" class="Cl_botaoprimario" id="bl_btn_import_pedidos">Importar pedidos do Bling</button>
+      </div>
+      {% else %}
+      <h3>Catálogo e estoque</h3>
+      <p class="Bl_Hint">Esta tela é do <strong>módulo Fornecedor</strong>: produtos, estoque e categorias do seu Bling.</p>
+      <input type="hidden" id="bl_contexto_ativo" value="fornecedor" />
+      <input type="hidden" id="bl_papel" value="catalogo" />
 
       <div class="Bl_Grid2">
-        <label class="Bl_Field" data-bl-campo="catalogo" {% if bling_papel == 'pedidos' %}hidden{% endif %}>
+        <label class="Bl_Field">
           <span>Modo das imagens</span>
           <select id="bl_modo_imagem">
             <option value="link">Manter como link</option>
             <option value="download">Baixar para o servidor</option>
           </select>
         </label>
-        <label class="Bl_Field" data-bl-campo="catalogo" {% if bling_papel == 'pedidos' %}hidden{% endif %}>
+        <label class="Bl_Field">
           <span>Fonte principal</span>
           <select id="bl_fonte">
             <option value="bling">Bling</option>
             <option value="dropnexo">DropNexo</option>
           </select>
         </label>
-        <label class="Bl_Field" data-bl-campo="catalogo" {% if bling_papel == 'pedidos' %}hidden{% endif %}>
+        <label class="Bl_Field">
           <span>Produtos</span>
           <select id="bl_produtos_modo">
             <option value="importar">Importar</option>
@@ -80,17 +127,9 @@
             <option value="atualizar">Atualizar (ambos)</option>
           </select>
         </label>
-        <label class="Bl_Field" data-bl-campo="catalogo" {% if bling_papel == 'pedidos' %}hidden{% endif %}>
+        <label class="Bl_Field">
           <span>Estoque</span>
           <select id="bl_estoque_modo">
-            <option value="importar">Importar</option>
-            <option value="exportar">Exportar</option>
-            <option value="atualizar">Atualizar (ambos)</option>
-          </select>
-        </label>
-        <label class="Bl_Field" data-bl-campo="pedidos" {% if bling_papel == 'catalogo' %}hidden{% endif %}>
-          <span>Pedidos</span>
-          <select id="bl_pedidos_modo">
             <option value="importar">Importar</option>
             <option value="exportar">Exportar</option>
             <option value="atualizar">Atualizar (ambos)</option>
@@ -102,17 +141,8 @@
         <button type="button" class="Cl_BtnSalvar" id="bl_btn_salvar">Salvar</button>
       </div>
 
-      <p class="Bl_Meta" id="bl_ultima_sync" {% if bling_papel == 'pedidos' %}hidden{% endif %}></p>
-      <p class="Bl_Meta" id="bl_ultima_sync_pedidos" hidden></p>
-
-      <div class="Bl_PedidosImport" id="bl_pedidos_import_wrap" {% if bling_papel != 'pedidos' %}hidden{% endif %}>
-        <h3 class="Bl_EstoqueBlockTitle">Importar pedidos pagos</h3>
-        <p class="Bl_Hint">
-          Busca pedidos de venda <strong>confirmados/pagos</strong> no Bling dos últimos 30 dias e cria pedidos DropNexo
-          (somente SKUs ativos em Meus produtos).
-        </p>
-        <button type="button" class="Cl_botaoprimario" id="bl_btn_import_pedidos">Importar pedidos do Bling</button>
-      </div>
+      <p class="Bl_Meta" id="bl_ultima_sync"></p>
+      {% endif %}
     </div>
 
     <div id="bl_pane_estoque" hidden>
@@ -259,5 +289,5 @@
 </div>
 {% endblock %}
 {% block page_js %}
-<script src="{{ url_for('static', filename='script/Sbling_integracao.js') }}?v=25"></script>
+<script src="{{ url_for('static', filename='script/Sbling_integracao.js') }}?v=26"></script>
 {% endblock %}

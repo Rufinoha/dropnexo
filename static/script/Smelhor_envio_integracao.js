@@ -1,60 +1,103 @@
 (function () {
-  const badge = document.getElementById("me_status_badge");
-  const alertSrv = document.getElementById("me_alert_servidor");
-  const secGuia = document.getElementById("me_sec_guia");
-  const painel = document.getElementById("me_painel_config");
-  const contaInfo = document.getElementById("me_conta_info");
-  const btnDesconectar = document.getElementById("me_btn_desconectar");
-  const redirectEl = document.getElementById("me_redirect_uri");
-  const webhookEl = document.getElementById("me_webhook_url");
-  const devStatus = document.getElementById("me_dev_status");
+  const el = {
+    badge: document.getElementById("me_status_badge"),
+    alertSrv: document.getElementById("me_alert_servidor"),
+    secGuia: document.getElementById("me_sec_guia"),
+    painel: document.getElementById("me_painel_config"),
+    contaInfo: document.getElementById("me_conta_info"),
+    btnDesconectar: document.getElementById("me_btn_desconectar"),
+    btnConectar: document.getElementById("me_btn_conectar"),
+    opcaoRecebimento: document.getElementById("me_opcao_recebimento"),
+    opcaoMaosProprias: document.getElementById("me_opcao_maos_proprias"),
+    msg: document.getElementById("me_msg"),
+  };
+
+  let salvando = false;
 
   function setConectado(on) {
-    if (badge) {
-      badge.textContent = on ? "Conectado" : "Desconectado";
-      badge.classList.toggle("is-on", on);
-      badge.classList.toggle("is-off", !on);
+    if (el.badge) {
+      el.badge.textContent = on ? "Conectado" : "Desconectado";
+      el.badge.classList.toggle("is-on", on);
+      el.badge.classList.toggle("is-off", !on);
     }
-    secGuia?.toggleAttribute("hidden", on);
-    painel?.toggleAttribute("hidden", !on);
+    el.secGuia?.toggleAttribute("hidden", on);
+    el.painel?.toggleAttribute("hidden", !on);
+  }
+
+  function setServidorConfigurado(ok) {
+    if (el.alertSrv) el.alertSrv.hidden = !!ok;
+    if (el.btnConectar && !ok) {
+      el.btnConectar.classList.add("is-disabled");
+      el.btnConectar.setAttribute("aria-disabled", "true");
+      el.btnConectar.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        alert("Integração indisponível. Entre em contato com o suporte DropNexo.");
+      });
+    }
+  }
+
+  function mostrarMsg(t, erro) {
+    if (!el.msg) return;
+    el.msg.textContent = t;
+    el.msg.hidden = !t;
+    el.msg.classList.toggle("is-erro", !!erro);
+    if (t && !erro) {
+      setTimeout(() => {
+        if (el.msg.textContent === t) el.msg.hidden = true;
+      }, 2500);
+    }
+  }
+
+  async function salvarPreferencias() {
+    if (salvando) return;
+    salvando = true;
+    try {
+      const r = await fetch("/api/integracoes/melhor-envio/config/salvar", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          opcao_recebimento: !!el.opcaoRecebimento?.checked,
+          opcao_maos_proprias: !!el.opcaoMaosProprias?.checked,
+        }),
+      });
+      const j = await r.json();
+      mostrarMsg(j.message || (j.success ? "Preferências salvas." : "Erro."), !j.success);
+    } finally {
+      salvando = false;
+    }
   }
 
   async function carregarStatus() {
     try {
-      const r = await fetch("/api/integracoes/melhor-envio/status");
+      const r = await fetch("/api/integracoes/melhor-envio/status", { credentials: "same-origin" });
       const j = await r.json();
       if (!j.success) return;
-      if (!j.configurado_servidor) alertSrv?.removeAttribute("hidden");
-      setConectado(j.status === "conectado");
-      if (redirectEl) redirectEl.textContent = j.redirect_uri || "—";
-      if (webhookEl) webhookEl.textContent = j.webhook_url || "—";
-      if (devStatus) {
-        devStatus.textContent = j.configurado_servidor
-          ? "Credenciais do app configuradas no servidor."
-          : "Credenciais ME ausentes no .env.";
-      }
+      const on = j.status === "conectado";
+      setConectado(on);
+      setServidorConfigurado(!!j.configurado_servidor);
+      if (el.opcaoRecebimento) el.opcaoRecebimento.checked = !!j.opcao_recebimento;
+      if (el.opcaoMaosProprias) el.opcaoMaosProprias.checked = !!j.opcao_maos_proprias;
+
       const conta = j.conta || {};
-      const nome = conta.name || conta.firstname || conta.email;
-      if (nome && contaInfo) {
-        contaInfo.textContent = `Conta: ${nome}`;
-        contaInfo.hidden = false;
+      const rotulo = [conta.name || conta.firstname, conta.email].filter(Boolean).join(" · ");
+      if (el.contaInfo) {
+        if (on && rotulo) {
+          el.contaInfo.textContent = `Conta conectada: ${rotulo}`;
+          el.contaInfo.hidden = false;
+        } else {
+          el.contaInfo.hidden = true;
+        }
       }
     } catch {
       /* silencioso */
     }
   }
 
-  document.querySelectorAll("[data-copy]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const id = btn.getAttribute("data-copy");
-      const el = document.getElementById(id);
-      const txt = el?.textContent?.trim();
-      if (!txt || txt === "—") return;
-      navigator.clipboard?.writeText(txt);
-    });
-  });
+  el.opcaoRecebimento?.addEventListener("change", salvarPreferencias);
+  el.opcaoMaosProprias?.addEventListener("change", salvarPreferencias);
 
-  btnDesconectar?.addEventListener("click", async () => {
+  el.btnDesconectar?.addEventListener("click", async () => {
     const ok = await Swal.fire({
       title: "Desconectar Melhor Envio?",
       icon: "warning",

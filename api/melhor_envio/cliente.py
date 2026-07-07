@@ -304,17 +304,46 @@ def atualizar_conta_info(cur, id_tenant: int, access_token: str) -> dict:
     return info
 
 
-def carregar_config_me(cur, id_tenant: int) -> dict:
+_COLUNAS_PREFS_ME_OK: bool | None = None
+
+
+def _tem_colunas_preferencias_me(cur) -> bool:
+    global _COLUNAS_PREFS_ME_OK
+    if _COLUNAS_PREFS_ME_OK is not None:
+        return _COLUNAS_PREFS_ME_OK
     cur.execute(
         """
-        SELECT status, me_user_id, me_conta_info, conectado_em, ultimo_erro
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'tbl_integracao_melhor_envio'
+          AND column_name = 'opcao_recebimento'
+        LIMIT 1
+        """
+    )
+    _COLUNAS_PREFS_ME_OK = cur.fetchone() is not None
+    return _COLUNAS_PREFS_ME_OK
+
+
+def carregar_config_me(cur, id_tenant: int) -> dict:
+    cols = "status, me_user_id, me_conta_info, conectado_em, ultimo_erro"
+    if _tem_colunas_preferencias_me(cur):
+        cols += ", opcao_recebimento, opcao_maos_proprias"
+    cur.execute(
+        f"""
+        SELECT {cols}
         FROM tbl_integracao_melhor_envio WHERE id_tenant = %s
         """,
         (id_tenant,),
     )
     row = cur.fetchone()
     if not row:
-        return {"status": "desconectado", "me_user_id": None, "conta": {}}
+        return {
+            "status": "desconectado",
+            "me_user_id": None,
+            "conta": {},
+            "opcao_recebimento": False,
+            "opcao_maos_proprias": False,
+        }
     raw_conta = row[2]
     if isinstance(raw_conta, dict):
         conta = raw_conta
@@ -325,12 +354,51 @@ def carregar_config_me(cur, id_tenant: int) -> dict:
             conta = {}
     else:
         conta = {}
-    return {
+    out = {
         "status": row[0],
         "me_user_id": row[1],
         "conta": conta,
         "conectado_em": row[3].isoformat() if row[3] else None,
         "ultimo_erro": row[4],
+        "opcao_recebimento": False,
+        "opcao_maos_proprias": False,
+    }
+    if _tem_colunas_preferencias_me(cur) and len(row) > 5:
+        out["opcao_recebimento"] = bool(row[5])
+        out["opcao_maos_proprias"] = bool(row[6])
+    return out
+
+
+def salvar_preferencias_me(
+    cur,
+    id_tenant: int,
+    *,
+    opcao_recebimento: bool,
+    opcao_maos_proprias: bool,
+) -> None:
+    if not _tem_colunas_preferencias_me(cur):
+        raise RuntimeError(
+            "Preferências indisponíveis. Execute a migração SQL 067_me_preferencias no banco."
+        )
+    cur.execute(
+        """
+        INSERT INTO tbl_integracao_melhor_envio (
+            id_tenant, status, opcao_recebimento, opcao_maos_proprias, atualizado_em
+        ) VALUES (%s, 'desconectado', %s, %s, %s)
+        ON CONFLICT (id_tenant) DO UPDATE SET
+            opcao_recebimento = EXCLUDED.opcao_recebimento,
+            opcao_maos_proprias = EXCLUDED.opcao_maos_proprias,
+            atualizado_em = EXCLUDED.atualizado_em
+        """,
+        (id_tenant, opcao_recebimento, opcao_maos_proprias, agora_utc()),
+    )
+
+
+def opcoes_cotacao_me(cur, id_tenant: int) -> dict[str, bool]:
+    cfg = carregar_config_me(cur, id_tenant)
+    return {
+        "receipt": bool(cfg.get("opcao_recebimento")),
+        "own_hand": bool(cfg.get("opcao_maos_proprias")),
     }
 
 

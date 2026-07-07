@@ -15,8 +15,8 @@ DEFAULTS_CONEXAO = {
         "fonte_principal": "bling",
         "modo_imagem": "link",
         "produtos_modo": "exportar",
-        "estoque_modo": "atualizar",
-        "pedidos_modo": "importar",
+        "estoque_modo": "importar",
+        "pedidos_modo": "atualizar",
     },
 }
 

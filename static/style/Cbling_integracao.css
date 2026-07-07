@@ -916,6 +916,24 @@
   margin-left: 6px;
 }
 
+.Bl_ModuloTag {
+  display: inline-block;
+  margin: 0 0.35rem;
+  padding: 0.12rem 0.5rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #021f81;
+  background: #e8f0ff;
+  border-radius: 999px;
+  vertical-align: middle;
+}
+
+.Bl_SyncGrid--pedidos {
+  margin-top: 0.75rem;
+}
+
 @media (max-width: 720px) {
   .Bl_SyncGrid { grid-template-columns: 1fr; }
   .Bl_SubTab { font-size: 0.78rem; padding: 0.5rem 0.45rem; }

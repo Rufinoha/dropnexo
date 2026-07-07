@@ -406,18 +406,29 @@ def salvar_config():
         v = (body.get(campo) or padrao).strip()
         return v if v in ("importar", "exportar", "atualizar") else padrao
 
-    fonte = (body.get("fonte_principal") or "bling").strip()
-    if fonte not in ("bling", "dropnexo"):
-        fonte = "bling"
-    modo_img = (body.get("modo_imagem") or "link").strip()
-    if modo_img not in ("link", "download"):
-        modo_img = "link"
-
     id_tenant = session.get("id_tenant")
+    opcoes_body = body.get("opcoes") if isinstance(body.get("opcoes"), dict) else None
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
         agora = agora_utc()
+        if contexto == "vendedor":
+            produtos_modo = "exportar"
+            estoque_modo = "importar"
+            pedidos_modo = modo("pedidos_modo", "atualizar")
+            fonte = "bling"
+            modo_img = "link"
+        else:
+            pedidos_modo = modo("pedidos_modo", "exportar")
+            produtos_modo = modo("produtos_modo", "importar")
+            estoque_modo = modo("estoque_modo", "importar")
+            fonte = (body.get("fonte_principal") or "bling").strip()
+            if fonte not in ("bling", "dropnexo"):
+                fonte = "bling"
+            modo_img = (body.get("modo_imagem") or "link").strip()
+            if modo_img not in ("link", "download"):
+                modo_img = "link"
+
         cur.execute(
             """
             INSERT INTO tbl_integracao_bling_config (
@@ -437,20 +448,31 @@ def salvar_config():
                 contexto,
                 fonte,
                 modo_img,
-                modo("produtos_modo", "importar"),
-                modo("estoque_modo", "importar"),
-                modo("pedidos_modo", "importar"),
+                produtos_modo,
+                estoque_modo,
+                pedidos_modo,
                 agora,
             ),
         )
-        cur.execute(
-            """
-            UPDATE tbl_integracao_bling_config
-            SET modo_imagem = %s, atualizado_em = %s
-            WHERE id_tenant = %s
-            """,
-            (modo_img, agora, id_tenant),
-        )
+        if opcoes_body is not None:
+            cur.execute(
+                """
+                UPDATE tbl_integracao_bling_config
+                SET opcoes = COALESCE(opcoes, '{}'::jsonb) || %s::jsonb,
+                    atualizado_em = %s
+                WHERE id_tenant = %s AND contexto = %s
+                """,
+                (json.dumps(opcoes_body, ensure_ascii=False), agora, id_tenant, contexto),
+            )
+        if contexto == "fornecedor":
+            cur.execute(
+                """
+                UPDATE tbl_integracao_bling_config
+                SET modo_imagem = %s, atualizado_em = %s
+                WHERE id_tenant = %s
+                """,
+                (modo_img, agora, id_tenant),
+            )
         conn.commit()
         return jsonify(success=True, message="Configuração salva.")
     finally:

@@ -9,6 +9,7 @@ from api.melhor_envio.cliente import (
     calcular_frete,
     me_conectado,
     obter_access_token_valido,
+    opcoes_cotacao_me,
 )
 from global_utils import agora_utc
 from servico_pedido import STATUS_RASCUNHO, obter_pedido
@@ -221,6 +222,7 @@ def cotar_frete_pedido(cur, id_vendedor: int, id_pedido: int) -> dict:
     id_forn = int(ped["id_tenant_fornecedor"])
     cep_orig = _cep_origem_pedido(cur, id_pedido, id_forn)
     produtos = _produtos_me_pedido(cur, id_pedido)
+    me_opts = opcoes_cotacao_me(cur, id_vendedor)
     payload = {
         "from": {"postal_code": cep_orig},
         "to": {"postal_code": cep_dest},
@@ -236,7 +238,7 @@ def cotar_frete_pedido(cur, id_vendedor: int, id_pedido: int) -> dict:
             }
             for p in produtos
         ],
-        "options": {"receipt": False, "own_hand": False},
+        "options": {"receipt": me_opts["receipt"], "own_hand": me_opts["own_hand"]},
     }
 
     token = obter_access_token_valido(cur, id_vendedor)

@@ -162,3 +162,13 @@
 }
 
 #mp_dev_status.is-erro { color: #b91c1c; font-weight: 600; }
+
+.Mp_ListaPassos {
+  margin: 0.5rem 0 0;
+  padding-left: 1.2rem;
+  line-height: 1.55;
+}
+
+.Mp_ListaPassos li + li {
+  margin-top: 0.35rem;
+}
