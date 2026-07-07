@@ -255,6 +255,7 @@
       nome: i.nome,
       sku: i.sku,
       valor_drop: i.valor_drop,
+      preco_venda: i.preco_venda,
       fornecedor_nome: i.fornecedor_nome,
       quantidade: i.quantidade,
     }));
@@ -1337,6 +1338,7 @@
         nome: item.nome,
         sku: item.sku,
         valor_drop: item.valor_drop,
+        preco_venda: item.preco_venda,
         fornecedor_nome: item.fornecedor_nome,
         quantidade: 1,
       });
@@ -1372,7 +1374,17 @@
     return comboProd;
   }
 
+  function margemItem(i) {
+    const venda = Number(i.preco_venda || 0);
+    const drop = Number(i.valor_drop || 0);
+    if (venda <= 0 && drop <= 0) return "—";
+    const m = venda - drop;
+    const cls = m >= 0 ? "Pd_Margem--ok" : "Pd_Margem--neg";
+    return `<span class="Pd_Margem ${cls}">${fmt(m)}</span>`;
+  }
+
   function renderItens() {
+    const somenteVer = somenteLeitura || !editavelCampos;
     el.itens.innerHTML = carrinho
       .map(
         (i, idx) => `
@@ -1380,8 +1392,10 @@
         <td>${esc(i.nome)}<br><small>${esc(i.fornecedor_nome || "")}</small></td>
         <td>${esc(i.sku)}</td>
         <td>${fmt(i.valor_drop)}</td>
-        <td><input type="number" min="1" value="${i.quantidade}" data-idx="${idx}" class="Pd_QtdInput" style="width:4rem" /></td>
-        <td><button type="button" class="Pd_BtnLink Pd_BtnLink--danger" data-rm="${idx}">Remover</button></td>
+        <td>${fmt(i.preco_venda)}</td>
+        <td>${margemItem(i)}</td>
+        <td><input type="number" min="1" value="${i.quantidade}" data-idx="${idx}" class="Pd_QtdInput" style="width:4rem" ${somenteVer ? "readonly" : ""} /></td>
+        <td>${somenteVer ? "" : `<button type="button" class="Pd_BtnLink Pd_BtnLink--danger" data-rm="${idx}">Remover</button>`}</td>
       </tr>`
       )
       .join("");

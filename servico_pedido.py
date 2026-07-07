@@ -1000,7 +1000,9 @@ def _resolver_item_meus_produtos_por_sku(cur, id_vendedor: int, sku: str) -> dic
     cur.execute(
         """
         SELECT p.id, v.id,
-               COALESCE(v.preco, 0), COALESCE(v.nome_exibicao, p.nome),
+               COALESCE(NULLIF(v.valor_drop, 0), NULLIF(p.valor_drop, 0), v.preco, 0),
+               COALESCE(v.preco, 0),
+               COALESCE(v.nome_exibicao, p.nome),
                v.sku, p.id_deposito_expedicao
         FROM tbl_produto_variante v
         JOIN tbl_produto p ON p.id = v.id_produto
@@ -1018,13 +1020,121 @@ def _resolver_item_meus_produtos_por_sku(cur, id_vendedor: int, sku: str) -> dic
         "id_fornecedor": id_vendedor,
         "id_produto": int(prop[0]),
         "id_variante": int(prop[1]),
-        "valor_drop": 0.0,
-        "preco_venda": _float(prop[2]),
-        "nome": prop[3] or sku,
-        "sku": prop[4] or sku,
-        "id_deposito": prop[5],
+        "valor_drop": _float(prop[2]),
+        "preco_venda": _float(prop[3]),
+        "nome": prop[4] or sku,
+        "sku": prop[5] or sku,
+        "id_deposito": prop[6],
         "proprio": True,
     }
+
+
+def _entrega_pedido_vazia(ped: dict) -> bool:
+    return not any(
+        str(ped.get(k) or "").strip()
+        for k in (
+            "entrega_cep",
+            "entrega_logradouro",
+            "entrega_numero",
+            "entrega_bairro",
+            "entrega_cidade",
+            "entrega_uf",
+        )
+    )
+
+
+def _enriquecer_item_pedido_catalogo(cur, id_vendedor: int, item: dict) -> dict:
+    """Preenche drop/venda zerados a partir do catálogo (pedidos Bling importados antes da correção)."""
+    vd = _float(item.get("valor_drop"))
+    pv = _float(item.get("preco_venda"))
+    sku = (item.get("sku") or "").strip()
+    if (vd > 0 and pv > 0) or not sku:
+        return item
+    cat = _resolver_item_meus_produtos_por_sku(cur, id_vendedor, sku)
+    if not cat:
+        return item
+    out = dict(item)
+    if vd <= 0 and cat["valor_drop"] > 0:
+        out["valor_drop"] = cat["valor_drop"]
+    if pv <= 0 and cat["preco_venda"] > 0:
+        out["preco_venda"] = cat["preco_venda"]
+    return out
+
+
+def reparar_dados_pedido_bling_importado(cur, id_vendedor: int, id_pedido: int) -> bool:
+    """Atualiza endereço, valores de itens e totais de pedidos Bling incompletos."""
+    ped = obter_pedido(cur, id_pedido, id_vendedor=id_vendedor)
+    if not ped or (ped.get("origem") or "") != "bling":
+        return False
+
+    alterou = False
+    id_bling = ped.get("id_bling_pedido")
+    if id_bling and _entrega_pedido_vazia(ped):
+        try:
+            from api.bling.campos_pedido import _endereco_dict_tem_dados, parse_pedido_bling
+            from api.bling.sync_pedidos import obter_pedido_bling
+
+            det = obter_pedido_bling(id_vendedor, str(id_bling))
+            entrega = parse_pedido_bling(det).get("entrega") or {}
+            if _endereco_dict_tem_dados(entrega):
+                cur.execute(
+                    """
+                    UPDATE tbl_pedido SET
+                        entrega_cep = %s, entrega_logradouro = %s, entrega_numero = %s,
+                        entrega_complemento = %s, entrega_bairro = %s, entrega_cidade = %s,
+                        entrega_uf = %s, atualizado_em = %s
+                    WHERE id = %s AND id_tenant_vendedor = %s
+                    """,
+                    (
+                        entrega.get("cep"),
+                        entrega.get("logradouro"),
+                        entrega.get("numero"),
+                        entrega.get("complemento"),
+                        entrega.get("bairro"),
+                        entrega.get("cidade"),
+                        entrega.get("uf"),
+                        agora_utc(),
+                        id_pedido,
+                        id_vendedor,
+                    ),
+                )
+                alterou = True
+        except Exception:
+            pass
+
+    for item in listar_itens_pedido(cur, id_pedido):
+        enr = _enriquecer_item_pedido_catalogo(cur, id_vendedor, item)
+        if enr["valor_drop"] != item["valor_drop"] or enr["preco_venda"] != item["preco_venda"]:
+            sub = enr["valor_drop"] * int(enr["quantidade"])
+            cur.execute(
+                """
+                UPDATE tbl_pedido_item
+                SET valor_drop = %s, preco_venda = %s, subtotal_drop = %s
+                WHERE id = %s
+                """,
+                (enr["valor_drop"], enr["preco_venda"], sub, item["id"]),
+            )
+            alterou = True
+
+    if alterou or _float(ped.get("subtotal_produtos")) <= 0:
+        cur.execute(
+            "SELECT COALESCE(SUM(subtotal_drop), 0) FROM tbl_pedido_item WHERE id_pedido = %s",
+            (id_pedido,),
+        )
+        subtotal = _float(cur.fetchone()[0])
+        if subtotal > 0:
+            taxa = _taxa_pedido_fornecedor(cur, int(ped["id_tenant_fornecedor"]))
+            total = subtotal + taxa
+            cur.execute(
+                """
+                UPDATE tbl_pedido SET
+                    subtotal_produtos = %s, valor_taxa_pedido = %s, valor_total = %s, atualizado_em = %s
+                WHERE id = %s
+                """,
+                (subtotal, taxa, total, agora_utc(), id_pedido),
+            )
+            alterou = True
+    return alterou
 
 
 def importar_pedido_bling(
@@ -1050,6 +1160,8 @@ def importar_pedido_bling(
         id_forn = int(item["id_fornecedor"])
         if not item["proprio"] and not vinculo_ativo(cur, id_vendedor, id_forn):
             raise ValueError(f"Fornecedor do SKU {sku} sem vínculo ativo.")
+        valor_bling = _float(raw.get("valor_bling"))
+        preco_canal = valor_bling if valor_bling > 0 else item["preco_venda"]
         por_fornecedor.setdefault(id_forn, []).append(
             {
                 "id_produto_vendedor": item["id_produto_vendedor"],
@@ -1057,7 +1169,7 @@ def importar_pedido_bling(
                 "id_produto": item["id_produto"],
                 "id_variante": item["id_variante"],
                 "valor_drop": item["valor_drop"],
-                "preco_venda": item["preco_venda"],
+                "preco_venda": preco_canal,
                 "nome": item["nome"] or raw.get("nome") or sku,
                 "sku": item["sku"] or sku,
                 "id_deposito": item["id_deposito"],
@@ -1435,15 +1547,17 @@ def _montar_contexto_pedidos(
             }
         )
         for item in listar_itens_pedido(cur, int(pid)):
+            enr = _enriquecer_item_pedido_catalogo(cur, id_vendedor, item)
             itens.append(
                 {
-                    "id_variante": item["id_variante"],
+                    "id_variante": enr["id_variante"],
                     "id_fornecedor": int(id_forn),
                     "fornecedor_nome": forn_nome or "",
-                    "nome": item["nome_produto"],
-                    "sku": item["sku"],
-                    "valor_drop": item["valor_drop"],
-                    "quantidade": item["quantidade"],
+                    "nome": enr["nome_produto"],
+                    "sku": enr["sku"],
+                    "valor_drop": enr["valor_drop"],
+                    "preco_venda": enr["preco_venda"],
+                    "quantidade": enr["quantidade"],
                 }
             )
 
@@ -1512,6 +1626,11 @@ def obter_contexto_pedido_vendedor(cur, id_vendedor: int, id_pedido: int) -> dic
     ped = obter_pedido(cur, id_pedido, id_vendedor=id_vendedor)
     if not ped:
         return None
+    if (ped.get("origem") or "") == "bling":
+        try:
+            reparar_dados_pedido_bling_importado(cur, id_vendedor, id_pedido)
+        except Exception:
+            pass
     if ped.get("id_grupo"):
         return obter_grupo_pedido(cur, id_vendedor, int(ped["id_grupo"]))
 

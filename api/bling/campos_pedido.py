@@ -83,20 +83,52 @@ def pedido_bling_importavel(pedido: dict, *, id_tenant: int | None = None) -> bo
     return bool(itens)
 
 
-def _endereco_entrega(pedido: dict) -> dict[str, str | None]:
-    transporte = pedido.get("transporte") or {}
-    end = transporte.get("enderecoEntrega") or transporte.get("endereco") or {}
-    if not end and isinstance(transporte.get("contato"), dict):
-        end = transporte["contato"].get("endereco") or {}
+def _endereco_dict_tem_dados(end: dict) -> bool:
+    if not isinstance(end, dict):
+        return False
+    return bool(
+        str(end.get("cep") or "").strip()
+        or str(end.get("endereco") or end.get("logradouro") or "").strip()
+    )
+
+
+def _mapear_endereco_bling(end: dict) -> dict[str, str | None]:
+    if not isinstance(end, dict):
+        end = {}
+    uf = str(end.get("uf") or end.get("estado") or "").strip()[:2] or None
     return {
-        "cep": (end.get("cep") or "").strip() or None,
-        "logradouro": (end.get("endereco") or end.get("logradouro") or "").strip() or None,
-        "numero": (end.get("numero") or "").strip() or None,
-        "complemento": (end.get("complemento") or "").strip() or None,
-        "bairro": (end.get("bairro") or "").strip() or None,
-        "cidade": (end.get("municipio") or end.get("cidade") or "").strip() or None,
-        "uf": ((end.get("uf") or end.get("estado") or "")[:2] or None),
+        "cep": str(end.get("cep") or "").strip() or None,
+        "logradouro": (str(end.get("endereco") or end.get("logradouro") or "").strip() or None),
+        "numero": str(end.get("numero") or "").strip() or None,
+        "complemento": str(end.get("complemento") or "").strip() or None,
+        "bairro": str(end.get("bairro") or "").strip() or None,
+        "cidade": (str(end.get("municipio") or end.get("cidade") or "").strip() or None),
+        "uf": uf,
     }
+
+
+def _endereco_entrega(pedido: dict) -> dict[str, str | None]:
+    """Endereço de entrega: transporte.enderecoEntrega, etiqueta ou contato do pedido."""
+    transporte = pedido.get("transporte") or {}
+    candidatos: list[dict] = []
+    for key in ("enderecoEntrega", "endereco", "etiqueta"):
+        raw = transporte.get(key)
+        if isinstance(raw, dict):
+            candidatos.append(raw)
+    if isinstance(transporte.get("contato"), dict):
+        ce = transporte["contato"].get("endereco")
+        if isinstance(ce, dict):
+            candidatos.append(ce)
+    contato = pedido.get("contato") or {}
+    if isinstance(contato.get("endereco"), dict):
+        candidatos.append(contato["endereco"])
+    if _endereco_dict_tem_dados(contato):
+        candidatos.append(contato)
+    for cand in candidatos:
+        mapped = _mapear_endereco_bling(cand)
+        if _endereco_dict_tem_dados(mapped):
+            return mapped
+    return _mapear_endereco_bling({})
 
 
 def _cliente(pedido: dict) -> dict[str, str | None]:

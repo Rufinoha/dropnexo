@@ -1068,3 +1068,16 @@
 
 .Pd_WizMain.is-readonly .Pd_ProdComboWrap,
 .Pd_WizMain.is-readonly [data-rm] { display: none; }
+
+.Pd_Margem { font-weight: 600; font-size: 0.88rem; white-space: nowrap; }
+.Pd_Margem--ok { color: #047857; }
+.Pd_Margem--neg { color: #b91c1c; }
+
+.Pd_Table--itens th:nth-child(3),
+.Pd_Table--itens th:nth-child(4),
+.Pd_Table--itens th:nth-child(5),
+.Pd_Table--itens td:nth-child(3),
+.Pd_Table--itens td:nth-child(4),
+.Pd_Table--itens td:nth-child(5) {
+  text-align: right;
+}
