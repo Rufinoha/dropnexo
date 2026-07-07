@@ -857,6 +857,71 @@ def _pedido_ja_importado_bling(
     return int(row[0]) if row else None
 
 
+def _resolver_item_meus_produtos_por_sku(cur, id_vendedor: int, sku: str) -> dict | None:
+    """Localiza SKU na vitrine integrada ou no catálogo próprio do vendedor."""
+    sku = (sku or "").strip()
+    if not sku:
+        return None
+
+    cur.execute(
+        """
+        SELECT pv.id, pv.id_tenant_fornecedor, pv.id_produto, pv.id_variante,
+               pv.preco_fornecedor, pv.preco_venda,
+               COALESCE(pv.nome_vitrine, p.nome), v.sku, p.id_deposito_expedicao
+        FROM tbl_produto_vendedor pv
+        JOIN tbl_produto_variante v ON v.id = pv.id_variante
+        JOIN tbl_produto p ON p.id = pv.id_produto
+        WHERE pv.id_tenant_vendedor = %s AND TRIM(v.sku) = %s AND pv.ativo = TRUE
+          AND v.ativo = TRUE AND p.ativo = TRUE
+        LIMIT 1
+        """,
+        (id_vendedor, sku),
+    )
+    vit = cur.fetchone()
+    if vit:
+        return {
+            "id_produto_vendedor": vit[0],
+            "id_fornecedor": int(vit[1]),
+            "id_produto": int(vit[2]),
+            "id_variante": int(vit[3]),
+            "valor_drop": _float(vit[4]),
+            "preco_venda": _float(vit[5]),
+            "nome": vit[6] or sku,
+            "sku": vit[7] or sku,
+            "id_deposito": vit[8],
+            "proprio": False,
+        }
+
+    cur.execute(
+        """
+        SELECT p.id, v.id,
+               COALESCE(v.preco, 0), COALESCE(v.nome_exibicao, p.nome),
+               v.sku, p.id_deposito_expedicao
+        FROM tbl_produto_variante v
+        JOIN tbl_produto p ON p.id = v.id_produto
+        WHERE p.id_tenant = %s AND TRIM(v.sku) = %s
+          AND p.ativo = TRUE AND v.ativo = TRUE
+        LIMIT 1
+        """,
+        (id_vendedor, sku),
+    )
+    prop = cur.fetchone()
+    if not prop:
+        return None
+    return {
+        "id_produto_vendedor": None,
+        "id_fornecedor": id_vendedor,
+        "id_produto": int(prop[0]),
+        "id_variante": int(prop[1]),
+        "valor_drop": 0.0,
+        "preco_venda": _float(prop[2]),
+        "nome": prop[3] or sku,
+        "sku": prop[4] or sku,
+        "id_deposito": prop[5],
+        "proprio": True,
+    }
+
+
 def importar_pedido_bling(
     cur,
     id_vendedor: int,
@@ -874,37 +939,23 @@ def importar_pedido_bling(
     for raw in itens_parsed:
         sku = (raw.get("sku") or "").strip()
         qtd = int(raw.get("quantidade") or 0)
-        cur.execute(
-            """
-            SELECT pv.id, pv.id_tenant_fornecedor, pv.id_produto, pv.id_variante,
-                   pv.preco_fornecedor, pv.preco_venda,
-                   COALESCE(pv.nome_vitrine, p.nome), v.sku, p.id_deposito_expedicao
-            FROM tbl_produto_vendedor pv
-            JOIN tbl_produto_variante v ON v.id = pv.id_variante
-            JOIN tbl_produto p ON p.id = pv.id_produto
-            WHERE pv.id_tenant_vendedor = %s AND v.sku = %s AND pv.ativo = TRUE
-              AND v.ativo = TRUE AND p.ativo = TRUE
-            LIMIT 1
-            """,
-            (id_vendedor, sku),
-        )
-        vit = cur.fetchone()
-        if not vit:
+        item = _resolver_item_meus_produtos_por_sku(cur, id_vendedor, sku)
+        if not item:
             raise ValueError(f"SKU {sku} não encontrado em Meus produtos.")
-        id_forn = int(vit[1])
-        if not vinculo_ativo(cur, id_vendedor, id_forn):
+        id_forn = int(item["id_fornecedor"])
+        if not item["proprio"] and not vinculo_ativo(cur, id_vendedor, id_forn):
             raise ValueError(f"Fornecedor do SKU {sku} sem vínculo ativo.")
         por_fornecedor.setdefault(id_forn, []).append(
             {
-                "id_produto_vendedor": vit[0],
+                "id_produto_vendedor": item["id_produto_vendedor"],
                 "id_fornecedor": id_forn,
-                "id_produto": int(vit[2]),
-                "id_variante": int(vit[3]),
-                "valor_drop": _float(vit[4]),
-                "preco_venda": _float(vit[5]),
-                "nome": vit[6] or raw.get("nome") or sku,
-                "sku": vit[7] or sku,
-                "id_deposito": vit[8],
+                "id_produto": item["id_produto"],
+                "id_variante": item["id_variante"],
+                "valor_drop": item["valor_drop"],
+                "preco_venda": item["preco_venda"],
+                "nome": item["nome"] or raw.get("nome") or sku,
+                "sku": item["sku"] or sku,
+                "id_deposito": item["id_deposito"],
                 "quantidade": qtd,
             }
         )
@@ -1003,7 +1054,11 @@ def importar_pedido_bling(
             )
 
         itens_reserva = [(i["id_variante"], i["quantidade"]) for i in itens]
-        reservar_itens_pedido(cur, itens_reserva)
+        try:
+            reservar_itens_pedido(cur, itens_reserva)
+            hist_estoque = "Estoque reservado."
+        except ValueError as e:
+            hist_estoque = f"Importado sem reserva de estoque ({e})."
 
         cur.execute(
             """
@@ -1025,7 +1080,7 @@ def importar_pedido_bling(
             cur,
             id_pedido,
             "importado_bling",
-            f"Pedido importado do Bling (#{numero_bling}). Estoque reservado.",
+            f"Pedido importado do Bling (#{numero_bling}). {hist_estoque}",
             id_usuario,
         )
         ids_criados.append(id_pedido)
