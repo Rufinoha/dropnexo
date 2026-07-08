@@ -825,11 +825,27 @@ def _resolver_categoria_ml(
     return (prevista or ""), ""
 
 
+def _extrair_listing_type_id(item) -> str:
+    """Normaliza id de tipo de anúncio (string ou objeto da API ML)."""
+    if item is None:
+        return ""
+    if isinstance(item, str):
+        return item.strip()
+    if isinstance(item, dict):
+        lid = item.get("id") or item.get("listing_type_id")
+        return str(lid).strip() if lid else ""
+    return ""
+
+
 def _listing_type_ml(cur, id_tenant: int, ml_user_id: int, category_id: str) -> str:
+    ids: list[str] = []
     try:
         cat = api_request(cur, id_tenant, "GET", f"/categories/{category_id}")
         tipos = cat.get("listing_types") or []
-        ids = [str(t.get("id")) for t in tipos if t.get("id")]
+        for t in tipos:
+            lid = _extrair_listing_type_id(t)
+            if lid:
+                ids.append(lid)
         for prefer in ("gold_special", "gold_pro", "gold_premium", "free"):
             if prefer in ids:
                 return prefer
@@ -846,11 +862,13 @@ def _listing_type_ml(cur, id_tenant: int, ml_user_id: int, category_id: str) -> 
             params={"category_id": category_id},
         )
         disponiveis = data.get("available") or []
+        disp_ids = [_extrair_listing_type_id(x) for x in disponiveis]
+        disp_ids = [x for x in disp_ids if x]
         for prefer in ("gold_special", "gold_pro", "gold_premium", "free"):
-            if prefer in disponiveis:
+            if prefer in disp_ids:
                 return prefer
-        if disponiveis:
-            return str(disponiveis[0])
+        if disp_ids:
+            return disp_ids[0]
     except RuntimeError:
         pass
     return "gold_special"
