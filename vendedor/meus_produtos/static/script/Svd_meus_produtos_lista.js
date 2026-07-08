@@ -172,6 +172,7 @@
     el.bulkActions.dataset.ready = "1";
     const acoes = [
       { acao: "categoria", icon: "categorias", title: "Associar categoria" },
+      { acao: "ml", icon: "vincular_clientes", title: "Integrar Mercado Livre" },
       { acao: "excluir", icon: "excluir", title: "Excluir selecionados", danger: true },
     ];
     acoes.forEach((a) => {
@@ -192,6 +193,7 @@
       try {
         if (b.dataset.bulk === "excluir") await excluirLote(ids);
         else if (b.dataset.bulk === "categoria") await associarCategoriaLote(ids);
+        else if (b.dataset.bulk === "ml") await integrarMercadoLivreLote(ids);
       } catch (e) {
         await Swal.fire("Erro", e.message, "error");
       }
@@ -245,6 +247,50 @@
 
   async function associarCategoriaUm(idProduto) {
     await associarCategoriaLote([idProduto]);
+  }
+
+  async function integrarMercadoLivreLote(ids) {
+    const c = await Swal.fire({
+      title: `Integrar ${ids.length} produto(s) ao Mercado Livre?`,
+      html: `<p style="text-align:left;font-size:13px;margin:0;">Confira em Integrações se o modo (vincular ou criar anúncio) e o mapeamento de categorias estão corretos.</p>`,
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonText: "Integrar",
+      cancelButtonText: "Cancelar",
+    });
+    if (!c.isConfirmed) return;
+
+    Swal.fire({
+      title: "Integrando…",
+      allowOutsideClick: false,
+      didOpen: () => Swal.showLoading(),
+    });
+
+    const resp = await fetch(`${BASE}/mercado-livre/publicar`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids }),
+    });
+    let jj = {};
+    try {
+      jj = await resp.json();
+    } catch {
+      throw new Error(resp.status >= 500 ? "Erro no servidor." : "Resposta inválida.");
+    }
+    Swal.close();
+    if (!resp.ok || !jj.success) throw new Error(jj.message || "Falha na integração.");
+
+    let msg = jj.message || "Concluído.";
+    if (jj.detalhes_erros?.length) {
+      msg += "\n\n" + jj.detalhes_erros.slice(0, 3).join("\n");
+    }
+    selecionados.clear();
+    syncBulkBar();
+    await Swal.fire({
+      title: jj.exportados > 0 || jj.vinculados > 0 ? "Integração concluída" : "Atenção",
+      text: msg,
+      icon: jj.exportados > 0 || jj.vinculados > 0 ? "success" : "warning",
+    });
   }
 
   function renderCategoriaCell(l) {

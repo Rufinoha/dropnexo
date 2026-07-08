@@ -656,6 +656,175 @@ def _prever_categoria_ml(cur, id_tenant: int, site_id: str, titulo: str) -> str 
     return None
 
 
+def _garantir_tabela_ml_categoria_map(cur) -> bool:
+    try:
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS tbl_integracao_ml_categoria_map (
+                id SERIAL PRIMARY KEY,
+                id_tenant INTEGER NOT NULL REFERENCES tbl_tenant(id) ON DELETE CASCADE,
+                id_categoria INTEGER NOT NULL REFERENCES tbl_categoria(id) ON DELETE CASCADE,
+                ml_category_id VARCHAR(32) NOT NULL,
+                family_name VARCHAR(120),
+                meta JSONB NOT NULL DEFAULT '{}',
+                criado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                atualizado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                UNIQUE (id_tenant, id_categoria)
+            )
+            """
+        )
+        return True
+    except Exception:
+        return False
+
+
+def _family_name_ml(titulo: str, marca: str, override: str = "") -> str:
+    if (override or "").strip():
+        return override.strip()[:120]
+    marca = (marca or "").strip()
+    titulo = (titulo or "").strip()
+    if marca and titulo and not titulo.lower().startswith(marca.lower()):
+        fam = f"{marca} {titulo}"
+    else:
+        fam = titulo or marca or "Produto"
+    return fam[:120]
+
+
+def _mapa_categoria_ml(cur, id_tenant: int, id_categoria: int | None) -> tuple[str, str]:
+    if not id_categoria:
+        return "", ""
+    _garantir_tabela_ml_categoria_map(cur)
+    try:
+        cur.execute(
+            """
+            SELECT ml_category_id, COALESCE(family_name, '')
+            FROM tbl_integracao_ml_categoria_map
+            WHERE id_tenant = %s AND id_categoria = %s
+            """,
+            (id_tenant, int(id_categoria)),
+        )
+        row = cur.fetchone()
+        if row and row[0]:
+            return str(row[0]).strip(), (row[1] or "").strip()
+    except Exception:
+        pass
+    return "", ""
+
+
+def listar_mapeamento_categorias_ml(cur, id_tenant: int) -> list[dict]:
+    _garantir_tabela_ml_categoria_map(cur)
+    cur.execute(
+        """
+        SELECT c.id, c.nome,
+               COALESCE(m.ml_category_id, ''),
+               COALESCE(m.family_name, '')
+        FROM tbl_categoria c
+        LEFT JOIN tbl_integracao_ml_categoria_map m
+            ON m.id_categoria = c.id AND m.id_tenant = c.id_tenant
+        WHERE c.id_tenant = %s AND c.ativo = TRUE
+        ORDER BY c.nome
+        """,
+        (id_tenant,),
+    )
+    return [
+        {
+            "id_categoria": int(r[0]),
+            "nome": r[1],
+            "ml_category_id": r[2] or "",
+            "family_name": r[3] or "",
+        }
+        for r in cur.fetchall()
+    ]
+
+
+def salvar_mapeamento_categorias_ml(cur, id_tenant: int, itens: list[dict]) -> int:
+    if not _garantir_tabela_ml_categoria_map(cur):
+        raise RuntimeError("Tabela de mapeamento ML indisponível. Aplique o SQL 073.")
+    salvos = 0
+    agora = agora_utc()
+    for item in itens:
+        try:
+            id_cat = int(item.get("id_categoria") or 0)
+        except (TypeError, ValueError):
+            continue
+        ml_cat = (item.get("ml_category_id") or "").strip().upper()
+        if not id_cat or not ml_cat:
+            continue
+        cur.execute(
+            "SELECT 1 FROM tbl_categoria WHERE id = %s AND id_tenant = %s AND ativo = TRUE",
+            (id_cat, id_tenant),
+        )
+        if not cur.fetchone():
+            continue
+        familia = (item.get("family_name") or "").strip()[:120] or None
+        cur.execute(
+            """
+            INSERT INTO tbl_integracao_ml_categoria_map (
+                id_tenant, id_categoria, ml_category_id, family_name, atualizado_em
+            ) VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT (id_tenant, id_categoria) DO UPDATE SET
+                ml_category_id = EXCLUDED.ml_category_id,
+                family_name = EXCLUDED.family_name,
+                atualizado_em = EXCLUDED.atualizado_em
+            """,
+            (id_tenant, id_cat, ml_cat, familia, agora),
+        )
+        salvos += 1
+    return salvos
+
+
+def buscar_categorias_ml(cur, id_tenant: int, termo: str, limit: int = 10) -> list[dict]:
+    """Sugere categorias ML pelo título (domain_discovery)."""
+    termo = (termo or "").strip()
+    if len(termo) < 3:
+        return []
+    cfg = carregar_config_ml(cur, id_tenant)
+    if not cfg.get("conectado"):
+        return []
+    site_id = (cfg.get("ml_site_id") or "MLB").upper()
+    try:
+        data = api_request(
+            cur,
+            id_tenant,
+            "GET",
+            f"/sites/{site_id}/domain_discovery/search",
+            params={"q": termo[:120], "limit": max(1, min(int(limit), 20))},
+        )
+    except RuntimeError:
+        return []
+    out: list[dict] = []
+    vistos: set[str] = set()
+    for item in data or []:
+        if not isinstance(item, dict):
+            continue
+        cat_id = str(item.get("category_id") or "").strip().upper()
+        if not cat_id or cat_id in vistos:
+            continue
+        vistos.add(cat_id)
+        nome = (
+            item.get("category_name")
+            or item.get("domain_name")
+            or item.get("category_id")
+            or ""
+        )
+        out.append({"category_id": cat_id, "nome": str(nome).strip() or cat_id})
+    return out
+
+
+def _resolver_categoria_ml(
+    cur,
+    id_tenant: int,
+    site_id: str,
+    id_categoria_vendedor: int | None,
+    titulo: str,
+) -> tuple[str, str]:
+    ml_cat, familia = _mapa_categoria_ml(cur, id_tenant, id_categoria_vendedor)
+    if ml_cat:
+        return ml_cat, familia
+    prevista = _prever_categoria_ml(cur, id_tenant, site_id, titulo)
+    return (prevista or ""), ""
+
+
 def _listing_type_ml(cur, id_tenant: int, ml_user_id: int, category_id: str) -> str:
     try:
         cat = api_request(cur, id_tenant, "GET", f"/categories/{category_id}")
@@ -802,6 +971,7 @@ def _criar_anuncio_ml(
     condicao: str | None,
     marca: str = "",
     gtin: str = "",
+    id_categoria_vendedor: int | None = None,
 ) -> str:
     titulo = (titulo or "Produto").strip()[:60]
     if preco <= 0:
@@ -810,9 +980,17 @@ def _criar_anuncio_ml(
     if not img_url:
         raise RuntimeError(f"«{titulo}»: imagem pública obrigatória para novo anúncio no ML.")
 
-    category_id = _prever_categoria_ml(cur, id_tenant, site_id, titulo)
+    category_id, familia_map = _mapa_categoria_ml(cur, id_tenant, id_categoria_vendedor)
+    if not category_id and id_categoria_vendedor:
+        raise RuntimeError(
+            f"«{titulo}»: mapeie a categoria em Integrações → Mercado Livre → Mapear categorias."
+        )
     if not category_id:
-        raise RuntimeError(f"«{titulo}»: não foi possível sugerir categoria no Mercado Livre.")
+        category_id = _prever_categoria_ml(cur, id_tenant, site_id, titulo) or ""
+    if not category_id:
+        raise RuntimeError(
+            f"«{titulo}»: associe uma categoria ao produto e mapeie-a ao Mercado Livre."
+        )
 
     listing_type = _listing_type_ml(cur, id_tenant, ml_user_id, category_id)
     cat_attrs = _attrs_categoria_ml(cur, id_tenant, category_id)
@@ -827,6 +1005,7 @@ def _criar_anuncio_ml(
 
     payload: dict[str, Any] = {
         "title": titulo,
+        "family_name": _family_name_ml(titulo, marca, familia_map),
         "category_id": category_id,
         "price": round(float(preco), 2),
         "currency_id": _moeda_site(site_id),
@@ -865,8 +1044,13 @@ def _criar_anuncio_ml(
     return item_id
 
 
-def _sql_produtos_vitrine_ml() -> str:
-    return """
+def _sql_produtos_vitrine_ml(ids_produtos: list[int] | None = None) -> tuple[str, list]:
+    extra = ""
+    params_tail: list = []
+    if ids_produtos:
+        extra = " AND p.id = ANY(%s)"
+        params_tail.append(ids_produtos)
+    sql = f"""
         SELECT pv.id, pv.id_variante, pv.id_produto,
                TRIM(COALESCE(NULLIF(v.sku, ''), p.sku, '')) AS sku,
                COALESCE(NULLIF(TRIM(pv.nome_vitrine), ''), NULLIF(TRIM(v.nome_exibicao), ''), p.nome) AS titulo,
@@ -876,14 +1060,16 @@ def _sql_produtos_vitrine_ml() -> str:
                COALESCE(ve.quantidade, 0) AS estoque,
                p.condicao,
                COALESCE(NULLIF(TRIM(p.marca), ''), '') AS marca,
-               COALESCE(NULLIF(TRIM(v.gtin), ''), NULLIF(TRIM(p.gtin), ''), '') AS gtin
+               COALESCE(NULLIF(TRIM(v.gtin), ''), NULLIF(TRIM(p.gtin), ''), '') AS gtin,
+               pv.id_categoria_vendedor
         FROM tbl_produto_vendedor pv
         JOIN tbl_produto_variante v ON v.id = pv.id_variante
         JOIN tbl_produto p ON p.id = pv.id_produto
         LEFT JOIN tbl_produto_variante_estoque ve ON ve.id_variante = v.id
-        WHERE pv.id_tenant_vendedor = %s AND pv.ativo = TRUE
-        ORDER BY pv.id
+        WHERE pv.id_tenant_vendedor = %s AND pv.ativo = TRUE{extra}
+        ORDER BY p.id, pv.id
     """
+    return sql, params_tail
 
 
 def _criar_anuncios_ml_lote(cur, id_tenant: int, cfg: dict, linhas: list) -> dict:
@@ -913,6 +1099,7 @@ def _criar_anuncios_ml_lote(cur, id_tenant: int, cfg: dict, linhas: list) -> dic
             condicao,
             marca,
             gtin,
+            id_cat_vd,
         ) = row
         processados += 1
 
@@ -940,6 +1127,7 @@ def _criar_anuncios_ml_lote(cur, id_tenant: int, cfg: dict, linhas: list) -> dic
                 condicao=condicao,
                 marca=marca or "",
                 gtin=gtin or "",
+                id_categoria_vendedor=int(id_cat_vd) if id_cat_vd else None,
             )
             exportados += 1
         except RuntimeError as e:
@@ -1038,7 +1226,8 @@ def exportar_produtos_ml(cur, id_tenant: int) -> dict:
         raise RuntimeError("Ative a exportação de produtos antes de sincronizar.")
 
     modo = cfg.get("produtos_modo") or "vincular_sku"
-    cur.execute(_sql_produtos_vitrine_ml(), (id_tenant,))
+    sql, extra = _sql_produtos_vitrine_ml()
+    cur.execute(sql, [id_tenant, *extra])
     linhas = cur.fetchall()
 
     if modo == "criar_anuncio":
@@ -1079,6 +1268,78 @@ def exportar_produtos_ml(cur, id_tenant: int) -> dict:
         if sem_sku:
             msg += f" {sem_sku} ignorado(s) sem SKU."
 
+    return {
+        "message": msg,
+        "total_produtos": total,
+        "modo": modo,
+        "exportados": 0,
+        "vinculados": vinculados,
+        "nao_encontrados": nao_encontrados,
+    }
+
+
+def publicar_produtos_ml(cur, id_tenant: int, ids_produtos: list[int]) -> dict:
+    """Publica ou vincula produtos selecionados (Meus produtos)."""
+    ids = []
+    for x in ids_produtos:
+        try:
+            pid = int(x)
+            if pid > 0:
+                ids.append(pid)
+        except (TypeError, ValueError):
+            continue
+    ids = list(dict.fromkeys(ids))
+    if not ids:
+        raise RuntimeError("Selecione ao menos um produto.")
+
+    cfg = carregar_config_ml(cur, id_tenant)
+    if not cfg.get("conectado"):
+        raise RuntimeError("Conecte o Mercado Livre em Integrações.")
+
+    if not cfg.get("produtos_exportar_auto"):
+        raise RuntimeError(
+            "Ative a exportação de produtos em Integrações → Mercado Livre → Produtos."
+        )
+
+    modo = cfg.get("produtos_modo") or "vincular_sku"
+    sql, extra = _sql_produtos_vitrine_ml(ids)
+    cur.execute(sql, [id_tenant, *extra])
+    linhas = cur.fetchall()
+    if not linhas:
+        raise RuntimeError("Nenhuma variação ativa encontrada nos produtos selecionados.")
+
+    if modo == "criar_anuncio":
+        return _criar_anuncios_ml_lote(cur, id_tenant, cfg, linhas)
+
+    ml_user_id = cfg.get("ml_user_id")
+    if not ml_user_id:
+        raise RuntimeError("Perfil Mercado Livre sem user_id. Reconecte a conta.")
+
+    vinculados = 0
+    nao_encontrados = 0
+    sem_sku = 0
+    for row in linhas:
+        _pv_id, id_variante, id_produto, sku, *_rest = row
+        sku = (sku or "").strip()
+        if not sku:
+            sem_sku += 1
+            continue
+        if _item_ja_vinculado_ml(cur, id_tenant, int(id_variante)):
+            vinculados += 1
+            continue
+        ml_item = _buscar_item_ml_por_sku(cur, id_tenant, int(ml_user_id), sku)
+        if not ml_item:
+            nao_encontrados += 1
+            continue
+        _salvar_map_produto_ml(cur, id_tenant, int(id_variante), int(id_produto), sku, ml_item)
+        vinculados += 1
+
+    total = len(linhas)
+    msg = f"{vinculados} de {total} variação(ões) vinculada(s) ao Mercado Livre."
+    if nao_encontrados:
+        msg += f" {nao_encontrados} sem anúncio com o mesmo SKU no ML."
+    if sem_sku:
+        msg += f" {sem_sku} sem SKU."
     return {
         "message": msg,
         "total_produtos": total,

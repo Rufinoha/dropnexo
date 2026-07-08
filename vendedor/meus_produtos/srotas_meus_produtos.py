@@ -1039,6 +1039,40 @@ def categoria_associar():
         conn.close()
 
 
+@vd_meus_produtos_bp.post("/meus-produtos/mercado-livre/publicar")
+@login_obrigatorio()
+@exigir_permissao(codigo="produtos.editar")
+def mercado_livre_publicar():
+    if (resp := _exigir_edicao()) is not None:
+        return resp
+    id_tenant = _id_tenant_sessao()
+    body = request.get_json(silent=True) or {}
+    raw = body.get("ids") or []
+    ids: list[int] = []
+    for x in raw:
+        try:
+            ids.append(int(x))
+        except (TypeError, ValueError):
+            continue
+    ids = list(dict.fromkeys(ids))
+    if not ids:
+        return jsonify(success=False, message="Nenhum produto selecionado."), 400
+
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        from api.mercado_livre.mercado_livre import publicar_produtos_ml
+
+        resultado = publicar_produtos_ml(cur, id_tenant, ids)
+        conn.commit()
+        return jsonify(success=True, **resultado)
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)[:300]), 400
+    finally:
+        conn.close()
+
+
 @vd_meus_produtos_bp.get("/meus-produtos/variantes/lista")
 @login_obrigatorio()
 @exigir_permissao(codigo="produtos.ver")

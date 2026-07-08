@@ -14,15 +14,21 @@
     btnDesconectar: document.getElementById("ml_btn_desconectar"),
     btnConectar: document.getElementById("ml_btn_conectar"),
     btnSync: document.getElementById("ml_btn_sync"),
-    btnSyncProdutos: document.getElementById("ml_btn_sync_produtos"),
+    btnMapearCategorias: document.getElementById("ml_btn_mapear_categorias"),
     btnSyncEstoque: document.getElementById("ml_btn_sync_estoque"),
     pedidosAuto: document.getElementById("ml_pedidos_auto"),
     produtosAuto: document.getElementById("ml_produtos_auto"),
     estoqueAuto: document.getElementById("ml_estoque_auto"),
     msg: document.getElementById("ml_msg"),
     subtabs: document.getElementById("ml_subtabs"),
+    modalCat: document.getElementById("ml_modal_categorias"),
+    tbodyCat: document.getElementById("ml_tbody_categorias"),
+    btnModalCatSalvar: document.getElementById("ml_modal_cat_salvar"),
+    btnModalCatFechar: document.getElementById("ml_modal_cat_fechar"),
+    btnModalCatCancelar: document.getElementById("ml_modal_cat_cancelar"),
   };
 
+  let categoriasMap = [];
   let salvando = false;
   let cfgAtual = {};
 
@@ -209,13 +215,157 @@
   el.btnSync?.addEventListener("click", () =>
     postSync("/api/integracoes/mercado-livre/sync/pedidos", el.btnSync, "Buscando pedidos no Mercado Livre…")
   );
-  el.btnSyncProdutos?.addEventListener("click", () =>
-    postSync(
-      "/api/integracoes/mercado-livre/sync/produtos",
-      el.btnSyncProdutos,
-      "Preparando sincronização de produtos…"
-    )
-  );
+
+  function esc(s) {
+    return String(s ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function renderTabelaCategorias() {
+    if (!el.tbodyCat) return;
+    if (!categoriasMap.length) {
+      el.tbodyCat.innerHTML =
+        '<tr><td colspan="4" class="Mp_Hint">Cadastre categorias em Categorias antes de mapear.</td></tr>';
+      return;
+    }
+    el.tbodyCat.innerHTML = categoriasMap
+      .map(
+        (c) => `<tr data-cat-id="${c.id_categoria}">
+          <td>${esc(c.nome)}</td>
+          <td><input type="text" class="ml-inp-cat" value="${esc(c.ml_category_id || "")}" placeholder="MLB1234" /></td>
+          <td><input type="text" class="ml-inp-fam" value="${esc(c.family_name || "")}" placeholder="Família do anúncio" /></td>
+          <td><button type="button" class="Cl_botaoFiltro Mp_CatMapBtn ml-btn-sugerir">Sugerir</button></td>
+        </tr>`
+      )
+      .join("");
+  }
+
+  function coletarItensMapeamento() {
+    const itens = [];
+    el.tbodyCat?.querySelectorAll("tr[data-cat-id]").forEach((tr) => {
+      const id = parseInt(tr.dataset.catId, 10);
+      if (!id) return;
+      const ml = tr.querySelector(".ml-inp-cat")?.value?.trim() || "";
+      const fam = tr.querySelector(".ml-inp-fam")?.value?.trim() || "";
+      if (ml) itens.push({ id_categoria: id, ml_category_id: ml, family_name: fam });
+    });
+    return itens;
+  }
+
+  async function carregarMapeamentoCategorias() {
+    const r = await fetch("/api/integracoes/mercado-livre/categorias-mapeamento", {
+      credentials: "same-origin",
+    });
+    const j = await r.json();
+    if (!r.ok || !j.success) throw new Error(j.message || "Falha ao carregar categorias.");
+    categoriasMap = j.itens || [];
+    renderTabelaCategorias();
+  }
+
+  async function abrirModalCategorias() {
+    if (!el.modalCat) return;
+    mostrarMsg("Carregando categorias…", false);
+    try {
+      await carregarMapeamentoCategorias();
+      mostrarMsg("", false);
+      el.modalCat.showModal();
+    } catch (e) {
+      mostrarMsg(e.message, true);
+    }
+  }
+
+  async function salvarMapeamentoCategorias() {
+    if (!el.btnModalCatSalvar) return;
+    const itens = coletarItensMapeamento();
+    if (!itens.length) {
+      mostrarMsg("Informe ao menos uma categoria ML.", true);
+      return;
+    }
+    el.btnModalCatSalvar.disabled = true;
+    try {
+      const r = await fetch("/api/integracoes/mercado-livre/categorias-mapeamento/salvar", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ itens }),
+      });
+      const j = await r.json();
+      if (!r.ok || !j.success) throw new Error(j.message || "Falha ao salvar.");
+      mostrarMsg(j.message || "Mapeamento salvo.", false);
+      el.modalCat?.close();
+    } catch (e) {
+      mostrarMsg(e.message, true);
+    } finally {
+      el.btnModalCatSalvar.disabled = false;
+    }
+  }
+
+  async function sugerirCategoriaMl(tr) {
+    const nome = tr.querySelector("td")?.textContent?.trim() || "";
+    if (nome.length < 3) {
+      mostrarMsg("Nome da categoria muito curto para sugerir.", true);
+      return;
+    }
+    const btn = tr.querySelector(".ml-btn-sugerir");
+    if (btn) btn.disabled = true;
+    try {
+      const r = await fetch(
+        `/api/integracoes/mercado-livre/categorias/buscar?q=${encodeURIComponent(nome)}`,
+        { credentials: "same-origin" }
+      );
+      const j = await r.json();
+      if (!r.ok || !j.success) throw new Error(j.message || "Falha na busca.");
+      const lista = j.itens || [];
+      if (!lista.length) {
+        mostrarMsg(`Nenhuma categoria ML sugerida para «${nome}».`, true);
+        return;
+      }
+      let picked = lista.length === 1 ? lista[0] : null;
+      if (!picked && window.Swal) {
+        const opts = lista
+          .map((x) => `<option value="${esc(x.category_id)}">${esc(x.category_id)} — ${esc(x.nome)}</option>`)
+          .join("");
+        const res = await Swal.fire({
+          title: "Categoria Mercado Livre",
+          html: `<select id="swalMlCat" class="swal2-select" style="width:100%">${opts}</select>`,
+          showCancelButton: true,
+          confirmButtonText: "Usar",
+          preConfirm: () => document.getElementById("swalMlCat")?.value,
+        });
+        if (!res.isConfirmed || !res.value) return;
+        picked = lista.find((x) => x.category_id === res.value) || lista[0];
+      } else if (!picked) {
+        picked = lista[0];
+      }
+      const inpCat = tr.querySelector(".ml-inp-cat");
+      const inpFam = tr.querySelector(".ml-inp-fam");
+      if (inpCat) inpCat.value = picked.category_id;
+      if (inpFam && !inpFam.value.trim()) inpFam.value = nome.slice(0, 120);
+      mostrarMsg(`Sugerido: ${picked.category_id}`, false);
+    } catch (e) {
+      mostrarMsg(e.message, true);
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  el.btnMapearCategorias?.addEventListener("click", () => abrirModalCategorias());
+  el.btnModalCatSalvar?.addEventListener("click", (ev) => {
+    ev.preventDefault();
+    salvarMapeamentoCategorias();
+  });
+  el.btnModalCatFechar?.addEventListener("click", () => el.modalCat?.close());
+  el.btnModalCatCancelar?.addEventListener("click", () => el.modalCat?.close());
+  el.tbodyCat?.addEventListener("click", (ev) => {
+    const btn = ev.target.closest(".ml-btn-sugerir");
+    if (!btn) return;
+    const tr = btn.closest("tr[data-cat-id]");
+    if (tr) sugerirCategoriaMl(tr);
+  });
+
   el.btnSyncEstoque?.addEventListener("click", () =>
     postSync(
       "/api/integracoes/mercado-livre/sync/estoque",
