@@ -122,6 +122,28 @@
   align-items: start;
 }
 
+.FnInt_Grid.FnInt_Grid--grouped {
+  display: flex;
+  flex-direction: column;
+  gap: 1.35rem;
+}
+
+.FnInt_GrupoTitulo {
+  margin: 0 0 0.75rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+
+.FnInt_GrupoGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.85rem;
+  align-items: start;
+}
+
 .FnInt_CardWrap {
   position: relative;
 }

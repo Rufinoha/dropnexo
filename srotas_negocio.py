@@ -299,6 +299,15 @@ CATEGORIAS_INTEGRACOES = [
         "subtitulo": "Importe pedidos de marketplaces, e-commerce e ERP.",
         "modulos": _MOD_VENDEDOR,
         "itens": [
+            {
+                "slug": "bling",
+                "nome": "Bling",
+                "descricao": "Importe pedidos de venda pagos do seu Bling.",
+                "cor": "#28A745",
+                "iniciais": "BL",
+                "modulos": _MOD_VENDEDOR,
+                "papel": "pedidos",
+            },
             {"slug": "mercado-livre", "nome": "Mercado Livre", "descricao": "Pedidos e anúncios do Mercado Livre.", "cor": "#FFE600", "iniciais": "ML", "modulos": _MOD_VENDEDOR},
             {"slug": "amazon", "nome": "Amazon", "descricao": "Pedidos da Amazon no seu painel.", "cor": "#FF9900", "iniciais": "AZ", "modulos": _MOD_VENDEDOR},
             {"slug": "magazine-luiza", "nome": "Magazine Luiza", "descricao": "Pedidos do marketplace Magalu.", "cor": "#0086FF", "iniciais": "MG", "modulos": _MOD_VENDEDOR},
@@ -310,15 +319,6 @@ CATEGORIAS_INTEGRACOES = [
             {"slug": "nuvemshop", "nome": "Nuvemshop", "descricao": "Pedidos da sua Nuvemshop.", "cor": "#2C3E50", "iniciais": "NV", "modulos": _MOD_VENDEDOR},
             {"slug": "beezoo", "nome": "Beezoo", "descricao": "Pedidos de lojas Beezoo.", "cor": "#F5A623", "iniciais": "BZ", "modulos": _MOD_VENDEDOR},
             {"slug": "bagy", "nome": "Bagy", "descricao": "Pedidos da plataforma Bagy.", "cor": "#111827", "iniciais": "BG", "modulos": _MOD_VENDEDOR},
-            {
-                "slug": "bling",
-                "nome": "Bling",
-                "descricao": "Importe pedidos de venda pagos do seu Bling.",
-                "cor": "#28A745",
-                "iniciais": "BL",
-                "modulos": _MOD_VENDEDOR,
-                "papel": "pedidos",
-            },
         ],
     },
     {

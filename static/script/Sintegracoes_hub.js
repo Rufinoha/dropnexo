@@ -193,6 +193,33 @@
     elDialog?.querySelector(".FnInt_ConnectDialog__btnPrimary")?.focus();
   }
 
+  function itemConectado(item) {
+    const slug = item.slug || "";
+    if (!INTEGRACOES_ATIVAS.has(slug)) return false;
+    return !!statusIntegracao(slug).conectado;
+  }
+
+  function agruparItensIntegracao(itens) {
+    const conectados = [];
+    const outros = [];
+    for (const item of itens || []) {
+      if (itemConectado(item)) conectados.push(item);
+      else outros.push(item);
+    }
+    return { conectados, outros };
+  }
+
+  function grupoHtml(rotulo, itens) {
+    if (!itens.length) return "";
+    return `
+      <section class="FnInt_Grupo">
+        <h4 class="FnInt_GrupoTitulo">${rotulo}</h4>
+        <div class="FnInt_GrupoGrid" role="list">
+          ${itens.map(cardHtml).join("")}
+        </div>
+      </section>`;
+  }
+
   function cardHtml(item) {
     const slug = item.slug || "";
     const ativa = INTEGRACOES_ATIVAS.has(slug);
@@ -229,9 +256,20 @@
     categoriaAtiva = catId;
     if (elTitulo) elTitulo.textContent = cat.titulo || cat.rotulo;
     if (elSubtitulo) elSubtitulo.textContent = cat.subtitulo || "";
-    elGrid.innerHTML =
-      (cat.itens || []).map(cardHtml).join("") ||
-      '<p class="FnInt_Subtitulo">Nenhuma integração nesta categoria.</p>';
+
+    const { conectados, outros } = agruparItensIntegracao(cat.itens);
+    const total = conectados.length + outros.length;
+    if (!total) {
+      elGrid.innerHTML = '<p class="FnInt_Subtitulo">Nenhuma integração nesta categoria.</p>';
+      elGrid.classList.remove("FnInt_Grid--grouped");
+    } else if (!conectados.length || !outros.length) {
+      elGrid.classList.remove("FnInt_Grid--grouped");
+      elGrid.innerHTML = [...conectados, ...outros].map(cardHtml).join("");
+    } else {
+      elGrid.classList.add("FnInt_Grid--grouped");
+      elGrid.innerHTML = grupoHtml("Conectados", conectados) + grupoHtml("Não conectados", outros);
+    }
+
     renderSubnav();
     window.lucide?.createIcons?.();
     if (itemModalAberto) {

@@ -46,7 +46,41 @@ def _float(v) -> float:
     return float(v or 0)
 
 
+_TABELA_SEQUENCIA_OK: bool | None = None
+
+
+def _tem_tabela_sequencia_pedido(cur) -> bool:
+    global _TABELA_SEQUENCIA_OK
+    if _TABELA_SEQUENCIA_OK is not None:
+        return _TABELA_SEQUENCIA_OK
+    cur.execute(
+        """
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = 'tbl_pedido_sequencia'
+        LIMIT 1
+        """
+    )
+    _TABELA_SEQUENCIA_OK = cur.fetchone() is not None
+    return _TABELA_SEQUENCIA_OK
+
+
+def _pad_tenant_numero(id_tenant: int) -> str:
+    s = str(int(id_tenant))
+    return s.zfill(max(3, len(s)))
+
+
+def _pad_sequencia_pedido(seq: int) -> str:
+    s = str(int(seq))
+    return s.zfill(max(5, len(s)))
+
+
+def format_numero_pedido(id_tenant: int, seq: int) -> str:
+    """Ex.: tenant 2, 5º pedido → 002-00005."""
+    return f"{_pad_tenant_numero(id_tenant)}-{_pad_sequencia_pedido(seq)}"
+
+
 def _gerar_numero(cur, prefixo: str, id_tenant: int, tabela: str, col_tenant: str) -> str:
+    """Legado (PED-/GRP-YYYY-NNNNN) — fallback se migração 070 não aplicada."""
     ano = datetime.now().year
     base = f"{prefixo}-{ano}-"
     cur.execute(
@@ -65,6 +99,103 @@ def _gerar_numero(cur, prefixo: str, id_tenant: int, tabela: str, col_tenant: st
         except ValueError:
             seq = 1
     return f"{base}{seq:05d}"
+
+
+def _proximo_numero_pedido(cur, id_tenant: int) -> str:
+    """Aloca o próximo número sequencial do tenant (002-00005). Nunca reutiliza."""
+    if not _tem_tabela_sequencia_pedido(cur):
+        return _gerar_numero(cur, "PED", id_tenant, "tbl_pedido", "id_tenant_vendedor")
+
+    cur.execute(
+        """
+        INSERT INTO tbl_pedido_sequencia (id_tenant_vendedor, proximo_numero)
+        SELECT %s, COUNT(*)::INTEGER + 1
+        FROM tbl_pedido
+        WHERE id_tenant_vendedor = %s
+        ON CONFLICT (id_tenant_vendedor) DO NOTHING
+        """,
+        (id_tenant, id_tenant),
+    )
+    cur.execute(
+        """
+        UPDATE tbl_pedido_sequencia
+        SET proximo_numero = proximo_numero + 1,
+            atualizado_em = NOW()
+        WHERE id_tenant_vendedor = %s
+        RETURNING proximo_numero - 1
+        """,
+        (id_tenant,),
+    )
+    row = cur.fetchone()
+    if not row:
+        raise RuntimeError("Falha ao alocar sequência de pedido.")
+    return format_numero_pedido(id_tenant, int(row[0]))
+
+
+def _cancelar_rascunho_pedido(
+    cur,
+    id_pedido: int,
+    *,
+    id_usuario: int | None = None,
+    motivo: str | None = None,
+) -> None:
+    """Cancela pedido em rascunho sem liberar estoque (nunca exclui o registro)."""
+    cv = col_status_vendedor(cur)
+    cur.execute(
+        f"SELECT {cv} FROM tbl_pedido WHERE id = %s",
+        (id_pedido,),
+    )
+    row = cur.fetchone()
+    if not row or row[0] != STATUS_RASCUNHO:
+        return
+    agora = agora_utc()
+    cur.execute(
+        f"""
+        UPDATE tbl_pedido SET
+            {cv} = %s,
+            status_pagamento = 'cancelado',
+            cancelado_em = %s,
+            atualizado_em = %s
+        WHERE id = %s
+        """,
+        (STATUS_CANCELADO, agora, agora, id_pedido),
+    )
+    registrar_historico(
+        cur,
+        id_pedido,
+        "cancelado",
+        motivo or "Rascunho cancelado.",
+        id_usuario,
+    )
+
+
+def _atualizar_numero_grupo(cur, id_grupo: int) -> str | None:
+    cv = col_status_vendedor(cur)
+    cur.execute(
+        f"""
+        SELECT numero FROM tbl_pedido
+        WHERE id_grupo = %s AND {cv} != %s
+        ORDER BY id
+        LIMIT 1
+        """,
+        (id_grupo, STATUS_CANCELADO),
+    )
+    row = cur.fetchone()
+    numero = (row[0] or "").strip() if row else ""
+    cur.execute(
+        "UPDATE tbl_pedido_grupo SET numero = %s WHERE id = %s",
+        (numero or str(id_grupo), id_grupo),
+    )
+    return numero or None
+
+
+def _rotulo_grupo_pedidos(pedidos: list[dict]) -> str:
+    numeros = [str(p.get("numero") or "").strip() for p in pedidos if (p.get("numero") or "").strip()]
+    if not numeros:
+        return ""
+    if len(numeros) == 1:
+        return numeros[0]
+    return ", ".join(numeros)
 
 
 def registrar_historico(
@@ -648,10 +779,12 @@ def salvar_rascunho(
         if not cur.fetchone():
             raise ValueError("Grupo de pedido não encontrado.")
     else:
-        numero_grupo = _gerar_numero(cur, "GRP", id_vendedor, "tbl_pedido_grupo", "id_tenant_vendedor")
         cur.execute(
-            "INSERT INTO tbl_pedido_grupo (id_tenant_vendedor, numero) VALUES (%s, %s) RETURNING id",
-            (id_vendedor, numero_grupo),
+            """
+            INSERT INTO tbl_pedido_grupo (id_tenant_vendedor, numero)
+            VALUES (%s, %s) RETURNING id
+            """,
+            (id_vendedor, f"__novo_{id_vendedor}_{datetime.now().timestamp_ns()}"),
         )
         id_grupo = int(cur.fetchone()[0])
 
@@ -660,14 +793,19 @@ def salvar_rascunho(
     cur.execute(
         f"""
         SELECT id, id_tenant_fornecedor, {cv} FROM tbl_pedido
-        WHERE id_grupo = %s AND id_tenant_vendedor = %s
+        WHERE id_grupo = %s AND id_tenant_vendedor = %s AND {cv} != %s
         """,
-        (id_grupo, id_vendedor),
+        (id_grupo, id_vendedor, STATUS_CANCELADO),
     )
     existentes = cur.fetchall()
     for pid, id_forn, st in existentes:
         if int(id_forn) not in ids_fornecedores_ativos and st == STATUS_RASCUNHO:
-            cur.execute("DELETE FROM tbl_pedido WHERE id = %s", (pid,))
+            _cancelar_rascunho_pedido(
+                cur,
+                int(pid),
+                id_usuario=id_usuario,
+                motivo="Fornecedor removido do rascunho.",
+            )
         elif int(id_forn) not in ids_fornecedores_ativos:
             raise ValueError("Não é possível remover fornecedor de pedido já confirmado.")
 
@@ -678,11 +816,12 @@ def salvar_rascunho(
         total = subtotal + taxa
 
         cur.execute(
-            """
+            f"""
             SELECT id FROM tbl_pedido
             WHERE id_grupo = %s AND id_tenant_fornecedor = %s AND id_tenant_vendedor = %s
+              AND {cv} != %s
             """,
-            (id_grupo, id_forn, id_vendedor),
+            (id_grupo, id_forn, id_vendedor, STATUS_CANCELADO),
         )
         row_ped = cur.fetchone()
         if row_ped:
@@ -731,7 +870,7 @@ def salvar_rascunho(
             except Exception:
                 pass
         else:
-            numero = _gerar_numero(cur, "PED", id_vendedor, "tbl_pedido", "id_tenant_vendedor")
+            numero = _proximo_numero_pedido(cur, id_vendedor)
             cur.execute(
                 """
                 INSERT INTO tbl_pedido (
@@ -798,8 +937,7 @@ def salvar_rascunho(
             )
         pedidos_ids.append(id_pedido)
 
-    cur.execute("SELECT numero FROM tbl_pedido_grupo WHERE id = %s", (id_grupo,))
-    num_grupo = cur.fetchone()[0]
+    num_grupo = _atualizar_numero_grupo(cur, id_grupo)
     return {"id_grupo": id_grupo, "numero_grupo": num_grupo, "pedidos_ids": pedidos_ids}
 
 
@@ -1192,7 +1330,7 @@ def importar_pedido_bling(
         taxa = _taxa_pedido_fornecedor(cur, id_forn)
         total = subtotal + taxa
         agora = agora_utc()
-        numero = _gerar_numero(cur, "PED", id_vendedor, "tbl_pedido", "id_tenant_vendedor")
+        numero = _proximo_numero_pedido(cur, id_vendedor)
         obs = obs_base
         if numero_bling:
             prefix = f"Importado do Bling #{numero_bling}."
@@ -1572,7 +1710,7 @@ def _montar_contexto_pedidos(
 
     return {
         "id_grupo": int(id_grupo) if id_grupo else None,
-        "numero_grupo": numero_grupo,
+        "numero_grupo": _rotulo_grupo_pedidos(pedidos) or numero_grupo,
         "editavel": editavel,
         "frete_editavel": frete_editavel,
         "bloqueado_total": bloqueado_total,
@@ -1610,9 +1748,10 @@ def obter_grupo_pedido(cur, id_vendedor: int, id_grupo: int) -> dict | None:
         f"""
         {sql_pedidos_resumo(cur)}
         WHERE p.id_grupo = %s AND p.id_tenant_vendedor = %s
+          AND p.{col_status_vendedor(cur)} != %s
         ORDER BY p.id
         """,
-        (id_grupo, id_vendedor),
+        (id_grupo, id_vendedor, STATUS_CANCELADO),
     )
     return _montar_contexto_pedidos(
         cur,

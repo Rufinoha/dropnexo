@@ -22,7 +22,7 @@ def _tlv(tag: str, value: str) -> str:
 
 
 def normalizar_txid(referencia: str, *, max_len: int = 25) -> str:
-    """TXID alfanumérico (BACEN) — ex.: PED-2026-00002 → PED202600002."""
+    """TXID alfanumérico (BACEN) — ex.: 002-00005 → 00200005."""
     limpo = re.sub(r"[^A-Za-z0-9]", "", referencia or "")
     return (limpo or "PEDIDO")[:max_len]
 

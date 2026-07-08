@@ -129,7 +129,7 @@
       .map(
         (p) => `
       <tr>
-        <td><strong>${esc(p.numero)}</strong>${p.numero_grupo ? `<br><small>${esc(p.numero_grupo)}</small>` : ""}</td>
+        <td><strong>${esc(p.numero)}</strong></td>
         <td>${esc(p.fornecedor_nome || "")}</td>
         <td>${esc(p.cliente_nome || "")}</td>
         <td>${fmt(p.valor_total)}</td>
@@ -313,9 +313,11 @@
     preencherFormulario(grupo);
     aplicarEstadoWizard(grupo);
 
+    const nums = (grupo.pedidos || []).map((p) => p.numero).filter(Boolean);
+    const refNum = nums.length === 1 ? nums[0] : nums.join(", ");
     const titulo = grupo.editavel
-      ? `Editar pedido ${grupo.numero_grupo || ""}`.trim()
-      : `Pedido ${grupo.numero_grupo || ""}`.trim();
+      ? `Editar pedido ${refNum || ""}`.trim()
+      : `Pedido ${refNum || ""}`.trim();
     document.getElementById("pd_modalTitulo").textContent = titulo;
 
     if (!comboProd) initComboProduto();
