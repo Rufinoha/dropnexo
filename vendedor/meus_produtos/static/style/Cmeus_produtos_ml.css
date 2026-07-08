@@ -1,3 +1,30 @@
+.Cat_ColIntegracoes {
+  width: 5.5rem;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.Cat_IntIcons {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  cursor: default;
+}
+
+.Cat_IntIcon {
+  display: block;
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  border-radius: 4px;
+}
+
+.Cat_IntVazio {
+  color: #94a3b8;
+  font-size: 0.9rem;
+}
+
 .Ob_MlModal {
   border: none;
   border-radius: 14px;

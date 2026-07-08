@@ -13,6 +13,7 @@
     filtroCategoria: document.getElementById("ob_filtroCategoria"),
     filtroTipo: document.getElementById("ob_filtroTipo"),
     filtroOrigem: document.getElementById("ob_filtroOrigem"),
+    filtroIntegracao: document.getElementById("ob_filtroIntegracao"),
     filtroAtivos: document.getElementById("ob_filtroAtivos"),
     filtroResumo: document.getElementById("ob_filtroResumo"),
     btnFiltrar: document.getElementById("ob_btnFiltrar"),
@@ -427,6 +428,19 @@
     return String(l.estoque ?? 0);
   }
 
+  function renderIntegracoesCell(l) {
+    const ints = l.integracoes || [];
+    if (!ints.length) return '<span class="Cat_IntVazio" title="Sem integração">—</span>';
+    const nomes = ints.map((i) => i.nome).join(", ");
+    const icons = ints
+      .map(
+        (i) =>
+          `<img class="Cat_IntIcon" src="${escapeHtml(i.icone_url)}" alt="${escapeHtml(i.nome)}" width="20" height="20" loading="lazy" />`
+      )
+      .join("");
+    return `<span class="Cat_IntIcons" title="${escapeHtml(nomes)}">${icons}</span>`;
+  }
+
   async function carregarCategoriasFiltro() {
     const r = await fetch(`${BASE}/combos`);
     const j = await r.json();
@@ -442,6 +456,22 @@
     });
     categoriasCache = j.categorias || [];
     sel.value = val;
+
+    const selInt = el.filtroIntegracao;
+    if (selInt) {
+      const valInt = selInt.value;
+      selInt.innerHTML = "";
+      (j.integracoes_filtro || [
+        { valor: "", nome: "Todas" },
+        { valor: "sem", nome: "Sem integração" },
+      ]).forEach((opt) => {
+        const o = document.createElement("option");
+        o.value = opt.valor;
+        o.textContent = opt.nome;
+        selInt.appendChild(o);
+      });
+      selInt.value = valInt;
+    }
   }
 
   function montarUrl() {
@@ -452,6 +482,7 @@
       id_categoria: el.filtroCategoria?.value || "",
       tipo: el.filtroTipo?.value || "",
       origem: el.filtroOrigem?.value || "",
+      integracao: el.filtroIntegracao?.value || "",
       ativos: el.filtroAtivos?.checked ? "sim" : "nao",
     });
     return `${BASE}/dados?${p}`;
@@ -506,6 +537,7 @@
       <td class="Cat_ColCategoria">${renderCategoriaCell(l)}</td>
       <td class="Cat_Preco">${preco}</td>
       <td class="Cat_ColEstoque">${renderEstoque(l)}</td>
+      <td class="Cat_ColIntegracoes">${renderIntegracoesCell(l)}</td>
       <td class="Cl_TableActions">${acoes}</td>
     </tr>`;
   }
@@ -513,7 +545,7 @@
   function renderTabela() {
     const linhas = linhasVisiveis();
     if (!linhas.length) {
-      el.tbody.innerHTML = '<tr><td colspan="10">Nenhum produto encontrado.</td></tr>';
+      el.tbody.innerHTML = '<tr><td colspan="11">Nenhum produto encontrado.</td></tr>';
       atualizarBtnExpandTodos();
       syncBulkBar();
       renderPaginacao();
@@ -690,6 +722,7 @@
     el.filtroCategoria.value = "";
     if (el.filtroTipo) el.filtroTipo.value = "";
     if (el.filtroOrigem) el.filtroOrigem.value = "";
+    if (el.filtroIntegracao) el.filtroIntegracao.value = "";
     if (el.filtroAtivos) el.filtroAtivos.checked = true;
     paginaAtual = 1;
     carregar().catch((e) => Swal.fire("Erro", e.message, "error"));

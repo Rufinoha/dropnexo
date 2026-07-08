@@ -8,7 +8,7 @@
 
 {% block head_extra %}
 <link rel="stylesheet" href="{{ url_for('fn_catalogo.static', filename='style/Ccatalogos.css') }}?v=10" />
-<link rel="stylesheet" href="{{ url_for('vd_meus_produtos.static', filename='style/Cmeus_produtos_ml.css') }}?v=1" />
+<link rel="stylesheet" href="{{ url_for('vd_meus_produtos.static', filename='style/Cmeus_produtos_ml.css') }}?v=2" />
 {% endblock %}
 
 {% block content %}
@@ -54,6 +54,13 @@
           <option value="somente_variacoes">Somente as Variações</option>
         </select>
       </div>
+      <div class="filter-group">
+        <label for="ob_filtroIntegracao">Integração</label>
+        <select id="ob_filtroIntegracao">
+          <option value="">Todas</option>
+          <option value="sem">Sem integração</option>
+        </select>
+      </div>
       <div class="filter-group filter-group--switch">
         <label class="Cl_Switch Cat_FiltroSwitch" for="ob_filtroAtivos">
           <span class="filter-group-switch-label">Somente ativos</span>
@@ -72,7 +79,7 @@
     <table>
       <thead>
         <tr class="Cat_BulkHeadRow" id="ob_bulkRow" hidden>
-          <th colspan="7"></th>
+          <th colspan="8"></th>
           <th colspan="3" class="Cat_BulkHeadCell">
             <div class="Cat_BulkActions" id="ob_bulkActions" aria-label="Ações em lote"></div>
           </th>
@@ -93,11 +100,12 @@
           <th>Categoria</th>
           <th>Preço venda</th>
           <th>Estoque</th>
+          <th class="Cat_ColIntegracoes">Integrações</th>
           <th class="col-acoes Cl_TableActions">Ações</th>
         </tr>
       </thead>
       <tbody id="ob_listaProdutos">
-        <tr><td colspan="10">Carregando…</td></tr>
+        <tr><td colspan="11">Carregando…</td></tr>
       </tbody>
     </table>
   </div>
@@ -136,5 +144,5 @@
 {% endblock %}
 
 {% block page_js %}
-<script defer src="{{ url_for('vd_meus_produtos.static', filename='script/Svd_meus_produtos_lista.js') }}?v=7"></script>
+<script defer src="{{ url_for('vd_meus_produtos.static', filename='script/Svd_meus_produtos_lista.js') }}?v=8"></script>
 {% endblock %}

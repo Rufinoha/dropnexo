@@ -3,7 +3,7 @@
 {% block title %}Mercado Livre — Integrações — {{ MARCA_NOME }}{% endblock %}
 {% block topbar_title %}Mercado Livre{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('static', filename='style/Cmercadopago_integracao.css') }}?v=6" />
+<link rel="stylesheet" href="{{ url_for('static', filename='style/Cmercadopago_integracao.css') }}?v=8" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal Mp_Wrap">
@@ -112,9 +112,33 @@
         </label>
         <label class="Mp_RadioRow">
           <input type="radio" name="ml_listing_type" value="gold_pro" data-ml-config="listing_type_padrao" />
-          <span><strong>Premium</strong> — maior visibilidade (comissão maior)</span>
+          <span><strong>Premium</strong> — maior visibilidade e parcelamento sem juros (comissão maior)</span>
+        </label>
+        <label class="Mp_RadioRow">
+          <input type="radio" name="ml_listing_type" value="free" data-ml-config="listing_type_padrao" />
+          <span><strong>Grátis</strong> — preferência por anúncio gratuito (exposição menor)</span>
         </label>
       </fieldset>
+      <p class="Mp_Aviso Mp_Aviso--warn" id="ml_aviso_gratis" hidden>
+        <strong>Atenção:</strong> Grátis é apenas a sua <em>preferência</em>. Na hora de publicar, o Mercado Livre pode
+        exigir <strong>Clássico</strong> ou <strong>Premium</strong> conforme a categoria do produto — nesse caso o
+        anúncio não será criado como Grátis e você verá o aviso no resultado da integração.
+      </p>
+      <div class="Mp_TaxasBox" id="ml_taxas_box">
+        <p class="Mp_Hint" style="margin-bottom:0.5rem"><strong>Simular taxas</strong> — valores consultados na API do Mercado Livre (comissão na venda; frete à parte).</p>
+        <div class="Mp_TaxasFiltro">
+          <label>
+            Preço de referência (R$)
+            <input type="text" id="ml_taxa_preco" inputmode="decimal" placeholder="Ex.: 50,00" value="50,00" />
+          </label>
+          <label>
+            Categoria ML <span class="Mp_Hint--inline">(opcional)</span>
+            <input type="text" id="ml_taxa_categoria" placeholder="Ex.: MLB1262" />
+          </label>
+          <button type="button" class="Cl_botaoFiltro" id="ml_btn_simular_taxas">Atualizar simulação</button>
+        </div>
+        <div id="ml_taxas_resultado" class="Mp_TaxasResultado" hidden></div>
+      </div>
       <div class="Mp_Switches">
         <div class="Mp_SwitchRow">
           <div class="Mp_SwitchText">
@@ -196,5 +220,5 @@
 </div>
 {% endblock %}
 {% block page_js %}
-<script src="{{ url_for('static', filename='script/Smercado_livre_integracao.js') }}?v=8"></script>
+<script src="{{ url_for('static', filename='script/Smercado_livre_integracao.js') }}?v=10"></script>
 {% endblock %}

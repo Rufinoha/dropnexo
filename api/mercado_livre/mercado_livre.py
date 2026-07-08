@@ -981,16 +981,12 @@ def _extrair_listing_type_id(item) -> str:
     return ""
 
 
-def _listing_type_ml(
+def _tipos_listing_disponiveis_ml(
     cur,
     id_tenant: int,
     ml_user_id: int,
     category_id: str,
-    preferido: str = "auto",
-) -> str:
-    pref = (preferido or "auto").strip()
-    if pref and pref != "auto" and pref in _ML_LISTING_TYPES:
-        return pref
+) -> list[str]:
     ids: list[str] = []
     try:
         cat = api_request(cur, id_tenant, "GET", f"/categories/{category_id}")
@@ -999,11 +995,8 @@ def _listing_type_ml(
             lid = _extrair_listing_type_id(t)
             if lid:
                 ids.append(lid)
-        for prefer in ("gold_special", "gold_pro", "gold_premium", "free"):
-            if prefer in ids:
-                return prefer
         if ids:
-            return ids[0]
+            return list(dict.fromkeys(ids))
     except RuntimeError:
         pass
     try:
@@ -1017,14 +1010,60 @@ def _listing_type_ml(
         disponiveis = data.get("available") or []
         disp_ids = [_extrair_listing_type_id(x) for x in disponiveis]
         disp_ids = [x for x in disp_ids if x]
-        for prefer in ("gold_special", "gold_pro", "gold_premium", "free"):
-            if prefer in disp_ids:
-                return prefer
         if disp_ids:
-            return disp_ids[0]
+            return list(dict.fromkeys(disp_ids))
     except RuntimeError:
         pass
-    return "gold_special"
+    return []
+
+
+def _resolver_listing_type_ml(
+    cur,
+    id_tenant: int,
+    ml_user_id: int,
+    category_id: str,
+    preferido: str = "auto",
+) -> str:
+    pref = (preferido or "auto").strip()
+    disponiveis = _tipos_listing_disponiveis_ml(cur, id_tenant, ml_user_id, category_id)
+
+    if pref == "auto" or not pref:
+        if not disponiveis:
+            return "gold_special"
+        for prefer in ("gold_special", "gold_pro", "gold_premium", "free"):
+            if prefer in disponiveis:
+                return prefer
+        return disponiveis[0]
+
+    if pref not in _ML_LISTING_TYPES:
+        return _resolver_listing_type_ml(cur, id_tenant, ml_user_id, category_id, "auto")
+
+    if not disponiveis:
+        return pref
+
+    if pref not in disponiveis:
+        nomes = ", ".join(_nome_listing_type_ml(x) for x in disponiveis)
+        if pref == "free":
+            raise RuntimeError(
+                "Esta categoria não aceita anúncio Grátis no Mercado Livre. "
+                f"Tipos permitidos: {nomes}. "
+                "Altere o tipo em Integrações → Mercado Livre ou use Automático/Clássico."
+            )
+        raise RuntimeError(
+            f"Tipo «{_nome_listing_type_ml(pref)}» indisponível nesta categoria. "
+            f"Permitidos: {nomes}."
+        )
+    return pref
+
+
+def _listing_type_ml(
+    cur,
+    id_tenant: int,
+    ml_user_id: int,
+    category_id: str,
+    preferido: str = "auto",
+) -> str:
+    return _resolver_listing_type_ml(cur, id_tenant, ml_user_id, category_id, preferido)
 
 
 def _montar_shipping_ml(frete_gratis: bool) -> dict[str, Any]:
@@ -1043,6 +1082,75 @@ def _nome_listing_type_ml(listing_type_id: str) -> str:
         "free": "Grátis",
     }
     return nomes.get((listing_type_id or "").strip(), listing_type_id or "—")
+
+
+def listar_taxas_listing_ml(
+    cur,
+    id_tenant: int,
+    price: float,
+    category_id: str = "",
+) -> list[dict]:
+    """Consulta comissões aproximadas via API listing_prices do Mercado Livre."""
+    if price <= 0:
+        raise RuntimeError("Informe um preço de referência maior que zero.")
+    cfg = carregar_config_ml(cur, id_tenant)
+    if not cfg.get("conectado"):
+        raise RuntimeError("Conecte o Mercado Livre primeiro.")
+    site_id = (cfg.get("ml_site_id") or "MLB").upper()
+    params: dict[str, Any] = {"price": round(float(price), 2)}
+    cat = (category_id or "").strip().upper()
+    if cat:
+        params["category_id"] = cat
+    try:
+        data = api_request(
+            cur,
+            id_tenant,
+            "GET",
+            f"/sites/{site_id}/listing_prices",
+            params=params,
+        )
+    except RuntimeError as e:
+        raise RuntimeError(f"Não foi possível consultar taxas no ML: {e}") from e
+    if not isinstance(data, list):
+        return []
+
+    ordem = ("free", "gold_special", "gold_pro", "gold_premium")
+    por_tipo: dict[str, dict] = {}
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        lid = (item.get("listing_type_id") or "").strip()
+        if not lid:
+            continue
+        det = item.get("sale_fee_details") or {}
+        pct = det.get("percentage_fee") or det.get("meli_percentage_fee")
+        fixa = det.get("fixed_fee")
+        taxa_venda = item.get("sale_fee_amount")
+        try:
+            taxa_venda_f = float(taxa_venda) if taxa_venda is not None else None
+        except (TypeError, ValueError):
+            taxa_venda_f = None
+        recebe = round(price - taxa_venda_f, 2) if taxa_venda_f is not None else None
+        por_tipo[lid] = {
+            "listing_type_id": lid,
+            "nome": item.get("listing_type_name") or _nome_listing_type_ml(lid),
+            "comissao_pct": float(pct) if pct is not None else None,
+            "taxa_venda": taxa_venda_f,
+            "taxa_fixa": float(fixa) if fixa is not None else None,
+            "recebe_aprox": recebe,
+            "exposicao": item.get("listing_exposure") or "",
+        }
+
+    out: list[dict] = []
+    vistos: set[str] = set()
+    for lid in ordem:
+        if lid in por_tipo:
+            out.append(por_tipo[lid])
+            vistos.add(lid)
+    for lid, row in por_tipo.items():
+        if lid not in vistos:
+            out.append(row)
+    return out
 
 
 def _estado_anuncio_ml(cur, id_tenant: int, item_id: str) -> dict[str, Any]:
@@ -1266,7 +1374,7 @@ def _criar_anuncio_ml(
     listing_pref = (cfg.get("listing_type_padrao") or "auto").strip()
     frete_gratis = bool(cfg.get("frete_gratis"))
 
-    listing_type = _listing_type_ml(
+    listing_type = _resolver_listing_type_ml(
         cur, id_tenant, ml_user_id, category_id, listing_pref
     )
     cat_attrs = _attrs_categoria_ml(cur, id_tenant, category_id)

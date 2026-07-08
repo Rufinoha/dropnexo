@@ -13,6 +13,7 @@ from api.mercado_livre.mercado_livre import (
     desconectar_ml,
     gerar_state_oauth,
     listar_mapeamento_categorias_ml,
+    listar_taxas_listing_ml,
     ml_configurado,
     ml_conectado,
     publicar_produtos_ml,
@@ -35,6 +36,8 @@ ml_bp = Blueprint(
     "mercado_livre",
     __name__,
     root_path=str(_MOD),
+    static_folder="static",
+    static_url_path="/static/api/mercado_livre",
 )
 
 
@@ -322,6 +325,32 @@ def produtos_publicar():
         return jsonify(success=True, **resultado)
     except Exception as e:
         conn.rollback()
+        return jsonify(success=False, message=str(e)[:300]), 400
+    finally:
+        conn.close()
+
+
+@ml_bp.get("/api/integracoes/mercado-livre/listing-prices")
+@login_obrigatorio()
+def listing_prices():
+    if not _pode_integracoes():
+        return jsonify(success=False, message="Sem permissão."), 403
+    if garantir_modulo_sessao() != "vendedor" and not session.get("eh_desenvolvedor"):
+        return jsonify(success=False, message="Apenas vendedores."), 403
+    try:
+        price = float((request.args.get("price") or "0").replace(",", "."))
+    except (TypeError, ValueError):
+        price = 0.0
+    category_id = (request.args.get("category_id") or "").strip()
+    id_tenant = session.get("id_tenant")
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        if not ml_conectado(cur, int(id_tenant)):
+            return jsonify(success=False, message="Mercado Livre não conectado."), 400
+        itens = listar_taxas_listing_ml(cur, int(id_tenant), price, category_id)
+        return jsonify(success=True, price=round(price, 2), category_id=category_id, itens=itens)
+    except Exception as e:
         return jsonify(success=False, message=str(e)[:300]), 400
     finally:
         conn.close()

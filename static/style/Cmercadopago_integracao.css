@@ -386,3 +386,87 @@
   padding: 0.85rem 1.15rem;
   border-top: 1px solid #e2e8f0;
 }
+
+.Mp_TaxasBox {
+  margin-top: 1rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.Mp_TaxasFiltro {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  align-items: flex-end;
+}
+
+.Mp_TaxasFiltro label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.78rem;
+  color: #475569;
+  min-width: 140px;
+}
+
+.Mp_TaxasFiltro input {
+  padding: 0.35rem 0.5rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 0.85rem;
+}
+
+.Mp_Hint--inline {
+  font-weight: 400;
+  color: #94a3b8;
+}
+
+.Mp_TaxasResultado {
+  margin-top: 0.75rem;
+  overflow-x: auto;
+}
+
+.Mp_TaxasTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+  background: #fff;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.Mp_TaxasTable th,
+.Mp_TaxasTable td {
+  padding: 0.45rem 0.55rem;
+  border-bottom: 1px solid #e2e8f0;
+  text-align: left;
+}
+
+.Mp_TaxasTable th {
+  background: #f1f5f9;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #64748b;
+}
+
+.Mp_TaxasTable tr.is-sel td {
+  background: #eff6ff;
+  font-weight: 600;
+}
+
+.Mp_Aviso {
+  margin: 0.65rem 0 0;
+  padding: 0.65rem 0.85rem;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.Mp_Aviso--warn {
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  color: #92400e;
+}

@@ -57,6 +57,231 @@ def sql_filtro_categoria_proprio(id_categoria: str) -> tuple[str | None, list]:
         return None, []
 
 
+INTEGRACOES_PRODUTO_VENDEDOR: dict[str, dict[str, str]] = {
+    "bling": {"nome": "Bling", "slug": "bling"},
+    "mercado_livre": {"nome": "Mercado Livre", "slug": "mercado-livre"},
+}
+
+_SQL_EXISTS_INTEGRACAO_PRODUTO = """
+    SELECT 1 FROM tbl_produto_variante v_int
+    JOIN tbl_integracao_map m_int ON m_int.id_dropnexo = v_int.id
+        AND m_int.id_tenant = %s
+        AND m_int.entidade = 'produto'
+        AND m_int.contexto = 'vendedor'
+        AND m_int.provedor IN ('bling', 'mercado_livre')
+    WHERE v_int.id_produto = {alias}.id
+"""
+
+_SQL_EXISTS_INTEGRACAO_VARIANTE = """
+    SELECT 1 FROM tbl_integracao_map m_int
+    WHERE m_int.id_dropnexo = {alias}.id
+      AND m_int.id_tenant = %s
+      AND m_int.entidade = 'produto'
+      AND m_int.contexto = 'vendedor'
+      AND m_int.provedor IN ('bling', 'mercado_livre')
+"""
+
+
+def sql_filtro_integracao_produto(
+    filtro_integracao: str,
+    id_tenant: int,
+    *,
+    alias_produto: str = "p",
+) -> tuple[str | None, list]:
+    filtro = (filtro_integracao or "").strip().lower()
+    if not filtro:
+        return None, []
+    base = _SQL_EXISTS_INTEGRACAO_PRODUTO.format(alias=alias_produto)
+    if filtro == "sem":
+        return f"NOT EXISTS ({base})", [id_tenant]
+    if filtro in INTEGRACOES_PRODUTO_VENDEDOR:
+        return f"EXISTS ({base} AND m_int.provedor = %s)", [id_tenant, filtro]
+    return None, []
+
+
+def sql_filtro_integracao_variante(
+    filtro_integracao: str,
+    id_tenant: int,
+    *,
+    alias_variante: str = "v",
+) -> tuple[str | None, list]:
+    filtro = (filtro_integracao or "").strip().lower()
+    if not filtro:
+        return None, []
+    base = _SQL_EXISTS_INTEGRACAO_VARIANTE.format(alias=alias_variante)
+    if filtro == "sem":
+        return f"NOT EXISTS ({base})", [id_tenant]
+    if filtro in INTEGRACOES_PRODUTO_VENDEDOR:
+        return f"EXISTS ({base} AND m_int.provedor = %s)", [id_tenant, filtro]
+    return None, []
+
+
+def _bling_vendedor_conectado(cur, id_tenant: int) -> bool:
+    try:
+        cur.execute(
+            "SELECT status FROM tbl_integracao_bling WHERE id_tenant = %s",
+            (id_tenant,),
+        )
+        row = cur.fetchone()
+        return bool(row and row[0] == "conectado")
+    except Exception:
+        return False
+
+
+def _ml_vendedor_conectado(cur, id_tenant: int) -> bool:
+    try:
+        cur.execute(
+            "SELECT status FROM tbl_integracao_mercado_livre WHERE id_tenant = %s",
+            (id_tenant,),
+        )
+        row = cur.fetchone()
+        return bool(row and row[0] == "conectado")
+    except Exception:
+        return False
+
+
+def listar_opcoes_filtro_integracao(
+    cur,
+    id_tenant: int,
+    url_icone,
+) -> list[dict]:
+    opcoes = [
+        {"valor": "", "nome": "Todas"},
+        {"valor": "sem", "nome": "Sem integração"},
+    ]
+    if _bling_vendedor_conectado(cur, id_tenant):
+        meta = INTEGRACOES_PRODUTO_VENDEDOR["bling"]
+        opcoes.append(
+            {
+                "valor": "bling",
+                "nome": meta["nome"],
+                "icone_url": url_icone(meta["slug"]),
+            }
+        )
+    if _ml_vendedor_conectado(cur, id_tenant):
+        meta = INTEGRACOES_PRODUTO_VENDEDOR["mercado_livre"]
+        opcoes.append(
+            {
+                "valor": "mercado_livre",
+                "nome": meta["nome"],
+                "icone_url": url_icone(meta["slug"]),
+            }
+        )
+    return opcoes
+
+
+def _meta_integracao_provedor(provedor: str, url_icone) -> dict:
+    meta = INTEGRACOES_PRODUTO_VENDEDOR.get(provedor, {})
+    return {
+        "provedor": provedor,
+        "nome": meta.get("nome") or provedor,
+        "icone_url": url_icone(meta.get("slug") or provedor),
+    }
+
+
+def carregar_mapa_integracoes_produtos(
+    cur,
+    id_tenant: int,
+    *,
+    ids_produtos: list[int] | None = None,
+    ids_variantes: list[int] | None = None,
+) -> tuple[dict[int, set[str]], dict[int, set[str]]]:
+    """Retorna (por_produto, por_variante) com provedores vinculados."""
+    clauses = [
+        "m.id_tenant = %s",
+        "m.entidade = 'produto'",
+        "m.contexto = 'vendedor'",
+        "m.provedor IN ('bling', 'mercado_livre')",
+    ]
+    params: list = [id_tenant]
+    if ids_produtos:
+        clauses.append("v.id_produto = ANY(%s)")
+        params.append(ids_produtos)
+    if ids_variantes:
+        clauses.append("v.id = ANY(%s)")
+        params.append(ids_variantes)
+    if not ids_produtos and not ids_variantes:
+        return {}, {}
+
+    cur.execute(
+        f"""
+        SELECT v.id, v.id_produto, m.provedor
+        FROM tbl_integracao_map m
+        JOIN tbl_produto_variante v ON v.id = m.id_dropnexo
+        WHERE {" AND ".join(clauses)}
+        """,
+        tuple(params),
+    )
+    por_produto: dict[int, set[str]] = {}
+    por_variante: dict[int, set[str]] = {}
+    for id_var, id_prod, provedor in cur.fetchall():
+        prov = (provedor or "").strip()
+        if not prov:
+            continue
+        por_variante.setdefault(int(id_var), set()).add(prov)
+        por_produto.setdefault(int(id_prod), set()).add(prov)
+    return por_produto, por_variante
+
+
+def enriquecer_linhas_integracoes(
+    cur,
+    id_tenant: int,
+    linhas: list[dict],
+    url_icone,
+) -> None:
+    if not linhas:
+        return
+    ids_produtos: list[int] = []
+    ids_variantes: list[int] = []
+    for linha in linhas:
+        if linha.get("formato") == "K":
+            continue
+        if linha.get("tipo") == "variante":
+            ids_variantes.append(int(linha["id"]))
+            ids_produtos.append(int(linha.get("id_produto") or 0))
+        elif linha.get("tipo") == "pai" and linha.get("id"):
+            ids_produtos.append(int(linha["id"]))
+    ids_produtos = [i for i in dict.fromkeys(ids_produtos) if i > 0]
+    ids_variantes = [i for i in dict.fromkeys(ids_variantes) if i > 0]
+    por_produto, por_variante = carregar_mapa_integracoes_produtos(
+        cur,
+        id_tenant,
+        ids_produtos=ids_produtos or None,
+        ids_variantes=ids_variantes or None,
+    )
+    for linha in linhas:
+        if linha.get("formato") == "K":
+            linha["integracoes"] = []
+            continue
+        provs: set[str] = set()
+        if linha.get("tipo") == "variante":
+            provs = por_variante.get(int(linha["id"]), set())
+        else:
+            provs = por_produto.get(int(linha["id"]), set())
+        linha["integracoes"] = [
+            _meta_integracao_provedor(p, url_icone) for p in sorted(provs)
+        ]
+
+
+def filtrar_linhas_integracao(linhas: list[dict], filtro_integracao: str) -> list[dict]:
+    filtro = (filtro_integracao or "").strip().lower()
+    if not filtro:
+        return linhas
+    out: list[dict] = []
+    for linha in linhas:
+        if linha.get("formato") == "K":
+            if filtro == "sem":
+                out.append(linha)
+            continue
+        provs = {i.get("provedor") for i in (linha.get("integracoes") or [])}
+        if filtro == "sem":
+            if not provs:
+                out.append(linha)
+        elif filtro in provs:
+            out.append(linha)
+    return out
+
+
 def categoria_pertence_vendedor(cur, id_vendedor: int, id_categoria: int) -> bool:
     cur.execute(
         "SELECT 1 FROM tbl_categoria WHERE id = %s AND id_tenant = %s AND ativo = TRUE",
@@ -393,6 +618,7 @@ def buscar_produtos_proprios(
     id_categoria: str = "",
     filtro_tipo: str = "",
     somente_ativos: bool = True,
+    filtro_integracao: str = "",
 ) -> tuple[list[dict], dict[int, list], list[dict]]:
     """Retorna (dados pais, variantes_por_produto, linhas planas)."""
     if filtro_tipo == "somente_variacoes":
@@ -410,6 +636,12 @@ def buscar_produtos_proprios(
         if somente_ativos:
             where.append("p.ativo = TRUE")
             where.append("v.ativo = TRUE")
+        frag_int, frag_int_params = sql_filtro_integracao_variante(
+            filtro_integracao, id_tenant, alias_variante="v"
+        )
+        if frag_int:
+            where.append(frag_int)
+            params.extend(frag_int_params)
         where_sql = " AND ".join(where)
         cur.execute(
             f"""
@@ -471,6 +703,12 @@ def buscar_produtos_proprios(
         where.append("p.formato = 'E'")
     if somente_ativos:
         where.append("p.ativo = TRUE")
+    frag_int, frag_int_params = sql_filtro_integracao_produto(
+        filtro_integracao, id_tenant, alias_produto="p"
+    )
+    if frag_int:
+        where.append(frag_int)
+        params.extend(frag_int_params)
 
     where_sql = " AND ".join(where)
     filtro_var_ativo = " AND v.ativo" if somente_ativos else ""

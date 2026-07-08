@@ -3,7 +3,7 @@ from __future__ import annotations
 from decimal import Decimal
 from pathlib import Path
 
-from flask import Blueprint, jsonify, render_template, request, session
+from flask import Blueprint, jsonify, render_template, request, session, url_for
 
 from global_utils import (
     Var_ConectarBanco,
@@ -38,9 +38,15 @@ from core.dominio import flatten_arvore_com_caminho, montar_arvore_categorias
 from vendedor.meus_produtos.servico_meus_produtos import (
     associar_categoria_produtos,
     categoria_pertence_vendedor,
+    enriquecer_linhas_integracoes,
     excluir_produto_meus_produtos,
+    filtrar_linhas_integracao,
+    listar_opcoes_filtro_integracao,
     sql_filtro_categoria_integrado,
+    sql_filtro_integracao_produto,
+    sql_filtro_integracao_variante,
 )
+from sistema.integracoes.srotas_integracoes import url_icone_integracao
 from vendedor.meus_produtos.servico_meus_produtos import montar_fornecedor_produto_apoio
 from vendedor.meus_produtos.servico_meus_produtos import buscar_produtos_proprios
 from vendedor.meus_produtos.servico_meus_produtos import (
@@ -153,6 +159,14 @@ def _enriquecer_categoria_linhas(linhas: list[dict], dados: list[dict]) -> None:
         linha["id_categoria"] = p.get("id_categoria")
 
 
+def _url_icone_integracao_produto(slug: str) -> str:
+    return url_icone_integracao(slug)
+
+
+def _enriquecer_integracoes_linhas(cur, id_tenant: int, linhas: list[dict]) -> None:
+    enriquecer_linhas_integracoes(cur, id_tenant, linhas, _url_icone_integracao_produto)
+
+
 def _exigir_produto_vitrine(cur, id_tenant_vendedor: int, id_produto: int) -> dict | None:
     cur.execute(
         """
@@ -245,6 +259,7 @@ def dados():
     id_categoria = (request.args.get("id_categoria") or "").strip()
     filtro_tipo = (request.args.get("tipo") or "").strip().lower()
     filtro_origem = (request.args.get("origem") or "").strip().lower()
+    filtro_integracao = (request.args.get("integracao") or "").strip().lower()
     somente_ativos = (request.args.get("ativos") or "sim").strip().lower() != "nao"
     offset = (pagina - 1) * por_pagina
 
@@ -253,6 +268,9 @@ def dados():
         try:
             cur = conn.cursor()
             linhas_kits = _montar_linhas_kits(cur, id_tenant, busca, somente_ativos)
+            if filtro_integracao and filtro_integracao != "sem":
+                linhas_kits = []
+            _enriquecer_integracoes_linhas(cur, id_tenant, linhas_kits)
             total = len(linhas_kits)
             linhas_pag = linhas_kits[offset : offset + por_pagina]
             total_paginas = max(1, (total + por_pagina - 1) // por_pagina)
@@ -279,10 +297,14 @@ def dados():
                 id_categoria=id_categoria,
                 filtro_tipo=filtro_tipo,
                 somente_ativos=somente_ativos,
+                filtro_integracao=filtro_integracao,
             )
             if filtro_tipo in ("", "kit"):
                 linhas_kits = _montar_linhas_kits(cur, id_tenant, busca, somente_ativos) if filtro_tipo in ("", "kit") else []
+                if filtro_integracao and filtro_integracao != "sem":
+                    linhas_kits = []
                 linhas_prop = linhas_kits + linhas_prop
+            _enriquecer_integracoes_linhas(cur, id_tenant, linhas_prop)
             total = len(linhas_prop)
             linhas_pag = linhas_prop[offset : offset + por_pagina]
             total_paginas = max(1, (total + por_pagina - 1) // por_pagina)
@@ -309,6 +331,12 @@ def dados():
                     params.extend(frag_params)
             if somente_ativos:
                 where.append("pv.ativo = TRUE")
+            frag_int, frag_int_params = sql_filtro_integracao_variante(
+                filtro_integracao, id_tenant, alias_variante="v"
+            )
+            if frag_int:
+                where.append(frag_int)
+                params.extend(frag_int_params)
             where_sql = " AND ".join(where)
 
             cur.execute(
@@ -361,6 +389,7 @@ def dados():
             for linha in linhas:
                 meta = _enriquecer_meta_pausa(cur, id_tenant, int(linha["id"]))
                 linha.update(meta)
+            _enriquecer_integracoes_linhas(cur, id_tenant, linhas)
             total_paginas = max(1, (total + por_pagina - 1) // por_pagina)
             return jsonify(
                 success=True,
@@ -397,6 +426,12 @@ def dados():
             where.append("p.formato = 'E'")
         if somente_ativos:
             where.append("pv.ativo = TRUE")
+        frag_int, frag_int_params = sql_filtro_integracao_produto(
+            filtro_integracao, id_tenant, alias_produto="p"
+        )
+        if frag_int:
+            where.append(frag_int)
+            params.extend(frag_int_params)
 
         where_sql = " AND ".join(where)
         filtro_var_ativo = " AND pv2.ativo = TRUE" if somente_ativos else ""
@@ -574,10 +609,14 @@ def dados():
                 id_categoria=id_categoria,
                 filtro_tipo=filtro_tipo,
                 somente_ativos=somente_ativos,
+                filtro_integracao=filtro_integracao,
             )
             linhas = linhas + linhas_prop
 
+        _enriquecer_integracoes_linhas(cur, id_tenant, linhas)
+
         if filtro_origem == "" and filtro_tipo not in ("kit", "somente_variacoes"):
+            linhas = filtrar_linhas_integracao(linhas, filtro_integracao)
             linhas.sort(key=lambda x: str(x.get("nome") or "").lower())
             total_produtos = len(linhas)
             linhas = linhas[offset : offset + por_pagina]
@@ -642,11 +681,15 @@ def combos():
             ]
         except Exception:
             depositos = []
+        integracoes_filtro = listar_opcoes_filtro_integracao(
+            cur, id_tenant, _url_icone_integracao_produto
+        )
         return jsonify(
             success=True,
             categorias=categorias,
             depositos=depositos,
             unidades=["UN", "CX", "KG", "PC", "PAR"],
+            integracoes_filtro=integracoes_filtro,
         )
     finally:
         conn.close()

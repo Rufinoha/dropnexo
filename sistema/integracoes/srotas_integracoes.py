@@ -164,6 +164,8 @@ def url_icone_integracao(slug: str, *, icones_base_url: str = "") -> str:
         return url_for("mercadopago.static", filename="imge/icone_mercadopago.png")
     if slug == "melhor-envio":
         return url_for("melhor_envio.static", filename="imge/icone_melhorenvio.png")
+    if slug == "mercado-livre":
+        return url_for("mercado_livre.static", filename="imge/icone_mercadolivre.png")
     arquivo = _arquivo_icone_api(slug)
     if arquivo:
         return url_for("static", filename=f"imge/icone_api/{arquivo}")
