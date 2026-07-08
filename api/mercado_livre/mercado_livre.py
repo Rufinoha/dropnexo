@@ -131,18 +131,16 @@ def _expires_em(expires_in: int | None) -> datetime | None:
 
 
 def _tem_tabela_ml(cur) -> bool:
+    """Detecta migração 071. Só cacheia True — False pode mudar após aplicar o SQL sem reiniciar o app."""
     global _TABELA_OK
-    if _TABELA_OK is not None:
-        return _TABELA_OK
-    cur.execute(
-        """
-        SELECT 1 FROM information_schema.tables
-        WHERE table_schema = 'public' AND table_name = 'tbl_integracao_mercado_livre'
-        LIMIT 1
-        """
-    )
-    _TABELA_OK = cur.fetchone() is not None
-    return _TABELA_OK
+    if _TABELA_OK is True:
+        return True
+    cur.execute("SELECT to_regclass(%s)", ("tbl_integracao_mercado_livre",))
+    row = cur.fetchone()
+    ok = bool(row and row[0])
+    if ok:
+        _TABELA_OK = True
+    return ok
 
 
 def salvar_tokens(cur, id_tenant: int, tokens: dict[str, Any]) -> None:

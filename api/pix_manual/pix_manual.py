@@ -12,17 +12,14 @@ _TABELA_OK: bool | None = None
 
 def _tem_tabela(cur) -> bool:
     global _TABELA_OK
-    if _TABELA_OK is not None:
-        return _TABELA_OK
-    cur.execute(
-        """
-        SELECT 1 FROM information_schema.tables
-        WHERE table_schema = 'public' AND table_name = 'tbl_integracao_pix_manual'
-        LIMIT 1
-        """
-    )
-    _TABELA_OK = cur.fetchone() is not None
-    return _TABELA_OK
+    if _TABELA_OK is True:
+        return True
+    cur.execute("SELECT to_regclass(%s)", ("tbl_integracao_pix_manual",))
+    row = cur.fetchone()
+    ok = bool(row and row[0])
+    if ok:
+        _TABELA_OK = True
+    return ok
 
 
 def carregar_config_pix_manual(cur, id_tenant: int) -> dict:
