@@ -204,14 +204,15 @@
 
 .VdCat_Grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 1rem;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 0.75rem;
+  align-items: start;
 }
 
 .VdCat_Card {
   background: var(--vd-cat-surface);
   border: 1px solid var(--vd-cat-border);
-  border-radius: 16px;
+  border-radius: 12px;
   overflow: hidden;
   cursor: pointer;
   display: flex;
@@ -258,15 +259,20 @@
 
 .VdCat_CardImg {
   position: relative;
-  aspect-ratio: 1;
+  flex-shrink: 0;
+  height: 118px;
+  overflow: hidden;
   background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
 }
 
 .VdCat_CardImg img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
+  object-position: center;
   display: block;
+  padding: 6px;
+  box-sizing: border-box;
   transition: transform 0.35s ease;
 }
 
@@ -280,7 +286,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 2.5rem;
+  font-size: 1.75rem;
   opacity: 0.35;
 }
 
@@ -325,11 +331,12 @@
 }
 
 .VdCat_CardBody {
-  padding: 0.85rem 0.95rem 1rem;
+  padding: 0.55rem 0.65rem 0.65rem;
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: 0.25rem;
   flex: 1;
+  min-height: 0;
 }
 
 .VdCat_CardForn {
@@ -342,10 +349,11 @@
 
 .VdCat_CardNome {
   margin: 0;
-  font-size: 0.9rem;
+  font-size: 0.82rem;
   font-weight: 700;
-  line-height: 1.35;
+  line-height: 1.3;
   color: #0f172a;
+  min-height: 2.6em;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -371,12 +379,12 @@
 }
 
 .VdCat_Precos {
-  margin-top: auto;
-  padding-top: 0.5rem;
+  margin-top: 0.35rem;
+  padding-top: 0.4rem;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 0.35rem 0.5rem;
-  font-size: 0.68rem;
+  gap: 0.25rem 0.4rem;
+  font-size: 0.65rem;
   border-top: 1px solid #f1f5f9;
 }
 
