@@ -76,7 +76,7 @@
 
     <div id="ml_pane_produtos" hidden>
       <h3>Produtos e anúncios</h3>
-      <p class="Mp_Hint">Exporte ou vincule produtos de <strong>Meus produtos</strong> aos anúncios do Mercado Livre. O SKU no DropNexo deve coincidir com o do anúncio para vincular.</p>
+      <p class="Mp_Hint">Exporte ou vincule produtos de <strong>Meus produtos</strong> aos anúncios do Mercado Livre. Para criar anúncios novos: preço, imagem pública e título são obrigatórios (máx. 20 por sincronização).</p>
       <div class="Mp_Switches">
         <div class="Mp_SwitchRow">
           <div class="Mp_SwitchText">
@@ -97,7 +97,7 @@
         </label>
         <label class="Mp_RadioRow">
           <input type="radio" name="ml_produtos_modo" value="criar_anuncio" data-ml-config="produtos_modo" />
-          <span><strong>Criar novos anúncios</strong> — publicar produtos que ainda não existem no ML (em breve)</span>
+          <span><strong>Criar novos anúncios</strong> — publicar na vitrine produtos que ainda não existem no ML (categoria sugerida pelo título)</span>
         </label>
       </fieldset>
       <div class="Mp_Actions" style="margin-top:0.85rem">
@@ -136,5 +136,5 @@
 </div>
 {% endblock %}
 {% block page_js %}
-<script src="{{ url_for('static', filename='script/Smercado_livre_integracao.js') }}?v=4"></script>
+<script src="{{ url_for('static', filename='script/Smercado_livre_integracao.js') }}?v=5"></script>
 {% endblock %}

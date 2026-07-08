@@ -187,9 +187,18 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({}),
       });
-      const j = await r.json();
-      if (!j.success) throw new Error(j.message || "Falha.");
-      mostrarMsg(j.message || "Concluído.", false);
+      let j = {};
+      try {
+        j = await r.json();
+      } catch {
+        throw new Error(r.status >= 500 ? "Erro no servidor." : "Resposta inválida do servidor.");
+      }
+      if (!r.ok || !j.success) throw new Error(j.message || "Falha.");
+      let msg = j.message || "Concluído.";
+      if (j.detalhes_erros?.length) {
+        msg += " " + j.detalhes_erros.slice(0, 2).join(" · ");
+      }
+      mostrarMsg(msg, false);
     } catch (e) {
       mostrarMsg(e.message, true);
     } finally {

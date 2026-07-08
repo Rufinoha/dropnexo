@@ -12,7 +12,7 @@ from urllib.parse import urlencode
 import requests
 
 from core.tokens import criptografar_token, descriptografar_token
-from global_utils import agora_utc, is_modo_producao, obter_base_url
+from global_utils import agora_utc, is_modo_producao, obter_base_url, url_imagem_produto
 
 _log = logging.getLogger(__name__)
 
@@ -562,35 +562,378 @@ def importar_pedidos_mercado_livre(cur, id_tenant: int, *, dias: int = 7) -> dic
     }
 
 
+_ML_CURRENCY_SITE = {
+    "MLB": "BRL",
+    "MLA": "ARS",
+    "MLM": "MXN",
+    "MLC": "CLP",
+    "MLU": "UYU",
+    "MCO": "COP",
+    "MPE": "PEN",
+}
+_ML_MAX_CRIAR_POR_SYNC = 20
+
+
+def _moeda_site(site_id: str) -> str:
+    return _ML_CURRENCY_SITE.get((site_id or "MLB").upper(), "BRL")
+
+
+def _condicao_ml(condicao: str | None) -> str:
+    c = (condicao or "").strip().lower()
+    if c in ("usado", "used", "seminovo", "recondicionado"):
+        return "used"
+    return "new"
+
+
+def _imagem_publica_ml(imagem_path: str | None) -> str:
+    rel = url_imagem_produto(imagem_path)
+    if not rel:
+        return ""
+    if rel.lower().startswith(("http://", "https://")):
+        return rel
+    base = obter_base_url()
+    if not base:
+        return ""
+    path = rel if rel.startswith("/") else f"/{rel}"
+    return f"{base.rstrip('/')}{path}"
+
+
+def _item_ja_vinculado_ml(cur, id_tenant: int, id_variante: int) -> str | None:
+    cur.execute(
+        """
+        SELECT id_bling FROM tbl_integracao_map
+        WHERE id_tenant = %s AND provedor = 'mercado_livre' AND contexto = 'vendedor'
+          AND entidade = 'produto' AND id_dropnexo = %s
+        LIMIT 1
+        """,
+        (id_tenant, id_variante),
+    )
+    row = cur.fetchone()
+    return str(row[0]) if row and row[0] else None
+
+
+def _prever_categoria_ml(cur, id_tenant: int, site_id: str, titulo: str) -> str | None:
+    titulo = (titulo or "").strip()
+    if not titulo:
+        return None
+    try:
+        data = api_request(
+            cur,
+            id_tenant,
+            "GET",
+            f"/sites/{site_id}/domain_discovery/search",
+            params={"q": titulo[:200], "limit": 1},
+        )
+        if isinstance(data, list) and data:
+            cat = (data[0] or {}).get("category_id")
+            return str(cat).strip() if cat else None
+    except RuntimeError:
+        pass
+    return None
+
+
+def _listing_type_ml(cur, id_tenant: int, ml_user_id: int, category_id: str) -> str:
+    try:
+        data = api_request(
+            cur,
+            id_tenant,
+            "GET",
+            f"/users/{int(ml_user_id)}/available_listing_types",
+            params={"category_id": category_id},
+        )
+        disponiveis = data.get("available") or []
+        for prefer in ("gold_special", "gold_pro", "gold_premium", "free"):
+            if prefer in disponiveis:
+                return prefer
+        if disponiveis:
+            return str(disponiveis[0])
+    except RuntimeError:
+        pass
+    return "gold_special"
+
+
+def _criar_anuncio_ml(
+    cur,
+    id_tenant: int,
+    ml_user_id: int,
+    site_id: str,
+    *,
+    id_variante: int,
+    id_produto: int,
+    sku: str,
+    titulo: str,
+    preco: float,
+    descricao: str,
+    imagem: str,
+    estoque: int,
+    condicao: str | None,
+) -> str:
+    titulo = (titulo or "Produto").strip()[:60]
+    if preco <= 0:
+        raise RuntimeError(f"Preço inválido para «{titulo}».")
+    img_url = _imagem_publica_ml(imagem)
+    if not img_url:
+        raise RuntimeError(f"«{titulo}»: imagem pública obrigatória para novo anúncio no ML.")
+
+    category_id = _prever_categoria_ml(cur, id_tenant, site_id, titulo)
+    if not category_id:
+        raise RuntimeError(f"«{titulo}»: não foi possível sugerir categoria no Mercado Livre.")
+
+    listing_type = _listing_type_ml(cur, id_tenant, ml_user_id, category_id)
+    payload: dict[str, Any] = {
+        "title": titulo,
+        "category_id": category_id,
+        "price": round(float(preco), 2),
+        "currency_id": _moeda_site(site_id),
+        "available_quantity": max(1, int(estoque or 0)),
+        "buying_mode": "buy_it_now",
+        "listing_type_id": listing_type,
+        "condition": _condicao_ml(condicao),
+        "pictures": [{"source": img_url}],
+        "shipping": {"mode": "me2", "local_pick_up": False, "free_shipping": False},
+    }
+    attrs: list[dict[str, str]] = []
+    if sku:
+        payload["seller_custom_field"] = sku[:100]
+        attrs.append({"id": "SELLER_SKU", "value_name": sku[:60]})
+    if attrs:
+        payload["attributes"] = attrs
+
+    resp = api_request(cur, id_tenant, "POST", "/items", json_body=payload)
+    item_id = str(resp.get("id") or "").strip()
+    if not item_id:
+        raise RuntimeError(f"«{titulo}»: ML não retornou id do anúncio.")
+
+    texto = (descricao or "").strip()
+    if texto:
+        try:
+            api_request(
+                cur,
+                id_tenant,
+                "POST",
+                f"/items/{item_id}/description",
+                json_body={"plain_text": texto[:50000]},
+            )
+        except RuntimeError:
+            pass
+
+    _salvar_map_produto_ml(cur, id_tenant, id_variante, id_produto, sku, item_id)
+    return item_id
+
+
+def _sql_produtos_vitrine_ml() -> str:
+    return """
+        SELECT pv.id, pv.id_variante, pv.id_produto,
+               TRIM(COALESCE(NULLIF(v.sku, ''), p.sku, '')) AS sku,
+               COALESCE(NULLIF(TRIM(pv.nome_vitrine), ''), NULLIF(TRIM(v.nome_exibicao), ''), p.nome) AS titulo,
+               COALESCE(pv.preco_venda, v.preco, p.preco, 0) AS preco,
+               LEFT(COALESCE(NULLIF(TRIM(pv.descricao_vitrine), ''), p.descricao, ''), 5000) AS descricao,
+               COALESCE(NULLIF(TRIM(pv.imagem_url_vitrine), ''), v.imagem_url, p.imagem_url) AS imagem,
+               COALESCE(ve.quantidade, 0) AS estoque,
+               p.condicao
+        FROM tbl_produto_vendedor pv
+        JOIN tbl_produto_variante v ON v.id = pv.id_variante
+        JOIN tbl_produto p ON p.id = pv.id_produto
+        LEFT JOIN tbl_produto_variante_estoque ve ON ve.id_variante = v.id
+        WHERE pv.id_tenant_vendedor = %s AND pv.ativo = TRUE
+        ORDER BY pv.id
+    """
+
+
+def _criar_anuncios_ml_lote(cur, id_tenant: int, cfg: dict, linhas: list) -> dict:
+    ml_user_id = int(cfg.get("ml_user_id") or 0)
+    site_id = (cfg.get("ml_site_id") or "MLB").upper()
+    if not ml_user_id:
+        raise RuntimeError("Perfil Mercado Livre sem user_id. Reconecte a conta.")
+
+    exportados = 0
+    ignorados = 0
+    erros: list[str] = []
+    processados = 0
+
+    for row in linhas:
+        if processados >= _ML_MAX_CRIAR_POR_SYNC:
+            break
+        (
+            _pv_id,
+            id_variante,
+            id_produto,
+            sku,
+            titulo,
+            preco,
+            descricao,
+            imagem,
+            estoque,
+            condicao,
+        ) = row
+        processados += 1
+
+        if _item_ja_vinculado_ml(cur, id_tenant, int(id_variante)):
+            ignorados += 1
+            continue
+        if sku and _buscar_item_ml_por_sku(cur, id_tenant, ml_user_id, sku):
+            ignorados += 1
+            continue
+
+        try:
+            _criar_anuncio_ml(
+                cur,
+                id_tenant,
+                ml_user_id,
+                site_id,
+                id_variante=int(id_variante),
+                id_produto=int(id_produto),
+                sku=sku or "",
+                titulo=titulo or "",
+                preco=float(preco or 0),
+                descricao=descricao or "",
+                imagem=imagem or "",
+                estoque=int(estoque or 0),
+                condicao=condicao,
+            )
+            exportados += 1
+        except RuntimeError as e:
+            erros.append(str(e)[:200])
+
+    total = len(linhas)
+    if exportados > 0:
+        msg = f"{exportados} anúncio(s) criado(s) no Mercado Livre."
+        if ignorados:
+            msg += f" {ignorados} já vinculado(s) ou existente(s) no ML."
+        if erros:
+            msg += f" {len(erros)} com erro."
+        if total > _ML_MAX_CRIAR_POR_SYNC:
+            msg += f" Limite de {_ML_MAX_CRIAR_POR_SYNC} por sincronização — execute novamente para continuar."
+    elif erros:
+        msg = f"Nenhum anúncio criado. {erros[0]}"
+    else:
+        msg = "Nenhum produto novo para publicar (todos já estão no ML ou na vitrine)."
+
+    out = {
+        "message": msg,
+        "total_produtos": total,
+        "modo": "criar_anuncio",
+        "exportados": exportados,
+        "vinculados": 0,
+        "ignorados": ignorados,
+        "erros": len(erros),
+    }
+    if erros:
+        out["detalhes_erros"] = erros[:5]
+    return out
+
+
+def _buscar_item_ml_por_sku(cur, id_tenant: int, ml_user_id: int, sku: str) -> str | None:
+    """Retorna id do anúncio ML (ex. MLB123) que corresponde ao SKU do vendedor."""
+    sku = (sku or "").strip()
+    if not sku or not ml_user_id:
+        return None
+    for param in ("seller_sku", "sku"):
+        try:
+            data = api_request(
+                cur,
+                id_tenant,
+                "GET",
+                f"/users/{int(ml_user_id)}/items/search",
+                params={param: sku, "status": "active"},
+            )
+            results = data.get("results") or []
+            if results:
+                return str(results[0])
+        except RuntimeError:
+            continue
+    return None
+
+
+def _salvar_map_produto_ml(
+    cur,
+    id_tenant: int,
+    id_variante: int,
+    id_produto: int,
+    sku: str,
+    ml_item_id: str,
+) -> None:
+    cur.execute(
+        """
+        DELETE FROM tbl_integracao_map
+        WHERE id_tenant = %s AND provedor = 'mercado_livre' AND contexto = 'vendedor'
+          AND entidade = 'produto' AND id_dropnexo = %s
+        """,
+        (id_tenant, id_variante),
+    )
+    meta = json.dumps({"id_produto": id_produto, "ml_item_id": ml_item_id}, ensure_ascii=False)
+    cur.execute(
+        """
+        INSERT INTO tbl_integracao_map (
+            id_tenant, provedor, contexto, entidade, id_bling, id_dropnexo, sku, meta, atualizado_em
+        ) VALUES (%s, 'mercado_livre', 'vendedor', 'produto', %s, %s, %s, %s::jsonb, %s)
+        ON CONFLICT (id_tenant, provedor, contexto, entidade, id_bling) DO UPDATE SET
+            id_dropnexo = EXCLUDED.id_dropnexo,
+            sku = EXCLUDED.sku,
+            meta = EXCLUDED.meta,
+            atualizado_em = EXCLUDED.atualizado_em
+        """,
+        (id_tenant, ml_item_id, id_variante, sku, meta, agora_utc()),
+    )
+
+
 def exportar_produtos_ml(cur, id_tenant: int) -> dict:
-    """Fase 2: publicar/vincular Meus produtos no ML. Por ora valida config e conta."""
+    """Vincula por SKU ou cria novos anúncios no Mercado Livre."""
     cfg = carregar_config_ml(cur, id_tenant)
     if not cfg.get("conectado"):
         raise RuntimeError("Mercado Livre não conectado.")
     if not cfg.get("produtos_exportar_auto"):
         raise RuntimeError("Ative a exportação de produtos antes de sincronizar.")
-    cur.execute(
-        """
-        SELECT COUNT(*)::int
-        FROM tbl_produto_vendedor pv
-        JOIN tbl_produto p ON p.id = pv.id_produto
-        WHERE pv.id_tenant_vendedor = %s AND pv.ativo = TRUE AND COALESCE(p.sku, '') <> ''
-        """,
-        (id_tenant,),
-    )
-    row = cur.fetchone()
-    com_sku = int(row[0] or 0) if row else 0
+
     modo = cfg.get("produtos_modo") or "vincular_sku"
-    acao = "vincular anúncios pelo SKU" if modo == "vincular_sku" else "criar novos anúncios"
+    cur.execute(_sql_produtos_vitrine_ml(), (id_tenant,))
+    linhas = cur.fetchall()
+
+    if modo == "criar_anuncio":
+        return _criar_anuncios_ml_lote(cur, id_tenant, cfg, linhas)
+
+    ml_user_id = cfg.get("ml_user_id")
+    if not ml_user_id:
+        raise RuntimeError("Perfil Mercado Livre sem user_id. Reconecte a conta.")
+
+    vinculados = 0
+    nao_encontrados = 0
+    sem_sku = 0
+    for row in linhas:
+        _pv_id, id_variante, id_produto, sku, *_rest = row
+        sku = (sku or "").strip()
+        if not sku:
+            sem_sku += 1
+            continue
+        ml_item = _buscar_item_ml_por_sku(cur, id_tenant, int(ml_user_id), sku)
+        if not ml_item:
+            nao_encontrados += 1
+            continue
+        _salvar_map_produto_ml(cur, id_tenant, int(id_variante), int(id_produto), sku, ml_item)
+        vinculados += 1
+
+    total = len(linhas)
+    if vinculados <= 0:
+        msg = (
+            f"Nenhum dos {total} produto(s) foi vinculado. "
+            "Confira se o SKU no DropNexo é igual ao do anúncio no Mercado Livre."
+        )
+        if sem_sku:
+            msg += f" {sem_sku} sem SKU."
+    else:
+        msg = f"{vinculados} de {total} produto(s) vinculado(s) ao Mercado Livre pelo SKU."
+        if nao_encontrados > 0:
+            msg += f" {nao_encontrados} sem anúncio correspondente no ML."
+        if sem_sku:
+            msg += f" {sem_sku} ignorado(s) sem SKU."
+
     return {
-        "message": (
-            f"{com_sku} produto(s) com SKU na vitrine prontos para {acao}. "
-            "A publicação automática no Mercado Livre será habilitada na próxima etapa."
-        ),
-        "total_produtos": com_sku,
+        "message": msg,
+        "total_produtos": total,
         "modo": modo,
         "exportados": 0,
-        "vinculados": 0,
+        "vinculados": vinculados,
+        "nao_encontrados": nao_encontrados,
     }
 
 
