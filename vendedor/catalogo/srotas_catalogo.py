@@ -46,35 +46,23 @@ def _precificar_variante(cur, id_fornecedor: int, id_categoria: int | None, prec
     }
 
 
-def _descendentes_categoria(rows: list[tuple], raiz_id: int) -> list[int]:
-    """ids da categoria e de todos os filhos (rows: id, parent_id)."""
-    filhos: dict[int | None, list[int]] = {}
-    for cid, pid in rows:
-        filhos.setdefault(pid, []).append(int(cid))
-    out: set[int] = {int(raiz_id)}
-    pilha = [int(raiz_id)]
-    while pilha:
-        atual = pilha.pop()
-        for ch in filhos.get(atual, []):
-            if ch not in out:
-                out.add(ch)
-                pilha.append(ch)
-    return list(out)
-
-
-def _ids_categoria_filtro(cur, id_categoria: str) -> tuple[bool, list[int]]:
-    """Retorna (sem_categoria, ids) para filtro no catálogo."""
+def _parse_categoria_filtro(id_categoria: str) -> str | int | list[int]:
+    """sem | lista de ids (agrupado) | id único."""
+    if not id_categoria:
+        return ""
     if id_categoria.strip().lower() == "sem":
-        return True, []
-    cid = int(id_categoria)
-    cur.execute(
-        "SELECT id, parent_id FROM tbl_categoria WHERE id_tenant = (SELECT id_tenant FROM tbl_categoria WHERE id = %s) AND ativo = TRUE",
-        (cid,),
-    )
-    rows = [(int(r[0]), r[1]) for r in cur.fetchall()]
-    if not rows:
-        return False, [cid]
-    return False, _descendentes_categoria(rows, cid)
+        return "sem"
+    if "," in id_categoria:
+        ids = []
+        for parte in id_categoria.split(","):
+            parte = parte.strip()
+            if parte.isdigit():
+                ids.append(int(parte))
+        return ids if ids else ""
+    try:
+        return int(id_categoria)
+    except ValueError:
+        return ""
 
 
 def _contar_sem_categoria(cur, id_vendedor: int, id_forn: str | None) -> int:
@@ -98,72 +86,44 @@ def _contar_sem_categoria(cur, id_vendedor: int, id_forn: str | None) -> int:
 
 
 def _listar_categorias_combos(cur, id_vendedor: int, id_forn: str | None) -> list[dict]:
-    from core.dominio import flatten_arvore_com_caminho, montar_arvore_categorias
-
-    fn_params: list = [id_vendedor]
-    fn_extra = ""
+    """Categorias folha com produtos, agrupadas por nome (todos os fornecedores)."""
+    params: list = [id_vendedor]
+    extra = ""
     if id_forn:
-        fn_extra = " AND vinc.id_tenant_fornecedor = %s"
-        fn_params.append(int(id_forn))
+        extra = " AND p.id_tenant = %s"
+        params.append(int(id_forn))
+
     cur.execute(
         f"""
-        SELECT t.id, COALESCE(NULLIF(TRIM(t.nome_fantasia), ''), t.nome)
-        FROM tbl_vinculo_vendedor_fornecedor vinc
-        JOIN tbl_tenant t ON t.id = vinc.id_tenant_fornecedor
-        WHERE vinc.id_tenant_vendedor = %s AND vinc.status = 'ativo'{fn_extra}
-        ORDER BY 2
+        SELECT LOWER(TRIM(c.nome)),
+               MIN(c.nome),
+               ARRAY_AGG(DISTINCT c.id ORDER BY c.id),
+               COUNT(DISTINCT p.id)::int
+        FROM tbl_produto p
+        JOIN tbl_categoria c ON c.id = p.id_categoria AND c.id_tenant = p.id_tenant AND c.ativo = TRUE
+        JOIN tbl_vinculo_vendedor_fornecedor vinc
+            ON vinc.id_tenant_fornecedor = p.id_tenant
+           AND vinc.id_tenant_vendedor = %s AND vinc.status = 'ativo'
+        WHERE p.publicado = TRUE AND p.ativo = TRUE
+          AND p.id_categoria IS NOT NULL{extra}
+        GROUP BY LOWER(TRIM(c.nome))
+        HAVING COUNT(DISTINCT p.id) > 0
+        ORDER BY MIN(c.nome)
         """,
-        fn_params,
+        params,
     )
-    fornecedores = cur.fetchall()
     categorias: list[dict] = []
-
-    for id_fn, nome_fn in fornecedores:
-        cur.execute(
-            """
-            SELECT id, nome, parent_id, ordem, COALESCE(nivel, 1), 0
-            FROM tbl_categoria
-            WHERE id_tenant = %s AND ativo = TRUE
-            ORDER BY ordem, nome
-            """,
-            (int(id_fn),),
-        )
-        rows_cat = cur.fetchall()
-        if not rows_cat:
+    for _chave, nome, ids_arr, qtd in cur.fetchall():
+        ids = [int(i) for i in (ids_arr or [])]
+        if not ids:
             continue
-
-        cur.execute(
-            """
-            SELECT p.id_categoria, COUNT(DISTINCT p.id)::int
-            FROM tbl_produto p
-            JOIN tbl_vinculo_vendedor_fornecedor vinc
-                ON vinc.id_tenant_fornecedor = p.id_tenant
-               AND vinc.id_tenant_vendedor = %s AND vinc.status = 'ativo'
-            WHERE p.id_tenant = %s
-              AND p.publicado = TRUE AND p.ativo = TRUE
-              AND p.id_categoria IS NOT NULL
-            GROUP BY p.id_categoria
-            """,
-            (id_vendedor, int(id_fn)),
+        categorias.append(
+            {
+                "id": ",".join(str(i) for i in ids),
+                "nome": nome,
+                "qtd": int(qtd or 0),
+            }
         )
-        qtd_direta = {int(r[0]): int(r[1] or 0) for r in cur.fetchall()}
-
-        rows_map = [(int(r[0]), r[2]) for r in rows_cat]
-        arvore = montar_arvore_categorias(rows_cat)
-        prefixo = "" if id_forn else f"{nome_fn} · "
-        for c in flatten_arvore_com_caminho(arvore):
-            ids_cat = _descendentes_categoria(rows_map, int(c["id"]))
-            qtd = sum(qtd_direta.get(cid, 0) for cid in ids_cat)
-            categorias.append(
-                {
-                    "id": int(c["id"]),
-                    "nome": f"{prefixo}{c['caminho']}",
-                    "qtd": qtd,
-                    "id_fornecedor": int(id_fn),
-                }
-            )
-
-    categorias.sort(key=lambda x: (x["nome"] or "").lower())
     return categorias
 
 
@@ -172,7 +132,7 @@ def _where_catalogo(
     busca: str,
     id_forn: str,
     id_seg: str,
-    id_categoria: str | list,
+    id_categoria: str | int | list[int],
     em_estoque: bool,
     conexao: str = "",
 ) -> tuple[list[str], list]:
@@ -191,7 +151,7 @@ def _where_catalogo(
         where.append("c.id_segmento = %s")
         params.append(int(id_seg))
     if id_categoria:
-        if isinstance(id_categoria, str) and id_categoria.strip().lower() == "sem":
+        if id_categoria == "sem":
             where.append("p.id_categoria IS NULL")
         elif isinstance(id_categoria, list):
             where.append("p.id_categoria = ANY(%s)")
@@ -274,7 +234,7 @@ def pagina():
 @exigir_modulo(MODULO_VENDEDOR)
 @exigir_permissao(codigo="vd_catalogo.ver")
 def combos():
-    """Fornecedores conectados e árvore de categorias dos fornecedores."""
+    """Fornecedores conectados e categorias folha (agrupadas por nome)."""
     id_vendedor = session.get("id_tenant")
     if not id_vendedor:
         return jsonify(success=False, message="Sessão inválida."), 403
@@ -305,7 +265,7 @@ def combos():
         categorias = _listar_categorias_combos(cur, int(id_vendedor), id_forn or None)
         sem_cat = _contar_sem_categoria(cur, int(id_vendedor), id_forn or None)
         if sem_cat > 0:
-            categorias.append({"id": "sem", "nome": "Sem categoria", "qtd": sem_cat, "id_fornecedor": None})
+            categorias.append({"id": "sem", "nome": "Sem categoria", "qtd": sem_cat})
 
         return jsonify(success=True, fornecedores=fornecedores, categorias=categorias)
     finally:
@@ -330,12 +290,7 @@ def dados():
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
-        cat_filtro: str | list = id_categoria
-        if id_categoria and id_categoria.strip().lower() != "sem":
-            sem_cat, ids_cat = _ids_categoria_filtro(cur, id_categoria)
-            cat_filtro = ids_cat if ids_cat else id_categoria
-        elif id_categoria.strip().lower() == "sem":
-            cat_filtro = "sem"
+        cat_filtro = _parse_categoria_filtro(id_categoria)
 
         where, params = _where_catalogo(
             id_vendedor, busca, id_forn, id_seg, cat_filtro, em_estoque, conexao

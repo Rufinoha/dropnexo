@@ -158,7 +158,7 @@
     if (!cats.length) {
       const msg = document.createElement("p");
       msg.className = "VdCat_CatEmpty";
-      msg.textContent = "Nenhuma categoria cadastrada pelos fornecedores.";
+      msg.textContent = "Nenhuma categoria com produtos neste filtro.";
       el.catNav.appendChild(msg);
       return;
     }
@@ -168,7 +168,9 @@
       btn.type = "button";
       btn.className = `VdCat_CatBtn${String(c.id) === categoriaAtiva ? " is-ativo" : ""}`;
       btn.dataset.categoria = String(c.id);
-      btn.innerHTML = `<span class="VdCat_CatBtn__nome">${esc(c.nome)}</span><span class="VdCat_CatBtn__qtd">${c.qtd || 0}</span>`;
+      btn.title = c.nome || "";
+      const qtd = c.qtd > 0 ? c.qtd : "";
+      btn.innerHTML = `<span class="VdCat_CatBtn__nome">${esc(c.nome)}</span>${qtd ? `<span class="VdCat_CatBtn__qtd">${qtd}</span>` : ""}`;
       el.catNav.appendChild(btn);
     });
   }
