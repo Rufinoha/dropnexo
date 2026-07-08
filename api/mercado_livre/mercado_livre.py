@@ -344,6 +344,15 @@ _ML_COLS_EXT_OK: bool | None = None
 _ML_COLS_ANUNCIO_OK: bool | None = None
 
 
+def _rollback_cur(cur) -> None:
+    try:
+        conn = getattr(cur, "connection", None)
+        if conn:
+            conn.rollback()
+    except Exception:
+        pass
+
+
 def _tem_colunas_config_ext(cur) -> bool:
     """Colunas do SQL 072 (produtos/estoque). Só cacheia True."""
     global _ML_COLS_EXT_OK
@@ -366,9 +375,10 @@ def _tem_colunas_config_ext(cur) -> bool:
 
 def _garantir_colunas_config_ext(cur) -> bool:
     """Cria colunas do SQL 072 se ainda não existirem (deploy sem migração manual)."""
-    if _tem_colunas_config_ext(cur):
-        return True
     global _ML_COLS_EXT_OK
+    if _tem_colunas_config_ext(cur):
+        _garantir_colunas_anuncio_config(cur)
+        return True
     try:
         cur.execute(
             """
@@ -392,6 +402,9 @@ def _garantir_colunas_config_ext(cur) -> bool:
         _ML_COLS_EXT_OK = True
         return True
     except Exception:
+        _rollback_cur(cur)
+        _ML_COLS_EXT_OK = None
+        _ML_COLS_ANUNCIO_OK = None
         return False
 
 
@@ -418,9 +431,9 @@ def _tem_colunas_anuncio_config(cur) -> bool:
 
 
 def _garantir_colunas_anuncio_config(cur) -> bool:
+    global _ML_COLS_ANUNCIO_OK
     if _tem_colunas_anuncio_config(cur):
         return True
-    global _ML_COLS_ANUNCIO_OK
     try:
         cur.execute(
             """
@@ -437,7 +450,16 @@ def _garantir_colunas_anuncio_config(cur) -> bool:
         _ML_COLS_ANUNCIO_OK = True
         return True
     except Exception:
+        _rollback_cur(cur)
+        _ML_COLS_ANUNCIO_OK = None
         return False
+
+
+def _erro_colunas_anuncio_ml() -> RuntimeError:
+    return RuntimeError(
+        "Não foi possível salvar tipo de anúncio ou frete grátis. "
+        "Aplique o SQL 074 (__doc/sql/074_integracao_mercado_livre_anuncio_config.sql) no banco."
+    )
 
 
 def carregar_config_ml(cur, id_tenant: int) -> dict[str, Any]:
@@ -562,10 +584,14 @@ def salvar_config_ml(
             updates["produtos_modo"] = modo
         if estoque_sync_ativo is not None:
             updates["estoque_sync_ativo"] = bool(estoque_sync_ativo)
-        if listing_type_padrao is not None and _garantir_colunas_anuncio_config(cur):
+        if listing_type_padrao is not None:
+            if not _garantir_colunas_anuncio_config(cur):
+                raise _erro_colunas_anuncio_ml()
             lt = (listing_type_padrao or "auto").strip()
             updates["listing_type_padrao"] = lt if lt in _ML_LISTING_TYPES else "auto"
-        if frete_gratis is not None and _garantir_colunas_anuncio_config(cur):
+        if frete_gratis is not None:
+            if not _garantir_colunas_anuncio_config(cur):
+                raise _erro_colunas_anuncio_ml()
             updates["frete_gratis"] = bool(frete_gratis)
     if not updates:
         return
@@ -1082,75 +1108,6 @@ def _nome_listing_type_ml(listing_type_id: str) -> str:
         "free": "Grátis",
     }
     return nomes.get((listing_type_id or "").strip(), listing_type_id or "—")
-
-
-def listar_taxas_listing_ml(
-    cur,
-    id_tenant: int,
-    price: float,
-    category_id: str = "",
-) -> list[dict]:
-    """Consulta comissões aproximadas via API listing_prices do Mercado Livre."""
-    if price <= 0:
-        raise RuntimeError("Informe um preço de referência maior que zero.")
-    cfg = carregar_config_ml(cur, id_tenant)
-    if not cfg.get("conectado"):
-        raise RuntimeError("Conecte o Mercado Livre primeiro.")
-    site_id = (cfg.get("ml_site_id") or "MLB").upper()
-    params: dict[str, Any] = {"price": round(float(price), 2)}
-    cat = (category_id or "").strip().upper()
-    if cat:
-        params["category_id"] = cat
-    try:
-        data = api_request(
-            cur,
-            id_tenant,
-            "GET",
-            f"/sites/{site_id}/listing_prices",
-            params=params,
-        )
-    except RuntimeError as e:
-        raise RuntimeError(f"Não foi possível consultar taxas no ML: {e}") from e
-    if not isinstance(data, list):
-        return []
-
-    ordem = ("free", "gold_special", "gold_pro", "gold_premium")
-    por_tipo: dict[str, dict] = {}
-    for item in data:
-        if not isinstance(item, dict):
-            continue
-        lid = (item.get("listing_type_id") or "").strip()
-        if not lid:
-            continue
-        det = item.get("sale_fee_details") or {}
-        pct = det.get("percentage_fee") or det.get("meli_percentage_fee")
-        fixa = det.get("fixed_fee")
-        taxa_venda = item.get("sale_fee_amount")
-        try:
-            taxa_venda_f = float(taxa_venda) if taxa_venda is not None else None
-        except (TypeError, ValueError):
-            taxa_venda_f = None
-        recebe = round(price - taxa_venda_f, 2) if taxa_venda_f is not None else None
-        por_tipo[lid] = {
-            "listing_type_id": lid,
-            "nome": item.get("listing_type_name") or _nome_listing_type_ml(lid),
-            "comissao_pct": float(pct) if pct is not None else None,
-            "taxa_venda": taxa_venda_f,
-            "taxa_fixa": float(fixa) if fixa is not None else None,
-            "recebe_aprox": recebe,
-            "exposicao": item.get("listing_exposure") or "",
-        }
-
-    out: list[dict] = []
-    vistos: set[str] = set()
-    for lid in ordem:
-        if lid in por_tipo:
-            out.append(por_tipo[lid])
-            vistos.add(lid)
-    for lid, row in por_tipo.items():
-        if lid not in vistos:
-            out.append(row)
-    return out
 
 
 def _estado_anuncio_ml(cur, id_tenant: int, item_id: str) -> dict[str, Any]:

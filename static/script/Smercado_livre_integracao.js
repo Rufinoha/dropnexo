@@ -27,10 +27,6 @@
     btnModalCatSalvar: document.getElementById("ml_modal_cat_salvar"),
     btnModalCatFechar: document.getElementById("ml_modal_cat_fechar"),
     btnModalCatCancelar: document.getElementById("ml_modal_cat_cancelar"),
-    taxaPreco: document.getElementById("ml_taxa_preco"),
-    taxaCategoria: document.getElementById("ml_taxa_categoria"),
-    btnSimularTaxas: document.getElementById("ml_btn_simular_taxas"),
-    taxasResultado: document.getElementById("ml_taxas_resultado"),
     avisoGratis: document.getElementById("ml_aviso_gratis"),
   };
 
@@ -51,23 +47,6 @@
     } catch {
       /* ignore */
     }
-    if (id === "produtos" && cfgAtual.conectado) {
-      preencherCategoriaTaxaPadrao().then(() => simularTaxas());
-    }
-  }
-
-  function fmtMoeda(v) {
-    if (v == null || Number.isNaN(v)) return "—";
-    return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-  }
-
-  function parsePrecoBr(s) {
-    const t = String(s || "")
-      .replace(/[^\d,.-]/g, "")
-      .replace(/\./g, "")
-      .replace(",", ".");
-    const n = parseFloat(t);
-    return Number.isFinite(n) ? n : 0;
   }
 
   function listingTypeSelecionado() {
@@ -77,79 +56,6 @@
   function atualizarAvisoGratis() {
     if (!el.avisoGratis) return;
     el.avisoGratis.hidden = listingTypeSelecionado() !== "free";
-  }
-
-  async function preencherCategoriaTaxaPadrao() {
-    if (!el.taxaCategoria || el.taxaCategoria.value.trim()) return;
-    try {
-      const r = await fetch("/api/integracoes/mercado-livre/categorias-mapeamento", {
-        credentials: "same-origin",
-      });
-      const j = await r.json();
-      if (!r.ok || !j.success) return;
-      const cat = (j.itens || []).find((c) => (c.ml_category_id || "").trim());
-      if (cat?.ml_category_id) el.taxaCategoria.value = cat.ml_category_id;
-    } catch {
-      /* silencioso */
-    }
-  }
-
-  function renderTabelaTaxas(itens) {
-    if (!el.taxasResultado) return;
-    const sel = listingTypeSelecionado();
-    if (!itens?.length) {
-      el.taxasResultado.hidden = false;
-      el.taxasResultado.innerHTML =
-        '<p class="Mp_Hint">Nenhuma taxa retornada para este preço/categoria. O tipo Grátis pode não estar disponível.</p>';
-      return;
-    }
-    const rows = itens
-      .map((x) => {
-        const isSel = sel !== "auto" && x.listing_type_id === sel;
-        const pct = x.comissao_pct != null ? `${x.comissao_pct}%` : "—";
-        const fixa = x.taxa_fixa != null && x.taxa_fixa > 0 ? fmtMoeda(x.taxa_fixa) : "—";
-        return `<tr class="${isSel ? "is-sel" : ""}" data-lid="${esc(x.listing_type_id)}">
-          <td>${esc(x.nome || x.listing_type_id)}</td>
-          <td>${pct}</td>
-          <td>${fmtMoeda(x.taxa_venda)}</td>
-          <td>${fixa}</td>
-          <td>${fmtMoeda(x.recebe_aprox)}</td>
-        </tr>`;
-      })
-      .join("");
-    el.taxasResultado.hidden = false;
-    el.taxasResultado.innerHTML = `<table class="Mp_TaxasTable">
-      <thead><tr>
-        <th>Tipo</th><th>Comissão</th><th>Total taxas*</th><th>Taxa fixa</th><th>Você recebe~</th>
-      </tr></thead>
-      <tbody>${rows}</tbody>
-    </table>
-    <p class="Mp_Hint Mp_Hint--note">* Comissão na venda; não inclui frete grátis nem custos logísticos. Valores oficiais do Mercado Livre.</p>`;
-  }
-
-  async function simularTaxas() {
-    if (!cfgAtual.conectado || !el.taxasResultado) return;
-    const preco = parsePrecoBr(el.taxaPreco?.value);
-    if (preco <= 0) {
-      mostrarMsg("Informe um preço de referência válido.", true);
-      return;
-    }
-    const cat = (el.taxaCategoria?.value || "").trim();
-    if (el.btnSimularTaxas) el.btnSimularTaxas.disabled = true;
-    try {
-      const qs = new URLSearchParams({ price: String(preco) });
-      if (cat) qs.set("category_id", cat);
-      const r = await fetch(`/api/integracoes/mercado-livre/listing-prices?${qs}`, {
-        credentials: "same-origin",
-      });
-      const j = await r.json();
-      if (!r.ok || !j.success) throw new Error(j.message || "Falha na simulação.");
-      renderTabelaTaxas(j.itens || []);
-    } catch (e) {
-      mostrarMsg(e.message, true);
-    } finally {
-      if (el.btnSimularTaxas) el.btnSimularTaxas.disabled = false;
-    }
   }
 
   function setConectado(on) {
@@ -262,12 +168,6 @@
       setConectado(!!cfg.conectado);
       aplicarConfig(cfg);
       renderConta(cfg);
-      if (cfg.conectado) {
-        const abaAtual = localStorage.getItem("ml_integracao_aba") || "pedidos";
-        if (abaAtual === "produtos") {
-          preencherCategoriaTaxaPadrao().then(() => simularTaxas());
-        }
-      }
     } catch {
       /* silencioso */
     }
@@ -289,14 +189,8 @@
     r.addEventListener("change", () => {
       salvarConfig();
       atualizarAvisoGratis();
-      const sel = listingTypeSelecionado();
-      el.taxasResultado?.querySelectorAll("tbody tr").forEach((tr) => {
-        tr.classList.toggle("is-sel", sel !== "auto" && tr.dataset.lid === sel);
-      });
     });
   });
-
-  el.btnSimularTaxas?.addEventListener("click", () => simularTaxas());
 
   el.btnDesconectar?.addEventListener("click", async () => {
     if (!confirm("Desconectar Mercado Livre deste vendedor?")) return;

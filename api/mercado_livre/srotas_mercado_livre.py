@@ -13,7 +13,6 @@ from api.mercado_livre.mercado_livre import (
     desconectar_ml,
     gerar_state_oauth,
     listar_mapeamento_categorias_ml,
-    listar_taxas_listing_ml,
     ml_configurado,
     ml_conectado,
     publicar_produtos_ml,
@@ -158,6 +157,9 @@ def status():
         cfg["configurado_servidor"] = ml_configurado()
         cfg["conectado"] = ml_conectado(cur, int(id_tenant))
         return jsonify(success=True, config=cfg)
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)[:300]), 500
     finally:
         conn.close()
 
@@ -189,7 +191,13 @@ def config_salvar():
         return jsonify(success=True, message="Preferências salvas.")
     except Exception as e:
         conn.rollback()
-        return jsonify(success=False, message=str(e)[:300]), 400
+        msg = str(e)[:300]
+        if "transaction is aborted" in msg.lower():
+            msg = (
+                "Não foi possível salvar as preferências. "
+                "Aplique o SQL 074 no banco e reinicie o servidor."
+            )
+        return jsonify(success=False, message=msg), 400
     finally:
         conn.close()
 
@@ -325,32 +333,6 @@ def produtos_publicar():
         return jsonify(success=True, **resultado)
     except Exception as e:
         conn.rollback()
-        return jsonify(success=False, message=str(e)[:300]), 400
-    finally:
-        conn.close()
-
-
-@ml_bp.get("/api/integracoes/mercado-livre/listing-prices")
-@login_obrigatorio()
-def listing_prices():
-    if not _pode_integracoes():
-        return jsonify(success=False, message="Sem permissão."), 403
-    if garantir_modulo_sessao() != "vendedor" and not session.get("eh_desenvolvedor"):
-        return jsonify(success=False, message="Apenas vendedores."), 403
-    try:
-        price = float((request.args.get("price") or "0").replace(",", "."))
-    except (TypeError, ValueError):
-        price = 0.0
-    category_id = (request.args.get("category_id") or "").strip()
-    id_tenant = session.get("id_tenant")
-    conn = Var_ConectarBanco()
-    try:
-        cur = conn.cursor()
-        if not ml_conectado(cur, int(id_tenant)):
-            return jsonify(success=False, message="Mercado Livre não conectado."), 400
-        itens = listar_taxas_listing_ml(cur, int(id_tenant), price, category_id)
-        return jsonify(success=True, price=round(price, 2), category_id=category_id, itens=itens)
-    except Exception as e:
         return jsonify(success=False, message=str(e)[:300]), 400
     finally:
         conn.close()
