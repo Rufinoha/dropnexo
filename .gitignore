@@ -29,4 +29,8 @@ old/
 OLD/
 !OLD/HUBSUPPORT/.git/
 
-# Documentação interna (__doc/) — versionada no repositório
+# SQL manual (migrações locais — não versionar)
+*.sql
+__doc/sql/
+
+# Documentação interna (__doc/) — demais arquivos podem ser versionados
