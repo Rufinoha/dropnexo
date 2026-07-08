@@ -573,29 +573,66 @@ _ML_CURRENCY_SITE = {
 }
 _ML_MAX_CRIAR_POR_SYNC = 20
 _ML_ATTR_CACHE: dict[str, list] = {}
+_SELLER_UP_CACHE: dict[int, bool] = {}
 
 
 def _formatar_erro_ml(status: int, text: str) -> str:
     try:
         data = json.loads(text)
+        err = (data.get("error") or "").strip()
         causes = data.get("cause") or []
         partes: list[str] = []
+        if err:
+            partes.append(err)
         for c in causes:
             code = (c.get("code") or "").strip()
             msg = (c.get("message") or "").strip()
+            refs = c.get("references") or c.get("department") or ""
+            if isinstance(refs, list):
+                refs = ", ".join(str(x) for x in refs if x)
             if code == "item.attributes.missing_required" and msg:
                 partes.append(msg)
             elif code == "body.required_fields" and msg:
                 partes.append(msg)
+            elif code == "body.invalid_fields" and msg:
+                partes.append(msg)
             elif msg:
-                partes.append(f"{code}: {msg}" if code else msg)
+                extra = f" ({refs})" if refs else ""
+                partes.append(f"{code}: {msg}{extra}" if code else f"{msg}{extra}")
         if partes:
-            return f"Mercado Livre ({status}): " + "; ".join(partes[:2])
-        if data.get("message"):
-            return f"Mercado Livre ({status}): {data['message']}"
+            # dedupe mantendo ordem
+            vistos: set[str] = set()
+            unicos = []
+            for p in partes:
+                if p not in vistos:
+                    vistos.add(p)
+                    unicos.append(p)
+            return f"Mercado Livre ({status}): " + "; ".join(unicos[:3])
+        msg = (data.get("message") or "").strip()
+        if msg:
+            return f"Mercado Livre ({status}): {msg}"
     except (TypeError, ValueError, json.JSONDecodeError):
         pass
     return f"Mercado Livre API ({status}): {(text or '')[:280]}"
+
+
+def _seller_usa_user_products_ml(
+    cur, id_tenant: int, ml_user_id: int, site_id: str = "MLB"
+) -> bool:
+    if id_tenant in _SELLER_UP_CACHE:
+        return _SELLER_UP_CACHE[id_tenant]
+    usa_up = False
+    try:
+        info = api_request(cur, id_tenant, "GET", f"/users/{int(ml_user_id)}")
+        tags = info.get("tags") or []
+        usa_up = "user_product_seller" in tags
+    except RuntimeError:
+        pass
+    # Novos anúncios no Brasil já seguem User Products (family_name, sem title).
+    if not usa_up and (site_id or "MLB").upper() == "MLB":
+        usa_up = True
+    _SELLER_UP_CACHE[id_tenant] = usa_up
+    return usa_up
 
 
 def _moeda_site(site_id: str) -> str:
@@ -1021,9 +1058,10 @@ def _criar_anuncio_ml(
         condicao=condicao or "",
     )
 
+    family_name = _family_name_ml(titulo, marca, familia_map)
+    usa_up = _seller_usa_user_products_ml(cur, id_tenant, ml_user_id, site_id)
+
     payload: dict[str, Any] = {
-        "title": titulo,
-        "family_name": _family_name_ml(titulo, marca, familia_map),
         "category_id": category_id,
         "price": round(float(preco), 2),
         "currency_id": _moeda_site(site_id),
@@ -1031,14 +1069,23 @@ def _criar_anuncio_ml(
         "buying_mode": "buy_it_now",
         "listing_type_id": listing_type,
         "condition": _condicao_ml(condicao),
-        "channels": ["marketplace"],
         "pictures": [{"source": img_url}],
-        "shipping": {"mode": "me2", "local_pick_up": False, "free_shipping": False},
     }
+    if usa_up:
+        # User Products: family_name obrigatório; title é gerado pelo ML.
+        payload["family_name"] = family_name
+    else:
+        payload["title"] = titulo
+        payload["channels"] = ["marketplace"]
+        payload["shipping"] = {
+            "mode": "me2",
+            "local_pick_up": False,
+            "free_shipping": False,
+        }
+        if sku:
+            payload["seller_custom_field"] = sku[:100]
     if attrs:
         payload["attributes"] = attrs
-    if sku:
-        payload["seller_custom_field"] = sku[:100]
 
     resp = api_request(cur, id_tenant, "POST", "/items", json_body=payload)
     item_id = str(resp.get("id") or "").strip()
