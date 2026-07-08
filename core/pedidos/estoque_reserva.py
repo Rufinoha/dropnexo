@@ -1,4 +1,4 @@
-# servico_estoque_reserva.py — reserva de estoque do fornecedor ao confirmar pedido
+# core/pedidos/estoque_reserva.py — reserva de estoque do fornecedor ao confirmar pedido
 from __future__ import annotations
 
 

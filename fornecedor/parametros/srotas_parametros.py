@@ -23,7 +23,7 @@ from vendedor.meus_produtos.servico_vitrine_vendedor import (
     pausar_vitrine_fornecedor,
 )
 from global_utils import Var_ConectarBanco, exigir_modulo, exigir_permissao, login_obrigatorio
-from srotas_plataforma import MODULO_FORNECEDOR
+from sistema.plataforma.sessao import MODULO_FORNECEDOR
 
 _MOD = Path(__file__).resolve().parent
 

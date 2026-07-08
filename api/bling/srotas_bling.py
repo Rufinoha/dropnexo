@@ -36,7 +36,7 @@ from api.bling.mapeamento_categorias import (
 from api.bling.sync_produtos import importar_produtos
 from api.bling.tokens import descriptografar_token
 from global_utils import Var_ConectarBanco, agora_utc, login_obrigatorio, obter_url_site_publico, usuario_tem_permissao
-from srotas_plataforma import garantir_modulo_sessao, rotulo_modulo
+from sistema.plataforma.sessao import garantir_modulo_sessao, rotulo_modulo
 
 _MOD_BLING = Path(__file__).resolve().parent
 
@@ -414,8 +414,8 @@ def salvar_config():
         cur = conn.cursor()
         agora = agora_utc()
         if contexto == "vendedor":
-            produtos_modo = "exportar"
-            estoque_modo = "importar"
+            produtos_modo = modo("produtos_modo", "exportar")
+            estoque_modo = modo("estoque_modo", "exportar")
             pedidos_modo = modo("pedidos_modo", "atualizar")
             fonte = "bling"
             modo_img = "link"
@@ -568,6 +568,18 @@ def sync_produtos():
         if not row or row[0] != "conectado":
             return jsonify(success=False, message="Conecte o Bling antes de sincronizar."), 400
 
+        if contexto == "vendedor":
+            from api.bling.export_produtos import exportar_produtos_vendedor
+
+            uid = session.get("id_usuario")
+            resultado = exportar_produtos_vendedor(
+                cur,
+                int(id_tenant),
+                id_usuario=int(uid) if uid else None,
+            )
+            conn.commit()
+            return jsonify(success=True, message=resultado.get("message"), dados=resultado)
+
         from api.bling.mapeamento_categorias import validar_mapeamento_para_importacao
 
         val = validar_mapeamento_para_importacao(
@@ -649,8 +661,8 @@ def sync_pedidos():
 
     body = request.get_json(silent=True) or {}
     contexto = (body.get("contexto") or garantir_modulo_sessao() or "vendedor").strip()
-    if contexto != "vendedor":
-        return jsonify(success=False, message="Importação de pedidos Bling disponível apenas para vendedor."), 400
+    if contexto not in ("vendedor", "fornecedor"):
+        return jsonify(success=False, message="Contexto inválido."), 400
 
     try:
         dias = int(body.get("dias") or 30)
@@ -668,19 +680,29 @@ def sync_pedidos():
         )
         row = cur.fetchone()
         if not row or row[0] != "conectado":
-            return jsonify(success=False, message="Conecte o Bling antes de importar pedidos."), 400
-
-        from api.bling.sync_pedidos import importar_pedidos_bling
+            return jsonify(success=False, message="Conecte o Bling antes de sincronizar pedidos."), 400
 
         uid = session.get("id_usuario")
-        resultado = importar_pedidos_bling(
-            cur,
-            int(id_tenant),
-            contexto=contexto,
-            dias=dias,
-            data_inicial=data_inicial,
-            id_usuario=int(uid) if uid else None,
-        )
+        if contexto == "fornecedor":
+            from api.bling.export_pedidos import exportar_pedidos_pendentes_fornecedor
+
+            resultado = exportar_pedidos_pendentes_fornecedor(
+                cur,
+                int(id_tenant),
+                dias=dias,
+                id_usuario=int(uid) if uid else None,
+            )
+        else:
+            from api.bling.sync_pedidos import importar_pedidos_bling
+
+            resultado = importar_pedidos_bling(
+                cur,
+                int(id_tenant),
+                contexto=contexto,
+                dias=dias,
+                data_inicial=data_inicial,
+                id_usuario=int(uid) if uid else None,
+            )
         conn.commit()
         return jsonify(success=True, **resultado)
     except ValueError as e:

@@ -3,8 +3,8 @@ from pathlib import Path
 from flask import Blueprint, jsonify, redirect, render_template, request, session, url_for
 
 from global_utils import Var_ConectarBanco, login_obrigatorio, usuario_tem_permissao
-from srotas_plataforma import MODULO_FORNECEDOR, MODULO_VENDEDOR, garantir_modulo_sessao
-from srotas_negocio import catalogo_integracoes_modulo, render_pagina_integracoes, url_icone_integracao
+from sistema.plataforma.sessao import MODULO_FORNECEDOR, MODULO_VENDEDOR, garantir_modulo_sessao
+from sistema.integracoes.catalogo import catalogo_integracoes_modulo, render_pagina_integracoes, url_icone_integracao
 
 _MOD_DIR = Path(__file__).resolve().parent
 
@@ -189,6 +189,35 @@ def pagina_melhor_envio():
     )
 
 
+@integracoes_bp.get("/integracoes/mercado-livre")
+@login_obrigatorio()
+def pagina_mercado_livre():
+    if not _pode_ver_integracoes():
+        return redirect(url_for("dashboard.index"))
+    if (r := _exigir_modulo(MODULO_VENDEDOR)) is not None:
+        return r
+    from api.mercado_livre.cliente import ml_conectado
+
+    id_tenant = session.get("id_tenant")
+    conectado = False
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        if id_tenant:
+            try:
+                conectado = ml_conectado(cur, int(id_tenant))
+            except Exception:
+                conectado = False
+    finally:
+        conn.close()
+    return render_template(
+        "frm_mercado_livre_integracao.html",
+        nav_codigo="integracoes",
+        ml_conectado=conectado,
+        icone_mercado_livre=url_icone_integracao("mercado-livre", icones_base_url=_icones_base_url()),
+    )
+
+
 @integracoes_bp.get("/api/integracoes/hub/status")
 @login_obrigatorio()
 def hub_status():
@@ -238,16 +267,22 @@ def hub_status():
 
     if modulo == MODULO_VENDEDOR:
         me_ok = False
+        ml_ok = False
         conn = Var_ConectarBanco()
         try:
             cur = conn.cursor()
             if id_tenant:
                 from api.melhor_envio.cliente import me_conectado
+                from api.mercado_livre.cliente import ml_conectado
 
                 try:
                     me_ok = me_conectado(cur, int(id_tenant))
                 except Exception:
                     me_ok = False
+                try:
+                    ml_ok = ml_conectado(cur, int(id_tenant))
+                except Exception:
+                    ml_ok = False
         finally:
             conn.close()
         integracoes["bling"] = {
@@ -259,6 +294,11 @@ def hub_status():
             "conectado": me_ok,
             "config_url": url_for("integracoes.pagina_melhor_envio"),
             "oauth_url": url_for("melhor_envio.oauth_iniciar"),
+        }
+        integracoes["mercado-livre"] = {
+            "conectado": ml_ok,
+            "config_url": url_for("integracoes.pagina_mercado_livre"),
+            "oauth_url": url_for("mercado_livre.oauth_iniciar"),
         }
 
     return jsonify(

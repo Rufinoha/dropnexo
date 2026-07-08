@@ -1,4 +1,4 @@
-# servico_melhor_envio.py — cotação e escolha de frete no pedido (vendedor)
+# api/melhor_envio/pedido.py — cotação e escolha de frete no pedido (vendedor)
 from __future__ import annotations
 
 import json
@@ -21,10 +21,10 @@ from api.melhor_envio.cliente import (
     opcoes_cotacao_me,
 )
 from global_utils import agora_utc
-from servico_pedido import STATUS_RASCUNHO, _frete_editavel_status, obter_pedido, registrar_anexo_pedido, registrar_historico, status_vendedor_pedido
+from core.pedidos.servico import STATUS_RASCUNHO, _frete_editavel_status, obter_pedido, registrar_anexo_pedido, registrar_historico, status_vendedor_pedido
 
 _log = logging.getLogger(__name__)
-_RAIZ_UPLOAD = Path(__file__).resolve().parent
+_RAIZ_UPLOAD = Path(__file__).resolve().parents[2]
 
 _COLUNAS_ME_OK: bool | None = None
 

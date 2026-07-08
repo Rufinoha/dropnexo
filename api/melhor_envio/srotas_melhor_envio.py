@@ -25,7 +25,7 @@ from api.melhor_envio.cliente import (
     diagnostico_oauth_me,
 )
 from global_utils import Var_ConectarBanco, login_obrigatorio, usuario_tem_permissao
-from srotas_plataforma import garantir_modulo_sessao
+from sistema.plataforma.sessao import garantir_modulo_sessao
 
 _log = logging.getLogger(__name__)
 
@@ -224,7 +224,7 @@ def _processar_evento_etiqueta(cur, payload: dict) -> None:
     if not me_id and not protocolo:
         return
 
-    from servico_pedido import marcar_em_expedicao, marcar_entregue
+    from core.pedidos.servico import marcar_em_expedicao, marcar_entregue
 
     cur.execute(
         """

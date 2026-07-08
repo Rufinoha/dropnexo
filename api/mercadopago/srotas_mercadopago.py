@@ -20,7 +20,7 @@ from api.mercadopago.cliente import (
     url_autorizacao,
 )
 from global_utils import Var_ConectarBanco, login_obrigatorio, obter_base_url, usuario_tem_permissao
-from srotas_plataforma import MODULO_FORNECEDOR, garantir_modulo_sessao
+from sistema.plataforma.sessao import MODULO_FORNECEDOR, garantir_modulo_sessao
 
 _log = logging.getLogger(__name__)
 
@@ -196,7 +196,7 @@ def webhook():
         conn = Var_ConectarBanco()
         try:
             cur = conn.cursor()
-            from servico_pedido_mp import processar_webhook_pagamento
+            from api.mercadopago.pedido import processar_webhook_pagamento
 
             result = processar_webhook_pagamento(cur, payment_id)
             conn.commit()

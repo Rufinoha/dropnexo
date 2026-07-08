@@ -419,7 +419,7 @@ def exigir_modulo(*modulos: str):
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
-            from srotas_plataforma import garantir_modulo_sessao
+            from sistema.plataforma.sessao import garantir_modulo_sessao
 
             ativo = garantir_modulo_sessao()
             if session.get("eh_desenvolvedor") or ativo in modulos:

@@ -12,7 +12,7 @@ from fornecedor.parametros.servico_precificacao import (
 )
 from vendedor.precificacao.servico_precificacao_vendedor import precificar_na_integracao
 from global_utils import Var_ConectarBanco, exigir_modulo, exigir_permissao, login_obrigatorio, url_imagem_produto
-from srotas_plataforma import MODULO_VENDEDOR
+from sistema.plataforma.sessao import MODULO_VENDEDOR
 from vendedor.fornecedores.srotas_fornecedores import (
     _agrupar_atributos_resumo,
     _ordem_atributos_produto,

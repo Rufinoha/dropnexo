@@ -1,8 +1,8 @@
-# servico_meios_pagamento.py — meios de pagamento por fornecedor (MP + PIX manual)
+# core/pedidos/meios_pagamento.py — meios de pagamento por fornecedor (MP + PIX manual)
 from __future__ import annotations
 
 from api.mercadopago.cliente import meios_pagamento_fornecedor
-from servico_pedido_pix_manual import meio_pix_manual_fornecedor
+from api.pix_manual.pedido import meio_pix_manual_fornecedor
 
 
 def listar_meios_fornecedor(cur, id_fornecedor: int, *, icone_mp: str = "") -> list[dict]:

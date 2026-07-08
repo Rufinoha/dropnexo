@@ -5,15 +5,15 @@ from pathlib import Path
 from flask import Blueprint, jsonify, render_template, request, session
 
 from global_utils import Var_ConectarBanco, exigir_modulo, exigir_permissao, login_obrigatorio
-from servico_pedido import (
+from core.pedidos.servico import (
     listar_anexos_pedido,
     listar_pedidos_fornecedor,
     marcar_em_expedicao,
     marcar_entregue,
     obter_pedido,
 )
-from servico_pedido_pix_manual import confirmar_pix_manual, rejeitar_comprovante_pix
-from srotas_plataforma import MODULO_FORNECEDOR
+from api.pix_manual.pedido import confirmar_pix_manual, rejeitar_comprovante_pix
+from sistema.plataforma.sessao import MODULO_FORNECEDOR
 
 _MOD = Path(__file__).resolve().parent
 fn_pedidos_bp = Blueprint(

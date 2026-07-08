@@ -1,4 +1,4 @@
-# servico_cnpj.py — consulta CNPJ (BrasilAPI)
+# core/cnpj.py — consulta CNPJ (BrasilAPI)
 from __future__ import annotations
 
 import re

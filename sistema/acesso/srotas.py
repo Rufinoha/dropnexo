@@ -1,9 +1,9 @@
 # DropNexo — acesso público, autenticação e cadastro
 from __future__ import annotations
 
+from flask import Blueprint, render_template, url_for
 
 # --- srotas_public ---
-from flask import Blueprint, render_template, url_for
 
 from global_utils import INTEGRACOES_CANAIS_PREVISAO, obter_base_url
 from sistema.planos.srotas_planos import catalogo_planos_home, landing_perfil
@@ -105,7 +105,7 @@ def _aplicar_tenant_na_sessao(
     session["tenant_slug"] = tenant_slug
     session["tenant_plano"] = plano
     session["tenant_tipo_negocio"] = tipo_negocio
-    from srotas_plataforma import modulo_padrao
+    from sistema.plataforma.sessao import modulo_padrao
 
     session["modulo_ativo"] = modulo_padrao(tipo_negocio)
     session["papel"] = (perfil_codigo or "visualizador").lower()
@@ -588,7 +588,7 @@ def api_trocar_tenant():
 @auth_bp.post("/api/auth/trocar-modulo")
 @login_obrigatorio()
 def api_trocar_modulo():
-    from srotas_plataforma import modulos_disponiveis_sessao, rotulo_modulo
+    from sistema.plataforma.sessao import modulos_disponiveis_sessao, rotulo_modulo
 
     dados = request.get_json(silent=True) or {}
     codigo = (dados.get("modulo") or "").strip().lower()
@@ -621,7 +621,7 @@ from global_utils import (
     valida_email,
 )
 from fornecedor.segmentos.servico_segmentos import listar_segmentos_plataforma, salvar_segmentos_fornecedor
-from servico_cnpj import consultar_cnpj
+from core.cnpj import consultar_cnpj
 
 cadastro_bp = Blueprint("cadastro", __name__)
 

@@ -222,8 +222,8 @@
   color: #94a3b8;
 }
 
-.FnInt_CardWrap.is-soon .FnInt_CardBody {
-  padding-right: 4.25rem;
+.FnInt_CardWrap.is-soon .FnInt_CardHead {
+  padding-right: 4.5rem;
 }
 
 .FnInt_CardWrap.is-soon .FnInt_Card:hover {
@@ -655,6 +655,8 @@ body.FnInt-modal-open {
   -webkit-box-orient: vertical;
   overflow: hidden;
   text-align: left;
+  width: 100%;
+  max-width: 100%;
 }
 
 .FnInt_CardHead {

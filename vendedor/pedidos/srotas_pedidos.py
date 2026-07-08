@@ -5,11 +5,11 @@ import time
 
 from flask import Blueprint, jsonify, render_template, request, send_file, session, url_for
 
-from servico_meios_pagamento import listar_meios_fornecedor
-from servico_pedido_pix_manual import iniciar_pix_manual, marcar_comprovante_enviado
+from core.pedidos.meios_pagamento import listar_meios_fornecedor
+from api.pix_manual.pedido import iniciar_pix_manual, marcar_comprovante_enviado
 
 from global_utils import Var_ConectarBanco, exigir_modulo, exigir_permissao, login_obrigatorio
-from servico_pedido import (
+from core.pedidos.servico import (
     buscar_produtos_pedido,
     cancelar_pedido,
     combobox_produtos_pedido,
@@ -26,8 +26,8 @@ from servico_pedido import (
     salvar_rascunho,
     taxas_fornecedores_vendedor,
 )
-from servico_pedido_mp import iniciar_pagamento, meios_pagamento_pedido, sincronizar_pagamento_pedido
-from servico_melhor_envio import (
+from api.mercadopago.pedido import iniciar_pagamento, meios_pagamento_pedido, sincronizar_pagamento_pedido
+from api.melhor_envio.pedido import (
     contratar_etiqueta_pedido,
     cotar_frete_pedido,
     definir_modo_frete_manual,
@@ -36,7 +36,7 @@ from servico_melhor_envio import (
     salvar_frete_manual,
     status_melhor_envio_vendedor,
 )
-from srotas_plataforma import MODULO_VENDEDOR
+from sistema.plataforma.sessao import MODULO_VENDEDOR
 
 _MOD = Path(__file__).resolve().parent
 _RAIZ = _MOD.parent.parent

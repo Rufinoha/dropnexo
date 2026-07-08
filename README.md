@@ -22,18 +22,35 @@ Documentação completa: `__doc/00 - Plano Mestre de Construção - DropNexo.md`
 
 **Raiz:**
 
-- `app.py` — bootstrap + auto-registro de `srotas_*.py`
+- `app.py` — bootstrap Flask + registro de APIs e módulos
 - `global_utils.py` — infra (DB, auth, permissões, marca)
-- `srotas_acesso.py` — home pública, login, cadastro
-- `srotas_plataforma.py` — navegação (módulo fornecedor/vendedor) e usuários por tenant
-- `srotas_negocio.py` — categorias, precificação/vínculos e hub de integrações
 - `templates/`, `static/` — globais (frm_base, home, login…)
-- `fornecedor/`, `vendedor/`, `sistema/` — módulos de negócio
-- `api/` — brevo, efi, whatsapp
+
+**`core/`** — domínio compartilhado (fornecedor + vendedor):
+
+- `core/pedidos/servico.py` — pedidos B2B, status, importação Bling
+- `core/pedidos/estoque_reserva.py` — reserva/baixa de estoque
+- `core/pedidos/meios_pagamento.py` — facade MP + PIX manual
+- `core/categorias.py` — árvore de categorias
+- `core/vinculos.py` — vínculo vendedor × fornecedor
+- `core/cnpj.py` — consulta CNPJ
+
+**`sistema/`** — plataforma:
+
+- `sistema/acesso/srotas.py` — home pública, login, cadastro
+- `sistema/plataforma/sessao.py` — módulo ativo, usuários por tenant
+- `sistema/integracoes/catalogo.py` — catálogo do hub de integrações
+- demais features em `sistema/<feature>/srotas_*.py`
+
+**`api/`** — integrações externas (OAuth, webhook, sync):
+
+- cada provedor em `api/<nome>/` com `cliente.py`, `srotas_*.py` e, quando ligado a pedidos, `pedido.py`
+
+**`fornecedor/`, `vendedor/`** — módulos de negócio (telas + rotas por feature)
 
 **Cada feature (`fornecedor/categorias/`, `vendedor/catalogo/`, …):**
 
-- `srotas_<feature>.py` — **único** arquivo Python (blueprint + rotas + `init_app`)
+- `srotas_<feature>.py` — blueprint + rotas + `init_app`
 - `templates/`, `static/` — assets locais
 
-Sem `__init__.py`. Detalhes: `__doc/00 - Plano Mestre…` §6.4.
+Serviços de domínio ficam em `core/` ou na pasta da feature; orquestração com ERP/pagamento/frete fica em `api/<provedor>/pedido.py`. Detalhes: `__doc/00 - Plano Mestre…` §6.4.

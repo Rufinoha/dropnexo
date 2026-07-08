@@ -1,231 +1,21 @@
-# DropNexo — negócio: categorias, precificação/vínculos e hub de integrações
+# sistema/integracoes/catalogo.py — catálogo e render do hub de integrações
 from __future__ import annotations
 
 import json
-from decimal import Decimal
-from typing import Any
-
-from flask import render_template, session, url_for
-from srotas_plataforma import MODULO_FORNECEDOR, MODULO_VENDEDOR, garantir_modulo_sessao
-
 from pathlib import Path
 
-_RAIZ_PROJETO = Path(__file__).resolve().parent
+from flask import render_template, session, url_for
+
+from sistema.plataforma.sessao import MODULO_FORNECEDOR, MODULO_VENDEDOR, garantir_modulo_sessao
+
+_RAIZ_PROJETO = Path(__file__).resolve().parents[2]
 _ICONES_API_DIR = _RAIZ_PROJETO / "static" / "imge" / "icone_api"
 
-# slug da integração → arquivo em static/imge/icone_api/
 ICONES_API_ARQUIVOS: dict[str, str] = {
     "bling": "icone_bling.png",
     "olist": "icone_olist.png",
     "conta-azul": "icone_contaazul.png",
 }
-
-# ── Categorias (fornecedor) ───────────────────────────────────────────
-
-MAX_NIVEL_CATEGORIA = 3
-
-
-def montar_arvore_categorias(rows: list[tuple]) -> list[dict]:
-    """rows: id, nome, parent_id, ordem, nivel, qtd_produtos"""
-    nodes = []
-    for r in rows:
-        nodes.append(
-            {
-                "id": r[0],
-                "nome": r[1],
-                "parent_id": r[2],
-                "ordem": r[3],
-                "nivel": int(r[4] or 1),
-                "qtd_produtos": int(r[5] or 0),
-                "filhos": [],
-            }
-        )
-    by_id = {n["id"]: n for n in nodes}
-    raiz = []
-    for n in nodes:
-        pid = n["parent_id"]
-        if pid and pid in by_id:
-            by_id[pid]["filhos"].append(n)
-        else:
-            raiz.append(n)
-
-    def ordenar(lst):
-        lst.sort(key=lambda x: (x["ordem"], x["nome"]))
-        for c in lst:
-            ordenar(c["filhos"])
-
-    ordenar(raiz)
-    return raiz
-
-
-def caminho_categoria(nome: str, parent_id: int | None, by_id: dict) -> str:
-    partes = [nome]
-    pid = parent_id
-    while pid and pid in by_id:
-        p = by_id[pid]
-        partes.insert(0, p["nome"])
-        pid = p.get("parent_id")
-    return " › ".join(partes)
-
-
-def flatten_arvore_com_caminho(raiz: list[dict], prefixo: str = "") -> list[dict]:
-    """Lista plana para combos (produto): id, nome, caminho, nivel."""
-    out = []
-    for n in raiz:
-        caminho = f"{prefixo}{n['nome']}" if prefixo else n["nome"]
-        out.append(
-            {
-                "id": n["id"],
-                "nome": n["nome"],
-                "caminho": caminho,
-                "nivel": n["nivel"],
-            }
-        )
-        out.extend(flatten_arvore_com_caminho(n["filhos"], caminho + " › "))
-    return out
-
-
-# ── Precificação e vínculos V2 ────────────────────────────────────────
-
-from vendedor.precificacao.servico_precificacao_vendedor import (  # noqa: E402
-    aplicar_precificacao_tenant,
-    buscar_regra_precificacao,
-    calcular_preco_venda_vendedor as calcular_preco_venda,
-)
-
-
-def inativar_vinculo(cur, id_vinculo: int, id_fornecedor: int) -> None:
-    """Corte de vínculo: desativa produtos do vendedor e zera estoque vitrine; pedidos abertos seguem."""
-    cur.execute(
-        """
-        UPDATE tbl_vinculo_vendedor_fornecedor
-        SET status = 'inativo', inativado_em = NOW()
-        WHERE id = %s AND id_tenant_fornecedor = %s
-        """,
-        (id_vinculo, id_fornecedor),
-    )
-    cur.execute(
-        """
-        SELECT id_tenant_vendedor FROM tbl_vinculo_vendedor_fornecedor WHERE id = %s
-        """,
-        (id_vinculo,),
-    )
-    row = cur.fetchone()
-    if not row:
-        return
-    id_vendedor = row[0]
-    cur.execute(
-        """
-        UPDATE tbl_produto_vendedor
-        SET ativo = FALSE, estoque_vitrine = 0, atualizado_em = NOW()
-        WHERE id_tenant_vendedor = %s AND id_tenant_fornecedor = %s
-        """,
-        (id_vendedor, id_fornecedor),
-    )
-
-
-def snapshot_vendedor_sessao() -> dict:
-    return {
-        "tenant_nome": session.get("tenant_nome"),
-        "tenant_slug": session.get("tenant_slug"),
-        "usuario_nome": session.get("nome"),
-        "usuario_email": session.get("email"),
-        "id_tenant": session.get("id_tenant"),
-        "id_usuario": session.get("id_usuario"),
-    }
-
-
-def _formatar_documento(doc: str | None, tipo: str | None) -> str:
-    d = "".join(c for c in (doc or "") if c.isdigit())
-    if len(d) == 11:
-        return f"{d[:3]}.{d[3:6]}.{d[6:9]}-{d[9:]}"
-    if len(d) == 14:
-        return f"{d[:2]}.{d[2:5]}.{d[5:8]}/{d[8:12]}-{d[12:]}"
-    return doc or ""
-
-
-def montar_snapshot_vendedor(cur, id_vendedor: int, id_usuario: int | None) -> dict:
-    """Snapshot completo gravado na solicitação de vínculo (dados para decisão do fornecedor)."""
-    base: dict = {"id_tenant": id_vendedor, "id_usuario": id_usuario}
-    cur.execute(
-        """
-        SELECT COALESCE(t.nome_fantasia, t.nome), t.slug,
-               t.tipo_pessoa, t.documento, t.nome_completo, COALESCE(t.nome_fantasia, t.nome),
-               t.razao_social, t.cep, t.logradouro, t.numero, t.complemento,
-               t.bairro, t.cidade, t.uf, t.telefone_comercial, t.celular_comercial,
-               t.email_comercial, t.criado_em, t.tipo_negocio, t.site,
-               t.faturamento_ultimo_ano, t.tamanho_empresa
-        FROM tbl_tenant t
-        WHERE t.id = %s
-        """,
-        (id_vendedor,),
-    )
-    row = cur.fetchone()
-    if row:
-        base["tenant_nome"] = row[0]
-        base["tenant_slug"] = row[1]
-        endereco_parts = [row[8], row[9], row[10], row[11], row[12], row[13]]
-        endereco = ", ".join(p for p in endereco_parts if p)
-        base.update(
-            {
-                "tipo_pessoa": row[2],
-                "documento": row[3],
-                "documento_formatado": _formatar_documento(row[3], row[2]),
-                "nome_completo": row[4],
-                "nome_fantasia": row[5],
-                "razao_social": row[6] or "",
-                "cep": row[7] or "",
-                "endereco": endereco,
-                "logradouro": row[8] or "",
-                "numero": row[9] or "",
-                "complemento": row[10] or "",
-                "bairro": row[11] or "",
-                "cidade": row[12] or "",
-                "uf": row[13] or "",
-                "telefone_comercial": row[14] or "",
-                "celular_comercial": row[15] or "",
-                "email_comercial": row[16] or "",
-                "cadastro_desde": row[17].isoformat() if row[17] else "",
-                "tipo_negocio": row[18] or "",
-                "site": row[19] or "",
-                "faturamento_ultimo_ano": row[20] or "",
-                "tamanho_empresa": row[21] or "",
-            }
-        )
-
-    if id_usuario:
-        cur.execute(
-            "SELECT nome, email, whatsapp FROM tbl_usuario WHERE id = %s",
-            (id_usuario,),
-        )
-        u = cur.fetchone()
-        if u:
-            base["usuario_nome"] = u[0]
-            base["usuario_email"] = u[1]
-            base["usuario_whatsapp"] = u[2] or ""
-
-    cur.execute(
-        """
-        SELECT COUNT(*)::int FROM tbl_vinculo_vendedor_fornecedor
-        WHERE id_tenant_vendedor = %s AND status = 'ativo'
-        """,
-        (id_vendedor,),
-    )
-    base["qtd_fornecedores_ativos"] = int(cur.fetchone()[0] or 0)
-
-    cur.execute(
-        """
-        SELECT COUNT(*)::int FROM tbl_produto_vendedor
-        WHERE id_tenant_vendedor = %s AND ativo = TRUE
-        """,
-        (id_vendedor,),
-    )
-    base["qtd_produtos_vitrine"] = int(cur.fetchone()[0] or 0)
-
-    return base
-
-
-# ── Hub de integrações ────────────────────────────────────────────────
 
 HUB_COPY_INTEGRACOES = {
     MODULO_FORNECEDOR: {
@@ -358,7 +148,6 @@ def hub_copy_integracoes(modulo: str | None = None) -> dict[str, str]:
 
 
 def _arquivo_icone_api(slug: str) -> str | None:
-    """Resolve PNG em static/imge/icone_api/ (mapa explícito ou convenção icone_{slug}.png)."""
     nome = ICONES_API_ARQUIVOS.get(slug)
     if nome and (_ICONES_API_DIR / nome).is_file():
         return nome
@@ -369,7 +158,6 @@ def _arquivo_icone_api(slug: str) -> str | None:
 
 
 def url_icone_integracao(slug: str, *, icones_base_url: str = "") -> str:
-    """URL do ícone da integração (prioriza static/imge/icone_api/ ou módulo api/)."""
     if slug == "mercado-pago":
         return url_for("mercadopago.static", filename="imge/icone_mercadopago.png")
     if slug == "melhor-envio":
@@ -403,7 +191,6 @@ def catalogo_com_urls(icones_base_url: str) -> list[dict]:
 
 
 def catalogo_integracoes_modulo(icones_base_url: str, modulo: str | None = None) -> list[dict]:
-    """Catálogo filtrado pelo módulo ativo (fornecedor ou vendedor)."""
     mod = modulo or garantir_modulo_sessao()
     cats_out: list[dict] = []
     for cat in catalogo_com_urls(icones_base_url):

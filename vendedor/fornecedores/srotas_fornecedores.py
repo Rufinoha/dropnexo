@@ -20,8 +20,8 @@ from fornecedor.parametros.servico_precificacao import (
 )
 from vendedor.precificacao.servico_precificacao_vendedor import precificar_na_integracao
 from global_utils import Var_ConectarBanco, agora_utc, exigir_modulo, login_obrigatorio, exigir_permissao, url_imagem_produto
-from srotas_negocio import montar_snapshot_vendedor
-from srotas_plataforma import MODULO_VENDEDOR
+from core.vinculos import montar_snapshot_vendedor
+from sistema.plataforma.sessao import MODULO_VENDEDOR
 from vendedor.fornecedores.servico_desvincular_fornecedor import desconectar_fornecedor
 
 _MOD_DIR = Path(__file__).resolve().parent

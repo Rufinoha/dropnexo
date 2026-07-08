@@ -1306,7 +1306,7 @@ def catalogos_dados():
 @login_obrigatorio()
 @exigir_permissao(codigos=["catalogos.ver", "produtos.ver"])
 def catalogos_combos():
-    from srotas_negocio import flatten_arvore_com_caminho, montar_arvore_categorias
+    from core.categorias import flatten_arvore_com_caminho, montar_arvore_categorias
 
     id_tenant = session.get("id_tenant")
     conn = Var_ConectarBanco()
@@ -2676,7 +2676,7 @@ def _exigir_catalogo_escrita():
 @login_obrigatorio()
 @exigir_permissao(codigos=["catalogos.ver", "produtos.ver"])
 def categorias_arvore():
-    from srotas_negocio import montar_arvore_categorias as categorias_arvore
+    from core.categorias import montar_arvore_categorias as categorias_arvore
 
     id_tenant = session.get("id_tenant")
     conn = Var_ConectarBanco()

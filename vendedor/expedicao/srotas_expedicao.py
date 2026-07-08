@@ -5,8 +5,8 @@ from pathlib import Path
 from flask import Blueprint, jsonify, render_template, request, session
 
 from global_utils import Var_ConectarBanco, exigir_modulo, exigir_permissao, login_obrigatorio
-from servico_pedido import listar_pedidos_expedicao_vendedor
-from srotas_plataforma import MODULO_VENDEDOR
+from core.pedidos.servico import listar_pedidos_expedicao_vendedor
+from sistema.plataforma.sessao import MODULO_VENDEDOR
 
 _MOD = Path(__file__).resolve().parent
 vd_expedicao_bp = Blueprint(

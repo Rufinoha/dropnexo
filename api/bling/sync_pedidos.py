@@ -12,7 +12,7 @@ from api.bling.campos_pedido import (
 )
 from api.bling.cliente import api_request
 from global_utils import agora_utc
-from servico_pedido import importar_pedido_bling
+from core.pedidos.servico import importar_pedido_bling
 
 
 def _registrar_log(

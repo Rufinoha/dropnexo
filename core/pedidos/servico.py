@@ -1,4 +1,4 @@
-# servico_pedido.py — pedidos B2B vendedor → fornecedor (Fase 0)
+# core/pedidos/servico.py — pedidos B2B vendedor → fornecedor
 from __future__ import annotations
 
 import json
@@ -7,7 +7,7 @@ from typing import Any
 
 from fornecedor.requisitos_vendedor import carregar_requisitos_raw
 from global_utils import agora_utc
-from servico_estoque_reserva import (
+from core.pedidos.estoque_reserva import (
     baixar_itens_pedido,
     liberar_itens_pedido,
     reservar_itens_pedido,
@@ -864,7 +864,7 @@ def salvar_rascunho(
             )
             cur.execute("DELETE FROM tbl_pedido_item WHERE id_pedido = %s", (id_pedido,))
             try:
-                from servico_melhor_envio import limpar_frete_pedido
+                from api.melhor_envio.pedido import limpar_frete_pedido
 
                 limpar_frete_pedido(cur, id_pedido)
             except Exception:
@@ -1076,9 +1076,15 @@ def marcar_pedido_pago(
         id_usuario,
     )
     try:
-        from servico_melhor_envio import tentar_contratar_etiqueta_apos_pagamento
+        from api.melhor_envio.pedido import tentar_contratar_etiqueta_apos_pagamento
 
         tentar_contratar_etiqueta_apos_pagamento(cur, id_pedido, id_usuario=id_usuario)
+    except Exception:
+        pass
+    try:
+        from api.bling.export_pedidos import tentar_exportar_pedido_fornecedor_apos_pagamento
+
+        tentar_exportar_pedido_fornecedor_apos_pagamento(cur, id_pedido)
     except Exception:
         pass
     return True
@@ -1660,7 +1666,7 @@ def _montar_contexto_pedidos(
         sv, sc = _normalizar_status_pedido(origem or "manual", sv, sc)
         frete_info = {}
         try:
-            from servico_melhor_envio import frete_resumo_pedido
+            from api.melhor_envio.pedido import frete_resumo_pedido
 
             frete_info = frete_resumo_pedido(cur, int(pid))
         except Exception:

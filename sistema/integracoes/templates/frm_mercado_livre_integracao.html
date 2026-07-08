@@ -1,0 +1,81 @@
+{% set nav_ativo = nav_codigo %}
+{% extends "frm_base.html" %}
+{% block title %}Mercado Livre — Integrações — {{ MARCA_NOME }}{% endblock %}
+{% block topbar_title %}Mercado Livre{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('static', filename='style/Cmercadopago_integracao.css') }}?v=4" />
+{% endblock %}
+{% block content %}
+<div class="Cl_ContainerApoio cl-page-principal Mp_Wrap">
+  <div class="cl-page-title Mp_PageHead">
+    <div class="Mp_PageHeadMain">
+      <a href="{{ url_for('integracoes.pagina') }}" class="Mp_BackLink">
+        <i data-lucide="arrow-left"></i> Integrações
+      </a>
+      <div class="Mp_TitleRow">
+        <div class="Mp_Logo" aria-hidden="true">
+          <img src="{{ icone_mercado_livre }}" alt="" width="48" height="48" />
+        </div>
+        <div>
+          <h2>Mercado Livre</h2>
+          <p class="cl-page-desc">Conecte sua conta de vendedor para importar pedidos pagos do Mercado Livre.</p>
+        </div>
+      </div>
+    </div>
+    <div class="Mp_ConnBadge {{ 'is-on' if ml_conectado else 'is-off' }}" id="ml_status_badge">
+      {{ 'Conectado' if ml_conectado else 'Desconectado' }}
+    </div>
+  </div>
+
+  <section class="Mp_Card Mp_Card--alert" id="ml_alert_servidor" hidden>
+    <h3>Integração indisponível</h3>
+    <p class="Mp_Hint">O app Mercado Livre ainda não está configurado neste servidor. Peça ao administrador para cadastrar <code>ML_CLIENT_ID_PROD</code> e <code>ML_CLIENT_SECRET_PROD</code> no <code>.env</code>.</p>
+  </section>
+
+  <section class="Mp_Card Mp_Card--info" id="ml_sec_guia" {% if ml_conectado %}hidden{% endif %}>
+    <h3>Conectar sua conta</h3>
+    <p class="Mp_Hint">Use a conta Mercado Livre em que você <strong>vende</strong>. Você será redirecionado ao site do Mercado Livre para autorizar o DropNexo.</p>
+    <div class="Mp_Actions">
+      <a href="{{ url_for('mercado_livre.oauth_iniciar') }}" class="Cl_botaoprimario" id="ml_btn_conectar">Conectar conta</a>
+    </div>
+  </section>
+
+  <section class="Mp_Card" id="ml_painel_config" {% if not ml_conectado %}hidden{% endif %}>
+    <p id="ml_conta_info" class="Mp_ContaResumo" hidden></p>
+
+    <h3>Importação de pedidos</h3>
+    <p class="Mp_Hint">Busca pedidos <strong>pagos</strong> na sua conta ML. A criação automática de pedidos no DropNexo será habilitada em breve.</p>
+    <div class="Mp_Switches">
+      <div class="Mp_SwitchRow">
+        <div class="Mp_SwitchText">
+          <strong>Importar automaticamente</strong>
+          <span>Quando disponível, novos pedidos pagos entram no DropNexo</span>
+        </div>
+        <label class="Cl_Switch Mp_Switch" title="Importação automática">
+          <input type="checkbox" id="ml_pedidos_auto" />
+          <span class="Cl_SwitchSlider"></span>
+        </label>
+      </div>
+    </div>
+    <div class="Mp_Actions" style="margin-top:0.85rem">
+      <button type="button" class="Cl_botaoprimario" id="ml_btn_sync">Buscar pedidos recentes</button>
+    </div>
+    <p id="ml_msg" class="Mp_Msg" hidden></p>
+
+    <h3 style="margin-top:1.25rem">Próximos passos</h3>
+    <ol class="Mp_Hint Mp_ListaPassos">
+      <li>Produtos do ML devem estar em <strong>Meus produtos</strong> (SKU igual ao anúncio).</li>
+      <li>Pedidos importados seguirão o mesmo fluxo do Bling (aguardando pagamento ao fornecedor).</li>
+      <li>Frete pode ser cotado com Melhor Envio após a importação.</li>
+    </ol>
+
+    <div class="Mp_Actions Mp_Actions--foot">
+      <a href="{{ url_for('vd_pedidos.pedidos') }}" class="Cl_botaoFiltro">Ir para pedidos</a>
+      <button type="button" class="Cl_BtnCancelar" id="ml_btn_desconectar">Desconectar</button>
+    </div>
+  </section>
+</div>
+{% endblock %}
+{% block page_js %}
+<script src="{{ url_for('static', filename='script/Smercado_livre_integracao.js') }}?v=2"></script>
+{% endblock %}

@@ -23,7 +23,7 @@ def init_app(app):
 @dashboard_bp.get("/index")
 @login_obrigatorio()
 def index():
-    from srotas_plataforma import garantir_modulo_sessao, rotulo_modulo
+    from sistema.plataforma.sessao import garantir_modulo_sessao, rotulo_modulo
 
     tipo = session.get("tenant_tipo_negocio", "vendedor")
     modulo = garantir_modulo_sessao()

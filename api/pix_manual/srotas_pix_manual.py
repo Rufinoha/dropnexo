@@ -12,7 +12,7 @@ from api.pix_manual.cliente import (
     salvar_config_pix_manual,
 )
 from global_utils import Var_ConectarBanco, login_obrigatorio
-from srotas_plataforma import MODULO_FORNECEDOR, garantir_modulo_sessao
+from sistema.plataforma.sessao import MODULO_FORNECEDOR, garantir_modulo_sessao
 
 _MOD = Path(__file__).resolve().parent
 pix_manual_bp = Blueprint(

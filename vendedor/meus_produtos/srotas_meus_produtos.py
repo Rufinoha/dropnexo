@@ -14,7 +14,7 @@ from global_utils import (
     url_imagem_produto,
     usuario_tem_permissao,
 )
-from srotas_plataforma import MODULO_VENDEDOR
+from sistema.plataforma.sessao import MODULO_VENDEDOR
 from fornecedor.catalogo.srotas_catalogo import (
     SQL_VARIANTE_LISTA,
     _catalogo_montar_linhas_pai,
@@ -34,7 +34,7 @@ from fornecedor.catalogo.servico_imagens import (
     listar_regras_atributo_imagem,
     obter_imagem_modo,
 )
-from srotas_negocio import flatten_arvore_com_caminho, montar_arvore_categorias
+from core.categorias import flatten_arvore_com_caminho, montar_arvore_categorias
 from vendedor.meus_produtos.servico_categoria_vendedor import (
     associar_categoria_produtos,
     categoria_pertence_vendedor,

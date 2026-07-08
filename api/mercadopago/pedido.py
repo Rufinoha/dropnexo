@@ -1,4 +1,4 @@
-# servico_pedido_mp.py — checkout Mercado Pago nos pedidos B2B (Fase 2)
+# api/mercadopago/pedido.py — checkout Mercado Pago nos pedidos B2B
 from __future__ import annotations
 
 import logging
@@ -16,7 +16,7 @@ from api.mercadopago.cliente import (
     obter_pagamento_mp,
 )
 from global_utils import agora_utc, obter_base_url
-from servico_pedido import (
+from core.pedidos.servico import (
     STATUS_AGUARDANDO,
     STATUS_IMPORTADO,
     STATUS_PAGO,

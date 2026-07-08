@@ -4,8 +4,8 @@ from pathlib import Path
 
 from flask import Blueprint, jsonify, render_template, request, session, url_for
 from global_utils import exigir_modulo, exigir_permissao, login_obrigatorio, usuario_tem_permissao
-from srotas_plataforma import MODULO_VENDEDOR
-from srotas_plataforma import PERFIS_EQUIPE_VENDEDOR, carregar_usuario_apoio, inativar_usuario_tenant, listar_perfis_combo, listar_usuarios_tenant, normalizar_bool, reenviar_convite_usuario, salvar_usuario_tenant
+from sistema.plataforma.sessao import MODULO_VENDEDOR
+from sistema.plataforma.sessao import PERFIS_EQUIPE_VENDEDOR, carregar_usuario_apoio, inativar_usuario_tenant, listar_perfis_combo, listar_usuarios_tenant, normalizar_bool, reenviar_convite_usuario, salvar_usuario_tenant
 
 
 _MOD = Path(__file__).resolve().parent

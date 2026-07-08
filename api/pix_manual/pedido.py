@@ -1,10 +1,10 @@
-# servico_pedido_pix_manual.py — PIX manual B2B (QR estático + comprovante)
+# api/pix_manual/pedido.py — PIX manual B2B (QR estático + comprovante)
 from __future__ import annotations
 
 from api.pix_manual.cliente import carregar_config_pix_manual, pix_manual_ativo
 from api.pix_manual.payload import gerar_payload_pix, normalizar_txid
 from global_utils import agora_utc
-from servico_pedido import (
+from core.pedidos.servico import (
     STATUS_AGUARDANDO,
     STATUS_IMPORTADO,
     STATUS_PAGO,

@@ -25,7 +25,7 @@ from api.bling.sync_categorias import (
     resolver_id_segmento_import,
 )
 from api.bling.sync_produtos import _iterar_listas_produtos, _preparar_jobs_importacao
-from srotas_negocio import flatten_arvore_com_caminho, montar_arvore_categorias
+from core.categorias import flatten_arvore_com_caminho, montar_arvore_categorias
 
 
 def _montar_filtro_categorias_api(

@@ -10,8 +10,8 @@ from global_utils import (
     login_obrigatorio,
     usuario_tem_permissao,
 )
-from srotas_negocio import url_icone_integracao
-from srotas_plataforma import (
+from sistema.integracoes.catalogo import url_icone_integracao
+from sistema.plataforma.sessao import (
     carregar_usuario_apoio,
     inativar_usuario_tenant,
     listar_perfis_combo,
@@ -708,7 +708,7 @@ def _icone_svg_menu(nome: str | None) -> str:
 
 
 def carregar_menu_sidebar() -> list[dict]:
-    from srotas_plataforma import garantir_modulo_sessao, resolver_url_menu
+    from sistema.plataforma.sessao import garantir_modulo_sessao, resolver_url_menu
 
     if not session.get("id_usuario"):
         return []
@@ -784,7 +784,7 @@ def carregar_menu_sidebar() -> list[dict]:
 
 
 def _menu_sidebar_fallback(mod_ativo: str = "vendedor") -> list[dict]:
-    from srotas_plataforma import MODULO_FORNECEDOR, resolver_url_menu
+    from sistema.plataforma.sessao import MODULO_FORNECEDOR, resolver_url_menu
 
     comum = [
         {"nome": "Dashboard", "url": url_for("dashboard.index"), "icone_svg": _ICONES_SVG["layout-dashboard"], "nav_codigo": "inicio"},
@@ -800,7 +800,7 @@ def _menu_sidebar_fallback(mod_ativo: str = "vendedor") -> list[dict]:
 
 
 def obter_menu_sidebar_ctx() -> dict:
-    from srotas_plataforma import ctx_navegacao
+    from sistema.plataforma.sessao import ctx_navegacao
 
     base = ctx_navegacao()
     base["menu_sidebar"] = carregar_menu_sidebar() if session.get("id_usuario") else []

@@ -1,4 +1,4 @@
-# DropNexo — plataforma: navegação (Fornecedor/Vendedor) e usuários por tenant
+# sistema/plataforma/sessao.py — navegação (módulo fornecedor/vendedor) e usuários por tenant
 from __future__ import annotations
 
 import os

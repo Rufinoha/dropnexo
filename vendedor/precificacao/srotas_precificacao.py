@@ -5,7 +5,7 @@ from pathlib import Path
 from flask import Blueprint, jsonify, render_template, request, session
 
 from global_utils import Var_ConectarBanco, exigir_modulo, exigir_permissao, login_obrigatorio
-from srotas_plataforma import MODULO_VENDEDOR
+from sistema.plataforma.sessao import MODULO_VENDEDOR
 from vendedor.precificacao.servico_precificacao_vendedor import (
     MODO_MARGEM_DROP,
     MODO_SUGESTAO_FORNECEDOR,

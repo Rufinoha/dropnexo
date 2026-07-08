@@ -18,11 +18,25 @@
   const syncVisualPedidos = document.getElementById("bl_sync_visual_pedidos");
   const EH_DEV = !!(window.OSB_SHELL?.ehDesenvolvedor);
   const btnSalvar = document.getElementById("bl_btn_salvar");
+  const btnSalvarPedidos = document.getElementById("bl_btn_salvar_pedidos");
+  const btnSalvarProdutos = document.getElementById("bl_btn_salvar_produtos");
   const btnSalvarEstoque = document.getElementById("bl_btn_salvar_estoque");
+  const btnSyncProdutosVd = document.getElementById("bl_btn_sync_produtos_vd");
+  const btnSyncProdutosFn = document.getElementById("bl_btn_sync_produtos_fn");
+  const btnExportPedidos = document.getElementById("bl_btn_export_pedidos");
   const paneConfig = document.getElementById("bl_pane_config");
-  const paneEstoque = document.getElementById("bl_pane_estoque");
+  const panePedidos = document.getElementById("bl_pane_pedidos");
+  const paneProdutos = document.getElementById("bl_pane_produtos");
   const paneCategorias = document.getElementById("bl_pane_categorias");
   const paneLogs = document.getElementById("bl_pane_logs");
+  const chkProdutosExportar = document.getElementById("bl_produtos_exportar");
+  const chkEstoqueExportar = document.getElementById("bl_estoque_exportar");
+  const chkPedidosExportar = document.getElementById("bl_pedidos_exportar");
+  const chkPedidosExportarAuto = document.getElementById("bl_pedidos_exportar_auto");
+  const inputPedidosDias = document.getElementById("bl_pedidos_dias");
+  const ultimaSyncProdutosVd = document.getElementById("bl_ultima_sync_produtos_vd");
+  const ultimaSyncPedidosFn = document.getElementById("bl_ultima_sync_pedidos_fn");
+  const pedidosExportWrap = document.getElementById("bl_pedidos_export_wrap");
   const alertDep = document.getElementById("bl_estoque_alert_dep");
   const webhookHint = document.getElementById("bl_webhook_hint");
   const syncRecebido = document.getElementById("bl_sync_recebido");
@@ -40,7 +54,7 @@
     bling_conta: null,
   };
 
-  let tabAtiva = "config";
+  let tabAtiva = BL_PAPEL === "pedidos" ? "pedidos" : "config";
   let catPainel = { segmentos: [], opcoes: [] };
   let catBulkBound = false;
 
@@ -81,16 +95,18 @@
   }
 
   function pickTab(tab) {
-    if (tab === "logs" && !EH_DEV) tab = "config";
+    if (tab === "logs" && !EH_DEV) tab = BL_PAPEL === "pedidos" ? "pedidos" : "config";
+    if (tab === "estoque") tab = "produtos";
     tabAtiva = tab;
     document.querySelectorAll(".Bl_SubTab").forEach((b) => {
       b.classList.toggle("is-active", b.dataset.blTab === tab);
     });
     definirVisivel(paneConfig, tab === "config");
-    definirVisivel(paneEstoque, tab === "estoque");
+    definirVisivel(panePedidos, tab === "pedidos");
+    definirVisivel(paneProdutos, tab === "produtos");
     definirVisivel(paneCategorias, tab === "categorias");
     definirVisivel(paneLogs, tab === "logs");
-    if (tab === "estoque") carregarDepositos().catch(() => {});
+    if (tab === "produtos" && BL_PAPEL !== "pedidos") carregarDepositos().catch(() => {});
     if (tab === "categorias") carregarCategorias().catch(() => {});
   }
 
@@ -151,6 +167,14 @@
         chkPedidosExportarStatus.checked =
           opcoes.pedidos_exportar_status !== undefined ? !!opcoes.pedidos_exportar_status : true;
       }
+      if (chkProdutosExportar) {
+        chkProdutosExportar.checked =
+          opcoes.produtos_exportar !== undefined ? !!opcoes.produtos_exportar : true;
+      }
+      if (chkEstoqueExportar) {
+        chkEstoqueExportar.checked =
+          opcoes.estoque_exportar !== undefined ? !!opcoes.estoque_exportar : true;
+      }
       if (inputDataPedido) {
         inputDataPedido.value = opcoes.pedidos_data_inicial || inputDataPedido.value || hojeIso();
       }
@@ -158,8 +182,27 @@
         const manual = chkPedidosImportar?.checked !== false;
         pedidosImportWrap.hidden = !estado.conectado || !manual;
       }
+      if (ultimaSyncProdutosVd) {
+        ultimaSyncProdutosVd.textContent = cfg.ultima_sync_produtos
+          ? `Última sync produtos: ${new Date(cfg.ultima_sync_produtos).toLocaleString("pt-BR")}`
+          : "";
+      }
       atualizarAnimacaoPedidos();
     } else {
+      const opcoes = cfg.opcoes || {};
+      const modoPed = cfg.pedidos_modo || "exportar";
+      if (chkPedidosExportar) {
+        chkPedidosExportar.checked =
+          opcoes.pedidos_exportar !== undefined
+            ? !!opcoes.pedidos_exportar
+            : modoPed === "exportar" || modoPed === "atualizar";
+      }
+      if (chkPedidosExportarAuto) {
+        chkPedidosExportarAuto.checked = !!opcoes.pedidos_exportar_auto;
+      }
+      if (pedidosExportWrap) {
+        pedidosExportWrap.hidden = !estado.conectado || chkPedidosExportar?.checked === false;
+      }
       const map = {
         bl_modo_imagem: cfg.modo_imagem,
         bl_fonte: cfg.fonte_principal,
@@ -172,8 +215,17 @@
       });
       if (ultimaSync) {
         ultimaSync.textContent = cfg.ultima_sync_produtos
-          ? `Última sync produtos: ${new Date(cfg.ultima_sync_produtos).toLocaleString("pt-BR")}`
+          ? `Última importação de produtos: ${new Date(cfg.ultima_sync_produtos).toLocaleString("pt-BR")}`
           : "";
+      }
+      if (ultimaSyncPedidosFn) {
+        if (cfg.ultima_sync_pedidos) {
+          ultimaSyncPedidosFn.hidden = false;
+          ultimaSyncPedidosFn.textContent = `Última exportação: ${new Date(cfg.ultima_sync_pedidos).toLocaleString("pt-BR")}`;
+        } else {
+          ultimaSyncPedidosFn.hidden = false;
+          ultimaSyncPedidosFn.textContent = "";
+        }
       }
     }
     if (ctxInput) ctxInput.value = estado.contexto_modulo || "";
@@ -1241,7 +1293,7 @@
         .join("") || '<li class="Bl_LogItem">Nenhum log ainda.</li>';
     }
     aplicarConfigTela();
-    if (on && tabAtiva === "estoque") carregarDepositos().catch(() => {});
+    if (on && tabAtiva === "produtos" && BL_PAPEL !== "pedidos") carregarDepositos().catch(() => {});
   }
 
   async function carregarStatus() {
@@ -1252,6 +1304,26 @@
   }
 
   async function salvarConfig() {
+    const ctx = BL_PAPEL === "pedidos" ? "vendedor" : "fornecedor";
+    const body = {
+      contexto: ctx,
+      fonte_principal: document.getElementById("bl_fonte")?.value,
+      modo_imagem: document.getElementById("bl_modo_imagem")?.value,
+      produtos_modo: document.getElementById("bl_produtos_modo")?.value,
+      estoque_modo: document.getElementById("bl_estoque_modo")?.value,
+    };
+    const r = await fetch("/api/integracoes/bling/config/salvar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const j = await r.json();
+    if (!j.success) throw new Error(j.message || "Erro ao salvar.");
+    await Swal.fire({ icon: "success", title: "Salvo", timer: 1400, showConfirmButton: false });
+    await carregarStatus();
+  }
+
+  async function salvarPedidos() {
     const ctx = BL_PAPEL === "pedidos" ? "vendedor" : "fornecedor";
     let body;
     if (BL_PAPEL === "pedidos") {
@@ -1271,12 +1343,15 @@
         },
       };
     } else {
+      const exportar = chkPedidosExportar?.checked !== false;
+      const auto = chkPedidosExportarAuto?.checked === true;
       body = {
         contexto: ctx,
-        fonte_principal: document.getElementById("bl_fonte")?.value,
-        modo_imagem: document.getElementById("bl_modo_imagem")?.value,
-        produtos_modo: document.getElementById("bl_produtos_modo")?.value,
-        estoque_modo: document.getElementById("bl_estoque_modo")?.value,
+        pedidos_modo: exportar ? "exportar" : "importar",
+        opcoes: {
+          pedidos_exportar: exportar,
+          pedidos_exportar_auto: auto,
+        },
       };
     }
     const r = await fetch("/api/integracoes/bling/config/salvar", {
@@ -1288,6 +1363,41 @@
     if (!j.success) throw new Error(j.message || "Erro ao salvar.");
     await Swal.fire({ icon: "success", title: "Salvo", timer: 1400, showConfirmButton: false });
     await carregarStatus();
+  }
+
+  async function salvarProdutosVendedor() {
+    const exportarProd = chkProdutosExportar?.checked !== false;
+    const exportarEst = chkEstoqueExportar?.checked !== false;
+    const body = {
+      contexto: "vendedor",
+      produtos_modo: exportarProd ? "exportar" : "importar",
+      estoque_modo: exportarEst ? "exportar" : "importar",
+      opcoes: {
+        produtos_exportar: exportarProd,
+        estoque_exportar: exportarEst,
+      },
+    };
+    const r = await fetch("/api/integracoes/bling/config/salvar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const j = await r.json();
+    if (!j.success) throw new Error(j.message || "Erro ao salvar.");
+    await Swal.fire({ icon: "success", title: "Salvo", timer: 1400, showConfirmButton: false });
+    await carregarStatus();
+  }
+
+  async function syncProdutos(contexto) {
+    const r = await fetch("/api/integracoes/bling/sync/produtos", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contexto }),
+    });
+    const j = await r.json();
+    if (!r.ok || !j.success) throw new Error(j.message || "Falha na sincronização.");
+    return j;
   }
 
   async function salvarEstoque() {
@@ -1316,9 +1426,13 @@
   chkReceber?.addEventListener("change", atualizarAnimacaoEstoque);
   chkBaixa?.addEventListener("change", atualizarAnimacaoEstoque);
   chkPedidosImportar?.addEventListener("change", aplicarConfigTela);
+  chkPedidosExportar?.addEventListener("change", aplicarConfigTela);
   chkPedidosImportarAuto?.addEventListener("change", () => {
     atualizarAnimacaoPedidos();
-    salvarConfig().catch(() => {});
+    salvarPedidos().catch(() => {});
+  });
+  chkPedidosExportarAuto?.addEventListener("change", () => {
+    salvarPedidos().catch(() => {});
   });
 
   if (inputDataPedido && !inputDataPedido.value) inputDataPedido.value = hojeIso();
@@ -1333,11 +1447,118 @@
     }
   });
 
+  btnSalvarPedidos?.addEventListener("click", async () => {
+    try {
+      await salvarPedidos();
+    } catch (e) {
+      Swal.fire({ icon: "error", title: "Erro", text: e.message, confirmButtonColor: "#021F81" });
+    }
+  });
+
+  btnSalvarProdutos?.addEventListener("click", async () => {
+    try {
+      await salvarProdutosVendedor();
+    } catch (e) {
+      Swal.fire({ icon: "error", title: "Erro", text: e.message, confirmButtonColor: "#021F81" });
+    }
+  });
+
   btnSalvarEstoque?.addEventListener("click", async () => {
     try {
       await salvarEstoque();
     } catch (e) {
       Swal.fire({ icon: "error", title: "Erro", text: e.message, confirmButtonColor: "#021F81" });
+    }
+  });
+
+  btnSyncProdutosVd?.addEventListener("click", async () => {
+    const ok = await Swal.fire({
+      title: "Sincronizar Meus produtos?",
+      text: "Produtos ativos com SKU serão criados ou atualizados no Bling, com estoque quando habilitado.",
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonText: "Sincronizar",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#021F81",
+    });
+    if (!ok.isConfirmed) return;
+    btnSyncProdutosVd.disabled = true;
+    try {
+      const j = await syncProdutos("vendedor");
+      await Swal.fire({
+        icon: "success",
+        title: "Sincronização concluída",
+        text: j.message || j.dados?.message || "Produtos enviados ao Bling.",
+        confirmButtonColor: "#021F81",
+      });
+      await carregarStatus();
+    } catch (e) {
+      Swal.fire({ icon: "error", title: "Erro", text: e.message, confirmButtonColor: "#021F81" });
+    } finally {
+      btnSyncProdutosVd.disabled = false;
+    }
+  });
+
+  btnSyncProdutosFn?.addEventListener("click", async () => {
+    const ok = await Swal.fire({
+      title: "Importar produtos do Bling?",
+      text: "Certifique-se de que as categorias estão mapeadas na aba Categorias.",
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonText: "Importar",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#021F81",
+    });
+    if (!ok.isConfirmed) return;
+    btnSyncProdutosFn.disabled = true;
+    try {
+      const j = await syncProdutos("fornecedor");
+      await Swal.fire({
+        icon: "success",
+        title: "Importação concluída",
+        text: j.message || "Produtos importados.",
+        confirmButtonColor: "#021F81",
+      });
+      await carregarStatus();
+    } catch (e) {
+      Swal.fire({ icon: "error", title: "Erro", text: e.message, confirmButtonColor: "#021F81" });
+    } finally {
+      btnSyncProdutosFn.disabled = false;
+    }
+  });
+
+  btnExportPedidos?.addEventListener("click", async () => {
+    const dias = Number(inputPedidosDias?.value || 30);
+    const ok = await Swal.fire({
+      title: "Exportar pedidos ao Bling?",
+      text: `Serão exportados pedidos pagos dos últimos ${dias} dia(s) que ainda não foram enviados.`,
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonText: "Exportar",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#021F81",
+    });
+    if (!ok.isConfirmed) return;
+    btnExportPedidos.disabled = true;
+    try {
+      const r = await fetch("/api/integracoes/bling/sync/pedidos", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contexto: "fornecedor", dias }),
+      });
+      const j = await r.json();
+      await Swal.fire({
+        icon: j.success ? "success" : "error",
+        title: j.success ? "Exportação concluída" : "Falha",
+        text: j.message || "Erro desconhecido",
+        confirmButtonColor: "#021F81",
+      });
+      if (j.success) await carregarStatus();
+    } catch (e) {
+      Swal.fire({ icon: "error", title: "Erro", text: e.message, confirmButtonColor: "#021F81" });
+    } finally {
+      btnExportPedidos.disabled = false;
     }
   });
 
@@ -1404,7 +1625,8 @@
     window.history.replaceState({}, "", location.pathname);
   }
   const aba = params.get("aba");
-  if (aba === "estoque" || aba === "logs" || aba === "config" || aba === "categorias") pickTab(aba);
+  const abaMap = { estoque: "produtos", config: "config", produtos: "produtos", pedidos: "pedidos", categorias: "categorias", logs: "logs" };
+  if (abaMap[aba]) pickTab(abaMap[aba]);
 
   carregarStatus().catch((e) => {
     Swal.fire({ icon: "error", title: "Erro", text: e.message, confirmButtonColor: "#021F81" });

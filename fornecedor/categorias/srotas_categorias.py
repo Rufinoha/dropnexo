@@ -9,8 +9,8 @@ from api.bling.sync_categorias import (
     listar_categorias_bling_sem_segmento,
 )
 from global_utils import Var_ConectarBanco, exigir_modulo, exigir_permissao, login_obrigatorio
-from srotas_negocio import MAX_NIVEL_CATEGORIA, flatten_arvore_com_caminho, montar_arvore_categorias
-from srotas_plataforma import MODULO_FORNECEDOR
+from core.categorias import MAX_NIVEL_CATEGORIA, flatten_arvore_com_caminho, montar_arvore_categorias
+from sistema.plataforma.sessao import MODULO_FORNECEDOR
 
 
 _MOD = Path(__file__).resolve().parent
