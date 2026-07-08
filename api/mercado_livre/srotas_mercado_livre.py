@@ -172,7 +172,10 @@ def config_salvar():
         salvar_config_ml(
             cur,
             int(id_tenant),
-            pedidos_importar_auto=bool(body.get("pedidos_importar_auto")),
+            pedidos_importar_auto=body.get("pedidos_importar_auto") if "pedidos_importar_auto" in body else None,
+            produtos_exportar_auto=body.get("produtos_exportar_auto") if "produtos_exportar_auto" in body else None,
+            produtos_modo=body.get("produtos_modo") if "produtos_modo" in body else None,
+            estoque_sync_ativo=body.get("estoque_sync_ativo") if "estoque_sync_ativo" in body else None,
         )
         conn.commit()
         return jsonify(success=True, message="Preferências salvas.")
@@ -196,6 +199,52 @@ def sync_pedidos():
         from api.mercado_livre.mercado_livre import importar_pedidos_mercado_livre
 
         resultado = importar_pedidos_mercado_livre(cur, int(id_tenant))
+        conn.commit()
+        return jsonify(success=True, **resultado)
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)[:300]), 400
+    finally:
+        conn.close()
+
+
+@ml_bp.post("/api/integracoes/mercado-livre/sync/produtos")
+@login_obrigatorio()
+def sync_produtos():
+    if not _pode_integracoes():
+        return jsonify(success=False, message="Sem permissão."), 403
+    if garantir_modulo_sessao() != "vendedor" and not session.get("eh_desenvolvedor"):
+        return jsonify(success=False, message="Apenas vendedores."), 403
+    id_tenant = session.get("id_tenant")
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        from api.mercado_livre.mercado_livre import exportar_produtos_ml
+
+        resultado = exportar_produtos_ml(cur, int(id_tenant))
+        conn.commit()
+        return jsonify(success=True, **resultado)
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)[:300]), 400
+    finally:
+        conn.close()
+
+
+@ml_bp.post("/api/integracoes/mercado-livre/sync/estoque")
+@login_obrigatorio()
+def sync_estoque():
+    if not _pode_integracoes():
+        return jsonify(success=False, message="Sem permissão."), 403
+    if garantir_modulo_sessao() != "vendedor" and not session.get("eh_desenvolvedor"):
+        return jsonify(success=False, message="Apenas vendedores."), 403
+    id_tenant = session.get("id_tenant")
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        from api.mercado_livre.mercado_livre import sincronizar_estoque_ml
+
+        resultado = sincronizar_estoque_ml(cur, int(id_tenant))
         conn.commit()
         return jsonify(success=True, **resultado)
     except Exception as e:

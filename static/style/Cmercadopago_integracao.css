@@ -224,3 +224,75 @@
 .Mp_ListaPassos li + li {
   margin-top: 0.35rem;
 }
+
+.Mp_ContextPanel {
+  padding-top: 0.85rem;
+}
+
+.Mp_SubTabs {
+  display: flex;
+  gap: 0.25rem;
+  margin: 0 -0.25rem 1.15rem;
+  padding: 0.25rem;
+  background: #f1f5f9;
+  border-radius: 10px;
+}
+
+.Mp_SubTab {
+  flex: 1;
+  border: none;
+  background: transparent;
+  padding: 0.55rem 0.75rem;
+  border-radius: 8px;
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+  transition: background 180ms ease, color 180ms ease, box-shadow 180ms ease;
+}
+
+.Mp_SubTab:hover {
+  color: #334155;
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.Mp_SubTab.is-active {
+  color: #021f81;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(2, 31, 129, 0.1);
+}
+
+.Mp_RadioGroup {
+  border: none;
+  margin: 0.85rem 0 0;
+  padding: 0;
+}
+
+.Mp_RadioLegend {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #64748b;
+  margin-bottom: 0.5rem;
+}
+
+.Mp_RadioRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  padding: 0.55rem 0;
+  font-size: 0.85rem;
+  color: #334155;
+  cursor: pointer;
+}
+
+.Mp_RadioRow input {
+  margin-top: 0.2rem;
+  flex-shrink: 0;
+}
+
+.Mp_Hint--note {
+  margin-top: 0.85rem;
+  font-size: 0.8rem;
+}

@@ -340,6 +340,29 @@ def atualizar_conta_info(cur, id_tenant: int, access_token: str | None = None) -
     return conta
 
 
+_ML_COLS_EXT_OK: bool | None = None
+
+
+def _tem_colunas_config_ext(cur) -> bool:
+    """Colunas do SQL 072 (produtos/estoque). Só cacheia True."""
+    global _ML_COLS_EXT_OK
+    if _ML_COLS_EXT_OK is True:
+        return True
+    cur.execute(
+        """
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'tbl_integracao_mercado_livre'
+          AND column_name = 'produtos_exportar_auto'
+        LIMIT 1
+        """
+    )
+    ok = cur.fetchone() is not None
+    if ok:
+        _ML_COLS_EXT_OK = True
+    return ok
+
+
 def carregar_config_ml(cur, id_tenant: int) -> dict[str, Any]:
     base = {
         "status": "desconectado",
@@ -348,6 +371,10 @@ def carregar_config_ml(cur, id_tenant: int) -> dict[str, Any]:
         "ml_site_id": None,
         "conta": {},
         "pedidos_importar_auto": False,
+        "produtos_exportar_auto": False,
+        "produtos_modo": "vincular_sku",
+        "estoque_sync_ativo": False,
+        "config_ext_disponivel": False,
         "ultima_sync_pedidos": None,
         "conectado_em": None,
         "ultimo_erro": None,
@@ -356,17 +383,29 @@ def carregar_config_ml(cur, id_tenant: int) -> dict[str, Any]:
     }
     if not _tem_tabela_ml(cur):
         return base
-    cur.execute(
-        """
-        SELECT status, ml_user_id, ml_site_id, ml_conta_info,
-               pedidos_importar_auto, ultima_sync_pedidos, conectado_em, ultimo_erro
-        FROM tbl_integracao_mercado_livre WHERE id_tenant = %s
-        """,
-        (id_tenant,),
-    )
+    ext = _tem_colunas_config_ext(cur)
+    if ext:
+        cur.execute(
+            """
+            SELECT status, ml_user_id, ml_site_id, ml_conta_info,
+                   pedidos_importar_auto, ultima_sync_pedidos, conectado_em, ultimo_erro,
+                   produtos_exportar_auto, produtos_modo, estoque_sync_ativo
+            FROM tbl_integracao_mercado_livre WHERE id_tenant = %s
+            """,
+            (id_tenant,),
+        )
+    else:
+        cur.execute(
+            """
+            SELECT status, ml_user_id, ml_site_id, ml_conta_info,
+                   pedidos_importar_auto, ultima_sync_pedidos, conectado_em, ultimo_erro
+            FROM tbl_integracao_mercado_livre WHERE id_tenant = %s
+            """,
+            (id_tenant,),
+        )
     row = cur.fetchone()
     if not row:
-        return base
+        return {**base, "config_ext_disponivel": ext}
     conta_raw = row[3]
     if isinstance(conta_raw, str):
         try:
@@ -378,7 +417,7 @@ def carregar_config_ml(cur, id_tenant: int) -> dict[str, Any]:
     else:
         conta = {}
     st = row[0] or "desconectado"
-    return {
+    out = {
         **base,
         "status": st,
         "conectado": st == "conectado",
@@ -389,7 +428,16 @@ def carregar_config_ml(cur, id_tenant: int) -> dict[str, Any]:
         "ultima_sync_pedidos": row[5].isoformat() if row[5] else None,
         "conectado_em": row[6].isoformat() if row[6] else None,
         "ultimo_erro": row[7],
+        "config_ext_disponivel": ext,
     }
+    if ext and len(row) > 8:
+        modo = (row[9] or "vincular_sku").strip()
+        if modo not in ("vincular_sku", "criar_anuncio"):
+            modo = "vincular_sku"
+        out["produtos_exportar_auto"] = bool(row[8])
+        out["produtos_modo"] = modo
+        out["estoque_sync_ativo"] = bool(row[10])
+    return out
 
 
 def salvar_config_ml(
@@ -397,20 +445,43 @@ def salvar_config_ml(
     id_tenant: int,
     *,
     pedidos_importar_auto: bool | None = None,
+    produtos_exportar_auto: bool | None = None,
+    produtos_modo: str | None = None,
+    estoque_sync_ativo: bool | None = None,
 ) -> None:
     if not _tem_tabela_ml(cur):
         raise RuntimeError("Tabela tbl_integracao_mercado_livre não existe.")
-    if pedidos_importar_auto is None:
+    updates: dict[str, Any] = {}
+    if pedidos_importar_auto is not None:
+        updates["pedidos_importar_auto"] = bool(pedidos_importar_auto)
+    ext = _tem_colunas_config_ext(cur)
+    if ext:
+        if produtos_exportar_auto is not None:
+            updates["produtos_exportar_auto"] = bool(produtos_exportar_auto)
+        if produtos_modo is not None:
+            modo = (produtos_modo or "vincular_sku").strip()
+            if modo not in ("vincular_sku", "criar_anuncio"):
+                modo = "vincular_sku"
+            updates["produtos_modo"] = modo
+        if estoque_sync_ativo is not None:
+            updates["estoque_sync_ativo"] = bool(estoque_sync_ativo)
+    elif any(v is not None for v in (produtos_exportar_auto, produtos_modo, estoque_sync_ativo)):
+        raise RuntimeError(
+            "Preferências de produtos/estoque indisponíveis. Aplique o SQL 072 no banco."
+        )
+    if not updates:
         return
+    cols = ["id_tenant", *updates.keys(), "atualizado_em"]
+    placeholders = ", ".join(["%s"] * len(cols))
+    set_clause = ", ".join(f"{c} = EXCLUDED.{c}" for c in updates) + ", atualizado_em = EXCLUDED.atualizado_em"
+    vals = [id_tenant, *updates.values(), agora_utc()]
     cur.execute(
-        """
-        INSERT INTO tbl_integracao_mercado_livre (id_tenant, pedidos_importar_auto, atualizado_em)
-        VALUES (%s, %s, %s)
-        ON CONFLICT (id_tenant) DO UPDATE SET
-            pedidos_importar_auto = EXCLUDED.pedidos_importar_auto,
-            atualizado_em = EXCLUDED.atualizado_em
+        f"""
+        INSERT INTO tbl_integracao_mercado_livre ({", ".join(cols)})
+        VALUES ({placeholders})
+        ON CONFLICT (id_tenant) DO UPDATE SET {set_clause}
         """,
-        (id_tenant, bool(pedidos_importar_auto), agora_utc()),
+        vals,
     )
 
 # ── sync_pedidos ──────────────────────────────────
@@ -450,4 +521,52 @@ def importar_pedidos_mercado_livre(cur, id_tenant: int, *, dias: int = 7) -> dic
         "ids_amostra": ids[:10],
         "importados": 0,
         "ignorados": len(ids),
+    }
+
+
+def exportar_produtos_ml(cur, id_tenant: int) -> dict:
+    """Fase 2: publicar/vincular Meus produtos no ML. Por ora valida config e conta."""
+    cfg = carregar_config_ml(cur, id_tenant)
+    if not cfg.get("conectado"):
+        raise RuntimeError("Mercado Livre não conectado.")
+    if not cfg.get("produtos_exportar_auto"):
+        raise RuntimeError("Ative a exportação de produtos antes de sincronizar.")
+    cur.execute(
+        """
+        SELECT COUNT(*)::int
+        FROM tbl_produto_vendedor pv
+        JOIN tbl_produto p ON p.id = pv.id_produto
+        WHERE pv.id_tenant_vendedor = %s AND pv.ativo = TRUE AND COALESCE(p.sku, '') <> ''
+        """,
+        (id_tenant,),
+    )
+    row = cur.fetchone()
+    com_sku = int(row[0] or 0) if row else 0
+    modo = cfg.get("produtos_modo") or "vincular_sku"
+    acao = "vincular anúncios pelo SKU" if modo == "vincular_sku" else "criar novos anúncios"
+    return {
+        "message": (
+            f"{com_sku} produto(s) com SKU na vitrine prontos para {acao}. "
+            "A publicação automática no Mercado Livre será habilitada na próxima etapa."
+        ),
+        "total_produtos": com_sku,
+        "modo": modo,
+        "exportados": 0,
+        "vinculados": 0,
+    }
+
+
+def sincronizar_estoque_ml(cur, id_tenant: int) -> dict:
+    """Fase 2: enviar estoque DropNexo → anúncios ML."""
+    cfg = carregar_config_ml(cur, id_tenant)
+    if not cfg.get("conectado"):
+        raise RuntimeError("Mercado Livre não conectado.")
+    if not cfg.get("estoque_sync_ativo"):
+        raise RuntimeError("Ative a sincronização de estoque antes de enviar.")
+    return {
+        "message": (
+            "Sincronização de estoque com o Mercado Livre será habilitada na próxima etapa. "
+            "As preferências já foram salvas."
+        ),
+        "atualizados": 0,
     }

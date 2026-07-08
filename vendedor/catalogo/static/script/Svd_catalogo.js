@@ -158,7 +158,7 @@
     if (!cats.length) {
       const msg = document.createElement("p");
       msg.className = "VdCat_CatEmpty";
-      msg.textContent = "Nenhuma categoria com produtos neste filtro.";
+      msg.textContent = "Nenhuma categoria cadastrada pelos fornecedores.";
       el.catNav.appendChild(msg);
       return;
     }

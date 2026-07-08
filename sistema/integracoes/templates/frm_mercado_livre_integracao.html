@@ -3,7 +3,7 @@
 {% block title %}Mercado Livre — Integrações — {{ MARCA_NOME }}{% endblock %}
 {% block topbar_title %}Mercado Livre{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('static', filename='style/Cmercadopago_integracao.css') }}?v=4" />
+<link rel="stylesheet" href="{{ url_for('static', filename='style/Cmercadopago_integracao.css') }}?v=5" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal Mp_Wrap">
@@ -18,7 +18,7 @@
         </div>
         <div>
           <h2>Mercado Livre</h2>
-          <p class="cl-page-desc">Conecte sua conta de vendedor para importar pedidos pagos do Mercado Livre.</p>
+          <p class="cl-page-desc">Pedidos, produtos e estoque da sua conta de vendedor no Mercado Livre.</p>
         </div>
       </div>
     </div>
@@ -40,42 +40,101 @@
     </div>
   </section>
 
-  <section class="Mp_Card" id="ml_painel_config" {% if not ml_conectado %}hidden{% endif %}>
+  <section class="Mp_Card Mp_ContextPanel" id="ml_painel_config" {% if not ml_conectado %}hidden{% endif %}>
     <p id="ml_conta_info" class="Mp_ContaResumo" hidden></p>
 
-    <h3>Importação de pedidos</h3>
-    <p class="Mp_Hint">Busca pedidos <strong>pagos</strong> na sua conta ML. A criação automática de pedidos no DropNexo será habilitada em breve.</p>
-    <div class="Mp_Switches">
-      <div class="Mp_SwitchRow">
-        <div class="Mp_SwitchText">
-          <strong>Importar automaticamente</strong>
-          <span>Quando disponível, novos pedidos pagos entram no DropNexo</span>
+    <nav class="Mp_SubTabs" id="ml_subtabs" aria-label="Seções Mercado Livre">
+      <button type="button" class="Mp_SubTab is-active" data-ml-tab="pedidos">Pedidos</button>
+      <button type="button" class="Mp_SubTab" data-ml-tab="produtos">Produtos</button>
+      <button type="button" class="Mp_SubTab" data-ml-tab="estoque">Estoque</button>
+    </nav>
+
+    <div id="ml_pane_pedidos">
+      <h3>Importação de pedidos</h3>
+      <p class="Mp_Hint">Busca pedidos <strong>pagos</strong> na sua conta ML. A criação automática de pedidos no DropNexo será habilitada em breve.</p>
+      <div class="Mp_Switches">
+        <div class="Mp_SwitchRow">
+          <div class="Mp_SwitchText">
+            <strong>Importar automaticamente</strong>
+            <span>Quando disponível, novos pedidos pagos entram no DropNexo</span>
+          </div>
+          <label class="Cl_Switch Mp_Switch" title="Importação automática">
+            <input type="checkbox" id="ml_pedidos_auto" data-ml-config="pedidos_importar_auto" />
+            <span class="Cl_SwitchSlider"></span>
+          </label>
         </div>
-        <label class="Cl_Switch Mp_Switch" title="Importação automática">
-          <input type="checkbox" id="ml_pedidos_auto" />
-          <span class="Cl_SwitchSlider"></span>
+      </div>
+      <div class="Mp_Actions" style="margin-top:0.85rem">
+        <button type="button" class="Cl_botaoprimario" id="ml_btn_sync">Buscar pedidos recentes</button>
+        <a href="{{ url_for('vd_pedidos.pedidos') }}" class="Cl_botaoFiltro">Ir para pedidos</a>
+      </div>
+      <ol class="Mp_Hint Mp_ListaPassos" style="margin-top:1rem">
+        <li>Pedidos importados seguirão o mesmo fluxo do Bling (aguardando pagamento ao fornecedor).</li>
+        <li>Frete pode ser cotado com Melhor Envio após a importação.</li>
+      </ol>
+    </div>
+
+    <div id="ml_pane_produtos" hidden>
+      <h3>Produtos e anúncios</h3>
+      <p class="Mp_Hint">Exporte ou vincule produtos de <strong>Meus produtos</strong> aos anúncios do Mercado Livre. O SKU no DropNexo deve coincidir com o do anúncio para vincular.</p>
+      <div class="Mp_Switches">
+        <div class="Mp_SwitchRow">
+          <div class="Mp_SwitchText">
+            <strong>Ativar exportação / vínculo</strong>
+            <span>Permite sincronizar o catálogo com o ML</span>
+          </div>
+          <label class="Cl_Switch Mp_Switch">
+            <input type="checkbox" id="ml_produtos_auto" data-ml-config="produtos_exportar_auto" />
+            <span class="Cl_SwitchSlider"></span>
+          </label>
+        </div>
+      </div>
+      <fieldset class="Mp_RadioGroup">
+        <legend class="Mp_RadioLegend">Modo</legend>
+        <label class="Mp_RadioRow">
+          <input type="radio" name="ml_produtos_modo" value="vincular_sku" checked data-ml-config="produtos_modo" />
+          <span><strong>Vincular por SKU</strong> — casar Meus produtos com anúncios já publicados no ML</span>
         </label>
+        <label class="Mp_RadioRow">
+          <input type="radio" name="ml_produtos_modo" value="criar_anuncio" data-ml-config="produtos_modo" />
+          <span><strong>Criar novos anúncios</strong> — publicar produtos que ainda não existem no ML (em breve)</span>
+        </label>
+      </fieldset>
+      <div class="Mp_Actions" style="margin-top:0.85rem">
+        <button type="button" class="Cl_botaoprimario" id="ml_btn_sync_produtos">Sincronizar produtos</button>
+        <a href="{{ url_for('vd_meus_produtos.pagina') }}" class="Cl_botaoFiltro">Meus produtos</a>
       </div>
     </div>
-    <div class="Mp_Actions" style="margin-top:0.85rem">
-      <button type="button" class="Cl_botaoprimario" id="ml_btn_sync">Buscar pedidos recentes</button>
+
+    <div id="ml_pane_estoque" hidden>
+      <h3>Estoque</h3>
+      <p class="Mp_Hint">Envia o estoque da vitrine DropNexo para os anúncios vinculados no Mercado Livre.</p>
+      <div class="Mp_Switches">
+        <div class="Mp_SwitchRow">
+          <div class="Mp_SwitchText">
+            <strong>Sincronizar estoque automaticamente</strong>
+            <span>Quando disponível, alterações de estoque em Meus produtos atualizam o ML</span>
+          </div>
+          <label class="Cl_Switch Mp_Switch">
+            <input type="checkbox" id="ml_estoque_auto" data-ml-config="estoque_sync_ativo" />
+            <span class="Cl_SwitchSlider"></span>
+          </label>
+        </div>
+      </div>
+      <div class="Mp_Actions" style="margin-top:0.85rem">
+        <button type="button" class="Cl_botaoprimario" id="ml_btn_sync_estoque">Enviar estoque agora</button>
+      </div>
+      <p class="Mp_Hint Mp_Hint--note">Recomendado: vincule os produtos na aba <strong>Produtos</strong> antes de ativar o estoque.</p>
     </div>
+
     <p id="ml_msg" class="Mp_Msg" hidden></p>
 
-    <h3 style="margin-top:1.25rem">Próximos passos</h3>
-    <ol class="Mp_Hint Mp_ListaPassos">
-      <li>Produtos do ML devem estar em <strong>Meus produtos</strong> (SKU igual ao anúncio).</li>
-      <li>Pedidos importados seguirão o mesmo fluxo do Bling (aguardando pagamento ao fornecedor).</li>
-      <li>Frete pode ser cotado com Melhor Envio após a importação.</li>
-    </ol>
-
     <div class="Mp_Actions Mp_Actions--foot">
-      <a href="{{ url_for('vd_pedidos.pedidos') }}" class="Cl_botaoFiltro">Ir para pedidos</a>
       <button type="button" class="Cl_BtnCancelar" id="ml_btn_desconectar">Desconectar</button>
     </div>
   </section>
 </div>
 {% endblock %}
 {% block page_js %}
-<script src="{{ url_for('static', filename='script/Smercado_livre_integracao.js') }}?v=2"></script>
+<script src="{{ url_for('static', filename='script/Smercado_livre_integracao.js') }}?v=3"></script>
 {% endblock %}

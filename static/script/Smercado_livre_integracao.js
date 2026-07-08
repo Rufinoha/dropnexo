@@ -1,4 +1,10 @@
 (function () {
+  const PANES = {
+    pedidos: document.getElementById("ml_pane_pedidos"),
+    produtos: document.getElementById("ml_pane_produtos"),
+    estoque: document.getElementById("ml_pane_estoque"),
+  };
+
   const el = {
     badge: document.getElementById("ml_status_badge"),
     alertSrv: document.getElementById("ml_alert_servidor"),
@@ -8,11 +14,32 @@
     btnDesconectar: document.getElementById("ml_btn_desconectar"),
     btnConectar: document.getElementById("ml_btn_conectar"),
     btnSync: document.getElementById("ml_btn_sync"),
+    btnSyncProdutos: document.getElementById("ml_btn_sync_produtos"),
+    btnSyncEstoque: document.getElementById("ml_btn_sync_estoque"),
     pedidosAuto: document.getElementById("ml_pedidos_auto"),
+    produtosAuto: document.getElementById("ml_produtos_auto"),
+    estoqueAuto: document.getElementById("ml_estoque_auto"),
     msg: document.getElementById("ml_msg"),
+    subtabs: document.getElementById("ml_subtabs"),
   };
 
   let salvando = false;
+  let cfgAtual = {};
+
+  function ativarAba(tab) {
+    const id = tab in PANES ? tab : "pedidos";
+    document.querySelectorAll(".Mp_SubTab").forEach((b) => {
+      b.classList.toggle("is-active", b.dataset.mlTab === id);
+    });
+    Object.entries(PANES).forEach(([k, pane]) => {
+      if (pane) pane.hidden = k !== id;
+    });
+    try {
+      localStorage.setItem("ml_integracao_aba", id);
+    } catch {
+      /* ignore */
+    }
+  }
 
   function setConectado(on) {
     if (el.badge) {
@@ -58,19 +85,41 @@
     }
   }
 
-  async function salvarConfig() {
-    if (salvando || !el.pedidosAuto) return;
+  function aplicarConfig(cfg) {
+    cfgAtual = cfg || {};
+    if (el.pedidosAuto) el.pedidosAuto.checked = !!cfg.pedidos_importar_auto;
+    if (el.produtosAuto) el.produtosAuto.checked = !!cfg.produtos_exportar_auto;
+    if (el.estoqueAuto) el.estoqueAuto.checked = !!cfg.estoque_sync_ativo;
+    const modo = cfg.produtos_modo || "vincular_sku";
+    document.querySelectorAll('input[name="ml_produtos_modo"]').forEach((r) => {
+      r.checked = r.value === modo;
+    });
+  }
+
+  function payloadConfig(parcial) {
+    const body = { ...parcial };
+    if (el.pedidosAuto) body.pedidos_importar_auto = el.pedidosAuto.checked;
+    if (el.produtosAuto) body.produtos_exportar_auto = el.produtosAuto.checked;
+    if (el.estoqueAuto) body.estoque_sync_ativo = el.estoqueAuto.checked;
+    const modo = document.querySelector('input[name="ml_produtos_modo"]:checked');
+    if (modo) body.produtos_modo = modo.value;
+    return body;
+  }
+
+  async function salvarConfig(parcial) {
+    if (salvando) return;
     salvando = true;
     try {
       const r = await fetch("/api/integracoes/mercado-livre/config/salvar", {
         method: "POST",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pedidos_importar_auto: el.pedidosAuto.checked }),
+        body: JSON.stringify(payloadConfig(parcial || {})),
       });
       const j = await r.json();
       if (!j.success) throw new Error(j.message || "Falha ao salvar.");
-      mostrarMsg(j.message || "Salvo.", false);
+      mostrarMsg(j.message || "Preferências salvas.", false);
+      Object.assign(cfgAtual, payloadConfig({}));
     } catch (e) {
       mostrarMsg(e.message, true);
     } finally {
@@ -86,14 +135,25 @@
       const cfg = j.config || {};
       setServidorConfigurado(!!cfg.configurado_servidor);
       setConectado(!!cfg.conectado);
-      if (el.pedidosAuto) el.pedidosAuto.checked = !!cfg.pedidos_importar_auto;
+      aplicarConfig(cfg);
       renderConta(cfg);
     } catch {
       /* silencioso */
     }
   }
 
-  el.pedidosAuto?.addEventListener("change", () => salvarConfig());
+  el.subtabs?.addEventListener("click", (ev) => {
+    const btn = ev.target.closest(".Mp_SubTab");
+    if (!btn?.dataset.mlTab) return;
+    ativarAba(btn.dataset.mlTab);
+  });
+
+  [el.pedidosAuto, el.produtosAuto, el.estoqueAuto].forEach((inp) => {
+    inp?.addEventListener("change", () => salvarConfig());
+  });
+  document.querySelectorAll('input[name="ml_produtos_modo"]').forEach((r) => {
+    r.addEventListener("change", () => salvarConfig());
+  });
 
   el.btnDesconectar?.addEventListener("click", async () => {
     if (!confirm("Desconectar Mercado Livre deste vendedor?")) return;
@@ -111,28 +171,54 @@
     }
   });
 
-  el.btnSync?.addEventListener("click", async () => {
-    if (!el.btnSync) return;
-    el.btnSync.disabled = true;
-    mostrarMsg("Buscando pedidos no Mercado Livre…", false);
+  async function postSync(url, btn, loading) {
+    if (!btn) return;
+    btn.disabled = true;
+    mostrarMsg(loading, false);
     try {
-      const r = await fetch("/api/integracoes/mercado-livre/sync/pedidos", {
+      const r = await fetch(url, {
         method: "POST",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({}),
       });
       const j = await r.json();
-      if (!j.success) throw new Error(j.message || "Falha na busca.");
+      if (!j.success) throw new Error(j.message || "Falha.");
       mostrarMsg(j.message || "Concluído.", false);
     } catch (e) {
       mostrarMsg(e.message, true);
     } finally {
-      el.btnSync.disabled = false;
+      btn.disabled = false;
     }
-  });
+  }
+
+  el.btnSync?.addEventListener("click", () =>
+    postSync("/api/integracoes/mercado-livre/sync/pedidos", el.btnSync, "Buscando pedidos no Mercado Livre…")
+  );
+  el.btnSyncProdutos?.addEventListener("click", () =>
+    postSync(
+      "/api/integracoes/mercado-livre/sync/produtos",
+      el.btnSyncProdutos,
+      "Preparando sincronização de produtos…"
+    )
+  );
+  el.btnSyncEstoque?.addEventListener("click", () =>
+    postSync(
+      "/api/integracoes/mercado-livre/sync/estoque",
+      el.btnSyncEstoque,
+      "Enviando estoque ao Mercado Livre…"
+    )
+  );
 
   const params = new URLSearchParams(location.search);
+  let aba = "pedidos";
+  try {
+    aba = localStorage.getItem("ml_integracao_aba") || "pedidos";
+  } catch {
+    /* ignore */
+  }
+  ativarAba(aba);
+
   if (params.get("conectado") === "1") {
     window.history.replaceState({}, "", location.pathname);
     if (window.Swal) {
@@ -143,8 +229,6 @@
         confirmButtonColor: "#021F81",
       });
     }
-    carregarStatus();
-  } else {
-    carregarStatus();
   }
+  carregarStatus();
 })();
