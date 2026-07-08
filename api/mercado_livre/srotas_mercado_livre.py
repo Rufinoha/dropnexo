@@ -179,6 +179,9 @@ def config_salvar():
         )
         conn.commit()
         return jsonify(success=True, message="Preferências salvas.")
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)[:300]), 400
     finally:
         conn.close()
 

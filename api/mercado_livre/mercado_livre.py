@@ -363,6 +363,36 @@ def _tem_colunas_config_ext(cur) -> bool:
     return ok
 
 
+def _garantir_colunas_config_ext(cur) -> bool:
+    """Cria colunas do SQL 072 se ainda não existirem (deploy sem migração manual)."""
+    if _tem_colunas_config_ext(cur):
+        return True
+    global _ML_COLS_EXT_OK
+    try:
+        cur.execute(
+            """
+            ALTER TABLE tbl_integracao_mercado_livre
+                ADD COLUMN IF NOT EXISTS produtos_exportar_auto BOOLEAN NOT NULL DEFAULT FALSE
+            """
+        )
+        cur.execute(
+            """
+            ALTER TABLE tbl_integracao_mercado_livre
+                ADD COLUMN IF NOT EXISTS produtos_modo VARCHAR(24) NOT NULL DEFAULT 'vincular_sku'
+            """
+        )
+        cur.execute(
+            """
+            ALTER TABLE tbl_integracao_mercado_livre
+                ADD COLUMN IF NOT EXISTS estoque_sync_ativo BOOLEAN NOT NULL DEFAULT FALSE
+            """
+        )
+        _ML_COLS_EXT_OK = True
+        return True
+    except Exception:
+        return False
+
+
 def carregar_config_ml(cur, id_tenant: int) -> dict[str, Any]:
     base = {
         "status": "desconectado",
@@ -383,7 +413,7 @@ def carregar_config_ml(cur, id_tenant: int) -> dict[str, Any]:
     }
     if not _tem_tabela_ml(cur):
         return base
-    ext = _tem_colunas_config_ext(cur)
+    ext = _garantir_colunas_config_ext(cur)
     if ext:
         cur.execute(
             """
@@ -454,6 +484,11 @@ def salvar_config_ml(
     updates: dict[str, Any] = {}
     if pedidos_importar_auto is not None:
         updates["pedidos_importar_auto"] = bool(pedidos_importar_auto)
+    precisa_ext = any(v is not None for v in (produtos_exportar_auto, produtos_modo, estoque_sync_ativo))
+    if precisa_ext and not _garantir_colunas_config_ext(cur):
+        raise RuntimeError(
+            "Preferências de produtos/estoque indisponíveis. Aplique o SQL 072 no banco."
+        )
     ext = _tem_colunas_config_ext(cur)
     if ext:
         if produtos_exportar_auto is not None:
@@ -465,24 +500,27 @@ def salvar_config_ml(
             updates["produtos_modo"] = modo
         if estoque_sync_ativo is not None:
             updates["estoque_sync_ativo"] = bool(estoque_sync_ativo)
-    elif any(v is not None for v in (produtos_exportar_auto, produtos_modo, estoque_sync_ativo)):
-        raise RuntimeError(
-            "Preferências de produtos/estoque indisponíveis. Aplique o SQL 072 no banco."
-        )
     if not updates:
         return
-    cols = ["id_tenant", *updates.keys(), "atualizado_em"]
-    placeholders = ", ".join(["%s"] * len(cols))
-    set_clause = ", ".join(f"{c} = EXCLUDED.{c}" for c in updates) + ", atualizado_em = EXCLUDED.atualizado_em"
-    vals = [id_tenant, *updates.values(), agora_utc()]
+    set_parts = [f"{c} = %s" for c in updates]
+    set_parts.append("atualizado_em = %s")
+    vals = [*updates.values(), agora_utc(), id_tenant]
     cur.execute(
-        f"""
-        INSERT INTO tbl_integracao_mercado_livre ({", ".join(cols)})
-        VALUES ({placeholders})
-        ON CONFLICT (id_tenant) DO UPDATE SET {set_clause}
-        """,
+        f"UPDATE tbl_integracao_mercado_livre SET {', '.join(set_parts)} WHERE id_tenant = %s",
         vals,
     )
+    if cur.rowcount == 0:
+        cols = ["id_tenant", *updates.keys(), "atualizado_em"]
+        placeholders = ", ".join(["%s"] * len(cols))
+        set_clause = ", ".join(f"{c} = EXCLUDED.{c}" for c in updates) + ", atualizado_em = EXCLUDED.atualizado_em"
+        cur.execute(
+            f"""
+            INSERT INTO tbl_integracao_mercado_livre ({", ".join(cols)})
+            VALUES ({placeholders})
+            ON CONFLICT (id_tenant) DO UPDATE SET {set_clause}
+            """,
+            [id_tenant, *updates.values(), agora_utc()],
+        )
 
 # ── sync_pedidos ──────────────────────────────────
 

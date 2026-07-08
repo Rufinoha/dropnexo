@@ -116,8 +116,13 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payloadConfig(parcial || {})),
       });
-      const j = await r.json();
-      if (!j.success) throw new Error(j.message || "Falha ao salvar.");
+      let j = {};
+      try {
+        j = await r.json();
+      } catch {
+        throw new Error(r.status >= 500 ? "Erro no servidor ao salvar." : "Resposta inválida do servidor.");
+      }
+      if (!r.ok || !j.success) throw new Error(j.message || "Falha ao salvar.");
       mostrarMsg(j.message || "Preferências salvas.", false);
       Object.assign(cfgAtual, payloadConfig({}));
     } catch (e) {
