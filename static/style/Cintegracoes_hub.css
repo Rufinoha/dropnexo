@@ -158,15 +158,15 @@
 .FnInt_CardWrap {
   position: relative;
   display: flex;
-  min-height: 168px;
-  height: 100%;
+  height: 96px;
+  max-height: 96px;
 }
 
 /* Selo "Em breve" — pill legível no canto */
 .FnInt_SoonTag {
   position: absolute;
-  top: 0.55rem;
-  right: 0.55rem;
+  top: 0.45rem;
+  right: 0.45rem;
   z-index: 3;
   display: inline-flex;
   align-items: center;
@@ -220,6 +220,10 @@
 
 .FnInt_CardWrap.is-soon .FnInt_CardDesc {
   color: #94a3b8;
+}
+
+.FnInt_CardWrap.is-soon .FnInt_CardBody {
+  padding-right: 4.25rem;
 }
 
 .FnInt_CardWrap.is-soon .FnInt_Card:hover {
@@ -541,23 +545,23 @@ body.FnInt-modal-open {
 
 .FnInt_Card {
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 0.55rem;
-  padding: 1.05rem 0.75rem 0.9rem;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 0.7rem;
+  padding: 0.8rem 0.85rem;
   background: #ffffff;
   border: 1px solid #e5e7eb;
-  border-radius: 14px;
+  border-radius: 12px;
   cursor: pointer;
-  text-align: center;
+  text-align: left;
   font: inherit;
   color: inherit;
   transition: border-color 0.15s, box-shadow 0.15s, transform 0.12s;
-  min-height: 168px;
-  height: 100%;
+  height: 96px;
+  max-height: 96px;
   width: 100%;
   box-shadow: 0 2px 6px rgba(15, 23, 42, 0.04);
+  overflow: hidden;
 }
 
 .FnInt_Card:hover {
@@ -572,10 +576,10 @@ body.FnInt-modal-open {
 }
 
 .FnInt_CardIcon {
-  width: 52px;
-  height: 52px;
+  width: 44px;
+  height: 44px;
   flex-shrink: 0;
-  border-radius: 12px;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -583,8 +587,7 @@ body.FnInt-modal-open {
   position: relative;
   border: 1px solid #e8ecf2;
   background: #fff;
-  margin-top: 0.15rem;
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+  margin-top: 0.05rem;
 }
 
 .FnInt_CardIcon.is-fallback {
@@ -629,37 +632,37 @@ body.FnInt-modal-open {
   flex: 1;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  width: 100%;
+  justify-content: center;
+  gap: 0.2rem;
+  height: 100%;
 }
 
 .FnInt_CardNome {
-  margin: 0 0 0.2rem;
+  margin: 0;
   font-size: 0.88rem;
   font-weight: 700;
   color: #1e293b;
-  line-height: 1.25;
+  line-height: 1.2;
 }
 
 .FnInt_CardDesc {
   margin: 0;
   font-size: 0.74rem;
   color: #64748b;
-  line-height: 1.4;
+  line-height: 1.35;
   display: -webkit-box;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  text-align: center;
-  width: 100%;
+  text-align: left;
 }
 
 .FnInt_CardHead {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 0.35rem;
-  margin-bottom: 0.15rem;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.45rem;
+  margin: 0;
   width: 100%;
 }
 
