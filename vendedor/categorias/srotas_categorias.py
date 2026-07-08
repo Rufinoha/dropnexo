@@ -5,7 +5,7 @@ from pathlib import Path
 from flask import Blueprint, jsonify, render_template, request, session
 
 from global_utils import Var_ConectarBanco, exigir_modulo, exigir_permissao, login_obrigatorio
-from core.categorias import MAX_NIVEL_CATEGORIA, flatten_arvore_com_caminho, montar_arvore_categorias
+from core.dominio import MAX_NIVEL_CATEGORIA, flatten_arvore_com_caminho, montar_arvore_categorias
 from sistema.plataforma.sessao import MODULO_VENDEDOR
 
 _MOD = Path(__file__).resolve().parent

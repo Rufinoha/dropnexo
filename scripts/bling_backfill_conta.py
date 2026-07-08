@@ -21,7 +21,7 @@ from dotenv import load_dotenv
 load_dotenv(ROOT / ".env")
 
 from api.bling.cliente import bling_configurado
-from api.bling.conta_empresa import backfill_contas_conectadas
+from api.bling.config import backfill_contas_conectadas
 from global_utils import Var_ConectarBanco
 
 

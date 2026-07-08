@@ -5,7 +5,7 @@ import logging
 from pathlib import Path
 from flask import Blueprint, jsonify, redirect, request, session, url_for
 
-from api.mercadopago.cliente import (
+from api.mercadopago.mercadopago import (
     atualizar_conta_info,
     carregar_config_mp,
     desconectar_mp,
@@ -196,7 +196,7 @@ def webhook():
         conn = Var_ConectarBanco()
         try:
             cur = conn.cursor()
-            from api.mercadopago.pedido import processar_webhook_pagamento
+            from api.mercadopago.mercadopago import processar_webhook_pagamento
 
             result = processar_webhook_pagamento(cur, payment_id)
             conn.commit()

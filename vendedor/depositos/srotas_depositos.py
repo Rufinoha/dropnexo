@@ -8,7 +8,7 @@ from flask import Blueprint, jsonify, render_template, request, session
 
 from global_utils import Var_ConectarBanco, agora_utc, exigir_modulo, exigir_permissao, login_obrigatorio
 from sistema.plataforma.sessao import MODULO_VENDEDOR
-from vendedor.meus_produtos.servico_deposito_vendedor import sincronizar_espelhos_integrados
+from vendedor.meus_produtos.servico_meus_produtos import sincronizar_espelhos_integrados
 
 _MOD = Path(__file__).resolve().parent
 

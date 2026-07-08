@@ -10,7 +10,7 @@ from urllib.parse import urlencode
 
 import requests
 
-from api.bling.tokens import criptografar_token, descriptografar_token
+from core.tokens import criptografar_token, descriptografar_token
 from global_utils import Var_ConectarBanco, agora_utc, obter_base_url
 
 _log = logging.getLogger(__name__)

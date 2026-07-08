@@ -27,22 +27,22 @@ from fornecedor.catalogo.srotas_catalogo import (
     variante_dict,
     variante_rede_valida,
 )
-from fornecedor.catalogo.servico_estoque_deposito import listar_estoque_por_deposito
-from fornecedor.catalogo.servico_imagens import (
+from fornecedor.catalogo.catalogo import listar_estoque_por_deposito
+from fornecedor.catalogo.catalogo import (
     listar_imagens_galeria_pai,
     listar_imagens_variante_selecionadas,
     listar_regras_atributo_imagem,
     obter_imagem_modo,
 )
-from core.categorias import flatten_arvore_com_caminho, montar_arvore_categorias
-from vendedor.meus_produtos.servico_categoria_vendedor import (
+from core.dominio import flatten_arvore_com_caminho, montar_arvore_categorias
+from vendedor.meus_produtos.servico_meus_produtos import (
     associar_categoria_produtos,
     categoria_pertence_vendedor,
     sql_filtro_categoria_integrado,
 )
-from vendedor.meus_produtos.servico_fornecedor_apoio import montar_fornecedor_produto_apoio
-from vendedor.meus_produtos.servico_listagem_proprio import buscar_produtos_proprios
-from vendedor.meus_produtos.servico_vitrine_vendedor import (
+from vendedor.meus_produtos.servico_meus_produtos import montar_fornecedor_produto_apoio
+from vendedor.meus_produtos.servico_meus_produtos import buscar_produtos_proprios
+from vendedor.meus_produtos.servico_meus_produtos import (
     CAMPOS_READONLY_INTEGRADO,
     avaliar_pausa_variante,
     estoque_efetivo,

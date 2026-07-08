@@ -8,7 +8,7 @@ from pathlib import Path
 from flask import Blueprint, jsonify, render_template, request, session
 
 from global_utils import Var_ConectarBanco, exigir_modulo, exigir_permissao, login_obrigatorio
-from core.vinculos import inativar_vinculo, montar_snapshot_vendedor
+from core.dominio import inativar_vinculo, montar_snapshot_vendedor
 from sistema.plataforma.sessao import MODULO_FORNECEDOR
 
 _MOD = Path(__file__).resolve().parent

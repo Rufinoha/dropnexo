@@ -748,12 +748,12 @@ from global_utils import (
     url_imagem_produto,
     usuario_tem_permissao,
 )
-from fornecedor.catalogo.servico_estoque_deposito import (
+from fornecedor.catalogo.catalogo import (
     atualizar_saldo_deposito,
     listar_estoque_por_deposito,
     sincronizar_estoque_produtos_bling,
 )
-from fornecedor.catalogo.servico_imagens import (
+from fornecedor.catalogo.catalogo import (
     classificar_origem_manual,
     exigir_modo_compativel,
     listar_imagens_galeria_pai,
@@ -767,8 +767,8 @@ from fornecedor.catalogo.servico_imagens import (
     url_exibicao,
     validar_id_imagem_produto,
 )
-from fornecedor.catalogo.servico_promocao_variante import promocao_variante_ativa
-from fornecedor.parametros.servico_precificacao import (
+from fornecedor.catalogo.catalogo import promocao_variante_ativa
+from fornecedor.parametros.precificacao import (
     aplicar_valor_drop_produto_e_variantes,
     aplicar_valor_drop_variante,
     salvar_valor_drop_manual,
@@ -1306,7 +1306,7 @@ def catalogos_dados():
 @login_obrigatorio()
 @exigir_permissao(codigos=["catalogos.ver", "produtos.ver"])
 def catalogos_combos():
-    from core.categorias import flatten_arvore_com_caminho, montar_arvore_categorias
+    from core.dominio import flatten_arvore_com_caminho, montar_arvore_categorias
 
     id_tenant = session.get("id_tenant")
     conn = Var_ConectarBanco()
@@ -1736,7 +1736,7 @@ def catalogos_salvar():
                     vid,
                 ),
             )
-            from fornecedor.catalogo.servico_estoque_deposito import (
+            from fornecedor.catalogo.catalogo import (
                 garantir_linhas_estoque_depositos,
                 sincronizar_total_variante,
             )
@@ -2676,7 +2676,7 @@ def _exigir_catalogo_escrita():
 @login_obrigatorio()
 @exigir_permissao(codigos=["catalogos.ver", "produtos.ver"])
 def categorias_arvore():
-    from core.categorias import montar_arvore_categorias as categorias_arvore
+    from core.dominio import montar_arvore_categorias as categorias_arvore
 
     id_tenant = session.get("id_tenant")
     conn = Var_ConectarBanco()

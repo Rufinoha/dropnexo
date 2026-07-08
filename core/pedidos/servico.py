@@ -5,13 +5,8 @@ import json
 from datetime import datetime
 from typing import Any
 
-from fornecedor.requisitos_vendedor import carregar_requisitos_raw
+from fornecedor.parametros.requisitos import carregar_requisitos_raw
 from global_utils import agora_utc
-from core.pedidos.estoque_reserva import (
-    baixar_itens_pedido,
-    liberar_itens_pedido,
-    reservar_itens_pedido,
-)
 
 STATUS_RASCUNHO = "rascunho"
 STATUS_IMPORTADO = "importado"
@@ -864,7 +859,7 @@ def salvar_rascunho(
             )
             cur.execute("DELETE FROM tbl_pedido_item WHERE id_pedido = %s", (id_pedido,))
             try:
-                from api.melhor_envio.pedido import limpar_frete_pedido
+                from api.melhor_envio.melhor_envio import limpar_frete_pedido
 
                 limpar_frete_pedido(cur, id_pedido)
             except Exception:
@@ -1076,13 +1071,13 @@ def marcar_pedido_pago(
         id_usuario,
     )
     try:
-        from api.melhor_envio.pedido import tentar_contratar_etiqueta_apos_pagamento
+        from api.melhor_envio.melhor_envio import tentar_contratar_etiqueta_apos_pagamento
 
         tentar_contratar_etiqueta_apos_pagamento(cur, id_pedido, id_usuario=id_usuario)
     except Exception:
         pass
     try:
-        from api.bling.export_pedidos import tentar_exportar_pedido_fornecedor_apos_pagamento
+        from api.bling.pedidos import tentar_exportar_pedido_fornecedor_apos_pagamento
 
         tentar_exportar_pedido_fornecedor_apos_pagamento(cur, id_pedido)
     except Exception:
@@ -1215,8 +1210,8 @@ def reparar_dados_pedido_bling_importado(cur, id_vendedor: int, id_pedido: int) 
     id_bling = ped.get("id_bling_pedido")
     if id_bling and _entrega_pedido_vazia(ped):
         try:
-            from api.bling.campos_pedido import _endereco_dict_tem_dados, parse_pedido_bling
-            from api.bling.sync_pedidos import obter_pedido_bling
+            from api.bling.campos import _endereco_dict_tem_dados, parse_pedido_bling
+            from api.bling.pedidos import obter_pedido_bling
 
             det = obter_pedido_bling(id_vendedor, str(id_bling))
             entrega = parse_pedido_bling(det).get("entrega") or {}
@@ -1555,7 +1550,7 @@ def marcar_em_expedicao(
         det += f" Rastreio: {codigo_rastreio}."
     registrar_historico(cur, id_pedido, "expedido", det, id_usuario)
     try:
-        from api.bling.sync_pedido_status import exportar_status_pedido_bling
+        from api.bling.pedidos import exportar_status_pedido_bling
 
         exportar_status_pedido_bling(cur, id_pedido, evento="expedido")
     except Exception:
@@ -1600,7 +1595,7 @@ def marcar_entregue(
     )
     registrar_historico(cur, id_pedido, "entregue", "Pedido marcado como entregue.", id_usuario)
     try:
-        from api.bling.sync_pedido_status import exportar_status_pedido_bling
+        from api.bling.pedidos import exportar_status_pedido_bling
 
         exportar_status_pedido_bling(cur, id_pedido, evento="entregue")
     except Exception:
@@ -1666,7 +1661,7 @@ def _montar_contexto_pedidos(
         sv, sc = _normalizar_status_pedido(origem or "manual", sv, sc)
         frete_info = {}
         try:
-            from api.melhor_envio.pedido import frete_resumo_pedido
+            from api.melhor_envio.melhor_envio import frete_resumo_pedido
 
             frete_info = frete_resumo_pedido(cur, int(pid))
         except Exception:
@@ -1908,3 +1903,155 @@ def excluir_anexo_pedido(cur, id_vendedor: int, id_anexo: int) -> dict:
         raise ValueError("Anexo não encontrado.")
     cur.execute("DELETE FROM tbl_pedido_anexo WHERE id = %s", (id_anexo,))
     return {"id": row[0], "id_pedido": row[1], "caminho": row[2]}
+
+
+# ── estoque_reserva ───────────────────────────────────
+
+def estoque_disponivel_variante(cur, id_variante: int) -> int:
+    cur.execute(
+        """
+        SELECT COALESCE(quantidade, 0) - COALESCE(reservado, 0)
+        FROM tbl_produto_variante_estoque
+        WHERE id_variante = %s
+        """,
+        (id_variante,),
+    )
+    row = cur.fetchone()
+    if row:
+        return max(0, int(row[0]))
+    cur.execute(
+        """
+        SELECT COALESCE(SUM(quantidade), 0)
+        FROM tbl_produto_estoque_deposito
+        WHERE id_variante = %s
+        """,
+        (id_variante,),
+    )
+    dep = cur.fetchone()
+    return max(0, int(dep[0] if dep else 0))
+
+
+def _garantir_linha_estoque(cur, id_variante: int) -> None:
+    cur.execute(
+        """
+        INSERT INTO tbl_produto_variante_estoque (id_variante, quantidade, reservado, atualizado_em)
+        SELECT %s,
+               COALESCE((
+                   SELECT SUM(ped.quantidade)
+                   FROM tbl_produto_estoque_deposito ped
+                   WHERE ped.id_variante = %s
+               ), 0),
+               0, NOW()
+        ON CONFLICT (id_variante) DO NOTHING
+        """,
+        (id_variante, id_variante),
+    )
+
+
+def reservar_estoque(cur, id_variante: int, quantidade: int) -> None:
+    if quantidade <= 0:
+        return
+    disponivel = estoque_disponivel_variante(cur, id_variante)
+    if disponivel < quantidade:
+        raise ValueError(f"Estoque insuficiente para a variante {id_variante} (disponível: {disponivel}).")
+    _garantir_linha_estoque(cur, id_variante)
+    cur.execute(
+        """
+        UPDATE tbl_produto_variante_estoque
+        SET reservado = reservado + %s, atualizado_em = NOW()
+        WHERE id_variante = %s
+        """,
+        (quantidade, id_variante),
+    )
+
+
+def liberar_reserva(cur, id_variante: int, quantidade: int) -> None:
+    if quantidade <= 0:
+        return
+    cur.execute(
+        """
+        UPDATE tbl_produto_variante_estoque
+        SET reservado = GREATEST(0, reservado - %s), atualizado_em = NOW()
+        WHERE id_variante = %s
+        """,
+        (quantidade, id_variante),
+    )
+
+
+def reservar_itens_pedido(cur, itens: list[tuple[int, int]]) -> None:
+    """itens: lista de (id_variante, quantidade)."""
+    for id_var, qtd in itens:
+        reservar_estoque(cur, int(id_var), int(qtd))
+
+
+def liberar_itens_pedido(cur, itens: list[tuple[int, int]]) -> None:
+    for id_var, qtd in itens:
+        liberar_reserva(cur, int(id_var), int(qtd))
+
+
+def baixar_estoque_expedicao(
+    cur,
+    id_variante: int,
+    quantidade: int,
+    *,
+    id_deposito: int | None = None,
+) -> None:
+    """Baixa física na expedição: reduz quantidade e libera a reserva."""
+    if quantidade <= 0:
+        return
+    _garantir_linha_estoque(cur, id_variante)
+    cur.execute(
+        """
+        UPDATE tbl_produto_variante_estoque
+        SET quantidade = GREATEST(0, quantidade - %s),
+            reservado = GREATEST(0, reservado - %s),
+            atualizado_em = NOW()
+        WHERE id_variante = %s
+        """,
+        (quantidade, quantidade, id_variante),
+    )
+    if id_deposito:
+        cur.execute(
+            """
+            UPDATE tbl_produto_estoque_deposito
+            SET quantidade = GREATEST(0, quantidade - %s), atualizado_em = NOW()
+            WHERE id_variante = %s AND id_deposito = %s
+            """,
+            (quantidade, id_variante, id_deposito),
+        )
+        from fornecedor.catalogo.catalogo import sincronizar_total_variante
+
+        sincronizar_total_variante(cur, id_variante)
+
+
+def baixar_itens_pedido(cur, itens: list[tuple[int, int, int | None]]) -> None:
+    """itens: (id_variante, quantidade, id_deposito opcional)."""
+    for id_var, qtd, id_dep in itens:
+        baixar_estoque_expedicao(cur, int(id_var), int(qtd), id_deposito=id_dep)
+
+
+# ── meios_pagamento ───────────────────────────────────
+
+from api.mercadopago.mercadopago import meios_pagamento_fornecedor
+from api.pix_manual.pix_manual import meio_pix_manual_fornecedor
+
+
+def listar_meios_fornecedor(cur, id_fornecedor: int, *, icone_mp: str = "") -> list[dict]:
+    out: list[dict] = []
+    mp = meios_pagamento_fornecedor(cur, id_fornecedor)
+    if mp.get("conectado"):
+        out.append(
+            {
+                "integracao": "mercado-pago",
+                "integracao_nome": "Mercado Pago",
+                "icone_url": icone_mp,
+                "conectado": True,
+                "pix": bool(mp.get("pix")),
+                "cartao": bool(mp.get("cartao")),
+                "pix_manual": False,
+            }
+        )
+    pix_m = meio_pix_manual_fornecedor(cur, id_fornecedor)
+    if pix_m.get("pix_manual"):
+        out.append({**pix_m, "icone_url": ""})
+    return out

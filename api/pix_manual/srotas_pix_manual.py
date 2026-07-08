@@ -5,7 +5,7 @@ from pathlib import Path
 
 from flask import Blueprint, jsonify, request, session
 
-from api.pix_manual.cliente import (
+from api.pix_manual.pix_manual import (
     carregar_config_pix_manual,
     desativar_pix_manual,
     pix_manual_ativo,

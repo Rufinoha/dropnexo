@@ -18,7 +18,7 @@ from global_utils import (
     valida_email,
     validar_politica_senha,
 )
-from fornecedor.segmentos.servico_segmentos import (
+from fornecedor.segmentos.segmentos import (
     ids_segmentos_com_categorias,
     ids_segmentos_fornecedor,
     listar_segmentos_plataforma,
@@ -986,7 +986,7 @@ def api_cobranca_config():
         row = cur.fetchone()
         if not row:
             return jsonify(success=False, message="Cobrança não configurada."), 404
-        from api.efi.cliente import efi_disponivel
+        from api.efi.efi import efi_disponivel
 
         return jsonify(
             success=True,
@@ -1163,7 +1163,7 @@ def api_faturas_gerar():
         if forma != "boleto":
             return jsonify(success=False, message="Somente boleto disponível nesta fase."), 400
 
-        from api.efi.cliente import criar_cobranca_boleto, efi_disponivel
+        from api.efi.efi import criar_cobranca_boleto, efi_disponivel
 
         if not efi_disponivel():
             return jsonify(success=False, message="Efi não configurado no .env."), 503

@@ -25,7 +25,7 @@ load_dotenv(ROOT / ".env")
 
 from api.bling.cliente import bling_configurado, obter_access_token_valido, renovar_access_token
 from api.bling.homologacao import executar_homologacao
-from api.bling.tokens import descriptografar_token
+from core.tokens import descriptografar_token
 from global_utils import Var_ConectarBanco
 
 

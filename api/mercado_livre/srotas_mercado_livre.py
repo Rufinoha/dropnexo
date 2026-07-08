@@ -6,7 +6,7 @@ from pathlib import Path
 
 from flask import Blueprint, jsonify, redirect, request, session, url_for
 
-from api.mercado_livre.cliente import (
+from api.mercado_livre.mercado_livre import (
     atualizar_conta_info,
     carregar_config_ml,
     desconectar_ml,
@@ -193,7 +193,7 @@ def sync_pedidos():
         cur = conn.cursor()
         if not ml_conectado(cur, int(id_tenant)):
             return jsonify(success=False, message="Mercado Livre não conectado."), 400
-        from api.mercado_livre.sync_pedidos import importar_pedidos_mercado_livre
+        from api.mercado_livre.mercado_livre import importar_pedidos_mercado_livre
 
         resultado = importar_pedidos_mercado_livre(cur, int(id_tenant))
         conn.commit()

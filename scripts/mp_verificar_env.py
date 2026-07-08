@@ -17,7 +17,7 @@ try:
 except ImportError:
     pass
 
-from api.mercadopago.cliente import mp_configurado, mp_client_id, redirect_uri_oauth
+from api.mercadopago.mercadopago import mp_configurado, mp_client_id, redirect_uri_oauth
 from global_utils import obter_base_url
 
 

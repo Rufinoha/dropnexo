@@ -9,11 +9,11 @@ from pathlib import Path
 
 from flask import Blueprint, current_app, jsonify, redirect, render_template, request, session, url_for
 
-from api.bling.importacao_progresso import iniciar_importacao_bling_async, obter_progresso_bling
-from api.bling.sync_produtos import importar_produtos
-from api.bling.mapeamento_categorias import aplicar_mapeamento_categorias, pre_analisar_mapeamento_categorias, validar_mapeamento_para_importacao
-from fornecedor.importacao.erro_traducao import montar_payload_erro
-from fornecedor.parametros.servico_precificacao import aplicar_valor_drop_produto_e_variantes
+from api.bling.sync_progresso import iniciar_importacao_bling_async, obter_progresso_bling
+from api.bling.produtos import importar_produtos
+from api.bling.categorias_bling import aplicar_mapeamento_categorias, pre_analisar_mapeamento_categorias, validar_mapeamento_para_importacao
+from fornecedor.importacao.servico_importacao import montar_payload_erro
+from fornecedor.parametros.precificacao import aplicar_valor_drop_produto_e_variantes
 from fornecedor.importacao.servico_importacao import (
     MODULO_CATALOGO,
     ORIGEM_ARQUIVO,
@@ -154,7 +154,7 @@ def _bling_config_fornecedor(cur, id_tenant: int) -> dict:
     def sync_iso(val):
         return val.isoformat() if val else None
 
-    from api.bling.depositos import resumo_depositos_bling
+    from api.bling.estoque import resumo_depositos_bling
 
     try:
         deps = resumo_depositos_bling(cur, id_tenant)

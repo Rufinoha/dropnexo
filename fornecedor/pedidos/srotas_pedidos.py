@@ -12,7 +12,7 @@ from core.pedidos.servico import (
     marcar_entregue,
     obter_pedido,
 )
-from api.pix_manual.pedido import confirmar_pix_manual, rejeitar_comprovante_pix
+from api.pix_manual.pix_manual import confirmar_pix_manual, rejeitar_comprovante_pix
 from sistema.plataforma.sessao import MODULO_FORNECEDOR
 
 _MOD = Path(__file__).resolve().parent

@@ -9,7 +9,7 @@ from flask import Blueprint, jsonify, render_template, request, session
 
 from global_utils import Var_ConectarBanco, agora_utc, exigir_modulo, exigir_permissao, login_obrigatorio
 from sistema.plataforma.sessao import MODULO_FORNECEDOR
-from core.vinculos import inativar_vinculo
+from core.dominio import inativar_vinculo
 
 
 _MOD = Path(__file__).resolve().parent

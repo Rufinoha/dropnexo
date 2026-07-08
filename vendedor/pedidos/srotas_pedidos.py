@@ -5,8 +5,8 @@ import time
 
 from flask import Blueprint, jsonify, render_template, request, send_file, session, url_for
 
-from core.pedidos.meios_pagamento import listar_meios_fornecedor
-from api.pix_manual.pedido import iniciar_pix_manual, marcar_comprovante_enviado
+from core.pedidos.servico import listar_meios_fornecedor
+from api.pix_manual.pix_manual import iniciar_pix_manual, marcar_comprovante_enviado
 
 from global_utils import Var_ConectarBanco, exigir_modulo, exigir_permissao, login_obrigatorio
 from core.pedidos.servico import (
@@ -26,8 +26,8 @@ from core.pedidos.servico import (
     salvar_rascunho,
     taxas_fornecedores_vendedor,
 )
-from api.mercadopago.pedido import iniciar_pagamento, meios_pagamento_pedido, sincronizar_pagamento_pedido
-from api.melhor_envio.pedido import (
+from api.mercadopago.mercadopago import iniciar_pagamento, meios_pagamento_pedido, sincronizar_pagamento_pedido
+from api.melhor_envio.melhor_envio import (
     contratar_etiqueta_pedido,
     cotar_frete_pedido,
     definir_modo_frete_manual,

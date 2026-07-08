@@ -620,8 +620,8 @@ from global_utils import (
     obter_base_url,
     valida_email,
 )
-from fornecedor.segmentos.servico_segmentos import listar_segmentos_plataforma, salvar_segmentos_fornecedor
-from core.cnpj import consultar_cnpj
+from fornecedor.segmentos.segmentos import listar_segmentos_plataforma, salvar_segmentos_fornecedor
+from core.dominio import consultar_cnpj
 
 cadastro_bp = Blueprint("cadastro", __name__)
 

@@ -4,7 +4,7 @@ from pathlib import Path
 
 from flask import Blueprint, jsonify, render_template, request, session
 
-from fornecedor.parametros.servico_precificacao import (
+from fornecedor.parametros.precificacao import (
     MARGEM_REVENDA_PADRAO,
     aplicar_precificacao_catalogo,
     listar_regras_fornecedor,
@@ -12,13 +12,13 @@ from fornecedor.parametros.servico_precificacao import (
     salvar_modo_precificacao,
     salvar_regra_fornecedor,
 )
-from fornecedor.requisitos_vendedor import (
+from fornecedor.parametros.requisitos import (
     carregar_requisitos,
     contar_produtos_ativos_fornecedor,
     salvar_requisitos,
     salvar_visivel_rede_vendedor,
 )
-from vendedor.meus_produtos.servico_vitrine_vendedor import (
+from vendedor.meus_produtos.servico_meus_produtos import (
     despausar_vitrine_fornecedor,
     pausar_vitrine_fornecedor,
 )

@@ -3,13 +3,13 @@ from __future__ import annotations
 from pathlib import Path
 
 from flask import Blueprint, jsonify, render_template, request, session, url_for
-from api.bling.sync_categorias import (
+from api.bling.categorias_bling import (
     associar_segmento_categorias_bling,
     contar_categorias_bling_sem_segmento,
     listar_categorias_bling_sem_segmento,
 )
 from global_utils import Var_ConectarBanco, exigir_modulo, exigir_permissao, login_obrigatorio
-from core.categorias import MAX_NIVEL_CATEGORIA, flatten_arvore_com_caminho, montar_arvore_categorias
+from core.dominio import MAX_NIVEL_CATEGORIA, flatten_arvore_com_caminho, montar_arvore_categorias
 from sistema.plataforma.sessao import MODULO_FORNECEDOR
 
 

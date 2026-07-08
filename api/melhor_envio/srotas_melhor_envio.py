@@ -7,7 +7,7 @@ from pathlib import Path
 
 from flask import Blueprint, jsonify, redirect, request, session, url_for
 
-from api.melhor_envio.cliente import (
+from api.melhor_envio.melhor_envio import (
     atualizar_conta_info,
     carregar_config_me,
     desconectar_me,

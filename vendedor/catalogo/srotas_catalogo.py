@@ -5,12 +5,12 @@ from pathlib import Path
 from flask import Blueprint, jsonify, render_template, request, session
 
 from fornecedor.catalogo.srotas_catalogo import _sanitizar_descricao_html
-from fornecedor.parametros.servico_precificacao import (
+from fornecedor.parametros.precificacao import (
     buscar_regra_fornecedor,
     calcular_preco_sugerido_revenda,
     pct_margem_revenda_efetiva,
 )
-from vendedor.precificacao.servico_precificacao_vendedor import precificar_na_integracao
+from vendedor.precificacao.srotas_precificacao import precificar_na_integracao
 from global_utils import Var_ConectarBanco, exigir_modulo, exigir_permissao, login_obrigatorio, url_imagem_produto
 from sistema.plataforma.sessao import MODULO_VENDEDOR
 from vendedor.fornecedores.srotas_fornecedores import (
@@ -448,7 +448,7 @@ def ativar_produto():
             return jsonify(success=False, message="Produto indisponível ou fornecedor não aprovado."), 404
 
         id_fornecedor = int(rows[0][2])
-        from vendedor.meus_produtos.servico_deposito_vendedor import espelhar_depositos_fornecedor
+        from vendedor.meus_produtos.servico_meus_produtos import espelhar_depositos_fornecedor
 
         espelhar_depositos_fornecedor(cur, int(id_vendedor), id_fornecedor, id_produto=id_produto)
 
@@ -516,7 +516,7 @@ def ativar():
         row = cur.fetchone()
         if not row:
             return jsonify(success=False, message="Produto indisponível ou fornecedor não aprovado."), 404
-        from vendedor.meus_produtos.servico_deposito_vendedor import espelhar_depositos_fornecedor
+        from vendedor.meus_produtos.servico_meus_produtos import espelhar_depositos_fornecedor
 
         espelhar_depositos_fornecedor(cur, int(id_vendedor), int(row[2]), id_produto=int(row[1]))
         preco_forn = float(row[3] or 0)

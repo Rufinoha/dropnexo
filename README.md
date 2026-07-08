@@ -39,18 +39,40 @@ Documentação completa: `__doc/00 - Plano Mestre de Construção - DropNexo.md`
 
 - `sistema/acesso/srotas.py` — home pública, login, cadastro
 - `sistema/plataforma/sessao.py` — módulo ativo, usuários por tenant
-- `sistema/integracoes/catalogo.py` — catálogo do hub de integrações
+- `sistema/integracoes/srotas_integracoes.py` — catálogo do hub de integrações
 - demais features em `sistema/<feature>/srotas_*.py`
 
-**`api/`** — integrações externas (OAuth, webhook, sync):
+**`api/`** — integrações externas (OAuth, webhook, sync); cada provedor em `api/<nome>/` com módulo de domínio + `srotas_*.py` (ex.: `api/pix_manual/pix_manual.py`, `api/mercadopago/mercadopago.py`, `api/melhor_envio/melhor_envio.py`, `api/mercado_livre/mercado_livre.py`).
 
-- cada provedor em `api/<nome>/` com `cliente.py`, `srotas_*.py` e, quando ligado a pedidos, `pedido.py`
+**`core/`** — domínio compartilhado (`pedidos/servico.py`, `dominio.py`, `tokens.py`).
 
-**`fornecedor/`, `vendedor/`** — módulos de negócio (telas + rotas por feature)
+**`core/pedidos/servico.py`** — pedidos B2B, reserva de estoque e meios de pagamento (seções `# ──`).
+
+**`core/dominio.py`** — categorias, consulta CNPJ e vínculos vendedor×fornecedor.
+
+**`api/bling/`** — integração Bling (módulos por domínio, seções `# ──` dentro de cada arquivo):
+
+| Arquivo | Responsabilidade |
+|---------|------------------|
+| `cliente.py` | OAuth, tokens API, HTTP |
+| `config.py` | defaults, conta empresa, eco estoque |
+| `campos.py` | parse produto + pedido |
+| `produtos.py` | imagens, importação e exportação de produtos |
+| `pedidos.py` | importação, exportação e status de pedidos |
+| `estoque.py` | depósitos e sincronização de estoque |
+| `categorias_bling.py` | sync e mapeamento de categorias |
+| `webhooks.py` | estoque + pedidos |
+| `sync_progresso.py` | jobs assíncronos (produtos, estoque, categorias) |
+| `homologacao.py` | homologação + manual público |
+| `srotas_bling.py` | rotas HTTP |
+
+(`tokens.py` de OAuth ficou em `core/tokens.py`, compartilhado entre integrações.)
+
+**`fornecedor/`, `vendedor/`** — módulos de negócio (telas + rotas por feature). Serviços agrupados quando pequenos (ex.: `vendedor/meus_produtos/servico_meus_produtos.py`, `fornecedor/importacao/servico_importacao.py`, `fornecedor/catalogo/catalogo.py`, `fornecedor/parametros/precificacao.py`).
 
 **Cada feature (`fornecedor/categorias/`, `vendedor/catalogo/`, …):**
 
 - `srotas_<feature>.py` — blueprint + rotas + `init_app`
 - `templates/`, `static/` — assets locais
 
-Serviços de domínio ficam em `core/` ou na pasta da feature; orquestração com ERP/pagamento/frete fica em `api/<provedor>/pedido.py`. Detalhes: `__doc/00 - Plano Mestre…` §6.4.
+Serviços de domínio ficam em `core/` ou na pasta da feature; orquestração com ERP/pagamento/frete fica em `api/<provedor>/` (módulo unificado por integração). Detalhes: `__doc/00 - Plano Mestre…` §6.4.

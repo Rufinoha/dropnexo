@@ -19,22 +19,22 @@ from api.bling.cliente import (
     url_autorizacao,
     _salvar_tokens,
 )
-from api.bling.config_padrao import aplicar_defaults_conexao, garantir_config_contexto
+from api.bling.config import aplicar_defaults_conexao, garantir_config_contexto
 from api.bling.homologacao import executar_homologacao
-from api.bling.manual_conteudo import (
+from api.bling.homologacao import (
     MANUAL_BLING_BOTOES_FORNECEDOR,
     MANUAL_BLING_CONFIG_FORNECEDOR,
     MANUAL_BLING_PASSOS,
     MANUAL_IMAGENS_PERMITIDAS,
 )
-from api.bling.sync_categorias import listar_categorias_bling_flat
-from api.bling.mapeamento_categorias import (
+from api.bling.categorias_bling import listar_categorias_bling_flat
+from api.bling.categorias_bling import (
     listar_painel_categorias_bling,
     salvar_mapeamento_categoria_ui,
     validar_mapeamento_para_importacao,
 )
-from api.bling.sync_produtos import importar_produtos
-from api.bling.tokens import descriptografar_token
+from api.bling.produtos import importar_produtos
+from core.tokens import descriptografar_token
 from global_utils import Var_ConectarBanco, agora_utc, login_obrigatorio, obter_url_site_publico, usuario_tem_permissao
 from sistema.plataforma.sessao import garantir_modulo_sessao, rotulo_modulo
 
@@ -172,8 +172,8 @@ def api_status():
         depositos_resumo = {"vinculados": 0, "pendentes": 0}
         if conectado:
             garantir_config_contexto(cur, id_tenant, contexto)
-            from api.bling.conta_empresa import garantir_conta_bling
-            from api.bling.depositos import resumo_depositos_bling
+            from api.bling.config import garantir_conta_bling
+            from api.bling.estoque import resumo_depositos_bling
 
             try:
                 bling_conta = garantir_conta_bling(cur, int(id_tenant))
@@ -295,7 +295,7 @@ def oauth_callback():
             _salvar_tokens(cur, int(id_tenant), tokens)
             contexto = session.get("bling_oauth_contexto") or garantir_modulo_sessao()
             aplicar_defaults_conexao(cur, int(id_tenant), contexto)
-            from api.bling.conta_empresa import garantir_conta_bling
+            from api.bling.config import garantir_conta_bling
 
             try:
                 garantir_conta_bling(cur, int(id_tenant), forcar=True)
@@ -569,7 +569,7 @@ def sync_produtos():
             return jsonify(success=False, message="Conecte o Bling antes de sincronizar."), 400
 
         if contexto == "vendedor":
-            from api.bling.export_produtos import exportar_produtos_vendedor
+            from api.bling.produtos import exportar_produtos_vendedor
 
             uid = session.get("id_usuario")
             resultado = exportar_produtos_vendedor(
@@ -580,7 +580,7 @@ def sync_produtos():
             conn.commit()
             return jsonify(success=True, message=resultado.get("message"), dados=resultado)
 
-        from api.bling.mapeamento_categorias import validar_mapeamento_para_importacao
+        from api.bling.categorias_bling import validar_mapeamento_para_importacao
 
         val = validar_mapeamento_para_importacao(
             cur,
@@ -684,7 +684,7 @@ def sync_pedidos():
 
         uid = session.get("id_usuario")
         if contexto == "fornecedor":
-            from api.bling.export_pedidos import exportar_pedidos_pendentes_fornecedor
+            from api.bling.pedidos import exportar_pedidos_pendentes_fornecedor
 
             resultado = exportar_pedidos_pendentes_fornecedor(
                 cur,
@@ -693,7 +693,7 @@ def sync_pedidos():
                 id_usuario=int(uid) if uid else None,
             )
         else:
-            from api.bling.sync_pedidos import importar_pedidos_bling
+            from api.bling.pedidos import importar_pedidos_bling
 
             resultado = importar_pedidos_bling(
                 cur,
@@ -772,8 +772,8 @@ def api_categorias_bling_mapeamento():
         if not row or row[0] != "conectado":
             return jsonify(success=False, message="Conecte o Bling antes de mapear categorias."), 400
 
-        from api.bling.categorias_sync_progresso import iniciar_carregar_painel_categorias
-        from api.bling.sync_categorias import (
+        from api.bling.sync_progresso import iniciar_carregar_painel_categorias
+        from api.bling.categorias_bling import (
             PAINEL_ENRIQUECER_ASYNC_MIN,
             cache_categorias_precisa_enriquecer,
             carregar_mapa_categorias_bling_listagem,
@@ -806,7 +806,7 @@ def api_categorias_bling_mapeamento():
 def api_categorias_bling_mapeamento_job(job_id: str):
     if not _pode_bling_sync():
         return jsonify(success=False, message="Sem permissão."), 403
-    from api.bling.categorias_sync_progresso import obter_job_painel_categorias
+    from api.bling.sync_progresso import obter_job_painel_categorias
 
     id_tenant = session.get("id_tenant")
     job = obter_job_painel_categorias(job_id, int(id_tenant))
@@ -909,7 +909,7 @@ def api_categorias_bling_salvar_lote():
     finally:
         conn.close()
 
-    from api.bling.categorias_sync_progresso import iniciar_salvar_categorias_lote
+    from api.bling.sync_progresso import iniciar_salvar_categorias_lote
 
     job_id = iniciar_salvar_categorias_lote(
         current_app._get_current_object(),
@@ -925,7 +925,7 @@ def api_categorias_bling_salvar_lote():
 def api_categorias_sync_progresso(job_id: str):
     if not _pode_bling_sync():
         return jsonify(success=False, message="Sem permissão."), 403
-    from api.bling.categorias_sync_progresso import obter_progresso_categorias
+    from api.bling.sync_progresso import obter_progresso_categorias
 
     id_tenant = session.get("id_tenant")
     job = obter_progresso_categorias(job_id, int(id_tenant))
@@ -960,7 +960,7 @@ def api_categorias_bling_reparar_hierarquia():
     finally:
         conn.close()
 
-    from api.bling.categorias_sync_progresso import iniciar_reparar_hierarquia_categorias
+    from api.bling.sync_progresso import iniciar_reparar_hierarquia_categorias
 
     job_id = iniciar_reparar_hierarquia_categorias(
         current_app._get_current_object(),
@@ -1031,7 +1031,7 @@ def api_depositos_bling():
         if not row or row[0] != "conectado":
             return jsonify(success=False, message="Conecte o Bling antes."), 400
 
-        from api.bling.depositos import carregar_depositos_bling_ui
+        from api.bling.estoque import carregar_depositos_bling_ui
 
         mapa_enriquecido, bling_deps, aviso_bling = carregar_depositos_bling_ui(cur, int(id_tenant))
         conn.commit()
@@ -1082,7 +1082,7 @@ def api_vincular_deposito_bling():
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
-        from api.bling.depositos import vincular_ou_criar_deposito_bling
+        from api.bling.estoque import vincular_ou_criar_deposito_bling
 
         rid, id_drop, criou, alterado = vincular_ou_criar_deposito_bling(
             cur,
@@ -1152,7 +1152,7 @@ def api_sincronizar_estoque_deposito_bling():
         if not row[1]:
             return jsonify(success=False, message="Estoque deste depósito já foi sincronizado. Altere o vínculo para sincronizar novamente."), 409
 
-        from api.bling.estoque_sync_progresso import deposito_tem_sync_ativa, iniciar_sync_inicial_deposito
+        from api.bling.sync_progresso import deposito_tem_sync_ativa, iniciar_sync_inicial_deposito
 
         if deposito_tem_sync_ativa(cur, int(id_tenant), id_bling):
             return jsonify(success=False, message="Sincronização já em andamento para este depósito."), 409
@@ -1172,7 +1172,7 @@ def api_sincronizar_estoque_deposito_bling():
 @bling_bp.post("/api/integracoes/bling/webhook")
 def api_bling_webhook():
     """Webhook público Bling (estoque, produtos, etc.) — autenticado por HMAC."""
-    from api.bling.webhook_estoque import receber_webhook_http
+    from api.bling.webhooks import receber_webhook_http
 
     body, code = receber_webhook_http(current_app._get_current_object(), request)
     return jsonify(body), code
@@ -1183,7 +1183,7 @@ def api_bling_webhook():
 def api_estoque_sync_progresso(job_id: str):
     if not _pode_bling_sync():
         return jsonify(success=False, message="Sem permissão."), 403
-    from api.bling.estoque_sync_progresso import obter_progresso_sync
+    from api.bling.sync_progresso import obter_progresso_sync
 
     id_tenant = session.get("id_tenant")
     job = obter_progresso_sync(job_id, int(id_tenant))

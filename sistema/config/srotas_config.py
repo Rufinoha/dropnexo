@@ -10,7 +10,7 @@ from global_utils import (
     login_obrigatorio,
     usuario_tem_permissao,
 )
-from sistema.integracoes.catalogo import url_icone_integracao
+from sistema.integracoes.srotas_integracoes import url_icone_integracao
 from sistema.plataforma.sessao import (
     carregar_usuario_apoio,
     inativar_usuario_tenant,
@@ -980,7 +980,7 @@ def marktplace_produtos_pagina():
 def marktplace_produtos_dados():
     if (r := _exigir_dev()) is not None:
         return r
-    from sistema.marktplace.servico_marktplace import SQL_LISTA, produto_dict
+    from sistema.marktplace.srotas_marktplace import SQL_LISTA, produto_dict
 
     conn = Var_ConectarBanco()
     try:
@@ -999,7 +999,7 @@ def marktplace_produtos_salvar():
         return r
     import json as _json
 
-    from sistema.marktplace.servico_marktplace import produto_dict
+    from sistema.marktplace.srotas_marktplace import produto_dict
 
     body = request.get_json(silent=True) or {}
     titulo = (body.get("titulo") or "").strip()
