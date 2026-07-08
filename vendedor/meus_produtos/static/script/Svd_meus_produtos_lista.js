@@ -272,7 +272,12 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id }),
       });
-      const j = await r.json();
+      let j = {};
+      try {
+        j = await r.json();
+      } catch {
+        throw new Error(r.status === 500 ? "Erro no servidor ao excluir." : "Resposta inválida do servidor.");
+      }
       if (!r.ok || !j.success) throw new Error(j.message || "Erro.");
     }
     selecionados.clear();
@@ -547,7 +552,12 @@
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id }),
     });
-    const j = await r.json();
+    let j = {};
+    try {
+      j = await r.json();
+    } catch {
+      throw new Error(r.status === 500 ? "Erro no servidor ao excluir." : "Resposta inválida do servidor.");
+    }
     if (!r.ok || !j.success) throw new Error(j.message || "Erro.");
     await Swal.fire("Sucesso", j.message, "success");
     await carregar();

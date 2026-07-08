@@ -796,3 +796,187 @@ def restaurar_vitrine_variante(cur, id_tenant_vendedor: int, id_variante: int) -
         (preco_venda, agora_utc(), row[0]),
     )
     return True
+
+
+# ── exclusão vitrine / produto próprio ─────────────────
+
+def _limpar_referencias_variantes_vendedor(cur, id_vendedor: int, ids_variantes: list[int]) -> None:
+    if not ids_variantes:
+        return
+    cur.execute(
+        """
+        DELETE FROM tbl_kit_vendedor_item i
+        USING tbl_kit_vendedor k
+        WHERE i.id_kit = k.id AND k.id_tenant = %s AND i.id_variante = ANY(%s)
+        """,
+        (id_vendedor, ids_variantes),
+    )
+    cur.execute(
+        "DELETE FROM tbl_produto_favorito WHERE id_tenant = %s AND id_variante = ANY(%s)",
+        (id_vendedor, ids_variantes),
+    )
+
+
+def excluir_produto_meus_produtos(cur, id_tenant: int, pid: int) -> tuple[bool, str]:
+    """Exclui produto próprio (com variações) ou remove integrado da vitrine."""
+    cur.execute("SELECT id_tenant FROM tbl_produto WHERE id = %s", (pid,))
+    row = cur.fetchone()
+    if not row:
+        return False, "Produto não encontrado."
+
+    id_owner = int(row[0])
+    cur.execute("SELECT id FROM tbl_produto_variante WHERE id_produto = %s", (pid,))
+    ids_variantes = [int(r[0]) for r in cur.fetchall()]
+
+    if id_owner == id_tenant:
+        _limpar_referencias_variantes_vendedor(cur, id_tenant, ids_variantes)
+        cur.execute(
+            "DELETE FROM tbl_produto_favorito WHERE id_tenant = %s AND id_produto = %s",
+            (id_tenant, pid),
+        )
+        cur.execute(
+            "DELETE FROM tbl_produto_vendedor WHERE id_tenant_vendedor = %s AND id_produto = %s",
+            (id_tenant, pid),
+        )
+        try:
+            cur.execute(
+                """
+                DELETE FROM tbl_integracao_map
+                WHERE id_tenant = %s AND entidade = 'produto' AND id_dropnexo = %s
+                """,
+                (id_tenant, pid),
+            )
+        except Exception:
+            pass
+        cur.execute(
+            "UPDATE tbl_produto SET id_variante_padrao = NULL WHERE id = %s AND id_tenant = %s",
+            (pid, id_tenant),
+        )
+        cur.execute("DELETE FROM tbl_produto WHERE id = %s AND id_tenant = %s", (pid, id_tenant))
+        if cur.rowcount == 0:
+            return False, "Produto não encontrado."
+        return True, "Produto excluído."
+
+    cur.execute(
+        """
+        SELECT 1 FROM tbl_produto_vendedor
+        WHERE id_tenant_vendedor = %s AND id_produto = %s
+        LIMIT 1
+        """,
+        (id_tenant, pid),
+    )
+    if not cur.fetchone():
+        return False, "Produto não encontrado na vitrine."
+
+    cur.execute(
+        """
+        SELECT id_variante FROM tbl_produto_vendedor
+        WHERE id_tenant_vendedor = %s AND id_produto = %s
+        """,
+        (id_tenant, pid),
+    )
+    ids_vitrine = [int(r[0]) for r in cur.fetchall()]
+    _limpar_referencias_variantes_vendedor(cur, id_tenant, ids_vitrine)
+    cur.execute(
+        "DELETE FROM tbl_produto_favorito WHERE id_tenant = %s AND id_produto = %s",
+        (id_tenant, pid),
+    )
+    cur.execute(
+        "DELETE FROM tbl_produto_vendedor WHERE id_tenant_vendedor = %s AND id_produto = %s",
+        (id_tenant, pid),
+    )
+    if cur.rowcount == 0:
+        return False, "Produto não encontrado na vitrine."
+    return True, "Produto removido da vitrine."
+
+
+# ── exclusão vitrine / produto próprio ─────────────────
+
+def _limpar_referencias_variantes_vendedor(cur, id_vendedor: int, ids_variantes: list[int]) -> None:
+    if not ids_variantes:
+        return
+    cur.execute(
+        """
+        DELETE FROM tbl_kit_vendedor_item i
+        USING tbl_kit_vendedor k
+        WHERE i.id_kit = k.id AND k.id_tenant = %s AND i.id_variante = ANY(%s)
+        """,
+        (id_vendedor, ids_variantes),
+    )
+    cur.execute(
+        "DELETE FROM tbl_produto_favorito WHERE id_tenant = %s AND id_variante = ANY(%s)",
+        (id_vendedor, ids_variantes),
+    )
+
+
+def excluir_produto_meus_produtos(cur, id_tenant: int, pid: int) -> tuple[bool, str]:
+    """Exclui produto próprio (com variações) ou remove integrado da vitrine."""
+    cur.execute("SELECT id_tenant FROM tbl_produto WHERE id = %s", (pid,))
+    row = cur.fetchone()
+    if not row:
+        return False, "Produto não encontrado."
+
+    id_owner = int(row[0])
+    cur.execute("SELECT id FROM tbl_produto_variante WHERE id_produto = %s", (pid,))
+    ids_variantes = [int(r[0]) for r in cur.fetchall()]
+
+    if id_owner == id_tenant:
+        _limpar_referencias_variantes_vendedor(cur, id_tenant, ids_variantes)
+        cur.execute(
+            "DELETE FROM tbl_produto_favorito WHERE id_tenant = %s AND id_produto = %s",
+            (id_tenant, pid),
+        )
+        cur.execute(
+            "DELETE FROM tbl_produto_vendedor WHERE id_tenant_vendedor = %s AND id_produto = %s",
+            (id_tenant, pid),
+        )
+        try:
+            cur.execute(
+                """
+                DELETE FROM tbl_integracao_map
+                WHERE id_tenant = %s AND entidade = 'produto' AND id_dropnexo = %s
+                """,
+                (id_tenant, pid),
+            )
+        except Exception:
+            pass
+        cur.execute(
+            "UPDATE tbl_produto SET id_variante_padrao = NULL WHERE id = %s AND id_tenant = %s",
+            (pid, id_tenant),
+        )
+        cur.execute("DELETE FROM tbl_produto WHERE id = %s AND id_tenant = %s", (pid, id_tenant))
+        if cur.rowcount == 0:
+            return False, "Produto não encontrado."
+        return True, "Produto excluído."
+
+    cur.execute(
+        """
+        SELECT 1 FROM tbl_produto_vendedor
+        WHERE id_tenant_vendedor = %s AND id_produto = %s
+        LIMIT 1
+        """,
+        (id_tenant, pid),
+    )
+    if not cur.fetchone():
+        return False, "Produto não encontrado na vitrine."
+
+    cur.execute(
+        """
+        SELECT id_variante FROM tbl_produto_vendedor
+        WHERE id_tenant_vendedor = %s AND id_produto = %s
+        """,
+        (id_tenant, pid),
+    )
+    ids_vitrine = [int(r[0]) for r in cur.fetchall()]
+    _limpar_referencias_variantes_vendedor(cur, id_tenant, ids_vitrine)
+    cur.execute(
+        "DELETE FROM tbl_produto_favorito WHERE id_tenant = %s AND id_produto = %s",
+        (id_tenant, pid),
+    )
+    cur.execute(
+        "DELETE FROM tbl_produto_vendedor WHERE id_tenant_vendedor = %s AND id_produto = %s",
+        (id_tenant, pid),
+    )
+    if cur.rowcount == 0:
+        return False, "Produto não encontrado na vitrine."
+    return True, "Produto removido da vitrine."

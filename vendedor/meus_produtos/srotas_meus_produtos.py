@@ -38,6 +38,7 @@ from core.dominio import flatten_arvore_com_caminho, montar_arvore_categorias
 from vendedor.meus_produtos.servico_meus_produtos import (
     associar_categoria_produtos,
     categoria_pertence_vendedor,
+    excluir_produto_meus_produtos,
     sql_filtro_categoria_integrado,
 )
 from vendedor.meus_produtos.servico_meus_produtos import montar_fornecedor_produto_apoio
@@ -693,22 +694,22 @@ def excluir_produto():
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
-        cur.execute("SELECT id_tenant FROM tbl_produto WHERE id = %s", (pid,))
-        row_owner = cur.fetchone()
-        if row_owner and int(row_owner[0]) == id_tenant:
-            cur.execute("DELETE FROM tbl_produto WHERE id = %s AND id_tenant = %s", (pid, id_tenant))
-            conn.commit()
-            if cur.rowcount == 0:
-                return jsonify(success=False, message="Produto não encontrado."), 404
-            return jsonify(success=True, message="Produto excluído.")
-        cur.execute(
-            "DELETE FROM tbl_produto_vendedor WHERE id_tenant_vendedor = %s AND id_produto = %s",
-            (id_tenant, pid),
-        )
+        ok, msg = excluir_produto_meus_produtos(cur, int(id_tenant), pid)
+        if not ok:
+            conn.rollback()
+            status = 404 if "não encontrado" in msg.lower() else 400
+            return jsonify(success=False, message=msg), status
         conn.commit()
-        if cur.rowcount == 0:
-            return jsonify(success=False, message="Produto não encontrado."), 404
-        return jsonify(success=True, message="Produto removido da vitrine.")
+        return jsonify(success=True, message=msg)
+    except Exception as e:
+        conn.rollback()
+        err = str(e).lower()
+        if "foreign key" in err or "violates" in err or "restrict" in err:
+            return jsonify(
+                success=False,
+                message="Não é possível excluir: produto em uso (pedido, kit ou outra referência).",
+            ), 409
+        return jsonify(success=False, message=str(e)), 500
     finally:
         conn.close()
 
