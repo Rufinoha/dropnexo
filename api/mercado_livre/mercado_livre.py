@@ -341,6 +341,7 @@ def atualizar_conta_info(cur, id_tenant: int, access_token: str | None = None) -
 
 
 _ML_COLS_EXT_OK: bool | None = None
+_ML_COLS_ANUNCIO_OK: bool | None = None
 
 
 def _tem_colunas_config_ext(cur) -> bool:
@@ -387,7 +388,53 @@ def _garantir_colunas_config_ext(cur) -> bool:
                 ADD COLUMN IF NOT EXISTS estoque_sync_ativo BOOLEAN NOT NULL DEFAULT FALSE
             """
         )
+        _garantir_colunas_anuncio_config(cur)
         _ML_COLS_EXT_OK = True
+        return True
+    except Exception:
+        return False
+
+
+_ML_LISTING_TYPES = frozenset({"auto", "gold_special", "gold_pro", "gold_premium", "free"})
+
+
+def _tem_colunas_anuncio_config(cur) -> bool:
+    global _ML_COLS_ANUNCIO_OK
+    if _ML_COLS_ANUNCIO_OK is True:
+        return True
+    cur.execute(
+        """
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'tbl_integracao_mercado_livre'
+          AND column_name = 'listing_type_padrao'
+        LIMIT 1
+        """
+    )
+    ok = cur.fetchone() is not None
+    if ok:
+        _ML_COLS_ANUNCIO_OK = True
+    return ok
+
+
+def _garantir_colunas_anuncio_config(cur) -> bool:
+    if _tem_colunas_anuncio_config(cur):
+        return True
+    global _ML_COLS_ANUNCIO_OK
+    try:
+        cur.execute(
+            """
+            ALTER TABLE tbl_integracao_mercado_livre
+                ADD COLUMN IF NOT EXISTS listing_type_padrao VARCHAR(24) NOT NULL DEFAULT 'auto'
+            """
+        )
+        cur.execute(
+            """
+            ALTER TABLE tbl_integracao_mercado_livre
+                ADD COLUMN IF NOT EXISTS frete_gratis BOOLEAN NOT NULL DEFAULT FALSE
+            """
+        )
+        _ML_COLS_ANUNCIO_OK = True
         return True
     except Exception:
         return False
@@ -404,6 +451,8 @@ def carregar_config_ml(cur, id_tenant: int) -> dict[str, Any]:
         "produtos_exportar_auto": False,
         "produtos_modo": "vincular_sku",
         "estoque_sync_ativo": False,
+        "listing_type_padrao": "auto",
+        "frete_gratis": False,
         "config_ext_disponivel": False,
         "ultima_sync_pedidos": None,
         "conectado_em": None,
@@ -414,12 +463,16 @@ def carregar_config_ml(cur, id_tenant: int) -> dict[str, Any]:
     if not _tem_tabela_ml(cur):
         return base
     ext = _garantir_colunas_config_ext(cur)
+    anuncio_cfg = _garantir_colunas_anuncio_config(cur)
+    cols_ext = ""
+    if anuncio_cfg:
+        cols_ext = ", listing_type_padrao, frete_gratis"
     if ext:
         cur.execute(
-            """
+            f"""
             SELECT status, ml_user_id, ml_site_id, ml_conta_info,
                    pedidos_importar_auto, ultima_sync_pedidos, conectado_em, ultimo_erro,
-                   produtos_exportar_auto, produtos_modo, estoque_sync_ativo
+                   produtos_exportar_auto, produtos_modo, estoque_sync_ativo{cols_ext}
             FROM tbl_integracao_mercado_livre WHERE id_tenant = %s
             """,
             (id_tenant,),
@@ -467,6 +520,10 @@ def carregar_config_ml(cur, id_tenant: int) -> dict[str, Any]:
         out["produtos_exportar_auto"] = bool(row[8])
         out["produtos_modo"] = modo
         out["estoque_sync_ativo"] = bool(row[10])
+        if anuncio_cfg and len(row) > 12:
+            lt = (row[11] or "auto").strip()
+            out["listing_type_padrao"] = lt if lt in _ML_LISTING_TYPES else "auto"
+            out["frete_gratis"] = bool(row[12])
     return out
 
 
@@ -478,13 +535,18 @@ def salvar_config_ml(
     produtos_exportar_auto: bool | None = None,
     produtos_modo: str | None = None,
     estoque_sync_ativo: bool | None = None,
+    listing_type_padrao: str | None = None,
+    frete_gratis: bool | None = None,
 ) -> None:
     if not _tem_tabela_ml(cur):
         raise RuntimeError("Tabela tbl_integracao_mercado_livre não existe.")
     updates: dict[str, Any] = {}
     if pedidos_importar_auto is not None:
         updates["pedidos_importar_auto"] = bool(pedidos_importar_auto)
-    precisa_ext = any(v is not None for v in (produtos_exportar_auto, produtos_modo, estoque_sync_ativo))
+    precisa_ext = any(
+        v is not None
+        for v in (produtos_exportar_auto, produtos_modo, estoque_sync_ativo, listing_type_padrao, frete_gratis)
+    )
     if precisa_ext and not _garantir_colunas_config_ext(cur):
         raise RuntimeError(
             "Preferências de produtos/estoque indisponíveis. Aplique o SQL 072 no banco."
@@ -500,6 +562,11 @@ def salvar_config_ml(
             updates["produtos_modo"] = modo
         if estoque_sync_ativo is not None:
             updates["estoque_sync_ativo"] = bool(estoque_sync_ativo)
+        if listing_type_padrao is not None and _garantir_colunas_anuncio_config(cur):
+            lt = (listing_type_padrao or "auto").strip()
+            updates["listing_type_padrao"] = lt if lt in _ML_LISTING_TYPES else "auto"
+        if frete_gratis is not None and _garantir_colunas_anuncio_config(cur):
+            updates["frete_gratis"] = bool(frete_gratis)
     if not updates:
         return
     set_parts = [f"{c} = %s" for c in updates]
@@ -572,6 +639,7 @@ _ML_CURRENCY_SITE = {
     "MPE": "PEN",
 }
 _ML_MAX_CRIAR_POR_SYNC = 20
+_ML_FAMILY_NAME_MAX = 60
 _ML_ATTR_CACHE: dict[str, list] = {}
 _SELLER_UP_CACHE: dict[int, bool] = {}
 
@@ -614,6 +682,45 @@ def _formatar_erro_ml(status: int, text: str) -> str:
     except (TypeError, ValueError, json.JSONDecodeError):
         pass
     return f"Mercado Livre API ({status}): {(text or '')[:280]}"
+
+
+def _erro_ml_para_usuario(texto: str) -> str:
+    """Traduz erros técnicos da API ML para mensagens claras."""
+    t = (texto or "").strip()
+    if t.lower().startswith("mercado livre"):
+        partes = t.split(":", 1)
+        if len(partes) > 1:
+            t = partes[1].strip()
+    low = t.lower()
+    if "gtin" in low and ("required" in low or "missing" in low or "conditional" in low):
+        return (
+            "Código GTIN/EAN obrigatório nesta categoria. "
+            "Cadastre o código de barras no produto ou informe que ele não possui GTIN."
+        )
+    if "family_name" in low and ("length" in low or "caracter" in low):
+        return (
+            f"Nome da família muito longo (máx. {_ML_FAMILY_NAME_MAX} caracteres). "
+            "Encurte em Integrações → Mercado Livre → Mapear categorias."
+        )
+    if "imagem" in low or "pictures" in low or "picture" in low:
+        return "Foto pública obrigatória. Adicione uma imagem ao produto antes de publicar."
+    if "preço" in low or "price" in low:
+        return "Preço de venda inválido ou abaixo do mínimo permitido pelo Mercado Livre."
+    if "categoria" in low or "category" in low:
+        return "Categoria não configurada. Associe ao produto e mapeie em Integrações → Mercado Livre."
+    if "mapeie" in low or "mapear categorias" in low:
+        return t
+    if "validation_error" in low:
+        # remove ruído técnico
+        t = t.replace("validation_error;", "").replace("validation_error", "").strip(" ;")
+    if len(t) > 220:
+        t = t[:217] + "…"
+    return t or "Não foi possível publicar este produto no Mercado Livre."
+
+
+def _titulo_exibicao_ml(titulo: str, sku: str) -> str:
+    nome = (titulo or sku or "Produto").strip()
+    return nome[:80]
 
 
 def _seller_usa_user_products_ml(
@@ -717,14 +824,14 @@ def _garantir_tabela_ml_categoria_map(cur) -> bool:
 
 def _family_name_ml(titulo: str, marca: str, override: str = "") -> str:
     if (override or "").strip():
-        return override.strip()[:120]
+        return override.strip()[:_ML_FAMILY_NAME_MAX]
     marca = (marca or "").strip()
     titulo = (titulo or "").strip()
     if marca and titulo and not titulo.lower().startswith(marca.lower()):
         fam = f"{marca} {titulo}"
     else:
         fam = titulo or marca or "Produto"
-    return fam[:120]
+    return fam[:_ML_FAMILY_NAME_MAX]
 
 
 def _mapa_categoria_ml(cur, id_tenant: int, id_categoria: int | None) -> tuple[str, str]:
@@ -793,7 +900,7 @@ def salvar_mapeamento_categorias_ml(cur, id_tenant: int, itens: list[dict]) -> i
         )
         if not cur.fetchone():
             continue
-        familia = (item.get("family_name") or "").strip()[:120] or None
+        familia = (item.get("family_name") or "").strip()[:_ML_FAMILY_NAME_MAX] or None
         cur.execute(
             """
             INSERT INTO tbl_integracao_ml_categoria_map (
@@ -874,7 +981,16 @@ def _extrair_listing_type_id(item) -> str:
     return ""
 
 
-def _listing_type_ml(cur, id_tenant: int, ml_user_id: int, category_id: str) -> str:
+def _listing_type_ml(
+    cur,
+    id_tenant: int,
+    ml_user_id: int,
+    category_id: str,
+    preferido: str = "auto",
+) -> str:
+    pref = (preferido or "auto").strip()
+    if pref and pref != "auto" and pref in _ML_LISTING_TYPES:
+        return pref
     ids: list[str] = []
     try:
         cat = api_request(cur, id_tenant, "GET", f"/categories/{category_id}")
@@ -909,6 +1025,71 @@ def _listing_type_ml(cur, id_tenant: int, ml_user_id: int, category_id: str) -> 
     except RuntimeError:
         pass
     return "gold_special"
+
+
+def _montar_shipping_ml(frete_gratis: bool) -> dict[str, Any]:
+    return {
+        "mode": "me2",
+        "local_pick_up": False,
+        "free_shipping": bool(frete_gratis),
+    }
+
+
+def _nome_listing_type_ml(listing_type_id: str) -> str:
+    nomes = {
+        "gold_special": "Clássico",
+        "gold_pro": "Premium",
+        "gold_premium": "Premium",
+        "free": "Grátis",
+    }
+    return nomes.get((listing_type_id or "").strip(), listing_type_id or "—")
+
+
+def _estado_anuncio_ml(cur, id_tenant: int, item_id: str) -> dict[str, Any]:
+    try:
+        data = api_request(cur, id_tenant, "GET", f"/items/{item_id}")
+        if not isinstance(data, dict):
+            return {}
+        return {
+            "status": data.get("status") or "",
+            "sub_status": data.get("sub_status") or [],
+            "category_id": data.get("category_id") or "",
+            "listing_type_id": data.get("listing_type_id") or "",
+        }
+    except RuntimeError:
+        return {}
+
+
+def _mensagem_pos_publicacao_ml(estado: dict[str, Any], category_id: str) -> str:
+    st = (estado.get("status") or "").lower()
+    subs = [str(s).lower() for s in (estado.get("sub_status") or [])]
+    cat = estado.get("category_id") or category_id or ""
+    tipo = _nome_listing_type_ml(estado.get("listing_type_id") or "")
+    base = f"Categoria ML: {cat}." if cat else ""
+    tipo_txt = f" Tipo: {tipo}." if tipo and tipo != "—" else ""
+
+    if st == "active":
+        return f"Anúncio ativo no Mercado Livre.{tipo_txt} {base}".strip()
+    if st == "under_review" or any("picture" in s or "moderation" in s for s in subs):
+        return (
+            "Anúncio criado. O Mercado Livre está revisando as fotos — "
+            "costuma levar algumas horas para ficar ativo."
+            f"{tipo_txt} {base}"
+        ).strip()
+    if st == "paused":
+        return (
+            "Anúncio criado, mas aparece como pausado/inativo no Mercado Livre. "
+            "Se a revisão de fotos terminar, ative pelo painel do ML ou aguarde."
+            f"{tipo_txt} {base}"
+        ).strip()
+    return f"Anúncio criado no Mercado Livre.{tipo_txt} {base}".strip()
+
+
+def _tentar_ativar_anuncio_ml(cur, id_tenant: int, item_id: str) -> None:
+    try:
+        api_request(cur, id_tenant, "PUT", f"/items/{item_id}", json_body={"status": "active"})
+    except RuntimeError:
+        pass
 
 
 def _attrs_categoria_ml(cur, id_tenant: int, category_id: str) -> list[dict]:
@@ -967,6 +1148,8 @@ def _montar_atributos_obrigatorios_ml(
         obrigatorio = bool(tags.get("required"))
         if tags.get("new_required") and eh_novo:
             obrigatorio = True
+        if tags.get("conditional_required"):
+            obrigatorio = True
         if not obrigatorio:
             continue
         if aid in ("SELLER_SKU", "SELLER_PACKAGE_HEIGHT", "SELLER_PACKAGE_WIDTH", "SELLER_PACKAGE_LENGTH", "SELLER_PACKAGE_WEIGHT"):
@@ -982,13 +1165,16 @@ def _montar_atributos_obrigatorios_ml(
         elif aid == "GTIN":
             if gtin:
                 entry = _attr_valor_texto(aid, gtin)
-            else:
-                continue
         elif aid == "EMPTY_GTIN_REASON":
             if not gtin:
-                entry = _attr_valor_lista(attr, "O produto não tem código cadastrado")
-                if not entry:
-                    entry = _attr_valor_lista(attr, "Outro motivo")
+                for motivo in (
+                    "O produto não tem código cadastrado",
+                    "O produto é uma peça artesanal",
+                    "Outro motivo",
+                ):
+                    entry = _attr_valor_lista(attr, motivo)
+                    if entry:
+                        break
         elif aid == "PART_NUMBER":
             entry = _attr_valor_texto(aid, sku or titulo[:60])
         else:
@@ -1006,6 +1192,34 @@ def _montar_atributos_obrigatorios_ml(
 
     if sku:
         out.append(_attr_valor_texto("SELLER_SKU", sku[:60]))
+
+    # GTIN condicional: sem código, informar motivo
+    if not gtin and "GTIN" not in vistos and "EMPTY_GTIN_REASON" not in vistos:
+        precisa_gtin = any(
+            (a.get("id") or "").strip() == "GTIN"
+            and (
+                (a.get("tags") or {}).get("required")
+                or (a.get("tags") or {}).get("conditional_required")
+                or ((a.get("tags") or {}).get("new_required") and eh_novo)
+            )
+            for a in cat_attrs
+        )
+        if precisa_gtin:
+            for attr in cat_attrs:
+                if (attr.get("id") or "").strip() != "EMPTY_GTIN_REASON":
+                    continue
+                for motivo in (
+                    "O produto não tem código cadastrado",
+                    "O produto é uma peça artesanal",
+                    "Outro motivo",
+                ):
+                    entry = _attr_valor_lista(attr, motivo)
+                    if entry:
+                        out.append(entry)
+                        vistos.add("EMPTY_GTIN_REASON")
+                        break
+                break
+
     return out
 
 
@@ -1027,6 +1241,7 @@ def _criar_anuncio_ml(
     marca: str = "",
     gtin: str = "",
     id_categoria_vendedor: int | None = None,
+    cfg: dict | None = None,
 ) -> str:
     titulo = (titulo or "Produto").strip()[:60]
     if preco <= 0:
@@ -1047,7 +1262,13 @@ def _criar_anuncio_ml(
             f"«{titulo}»: associe uma categoria ao produto e mapeie-a ao Mercado Livre."
         )
 
-    listing_type = _listing_type_ml(cur, id_tenant, ml_user_id, category_id)
+    cfg = cfg or {}
+    listing_pref = (cfg.get("listing_type_padrao") or "auto").strip()
+    frete_gratis = bool(cfg.get("frete_gratis"))
+
+    listing_type = _listing_type_ml(
+        cur, id_tenant, ml_user_id, category_id, listing_pref
+    )
     cat_attrs = _attrs_categoria_ml(cur, id_tenant, category_id)
     attrs = _montar_atributos_obrigatorios_ml(
         cat_attrs,
@@ -1074,14 +1295,11 @@ def _criar_anuncio_ml(
     if usa_up:
         # User Products: family_name obrigatório; title é gerado pelo ML.
         payload["family_name"] = family_name
+        payload["shipping"] = _montar_shipping_ml(frete_gratis)
     else:
         payload["title"] = titulo
         payload["channels"] = ["marketplace"]
-        payload["shipping"] = {
-            "mode": "me2",
-            "local_pick_up": False,
-            "free_shipping": False,
-        }
+        payload["shipping"] = _montar_shipping_ml(frete_gratis)
         if sku:
             payload["seller_custom_field"] = sku[:100]
     if attrs:
@@ -1091,6 +1309,8 @@ def _criar_anuncio_ml(
     item_id = str(resp.get("id") or "").strip()
     if not item_id:
         raise RuntimeError(f"«{titulo}»: ML não retornou id do anúncio.")
+
+    _tentar_ativar_anuncio_ml(cur, id_tenant, item_id)
 
     texto = (descricao or "").strip()
     if texto:
@@ -1146,6 +1366,7 @@ def _criar_anuncios_ml_lote(cur, id_tenant: int, cfg: dict, linhas: list) -> dic
     exportados = 0
     ignorados = 0
     erros: list[str] = []
+    resultados: list[dict] = []
     processados = 0
 
     for row in linhas:
@@ -1167,23 +1388,43 @@ def _criar_anuncios_ml_lote(cur, id_tenant: int, cfg: dict, linhas: list) -> dic
             id_cat_vd,
         ) = row
         processados += 1
+        nome = _titulo_exibicao_ml(titulo or "", sku or "")
+        sku_limpo = (sku or "").strip()
 
         if _item_ja_vinculado_ml(cur, id_tenant, int(id_variante)):
             ignorados += 1
+            resultados.append(
+                {
+                    "id_produto": int(id_produto),
+                    "titulo": nome,
+                    "sku": sku_limpo,
+                    "status": "ignorado",
+                    "mensagem": "Já vinculado ao Mercado Livre.",
+                }
+            )
             continue
-        if sku and _buscar_item_ml_por_sku(cur, id_tenant, ml_user_id, sku):
+        if sku_limpo and _buscar_item_ml_por_sku(cur, id_tenant, ml_user_id, sku_limpo):
             ignorados += 1
+            resultados.append(
+                {
+                    "id_produto": int(id_produto),
+                    "titulo": nome,
+                    "sku": sku_limpo,
+                    "status": "ignorado",
+                    "mensagem": "Já existe anúncio com este SKU no Mercado Livre.",
+                }
+            )
             continue
 
         try:
-            _criar_anuncio_ml(
+            ml_item_id = _criar_anuncio_ml(
                 cur,
                 id_tenant,
                 ml_user_id,
                 site_id,
                 id_variante=int(id_variante),
                 id_produto=int(id_produto),
-                sku=sku or "",
+                sku=sku_limpo,
                 titulo=titulo or "",
                 preco=float(preco or 0),
                 descricao=descricao or "",
@@ -1193,12 +1434,38 @@ def _criar_anuncios_ml_lote(cur, id_tenant: int, cfg: dict, linhas: list) -> dic
                 marca=marca or "",
                 gtin=gtin or "",
                 id_categoria_vendedor=int(id_cat_vd) if id_cat_vd else None,
+                cfg=cfg,
             )
             exportados += 1
+            estado = _estado_anuncio_ml(cur, id_tenant, ml_item_id)
+            cat_usada = estado.get("category_id") or ""
+            resultados.append(
+                {
+                    "id_produto": int(id_produto),
+                    "titulo": nome,
+                    "sku": sku_limpo,
+                    "status": "ok",
+                    "mensagem": _mensagem_pos_publicacao_ml(estado, cat_usada),
+                    "ml_item_id": ml_item_id,
+                    "ml_category_id": cat_usada,
+                    "ml_listing_type": estado.get("listing_type_id") or "",
+                    "ml_status": estado.get("status") or "",
+                }
+            )
         except RuntimeError as e:
-            msg = str(e)[:240]
-            if msg not in erros:
-                erros.append(msg)
+            msg_tec = str(e)[:400]
+            msg_user = _erro_ml_para_usuario(msg_tec)
+            if msg_user not in erros:
+                erros.append(msg_user)
+            resultados.append(
+                {
+                    "id_produto": int(id_produto),
+                    "titulo": nome,
+                    "sku": sku_limpo,
+                    "status": "erro",
+                    "mensagem": msg_user,
+                }
+            )
 
     total = len(linhas)
     if exportados > 0:
@@ -1210,7 +1477,7 @@ def _criar_anuncios_ml_lote(cur, id_tenant: int, cfg: dict, linhas: list) -> dic
         if total > _ML_MAX_CRIAR_POR_SYNC:
             msg += f" Limite de {_ML_MAX_CRIAR_POR_SYNC} por sincronização — execute novamente para continuar."
     elif erros:
-        msg = f"Nenhum anúncio criado. {erros[0]}"
+        msg = f"Nenhum anúncio criado. {len(erros)} produto(s) com pendência."
     else:
         msg = "Nenhum produto novo para publicar (todos já estão no ML ou na vitrine)."
 
@@ -1221,10 +1488,11 @@ def _criar_anuncios_ml_lote(cur, id_tenant: int, cfg: dict, linhas: list) -> dic
         "exportados": exportados,
         "vinculados": 0,
         "ignorados": ignorados,
-        "erros": len(erros),
+        "erros": len([r for r in resultados if r.get("status") == "erro"]),
+        "resultados": resultados,
     }
     if erros:
-        out["detalhes_erros"] = erros[:5]
+        out["detalhes_erros"] = erros[:8]
     return out
 
 

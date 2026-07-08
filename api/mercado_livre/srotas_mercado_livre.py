@@ -179,7 +179,8 @@ def config_salvar():
             pedidos_importar_auto=body.get("pedidos_importar_auto") if "pedidos_importar_auto" in body else None,
             produtos_exportar_auto=body.get("produtos_exportar_auto") if "produtos_exportar_auto" in body else None,
             produtos_modo=body.get("produtos_modo") if "produtos_modo" in body else None,
-            estoque_sync_ativo=body.get("estoque_sync_ativo") if "estoque_sync_ativo" in body else None,
+            listing_type_padrao=body.get("listing_type_padrao") if "listing_type_padrao" in body else None,
+            frete_gratis=body.get("frete_gratis") if "frete_gratis" in body else None,
         )
         conn.commit()
         return jsonify(success=True, message="Preferências salvas.")

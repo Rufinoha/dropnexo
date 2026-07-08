@@ -19,6 +19,7 @@
     pedidosAuto: document.getElementById("ml_pedidos_auto"),
     produtosAuto: document.getElementById("ml_produtos_auto"),
     estoqueAuto: document.getElementById("ml_estoque_auto"),
+    freteGratis: document.getElementById("ml_frete_gratis"),
     msg: document.getElementById("ml_msg"),
     subtabs: document.getElementById("ml_subtabs"),
     modalCat: document.getElementById("ml_modal_categorias"),
@@ -96,9 +97,14 @@
     if (el.pedidosAuto) el.pedidosAuto.checked = !!cfg.pedidos_importar_auto;
     if (el.produtosAuto) el.produtosAuto.checked = !!cfg.produtos_exportar_auto;
     if (el.estoqueAuto) el.estoqueAuto.checked = !!cfg.estoque_sync_ativo;
+    if (el.freteGratis) el.freteGratis.checked = !!cfg.frete_gratis;
     const modo = cfg.produtos_modo || "vincular_sku";
     document.querySelectorAll('input[name="ml_produtos_modo"]').forEach((r) => {
       r.checked = r.value === modo;
+    });
+    const lt = cfg.listing_type_padrao || "auto";
+    document.querySelectorAll('input[name="ml_listing_type"]').forEach((r) => {
+      r.checked = r.value === lt;
     });
   }
 
@@ -107,8 +113,11 @@
     if (el.pedidosAuto) body.pedidos_importar_auto = el.pedidosAuto.checked;
     if (el.produtosAuto) body.produtos_exportar_auto = el.produtosAuto.checked;
     if (el.estoqueAuto) body.estoque_sync_ativo = el.estoqueAuto.checked;
+    if (el.freteGratis) body.frete_gratis = el.freteGratis.checked;
     const modo = document.querySelector('input[name="ml_produtos_modo"]:checked');
     if (modo) body.produtos_modo = modo.value;
+    const lt = document.querySelector('input[name="ml_listing_type"]:checked');
+    if (lt) body.listing_type_padrao = lt.value;
     return body;
   }
 
@@ -159,10 +168,13 @@
     ativarAba(btn.dataset.mlTab);
   });
 
-  [el.pedidosAuto, el.produtosAuto, el.estoqueAuto].forEach((inp) => {
+  [el.pedidosAuto, el.produtosAuto, el.estoqueAuto, el.freteGratis].forEach((inp) => {
     inp?.addEventListener("change", () => salvarConfig());
   });
   document.querySelectorAll('input[name="ml_produtos_modo"]').forEach((r) => {
+    r.addEventListener("change", () => salvarConfig());
+  });
+  document.querySelectorAll('input[name="ml_listing_type"]').forEach((r) => {
     r.addEventListener("change", () => salvarConfig());
   });
 
@@ -236,7 +248,7 @@
         (c) => `<tr data-cat-id="${c.id_categoria}">
           <td>${esc(c.nome)}</td>
           <td><input type="text" class="ml-inp-cat" value="${esc(c.ml_category_id || "")}" placeholder="MLB1234" /></td>
-          <td><input type="text" class="ml-inp-fam" value="${esc(c.family_name || "")}" placeholder="Família do anúncio" /></td>
+          <td><input type="text" class="ml-inp-fam" value="${esc(c.family_name || "")}" placeholder="Família (máx. 60)" maxlength="60" /></td>
           <td><button type="button" class="Cl_botaoFiltro Mp_CatMapBtn ml-btn-sugerir">Sugerir</button></td>
         </tr>`
       )
@@ -343,7 +355,7 @@
       const inpCat = tr.querySelector(".ml-inp-cat");
       const inpFam = tr.querySelector(".ml-inp-fam");
       if (inpCat) inpCat.value = picked.category_id;
-      if (inpFam && !inpFam.value.trim()) inpFam.value = nome.slice(0, 120);
+      if (inpFam && !inpFam.value.trim()) inpFam.value = nome.slice(0, 60);
       mostrarMsg(`Sugerido: ${picked.category_id}`, false);
     } catch (e) {
       mostrarMsg(e.message, true);

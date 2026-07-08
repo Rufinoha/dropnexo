@@ -100,6 +100,34 @@
           <span><strong>Criar novos anúncios</strong> — publicar produtos que ainda não existem no ML (exige mapeamento de categoria)</span>
         </label>
       </fieldset>
+      <fieldset class="Mp_RadioGroup">
+        <legend class="Mp_RadioLegend">Tipo de anúncio padrão</legend>
+        <label class="Mp_RadioRow">
+          <input type="radio" name="ml_listing_type" value="auto" checked data-ml-config="listing_type_padrao" />
+          <span><strong>Automático</strong> — usa o primeiro tipo disponível na categoria (geralmente Clássico)</span>
+        </label>
+        <label class="Mp_RadioRow">
+          <input type="radio" name="ml_listing_type" value="gold_special" data-ml-config="listing_type_padrao" />
+          <span><strong>Clássico</strong> — menor comissão, exposição padrão</span>
+        </label>
+        <label class="Mp_RadioRow">
+          <input type="radio" name="ml_listing_type" value="gold_pro" data-ml-config="listing_type_padrao" />
+          <span><strong>Premium</strong> — maior visibilidade (comissão maior)</span>
+        </label>
+      </fieldset>
+      <div class="Mp_Switches">
+        <div class="Mp_SwitchRow">
+          <div class="Mp_SwitchText">
+            <strong>Oferecer frete grátis</strong>
+            <span>Envia frete grátis no anúncio (custo absorvido por você no ML)</span>
+          </div>
+          <label class="Cl_Switch Mp_Switch">
+            <input type="checkbox" id="ml_frete_gratis" data-ml-config="frete_gratis" />
+            <span class="Cl_SwitchSlider"></span>
+          </label>
+        </div>
+      </div>
+      <p class="Mp_Hint Mp_Hint--note">Origem de expedição: o ML usa o endereço e depósitos da sua conta de vendedor. Vincular depósitos do DropNexo ao ML será habilitado em breve.</p>
       <div class="Mp_Actions" style="margin-top:0.85rem">
         <button type="button" class="Cl_botaoprimario" id="ml_btn_mapear_categorias">Mapear categorias</button>
         <a href="{{ url_for('vd_meus_produtos.pagina') }}" class="Cl_botaoFiltro">Ir para Meus produtos</a>
@@ -140,7 +168,7 @@
           <h3 id="ml_modal_cat_titulo">Mapear categorias — Mercado Livre</h3>
           <button type="button" class="Mp_ModalClose" id="ml_modal_cat_fechar" aria-label="Fechar">&times;</button>
         </header>
-        <p class="Mp_Hint">Para cada categoria sua, informe o ID da categoria no Mercado Livre (ex.: MLB1246) e a família do anúncio. Use <strong>Sugerir</strong> para buscar pelo nome.</p>
+        <p class="Mp_Hint">Para cada categoria sua, informe o ID da categoria no Mercado Livre (ex.: MLB1246) e a família do anúncio (máx. 60 caracteres). Use <strong>Sugerir</strong> para buscar pelo nome.</p>
         <div class="Mp_CatMapWrap">
           <table class="Mp_CatMapTable" id="ml_tabela_categorias">
             <thead>
@@ -168,5 +196,5 @@
 </div>
 {% endblock %}
 {% block page_js %}
-<script src="{{ url_for('static', filename='script/Smercado_livre_integracao.js') }}?v=7"></script>
+<script src="{{ url_for('static', filename='script/Smercado_livre_integracao.js') }}?v=8"></script>
 {% endblock %}

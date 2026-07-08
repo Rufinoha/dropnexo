@@ -30,6 +30,13 @@
     btnAnterior: document.getElementById("ob_btnAnterior"),
     btnProximo: document.getElementById("ob_btnProximo"),
     btnUltimo: document.getElementById("ob_btnUltimo"),
+    modalMl: document.getElementById("ob_modalMl"),
+    mlTitulo: document.getElementById("ob_mlTitulo"),
+    mlSubtitulo: document.getElementById("ob_mlSubtitulo"),
+    mlResumo: document.getElementById("ob_mlResumo"),
+    mlLista: document.getElementById("ob_mlLista"),
+    mlFechar: document.getElementById("ob_mlFechar"),
+    mlBtnOk: document.getElementById("ob_mlBtnOk"),
   };
   if (!el.tbody) return;
 
@@ -249,6 +256,79 @@
     await associarCategoriaLote([idProduto]);
   }
 
+  function fecharModalMl() {
+    el.modalMl?.close();
+  }
+
+  function abrirModalMlResultado(jj) {
+    if (!el.modalMl || !el.mlLista) return;
+
+    const resultados = jj.resultados || [];
+    const ok = resultados.filter((r) => r.status === "ok").length || jj.exportados || jj.vinculados || 0;
+    const erros = resultados.filter((r) => r.status === "erro").length || jj.erros || 0;
+    const ign = resultados.filter((r) => r.status === "ignorado").length || jj.ignorados || 0;
+    const parcial = ok > 0 && erros > 0;
+
+    if (el.mlTitulo) {
+      el.mlTitulo.textContent = parcial
+        ? "Integração parcialmente concluída"
+        : ok > 0
+          ? "Integração concluída"
+          : "Não foi possível integrar";
+    }
+    if (el.mlSubtitulo) {
+      el.mlSubtitulo.textContent = jj.message || "Resultado da publicação no Mercado Livre.";
+    }
+
+    if (el.mlResumo) {
+      el.mlResumo.hidden = !resultados.length;
+      el.mlResumo.innerHTML = `
+        <div class="Ob_MlResumoCard Ob_MlResumoCard--ok"><strong>${ok}</strong><span>Publicados</span></div>
+        <div class="Ob_MlResumoCard Ob_MlResumoCard--erro"><strong>${erros}</strong><span>Com pendência</span></div>
+        <div class="Ob_MlResumoCard Ob_MlResumoCard--ign"><strong>${ign}</strong><span>Ignorados</span></div>`;
+    }
+
+    const icones = { ok: "✓", erro: "!", ignorado: "·" };
+    const itens =
+      resultados.length > 0
+        ? resultados
+        : (jj.detalhes_erros || []).map((msg) => ({
+            titulo: "Produto",
+            status: "erro",
+            mensagem: msg,
+          }));
+
+    if (!itens.length && jj.message) {
+      itens.push({ titulo: "Resumo", status: ok > 0 ? "ok" : "erro", mensagem: jj.message });
+    }
+
+    el.mlLista.innerHTML = itens
+      .map((r) => {
+        const st = r.status === "ok" || r.status === "erro" || r.status === "ignorado" ? r.status : "erro";
+        const meta = [r.sku && `SKU ${escapeHtml(r.sku)}`, r.ml_item_id && `Anúncio ${escapeHtml(r.ml_item_id)}`]
+          .filter(Boolean)
+          .join(" · ");
+        return `<li class="Ob_MlItem Ob_MlItem--${st}">
+          <span class="Ob_MlItemIcon" aria-hidden="true">${icones[st] || "!"}</span>
+          <div>
+            <p class="Ob_MlItemTitulo">${escapeHtml(r.titulo || "Produto")}</p>
+            ${meta ? `<p class="Ob_MlItemMeta">${meta}</p>` : ""}
+            <p class="Ob_MlItemMsg">${escapeHtml(r.mensagem || "")}</p>
+          </div>
+        </li>`;
+      })
+      .join("");
+
+    el.modalMl.showModal();
+  }
+
+  el.mlFechar?.addEventListener("click", fecharModalMl);
+  el.mlBtnOk?.addEventListener("click", fecharModalMl);
+  el.modalMl?.addEventListener("cancel", (ev) => {
+    ev.preventDefault();
+    fecharModalMl();
+  });
+
   async function integrarMercadoLivreLote(ids) {
     const c = await Swal.fire({
       title: `Integrar ${ids.length} produto(s) ao Mercado Livre?`,
@@ -280,17 +360,9 @@
     Swal.close();
     if (!resp.ok || !jj.success) throw new Error(jj.message || "Falha na integração.");
 
-    let msg = jj.message || "Concluído.";
-    if (jj.detalhes_erros?.length) {
-      msg += "\n\n" + jj.detalhes_erros.slice(0, 3).join("\n");
-    }
     selecionados.clear();
     syncBulkBar();
-    await Swal.fire({
-      title: jj.exportados > 0 || jj.vinculados > 0 ? "Integração concluída" : "Atenção",
-      text: msg,
-      icon: jj.exportados > 0 || jj.vinculados > 0 ? "success" : "warning",
-    });
+    abrirModalMlResultado(jj);
   }
 
   function renderCategoriaCell(l) {

@@ -8,6 +8,7 @@
 
 {% block head_extra %}
 <link rel="stylesheet" href="{{ url_for('fn_catalogo.static', filename='style/Ccatalogos.css') }}?v=10" />
+<link rel="stylesheet" href="{{ url_for('vd_meus_produtos.static', filename='style/Cmeus_produtos_ml.css') }}?v=1" />
 {% endblock %}
 
 {% block content %}
@@ -113,8 +114,27 @@
 
 </div>
 
+<dialog class="Ob_MlModal" id="ob_modalMl" aria-labelledby="ob_mlTitulo">
+  <div class="Ob_MlModalInner">
+    <header class="Ob_MlModalHead">
+      <div>
+        <h3 id="ob_mlTitulo">Integração Mercado Livre</h3>
+        <p class="Ob_MlModalSub" id="ob_mlSubtitulo"></p>
+      </div>
+      <button type="button" class="Ob_MlModalClose" id="ob_mlFechar" aria-label="Fechar">&times;</button>
+    </header>
+    <div class="Ob_MlResumo" id="ob_mlResumo" hidden></div>
+    <div class="Ob_MlListaWrap">
+      <ul class="Ob_MlLista" id="ob_mlLista"></ul>
+    </div>
+    <footer class="Ob_MlModalFoot">
+      <button type="button" class="Cl_botaoprimario" id="ob_mlBtnOk">Entendi</button>
+    </footer>
+  </div>
+</dialog>
+
 {% endblock %}
 
 {% block page_js %}
-<script defer src="{{ url_for('vd_meus_produtos.static', filename='script/Svd_meus_produtos_lista.js') }}?v=6"></script>
+<script defer src="{{ url_for('vd_meus_produtos.static', filename='script/Svd_meus_produtos_lista.js') }}?v=7"></script>
 {% endblock %}
