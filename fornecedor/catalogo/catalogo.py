@@ -834,6 +834,14 @@ def sincronizar_total_variante(cur, id_variante: int) -> int:
         """,
         (id_variante, total, agora),
     )
+    try:
+        from api.mercado_livre.eco_estoque import ml_sync_suprimido
+        from api.mercado_livre.sync_runtime import propagar_estoque_variante_ml
+
+        if not ml_sync_suprimido():
+            propagar_estoque_variante_ml(cur, int(id_variante), quantidade=total)
+    except Exception:
+        pass
     return total
 
 

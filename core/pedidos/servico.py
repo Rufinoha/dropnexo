@@ -2022,6 +2022,15 @@ def baixar_estoque_expedicao(
         from fornecedor.catalogo.catalogo import sincronizar_total_variante
 
         sincronizar_total_variante(cur, id_variante)
+    else:
+        try:
+            from api.mercado_livre.eco_estoque import ml_sync_suprimido
+            from api.mercado_livre.sync_runtime import propagar_estoque_variante_ml
+
+            if not ml_sync_suprimido():
+                propagar_estoque_variante_ml(cur, int(id_variante))
+        except Exception:
+            pass
 
 
 def baixar_itens_pedido(cur, itens: list[tuple[int, int, int | None]]) -> None:

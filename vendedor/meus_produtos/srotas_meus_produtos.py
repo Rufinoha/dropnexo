@@ -1032,7 +1032,18 @@ def salvar_vitrine():
         if cur.rowcount == 0:
             return jsonify(success=False, message="Produto não está na sua vitrine."), 404
         conn.commit()
-        return jsonify(success=True, message="Vitrine atualizada.", id=pid)
+        ml_aviso = None
+        try:
+            from api.mercado_livre.sync_runtime import propagar_produto_ml_apos_salvar
+
+            ml_aviso = propagar_produto_ml_apos_salvar(cur, id_tenant, pid)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+        msg = "Vitrine atualizada."
+        if ml_aviso:
+            msg += f" Aviso Mercado Livre: {ml_aviso}"
+        return jsonify(success=True, message=msg, id=pid)
     finally:
         conn.close()
 
@@ -1345,7 +1356,20 @@ def salvar_variante_vitrine():
             return jsonify(success=False, message="Edição completa de variação própria ainda não disponível."), 501
 
         conn.commit()
-        return jsonify(success=True, message="Variação atualizada na vitrine.", id_variante=vid)
+        ml_aviso = None
+        try:
+            from api.mercado_livre.sync_runtime import propagar_produto_ml_apos_salvar
+
+            ml_aviso = propagar_produto_ml_apos_salvar(
+                cur, id_tenant, int(row[0]), id_variante=vid
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+        msg = "Variação atualizada na vitrine."
+        if ml_aviso:
+            msg += f" Aviso Mercado Livre: {ml_aviso}"
+        return jsonify(success=True, message=msg, id_variante=vid)
     finally:
         conn.close()
 

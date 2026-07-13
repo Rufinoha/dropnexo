@@ -1,0 +1,87 @@
+<footer class="pub-footer pub-footer--rich">
+  <div class="pub-footer__inner">
+    <div class="pub-footer__brand">
+      <a class="pub-footer__logo" href="{{ url_home|default('/') }}">
+        <img src="{{ marca_logo_nome_url }}" alt="{{ MARCA_NOME }}" height="28" />
+      </a>
+      <p class="pub-footer__tagline">
+        Plataforma B2B de dropshipping: conecta fornecedores e vendedores sem comissão sobre vendas.
+      </p>
+      <p class="pub-footer__familia">{{ MARCA_FAMILIA }}</p>
+    </div>
+
+    <ul class="pub-footer__trust" aria-label="Compromissos">
+      <li class="pub-footer__trust-card">
+        <span class="pub-footer__trust-icon" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+        </span>
+        <strong>Conexão segura</strong>
+        <span>HTTPS em todo o site</span>
+      </li>
+      <li class="pub-footer__trust-card">
+        <span class="pub-footer__trust-icon" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        </span>
+        <strong>Dados isolados</strong>
+        <span>Conta separada por empresa</span>
+      </li>
+      <li class="pub-footer__trust-card">
+        <span class="pub-footer__trust-icon" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg>
+        </span>
+        <strong>LGPD</strong>
+        <span>Política de privacidade publicada</span>
+      </li>
+      <li class="pub-footer__trust-card">
+        <span class="pub-footer__trust-icon" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 010 20 15.3 15.3 0 010-20z"/></svg>
+        </span>
+        <strong>Feito no Brasil</strong>
+        <span>Suporte e operação nacional</span>
+      </li>
+    </ul>
+
+    <nav class="pub-footer__nav" aria-label="Rodapé">
+      <div class="pub-footer__col">
+        <h3>Produto</h3>
+        {% if url_para_vendedores is defined %}
+        <a href="{{ url_para_vendedores }}">Vendedores</a>
+        {% endif %}
+        {% if url_para_fornecedores is defined %}
+        <a href="{{ url_para_fornecedores }}">Fornecedores</a>
+        {% endif %}
+        {% if request.endpoint == 'public.home' %}
+        <a href="#como-funciona">Como funciona</a>
+        {% else %}
+        <a href="{{ url_home|default('/') }}#como-funciona">Como funciona</a>
+        {% endif %}
+      </div>
+      <div class="pub-footer__col">
+        <h3>Conta</h3>
+        {% if request.endpoint == 'public.home' %}
+        <a href="#comecar">Criar conta</a>
+        {% elif url_cadastro is defined %}
+        <a href="{{ url_cadastro }}">Criar conta</a>
+        {% elif url_cadastro_vendedor is defined %}
+        <a href="{{ url_cadastro_vendedor }}">Criar conta</a>
+        {% endif %}
+        {% if url_login is defined %}
+        <a href="{{ url_login }}">Entrar</a>
+        {% endif %}
+      </div>
+      <div class="pub-footer__col">
+        <h3>Legal</h3>
+        <a href="{{ url_for('public.privacidade') }}">Privacidade</a>
+        <a href="{{ url_for('public.termos') }}">Termos</a>
+        <a href="mailto:{{ CONTATO_EMAIL|default('contato@dropnexo.com.br') }}">Contato</a>
+      </div>
+    </nav>
+  </div>
+
+  <div class="pub-footer__bottom">
+    <p>
+      © DropNexo · Todos os direitos reservados para
+      <a href="https://h74.com.br" target="_blank" rel="noopener noreferrer">H74 SISTEMAS LTDA</a>
+    </p>
+  </div>
+</footer>

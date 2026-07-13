@@ -1,9 +1,11 @@
 # DropNexo — acesso público, autenticação e cadastro
 from __future__ import annotations
 
-from flask import Blueprint, render_template, url_for
+from flask import Blueprint, Response, render_template, url_for
 
 # --- srotas_public ---
+
+from datetime import date
 
 from global_utils import INTEGRACOES_CANAIS_PREVISAO, obter_base_url
 from sistema.planos.srotas_planos import catalogo_planos_home, landing_perfil
@@ -62,6 +64,124 @@ def para_fornecedores():
         outro_perfil_label="Para vendedores",
         canonical_url=f"{obter_base_url().rstrip('/')}/para-fornecedores",
     )
+
+
+def _ctx_pagina_legal(**extra):
+    base = obter_base_url().rstrip("/")
+    return {
+        "url_home": url_for("public.home"),
+        "url_login": url_for("auth.pagina_login"),
+        "url_cadastro_vendedor": url_for("cadastro.pagina_cadastro", tipo="vendedor"),
+        "url_para_vendedores": url_for("public.para_vendedores"),
+        "url_para_fornecedores": url_for("public.para_fornecedores"),
+        "url_politica_privacidade": url_for("public.privacidade"),
+        "url_termos": url_for("public.termos"),
+        **extra,
+        "canonical_url": extra.get("canonical_url") or f"{base}/",
+    }
+
+
+@public_bp.get("/privacidade")
+def privacidade():
+    base = obter_base_url().rstrip("/")
+    return render_template(
+        "privacidade.html",
+        **_ctx_pagina_legal(
+            page_title="Política de Privacidade",
+            meta_description="Política de Privacidade do DropNexo — tratamento de dados pessoais conforme a LGPD.",
+            kicker="Legal",
+            heading="Política de Privacidade",
+            atualizado_em="13 de julho de 2026",
+            canonical_url=f"{base}/privacidade",
+        ),
+    )
+
+
+@public_bp.get("/termos")
+def termos():
+    base = obter_base_url().rstrip("/")
+    return render_template(
+        "termos.html",
+        **_ctx_pagina_legal(
+            page_title="Termos de Uso",
+            meta_description="Termos de Uso do DropNexo — condições para uso da plataforma B2B de dropshipping.",
+            kicker="Legal",
+            heading="Termos de Uso",
+            atualizado_em="13 de julho de 2026",
+            canonical_url=f"{base}/termos",
+        ),
+    )
+
+
+@public_bp.get("/robots.txt")
+def robots_txt():
+    """Indexar só páginas públicas de marketing; bloquear área logada e auth."""
+    base = obter_base_url().rstrip("/")
+    corpo = f"""# DropNexo — regras para crawlers
+User-agent: *
+Allow: /$
+Allow: /para-vendedores$
+Allow: /para-fornecedores$
+Allow: /privacidade$
+Allow: /termos$
+
+# Área autenticada / operacional
+Disallow: /login
+Disallow: /cadastro
+Disallow: /definir-senha
+Disallow: /index
+Disallow: /api/
+Disallow: /meus-produtos
+Disallow: /catalogos
+Disallow: /integracoes
+Disallow: /vendedor/
+Disallow: /fornecedor/
+Disallow: /sistema/
+Disallow: /config
+Disallow: /perfil
+Disallow: /pedidos
+Disallow: /expedicao
+Disallow: /precificacao
+Disallow: /depositos
+Disallow: /usuarios
+Disallow: /dashboard
+Disallow: /static/upload/
+
+Sitemap: {base}/sitemap.xml
+"""
+    return Response(corpo, mimetype="text/plain; charset=utf-8")
+
+
+@public_bp.get("/sitemap.xml")
+def sitemap_xml():
+    """Sitemap apenas com URLs públicas indexáveis."""
+    base = obter_base_url().rstrip("/")
+    hoje = date.today().isoformat()
+    urls = [
+        ("/", "1.0", "weekly"),
+        ("/para-vendedores", "0.8", "weekly"),
+        ("/para-fornecedores", "0.8", "weekly"),
+        ("/privacidade", "0.3", "yearly"),
+        ("/termos", "0.3", "yearly"),
+    ]
+    itens = []
+    for path, prioridade, freq in urls:
+        loc = base if path == "/" else f"{base}{path}"
+        itens.append(
+            f"""  <url>
+    <loc>{loc}</loc>
+    <lastmod>{hoje}</lastmod>
+    <changefreq>{freq}</changefreq>
+    <priority>{prioridade}</priority>
+  </url>"""
+        )
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+        + "\n".join(itens)
+        + "\n</urlset>\n"
+    )
+    return Response(xml, mimetype="application/xml; charset=utf-8")
 
 
 # --- srotas_auth ---

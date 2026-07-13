@@ -622,37 +622,9 @@ from datetime import datetime, timedelta, timezone
 
 
 def importar_pedidos_mercado_livre(cur, id_tenant: int, *, dias: int = 7) -> dict:
-    """
-    Lista pedidos pagos recentes no ML e prepara importação.
-    A gravação em tbl_pedido (origem mercado_livre) será expandida na próxima etapa.
-    """
-    cfg = carregar_config_ml(cur, id_tenant)
-    ml_user_id = cfg.get("ml_user_id")
-    if not ml_user_id:
-        raise RuntimeError("Perfil Mercado Livre sem user_id. Reconecte a conta.")
+    from api.mercado_livre.pedidos_ml import importar_pedidos_mercado_livre as _importar
 
-    desde = datetime.now(timezone.utc) - timedelta(days=max(1, min(dias, 60)))
-    params = {
-        "seller": ml_user_id,
-        "order.status": "paid",
-        "sort": "date_desc",
-        "order.date_created.from": desde.strftime("%Y-%m-%dT%H:%M:%S.000-00:00"),
-        "limit": 50,
-    }
-    data = api_request(cur, id_tenant, "GET", "/orders/search", params=params)
-    resultados = data.get("results") or []
-    ids = [str(o.get("id")) for o in resultados if o.get("id")]
-
-    return {
-        "message": (
-            f"{len(ids)} pedido(s) pago(s) encontrado(s) nos últimos {dias} dia(s). "
-            "A importação automática para DropNexo será habilitada na próxima etapa."
-        ),
-        "total_encontrados": len(ids),
-        "ids_amostra": ids[:10],
-        "importados": 0,
-        "ignorados": len(ids),
-    }
+    return _importar(cur, id_tenant, dias=dias)
 
 
 _ML_CURRENCY_SITE = {
@@ -1749,16 +1721,6 @@ def publicar_produtos_ml(cur, id_tenant: int, ids_produtos: list[int]) -> dict:
 
 
 def sincronizar_estoque_ml(cur, id_tenant: int) -> dict:
-    """Fase 2: enviar estoque DropNexo → anúncios ML."""
-    cfg = carregar_config_ml(cur, id_tenant)
-    if not cfg.get("conectado"):
-        raise RuntimeError("Mercado Livre não conectado.")
-    if not cfg.get("estoque_sync_ativo"):
-        raise RuntimeError("Ative a sincronização de estoque antes de enviar.")
-    return {
-        "message": (
-            "Sincronização de estoque com o Mercado Livre será habilitada na próxima etapa. "
-            "As preferências já foram salvas."
-        ),
-        "atualizados": 0,
-    }
+    from api.mercado_livre.sync_runtime import sincronizar_todos_estoques_ml
+
+    return sincronizar_todos_estoques_ml(cur, id_tenant)

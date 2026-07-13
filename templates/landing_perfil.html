@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="{{ url_for('static', filename='style/public.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style/public.css') }}?v=15" />
   {% include "partials/gtag_analytics.html" %}
 </head>
 <body class="public-site">
@@ -83,10 +83,8 @@
     </section>
   </main>
 
-  <footer class="pub-footer">
-    <p>© {{ MARCA_NOME }} · <a href="{{ url_home }}">Início</a> · <a href="{{ url_outro_perfil }}">{{ outro_perfil_label }}</a></p>
-  </footer>
+  {% include "partials/public_footer.html" %}
 
-  <script src="{{ url_for('static', filename='script/public.js') }}"></script>
+  <script src="{{ url_for('static', filename='script/public.js') }}?v=3"></script>
 </body>
 </html>

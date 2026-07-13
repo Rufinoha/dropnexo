@@ -14,7 +14,13 @@
       {% if url_para_fornecedores is defined %}
       <a href="{{ url_para_fornecedores }}">Fornecedores</a>
       {% endif %}
+      {% if request.endpoint == 'public.home' %}
+      <a href="#como-funciona">Como funciona</a>
       {% if url_login is defined %}
+      <a class="pub-nav__login" href="{{ url_login }}">Entrar</a>
+      {% endif %}
+      <a class="pub-nav__cta pub-nav__cta--solid" href="#comecar">Criar conta grátis</a>
+      {% elif url_login is defined %}
       <a class="pub-nav__cta" href="{{ url_login }}">Entrar</a>
       {% endif %}
     </nav>

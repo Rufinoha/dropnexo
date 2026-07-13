@@ -1746,7 +1746,18 @@ def catalogos_salvar():
             sync_pai_de_variante_padrao(cur, prod_id)
         aplicar_valor_drop_produto_e_variantes(cur, id_tenant, prod_id, publicar=False)
         conn.commit()
-        return jsonify(success=True, message="Produto salvo.", id=prod_id)
+        ml_aviso = None
+        try:
+            from api.mercado_livre.sync_runtime import propagar_produto_ml_apos_salvar
+
+            ml_aviso = propagar_produto_ml_apos_salvar(cur, id_tenant, prod_id)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+        msg = "Produto salvo."
+        if ml_aviso:
+            msg += f" Aviso Mercado Livre: {ml_aviso}"
+        return jsonify(success=True, message=msg, id=prod_id)
     except ValueError as e:
         conn.rollback()
         return jsonify(success=False, message=str(e)), 409
@@ -2994,7 +3005,20 @@ def variantes_salvar():
         sync_pai_de_variante_padrao(cur, id_produto)
         aplicar_valor_drop_variante(cur, id_tenant, variant_id)
         conn.commit()
-        return jsonify(success=True, message="Variante salva.", id=variant_id)
+        ml_aviso = None
+        try:
+            from api.mercado_livre.sync_runtime import propagar_produto_ml_apos_salvar
+
+            ml_aviso = propagar_produto_ml_apos_salvar(
+                cur, id_tenant, id_produto, id_variante=variant_id
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+        msg = "Variante salva."
+        if ml_aviso:
+            msg += f" Aviso Mercado Livre: {ml_aviso}"
+        return jsonify(success=True, message=msg, id=variant_id)
     except ValueError as e:
         conn.rollback()
         return jsonify(success=False, message=str(e)), 409

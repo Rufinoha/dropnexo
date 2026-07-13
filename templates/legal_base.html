@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="{{ meta_description }}" />
+  <meta name="robots" content="index,follow" />
+  <title>{{ page_title }} — {{ MARCA_NOME }}</title>
+  <link rel="canonical" href="{{ canonical_url }}" />
+  {% include "partials/marca_favicon.html" %}
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style/public.css') }}?v=15" />
+  {% include "partials/gtag_analytics.html" %}
+</head>
+<body class="public-site public-site--legal">
+  {% include "partials/public_header.html" %}
+
+  <main class="pub-legal">
+    <article class="pub-legal__article">
+      <header class="pub-legal__head">
+        <p class="pub-kicker">{{ kicker }}</p>
+        <h1>{{ heading }}</h1>
+        <p class="pub-legal__meta">Última atualização: {{ atualizado_em }}</p>
+      </header>
+
+      <div class="pub-legal__body">
+        {% block legal_body %}{% endblock %}
+      </div>
+    </article>
+  </main>
+
+  {% include "partials/public_footer.html" %}
+  <script src="{{ url_for('static', filename='script/public.js') }}?v=3"></script>
+</body>
+</html>
