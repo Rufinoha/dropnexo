@@ -716,6 +716,13 @@ def _erro_ml_para_usuario(texto: str) -> str:
             f"Nome da família muito longo (máx. {_ML_FAMILY_NAME_MAX} caracteres). "
             "Encurte em Integrações → Mercado Livre → Mapear categorias."
         )
+    if "description.type.invalid" in low or (
+        "description" in low and "plain text" in low
+    ):
+        return (
+            "A descrição do produto ainda tem formatação/HTML que o Mercado Livre não aceita. "
+            "Reexporte após a correção automática, ou edite a descrição em texto simples."
+        )
     if "imagem" in low or "pictures" in low or "picture" in low:
         return "Foto pública obrigatória. Adicione uma imagem ao produto antes de publicar."
     if "preço" in low or "price" in low:
@@ -735,6 +742,54 @@ def _erro_ml_para_usuario(texto: str) -> str:
 def _titulo_exibicao_ml(titulo: str, sku: str) -> str:
     nome = (titulo or sku or "Produto").strip()
     return nome[:80]
+
+
+_ML_TITULO_PROMO_RE = re.compile(
+    r"\b("
+    r"frete\s*gr[aá]tis|envio\s*gr[aá]tis|promo[cç][aã]o|oferta|desconto|"
+    r"imperd[ií]vel|liquidação|liquidacao|super\s*oferta|"
+    r"parcelamento|sem\s*juros|100%\s*original|"
+    r"produto\s*novo|seminovo"
+    r")\b",
+    re.IGNORECASE,
+)
+
+
+def _truncar_titulo_ml(texto: str, max_len: int) -> str:
+    t = (texto or "").strip()
+    if len(t) <= max_len:
+        return t
+    corte = t[: max_len + 1]
+    if " " in corte:
+        corte = corte.rsplit(" ", 1)[0]
+    return (corte or t[:max_len]).strip()[:max_len]
+
+
+def _normalizar_titulo_ml(titulo: str, *, max_len: int = 60) -> str:
+    """
+    Padroniza título/family_name para o Mercado Livre:
+    texto limpo, sem HTML/símbolos, até max_len (padrão 60).
+    """
+    t = _texto_plano_ml(titulo)
+    if not t:
+        return "Produto"
+
+    t = _ML_TITULO_PROMO_RE.sub(" ", t)
+    # ML recomenda separar só com espaços — sem pontuação/símbolos.
+    t = t.replace("_", " ")
+    t = re.sub(r"[^\w\s%]", " ", t, flags=re.UNICODE)
+    t = t.replace("_", " ")
+    t = re.sub(r"\s+", " ", t).strip()
+
+    letras = [c for c in t if c.isalpha()]
+    if letras and (sum(1 for c in letras if c.isupper()) / len(letras)) >= 0.8:
+        # Evita título gritado em CAPS.
+        t = t.title()
+        for particula in (" Da ", " De ", " Do ", " Das ", " Dos ", " E ", " Em ", " Com "):
+            t = t.replace(particula, particula.lower())
+
+    t = _truncar_titulo_ml(t, max_len)
+    return t or "Produto"
 
 
 def _seller_usa_user_products_ml(
@@ -812,16 +867,75 @@ def _arquivo_local_imagem_ml(imagem_path: str | None) -> Path | None:
 
 def _texto_plano_ml(texto: str | None) -> str:
     """Converte HTML da vitrine em plain_text aceito pela API de descrição do ML."""
-    t = unescape((texto or "").strip())
+    from html.parser import HTMLParser
+
+    class _StripHtml(HTMLParser):
+        def __init__(self) -> None:
+            super().__init__(convert_charrefs=True)
+            self.parts: list[str] = []
+
+        def handle_data(self, data: str) -> None:
+            if data:
+                self.parts.append(data)
+
+        def handle_starttag(self, tag: str, attrs) -> None:
+            if tag.lower() in ("br", "p", "div", "li", "tr", "h1", "h2", "h3", "h4", "hr"):
+                self.parts.append("\n")
+
+        def handle_endtag(self, tag: str) -> None:
+            if tag.lower() in ("p", "div", "li", "tr", "h1", "h2", "h3", "h4"):
+                self.parts.append("\n")
+
+        def handle_startendtag(self, tag: str, attrs) -> None:
+            if tag.lower() in ("br", "hr"):
+                self.parts.append("\n")
+
+    t = (texto or "").strip()
     if not t:
         return ""
-    t = re.sub(r"(?is)<script[^>]*>.*?</script>", "", t)
-    t = re.sub(r"(?is)<style[^>]*>.*?</style>", "", t)
-    t = re.sub(r"(?i)<br\s*/?>", "\n", t)
-    t = re.sub(r"(?i)</p\s*>", "\n\n", t)
-    t = re.sub(r"(?i)</div\s*>", "\n", t)
-    t = re.sub(r"(?i)</li\s*>", "\n", t)
-    t = re.sub(r"<[^>]+>", "", t)
+
+    # Entidades HTML podem estar “duplas” no banco (&amp;lt; …).
+    for _ in range(3):
+        novo = unescape(t)
+        if novo == t:
+            break
+        t = novo
+
+    try:
+        parser = _StripHtml()
+        parser.feed(t)
+        parser.close()
+        t = "".join(parser.parts)
+    except Exception:
+        t = re.sub(r"(?is)<script[^>]*>.*?</script>", "", t)
+        t = re.sub(r"(?is)<style[^>]*>.*?</style>", "", t)
+        t = re.sub(r"(?i)<br\s*/?>", "\n", t)
+        t = re.sub(r"(?i)</(?:p|div|li|h[1-6])\s*>", "\n", t)
+        t = re.sub(r"<[^>]*>", "", t)
+
+    # ML trata qualquer < > como marcação — remove restos.
+    t = t.replace("<", " ").replace(">", " ")
+    t = (
+        t.replace("\u00a0", " ")
+        .replace("\u200b", "")
+        .replace("\u200c", "")
+        .replace("\u200d", "")
+        .replace("\ufeff", "")
+    )
+    limpo: list[str] = []
+    for ch in t:
+        o = ord(ch)
+        if ch == "\n":
+            limpo.append("\n")
+        elif ch == "\r":
+            limpo.append("\n")
+        elif ch == "\t":
+            limpo.append(" ")
+        elif o < 32 or o == 127:
+            limpo.append(" ")
+        else:
+            limpo.append(ch)
+    t = "".join(limpo)
     t = re.sub(r"[ \t]+\n", "\n", t)
     t = re.sub(r"\n{3,}", "\n\n", t)
     t = re.sub(r"[ \t]{2,}", " ", t)
@@ -953,12 +1067,14 @@ def _enviar_descricao_ml(cur, id_tenant: int, item_id: str, descricao: str) -> N
     if not texto:
         return
     body = {"plain_text": texto[:50000]}
+    params = {"api_version": "2"}
     try:
         api_request(
             cur,
             id_tenant,
             "PUT",
             f"/items/{item_id}/description",
+            params=params,
             json_body=body,
         )
     except RuntimeError:
@@ -967,6 +1083,7 @@ def _enviar_descricao_ml(cur, id_tenant: int, item_id: str, descricao: str) -> N
             id_tenant,
             "POST",
             f"/items/{item_id}/description",
+            params=params,
             json_body=body,
         )
 
@@ -1039,6 +1156,20 @@ def _atualizar_anuncio_completo_ml(
     if payload:
         api_request(cur, id_tenant, "PUT", f"/items/{ml_item_id}", json_body=payload)
 
+    titulo_limpo = _normalizar_titulo_ml(titulo or "", max_len=60)
+    if titulo_limpo and titulo_limpo != "Produto":
+        try:
+            api_request(
+                cur,
+                id_tenant,
+                "PUT",
+                f"/items/{ml_item_id}",
+                json_body={"title": titulo_limpo},
+            )
+        except RuntimeError as e:
+            # User Products / moderação pode bloquear alteração de título.
+            _log.info("Título ML não atualizado em %s: %s", ml_item_id, e)
+
     texto = _texto_plano_ml(descricao)
     if texto:
         _enviar_descricao_ml(cur, id_tenant, ml_item_id, texto)
@@ -1108,14 +1239,14 @@ def _garantir_tabela_ml_categoria_map(cur) -> bool:
 
 def _family_name_ml(titulo: str, marca: str, override: str = "") -> str:
     if (override or "").strip():
-        return override.strip()[:_ML_FAMILY_NAME_MAX]
+        return _normalizar_titulo_ml(override, max_len=_ML_FAMILY_NAME_MAX)
     marca = (marca or "").strip()
-    titulo = (titulo or "").strip()
+    titulo = _normalizar_titulo_ml(titulo or "", max_len=_ML_FAMILY_NAME_MAX)
     if marca and titulo and not titulo.lower().startswith(marca.lower()):
         fam = f"{marca} {titulo}"
     else:
         fam = titulo or marca or "Produto"
-    return fam[:_ML_FAMILY_NAME_MAX]
+    return _normalizar_titulo_ml(fam, max_len=_ML_FAMILY_NAME_MAX)
 
 
 def _mapa_categoria_ml(cur, id_tenant: int, id_categoria: int | None) -> tuple[str, str]:
@@ -1644,7 +1775,7 @@ def _criar_anuncio_ml(
     profundidade_cm: float | None = None,
     peso_kg: float | None = None,
 ) -> str:
-    titulo = (titulo or "Produto").strip()[:60]
+    titulo = _normalizar_titulo_ml(titulo or "Produto", max_len=60)
     if preco <= 0:
         raise RuntimeError(f"Preço inválido para «{titulo}».")
     pictures = _coletar_pictures_ml(
