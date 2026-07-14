@@ -92,6 +92,10 @@
   border-bottom: 1px solid #e2e8f0;
 }
 
+.Ob_MlResumo--4 {
+  grid-template-columns: repeat(4, 1fr);
+}
+
 .Ob_MlResumoCard {
   text-align: center;
   padding: 0.55rem 0.35rem;
@@ -114,8 +118,17 @@
 }
 
 .Ob_MlResumoCard--ok strong { color: #047857; }
+.Ob_MlResumoCard--upd strong { color: #1d4ed8; }
 .Ob_MlResumoCard--erro strong { color: #b91c1c; }
+.Ob_MlResumoCard--tot strong { color: #334155; }
 .Ob_MlResumoCard--ign strong { color: #b45309; }
+
+@media (max-width: 560px) {
+  .Ob_MlResumo,
+  .Ob_MlResumo--4 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
 
 .Ob_MlListaWrap {
   overflow: auto;

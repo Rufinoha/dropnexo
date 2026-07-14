@@ -265,9 +265,14 @@
     if (!el.modalMl || !el.mlLista) return;
 
     const resultados = jj.resultados || [];
-    const ok = resultados.filter((r) => r.status === "ok").length || jj.exportados || jj.vinculados || 0;
-    const erros = resultados.filter((r) => r.status === "erro").length || jj.erros || 0;
-    const ign = resultados.filter((r) => r.status === "ignorado").length || jj.ignorados || 0;
+    const criados =
+      resultados.filter((r) => r.status === "ok" && r.acao === "criado").length ||
+      Number(jj.exportados || 0);
+    const atualizados =
+      resultados.filter((r) => r.status === "ok" && r.acao === "atualizado").length ||
+      Number(jj.atualizados || 0);
+    const ok = resultados.filter((r) => r.status === "ok").length || criados + atualizados;
+    const erros = resultados.filter((r) => r.status === "erro").length || Number(jj.erros || 0);
     const parcial = ok > 0 && erros > 0;
 
     if (el.mlTitulo) {
@@ -282,11 +287,13 @@
     }
 
     if (el.mlResumo) {
-      el.mlResumo.hidden = !resultados.length;
+      el.mlResumo.hidden = false;
+      el.mlResumo.classList.toggle("Ob_MlResumo--4", true);
       el.mlResumo.innerHTML = `
-        <div class="Ob_MlResumoCard Ob_MlResumoCard--ok"><strong>${ok}</strong><span>Publicados</span></div>
-        <div class="Ob_MlResumoCard Ob_MlResumoCard--erro"><strong>${erros}</strong><span>Com pendência</span></div>
-        <div class="Ob_MlResumoCard Ob_MlResumoCard--ign"><strong>${ign}</strong><span>Ignorados</span></div>`;
+        <div class="Ob_MlResumoCard Ob_MlResumoCard--ok"><strong>${criados}</strong><span>Criados</span></div>
+        <div class="Ob_MlResumoCard Ob_MlResumoCard--upd"><strong>${atualizados}</strong><span>Atualizados</span></div>
+        <div class="Ob_MlResumoCard Ob_MlResumoCard--erro"><strong>${erros}</strong><span>Com erro</span></div>
+        <div class="Ob_MlResumoCard Ob_MlResumoCard--tot"><strong>${resultados.length || ok + erros}</strong><span>Total</span></div>`;
     }
 
     const icones = { ok: "✓", erro: "!", ignorado: "·" };
@@ -306,7 +313,13 @@
     el.mlLista.innerHTML = itens
       .map((r) => {
         const st = r.status === "ok" || r.status === "erro" || r.status === "ignorado" ? r.status : "erro";
-        const meta = [r.sku && `SKU ${escapeHtml(r.sku)}`, r.ml_item_id && `Anúncio ${escapeHtml(r.ml_item_id)}`]
+        const acaoTxt =
+          r.acao === "criado" ? "Criado" : r.acao === "atualizado" ? "Atualizado" : "";
+        const meta = [
+          acaoTxt,
+          r.sku && `SKU ${escapeHtml(r.sku)}`,
+          r.ml_item_id && `Anúncio ${escapeHtml(r.ml_item_id)}`,
+        ]
           .filter(Boolean)
           .join(" · ");
         return `<li class="Ob_MlItem Ob_MlItem--${st}">
@@ -330,10 +343,68 @@
     fecharModalMl();
   });
 
+  function htmlProgressoMl(atual, total, criados, atualizados, erros, nomeAtual) {
+    const pct = total > 0 ? Math.round((atual / total) * 100) : 0;
+    const nome = escapeHtml(nomeAtual || "produto");
+    return `
+      <div style="text-align:left;font-size:13px;line-height:1.45;">
+        <p style="margin:0 0 10px;color:#64748b;">Processando <strong>${atual}</strong> de <strong>${total}</strong></p>
+        <div style="height:10px;background:#e2e8f0;border-radius:999px;overflow:hidden;margin-bottom:10px;">
+          <div style="height:100%;width:${pct}%;background:#2563eb;transition:width .2s ease;"></div>
+        </div>
+        <p style="margin:0 0 8px;font-size:12px;color:#0f172a;">${nome}</p>
+        <p style="margin:0;font-size:12px;color:#64748b;">
+          Criados: <strong style="color:#047857">${criados}</strong>
+          · Atualizados: <strong style="color:#1d4ed8">${atualizados}</strong>
+          · Erros: <strong style="color:#b91c1c">${erros}</strong>
+        </p>
+      </div>`;
+  }
+
+  async function publicarUmProdutoMl(idProduto) {
+    const resp = await fetch(`${BASE}/mercado-livre/publicar`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: [idProduto] }),
+    });
+    let jj = {};
+    try {
+      jj = await resp.json();
+    } catch {
+      return {
+        success: false,
+        message: resp.status >= 500 ? "Erro no servidor." : "Resposta inválida.",
+        resultados: [
+          {
+            id_produto: idProduto,
+            titulo: `Produto #${idProduto}`,
+            status: "erro",
+            mensagem: resp.status >= 500 ? "Erro no servidor." : "Resposta inválida.",
+          },
+        ],
+      };
+    }
+    if (!resp.ok || !jj.success) {
+      const msg = jj.message || "Falha na integração.";
+      const resultados = jj.resultados?.length
+        ? jj.resultados
+        : [
+            {
+              id_produto: idProduto,
+              titulo: `Produto #${idProduto}`,
+              status: "erro",
+              mensagem: msg,
+            },
+          ];
+      return { ...jj, success: false, message: msg, resultados };
+    }
+    return jj;
+  }
+
   async function integrarMercadoLivreLote(ids) {
     const c = await Swal.fire({
       title: `Integrar ${ids.length} produto(s) ao Mercado Livre?`,
-      html: `<p style="text-align:left;font-size:13px;margin:0;">Confira em Integrações se o modo (vincular ou criar anúncio) e o mapeamento de categorias estão corretos.</p>`,
+      html: `<p style="text-align:left;font-size:13px;margin:0;">O mesmo botão cria anúncios novos ou atualiza os já vinculados (fotos, descrição, preço e estoque).</p>`,
       icon: "question",
       showCancelButton: true,
       confirmButtonText: "Integrar",
@@ -341,29 +412,92 @@
     });
     if (!c.isConfirmed) return;
 
+    const total = ids.length;
+    let criados = 0;
+    let atualizados = 0;
+    let erros = 0;
+    const resultados = [];
+    const detalhesErros = [];
+
     Swal.fire({
-      title: "Integrando…",
+      title: "Integrando ao Mercado Livre…",
+      html: htmlProgressoMl(0, total, 0, 0, 0, "Iniciando…"),
       allowOutsideClick: false,
+      showConfirmButton: false,
       didOpen: () => Swal.showLoading(),
     });
 
-    const resp = await fetch(`${BASE}/mercado-livre/publicar`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ids }),
-    });
-    let jj = {};
-    try {
-      jj = await resp.json();
-    } catch {
-      throw new Error(resp.status >= 500 ? "Erro no servidor." : "Resposta inválida.");
+    for (let i = 0; i < ids.length; i++) {
+      const id = ids[i];
+      Swal.update({
+        html: htmlProgressoMl(i, total, criados, atualizados, erros, `Produto #${id}…`),
+      });
+
+      const jj = await publicarUmProdutoMl(id);
+      const itens = jj.resultados?.length
+        ? jj.resultados
+        : [
+            {
+              id_produto: id,
+              titulo: `Produto #${id}`,
+              status: jj.success ? "ok" : "erro",
+              mensagem: jj.message || "",
+            },
+          ];
+
+      for (const r of itens) {
+        resultados.push(r);
+        if (r.status === "ok" && r.acao === "criado") criados += 1;
+        else if (r.status === "ok" && r.acao === "atualizado") atualizados += 1;
+        else if (r.status === "ok") {
+          if (Number(jj.exportados || 0) > 0) {
+            r.acao = "criado";
+            criados += 1;
+          } else {
+            r.acao = "atualizado";
+            atualizados += 1;
+          }
+        } else {
+          erros += 1;
+          if (r.mensagem && !detalhesErros.includes(r.mensagem)) detalhesErros.push(r.mensagem);
+        }
+      }
+
+      const ultimo = itens[itens.length - 1];
+      Swal.update({
+        html: htmlProgressoMl(
+          i + 1,
+          total,
+          criados,
+          atualizados,
+          erros,
+          ultimo?.titulo || `Produto #${id}`
+        ),
+      });
     }
+
     Swal.close();
-    if (!resp.ok || !jj.success) throw new Error(jj.message || "Falha na integração.");
+
+    const partes = [];
+    if (criados) partes.push(`${criados} criado(s)`);
+    if (atualizados) partes.push(`${atualizados} atualizado(s)`);
+    if (erros) partes.push(`${erros} com erro`);
+    const message = partes.length
+      ? partes.join(" · ") + " no Mercado Livre."
+      : "Nenhum produto processado.";
 
     selecionados.clear();
     syncBulkBar();
-    abrirModalMlResultado(jj);
+    abrirModalMlResultado({
+      success: criados + atualizados > 0,
+      message,
+      exportados: criados,
+      atualizados,
+      erros,
+      resultados,
+      detalhes_erros: detalhesErros.slice(0, 8),
+    });
+    await carregar();
   }
 
   function renderCategoriaCell(l) {

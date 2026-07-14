@@ -648,17 +648,30 @@ _SELLER_UP_CACHE: dict[int, bool] = {}
 def _formatar_erro_ml(status: int, text: str) -> str:
     try:
         data = json.loads(text)
+        if not isinstance(data, dict):
+            return f"Mercado Livre API ({status}): {(text or '')[:280]}"
         err = (data.get("error") or "").strip()
         causes = data.get("cause") or []
+        if not isinstance(causes, list):
+            causes = [causes] if causes else []
         partes: list[str] = []
         if err:
             partes.append(err)
         for c in causes:
+            if isinstance(c, str):
+                msg = c.strip()
+                if msg:
+                    partes.append(msg)
+                continue
+            if not isinstance(c, dict):
+                continue
             code = (c.get("code") or "").strip()
             msg = (c.get("message") or "").strip()
             refs = c.get("references") or c.get("department") or ""
             if isinstance(refs, list):
                 refs = ", ".join(str(x) for x in refs if x)
+            elif refs is not None and not isinstance(refs, str):
+                refs = str(refs)
             if code == "item.attributes.missing_required" and msg:
                 partes.append(msg)
             elif code == "body.required_fields" and msg:
@@ -680,7 +693,7 @@ def _formatar_erro_ml(status: int, text: str) -> str:
         msg = (data.get("message") or "").strip()
         if msg:
             return f"Mercado Livre ({status}): {msg}"
-    except (TypeError, ValueError, json.JSONDecodeError):
+    except (TypeError, ValueError, json.JSONDecodeError, AttributeError):
         pass
     return f"Mercado Livre API ({status}): {(text or '')[:280]}"
 
@@ -1414,14 +1427,31 @@ def _attrs_categoria_ml(cur, id_tenant: int, category_id: str) -> list[dict]:
     return attrs
 
 
+def _attr_tags_ml(attr: dict) -> dict:
+    """Normaliza tags da categoria ML (dict ou lista)."""
+    tags = (attr or {}).get("tags")
+    if isinstance(tags, dict):
+        return tags
+    if isinstance(tags, list):
+        return {str(t): True for t in tags if t}
+    return {}
+
+
 def _attr_valor_lista(attr: dict, nome: str) -> dict | None:
     nome_l = (nome or "").strip().lower()
-    for v in attr.get("values") or []:
+    valores = attr.get("values") or []
+    if not isinstance(valores, list):
+        return None
+    for v in valores:
+        if not isinstance(v, dict):
+            continue
         if (v.get("name") or "").strip().lower() == nome_l:
             if v.get("id"):
                 return {"id": attr["id"], "value_id": v["id"]}
             return {"id": attr["id"], "value_name": v.get("name")}
-    for v in attr.get("values") or []:
+    for v in valores:
+        if not isinstance(v, dict):
+            continue
         if v.get("id"):
             return {"id": attr["id"], "value_id": v["id"]}
         if v.get("name"):
@@ -1487,10 +1517,12 @@ def _montar_atributos_obrigatorios_ml(
         return out
 
     for attr in cat_attrs:
+        if not isinstance(attr, dict):
+            continue
         aid = (attr.get("id") or "").strip()
         if not aid or aid in vistos:
             continue
-        tags = attr.get("tags") or {}
+        tags = _attr_tags_ml(attr)
         obrigatorio = bool(tags.get("required"))
         if tags.get("new_required") and eh_novo:
             obrigatorio = True
@@ -1562,11 +1594,12 @@ def _montar_atributos_obrigatorios_ml(
         precisa_gtin = any(
             (a.get("id") or "").strip() == "GTIN"
             and (
-                (a.get("tags") or {}).get("required")
-                or (a.get("tags") or {}).get("conditional_required")
-                or ((a.get("tags") or {}).get("new_required") and eh_novo)
+                _attr_tags_ml(a).get("required")
+                or _attr_tags_ml(a).get("conditional_required")
+                or (_attr_tags_ml(a).get("new_required") and eh_novo)
             )
             for a in cat_attrs
+            if isinstance(a, dict)
         )
         if precisa_gtin:
             for attr in cat_attrs:
@@ -1831,6 +1864,7 @@ def _criar_anuncios_ml_lote(cur, id_tenant: int, cfg: dict, linhas: list) -> dic
                         "titulo": nome,
                         "sku": sku_limpo,
                         "status": "ok",
+                        "acao": "atualizado",
                         "mensagem": (
                             "Anúncio atualizado no Mercado Livre "
                             "(fotos, preço, estoque e descrição)."
@@ -1886,6 +1920,7 @@ def _criar_anuncios_ml_lote(cur, id_tenant: int, cfg: dict, linhas: list) -> dic
                     "titulo": nome,
                     "sku": sku_limpo,
                     "status": "ok",
+                    "acao": "criado",
                     "mensagem": _mensagem_pos_publicacao_ml(estado, cat_usada),
                     "ml_item_id": ml_item_id,
                     "ml_category_id": cat_usada,
@@ -2235,6 +2270,7 @@ def publicar_produtos_ml(cur, id_tenant: int, ids_produtos: list[int]) -> dict:
                     "titulo": nome,
                     "sku": sku,
                     "status": "ok",
+                    "acao": "atualizado",
                     "mensagem": (
                         "Anúncio atualizado no Mercado Livre "
                         "(fotos, preço, estoque e descrição)."
