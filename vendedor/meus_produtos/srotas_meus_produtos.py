@@ -1033,6 +1033,8 @@ def salvar_vitrine():
             return jsonify(success=False, message="Produto não está na sua vitrine."), 404
         conn.commit()
         ml_aviso = None
+        tt_aviso = None
+        amz_aviso = None
         try:
             from api.mercado_livre.sync_runtime import propagar_produto_ml_apos_salvar
 
@@ -1040,9 +1042,27 @@ def salvar_vitrine():
             conn.commit()
         except Exception:
             conn.rollback()
+        try:
+            from api.tiktok.sync_runtime import propagar_produto_tiktok_apos_salvar
+
+            tt_aviso = propagar_produto_tiktok_apos_salvar(cur, id_tenant, pid)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+        try:
+            from api.amazon.sync_runtime import propagar_produto_amazon_apos_salvar
+
+            amz_aviso = propagar_produto_amazon_apos_salvar(cur, id_tenant, pid)
+            conn.commit()
+        except Exception:
+            conn.rollback()
         msg = "Vitrine atualizada."
         if ml_aviso:
             msg += f" Aviso Mercado Livre: {ml_aviso}"
+        if tt_aviso:
+            msg += f" Aviso TikTok: {tt_aviso}"
+        if amz_aviso:
+            msg += f" Aviso Amazon: {amz_aviso}"
         return jsonify(success=True, message=msg, id=pid)
     finally:
         conn.close()
@@ -1118,6 +1138,74 @@ def mercado_livre_publicar():
         from api.mercado_livre.mercado_livre import publicar_produtos_ml
 
         resultado = publicar_produtos_ml(cur, id_tenant, ids)
+        conn.commit()
+        return jsonify(success=True, **resultado)
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)[:300]), 400
+    finally:
+        conn.close()
+
+
+@vd_meus_produtos_bp.post("/meus-produtos/tiktok/publicar")
+@login_obrigatorio()
+@exigir_permissao(codigo="produtos.editar")
+def tiktok_publicar():
+    if (resp := _exigir_edicao()) is not None:
+        return resp
+    id_tenant = _id_tenant_sessao()
+    body = request.get_json(silent=True) or {}
+    raw = body.get("ids") or []
+    ids: list[int] = []
+    for x in raw:
+        try:
+            ids.append(int(x))
+        except (TypeError, ValueError):
+            continue
+    ids = list(dict.fromkeys(ids))
+    if not ids:
+        return jsonify(success=False, message="Nenhum produto selecionado."), 400
+
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        from api.tiktok.tiktok import publicar_produtos_tiktok
+
+        resultado = publicar_produtos_tiktok(cur, id_tenant, ids)
+        conn.commit()
+        return jsonify(success=True, **resultado)
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)[:300]), 400
+    finally:
+        conn.close()
+
+
+@vd_meus_produtos_bp.post("/meus-produtos/amazon/publicar")
+@login_obrigatorio()
+@exigir_permissao(codigo="produtos.editar")
+def amazon_publicar():
+    if (resp := _exigir_edicao()) is not None:
+        return resp
+    id_tenant = _id_tenant_sessao()
+    body = request.get_json(silent=True) or {}
+    raw = body.get("ids") or []
+    ids: list[int] = []
+    for x in raw:
+        try:
+            ids.append(int(x))
+        except (TypeError, ValueError):
+            continue
+    ids = list(dict.fromkeys(ids))
+    if not ids:
+        return jsonify(success=False, message="Nenhum produto selecionado."), 400
+
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        from api.amazon.amazon import publicar_produtos_amazon
+
+        resultado = publicar_produtos_amazon(cur, id_tenant, ids)
         conn.commit()
         return jsonify(success=True, **resultado)
     except Exception as e:
@@ -1357,6 +1445,8 @@ def salvar_variante_vitrine():
 
         conn.commit()
         ml_aviso = None
+        tt_aviso = None
+        amz_aviso = None
         try:
             from api.mercado_livre.sync_runtime import propagar_produto_ml_apos_salvar
 
@@ -1366,9 +1456,31 @@ def salvar_variante_vitrine():
             conn.commit()
         except Exception:
             conn.rollback()
+        try:
+            from api.tiktok.sync_runtime import propagar_produto_tiktok_apos_salvar
+
+            tt_aviso = propagar_produto_tiktok_apos_salvar(
+                cur, id_tenant, int(row[0]), id_variante=vid
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+        try:
+            from api.amazon.sync_runtime import propagar_produto_amazon_apos_salvar
+
+            amz_aviso = propagar_produto_amazon_apos_salvar(
+                cur, id_tenant, int(row[0]), id_variante=vid
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
         msg = "Variação atualizada na vitrine."
         if ml_aviso:
             msg += f" Aviso Mercado Livre: {ml_aviso}"
+        if tt_aviso:
+            msg += f" Aviso TikTok: {tt_aviso}"
+        if amz_aviso:
+            msg += f" Aviso Amazon: {amz_aviso}"
         return jsonify(success=True, message=msg, id_variante=vid)
     finally:
         conn.close()

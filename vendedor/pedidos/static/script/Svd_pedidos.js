@@ -157,6 +157,9 @@
   }
 
   function inferirModoFrete(ped) {
+    if ((ped.origem || "") === "mercado_livre") return "ml";
+    if ((ped.origem || "") === "tiktok") return "tiktok";
+    if ((ped.origem || "") === "amazon") return "amazon";
     if (freteModoPorPedido[ped.id]) return freteModoPorPedido[ped.id];
     if (ped.frete_modo === "manual" || ped.me_etiqueta_status === "manual") return "manual";
     if (ped.me_service_id) return "me";
@@ -390,6 +393,21 @@
         </div>
         ${renderBlocoAnexo(p, "nf", "Nota fiscal")}
         ${renderBlocoAnexo(p, "etiqueta", "Etiqueta de envio")}
+        ${(p.origem || "") === "mercado_livre"
+          ? `<div class="Pd_AnexoMl" style="margin-top:0.75rem">
+              <button type="button" class="Cl_botaoFiltro" data-ml-etiqueta="${p.id}">Baixar etiqueta ML</button>
+            </div>`
+          : ""}
+        ${(p.origem || "") === "tiktok"
+          ? `<div class="Pd_AnexoMl" style="margin-top:0.75rem">
+              <button type="button" class="Cl_botaoFiltro" data-tt-etiqueta="${p.id}">Baixar etiqueta TikTok</button>
+            </div>`
+          : ""}
+        ${(p.origem || "") === "amazon"
+          ? `<div class="Pd_AnexoMl" style="margin-top:0.75rem">
+              <small class="Mp_Hint">Pedido Amazon — etiqueta pelo Seller Central / envio Amazon.</small>
+            </div>`
+          : ""}
       </article>`
       )
       .join("");
@@ -399,6 +417,48 @@
     });
     elAnexosLista.querySelectorAll("[data-del-anexo]").forEach((btn) => {
       btn.addEventListener("click", () => excluirAnexo(+btn.dataset.delAnexo));
+    });
+    elAnexosLista.querySelectorAll("[data-ml-etiqueta]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        btn.disabled = true;
+        try {
+          const j = await baixarEtiquetaMl(+btn.dataset.mlEtiqueta);
+          renderAnexos();
+          atualizarNavAnexos();
+          Swal.fire({
+            icon: "success",
+            title: "Etiqueta ML",
+            text: j.message || "Etiqueta baixada.",
+            timer: 1800,
+            showConfirmButton: false,
+          });
+        } catch (e) {
+          Swal.fire({ icon: "error", title: "Etiqueta ML", text: e.message, confirmButtonColor: "#021F81" });
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    });
+    elAnexosLista.querySelectorAll("[data-tt-etiqueta]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        btn.disabled = true;
+        try {
+          const j = await baixarEtiquetaTiktok(+btn.dataset.ttEtiqueta);
+          renderAnexos();
+          atualizarNavAnexos();
+          Swal.fire({
+            icon: "success",
+            title: "Etiqueta TikTok",
+            text: j.message || "Etiqueta baixada.",
+            timer: 1800,
+            showConfirmButton: false,
+          });
+        } catch (e) {
+          Swal.fire({ icon: "error", title: "Etiqueta TikTok", text: e.message, confirmButtonColor: "#021F81" });
+        } finally {
+          btn.disabled = false;
+        }
+      });
     });
 
     if (tipoAnexoFoco && pedidoFocoAnexo) {
@@ -719,6 +779,89 @@
       </div>`;
   }
 
+  function renderFreteMl(ped) {
+    const etiquetas = (ped.anexos || []).filter((a) => a.tipo === "etiqueta");
+    const origem = (ped.origem || "").toLowerCase();
+    const isTt = origem === "tiktok";
+    const isAmz = origem === "amazon";
+    const canal = isAmz ? "Amazon" : isTt ? "TikTok Shop" : "Mercado Livre";
+    if (isAmz) {
+      return `
+      <div class="Pd_FreteMl">
+        <p class="Pd_Hint">Pedido da Amazon. Gerencie etiqueta e envio no Seller Central (ou logística Amazon).</p>
+        <ul class="Pd_AnexoItens Pd_FreteEtqLista" style="margin-top:0.75rem">
+          ${etiquetas.length
+            ? etiquetas
+                .map(
+                  (a) => `
+            <li>
+              <a href="/vendedor/pedidos/anexos/arquivo?caminho=${encodeURIComponent(a.caminho)}" target="_blank" rel="noopener">${esc(a.nome_original)}</a>
+            </li>`
+                )
+                .join("")
+            : `<li class="Pd_Hint">Sem etiqueta anexada neste pedido.</li>`}
+        </ul>
+      </div>`;
+    }
+    const btnAttr = isTt ? `data-tt-etiqueta="${ped.id}"` : `data-ml-etiqueta="${ped.id}"`;
+    const btnTxt = isTt ? "Baixar etiqueta TikTok" : "Baixar etiqueta ML";
+    const hint = isTt
+      ? "Pedido do TikTok Shop. Baixe a etiqueta quando a logística liberar."
+      : "Pedido do Mercado Livre. Baixe a etiqueta do Mercado Envios quando estiver disponível (<code>ready_to_ship</code>).";
+    return `
+      <div class="Pd_FreteMl">
+        <p class="Pd_Hint">${hint}</p>
+        <button type="button" class="Cl_botaoFiltro" ${btnAttr}>${btnTxt}</button>
+        <ul class="Pd_AnexoItens Pd_FreteEtqLista" style="margin-top:0.75rem">
+          ${etiquetas.length
+            ? etiquetas
+                .map(
+                  (a) => `
+            <li>
+              <a href="/vendedor/pedidos/anexos/arquivo?caminho=${encodeURIComponent(a.caminho)}" target="_blank" rel="noopener">${esc(a.nome_original)}</a>
+            </li>`
+                )
+                .join("")
+            : `<li class="Pd_Hint">Nenhuma etiqueta baixada ainda.</li>`}
+        </ul>
+      </div>`;
+  }
+
+  async function baixarEtiquetaMl(idPed) {
+    const r = await fetch(`/vendedor/pedidos/${idPed}/ml/etiqueta`, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+    const j = await parseJsonResp(r);
+    if (!r.ok || !j.success) throw new Error(j.message || "Erro ao baixar etiqueta ML.");
+    const ped = pedidosGrupo.find((p) => p.id === idPed);
+    if (ped && j.anexo && !j.ja_existia) {
+      ped.anexos = ped.anexos || [];
+      ped.anexos.push(j.anexo);
+    }
+    if (ped && j.id_ml_shipment) ped.id_ml_shipment = j.id_ml_shipment;
+    return j;
+  }
+
+  async function baixarEtiquetaTiktok(idPed) {
+    const r = await fetch(`/vendedor/pedidos/${idPed}/tiktok/etiqueta`, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+    const j = await parseJsonResp(r);
+    if (!r.ok || !j.success) throw new Error(j.message || "Erro ao baixar etiqueta TikTok.");
+    const ped = pedidosGrupo.find((p) => p.id === idPed);
+    if (ped && j.anexo && !j.ja_existia) {
+      ped.anexos = ped.anexos || [];
+      ped.anexos.push(j.anexo);
+    }
+    return j;
+  }
+
   function renderFreteManual(ped) {
     const etiquetas = (ped.anexos || []).filter((a) => a.tipo === "etiqueta");
     const inpId = `pd_frete_etq_inp_${ped.id}`;
@@ -840,24 +983,79 @@
             ? `<p class="Pd_Hint">Frete selecionado: <strong>${esc(escolhido.nome || frete.nome || "")}</strong> — ${fmt(frete.valor || 0)}</p>`
             : '<p class="Pd_Hint">Clique em Cotar para ver as opções do Melhor Envio.</p>';
         const etiquetaHtml = etiquetaStatusHtml(ped);
-        const corpo =
-          modo === "manual"
+        const isMl = modo === "ml" || modo === "tiktok" || modo === "amazon";
+        const corpo = isMl
+          ? renderFreteMl(ped)
+          : modo === "manual"
             ? renderFreteManual(ped)
             : renderFreteMe(ped, frete, escolhido, opcoesHtml);
+        const canalLabel =
+          modo === "amazon"
+            ? " · Amazon"
+            : modo === "tiktok"
+              ? " · TikTok Shop"
+              : modo === "ml"
+                ? " · Mercado Livre"
+                : "";
         return `
         <article class="Pd_FreteCard" data-frete-ped="${ped.id}" data-frete-modo-atual="${modo}">
           <div class="Pd_FreteCardHead">
             <div>
               <h5>${esc(ped.fornecedor_nome || "Fornecedor")}</h5>
-              <small class="Pd_Hint">Pedido ${esc(ped.numero || "")}</small>
+              <small class="Pd_Hint">Pedido ${esc(ped.numero || "")}${canalLabel}</small>
             </div>
           </div>
-          ${renderFreteModoTabs(ped, modo)}
-          ${etiquetaHtml}
+          ${isMl ? "" : renderFreteModoTabs(ped, modo)}
+          ${isMl ? "" : etiquetaHtml}
           <div class="Pd_FreteCorpo">${corpo}</div>
         </article>`;
       })
       .join("");
+
+    elFreteConteudo.querySelectorAll("[data-ml-etiqueta]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        btn.disabled = true;
+        try {
+          const j = await baixarEtiquetaMl(+btn.dataset.mlEtiqueta);
+          await renderFretePainel();
+          if (painelAtivo === "anexos") renderAnexos();
+          atualizarNavAnexos();
+          Swal.fire({
+            icon: "success",
+            title: "Etiqueta ML",
+            text: j.message || "Etiqueta baixada.",
+            timer: 1800,
+            showConfirmButton: false,
+          });
+        } catch (e) {
+          Swal.fire({ icon: "error", title: "Etiqueta ML", text: e.message, confirmButtonColor: "#021F81" });
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    });
+    elFreteConteudo.querySelectorAll("[data-tt-etiqueta]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        btn.disabled = true;
+        try {
+          const j = await baixarEtiquetaTiktok(+btn.dataset.ttEtiqueta);
+          await renderFretePainel();
+          if (painelAtivo === "anexos") renderAnexos();
+          atualizarNavAnexos();
+          Swal.fire({
+            icon: "success",
+            title: "Etiqueta TikTok",
+            text: j.message || "Etiqueta baixada.",
+            timer: 1800,
+            showConfirmButton: false,
+          });
+        } catch (e) {
+          Swal.fire({ icon: "error", title: "Etiqueta TikTok", text: e.message, confirmButtonColor: "#021F81" });
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    });
 
     elFreteConteudo.querySelectorAll("[data-frete-modo]").forEach((btn) => {
       btn.addEventListener("click", async () => {

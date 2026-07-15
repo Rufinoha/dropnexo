@@ -1,0 +1,169 @@
+{% set nav_ativo = nav_codigo %}
+{% extends "frm_base.html" %}
+{% block title %}TikTok Shop — Integrações — {{ MARCA_NOME }}{% endblock %}
+{% block topbar_title %}TikTok Shop{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('static', filename='style/Cmercadopago_integracao.css') }}?v=8" />
+{% endblock %}
+{% block content %}
+<div class="Cl_ContainerApoio cl-page-principal Mp_Wrap">
+  <div class="cl-page-title Mp_PageHead">
+    <div class="Mp_PageHeadMain">
+      <a href="{{ url_for('integracoes.pagina') }}" class="Mp_BackLink">
+        <i data-lucide="arrow-left"></i> Integrações
+      </a>
+      <div class="Mp_TitleRow">
+        <div class="Mp_Logo" aria-hidden="true">
+          <img src="{{ icone_tiktok }}" alt="" width="48" height="48" />
+        </div>
+        <div>
+          <h2>TikTok Shop</h2>
+          <p class="cl-page-desc">Pedidos, produtos, estoque e envios da sua loja no TikTok Shop.</p>
+        </div>
+      </div>
+    </div>
+    <div class="Mp_ConnBadge {{ 'is-on' if tiktok_conectado else 'is-off' }}" id="tt_status_badge">
+      {{ 'Conectado' if tiktok_conectado else 'Desconectado' }}
+    </div>
+  </div>
+
+  <section class="Mp_Card Mp_Card--alert" id="tt_alert_servidor" hidden>
+    <h3>Integração indisponível</h3>
+    <p class="Mp_Hint">Configure <code>TIKTOK_APP_KEY</code> e <code>TIKTOK_APP_SECRET</code> no <code>.env</code> do servidor.</p>
+  </section>
+
+  <section class="Mp_Card Mp_Card--info" id="tt_sec_guia" {% if tiktok_conectado %}hidden{% endif %}>
+    <h3>Conectar sua loja</h3>
+    <p class="Mp_Hint">Use a conta TikTok Shop em que você <strong>vende</strong>. Você será redirecionado para autorizar o DropNexo.</p>
+    <div class="Mp_Actions">
+      <a href="{{ url_for('tiktok.oauth_iniciar') }}" class="Cl_botaoprimario" id="tt_btn_conectar">Conectar loja</a>
+    </div>
+  </section>
+
+  <section class="Mp_Card Mp_ContextPanel" id="tt_painel_config" {% if not tiktok_conectado %}hidden{% endif %}>
+    <p id="tt_conta_info" class="Mp_ContaResumo" hidden></p>
+
+    <nav class="Mp_SubTabs" id="tt_subtabs" aria-label="Seções TikTok Shop">
+      <button type="button" class="Mp_SubTab is-active" data-tt-tab="pedidos">Pedidos</button>
+      <button type="button" class="Mp_SubTab" data-tt-tab="produtos">Produtos</button>
+      <button type="button" class="Mp_SubTab" data-tt-tab="estoque">Estoque</button>
+    </nav>
+
+    <div id="tt_pane_pedidos">
+      <h3>Importação de pedidos</h3>
+      <p class="Mp_Hint">Busca pedidos na TikTok Shop e cria o pedido no DropNexo (produtos já vinculados).</p>
+      <div class="Mp_Switches">
+        <div class="Mp_SwitchRow">
+          <div class="Mp_SwitchText">
+            <strong>Importar automaticamente</strong>
+            <span>Novos pedidos entram via webhook do TikTok Shop</span>
+          </div>
+          <label class="Cl_Switch Mp_Switch" title="Importação automática">
+            <input type="checkbox" id="tt_pedidos_auto" data-tt-config="pedidos_importar_auto" />
+            <span class="Cl_SwitchSlider"></span>
+          </label>
+        </div>
+      </div>
+      <div class="Mp_UrlBox" style="margin-top:0.85rem">
+        <span class="Mp_UrlLabel">Webhook (notificações TikTok)</span>
+        <code id="tt_webhook_url" class="Mp_Code">—</code>
+        <button type="button" class="Mp_CopyBtn" data-copy="tt_webhook_url" id="tt_btn_copy_webhook">Copiar</button>
+      </div>
+      <p class="Mp_Hint" style="margin-top:0.5rem">
+        Cadastre esta URL em <strong>Gerenciar webhook</strong> no Partner Center.
+        Em produção use HTTPS público.
+      </p>
+      <div class="Mp_Actions" style="margin-top:0.85rem">
+        <button type="button" class="Cl_botaoprimario" id="tt_btn_sync">Buscar pedidos recentes</button>
+        <a href="{{ url_for('vd_pedidos.pedidos') }}" class="Cl_botaoFiltro">Ir para pedidos</a>
+      </div>
+      <ol class="Mp_Hint Mp_ListaPassos" style="margin-top:1rem">
+        <li>Ative <strong>Importar automaticamente</strong> e cadastre o webhook.</li>
+        <li>Pedidos de itens vinculados entram em <strong>Pedidos</strong>; cancelamentos/devoluções sincronizam.</li>
+        <li>Ao marcar expedido/entregue, o status é enviado à TikTok Shop.</li>
+      </ol>
+    </div>
+
+    <div id="tt_pane_produtos" hidden>
+      <h3>Produtos e anúncios</h3>
+      <p class="Mp_Hint">A publicação ou vínculo é feita em <strong>Meus produtos</strong>.</p>
+      <div class="Mp_Switches">
+        <div class="Mp_SwitchRow">
+          <div class="Mp_SwitchText">
+            <strong>Ativar exportação / vínculo</strong>
+            <span>Habilita a ação de integrar produtos em Meus produtos</span>
+          </div>
+          <label class="Cl_Switch Mp_Switch">
+            <input type="checkbox" id="tt_produtos_auto" data-tt-config="produtos_exportar_auto" />
+            <span class="Cl_SwitchSlider"></span>
+          </label>
+        </div>
+      </div>
+      <fieldset class="Mp_RadioGroup">
+        <legend class="Mp_RadioLegend">Modo</legend>
+        <label class="Mp_RadioRow">
+          <input type="radio" name="tt_produtos_modo" value="vincular_sku" checked data-tt-config="produtos_modo" />
+          <span><strong>Vincular por SKU</strong> — casar Meus produtos com anúncios já publicados</span>
+        </label>
+        <label class="Mp_RadioRow">
+          <input type="radio" name="tt_produtos_modo" value="criar_anuncio" data-tt-config="produtos_modo" />
+          <span><strong>Criar novos anúncios</strong> — publicar produtos que ainda não existem</span>
+        </label>
+      </fieldset>
+      <div class="Mp_Actions" style="margin-top:0.85rem">
+        <button type="button" class="Cl_botaoprimario" id="tt_btn_mapear_categorias">Mapear categorias</button>
+        <a href="{{ url_for('vd_meus_produtos.pagina') }}" class="Cl_botaoFiltro">Ir para Meus produtos</a>
+      </div>
+    </div>
+
+    <div id="tt_pane_estoque" hidden>
+      <h3>Estoque</h3>
+      <p class="Mp_Hint">Envia o estoque da vitrine DropNexo para os anúncios vinculados no TikTok Shop.</p>
+      <div class="Mp_Switches">
+        <div class="Mp_SwitchRow">
+          <div class="Mp_SwitchText">
+            <strong>Sincronizar estoque automaticamente</strong>
+            <span>Alterações em Meus produtos atualizam o TikTok Shop</span>
+          </div>
+          <label class="Cl_Switch Mp_Switch">
+            <input type="checkbox" id="tt_estoque_auto" data-tt-config="estoque_sync_ativo" />
+            <span class="Cl_SwitchSlider"></span>
+          </label>
+        </div>
+      </div>
+      <div class="Mp_Actions" style="margin-top:0.85rem">
+        <button type="button" class="Cl_botaoprimario" id="tt_btn_sync_estoque">Sincronizar estoque agora</button>
+      </div>
+    </div>
+
+    <div class="Mp_Actions" style="margin-top:1.25rem">
+      <button type="button" class="Cl_botaoFiltro" id="tt_btn_desconectar">Desconectar</button>
+    </div>
+  </section>
+
+  <p id="tt_msg" class="Mp_Hint" hidden></p>
+</div>
+
+<dialog id="tt_modal_categorias" class="Mp_Modal">
+  <div class="Mp_ModalHead">
+    <h3>Mapear categorias</h3>
+    <button type="button" class="Mp_ModalClose" id="tt_modal_cat_fechar" aria-label="Fechar">×</button>
+  </div>
+  <div class="Mp_ModalBody">
+    <p class="Mp_Hint">Informe o ID da categoria TikTok Shop para cada categoria DropNexo.</p>
+    <table class="Mp_Table">
+      <thead>
+        <tr><th>Categoria DropNexo</th><th>ID categoria TikTok</th><th>Nome (opcional)</th></tr>
+      </thead>
+      <tbody id="tt_tbody_categorias"></tbody>
+    </table>
+  </div>
+  <div class="Mp_ModalFoot">
+    <button type="button" class="Cl_botaoFiltro" id="tt_modal_cat_cancelar">Cancelar</button>
+    <button type="button" class="Cl_botaoprimario" id="tt_modal_cat_salvar">Salvar</button>
+  </div>
+</dialog>
+{% endblock %}
+{% block page_js %}
+<script src="{{ url_for('static', filename='script/Stiktok_integracao.js') }}?v=1"></script>
+{% endblock %}

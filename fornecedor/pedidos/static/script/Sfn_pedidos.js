@@ -33,7 +33,7 @@
       .map(
         (p) => `
       <tr>
-        <td><strong>${esc(p.numero)}</strong>${p.origem === "bling" ? ' <small>(Bling)</small>' : ""}</td>
+        <td><strong>${esc(p.numero)}</strong>${p.origem === "bling" ? ' <small>(Bling)</small>' : p.origem === "mercado_livre" ? ' <small>(Mercado Livre)</small>' : p.origem === "tiktok" ? ' <small>(TikTok)</small>' : p.origem === "amazon" ? ' <small>(Amazon)</small>' : ""}</td>
         <td>${esc(p.vendedor_nome || "")}</td>
         <td>${esc(p.cliente_nome || "")}</td>
         <td>${fmt(p.valor_total)}</td>

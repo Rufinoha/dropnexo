@@ -181,6 +181,8 @@
     const acoes = [
       { acao: "categoria", icon: "categorias", title: "Associar categoria" },
       { acao: "ml", icon: "vincular_clientes", title: "Integrar Mercado Livre" },
+      { acao: "tiktok", icon: "vincular_clientes", title: "Integrar TikTok Shop" },
+      { acao: "amazon", icon: "vincular_clientes", title: "Integrar Amazon" },
       { acao: "excluir", icon: "excluir", title: "Excluir selecionados", danger: true },
     ];
     acoes.forEach((a) => {
@@ -202,6 +204,8 @@
         if (b.dataset.bulk === "excluir") await excluirLote(ids);
         else if (b.dataset.bulk === "categoria") await associarCategoriaLote(ids);
         else if (b.dataset.bulk === "ml") await integrarMercadoLivreLote(ids);
+        else if (b.dataset.bulk === "tiktok") await integrarTiktokLote(ids);
+        else if (b.dataset.bulk === "amazon") await integrarAmazonLote(ids);
       } catch (e) {
         await Swal.fire("Erro", e.message, "error");
       }
@@ -484,6 +488,268 @@
     if (erros) partes.push(`${erros} com erro`);
     const message = partes.length
       ? partes.join(" · ") + " no Mercado Livre."
+      : "Nenhum produto processado.";
+
+    selecionados.clear();
+    syncBulkBar();
+    abrirModalMlResultado({
+      success: criados + atualizados > 0,
+      message,
+      exportados: criados,
+      atualizados,
+      erros,
+      resultados,
+      detalhes_erros: detalhesErros.slice(0, 8),
+    });
+    await carregar();
+  }
+
+  async function publicarUmProdutoTiktok(idProduto) {
+    const resp = await fetch(`${BASE}/tiktok/publicar`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: [idProduto] }),
+    });
+    let jj = {};
+    try {
+      jj = await resp.json();
+    } catch {
+      return {
+        success: false,
+        message: resp.status >= 500 ? "Erro no servidor." : "Resposta inválida.",
+        resultados: [
+          {
+            id_produto: idProduto,
+            titulo: `Produto #${idProduto}`,
+            status: "erro",
+            mensagem: resp.status >= 500 ? "Erro no servidor." : "Resposta inválida.",
+          },
+        ],
+      };
+    }
+    if (!resp.ok || !jj.success) {
+      const msg = jj.message || "Falha na integração.";
+      const resultados = jj.resultados?.length
+        ? jj.resultados
+        : [
+            {
+              id_produto: idProduto,
+              titulo: `Produto #${idProduto}`,
+              status: "erro",
+              mensagem: msg,
+            },
+          ];
+      return { ...jj, success: false, message: msg, resultados };
+    }
+    return jj;
+  }
+
+  async function integrarTiktokLote(ids) {
+    const c = await Swal.fire({
+      title: `Integrar ${ids.length} produto(s) ao TikTok Shop?`,
+      html: `<p style="text-align:left;font-size:13px;margin:0;">Cria anúncios novos ou atualiza os já vinculados.</p>`,
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonText: "Integrar",
+      cancelButtonText: "Cancelar",
+    });
+    if (!c.isConfirmed) return;
+
+    const total = ids.length;
+    let criados = 0;
+    let atualizados = 0;
+    let erros = 0;
+    const resultados = [];
+    const detalhesErros = [];
+
+    Swal.fire({
+      title: "Integrando ao TikTok Shop…",
+      html: htmlProgressoMl(0, total, 0, 0, 0, "Iniciando…"),
+      allowOutsideClick: false,
+      showConfirmButton: false,
+      didOpen: () => Swal.showLoading(),
+    });
+
+    for (let i = 0; i < ids.length; i++) {
+      const id = ids[i];
+      Swal.update({
+        html: htmlProgressoMl(i, total, criados, atualizados, erros, `Produto #${id}…`),
+      });
+
+      const jj = await publicarUmProdutoTiktok(id);
+      const itens = jj.resultados?.length
+        ? jj.resultados
+        : [
+            {
+              id_produto: id,
+              titulo: `Produto #${id}`,
+              status: jj.success ? "ok" : "erro",
+              mensagem: jj.message || "",
+            },
+          ];
+
+      for (const r of itens) {
+        resultados.push(r);
+        if (r.status === "ok" && r.acao === "criado") criados += 1;
+        else if (r.status === "ok" && r.acao === "atualizado") atualizados += 1;
+        else if (r.status === "ok") {
+          if (Number(jj.exportados || 0) > 0) {
+            r.acao = "criado";
+            criados += 1;
+          } else {
+            r.acao = "atualizado";
+            atualizados += 1;
+          }
+        } else {
+          erros += 1;
+          if (r.mensagem && !detalhesErros.includes(r.mensagem)) detalhesErros.push(r.mensagem);
+        }
+      }
+
+      const ultimo = itens[itens.length - 1];
+      Swal.update({
+        html: htmlProgressoMl(
+          i + 1,
+          total,
+          criados,
+          atualizados,
+          erros,
+          ultimo?.titulo || `Produto #${id}`
+        ),
+      });
+    }
+
+    Swal.close();
+
+    const partes = [];
+    if (criados) partes.push(`${criados} criado(s)`);
+    if (atualizados) partes.push(`${atualizados} atualizado(s)`);
+    if (erros) partes.push(`${erros} com erro`);
+    const message = partes.length
+      ? partes.join(" · ") + " no TikTok Shop."
+      : "Nenhum produto processado.";
+
+    selecionados.clear();
+    syncBulkBar();
+    abrirModalMlResultado({
+      success: criados + atualizados > 0,
+      message,
+      exportados: criados,
+      atualizados,
+      erros,
+      resultados,
+      detalhes_erros: detalhesErros.slice(0, 8),
+    });
+    await carregar();
+  }
+
+  async function publicarUmProdutoAmazon(idProduto) {
+    const resp = await fetch(`${BASE}/amazon/publicar`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: [idProduto] }),
+    });
+    const jj = await resp.json().catch(() => ({}));
+    if (!resp.ok || !jj.success) {
+      const msg = jj.message || "Erro ao integrar na Amazon.";
+      const resultados = jj.resultados?.length
+        ? jj.resultados
+        : [
+            {
+              id_produto: idProduto,
+              titulo: `Produto #${idProduto}`,
+              status: "erro",
+              mensagem: msg,
+            },
+          ];
+      return { ...jj, success: false, message: msg, resultados };
+    }
+    return jj;
+  }
+
+  async function integrarAmazonLote(ids) {
+    const c = await Swal.fire({
+      title: `Integrar ${ids.length} produto(s) à Amazon?`,
+      html: `<p style="text-align:left;font-size:13px;margin:0;">Vincula por SKU ou cria/atualiza anúncios (conforme Integrações → Amazon).</p>`,
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonText: "Integrar",
+      cancelButtonText: "Cancelar",
+    });
+    if (!c.isConfirmed) return;
+
+    const total = ids.length;
+    let criados = 0;
+    let atualizados = 0;
+    let erros = 0;
+    const resultados = [];
+    const detalhesErros = [];
+
+    Swal.fire({
+      title: "Integrando à Amazon…",
+      html: htmlProgressoMl(0, total, 0, 0, 0, "Iniciando…"),
+      allowOutsideClick: false,
+      showConfirmButton: false,
+      didOpen: () => Swal.showLoading(),
+    });
+
+    for (let i = 0; i < ids.length; i++) {
+      const id = ids[i];
+      Swal.update({
+        html: htmlProgressoMl(i, total, criados, atualizados, erros, `Produto #${id}…`),
+      });
+
+      const jj = await publicarUmProdutoAmazon(id);
+      const itens = jj.resultados?.length
+        ? jj.resultados
+        : [
+            {
+              id_produto: id,
+              titulo: `Produto #${id}`,
+              status: jj.success ? "ok" : "erro",
+              mensagem: jj.message || "",
+            },
+          ];
+
+      for (const r of itens) {
+        resultados.push(r);
+        if (r.status === "ok" && r.acao === "criado") criados += 1;
+        else if (r.status === "ok" && (r.acao === "atualizado" || r.acao === "vinculado")) atualizados += 1;
+        else if (r.status === "ok") {
+          if (Number(jj.exportados || 0) > 0) {
+            r.acao = "criado";
+            criados += 1;
+          } else {
+            r.acao = "atualizado";
+            atualizados += 1;
+          }
+        } else {
+          erros += 1;
+          if (r.mensagem && !detalhesErros.includes(r.mensagem)) detalhesErros.push(r.mensagem);
+        }
+      }
+
+      const ultimo = itens[itens.length - 1];
+      Swal.update({
+        html: htmlProgressoMl(
+          i + 1,
+          total,
+          criados,
+          atualizados,
+          erros,
+          ultimo?.titulo || `Produto #${id}`
+        ),
+      });
+    }
+
+    Swal.close();
+
+    const partes = [];
+    if (criados) partes.push(`${criados} criado(s)`);
+    if (atualizados) partes.push(`${atualizados} atualizado(s)/vinculado(s)`);
+    if (erros) partes.push(`${erros} com erro`);
+    const message = partes.length
+      ? partes.join(" · ") + " na Amazon."
       : "Nenhum produto processado.";
 
     selecionados.clear();

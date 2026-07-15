@@ -101,7 +101,8 @@ CATEGORIAS_INTEGRACOES = [
                 "papel": "pedidos",
             },
             {"slug": "mercado-livre", "nome": "Mercado Livre", "descricao": "Pedidos e anúncios do Mercado Livre.", "cor": "#FFE600", "iniciais": "ML", "modulos": _MOD_VENDEDOR},
-            {"slug": "amazon", "nome": "Amazon", "descricao": "Pedidos da Amazon no seu painel.", "cor": "#FF9900", "iniciais": "AZ", "modulos": _MOD_VENDEDOR},
+            {"slug": "tiktok", "nome": "TikTok Shop", "descricao": "Pedidos, produtos e estoque do TikTok Shop.", "cor": "#000000", "iniciais": "TT", "modulos": _MOD_VENDEDOR},
+            {"slug": "amazon", "nome": "Amazon", "descricao": "Pedidos, produtos e estoque da Amazon.", "cor": "#FF9900", "iniciais": "AZ", "modulos": _MOD_VENDEDOR},
             {"slug": "magazine-luiza", "nome": "Magazine Luiza", "descricao": "Pedidos do marketplace Magalu.", "cor": "#0086FF", "iniciais": "MG", "modulos": _MOD_VENDEDOR},
             {"slug": "shopee", "nome": "Shopee", "descricao": "Pedidos da Shopee em um só lugar.", "cor": "#EE4D2D", "iniciais": "SH", "modulos": _MOD_VENDEDOR},
             {"slug": "americanas", "nome": "Americanas", "descricao": "Pedidos Americanas / B2W.", "cor": "#E60014", "iniciais": "AM", "modulos": _MOD_VENDEDOR},
@@ -166,6 +167,10 @@ def url_icone_integracao(slug: str, *, icones_base_url: str = "") -> str:
         return url_for("melhor_envio.static", filename="imge/icone_melhorenvio.png")
     if slug == "mercado-livre":
         return url_for("mercado_livre.static", filename="imge/icone_mercadolivre.png")
+    if slug == "tiktok":
+        return url_for("tiktok.static", filename="imge/icone_tiktok.png")
+    if slug == "amazon":
+        return url_for("amazon.static", filename="imge/icone_amazon.png")
     arquivo = _arquivo_icone_api(slug)
     if arquivo:
         return url_for("static", filename=f"imge/icone_api/{arquivo}")
@@ -184,7 +189,7 @@ def catalogo_com_urls(icones_base_url: str) -> list[dict]:
             slug = item["slug"]
             i["icone_png"] = url_icone_integracao(slug, icones_base_url=base)
             i["icone_svg"] = f"{base}{slug}.svg"
-            if _arquivo_icone_api(slug) or slug in ("mercado-pago", "melhor-envio"):
+            if _arquivo_icone_api(slug) or slug in ("mercado-pago", "melhor-envio", "mercado-livre", "tiktok", "amazon"):
                 i["icone_custom"] = True
             if item.get("papel"):
                 i["bling_papel"] = item["papel"]
@@ -446,6 +451,64 @@ def pagina_mercado_livre():
     )
 
 
+@integracoes_bp.get("/integracoes/tiktok")
+@login_obrigatorio()
+def pagina_tiktok():
+    if not _pode_ver_integracoes():
+        return redirect(url_for("dashboard.index"))
+    if (r := _exigir_modulo(MODULO_VENDEDOR)) is not None:
+        return r
+    from api.tiktok.tiktok import tiktok_conectado
+
+    id_tenant = session.get("id_tenant")
+    conectado = False
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        if id_tenant:
+            try:
+                conectado = tiktok_conectado(cur, int(id_tenant))
+            except Exception:
+                conectado = False
+    finally:
+        conn.close()
+    return render_template(
+        "frm_tiktok_integracao.html",
+        nav_codigo="integracoes",
+        tiktok_conectado=conectado,
+        icone_tiktok=url_icone_integracao("tiktok", icones_base_url=_icones_base_url()),
+    )
+
+
+@integracoes_bp.get("/integracoes/amazon")
+@login_obrigatorio()
+def pagina_amazon():
+    if not _pode_ver_integracoes():
+        return redirect(url_for("dashboard.index"))
+    if (r := _exigir_modulo(MODULO_VENDEDOR)) is not None:
+        return r
+    from api.amazon.amazon import amazon_conectado
+
+    id_tenant = session.get("id_tenant")
+    conectado = False
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        if id_tenant:
+            try:
+                conectado = amazon_conectado(cur, int(id_tenant))
+            except Exception:
+                conectado = False
+    finally:
+        conn.close()
+    return render_template(
+        "frm_amazon_integracao.html",
+        nav_codigo="integracoes",
+        amazon_conectado=conectado,
+        icone_amazon=url_icone_integracao("amazon", icones_base_url=_icones_base_url()),
+    )
+
+
 @integracoes_bp.get("/api/integracoes/hub/status")
 @login_obrigatorio()
 def hub_status():
@@ -496,12 +559,16 @@ def hub_status():
     if modulo == MODULO_VENDEDOR:
         me_ok = False
         ml_ok = False
+        tt_ok = False
+        amz_ok = False
         conn = Var_ConectarBanco()
         try:
             cur = conn.cursor()
             if id_tenant:
                 from api.melhor_envio.melhor_envio import me_conectado
                 from api.mercado_livre.mercado_livre import ml_conectado
+                from api.tiktok.tiktok import tiktok_conectado
+                from api.amazon.amazon import amazon_conectado
 
                 try:
                     me_ok = me_conectado(cur, int(id_tenant))
@@ -511,6 +578,14 @@ def hub_status():
                     ml_ok = ml_conectado(cur, int(id_tenant))
                 except Exception:
                     ml_ok = False
+                try:
+                    tt_ok = tiktok_conectado(cur, int(id_tenant))
+                except Exception:
+                    tt_ok = False
+                try:
+                    amz_ok = amazon_conectado(cur, int(id_tenant))
+                except Exception:
+                    amz_ok = False
         finally:
             conn.close()
         integracoes["bling"] = {
@@ -527,6 +602,16 @@ def hub_status():
             "conectado": ml_ok,
             "config_url": url_for("integracoes.pagina_mercado_livre"),
             "oauth_url": url_for("mercado_livre.oauth_iniciar"),
+        }
+        integracoes["tiktok"] = {
+            "conectado": tt_ok,
+            "config_url": url_for("integracoes.pagina_tiktok"),
+            "oauth_url": url_for("tiktok.oauth_iniciar"),
+        }
+        integracoes["amazon"] = {
+            "conectado": amz_ok,
+            "config_url": url_for("integracoes.pagina_amazon"),
+            "oauth_url": url_for("amazon.oauth_iniciar"),
         }
 
     return jsonify(

@@ -15,7 +15,7 @@ from urllib.parse import urlencode
 import requests
 
 from core.tokens import criptografar_token, descriptografar_token
-from global_utils import agora_utc, is_modo_producao, obter_base_url, url_imagem_produto
+from global_utils import agora_utc, is_modo_producao, obter_base_url, obter_url_site_publico, url_imagem_produto
 
 _log = logging.getLogger(__name__)
 
@@ -75,7 +75,8 @@ def redirect_uri_oauth() -> str:
 
 
 def webhook_url() -> str:
-    return f"{obter_base_url().rstrip('/')}/api/integracoes/mercado-livre/webhook"
+    # Notificações do ML precisam de HTTPS público (não localhost).
+    return f"{obter_url_site_publico().rstrip('/')}/api/integracoes/mercado-livre/webhook"
 
 
 def gerar_state_oauth() -> str:
@@ -295,6 +296,33 @@ def api_request(
     if not r.content:
         return {}
     return r.json()
+
+
+def api_request_bytes(
+    cur,
+    id_tenant: int,
+    method: str,
+    path: str,
+    *,
+    params: dict | None = None,
+) -> bytes:
+    """GET/POST que retorna corpo binário (ex.: PDF de etiqueta)."""
+    token = obter_access_token_valido(cur, id_tenant)
+    url = path if path.startswith("http") else f"{ML_API_BASE}{path}"
+    headers = {"Authorization": f"Bearer {token}", "Accept": "*/*"}
+    try:
+        r = requests.request(
+            method.upper(),
+            url,
+            headers=headers,
+            params=params,
+            timeout=ML_API_TIMEOUT,
+        )
+    except requests.RequestException as e:
+        raise RuntimeError(f"Falha na API Mercado Livre: {e}") from e
+    if r.status_code >= 400:
+        raise RuntimeError(_formatar_erro_ml(r.status_code, r.text))
+    return r.content or b""
 
 
 def atualizar_conta_info(cur, id_tenant: int, access_token: str | None = None) -> dict[str, Any]:
@@ -616,7 +644,7 @@ def salvar_config_ml(
             ON CONFLICT (id_tenant) DO UPDATE SET {set_clause}
             """,
             [id_tenant, *updates.values(), agora_utc()],
-        )
+    )
 
 # ── sync_pedidos ──────────────────────────────────
 

@@ -44,6 +44,16 @@
       config_url: "/integracoes/mercado-livre",
       oauth_url: "/api/integracoes/mercado-livre/oauth/iniciar",
     },
+    tiktok: {
+      conectado: false,
+      config_url: "/integracoes/tiktok",
+      oauth_url: "/api/integracoes/tiktok/oauth/iniciar",
+    },
+    amazon: {
+      conectado: false,
+      config_url: "/integracoes/amazon",
+      oauth_url: "/api/integracoes/amazon/oauth/iniciar",
+    },
   };
 
   const ICONES_CATEGORIA = {
@@ -62,10 +72,20 @@
     if (item.slug === "pix-manual") return st.config_url || "/integracoes/pix-manual";
     if (item.slug === "melhor-envio") return st.config_url || "/integracoes/melhor-envio";
     if (item.slug === "mercado-livre") return st.config_url || "/integracoes/mercado-livre";
+    if (item.slug === "tiktok") return st.config_url || "/integracoes/tiktok";
+    if (item.slug === "amazon") return st.config_url || "/integracoes/amazon";
     return st.config_url || `/integracoes/${item.slug}`;
   }
 
-  const INTEGRACOES_ATIVAS = new Set(["bling", "mercado-pago", "pix-manual", "melhor-envio", "mercado-livre"]);
+  const INTEGRACOES_ATIVAS = new Set([
+    "bling",
+    "mercado-pago",
+    "pix-manual",
+    "melhor-envio",
+    "mercado-livre",
+    "tiktok",
+    "amazon",
+  ]);
 
   function seloEmBreveHtml() {
     return `
@@ -283,7 +303,13 @@
       cat?.itens?.find((i) => i.slug === slug) ||
       { slug, nome, descricao: "", bling_papel: blingPapel };
 
-    if (slug === "pix-manual" || slug === "melhor-envio" || slug === "mercado-livre") {
+    if (
+      slug === "pix-manual" ||
+      slug === "melhor-envio" ||
+      slug === "mercado-livre" ||
+      slug === "tiktok" ||
+      slug === "amazon"
+    ) {
       window.location.href = configUrlIntegracao(item);
       return;
     }
@@ -405,6 +431,26 @@
         icon: "success",
         title: "Conectado",
         text: "Mercado Livre configurado com sucesso.",
+        confirmButtonColor: "#021F81",
+      });
+      window.history.replaceState({}, "", location.pathname);
+    } else if (params.get("conectado_tiktok") === "1" || params.get("conectado") === "tiktok") {
+      categoriaAtiva = categorias.some((c) => c.id === "pedidos") ? "pedidos" : categoriaAtiva;
+      await carregarStatusHub();
+      Swal.fire({
+        icon: "success",
+        title: "Conectado",
+        text: "TikTok Shop configurado com sucesso.",
+        confirmButtonColor: "#021F81",
+      });
+      window.history.replaceState({}, "", location.pathname);
+    } else if (params.get("conectado_amazon") === "1" || params.get("conectado") === "amazon") {
+      categoriaAtiva = categorias.some((c) => c.id === "pedidos") ? "pedidos" : categoriaAtiva;
+      await carregarStatusHub();
+      Swal.fire({
+        icon: "success",
+        title: "Conectado",
+        text: "Amazon configurada com sucesso.",
         confirmButtonColor: "#021F81",
       });
       window.history.replaceState({}, "", location.pathname);

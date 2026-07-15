@@ -288,15 +288,46 @@ def col_status_vendedor(cur) -> str:
 
 
 def _normalizar_status_pedido(origem: str, sv: str, sc: str | None) -> tuple[str, str]:
-    """Compatível com schema antigo (só status) e pedidos Bling já gravados."""
+    """Compatível com schema antigo (só status) e pedidos de canal já gravados."""
     origem_l = (origem or "manual").strip().lower()
     status_v = (sv or "").strip()
     status_c = (sc or "").strip()
+    canal = origem_l in ("bling", "mercado_livre", "tiktok", "amazon")
     if not status_c:
-        status_c = STATUS_COMPRADOR_PAGO if origem_l == "bling" else STATUS_COMPRADOR_PENDENTE
-    if origem_l == "bling" and status_v == STATUS_PAGO and status_c == STATUS_COMPRADOR_PAGO:
+        status_c = STATUS_COMPRADOR_PAGO if canal else STATUS_COMPRADOR_PENDENTE
+    if canal and status_v == STATUS_PAGO and status_c == STATUS_COMPRADOR_PAGO:
         status_v = STATUS_IMPORTADO
     return status_v, status_c
+
+
+def origem_e_canal_externo(origem: str | None) -> bool:
+    return (origem or "").strip().lower() in ("bling", "mercado_livre", "tiktok", "amazon")
+
+
+def _garantir_coluna_id_ml_pedido(cur) -> bool:
+    """Garante id_ml_pedido em tbl_pedido (SQL 076)."""
+    global _PEDIDO_COL_CACHE
+    cols = _pedido_colunas(cur)
+    if "id_ml_pedido" in cols:
+        return True
+    try:
+        cur.execute(
+            """
+            ALTER TABLE tbl_pedido
+              ADD COLUMN IF NOT EXISTS id_ml_pedido VARCHAR(64)
+            """
+        )
+        cur.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_pedido_ml
+              ON tbl_pedido (id_tenant_vendedor, id_ml_pedido)
+              WHERE id_ml_pedido IS NOT NULL
+            """
+        )
+    except Exception:
+        return False
+    _PEDIDO_COL_CACHE = None
+    return "id_ml_pedido" in _pedido_colunas(cur)
 
 
 def pedido_cols_sql(cur) -> str:
@@ -403,24 +434,64 @@ def _enriquecer_pedido_expedicao(cur, id_pedido: int, ped: dict) -> None:
     ped.setdefault("transportadora", "")
     ped.setdefault("expedido_em", None)
     ped.setdefault("entregue_em", None)
-    if not _pedido_tem_colunas_expedicao(cur):
+    ped.setdefault("id_ml_pedido", None)
+    ped.setdefault("id_ml_shipment", None)
+    ped.setdefault("id_tiktok_pedido", None)
+    ped.setdefault("id_tiktok_package", None)
+    ped.setdefault("id_amazon_pedido", None)
+    cols = _pedido_colunas(cur)
+    select_parts = []
+    if _pedido_tem_colunas_expedicao(cur):
+        select_parts.extend(
+            [
+                "id_bling_pedido",
+                "codigo_rastreio",
+                "transportadora",
+                "expedido_em",
+                "entregue_em",
+            ]
+        )
+    if "id_ml_pedido" in cols:
+        select_parts.append("id_ml_pedido")
+    if "id_ml_shipment" in cols:
+        select_parts.append("id_ml_shipment")
+    if "id_tiktok_pedido" in cols:
+        select_parts.append("id_tiktok_pedido")
+    if "id_tiktok_package" in cols:
+        select_parts.append("id_tiktok_package")
+    if "id_amazon_pedido" in cols:
+        select_parts.append("id_amazon_pedido")
+    if not select_parts:
         return
     cur.execute(
-        """
-        SELECT id_bling_pedido, codigo_rastreio, transportadora,
-               expedido_em, entregue_em
-        FROM tbl_pedido WHERE id = %s
-        """,
+        f"SELECT {', '.join(select_parts)} FROM tbl_pedido WHERE id = %s",
         (id_pedido,),
     )
     ex = cur.fetchone()
     if not ex:
         return
-    ped["id_bling_pedido"] = ex[0]
-    ped["codigo_rastreio"] = ex[1] or ""
-    ped["transportadora"] = ex[2] or ""
-    ped["expedido_em"] = ex[3].isoformat() if ex[3] else None
-    ped["entregue_em"] = ex[4].isoformat() if ex[4] else None
+    idx = 0
+    if _pedido_tem_colunas_expedicao(cur):
+        ped["id_bling_pedido"] = ex[idx]
+        ped["codigo_rastreio"] = ex[idx + 1] or ""
+        ped["transportadora"] = ex[idx + 2] or ""
+        ped["expedido_em"] = ex[idx + 3].isoformat() if ex[idx + 3] else None
+        ped["entregue_em"] = ex[idx + 4].isoformat() if ex[idx + 4] else None
+        idx += 5
+    if "id_ml_pedido" in cols:
+        ped["id_ml_pedido"] = ex[idx]
+        idx += 1
+    if "id_ml_shipment" in cols:
+        ped["id_ml_shipment"] = ex[idx]
+        idx += 1
+    if "id_tiktok_pedido" in cols:
+        ped["id_tiktok_pedido"] = ex[idx]
+        idx += 1
+    if "id_tiktok_package" in cols:
+        ped["id_tiktok_package"] = ex[idx]
+        idx += 1
+    if "id_amazon_pedido" in cols:
+        ped["id_amazon_pedido"] = ex[idx]
 
 
 def listar_itens_pedido(cur, id_pedido: int) -> list[dict]:
@@ -995,6 +1066,7 @@ def cancelar_pedido(
     id_fornecedor: int | None = None,
     id_usuario: int | None = None,
     motivo: str | None = None,
+    forcar_canal: bool = False,
 ) -> None:
     ped = obter_pedido(cur, id_pedido, id_vendedor=id_vendedor, id_fornecedor=id_fornecedor)
     if not ped:
@@ -1002,19 +1074,42 @@ def cancelar_pedido(
     st = status_vendedor_pedido(ped)
     if st == STATUS_CANCELADO:
         return
-    if st == STATUS_PAGO:
+    if st == STATUS_PAGO and not forcar_canal:
         raise ValueError("Pedido pago não pode ser cancelado por aqui.")
+    if st == STATUS_ENTREGUE and not forcar_canal:
+        raise ValueError("Pedido entregue não pode ser cancelado por aqui.")
+    if st == STATUS_EM_EXPEDICAO and not forcar_canal:
+        raise ValueError("Pedido em expedição não pode ser cancelado por aqui.")
 
-    if st in (STATUS_AGUARDANDO, STATUS_IMPORTADO):
+    if st in (STATUS_AGUARDANDO, STATUS_IMPORTADO, STATUS_PAGO):
         itens = [(i["id_variante"], i["quantidade"]) for i in ped["itens"]]
-        liberar_itens_pedido(cur, itens)
+        try:
+            liberar_itens_pedido(cur, itens)
+        except Exception:
+            pass
+    elif st == STATUS_EM_EXPEDICAO and forcar_canal:
+        # Estoque físico já baixado — devolve quantidade.
+        for item in ped["itens"]:
+            cur.execute(
+                """
+                UPDATE tbl_produto_variante_estoque
+                SET quantidade = quantidade + %s, atualizado_em = NOW()
+                WHERE id_variante = %s
+                """,
+                (int(item["quantidade"]), int(item["id_variante"])),
+            )
 
     agora = agora_utc()
     cv = col_status_vendedor(cur)
+    cols = _pedido_colunas(cur)
+    set_comprador = ""
+    if "status_comprador" in cols:
+        set_comprador = "status_comprador = 'cancelado',"
     cur.execute(
         f"""
         UPDATE tbl_pedido SET
             {cv} = %s,
+            {set_comprador}
             status_pagamento = 'cancelado',
             cancelado_em = %s,
             atualizado_em = %s
@@ -1023,6 +1118,177 @@ def cancelar_pedido(
         (STATUS_CANCELADO, agora, agora, id_pedido),
     )
     registrar_historico(cur, id_pedido, "cancelado", motivo or "Pedido cancelado.", id_usuario)
+
+
+def listar_pedidos_por_id_ml(cur, id_vendedor: int, id_ml_pedido: str) -> list[int]:
+    """Retorna IDs DropNexo ligados a um pedido ML."""
+    if "id_ml_pedido" not in _pedido_colunas(cur):
+        return []
+    cur.execute(
+        """
+        SELECT id FROM tbl_pedido
+        WHERE id_tenant_vendedor = %s AND id_ml_pedido = %s
+        ORDER BY id
+        """,
+        (id_vendedor, str(id_ml_pedido)),
+    )
+    return [int(r[0]) for r in cur.fetchall() if r and r[0]]
+
+
+def _garantir_coluna_id_tiktok_pedido(cur) -> bool:
+    """Garante id_tiktok_pedido em tbl_pedido (SQL 079)."""
+    global _PEDIDO_COL_CACHE
+    cols = _pedido_colunas(cur)
+    if "id_tiktok_pedido" in cols:
+        return True
+    try:
+        cur.execute(
+            """
+            ALTER TABLE tbl_pedido
+              ADD COLUMN IF NOT EXISTS id_tiktok_pedido VARCHAR(64)
+            """
+        )
+        cur.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_pedido_tiktok
+              ON tbl_pedido (id_tenant_vendedor, id_tiktok_pedido)
+              WHERE id_tiktok_pedido IS NOT NULL
+            """
+        )
+    except Exception:
+        return False
+    _PEDIDO_COL_CACHE = None
+    return "id_tiktok_pedido" in _pedido_colunas(cur)
+
+
+def listar_pedidos_por_id_tiktok(cur, id_vendedor: int, id_tiktok_pedido: str) -> list[int]:
+    """Retorna IDs DropNexo ligados a um pedido TikTok Shop."""
+    if "id_tiktok_pedido" not in _pedido_colunas(cur):
+        return []
+    cur.execute(
+        """
+        SELECT id FROM tbl_pedido
+        WHERE id_tenant_vendedor = %s AND id_tiktok_pedido = %s
+        ORDER BY id
+        """,
+        (id_vendedor, str(id_tiktok_pedido)),
+    )
+    return [int(r[0]) for r in cur.fetchall() if r and r[0]]
+
+
+def _garantir_coluna_id_amazon_pedido(cur) -> bool:
+    """Garante id_amazon_pedido em tbl_pedido (SQL 084)."""
+    global _PEDIDO_COL_CACHE
+    cols = _pedido_colunas(cur)
+    if "id_amazon_pedido" in cols:
+        return True
+    try:
+        cur.execute(
+            """
+            ALTER TABLE tbl_pedido
+              ADD COLUMN IF NOT EXISTS id_amazon_pedido VARCHAR(64)
+            """
+        )
+        cur.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_pedido_amazon
+              ON tbl_pedido (id_tenant_vendedor, id_amazon_pedido)
+              WHERE id_amazon_pedido IS NOT NULL
+            """
+        )
+    except Exception:
+        return False
+    _PEDIDO_COL_CACHE = None
+    return "id_amazon_pedido" in _pedido_colunas(cur)
+
+
+def listar_pedidos_por_id_amazon(cur, id_vendedor: int, id_amazon_pedido: str) -> list[int]:
+    """Retorna IDs DropNexo ligados a um pedido Amazon."""
+    if "id_amazon_pedido" not in _pedido_colunas(cur):
+        return []
+    cur.execute(
+        """
+        SELECT id FROM tbl_pedido
+        WHERE id_tenant_vendedor = %s AND id_amazon_pedido = %s
+        ORDER BY id
+        """,
+        (id_vendedor, str(id_amazon_pedido)),
+    )
+    return [int(r[0]) for r in cur.fetchall() if r and r[0]]
+
+
+def _garantir_coluna_id_ml_shipment(cur) -> bool:
+    global _PEDIDO_COL_CACHE
+    cols = _pedido_colunas(cur)
+    if "id_ml_shipment" in cols:
+        return True
+    try:
+        cur.execute(
+            """
+            ALTER TABLE tbl_pedido
+              ADD COLUMN IF NOT EXISTS id_ml_shipment VARCHAR(64)
+            """
+        )
+        cur.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_pedido_ml_shipment
+              ON tbl_pedido (id_ml_shipment)
+              WHERE id_ml_shipment IS NOT NULL
+            """
+        )
+    except Exception:
+        return False
+    _PEDIDO_COL_CACHE = None
+    return "id_ml_shipment" in _pedido_colunas(cur)
+
+
+def salvar_id_ml_shipment(cur, id_pedido: int, id_ml_shipment: str | int | None) -> None:
+    if not id_ml_shipment or not _garantir_coluna_id_ml_shipment(cur):
+        return
+    cur.execute(
+        """
+        UPDATE tbl_pedido SET id_ml_shipment = %s, atualizado_em = %s
+        WHERE id = %s
+        """,
+        (str(id_ml_shipment), agora_utc(), int(id_pedido)),
+    )
+
+
+def _garantir_coluna_id_tiktok_package(cur) -> bool:
+    global _PEDIDO_COL_CACHE
+    cols = _pedido_colunas(cur)
+    if "id_tiktok_package" in cols:
+        return True
+    try:
+        cur.execute(
+            """
+            ALTER TABLE tbl_pedido
+              ADD COLUMN IF NOT EXISTS id_tiktok_package VARCHAR(64)
+            """
+        )
+        cur.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_pedido_tiktok_package
+              ON tbl_pedido (id_tiktok_package)
+              WHERE id_tiktok_package IS NOT NULL
+            """
+        )
+    except Exception:
+        return False
+    _PEDIDO_COL_CACHE = None
+    return "id_tiktok_package" in _pedido_colunas(cur)
+
+
+def salvar_id_tiktok_package(cur, id_pedido: int, id_tiktok_package: str | int | None) -> None:
+    if not id_tiktok_package or not _garantir_coluna_id_tiktok_package(cur):
+        return
+    cur.execute(
+        """
+        UPDATE tbl_pedido SET id_tiktok_package = %s, atualizado_em = %s
+        WHERE id = %s
+        """,
+        (str(id_tiktok_package), agora_utc(), int(id_pedido)),
+    )
 
 
 def marcar_pedido_pago(
@@ -1099,6 +1365,103 @@ def _pedido_ja_importado_bling(
     )
     row = cur.fetchone()
     return int(row[0]) if row else None
+
+
+def _pedido_ja_importado_ml(
+    cur, id_vendedor: int, id_ml_pedido: str, id_fornecedor: int
+) -> int | None:
+    if not _garantir_coluna_id_ml_pedido(cur):
+        return None
+    cur.execute(
+        """
+        SELECT id FROM tbl_pedido
+        WHERE id_tenant_vendedor = %s AND id_ml_pedido = %s
+          AND id_tenant_fornecedor = %s
+        LIMIT 1
+        """,
+        (id_vendedor, str(id_ml_pedido), id_fornecedor),
+    )
+    row = cur.fetchone()
+    return int(row[0]) if row else None
+
+
+def _pedido_ja_importado_tiktok(
+    cur, id_vendedor: int, id_tiktok_pedido: str, id_fornecedor: int
+) -> int | None:
+    if not _garantir_coluna_id_tiktok_pedido(cur):
+        return None
+    cur.execute(
+        """
+        SELECT id FROM tbl_pedido
+        WHERE id_tenant_vendedor = %s AND id_tiktok_pedido = %s
+          AND id_tenant_fornecedor = %s
+        LIMIT 1
+        """,
+        (id_vendedor, str(id_tiktok_pedido), id_fornecedor),
+    )
+    row = cur.fetchone()
+    return int(row[0]) if row else None
+
+
+def _pedido_ja_importado_amazon(
+    cur, id_vendedor: int, id_amazon_pedido: str, id_fornecedor: int
+) -> int | None:
+    if not _garantir_coluna_id_amazon_pedido(cur):
+        return None
+    cur.execute(
+        """
+        SELECT id FROM tbl_pedido
+        WHERE id_tenant_vendedor = %s AND id_amazon_pedido = %s
+          AND id_tenant_fornecedor = %s
+        LIMIT 1
+        """,
+        (id_vendedor, str(id_amazon_pedido), id_fornecedor),
+    )
+    row = cur.fetchone()
+    return int(row[0]) if row else None
+
+
+def _resolver_item_meus_produtos_por_variante(
+    cur, id_vendedor: int, id_variante: int
+) -> dict | None:
+    """Localiza variante na vitrine ou no catálogo próprio do vendedor."""
+    item = _buscar_item_vitrine(cur, id_vendedor, int(id_variante))
+    if item:
+        return {
+            **item,
+            "id_variante": int(id_variante),
+            "proprio": int(item["id_fornecedor"]) == int(id_vendedor),
+        }
+    cur.execute(
+        """
+        SELECT p.id, v.id,
+               COALESCE(NULLIF(v.valor_drop, 0), NULLIF(p.valor_drop, 0), v.preco, 0),
+               COALESCE(v.preco, 0),
+               COALESCE(v.nome_exibicao, p.nome),
+               v.sku, p.id_deposito_expedicao
+        FROM tbl_produto_variante v
+        JOIN tbl_produto p ON p.id = v.id_produto
+        WHERE p.id_tenant = %s AND v.id = %s
+          AND p.ativo = TRUE AND v.ativo = TRUE
+        LIMIT 1
+        """,
+        (id_vendedor, int(id_variante)),
+    )
+    prop = cur.fetchone()
+    if not prop:
+        return None
+    return {
+        "id_produto_vendedor": None,
+        "id_fornecedor": id_vendedor,
+        "id_produto": int(prop[0]),
+        "id_variante": int(prop[1]),
+        "valor_drop": _float(prop[2]),
+        "preco_venda": _float(prop[3]),
+        "nome": prop[4] or "",
+        "sku": prop[5] or "",
+        "id_deposito": prop[6],
+        "proprio": True,
+    }
 
 
 def _resolver_item_meus_produtos_por_sku(cur, id_vendedor: int, sku: str) -> dict | None:
@@ -1492,6 +1855,732 @@ def importar_pedido_bling(
     return ids_criados
 
 
+def importar_pedido_ml(
+    cur,
+    id_vendedor: int,
+    id_ml_pedido: str,
+    dados: dict,
+    *,
+    id_usuario: int | None = None,
+) -> list[int]:
+    """Cria pedido(s) a partir do Mercado Livre (já pago pelo comprador). Retorna IDs criados."""
+    if not _garantir_coluna_id_ml_pedido(cur):
+        raise RuntimeError(
+            "Coluna id_ml_pedido ausente. Aplique __doc/sql/076_pedido_id_ml.sql."
+        )
+
+    itens_parsed = dados.get("itens") or []
+    if not itens_parsed:
+        raise ValueError("Pedido Mercado Livre sem itens.")
+
+    por_fornecedor: dict[int, list[dict]] = {}
+    for raw in itens_parsed:
+        id_variante = int(raw.get("id_variante") or 0)
+        qtd = int(raw.get("quantidade") or 0)
+        if id_variante <= 0 or qtd <= 0:
+            continue
+        item = _resolver_item_meus_produtos_por_variante(cur, id_vendedor, id_variante)
+        if not item:
+            sku = (raw.get("sku") or "").strip()
+            if sku:
+                item = _resolver_item_meus_produtos_por_sku(cur, id_vendedor, sku)
+        if not item:
+            raise ValueError(
+                f"Item ML (variante {id_variante}"
+                f"{'/SKU ' + raw.get('sku') if raw.get('sku') else ''}) "
+                "não encontrado em Meus produtos."
+            )
+        id_forn = int(item["id_fornecedor"])
+        if not item.get("proprio") and not vinculo_ativo(cur, id_vendedor, id_forn):
+            raise ValueError(
+                f"Fornecedor do item {item.get('sku') or id_variante} sem vínculo ativo."
+            )
+        valor_ml = _float(raw.get("preco_venda"))
+        preco_canal = valor_ml if valor_ml > 0 else item["preco_venda"]
+        por_fornecedor.setdefault(id_forn, []).append(
+            {
+                "id_produto_vendedor": item.get("id_produto_vendedor"),
+                "id_fornecedor": id_forn,
+                "id_produto": item["id_produto"],
+                "id_variante": item["id_variante"],
+                "valor_drop": item["valor_drop"],
+                "preco_venda": preco_canal,
+                "nome": item["nome"] or raw.get("nome") or item.get("sku") or "",
+                "sku": item["sku"] or raw.get("sku") or "",
+                "id_deposito": item.get("id_deposito"),
+                "quantidade": qtd,
+            }
+        )
+
+    if not por_fornecedor:
+        raise ValueError("Nenhum item do pedido ML pôde ser vinculado à vitrine.")
+
+    cliente = dados.get("cliente") or {}
+    entrega = dados.get("entrega") or {}
+    obs_base = dados.get("observacoes") or ""
+    numero_ml = dados.get("numero_ml") or id_ml_pedido
+    ids_criados: list[int] = []
+
+    for id_forn, itens in por_fornecedor.items():
+        existente = _pedido_ja_importado_ml(cur, id_vendedor, id_ml_pedido, id_forn)
+        if existente:
+            continue
+
+        subtotal = sum(i["valor_drop"] * i["quantidade"] for i in itens)
+        taxa = _taxa_pedido_fornecedor(cur, id_forn)
+        total = subtotal + taxa
+        agora = agora_utc()
+        numero = _proximo_numero_pedido(cur, id_vendedor)
+        obs = obs_base
+        prefix = f"Importado do Mercado Livre #{numero_ml}."
+        obs = f"{prefix} {obs}".strip() if obs else prefix
+
+        cv = col_status_vendedor(cur)
+        cols = _pedido_colunas(cur)
+        tem_id_ml = "id_ml_pedido" in cols
+        col_ml = ", id_ml_pedido" if tem_id_ml else ""
+        val_ml = ", %s" if tem_id_ml else ""
+
+        if pedido_tem_status_dual(cur) and "status_comprador" in cols:
+            cur.execute(
+                f"""
+                INSERT INTO tbl_pedido (
+                    numero, id_tenant_vendedor, id_tenant_fornecedor, origem,
+                    {cv}, status_comprador, status_pagamento,
+                    cliente_nome, cliente_email, cliente_telefone, cliente_documento,
+                    entrega_cep, entrega_logradouro, entrega_numero, entrega_complemento,
+                    entrega_bairro, entrega_cidade, entrega_uf,
+                    subtotal_produtos, valor_taxa_pedido, valor_frete, valor_total,
+                    observacoes, confirmado_em{col_ml}
+                ) VALUES (
+                    %s, %s, %s, 'mercado_livre',
+                    %s, %s, 'pendente',
+                    %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s,
+                    %s, %s{val_ml}
+                ) RETURNING id
+                """,
+                (
+                    numero,
+                    id_vendedor,
+                    id_forn,
+                    STATUS_IMPORTADO,
+                    STATUS_COMPRADOR_PAGO,
+                    cliente.get("nome") or "Cliente Mercado Livre",
+                    cliente.get("email"),
+                    cliente.get("telefone"),
+                    cliente.get("documento"),
+                    entrega.get("cep"),
+                    entrega.get("logradouro"),
+                    entrega.get("numero"),
+                    entrega.get("complemento"),
+                    entrega.get("bairro"),
+                    entrega.get("cidade"),
+                    entrega.get("uf"),
+                    subtotal,
+                    taxa,
+                    _float(dados.get("valor_frete")),
+                    total,
+                    obs,
+                    agora,
+                    *((str(id_ml_pedido),) if tem_id_ml else ()),
+                ),
+            )
+        else:
+            cur.execute(
+                f"""
+                INSERT INTO tbl_pedido (
+                    numero, id_tenant_vendedor, id_tenant_fornecedor, origem,
+                    {cv}, status_pagamento,
+                    cliente_nome, cliente_email, cliente_telefone, cliente_documento,
+                    entrega_cep, entrega_logradouro, entrega_numero, entrega_complemento,
+                    entrega_bairro, entrega_cidade, entrega_uf,
+                    subtotal_produtos, valor_taxa_pedido, valor_frete, valor_total,
+                    observacoes, confirmado_em{col_ml}
+                ) VALUES (
+                    %s, %s, %s, 'mercado_livre',
+                    %s, 'pendente',
+                    %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s,
+                    %s, %s{val_ml}
+                ) RETURNING id
+                """,
+                (
+                    numero,
+                    id_vendedor,
+                    id_forn,
+                    STATUS_AGUARDANDO,
+                    cliente.get("nome") or "Cliente Mercado Livre",
+                    cliente.get("email"),
+                    cliente.get("telefone"),
+                    cliente.get("documento"),
+                    entrega.get("cep"),
+                    entrega.get("logradouro"),
+                    entrega.get("numero"),
+                    entrega.get("complemento"),
+                    entrega.get("bairro"),
+                    entrega.get("cidade"),
+                    entrega.get("uf"),
+                    subtotal,
+                    taxa,
+                    _float(dados.get("valor_frete")),
+                    total,
+                    obs,
+                    agora,
+                    *((str(id_ml_pedido),) if tem_id_ml else ()),
+                ),
+            )
+        id_pedido = int(cur.fetchone()[0])
+
+        for item in itens:
+            sub = item["valor_drop"] * item["quantidade"]
+            cur.execute(
+                """
+                INSERT INTO tbl_pedido_item (
+                    id_pedido, id_variante, id_produto, id_produto_vendedor,
+                    sku, nome_produto, quantidade, valor_drop, preco_venda, subtotal_drop,
+                    id_deposito_fornecedor
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    id_pedido,
+                    item["id_variante"],
+                    item["id_produto"],
+                    item["id_produto_vendedor"],
+                    item["sku"],
+                    item["nome"],
+                    item["quantidade"],
+                    item["valor_drop"],
+                    item["preco_venda"],
+                    sub,
+                    item["id_deposito"],
+                ),
+            )
+
+        itens_reserva = [(i["id_variante"], i["quantidade"]) for i in itens]
+        try:
+            reservar_itens_pedido(cur, itens_reserva)
+            hist_estoque = "Estoque reservado."
+        except ValueError as e:
+            hist_estoque = f"Importado sem reserva de estoque ({e})."
+
+        cur.execute(
+            """
+            INSERT INTO tbl_integracao_map (
+                id_tenant, provedor, contexto, entidade, id_bling, id_dropnexo, sku, meta
+            ) VALUES (%s, 'mercado_livre', 'vendedor', 'pedido', %s, %s, NULL, %s::jsonb)
+            ON CONFLICT (id_tenant, provedor, contexto, entidade, id_bling)
+            DO UPDATE SET id_dropnexo = EXCLUDED.id_dropnexo, atualizado_em = NOW()
+            """,
+            (
+                id_vendedor,
+                f"{id_ml_pedido}:{id_forn}",
+                id_pedido,
+                json.dumps(
+                    {"numero_ml": numero_ml, "id_ml_pedido": str(id_ml_pedido)},
+                    ensure_ascii=False,
+                ),
+            ),
+        )
+
+        registrar_historico(
+            cur,
+            id_pedido,
+            "importado_ml",
+            f"Pedido importado do Mercado Livre (#{numero_ml}). {hist_estoque}",
+            id_usuario,
+        )
+        ids_criados.append(id_pedido)
+
+    return ids_criados
+
+
+def importar_pedido_tiktok(
+    cur,
+    id_vendedor: int,
+    id_tiktok_pedido: str,
+    dados: dict,
+    *,
+    id_usuario: int | None = None,
+) -> list[int]:
+    """Cria pedido(s) a partir do TikTok Shop (já pago pelo comprador). Retorna IDs criados."""
+    if not _garantir_coluna_id_tiktok_pedido(cur):
+        raise RuntimeError(
+            "Coluna id_tiktok_pedido ausente. Aplique __doc/sql/079_pedido_id_tiktok.sql."
+        )
+
+    itens_parsed = dados.get("itens") or []
+    if not itens_parsed:
+        raise ValueError("Pedido TikTok Shop sem itens.")
+
+    por_fornecedor: dict[int, list[dict]] = {}
+    for raw in itens_parsed:
+        id_variante = int(raw.get("id_variante") or 0)
+        qtd = int(raw.get("quantidade") or 0)
+        if id_variante <= 0 or qtd <= 0:
+            continue
+        item = _resolver_item_meus_produtos_por_variante(cur, id_vendedor, id_variante)
+        if not item:
+            sku = (raw.get("sku") or "").strip()
+            if sku:
+                item = _resolver_item_meus_produtos_por_sku(cur, id_vendedor, sku)
+        if not item:
+            raise ValueError(
+                f"Item TikTok Shop (variante {id_variante}"
+                f"{'/SKU ' + raw.get('sku') if raw.get('sku') else ''}) "
+                "não encontrado em Meus produtos."
+            )
+        id_forn = int(item["id_fornecedor"])
+        if not item.get("proprio") and not vinculo_ativo(cur, id_vendedor, id_forn):
+            raise ValueError(
+                f"Fornecedor do item {item.get('sku') or id_variante} sem vínculo ativo."
+            )
+        valor_tt = _float(raw.get("preco_venda"))
+        preco_canal = valor_tt if valor_tt > 0 else item["preco_venda"]
+        por_fornecedor.setdefault(id_forn, []).append(
+            {
+                "id_produto_vendedor": item.get("id_produto_vendedor"),
+                "id_fornecedor": id_forn,
+                "id_produto": item["id_produto"],
+                "id_variante": item["id_variante"],
+                "valor_drop": item["valor_drop"],
+                "preco_venda": preco_canal,
+                "nome": item["nome"] or raw.get("nome") or item.get("sku") or "",
+                "sku": item["sku"] or raw.get("sku") or "",
+                "id_deposito": item.get("id_deposito"),
+                "quantidade": qtd,
+            }
+        )
+
+    if not por_fornecedor:
+        raise ValueError("Nenhum item do pedido TikTok Shop pôde ser vinculado à vitrine.")
+
+    cliente = dados.get("cliente") or {}
+    entrega = dados.get("entrega") or {}
+    obs_base = dados.get("observacoes") or ""
+    numero_tt = dados.get("numero_tiktok") or id_tiktok_pedido
+    ids_criados: list[int] = []
+
+    for id_forn, itens in por_fornecedor.items():
+        existente = _pedido_ja_importado_tiktok(cur, id_vendedor, id_tiktok_pedido, id_forn)
+        if existente:
+            continue
+
+        subtotal = sum(i["valor_drop"] * i["quantidade"] for i in itens)
+        taxa = _taxa_pedido_fornecedor(cur, id_forn)
+        total = subtotal + taxa
+        agora = agora_utc()
+        numero = _proximo_numero_pedido(cur, id_vendedor)
+        obs = obs_base
+        prefix = f"Importado do TikTok Shop #{numero_tt}."
+        obs = f"{prefix} {obs}".strip() if obs else prefix
+
+        cv = col_status_vendedor(cur)
+        cols = _pedido_colunas(cur)
+        tem_id_tt = "id_tiktok_pedido" in cols
+        col_tt = ", id_tiktok_pedido" if tem_id_tt else ""
+        val_tt = ", %s" if tem_id_tt else ""
+
+        if pedido_tem_status_dual(cur) and "status_comprador" in cols:
+            cur.execute(
+                f"""
+                INSERT INTO tbl_pedido (
+                    numero, id_tenant_vendedor, id_tenant_fornecedor, origem,
+                    {cv}, status_comprador, status_pagamento,
+                    cliente_nome, cliente_email, cliente_telefone, cliente_documento,
+                    entrega_cep, entrega_logradouro, entrega_numero, entrega_complemento,
+                    entrega_bairro, entrega_cidade, entrega_uf,
+                    subtotal_produtos, valor_taxa_pedido, valor_frete, valor_total,
+                    observacoes, confirmado_em{col_tt}
+                ) VALUES (
+                    %s, %s, %s, 'tiktok',
+                    %s, %s, 'pendente',
+                    %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s,
+                    %s, %s{val_tt}
+                ) RETURNING id
+                """,
+                (
+                    numero,
+                    id_vendedor,
+                    id_forn,
+                    STATUS_IMPORTADO,
+                    STATUS_COMPRADOR_PAGO,
+                    cliente.get("nome") or "Cliente TikTok Shop",
+                    cliente.get("email"),
+                    cliente.get("telefone"),
+                    cliente.get("documento"),
+                    entrega.get("cep"),
+                    entrega.get("logradouro"),
+                    entrega.get("numero"),
+                    entrega.get("complemento"),
+                    entrega.get("bairro"),
+                    entrega.get("cidade"),
+                    entrega.get("uf"),
+                    subtotal,
+                    taxa,
+                    _float(dados.get("valor_frete")),
+                    total,
+                    obs,
+                    agora,
+                    *((str(id_tiktok_pedido),) if tem_id_tt else ()),
+                ),
+            )
+        else:
+            cur.execute(
+                f"""
+                INSERT INTO tbl_pedido (
+                    numero, id_tenant_vendedor, id_tenant_fornecedor, origem,
+                    {cv}, status_pagamento,
+                    cliente_nome, cliente_email, cliente_telefone, cliente_documento,
+                    entrega_cep, entrega_logradouro, entrega_numero, entrega_complemento,
+                    entrega_bairro, entrega_cidade, entrega_uf,
+                    subtotal_produtos, valor_taxa_pedido, valor_frete, valor_total,
+                    observacoes, confirmado_em{col_tt}
+                ) VALUES (
+                    %s, %s, %s, 'tiktok',
+                    %s, 'pendente',
+                    %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s,
+                    %s, %s{val_tt}
+                ) RETURNING id
+                """,
+                (
+                    numero,
+                    id_vendedor,
+                    id_forn,
+                    STATUS_AGUARDANDO,
+                    cliente.get("nome") or "Cliente TikTok Shop",
+                    cliente.get("email"),
+                    cliente.get("telefone"),
+                    cliente.get("documento"),
+                    entrega.get("cep"),
+                    entrega.get("logradouro"),
+                    entrega.get("numero"),
+                    entrega.get("complemento"),
+                    entrega.get("bairro"),
+                    entrega.get("cidade"),
+                    entrega.get("uf"),
+                    subtotal,
+                    taxa,
+                    _float(dados.get("valor_frete")),
+                    total,
+                    obs,
+                    agora,
+                    *((str(id_tiktok_pedido),) if tem_id_tt else ()),
+                ),
+            )
+        id_pedido = int(cur.fetchone()[0])
+
+        for item in itens:
+            sub = item["valor_drop"] * item["quantidade"]
+            cur.execute(
+                """
+                INSERT INTO tbl_pedido_item (
+                    id_pedido, id_variante, id_produto, id_produto_vendedor,
+                    sku, nome_produto, quantidade, valor_drop, preco_venda, subtotal_drop,
+                    id_deposito_fornecedor
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    id_pedido,
+                    item["id_variante"],
+                    item["id_produto"],
+                    item["id_produto_vendedor"],
+                    item["sku"],
+                    item["nome"],
+                    item["quantidade"],
+                    item["valor_drop"],
+                    item["preco_venda"],
+                    sub,
+                    item["id_deposito"],
+                ),
+            )
+
+        itens_reserva = [(i["id_variante"], i["quantidade"]) for i in itens]
+        try:
+            reservar_itens_pedido(cur, itens_reserva)
+            hist_estoque = "Estoque reservado."
+        except ValueError as e:
+            hist_estoque = f"Importado sem reserva de estoque ({e})."
+
+        cur.execute(
+            """
+            INSERT INTO tbl_integracao_map (
+                id_tenant, provedor, contexto, entidade, id_bling, id_dropnexo, sku, meta
+            ) VALUES (%s, 'tiktok', 'vendedor', 'pedido', %s, %s, NULL, %s::jsonb)
+            ON CONFLICT (id_tenant, provedor, contexto, entidade, id_bling)
+            DO UPDATE SET id_dropnexo = EXCLUDED.id_dropnexo, atualizado_em = NOW()
+            """,
+            (
+                id_vendedor,
+                f"{id_tiktok_pedido}:{id_forn}",
+                id_pedido,
+                json.dumps(
+                    {"numero_tiktok": numero_tt, "id_tiktok_pedido": str(id_tiktok_pedido)},
+                    ensure_ascii=False,
+                ),
+            ),
+        )
+
+        registrar_historico(
+            cur,
+            id_pedido,
+            "importado_tiktok",
+            f"Pedido importado do TikTok Shop (#{numero_tt}). {hist_estoque}",
+            id_usuario,
+        )
+        ids_criados.append(id_pedido)
+
+    return ids_criados
+
+
+def importar_pedido_amazon(
+    cur,
+    id_vendedor: int,
+    id_amazon_pedido: str,
+    dados: dict,
+    *,
+    id_usuario: int | None = None,
+) -> list[int]:
+    """Cria pedido(s) a partir da Amazon (já pago pelo comprador). Retorna IDs criados."""
+    if not _garantir_coluna_id_amazon_pedido(cur):
+        raise RuntimeError(
+            "Coluna id_amazon_pedido ausente. Aplique __doc/sql/084_pedido_id_amazon.sql."
+        )
+
+    itens_parsed = dados.get("itens") or []
+    if not itens_parsed:
+        raise ValueError("Pedido Amazon sem itens.")
+
+    por_fornecedor: dict[int, list[dict]] = {}
+    for raw in itens_parsed:
+        id_variante = int(raw.get("id_variante") or 0)
+        qtd = int(raw.get("quantidade") or 0)
+        if id_variante <= 0 or qtd <= 0:
+            continue
+        item = _resolver_item_meus_produtos_por_variante(cur, id_vendedor, id_variante)
+        if not item:
+            sku = (raw.get("sku") or "").strip()
+            if sku:
+                item = _resolver_item_meus_produtos_por_sku(cur, id_vendedor, sku)
+        if not item:
+            raise ValueError(
+                f"Item Amazon (variante {id_variante}"
+                f"{'/SKU ' + raw.get('sku') if raw.get('sku') else ''}) "
+                "não encontrado em Meus produtos."
+            )
+        id_forn = int(item["id_fornecedor"])
+        if not item.get("proprio") and not vinculo_ativo(cur, id_vendedor, id_forn):
+            raise ValueError(
+                f"Fornecedor do item {item.get('sku') or id_variante} sem vínculo ativo."
+            )
+        valor_amz = _float(raw.get("preco_venda"))
+        preco_canal = valor_amz if valor_amz > 0 else item["preco_venda"]
+        por_fornecedor.setdefault(id_forn, []).append(
+            {
+                "id_produto_vendedor": item.get("id_produto_vendedor"),
+                "id_fornecedor": id_forn,
+                "id_produto": item["id_produto"],
+                "id_variante": item["id_variante"],
+                "valor_drop": item["valor_drop"],
+                "preco_venda": preco_canal,
+                "nome": item["nome"] or raw.get("nome") or item.get("sku") or "",
+                "sku": item["sku"] or raw.get("sku") or "",
+                "id_deposito": item.get("id_deposito"),
+                "quantidade": qtd,
+            }
+        )
+
+    if not por_fornecedor:
+        raise ValueError("Nenhum item do pedido Amazon pôde ser vinculado à vitrine.")
+
+    cliente = dados.get("cliente") or {}
+    entrega = dados.get("entrega") or {}
+    obs_base = dados.get("observacoes") or ""
+    numero_amz = dados.get("numero_amazon") or id_amazon_pedido
+    ids_criados: list[int] = []
+
+    for id_forn, itens in por_fornecedor.items():
+        existente = _pedido_ja_importado_amazon(cur, id_vendedor, id_amazon_pedido, id_forn)
+        if existente:
+            continue
+
+        subtotal = sum(i["valor_drop"] * i["quantidade"] for i in itens)
+        taxa = _taxa_pedido_fornecedor(cur, id_forn)
+        total = subtotal + taxa
+        agora = agora_utc()
+        numero = _proximo_numero_pedido(cur, id_vendedor)
+        obs = obs_base
+        prefix = f"Importado da Amazon #{numero_amz}."
+        obs = f"{prefix} {obs}".strip() if obs else prefix
+
+        cv = col_status_vendedor(cur)
+        cols = _pedido_colunas(cur)
+        tem_id_amz = "id_amazon_pedido" in cols
+        col_amz = ", id_amazon_pedido" if tem_id_amz else ""
+        val_amz = ", %s" if tem_id_amz else ""
+
+        if pedido_tem_status_dual(cur) and "status_comprador" in cols:
+            cur.execute(
+                f"""
+                INSERT INTO tbl_pedido (
+                    numero, id_tenant_vendedor, id_tenant_fornecedor, origem,
+                    {cv}, status_comprador, status_pagamento,
+                    cliente_nome, cliente_email, cliente_telefone, cliente_documento,
+                    entrega_cep, entrega_logradouro, entrega_numero, entrega_complemento,
+                    entrega_bairro, entrega_cidade, entrega_uf,
+                    subtotal_produtos, valor_taxa_pedido, valor_frete, valor_total,
+                    observacoes, confirmado_em{col_amz}
+                ) VALUES (
+                    %s, %s, %s, 'amazon',
+                    %s, %s, 'pendente',
+                    %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s,
+                    %s, %s{val_amz}
+                ) RETURNING id
+                """,
+                (
+                    numero,
+                    id_vendedor,
+                    id_forn,
+                    STATUS_IMPORTADO,
+                    STATUS_COMPRADOR_PAGO,
+                    cliente.get("nome") or "Cliente Amazon",
+                    cliente.get("email"),
+                    cliente.get("telefone"),
+                    cliente.get("documento"),
+                    entrega.get("cep"),
+                    entrega.get("logradouro"),
+                    entrega.get("numero"),
+                    entrega.get("complemento"),
+                    entrega.get("bairro"),
+                    entrega.get("cidade"),
+                    entrega.get("uf"),
+                    subtotal,
+                    taxa,
+                    _float(dados.get("valor_frete")),
+                    total,
+                    obs,
+                    agora,
+                    *((str(id_amazon_pedido),) if tem_id_amz else ()),
+                ),
+            )
+        else:
+            cur.execute(
+                f"""
+                INSERT INTO tbl_pedido (
+                    numero, id_tenant_vendedor, id_tenant_fornecedor, origem,
+                    {cv}, status_pagamento,
+                    cliente_nome, cliente_email, cliente_telefone, cliente_documento,
+                    entrega_cep, entrega_logradouro, entrega_numero, entrega_complemento,
+                    entrega_bairro, entrega_cidade, entrega_uf,
+                    subtotal_produtos, valor_taxa_pedido, valor_frete, valor_total,
+                    observacoes, confirmado_em{col_amz}
+                ) VALUES (
+                    %s, %s, %s, 'amazon',
+                    %s, 'pendente',
+                    %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s,
+                    %s, %s{val_amz}
+                ) RETURNING id
+                """,
+                (
+                    numero,
+                    id_vendedor,
+                    id_forn,
+                    STATUS_AGUARDANDO,
+                    cliente.get("nome") or "Cliente Amazon",
+                    cliente.get("email"),
+                    cliente.get("telefone"),
+                    cliente.get("documento"),
+                    entrega.get("cep"),
+                    entrega.get("logradouro"),
+                    entrega.get("numero"),
+                    entrega.get("complemento"),
+                    entrega.get("bairro"),
+                    entrega.get("cidade"),
+                    entrega.get("uf"),
+                    subtotal,
+                    taxa,
+                    _float(dados.get("valor_frete")),
+                    total,
+                    obs,
+                    agora,
+                    *((str(id_amazon_pedido),) if tem_id_amz else ()),
+                ),
+            )
+        id_pedido = int(cur.fetchone()[0])
+
+        for item in itens:
+            sub = item["valor_drop"] * item["quantidade"]
+            cur.execute(
+                """
+                INSERT INTO tbl_pedido_item (
+                    id_pedido, id_variante, id_produto, id_produto_vendedor,
+                    sku, nome_produto, quantidade, valor_drop, preco_venda, subtotal_drop,
+                    id_deposito_fornecedor
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    id_pedido,
+                    item["id_variante"],
+                    item["id_produto"],
+                    item["id_produto_vendedor"],
+                    item["sku"],
+                    item["nome"],
+                    item["quantidade"],
+                    item["valor_drop"],
+                    item["preco_venda"],
+                    sub,
+                    item["id_deposito"],
+                ),
+            )
+
+        itens_reserva = [(i["id_variante"], i["quantidade"]) for i in itens]
+        try:
+            reservar_itens_pedido(cur, itens_reserva)
+            hist_estoque = "Estoque reservado."
+        except ValueError as e:
+            hist_estoque = f"Importado sem reserva de estoque ({e})."
+
+        cur.execute(
+            """
+            INSERT INTO tbl_integracao_map (
+                id_tenant, provedor, contexto, entidade, id_bling, id_dropnexo, sku, meta
+            ) VALUES (%s, 'amazon', 'vendedor', 'pedido', %s, %s, NULL, %s::jsonb)
+            ON CONFLICT (id_tenant, provedor, contexto, entidade, id_bling)
+            DO UPDATE SET id_dropnexo = EXCLUDED.id_dropnexo, atualizado_em = NOW()
+            """,
+            (
+                id_vendedor,
+                f"{id_amazon_pedido}:{id_forn}",
+                id_pedido,
+                json.dumps(
+                    {"numero_amazon": numero_amz, "id_amazon_pedido": str(id_amazon_pedido)},
+                    ensure_ascii=False,
+                ),
+            ),
+        )
+
+        registrar_historico(
+            cur,
+            id_pedido,
+            "importado_amazon",
+            f"Pedido importado da Amazon (#{numero_amz}). {hist_estoque}",
+            id_usuario,
+        )
+        ids_criados.append(id_pedido)
+
+    return ids_criados
+
+
 def marcar_em_expedicao(
     cur,
     id_pedido: int,
@@ -1555,6 +2644,24 @@ def marcar_em_expedicao(
         exportar_status_pedido_bling(cur, id_pedido, evento="expedido")
     except Exception:
         pass
+    try:
+        from api.mercado_livre.pedidos_ml import exportar_status_pedido_ml
+
+        exportar_status_pedido_ml(cur, id_pedido, evento="expedido")
+    except Exception:
+        pass
+    try:
+        from api.tiktok.pedidos_tiktok import exportar_status_pedido_tiktok
+
+        exportar_status_pedido_tiktok(cur, id_pedido, evento="expedido")
+    except Exception:
+        pass
+    try:
+        from api.amazon.pedidos_amazon import exportar_status_pedido_amazon
+
+        exportar_status_pedido_amazon(cur, id_pedido, evento="expedido")
+    except Exception:
+        pass
 
 
 def marcar_entregue(
@@ -1598,6 +2705,24 @@ def marcar_entregue(
         from api.bling.pedidos import exportar_status_pedido_bling
 
         exportar_status_pedido_bling(cur, id_pedido, evento="entregue")
+    except Exception:
+        pass
+    try:
+        from api.mercado_livre.pedidos_ml import exportar_status_pedido_ml
+
+        exportar_status_pedido_ml(cur, id_pedido, evento="entregue")
+    except Exception:
+        pass
+    try:
+        from api.tiktok.pedidos_tiktok import exportar_status_pedido_tiktok
+
+        exportar_status_pedido_tiktok(cur, id_pedido, evento="entregue")
+    except Exception:
+        pass
+    try:
+        from api.amazon.pedidos_amazon import exportar_status_pedido_amazon
+
+        exportar_status_pedido_amazon(cur, id_pedido, evento="entregue")
     except Exception:
         pass
 
@@ -1764,7 +2889,7 @@ def obter_grupo_pedido(cur, id_vendedor: int, id_grupo: int) -> dict | None:
 
 
 def obter_contexto_pedido_vendedor(cur, id_vendedor: int, id_pedido: int) -> dict | None:
-    """Carrega pedido manual (grupo) ou avulso (ex.: importado do Bling)."""
+    """Carrega pedido manual (grupo) ou avulso (ex.: importado do Bling/ML)."""
     ped = obter_pedido(cur, id_pedido, id_vendedor=id_vendedor)
     if not ped:
         return None
@@ -2029,6 +3154,14 @@ def baixar_estoque_expedicao(
 
             if not ml_sync_suprimido():
                 propagar_estoque_variante_ml(cur, int(id_variante))
+        except Exception:
+            pass
+        try:
+            from api.amazon.eco_estoque import amazon_sync_suprimido
+            from api.amazon.sync_runtime import propagar_estoque_variante_amazon
+
+            if not amazon_sync_suprimido():
+                propagar_estoque_variante_amazon(cur, int(id_variante))
         except Exception:
             pass
 

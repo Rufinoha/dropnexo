@@ -1,4 +1,4 @@
-# api/mercado_livre/srotas_mercado_livre.py — OAuth Mercado Livre (vendedor)
+# api/amazon/srotas_amazon.py — OAuth Amazon SP-API (vendedor)
 from __future__ import annotations
 
 import logging
@@ -6,23 +6,22 @@ from pathlib import Path
 
 from flask import Blueprint, jsonify, redirect, request, session, url_for
 
-from api.mercado_livre.mercado_livre import (
-    atualizar_conta_info,
-    buscar_categorias_ml,
-    carregar_config_ml,
-    desconectar_ml,
+from api.amazon.amazon import (
+    amazon_configurado,
+    amazon_conectado,
+    atualizar_seller_info,
+    buscar_product_types_amazon,
+    carregar_config_amazon,
+    desconectar_amazon,
     gerar_state_oauth,
-    listar_mapeamento_categorias_ml,
-    ml_configurado,
-    ml_conectado,
-    publicar_produtos_ml,
+    listar_mapeamento_categorias_amazon,
+    publicar_produtos_amazon,
     redirect_uri_oauth,
-    salvar_config_ml,
-    salvar_mapeamento_categorias_ml,
+    salvar_config_amazon,
+    salvar_mapeamento_categorias_amazon,
     salvar_tokens,
     trocar_code_por_tokens,
     url_autorizacao,
-    webhook_url,
 )
 from global_utils import Var_ConectarBanco, login_obrigatorio, usuario_tem_permissao
 from sistema.plataforma.sessao import garantir_modulo_sessao
@@ -31,17 +30,17 @@ _log = logging.getLogger(__name__)
 
 _MOD = Path(__file__).resolve().parent
 
-ml_bp = Blueprint(
-    "mercado_livre",
+amazon_bp = Blueprint(
+    "amazon",
     __name__,
     root_path=str(_MOD),
     static_folder="static",
-    static_url_path="/static/api/mercado_livre",
+    static_url_path="/static/api/amazon",
 )
 
 
 def init_app(app):
-    app.register_blueprint(ml_bp)
+    app.register_blueprint(amazon_bp)
 
 
 def _pode_integracoes() -> bool:
@@ -61,48 +60,54 @@ def _exigir_vendedor():
         return redirect(
             url_for(
                 "integracoes.pagina",
-                erro="Conecte o Mercado Livre no módulo Vendedor (troque o perfil no topo).",
+                erro="Conecte a Amazon no módulo Vendedor (troque o perfil no topo).",
             )
         )
-    return redirect(url_for("integracoes.pagina", erro="Mercado Livre é apenas para vendedores."))
+    return redirect(url_for("integracoes.pagina", erro="Amazon é apenas para vendedores."))
 
 
-@ml_bp.get("/api/integracoes/mercado-livre/oauth/iniciar")
+@amazon_bp.get("/api/integracoes/amazon/oauth/iniciar")
 @login_obrigatorio()
 def oauth_iniciar():
     if not _pode_integracoes():
         return jsonify(success=False, message="Sem permissão."), 403
     if (r := _exigir_vendedor()) is not None:
         return r
-    if not ml_configurado():
+    if not amazon_configurado():
         return redirect(
             url_for(
                 "integracoes.pagina",
-                erro="Mercado Livre indisponível. Configure ML_CLIENT_ID_DEV/PROD e ML_CLIENT_SECRET_DEV/PROD no .env.",
+                erro="Amazon indisponível. Configure AMAZON_LWA_CLIENT_ID, "
+                "AMAZON_LWA_CLIENT_SECRET e AMAZON_APP_ID no .env.",
             )
         )
     state = gerar_state_oauth()
-    session["ml_oauth_state"] = state
-    session["ml_oauth_tenant"] = session.get("id_tenant")
+    session["amazon_oauth_state"] = state
+    session["amazon_oauth_tenant"] = session.get("id_tenant")
     return redirect(url_autorizacao(state))
 
 
-@ml_bp.get("/api/integracoes/mercado-livre/oauth/callback")
+@amazon_bp.get("/api/integracoes/amazon/oauth/callback")
 @login_obrigatorio(exigir_tenant=False)
 def oauth_callback():
     if not _pode_integracoes():
         return redirect(url_for("integracoes.pagina", erro="permissao"))
 
-    erro = request.args.get("error")
+    erro = request.args.get("error") or request.args.get("error_description")
     if erro:
         return redirect(url_for("integracoes.pagina", erro=erro))
 
     state = request.args.get("state") or ""
-    code = request.args.get("code") or ""
-    if not code or state != session.get("ml_oauth_state"):
+    code = request.args.get("spapi_oauth_code") or request.args.get("code") or ""
+    selling_partner_id = (
+        request.args.get("selling_partner_id")
+        or request.args.get("seller_id")
+        or ""
+    ).strip()
+    if not code or state != session.get("amazon_oauth_state"):
         return redirect(url_for("integracoes.pagina", erro="state_invalido"))
 
-    id_tenant = session.get("ml_oauth_tenant") or session.get("id_tenant")
+    id_tenant = session.get("amazon_oauth_tenant") or session.get("id_tenant")
     if not id_tenant:
         return redirect(url_for("integracoes.pagina", erro="sessao"))
 
@@ -111,22 +116,20 @@ def oauth_callback():
         conn = Var_ConectarBanco()
         try:
             cur = conn.cursor()
-            salvar_tokens(cur, int(id_tenant), tokens)
-            access = tokens.get("access_token") or ""
-            if access:
-                atualizar_conta_info(cur, int(id_tenant), access)
+            salvar_tokens(cur, int(id_tenant), tokens, seller_id=selling_partner_id or None)
+            atualizar_seller_info(cur, int(id_tenant), seller_id=selling_partner_id or None)
             conn.commit()
         finally:
             conn.close()
-        session.pop("ml_oauth_state", None)
-        session.pop("ml_oauth_tenant", None)
-        return redirect(url_for("integracoes.pagina_mercado_livre", conectado="1"))
+        session.pop("amazon_oauth_state", None)
+        session.pop("amazon_oauth_tenant", None)
+        return redirect(url_for("integracoes.pagina", conectado_amazon="1"))
     except Exception as e:
-        _log.exception("ML OAuth callback")
+        _log.exception("Amazon OAuth callback")
         return redirect(url_for("integracoes.pagina", erro=str(e)[:120]))
 
 
-@ml_bp.post("/api/integracoes/mercado-livre/desconectar")
+@amazon_bp.post("/api/integracoes/amazon/desconectar")
 @login_obrigatorio()
 def desconectar():
     if not _pode_integracoes():
@@ -137,14 +140,14 @@ def desconectar():
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
-        desconectar_ml(cur, int(id_tenant))
+        desconectar_amazon(cur, int(id_tenant))
         conn.commit()
-        return jsonify(success=True, message="Mercado Livre desconectado.")
+        return jsonify(success=True, message="Amazon desconectada.")
     finally:
         conn.close()
 
 
-@ml_bp.get("/api/integracoes/mercado-livre/status")
+@amazon_bp.get("/api/integracoes/amazon/status")
 @login_obrigatorio()
 def status():
     if not _pode_integracoes():
@@ -153,9 +156,9 @@ def status():
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
-        cfg = carregar_config_ml(cur, int(id_tenant))
-        cfg["configurado_servidor"] = ml_configurado()
-        cfg["conectado"] = ml_conectado(cur, int(id_tenant))
+        cfg = carregar_config_amazon(cur, int(id_tenant))
+        cfg["configurado_servidor"] = amazon_configurado()
+        cfg["conectado"] = amazon_conectado(cur, int(id_tenant))
         return jsonify(success=True, config=cfg)
     except Exception as e:
         conn.rollback()
@@ -164,7 +167,7 @@ def status():
         conn.close()
 
 
-@ml_bp.post("/api/integracoes/mercado-livre/config/salvar")
+@amazon_bp.post("/api/integracoes/amazon/config/salvar")
 @login_obrigatorio()
 def config_salvar():
     if not _pode_integracoes():
@@ -176,33 +179,26 @@ def config_salvar():
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
-        if not ml_conectado(cur, int(id_tenant)):
-            return jsonify(success=False, message="Conecte o Mercado Livre primeiro."), 400
-        salvar_config_ml(
+        if not amazon_conectado(cur, int(id_tenant)):
+            return jsonify(success=False, message="Conecte a Amazon primeiro."), 400
+        salvar_config_amazon(
             cur,
             int(id_tenant),
             pedidos_importar_auto=body.get("pedidos_importar_auto") if "pedidos_importar_auto" in body else None,
             produtos_exportar_auto=body.get("produtos_exportar_auto") if "produtos_exportar_auto" in body else None,
             produtos_modo=body.get("produtos_modo") if "produtos_modo" in body else None,
-            listing_type_padrao=body.get("listing_type_padrao") if "listing_type_padrao" in body else None,
-            frete_gratis=body.get("frete_gratis") if "frete_gratis" in body else None,
+            estoque_sync_ativo=body.get("estoque_sync_ativo") if "estoque_sync_ativo" in body else None,
         )
         conn.commit()
         return jsonify(success=True, message="Preferências salvas.")
     except Exception as e:
         conn.rollback()
-        msg = str(e)[:300]
-        if "transaction is aborted" in msg.lower():
-            msg = (
-                "Não foi possível salvar as preferências. "
-                "Aplique o SQL 074 no banco e reinicie o servidor."
-            )
-        return jsonify(success=False, message=msg), 400
+        return jsonify(success=False, message=str(e)[:300]), 400
     finally:
         conn.close()
 
 
-@ml_bp.post("/api/integracoes/mercado-livre/sync/pedidos")
+@amazon_bp.post("/api/integracoes/amazon/sync/pedidos")
 @login_obrigatorio()
 def sync_pedidos():
     if not _pode_integracoes():
@@ -213,11 +209,11 @@ def sync_pedidos():
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
-        if not ml_conectado(cur, int(id_tenant)):
-            return jsonify(success=False, message="Mercado Livre não conectado."), 400
-        from api.mercado_livre.mercado_livre import importar_pedidos_mercado_livre
+        if not amazon_conectado(cur, int(id_tenant)):
+            return jsonify(success=False, message="Amazon não conectada."), 400
+        from api.amazon.amazon import importar_pedidos_amazon
 
-        resultado = importar_pedidos_mercado_livre(cur, int(id_tenant))
+        resultado = importar_pedidos_amazon(cur, int(id_tenant))
         conn.commit()
         return jsonify(success=True, **resultado)
     except Exception as e:
@@ -227,10 +223,9 @@ def sync_pedidos():
         conn.close()
 
 
-@ml_bp.post("/api/integracoes/mercado-livre/sync/produtos")
+@amazon_bp.post("/api/integracoes/amazon/sync/estoque")
 @login_obrigatorio()
-def sync_produtos():
-    """Legado: sincronização em massa. Prefira publicar em Meus produtos."""
+def sync_estoque():
     if not _pode_integracoes():
         return jsonify(success=False, message="Sem permissão."), 403
     if garantir_modulo_sessao() != "vendedor" and not session.get("eh_desenvolvedor"):
@@ -239,9 +234,9 @@ def sync_produtos():
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
-        from api.mercado_livre.mercado_livre import exportar_produtos_ml
+        from api.amazon.amazon import sincronizar_estoque_amazon
 
-        resultado = exportar_produtos_ml(cur, int(id_tenant))
+        resultado = sincronizar_estoque_amazon(cur, int(id_tenant))
         conn.commit()
         return jsonify(success=True, **resultado)
     except Exception as e:
@@ -251,7 +246,7 @@ def sync_produtos():
         conn.close()
 
 
-@ml_bp.get("/api/integracoes/mercado-livre/categorias-mapeamento")
+@amazon_bp.get("/api/integracoes/amazon/categorias-mapeamento")
 @login_obrigatorio()
 def categorias_mapeamento_listar():
     if not _pode_integracoes():
@@ -262,15 +257,15 @@ def categorias_mapeamento_listar():
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
-        if not ml_conectado(cur, int(id_tenant)):
-            return jsonify(success=False, message="Mercado Livre não conectado."), 400
-        itens = listar_mapeamento_categorias_ml(cur, int(id_tenant))
+        if not amazon_conectado(cur, int(id_tenant)):
+            return jsonify(success=False, message="Amazon não conectada."), 400
+        itens = listar_mapeamento_categorias_amazon(cur, int(id_tenant))
         return jsonify(success=True, itens=itens)
     finally:
         conn.close()
 
 
-@ml_bp.post("/api/integracoes/mercado-livre/categorias-mapeamento/salvar")
+@amazon_bp.post("/api/integracoes/amazon/categorias-mapeamento/salvar")
 @login_obrigatorio()
 def categorias_mapeamento_salvar():
     if not _pode_integracoes():
@@ -283,9 +278,9 @@ def categorias_mapeamento_salvar():
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
-        if not ml_conectado(cur, int(id_tenant)):
-            return jsonify(success=False, message="Mercado Livre não conectado."), 400
-        n = salvar_mapeamento_categorias_ml(cur, int(id_tenant), itens)
+        if not amazon_conectado(cur, int(id_tenant)):
+            return jsonify(success=False, message="Amazon não conectada."), 400
+        n = salvar_mapeamento_categorias_amazon(cur, int(id_tenant), itens)
         conn.commit()
         return jsonify(success=True, message=f"{n} categoria(s) mapeada(s).", salvos=n)
     except Exception as e:
@@ -295,27 +290,29 @@ def categorias_mapeamento_salvar():
         conn.close()
 
 
-@ml_bp.get("/api/integracoes/mercado-livre/categorias/buscar")
+@amazon_bp.get("/api/integracoes/amazon/product-types/buscar")
 @login_obrigatorio()
-def categorias_buscar():
+def product_types_buscar():
     if not _pode_integracoes():
         return jsonify(success=False, message="Sem permissão."), 403
     if garantir_modulo_sessao() != "vendedor" and not session.get("eh_desenvolvedor"):
         return jsonify(success=False, message="Apenas vendedores."), 403
-    q = (request.args.get("q") or "").strip()
+    keywords = (request.args.get("keywords") or request.args.get("q") or "").strip()
     id_tenant = session.get("id_tenant")
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
-        if not ml_conectado(cur, int(id_tenant)):
-            return jsonify(success=False, message="Mercado Livre não conectado."), 400
-        itens = buscar_categorias_ml(cur, int(id_tenant), q)
-        return jsonify(success=True, itens=itens)
+        if not amazon_conectado(cur, int(id_tenant)):
+            return jsonify(success=False, message="Amazon não conectada."), 400
+        tipos = buscar_product_types_amazon(cur, int(id_tenant), keywords)
+        return jsonify(success=True, itens=tipos)
+    except Exception as e:
+        return jsonify(success=False, message=str(e)[:300]), 400
     finally:
         conn.close()
 
 
-@ml_bp.post("/api/integracoes/mercado-livre/produtos/publicar")
+@amazon_bp.post("/api/integracoes/amazon/produtos/publicar")
 @login_obrigatorio()
 def produtos_publicar():
     if not _pode_integracoes():
@@ -328,7 +325,7 @@ def produtos_publicar():
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
-        resultado = publicar_produtos_ml(cur, int(id_tenant), ids)
+        resultado = publicar_produtos_amazon(cur, int(id_tenant), ids)
         conn.commit()
         return jsonify(success=True, **resultado)
     except Exception as e:
@@ -338,74 +335,13 @@ def produtos_publicar():
         conn.close()
 
 
-@ml_bp.post("/api/integracoes/mercado-livre/sync/estoque")
-@login_obrigatorio()
-def sync_estoque():
-    if not _pode_integracoes():
-        return jsonify(success=False, message="Sem permissão."), 403
-    if garantir_modulo_sessao() != "vendedor" and not session.get("eh_desenvolvedor"):
-        return jsonify(success=False, message="Apenas vendedores."), 403
-    id_tenant = session.get("id_tenant")
-    conn = Var_ConectarBanco()
-    try:
-        cur = conn.cursor()
-        from api.mercado_livre.mercado_livre import sincronizar_estoque_ml
-
-        resultado = sincronizar_estoque_ml(cur, int(id_tenant))
-        conn.commit()
-        return jsonify(success=True, **resultado)
-    except Exception as e:
-        conn.rollback()
-        return jsonify(success=False, message=str(e)[:300]), 400
-    finally:
-        conn.close()
-
-
-@ml_bp.get("/api/integracoes/mercado-livre/diagnostico")
+@amazon_bp.get("/api/integracoes/amazon/diagnostico")
 @login_obrigatorio()
 def diagnostico():
     if not _pode_integracoes():
         return jsonify(success=False, message="Sem permissão."), 403
     return jsonify(
         success=True,
-        configurado=ml_configurado(),
+        configurado=amazon_configurado(),
         redirect_uri=redirect_uri_oauth(),
-        webhook_url=webhook_url(),
     )
-
-
-@ml_bp.post("/api/integracoes/mercado-livre/webhook")
-def webhook():
-    """Recebe notificações ML (orders_v2) e importa pedido quando auto estiver ativo."""
-    raw = request.get_data(as_text=True) or ""
-    _log.info("Webhook Mercado Livre: %s", raw[:500])
-    payload = request.get_json(silent=True)
-    if not isinstance(payload, dict):
-        try:
-            import json as _json
-
-            payload = _json.loads(raw) if raw else {}
-        except Exception:
-            payload = {}
-    if not isinstance(payload, dict):
-        payload = {}
-
-    conn = Var_ConectarBanco()
-    try:
-        cur = conn.cursor()
-        from api.mercado_livre.pedidos_ml import processar_webhook_pedido_ml
-
-        resultado = processar_webhook_pedido_ml(cur, payload)
-        conn.commit()
-        if resultado.get("importado"):
-            _log.info("Webhook ML importou pedido: %s", resultado)
-        elif resultado.get("cancelado"):
-            _log.info("Webhook ML cancelou pedido: %s", resultado)
-        elif not resultado.get("ok"):
-            _log.warning("Webhook ML sem processamento: %s", resultado)
-    except Exception:
-        conn.rollback()
-        _log.exception("Erro no webhook Mercado Livre")
-    finally:
-        conn.close()
-    return "", 200

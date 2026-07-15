@@ -1,0 +1,169 @@
+{% set nav_ativo = nav_codigo %}
+{% extends "frm_base.html" %}
+{% block title %}Amazon — Integrações — {{ MARCA_NOME }}{% endblock %}
+{% block topbar_title %}Amazon{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('static', filename='style/Cmercadopago_integracao.css') }}?v=8" />
+{% endblock %}
+{% block content %}
+<div class="Cl_ContainerApoio cl-page-principal Mp_Wrap">
+  <div class="cl-page-title Mp_PageHead">
+    <div class="Mp_PageHeadMain">
+      <a href="{{ url_for('integracoes.pagina') }}" class="Mp_BackLink">
+        <i data-lucide="arrow-left"></i> Integrações
+      </a>
+      <div class="Mp_TitleRow">
+        <div class="Mp_Logo" aria-hidden="true">
+          <img src="{{ icone_amazon }}" alt="" width="48" height="48" />
+        </div>
+        <div>
+          <h2>Amazon</h2>
+          <p class="cl-page-desc">Pedidos, produtos e estoque da sua conta Seller Central (Brasil).</p>
+        </div>
+      </div>
+    </div>
+    <div class="Mp_ConnBadge {{ 'is-on' if amazon_conectado else 'is-off' }}" id="amz_status_badge">
+      {{ 'Conectado' if amazon_conectado else 'Desconectado' }}
+    </div>
+  </div>
+
+  <section class="Mp_Card Mp_Card--alert" id="amz_alert_servidor" hidden>
+    <h3>Integração indisponível</h3>
+    <p class="Mp_Hint">Configure <code>AMAZON_LWA_CLIENT_ID</code>, <code>AMAZON_LWA_CLIENT_SECRET</code> e <code>AMAZON_APP_ID</code> no <code>.env</code> do servidor.</p>
+  </section>
+
+  <section class="Mp_Card Mp_Card--info" id="amz_sec_guia" {% if amazon_conectado %}hidden{% endif %}>
+    <h3>Conectar sua conta</h3>
+    <p class="Mp_Hint">Use a conta Seller Central em que você <strong>vende</strong>. Você será redirecionado para autorizar o DropNexo.</p>
+    <div class="Mp_Actions">
+      <a href="{{ url_for('amazon.oauth_iniciar') }}" class="Cl_botaoprimario" id="amz_btn_conectar">Conectar conta</a>
+    </div>
+  </section>
+
+  <section class="Mp_Card Mp_ContextPanel" id="amz_painel_config" {% if not amazon_conectado %}hidden{% endif %}>
+    <p id="amz_conta_info" class="Mp_ContaResumo" hidden></p>
+
+    <nav class="Mp_SubTabs" id="amz_subtabs" aria-label="Seções Amazon">
+      <button type="button" class="Mp_SubTab is-active" data-amz-tab="pedidos">Pedidos</button>
+      <button type="button" class="Mp_SubTab" data-amz-tab="produtos">Produtos</button>
+      <button type="button" class="Mp_SubTab" data-amz-tab="estoque">Estoque</button>
+    </nav>
+
+    <div id="amz_pane_pedidos">
+      <h3>Importação de pedidos</h3>
+      <p class="Mp_Hint">Busca pedidos na Amazon e cria o pedido no DropNexo (produtos já vinculados por SKU).</p>
+      <div class="Mp_Switches">
+        <div class="Mp_SwitchRow">
+          <div class="Mp_SwitchText">
+            <strong>Importar automaticamente</strong>
+            <span>Quando houver rotina/sync, novos pedidos pagos entram no painel</span>
+          </div>
+          <label class="Cl_Switch Mp_Switch" title="Importação automática">
+            <input type="checkbox" id="amz_pedidos_auto" data-amz-config="pedidos_importar_auto" />
+            <span class="Cl_SwitchSlider"></span>
+          </label>
+        </div>
+      </div>
+      <div class="Mp_Actions" style="margin-top:0.85rem">
+        <button type="button" class="Cl_botaoprimario" id="amz_btn_sync">Buscar pedidos recentes</button>
+        <a href="{{ url_for('vd_pedidos.pedidos') }}" class="Cl_botaoFiltro">Ir para pedidos</a>
+      </div>
+      <ol class="Mp_Hint Mp_ListaPassos" style="margin-top:1rem">
+        <li>Vincule produtos em <strong>Meus produtos</strong> (mesmo SKU da Amazon).</li>
+        <li>Use <strong>Buscar pedidos recentes</strong> ou ative a importação automática.</li>
+        <li>Ao marcar expedido/entregue, o DropNexo tenta atualizar o status na Amazon.</li>
+      </ol>
+    </div>
+
+    <div id="amz_pane_produtos" hidden>
+      <h3>Produtos e anúncios</h3>
+      <p class="Mp_Hint">A publicação ou vínculo é feita em <strong>Meus produtos</strong>.</p>
+      <div class="Mp_Switches">
+        <div class="Mp_SwitchRow">
+          <div class="Mp_SwitchText">
+            <strong>Ativar exportação / vínculo</strong>
+            <span>Habilita a ação de integrar produtos em Meus produtos</span>
+          </div>
+          <label class="Cl_Switch Mp_Switch">
+            <input type="checkbox" id="amz_produtos_auto" data-amz-config="produtos_exportar_auto" />
+            <span class="Cl_SwitchSlider"></span>
+          </label>
+        </div>
+      </div>
+      <fieldset class="Mp_RadioGroup">
+        <legend class="Mp_RadioLegend">Modo</legend>
+        <label class="Mp_RadioRow">
+          <input type="radio" name="amz_produtos_modo" value="vincular_sku" checked data-amz-config="produtos_modo" />
+          <span><strong>Vincular por SKU</strong> — casar Meus produtos com anúncios já publicados</span>
+        </label>
+        <label class="Mp_RadioRow">
+          <input type="radio" name="amz_produtos_modo" value="criar_anuncio" data-amz-config="produtos_modo" />
+          <span><strong>Criar / atualizar anúncios</strong> — Listings API (exige Product Type mapeado)</span>
+        </label>
+      </fieldset>
+      <div class="Mp_Actions" style="margin-top:0.85rem">
+        <button type="button" class="Cl_botaoprimario" id="amz_btn_mapear_categorias">Mapear categorias</button>
+        <a href="{{ url_for('vd_meus_produtos.pagina') }}" class="Cl_botaoFiltro">Ir para Meus produtos</a>
+      </div>
+      <p class="Mp_Hint" style="margin-top:0.75rem">
+        Na Amazon, categorias viram <strong>Product Types</strong> (ex.: <code>SHIRT</code>, <code>LUGGAGE</code>).
+        Mapeie cada categoria DropNexo para o Product Type correto antes de criar anúncios.
+      </p>
+    </div>
+
+    <div id="amz_pane_estoque" hidden>
+      <h3>Estoque</h3>
+      <p class="Mp_Hint">Envia o estoque da vitrine DropNexo para os anúncios vinculados na Amazon.</p>
+      <div class="Mp_Switches">
+        <div class="Mp_SwitchRow">
+          <div class="Mp_SwitchText">
+            <strong>Sincronizar estoque automaticamente</strong>
+            <span>Alterações em Meus produtos atualizam a Amazon</span>
+          </div>
+          <label class="Cl_Switch Mp_Switch">
+            <input type="checkbox" id="amz_estoque_auto" data-amz-config="estoque_sync_ativo" />
+            <span class="Cl_SwitchSlider"></span>
+          </label>
+        </div>
+      </div>
+      <div class="Mp_Actions" style="margin-top:0.85rem">
+        <button type="button" class="Cl_botaoprimario" id="amz_btn_sync_estoque">Sincronizar estoque agora</button>
+      </div>
+    </div>
+
+    <div class="Mp_Actions" style="margin-top:1.25rem">
+      <button type="button" class="Cl_botaoFiltro" id="amz_btn_desconectar">Desconectar</button>
+    </div>
+  </section>
+
+  <p id="amz_msg" class="Mp_Hint" hidden></p>
+</div>
+
+<dialog id="amz_modal_categorias" class="Mp_Modal">
+  <div class="Mp_ModalHead">
+    <h3>Mapear categorias → Product Type</h3>
+    <button type="button" class="Mp_ModalClose" id="amz_modal_cat_fechar" aria-label="Fechar">×</button>
+  </div>
+  <div class="Mp_ModalBody">
+    <p class="Mp_Hint">Informe o Product Type Amazon para cada categoria DropNexo (ex.: PRODUCT, SHIRT).</p>
+    <div class="Mp_Actions" style="margin-bottom:0.75rem">
+      <input type="search" id="amz_pt_busca" class="Mp_Input" placeholder="Buscar product types na Amazon…" style="flex:1;min-width:12rem" />
+      <button type="button" class="Cl_botaoFiltro" id="amz_btn_buscar_pt">Buscar</button>
+    </div>
+    <p id="amz_pt_sugestoes" class="Mp_Hint" hidden></p>
+    <table class="Mp_Table">
+      <thead>
+        <tr><th>Categoria DropNexo</th><th>Product Type Amazon</th></tr>
+      </thead>
+      <tbody id="amz_tbody_categorias"></tbody>
+    </table>
+  </div>
+  <div class="Mp_ModalFoot">
+    <button type="button" class="Cl_botaoFiltro" id="amz_modal_cat_cancelar">Cancelar</button>
+    <button type="button" class="Cl_botaoprimario" id="amz_modal_cat_salvar">Salvar</button>
+  </div>
+</dialog>
+{% endblock %}
+{% block page_js %}
+<script src="{{ url_for('static', filename='script/Samazon_integracao.js') }}?v=1"></script>
+{% endblock %}

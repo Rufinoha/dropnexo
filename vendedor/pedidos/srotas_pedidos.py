@@ -548,6 +548,70 @@ def pedidos_frete_contratar_etiqueta(id_pedido: int):
         conn.close()
 
 
+@vd_pedidos_bp.post("/vendedor/pedidos/<int:id_pedido>/ml/etiqueta")
+@login_obrigatorio()
+@exigir_modulo(MODULO_VENDEDOR)
+@exigir_permissao(codigo="vd_pedidos.editar")
+def pedidos_ml_baixar_etiqueta(id_pedido: int):
+    id_v = _id_vendedor()
+    if not id_v:
+        return jsonify(success=False, message="Sessão inválida."), 403
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        from api.mercado_livre.pedidos_ml import baixar_etiqueta_ml
+
+        res = baixar_etiqueta_ml(
+            cur,
+            id_v,
+            id_pedido,
+            _pasta_anexos_tenant(id_v),
+            id_usuario=_id_usuario(),
+        )
+        conn.commit()
+        return jsonify(success=True, **res)
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 400
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)[:300]), 400
+    finally:
+        conn.close()
+
+
+@vd_pedidos_bp.post("/vendedor/pedidos/<int:id_pedido>/tiktok/etiqueta")
+@login_obrigatorio()
+@exigir_modulo(MODULO_VENDEDOR)
+@exigir_permissao(codigo="vd_pedidos.editar")
+def pedidos_tiktok_baixar_etiqueta(id_pedido: int):
+    id_v = _id_vendedor()
+    if not id_v:
+        return jsonify(success=False, message="Sessão inválida."), 403
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        from api.tiktok.pedidos_tiktok import baixar_etiqueta_tiktok
+
+        res = baixar_etiqueta_tiktok(
+            cur,
+            id_v,
+            id_pedido,
+            _pasta_anexos_tenant(id_v),
+            id_usuario=_id_usuario(),
+        )
+        conn.commit()
+        return jsonify(success=True, **res)
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 400
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)[:300]), 400
+    finally:
+        conn.close()
+
+
 @vd_pedidos_bp.post("/vendedor/pedidos/confirmar")
 @login_obrigatorio()
 @exigir_modulo(MODULO_VENDEDOR)

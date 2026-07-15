@@ -51,12 +51,12 @@
 
     <div id="ml_pane_pedidos">
       <h3>Importação de pedidos</h3>
-      <p class="Mp_Hint">Busca pedidos <strong>pagos</strong> na sua conta ML. A criação automática de pedidos no DropNexo será habilitada em breve.</p>
+      <p class="Mp_Hint">Busca pedidos <strong>pagos</strong> na sua conta ML e cria o pedido no DropNexo (mesmo fluxo do Bling).</p>
       <div class="Mp_Switches">
         <div class="Mp_SwitchRow">
           <div class="Mp_SwitchText">
             <strong>Importar automaticamente</strong>
-            <span>Quando disponível, novos pedidos pagos entram no DropNexo</span>
+            <span>Novos pedidos pagos entram via webhook do Mercado Livre</span>
           </div>
           <label class="Cl_Switch Mp_Switch" title="Importação automática">
             <input type="checkbox" id="ml_pedidos_auto" data-ml-config="pedidos_importar_auto" />
@@ -64,13 +64,26 @@
           </label>
         </div>
       </div>
+      <div class="Mp_UrlBox" style="margin-top:0.85rem">
+        <span class="Mp_UrlLabel">Webhook (notificações ML)</span>
+        <code id="ml_webhook_url" class="Mp_Code">—</code>
+        <button type="button" class="Mp_CopyBtn" data-copy="ml_webhook_url" id="ml_btn_copy_webhook">Copiar</button>
+      </div>
+      <p class="Mp_Hint" id="ml_webhook_hint" style="margin-top:0.5rem">
+        Cole esta URL em <strong>Suas aplicações → Notificações</strong> no
+        <a href="https://developers.mercadolivre.com.br/" target="_blank" rel="noopener">developers.mercadolivre.com.br</a>
+        (tópicos <code>orders_v2</code>, <code>shipments</code> e <code>claims</code>).
+        Em produção use HTTPS público — localhost o ML não alcança.
+      </p>
       <div class="Mp_Actions" style="margin-top:0.85rem">
         <button type="button" class="Cl_botaoprimario" id="ml_btn_sync">Buscar pedidos recentes</button>
         <a href="{{ url_for('vd_pedidos.pedidos') }}" class="Cl_botaoFiltro">Ir para pedidos</a>
       </div>
       <ol class="Mp_Hint Mp_ListaPassos" style="margin-top:1rem">
-        <li>Pedidos importados seguirão o mesmo fluxo do Bling (aguardando pagamento ao fornecedor).</li>
-        <li>Frete pode ser cotado com Melhor Envio após a importação.</li>
+        <li>Ative <strong>Importar automaticamente</strong> e cadastre o webhook no app ML.</li>
+        <li>Pedidos pagos entram em <strong>Pedidos</strong>; cancelamentos/devoluções também sincronizam.</li>
+        <li>Ao marcar expedido/entregue no DropNexo, o status é enviado ao ML quando o frete permitir.</li>
+        <li>Em pedidos ML, use <strong>Baixar etiqueta ML</strong> (Mercado Envios) no painel de frete/anexos.</li>
       </ol>
     </div>
 
@@ -205,5 +218,5 @@
 </div>
 {% endblock %}
 {% block page_js %}
-<script src="{{ url_for('static', filename='script/Smercado_livre_integracao.js') }}?v=11"></script>
+<script src="{{ url_for('static', filename='script/Smercado_livre_integracao.js') }}?v=14"></script>
 {% endblock %}

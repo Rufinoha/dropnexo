@@ -20,6 +20,7 @@
     produtosAuto: document.getElementById("ml_produtos_auto"),
     estoqueAuto: document.getElementById("ml_estoque_auto"),
     freteGratis: document.getElementById("ml_frete_gratis"),
+    webhookUrl: document.getElementById("ml_webhook_url"),
     msg: document.getElementById("ml_msg"),
     subtabs: document.getElementById("ml_subtabs"),
     modalCat: document.getElementById("ml_modal_categorias"),
@@ -108,6 +109,9 @@
     if (el.produtosAuto) el.produtosAuto.checked = !!cfg.produtos_exportar_auto;
     if (el.estoqueAuto) el.estoqueAuto.checked = !!cfg.estoque_sync_ativo;
     if (el.freteGratis) el.freteGratis.checked = !!cfg.frete_gratis;
+    if (el.webhookUrl) {
+      el.webhookUrl.textContent = cfg.webhook_url || "—";
+    }
     const modo = cfg.produtos_modo || "vincular_sku";
     document.querySelectorAll('input[name="ml_produtos_modo"]').forEach((r) => {
       r.checked = r.value === modo;
@@ -421,4 +425,20 @@
     }
   }
   carregarStatus();
+
+  document.querySelectorAll(".Mp_CopyBtn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const id = btn.getAttribute("data-copy");
+      const node = id ? document.getElementById(id) : null;
+      const text = (node?.textContent || "").trim();
+      if (!text || text === "—") return;
+      navigator.clipboard?.writeText(text).then(() => {
+        const prev = btn.textContent;
+        btn.textContent = "Copiado!";
+        setTimeout(() => {
+          btn.textContent = prev || "Copiar";
+        }, 1200);
+      });
+    });
+  });
 })();

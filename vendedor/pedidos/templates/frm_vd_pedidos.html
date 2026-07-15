@@ -21,7 +21,7 @@
       <select id="pd_filtroStatus">
         <option value="">Todas</option>
         <option value="rascunho">Rascunho</option>
-        <option value="importado">Importado (Bling)</option>
+        <option value="importado">Importado (canal)</option>
         <option value="aguardando_pagamento">Aguardando pagamento</option>
         <option value="pago">Pago</option>
         <option value="cancelado">Cancelado</option>
@@ -273,6 +273,6 @@
 {% endblock %}
 {% block page_js %}
 <script defer src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
-<script defer src="{{ url_for('vd_pedidos.static', filename='script/Svd_pedidos.js') }}?v=21"></script>
+<script defer src="{{ url_for('vd_pedidos.static', filename='script/Svd_pedidos.js') }}?v=24"></script>
 <script id="pd_cfg" type="application/json">{{ {"mp_icone": url_for("mercadopago.static", filename="imge/icone_mercadopago.png")}|tojson }}</script>
 {% endblock %}

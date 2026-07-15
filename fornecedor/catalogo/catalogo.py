@@ -842,6 +842,14 @@ def sincronizar_total_variante(cur, id_variante: int) -> int:
             propagar_estoque_variante_ml(cur, int(id_variante), quantidade=total)
     except Exception:
         pass
+    try:
+        from api.amazon.eco_estoque import amazon_sync_suprimido
+        from api.amazon.sync_runtime import propagar_estoque_variante_amazon
+
+        if not amazon_sync_suprimido():
+            propagar_estoque_variante_amazon(cur, int(id_variante), quantidade=total)
+    except Exception:
+        pass
     return total
 
 

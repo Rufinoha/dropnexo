@@ -60,6 +60,8 @@ def sql_filtro_categoria_proprio(id_categoria: str) -> tuple[str | None, list]:
 INTEGRACOES_PRODUTO_VENDEDOR: dict[str, dict[str, str]] = {
     "bling": {"nome": "Bling", "slug": "bling"},
     "mercado_livre": {"nome": "Mercado Livre", "slug": "mercado-livre"},
+    "tiktok": {"nome": "TikTok Shop", "slug": "tiktok"},
+    "amazon": {"nome": "Amazon", "slug": "amazon"},
 }
 
 _SQL_EXISTS_INTEGRACAO_PRODUTO = """
@@ -68,7 +70,7 @@ _SQL_EXISTS_INTEGRACAO_PRODUTO = """
         AND m_int.id_tenant = %s
         AND m_int.entidade = 'produto'
         AND m_int.contexto = 'vendedor'
-        AND m_int.provedor IN ('bling', 'mercado_livre')
+        AND m_int.provedor IN ('bling', 'mercado_livre', 'tiktok', 'amazon')
     WHERE v_int.id_produto = {alias}.id
 """
 
@@ -78,7 +80,7 @@ _SQL_EXISTS_INTEGRACAO_VARIANTE = """
       AND m_int.id_tenant = %s
       AND m_int.entidade = 'produto'
       AND m_int.contexto = 'vendedor'
-      AND m_int.provedor IN ('bling', 'mercado_livre')
+      AND m_int.provedor IN ('bling', 'mercado_livre', 'tiktok', 'amazon')
 """
 
 
@@ -140,6 +142,30 @@ def _ml_vendedor_conectado(cur, id_tenant: int) -> bool:
         return False
 
 
+def _tiktok_vendedor_conectado(cur, id_tenant: int) -> bool:
+    try:
+        cur.execute(
+            "SELECT status FROM tbl_integracao_tiktok WHERE id_tenant = %s",
+            (id_tenant,),
+        )
+        row = cur.fetchone()
+        return bool(row and row[0] == "conectado")
+    except Exception:
+        return False
+
+
+def _amazon_vendedor_conectado(cur, id_tenant: int) -> bool:
+    try:
+        cur.execute(
+            "SELECT status FROM tbl_integracao_amazon WHERE id_tenant = %s",
+            (id_tenant,),
+        )
+        row = cur.fetchone()
+        return bool(row and row[0] == "conectado")
+    except Exception:
+        return False
+
+
 def listar_opcoes_filtro_integracao(
     cur,
     id_tenant: int,
@@ -163,6 +189,24 @@ def listar_opcoes_filtro_integracao(
         opcoes.append(
             {
                 "valor": "mercado_livre",
+                "nome": meta["nome"],
+                "icone_url": url_icone(meta["slug"]),
+            }
+        )
+    if _tiktok_vendedor_conectado(cur, id_tenant):
+        meta = INTEGRACOES_PRODUTO_VENDEDOR["tiktok"]
+        opcoes.append(
+            {
+                "valor": "tiktok",
+                "nome": meta["nome"],
+                "icone_url": url_icone(meta["slug"]),
+            }
+        )
+    if _amazon_vendedor_conectado(cur, id_tenant):
+        meta = INTEGRACOES_PRODUTO_VENDEDOR["amazon"]
+        opcoes.append(
+            {
+                "valor": "amazon",
                 "nome": meta["nome"],
                 "icone_url": url_icone(meta["slug"]),
             }
@@ -191,7 +235,7 @@ def carregar_mapa_integracoes_produtos(
         "m.id_tenant = %s",
         "m.entidade = 'produto'",
         "m.contexto = 'vendedor'",
-        "m.provedor IN ('bling', 'mercado_livre')",
+        "m.provedor IN ('bling', 'mercado_livre', 'tiktok', 'amazon')",
     ]
     params: list = [id_tenant]
     if ids_produtos:
