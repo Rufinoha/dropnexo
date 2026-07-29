@@ -277,27 +277,39 @@ def _release_savepoint(cur, nome: str) -> None:
 
 
 def _garantir_config(cur, id_tenant: int, contexto: str) -> dict:
+    """Config Bling do módulo — usada em importação e exportação."""
     cur.execute(
         """
-        SELECT fonte_principal, modo_imagem, produtos_modo
+        SELECT fonte_principal, modo_imagem, produtos_modo, estoque_modo, opcoes
         FROM tbl_integracao_bling_config
         WHERE id_tenant = %s AND contexto = %s
         """,
         (id_tenant, contexto),
     )
     row = cur.fetchone()
-    if row:
-        return {"fonte_principal": row[0], "modo_imagem": row[1], "produtos_modo": row[2]}
-    cur.execute(
-        """
-        INSERT INTO tbl_integracao_bling_config (id_tenant, contexto)
-        VALUES (%s, %s)
-        RETURNING fonte_principal, modo_imagem, produtos_modo
-        """,
-        (id_tenant, contexto),
-    )
-    row = cur.fetchone()
-    return {"fonte_principal": row[0], "modo_imagem": row[1], "produtos_modo": row[2]}
+    if not row:
+        cur.execute(
+            """
+            INSERT INTO tbl_integracao_bling_config (id_tenant, contexto)
+            VALUES (%s, %s)
+            RETURNING fonte_principal, modo_imagem, produtos_modo, estoque_modo, opcoes
+            """,
+            (id_tenant, contexto),
+        )
+        row = cur.fetchone()
+    opcoes = row[4] or {}
+    if isinstance(opcoes, str) and opcoes.strip():
+        try:
+            opcoes = json.loads(opcoes) or {}
+        except json.JSONDecodeError:
+            opcoes = {}
+    return {
+        "fonte_principal": row[0] or "bling",
+        "modo_imagem": row[1] or "hibrido",
+        "produtos_modo": row[2] or "importar",
+        "estoque_modo": row[3] or "atualizar",
+        "opcoes": opcoes if isinstance(opcoes, dict) else {},
+    }
 
 
 def _fetch_returning_id(cur, *, contexto: str) -> int:
@@ -965,7 +977,7 @@ def _processar_item_produto(
             id_produto=prod_id,
             sku=sku,
             urls=urls,
-            modo_imagem=cfg["modo_imagem"],
+            modo_imagem=cfg.get("modo_imagem") or "hibrido",
         )
 
     _upsert_mapa(
@@ -1065,7 +1077,7 @@ def _processar_grupo_variacoes(
             id_produto=prod_id,
             sku=sku_mapa or f"bling-{id_bling_pai}",
             urls=urls,
-            modo_imagem=cfg["modo_imagem"],
+            modo_imagem=cfg.get("modo_imagem") or "hibrido",
             variacoes_bling=variacoes,
         )
 
@@ -1455,31 +1467,6 @@ def _registrar_log(
     )
 
 
-def _garantir_config(cur, id_tenant: int, contexto: str) -> dict:
-    cur.execute(
-        """
-        SELECT produtos_modo, estoque_modo, opcoes
-        FROM tbl_integracao_bling_config
-        WHERE id_tenant = %s AND contexto = %s AND ativo = TRUE
-        """,
-        (id_tenant, contexto),
-    )
-    row = cur.fetchone()
-    if not row:
-        raise ValueError("Configure a integração Bling antes de exportar produtos.")
-    opcoes = row[2] or {}
-    if isinstance(opcoes, str) and opcoes.strip():
-        try:
-            opcoes = json.loads(opcoes) or {}
-        except json.JSONDecodeError:
-            opcoes = {}
-    return {
-        "produtos_modo": row[0] or "exportar",
-        "estoque_modo": row[1] or "exportar",
-        "opcoes": opcoes if isinstance(opcoes, dict) else {},
-    }
-
-
 def _buscar_id_bling_mapa(
     cur, id_tenant: int, contexto: str, *, id_variante: int | None = None, sku: str | None = None
 ) -> str | None:
@@ -1621,7 +1608,9 @@ def exportar_produtos_vendedor(
         pass  # reservado para auditoria futura
 
     cfg = _garantir_config(cur, id_tenant, "vendedor")
-    modo_prod = (cfg["produtos_modo"] or "exportar").strip()
+    if not (cfg.get("produtos_modo") or "").strip():
+        raise ValueError("Configure a integração Bling antes de exportar produtos.")
+    modo_prod = (cfg.get("produtos_modo") or "exportar").strip()
     if modo_prod not in ("exportar", "atualizar"):
         raise ValueError("Modo de produtos não permite exportar ao Bling. Ative em Integrações → Bling → Produtos.")
 

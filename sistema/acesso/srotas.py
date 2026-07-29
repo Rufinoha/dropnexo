@@ -484,18 +484,28 @@ def _redirect_seguro(valor) -> str:
     return url_for("dashboard.index")
 
 
-def _listar_fornecedores_dev(cur, id_tenant_atual: int | None) -> list[dict]:
+_ROTULO_TIPO_TENANT = {
+    "fornecedor": "Fornecedor",
+    "vendedor": "Vendedor",
+    "hibrido": "Híbrido",
+}
+
+
+def _listar_tenants_dev(cur, id_tenant_atual: int | None) -> list[dict]:
+    """Todos os tenants ativos — suporte DEV (vendedor, fornecedor e híbrido)."""
     cur.execute(
         """
         SELECT t.id, t.nome, t.slug, t.plano, t.tipo_negocio, t.cidade, t.uf, t.documento
         FROM tbl_tenant t
-        WHERE t.ativo = TRUE AND t.tipo_negocio IN ('fornecedor', 'hibrido')
+        WHERE t.ativo = TRUE
+          AND t.tipo_negocio IN ('fornecedor', 'vendedor', 'hibrido')
         ORDER BY t.nome ASC
         """
     )
     itens = []
     for row in cur.fetchall():
         tid, nome, slug, plano, tipo_negocio, cidade, uf, documento = row
+        tipo = (tipo_negocio or "").strip().lower()
         meta_partes = []
         if cidade and uf:
             meta_partes.append(f"{cidade}/{uf}")
@@ -509,9 +519,9 @@ def _listar_fornecedores_dev(cur, id_tenant_atual: int | None) -> list[dict]:
                 "nome": nome or "",
                 "slug": slug or "",
                 "plano": plano or "",
-                "tipo_negocio": tipo_negocio or "",
+                "tipo_negocio": tipo,
                 "papel": "dono",
-                "papel_label": "Fornecedor",
+                "papel_label": _ROTULO_TIPO_TENANT.get(tipo, tipo or "Tenant"),
                 "perfil_codigo": "dono",
                 "perfil_nome": "Dono da conta",
                 "meta": " · ".join(meta_partes),
@@ -535,12 +545,13 @@ def api_listar_tenants():
         cur = conn.cursor()
 
         if eh_dev:
-            itens = _listar_fornecedores_dev(cur, id_tenant_atual)
+            itens = _listar_tenants_dev(cur, id_tenant_atual)
             return jsonify(
                 success=True,
                 itens=itens,
                 id_tenant_atual=id_tenant_atual,
                 modo_dev_fornecedor=True,
+                modo_dev_suporte=True,
             )
 
         cur.execute(
@@ -626,7 +637,7 @@ def api_trocar_tenant():
                 FROM tbl_usuario u
                 CROSS JOIN tbl_tenant t
                 WHERE u.id = %s AND t.id = %s AND t.ativo = TRUE
-                  AND t.tipo_negocio IN ('fornecedor', 'hibrido')
+                  AND t.tipo_negocio IN ('fornecedor', 'vendedor', 'hibrido')
                 LIMIT 1
                 """,
                 (id_usuario, id_tenant),
@@ -637,6 +648,7 @@ def api_trocar_tenant():
                 cur.execute("SELECT id FROM tbl_perfil WHERE codigo = 'dono' LIMIT 1")
                 perfil_row = cur.fetchone()
                 id_perfil = perfil_row[0] if perfil_row else 1
+                tipo_nb = (tipo_negocio or "vendedor").strip().lower()
                 _aplicar_tenant_na_sessao(
                     conn,
                     id_usuario=id_usuario,
@@ -646,7 +658,7 @@ def api_trocar_tenant():
                     plano=plano,
                     id_perfil=id_perfil,
                     perfil_codigo="dono",
-                    tipo_negocio=tipo_negocio or "fornecedor",
+                    tipo_negocio=tipo_nb,
                     nome=nome,
                     email=email,
                     eh_desenvolvedor=eh_dev,

@@ -16,8 +16,10 @@
 
   let tenantsCarregados = false;
   let tenantsItens = [];
-  let modoDevFornecedor = false;
+  let modoDevSuporte = false;
+  let filtroTipoTenant = "todos";
   let trocandoTenant = false;
+  const tenantFiltros = document.getElementById("fg-tenant-filtros");
 
   /**
    * Sincroniza o avatar do header (iniciais ou foto).
@@ -107,12 +109,32 @@
     }
   }
 
+  function rotuloTipoTenant(tipo) {
+    const t = String(tipo || "").toLowerCase();
+    if (t === "fornecedor") return "Fornecedor";
+    if (t === "vendedor") return "Vendedor";
+    if (t === "hibrido") return "Híbrido";
+    return t || "Tenant";
+  }
+
   function filtrarTenants(itens) {
-    if (!tenantSearch || !modoDevFornecedor) return itens;
+    let lista = itens || [];
+    if (modoDevSuporte && filtroTipoTenant === "fornecedor") {
+      lista = lista.filter(function (t) {
+        const tipo = String(t.tipo_negocio || "").toLowerCase();
+        return tipo === "fornecedor" || tipo === "hibrido";
+      });
+    } else if (modoDevSuporte && filtroTipoTenant === "vendedor") {
+      lista = lista.filter(function (t) {
+        const tipo = String(t.tipo_negocio || "").toLowerCase();
+        return tipo === "vendedor" || tipo === "hibrido";
+      });
+    }
+    if (!tenantSearch || !modoDevSuporte) return lista;
     const termo = tenantSearch.value.trim().toLowerCase();
-    if (!termo) return itens;
-    return itens.filter(function (t) {
-      const alvo = [t.nome, t.slug, t.meta, t.papel_label, t.plano]
+    if (!termo) return lista;
+    return lista.filter(function (t) {
+      const alvo = [t.nome, t.slug, t.meta, t.papel_label, t.plano, t.tipo_negocio]
         .filter(Boolean)
         .join(" ")
         .toLowerCase();
@@ -127,8 +149,8 @@
     if (!visiveis.length) {
       if (tenantHint) {
         tenantHint.hidden = false;
-        tenantHint.textContent = modoDevFornecedor
-          ? "Nenhum fornecedor encontrado."
+        tenantHint.textContent = modoDevSuporte
+          ? "Nenhum tenant encontrado."
           : "Nenhuma conta vinculada.";
       }
       return;
@@ -145,24 +167,36 @@
       btn.dataset.idTenant = String(t.id);
       if (t.is_atual) btn.disabled = true;
 
+      const topo = document.createElement("span");
+      topo.className = "fg-tenant-item-topo";
+
       const nome = document.createElement("span");
       nome.className = "fg-tenant-item-name";
       nome.textContent = t.nome || "Conta";
+      topo.appendChild(nome);
+
+      if (modoDevSuporte) {
+        const tipoBadge = document.createElement("span");
+        const tipo = String(t.tipo_negocio || "").toLowerCase();
+        tipoBadge.className = "fg-tenant-tipo fg-tenant-tipo--" + (tipo || "outro");
+        tipoBadge.textContent = rotuloTipoTenant(tipo);
+        topo.appendChild(tipoBadge);
+      }
 
       const meta = document.createElement("span");
       meta.className = "fg-tenant-item-meta";
       const partes = [];
       if (t.meta) partes.push(String(t.meta));
-      if (!t.meta && t.plano) partes.push(String(t.plano));
-      if (!t.meta && t.papel_label) partes.push(t.papel_label);
+      if (t.plano) partes.push(String(t.plano));
+      if (!modoDevSuporte && t.papel_label) partes.push(t.papel_label);
       meta.textContent = partes.join(" · ") || t.slug || "";
 
-      btn.appendChild(nome);
+      btn.appendChild(topo);
       btn.appendChild(meta);
       if (t.is_atual) {
         const badge = document.createElement("span");
         badge.className = "fg-tenant-item-badge";
-        badge.textContent = modoDevFornecedor ? "Ativo" : "Conta atual";
+        badge.textContent = modoDevSuporte ? "Ativo" : "Conta atual";
         btn.appendChild(badge);
       }
 
@@ -198,11 +232,11 @@
         return;
       }
       tenantsItens = j.itens || [];
-      modoDevFornecedor = !!(j.modo_dev_fornecedor || cfg.ehDesenvolvedor);
+      modoDevSuporte = !!(j.modo_dev_suporte || j.modo_dev_fornecedor || cfg.ehDesenvolvedor);
       tenantsCarregados = true;
       renderTenantList(tenantsItens);
 
-      if (tenantTrigger && !modoDevFornecedor && tenantsItens.length <= 1) {
+      if (tenantTrigger && !modoDevSuporte && tenantsItens.length <= 1) {
         tenantTrigger.classList.add("is-single");
         tenantTrigger.setAttribute("title", tenantsItens[0]?.nome || "");
       } else if (tenantTrigger) {
@@ -287,6 +321,18 @@
       closeTenantMenu();
     });
     userDropdown.addEventListener("click", (e) => e.stopPropagation());
+  }
+
+  if (tenantFiltros) {
+    tenantFiltros.addEventListener("click", function (e) {
+      const btn = e.target.closest(".fg-tenant-filtro");
+      if (!btn) return;
+      filtroTipoTenant = btn.getAttribute("data-filtro") || "todos";
+      tenantFiltros.querySelectorAll(".fg-tenant-filtro").forEach(function (el) {
+        el.classList.toggle("is-active", el === btn);
+      });
+      renderTenantList(tenantsItens);
+    });
   }
 
   if (tenantSearch) {

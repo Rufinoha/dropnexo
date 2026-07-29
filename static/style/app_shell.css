@@ -418,6 +418,37 @@ body.fg-app {
   line-height: 1.2;
 }
 
+.fg-tenant-filtros {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0 0 0.45rem;
+}
+
+.fg-tenant-filtro {
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #475569;
+  border-radius: 999px;
+  padding: 0.2rem 0.65rem;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  line-height: 1.3;
+}
+
+.fg-tenant-filtro:hover {
+  border-color: var(--marca-primary);
+  color: var(--marca-primary);
+}
+
+.fg-tenant-filtro.is-active {
+  background: var(--marca-primary);
+  border-color: var(--marca-primary);
+  color: #fff;
+}
+
 .fg-tenant-search {
   width: 100%;
   box-sizing: border-box;
@@ -429,6 +460,40 @@ body.fg-app {
   font-size: 0.82rem;
   color: #1e293b;
   background: #f8fafc;
+}
+
+.fg-tenant-item-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.fg-tenant-tipo {
+  flex-shrink: 0;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.fg-tenant-tipo--fornecedor {
+  background: #e0e7ff;
+  color: #021F81;
+}
+
+.fg-tenant-tipo--vendedor {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.fg-tenant-tipo--hibrido {
+  background: #fef3c7;
+  color: #92400e;
 }
 
 .fg-tenant-search:focus {
