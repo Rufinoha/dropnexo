@@ -8,7 +8,7 @@ from global_utils import agora_utc
 DEFAULTS_CONEXAO = {
     "fornecedor": {
         "fonte_principal": "bling",
-        "modo_imagem": "link",
+        "modo_imagem": "hibrido",
         "produtos_modo": "importar",
         "estoque_modo": "atualizar",
         "pedidos_modo": "exportar",

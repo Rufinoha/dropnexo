@@ -1,0 +1,114 @@
+.CfgMd_Aviso { margin-bottom: 0.75rem; }
+.CfgMd_Webhook {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin-bottom: 1.25rem;
+  padding: 0.85rem 1rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  font-size: 0.875rem;
+}
+.CfgMd_Webhook code {
+  flex: 1;
+  min-width: 12rem;
+  padding: 0.35rem 0.5rem;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  word-break: break-all;
+}
+.CfgMd_Tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+.CfgMd_Tab {
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  border-radius: 999px;
+  padding: 0.4rem 0.9rem;
+  font: inherit;
+  font-size: 0.875rem;
+  cursor: pointer;
+  color: #475569;
+}
+.CfgMd_Tab.is-active {
+  background: #021F81;
+  border-color: #021F81;
+  color: #fff;
+  font-weight: 600;
+}
+.CfgMd_Grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.9fr);
+  gap: 1.25rem;
+  align-items: start;
+}
+@media (max-width: 960px) {
+  .CfgMd_Grid { grid-template-columns: 1fr; }
+}
+.CfgMd_Card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 1rem 1.1rem;
+}
+.CfgMd_Card h3 {
+  margin: 0 0 0.75rem;
+  font-size: 1.05rem;
+  color: #1c2e3b;
+}
+.CfgMd_TabelaWrap { overflow-x: auto; margin-top: 0.5rem; }
+.CfgMd_Tabela tbody tr { cursor: pointer; }
+.CfgMd_Tabela tbody tr:hover { background: #f8fafc; }
+.CfgMd_Tabela tbody tr.is-selected { background: #eff6ff; }
+.CfgMd_Tabela tbody tr.is-muted { opacity: 0.55; }
+.CfgMd_Hint { font-size: 0.85rem; color: #64748b; margin: 0.35rem 0 0; }
+.CfgMd_SelBar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  font-size: 0.875rem;
+}
+.CfgMd_Field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.875rem;
+}
+.CfgMd_Field span { color: #334155; font-weight: 600; }
+.CfgMd_Field input,
+.CfgMd_Field textarea {
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 0.5rem 0.65rem;
+  font: inherit;
+}
+.CfgMd_Resumo {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.4rem 0.75rem;
+  margin: 0 0 0.75rem;
+  font-size: 0.85rem;
+}
+.CfgMd_Resumo dt { color: #94a3b8; margin: 0; }
+.CfgMd_Resumo dd { margin: 0; font-weight: 600; color: #1c2e3b; }
+.CfgMd_Status {
+  display: inline-block;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: #f1f5f9;
+  color: #475569;
+}
+.CfgMd_Status.is-ok { background: #dcfce7; color: #166534; }
+.CfgMd_Status.is-open { background: #dbeafe; color: #1d4ed8; }
+.CfgMd_Status.is-err { background: #fee2e2; color: #991b1b; }

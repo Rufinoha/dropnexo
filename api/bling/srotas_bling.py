@@ -231,6 +231,24 @@ def api_status():
             for r in cur.fetchall()
         ]
 
+        armazenamento = {"bytes_imagens": 0, "atualizado_em": None}
+        try:
+            from fornecedor.catalogo.catalogo import obter_bytes_imagens_tenant
+
+            bytes_img = obter_bytes_imagens_tenant(cur, int(id_tenant))
+            cur.execute(
+                "SELECT atualizado_em FROM tbl_tenant_armazenamento WHERE id_tenant = %s",
+                (id_tenant,),
+            )
+            row_arm = cur.fetchone()
+            armazenamento = {
+                "bytes_imagens": bytes_img,
+                "atualizado_em": row_arm[0].isoformat() if row_arm and row_arm[0] else None,
+            }
+            conn.commit()
+        except Exception:
+            pass
+
         return jsonify(
             success=True,
             app_configurado=bling_configurado(),
@@ -246,6 +264,7 @@ def api_status():
             token_expires_em=row[3].isoformat() if row and row[3] else None,
             configs=configs,
             logs=logs,
+            armazenamento=armazenamento,
         )
     finally:
         conn.close()
@@ -426,9 +445,9 @@ def salvar_config():
             fonte = (body.get("fonte_principal") or "bling").strip()
             if fonte not in ("bling", "dropnexo"):
                 fonte = "bling"
-            modo_img = (body.get("modo_imagem") or "link").strip()
-            if modo_img not in ("link", "download"):
-                modo_img = "link"
+            modo_img = (body.get("modo_imagem") or "hibrido").strip().lower()
+            if modo_img not in ("link", "hibrido", "download"):
+                modo_img = "hibrido"
 
         cur.execute(
             """

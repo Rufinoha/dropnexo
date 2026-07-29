@@ -426,21 +426,27 @@ MANUAL_BLING_CONFIG_FORNECEDOR = [
             "Define como as fotos dos produtos vindos do Bling serão armazenadas no DropNexo "
             "durante a sincronização de catálogo."
         ),
-        "padrao": "Manter como link",
+        "padrao": "Híbrido (recomendado)",
         "opcoes": [
             {
-                "nome": "Manter como link",
+                "nome": "Híbrido (recomendado)",
                 "efeito": (
-                    "O DropNexo grava a <strong>URL original</strong> da imagem hospedada no Bling. "
-                    "As fotos continuam sendo servidas pelo Bling; a sincronização é mais rápida e ocupa menos espaço no servidor."
+                    "Links <strong>temporários</strong> do Bling são baixados; URLs externas permanentes "
+                    "ficam como link. Equilíbrio entre estabilidade e espaço em disco."
                 ),
             },
             {
-                "nome": "Baixar para o servidor",
+                "nome": "Somente link",
                 "efeito": (
-                    "O DropNexo <strong>baixa cada imagem</strong> para a pasta da sua empresa "
-                    "(<code>upload/tenant…/produtos/SKU/</code>). Limite de <strong>3 MB</strong> por arquivo. "
-                    "Útil quando você quer independência do link externo ou controle local dos arquivos."
+                    "Não baixa imagens. Grava a URL e a data de validade; um job na madrugada "
+                    "renova só os links que vão vencer. Usa pouco disco, depende do Bling."
+                ),
+            },
+            {
+                "nome": "Baixar todas",
+                "efeito": (
+                    "Baixa <strong>todas</strong> as imagens para "
+                    "<code>upload/tenant…/produtos/SKU/</code> (limite 3 MB) e contabiliza o espaço usado."
                 ),
             },
         ],

@@ -1375,6 +1375,322 @@ def manutencao_tenant_salvar():
         conn.close()
 
 
+# --- mala direta (DEV) ---
+
+MALA_DIRETA_PREFIX = "/configuracoes/mala-direta"
+
+
+def _email_destinatario_tenant(cur, id_tenant: int) -> tuple[str | None, str | None]:
+    """Preferência: email_comercial do tenant → e-mail do dono ativo."""
+    cur.execute(
+        "SELECT email_comercial, nome FROM tbl_tenant WHERE id = %s",
+        (id_tenant,),
+    )
+    row = cur.fetchone()
+    if not row:
+        return None, None
+    nome = row[1] or ""
+    email = (row[0] or "").strip().lower()
+    if email and "@" in email:
+        return email, nome
+    cur.execute(
+        """
+        SELECT u.email
+        FROM tbl_usuario_tenant ut
+        JOIN tbl_usuario u ON u.id = ut.id_usuario
+        JOIN tbl_perfil pf ON pf.id = ut.id_perfil
+        WHERE ut.id_tenant = %s AND ut.ativo = TRUE AND u.ativo = TRUE
+          AND lower(pf.codigo) = 'dono'
+        ORDER BY ut.id
+        LIMIT 1
+        """,
+        (id_tenant,),
+    )
+    r2 = cur.fetchone()
+    if r2 and r2[0]:
+        return str(r2[0]).strip().lower(), nome
+    cur.execute(
+        """
+        SELECT u.email
+        FROM tbl_usuario_tenant ut
+        JOIN tbl_usuario u ON u.id = ut.id_usuario
+        WHERE ut.id_tenant = %s AND ut.ativo = TRUE AND u.ativo = TRUE
+          AND u.email IS NOT NULL AND trim(u.email) <> ''
+        ORDER BY ut.id
+        LIMIT 1
+        """,
+        (id_tenant,),
+    )
+    r3 = cur.fetchone()
+    if r3 and r3[0]:
+        return str(r3[0]).strip().lower(), nome
+    return None, nome
+
+
+@config_bp.get(MALA_DIRETA_PREFIX)
+@login_obrigatorio()
+def mala_direta_pagina():
+    if not session.get("eh_desenvolvedor"):
+        return redirect(url_for("dashboard.index"))
+    from api.brevo.srotas_brevo import brevo_configurado, webhook_url_publico
+
+    return render_template(
+        "frm_config_mala_direta.html",
+        nav_ativo="config",
+        webhook_url=webhook_url_publico(),
+        brevo_ok=brevo_configurado(),
+    )
+
+
+@config_bp.get(f"{MALA_DIRETA_PREFIX}/tenants")
+@login_obrigatorio()
+def mala_direta_tenants():
+    if (r := _exigir_dev()) is not None:
+        return r
+    q = (request.args.get("q") or "").strip()
+    tipo = (request.args.get("tipo") or "").strip().lower()
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        where = ["t.ativo = TRUE"]
+        params: list = []
+        if tipo == "vendedor":
+            where.append("t.tipo_negocio IN ('vendedor', 'hibrido')")
+        elif tipo == "fornecedor":
+            where.append("t.tipo_negocio IN ('fornecedor', 'hibrido')")
+        elif tipo == "ambos":
+            pass
+        elif tipo in _TIPOS_NEGOCIO_OK:
+            where.append("t.tipo_negocio = %s")
+            params.append(tipo)
+        if q:
+            where.append(
+                "(t.nome ILIKE %s OR t.slug ILIKE %s OR COALESCE(t.documento,'') ILIKE %s "
+                "OR CAST(t.id AS TEXT) = %s)"
+            )
+            like = f"%{q}%"
+            params.extend([like, like, like, q])
+        cur.execute(
+            f"""
+            SELECT t.id, t.nome, t.slug, t.tipo_negocio, t.email_comercial
+            FROM tbl_tenant t
+            WHERE {" AND ".join(where)}
+            ORDER BY t.nome ASC
+            LIMIT 500
+            """,
+            params,
+        )
+        itens = []
+        for row in cur.fetchall():
+            tid = int(row[0])
+            email, _ = _email_destinatario_tenant(cur, tid)
+            itens.append(
+                {
+                    "id": tid,
+                    "nome": row[1] or "",
+                    "slug": row[2] or "",
+                    "tipo_negocio": (row[3] or "").lower(),
+                    "email": email or "",
+                    "sem_email": not bool(email),
+                }
+            )
+        return jsonify(success=True, itens=itens)
+    finally:
+        conn.close()
+
+
+@config_bp.post(f"{MALA_DIRETA_PREFIX}/enviar")
+@login_obrigatorio()
+def mala_direta_enviar():
+    if (r := _exigir_dev()) is not None:
+        return r
+    from api.brevo.srotas_brevo import enviar_mala_direta
+
+    body = request.get_json(silent=True) or {}
+    assunto = (body.get("assunto") or "").strip()
+    corpo_html = (body.get("corpo_html") or body.get("mensagem") or "").strip()
+    filtro = (body.get("filtro_tipo") or "ambos").strip().lower()
+    ids_raw = body.get("ids_tenant") or []
+    selecionar_todos = bool(body.get("selecionar_todos"))
+
+    if not assunto or not corpo_html:
+        return jsonify(success=False, message="Informe assunto e mensagem."), 400
+
+    # quebras de linha → <br> se for texto puro
+    if "<" not in corpo_html:
+        import html as _html
+
+        corpo_html = "<p>" + _html.escape(corpo_html).replace("\n", "<br>") + "</p>"
+
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        where = ["t.ativo = TRUE"]
+        params: list = []
+        if filtro == "vendedor":
+            where.append("t.tipo_negocio IN ('vendedor', 'hibrido')")
+        elif filtro == "fornecedor":
+            where.append("t.tipo_negocio IN ('fornecedor', 'hibrido')")
+        if not selecionar_todos:
+            ids: list[int] = []
+            for x in ids_raw:
+                try:
+                    ids.append(int(x))
+                except (TypeError, ValueError):
+                    pass
+            if not ids:
+                return jsonify(success=False, message="Selecione ao menos um tenant."), 400
+            where.append("t.id = ANY(%s)")
+            params.append(ids)
+        cur.execute(
+            f"SELECT t.id, t.nome FROM tbl_tenant t WHERE {' AND '.join(where)} ORDER BY t.id",
+            params,
+        )
+        rows = cur.fetchall()
+        dest = []
+        for tid, nome in rows:
+            email, _ = _email_destinatario_tenant(cur, int(tid))
+            if email:
+                dest.append(
+                    {
+                        "email": email,
+                        "id_tenant": int(tid),
+                        "nome_tenant": nome or "",
+                    }
+                )
+    finally:
+        conn.close()
+
+    if not dest:
+        return jsonify(
+            success=False,
+            message="Nenhum destinatário com e-mail válido nos tenants escolhidos.",
+        ), 400
+
+    ok, msg, id_envio, resumo = enviar_mala_direta(
+        destinatarios=dest,
+        assunto=assunto,
+        corpo_html=corpo_html,
+        filtro_tipo=filtro,
+        criado_por=session.get("id_usuario"),
+    )
+    if not ok:
+        return jsonify(success=False, message=msg, id_envio=id_envio, resumo=resumo), 500
+    return jsonify(
+        success=True,
+        message=f"Disparo concluído: {resumo.get('ok')} enviados, {resumo.get('falha')} falhas.",
+        id_envio=id_envio,
+        resumo=resumo,
+    )
+
+
+@config_bp.get(f"{MALA_DIRETA_PREFIX}/disparos")
+@login_obrigatorio()
+def mala_direta_disparos():
+    if (r := _exigir_dev()) is not None:
+        return r
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT e.id_envio, e.assunto, e.tag_email, e.dt_envio, e.filtro_tipo,
+                   e.total_destinatarios, e.criado_por,
+                   (SELECT COUNT(*) FROM tbl_email_destinatario d
+                    WHERE d.id_envio = e.id_envio AND lower(d.status_atual) IN ('opened','unique_opened','first_opening')),
+                   (SELECT COUNT(*) FROM tbl_email_destinatario d
+                    WHERE d.id_envio = e.id_envio AND lower(d.status_atual) LIKE '%%bounce%%'),
+                   (SELECT COUNT(*) FROM tbl_email_destinatario d
+                    WHERE d.id_envio = e.id_envio AND lower(d.status_atual) IN ('delivered','request')),
+                   (SELECT COUNT(*) FROM tbl_email_destinatario d
+                    WHERE d.id_envio = e.id_envio AND lower(d.status_atual) IN ('falha','error','blocked','invalid','spam'))
+            FROM tbl_email_envio e
+            WHERE e.tipo_disparo = 'mala_direta'
+            ORDER BY e.dt_envio DESC
+            LIMIT 50
+            """
+        )
+        itens = []
+        for r in cur.fetchall():
+            itens.append(
+                {
+                    "id_envio": int(r[0]),
+                    "assunto": r[1] or "",
+                    "tag": r[2] or "",
+                    "dt_envio": r[3].isoformat() if r[3] else None,
+                    "filtro_tipo": r[4] or "",
+                    "total": int(r[5] or 0),
+                    "abertos": int(r[7] or 0),
+                    "bounces": int(r[8] or 0),
+                    "entregues": int(r[9] or 0),
+                    "erros": int(r[10] or 0),
+                }
+            )
+        return jsonify(success=True, itens=itens)
+    finally:
+        conn.close()
+
+
+@config_bp.get(f"{MALA_DIRETA_PREFIX}/disparos/<int:id_envio>")
+@login_obrigatorio()
+def mala_direta_disparo_detalhe(id_envio: int):
+    if (r := _exigir_dev()) is not None:
+        return r
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT id_envio, assunto, corpo, tag_email, dt_envio, filtro_tipo,
+                   total_destinatarios, tipo_disparo
+            FROM tbl_email_envio WHERE id_envio = %s
+            """,
+            (id_envio,),
+        )
+        row = cur.fetchone()
+        if not row:
+            return jsonify(success=False, message="Disparo não encontrado."), 404
+        cur.execute(
+            """
+            SELECT id_destinatario, email, status_atual, dt_ultimo_evento,
+                   id_tenant, nome_tenant, message_id
+            FROM tbl_email_destinatario
+            WHERE id_envio = %s
+            ORDER BY nome_tenant NULLS LAST, email
+            """,
+            (id_envio,),
+        )
+        dests = []
+        for d in cur.fetchall():
+            dests.append(
+                {
+                    "id_destinatario": int(d[0]),
+                    "email": d[1] or "",
+                    "status": d[2] or "",
+                    "dt_ultimo_evento": d[3].isoformat() if d[3] else None,
+                    "id_tenant": int(d[4]) if d[4] else None,
+                    "nome_tenant": d[5] or "",
+                    "message_id": d[6] or "",
+                }
+            )
+        return jsonify(
+            success=True,
+            disparo={
+                "id_envio": int(row[0]),
+                "assunto": row[1] or "",
+                "corpo": row[2] or "",
+                "tag": row[3] or "",
+                "dt_envio": row[4].isoformat() if row[4] else None,
+                "filtro_tipo": row[5] or "",
+                "total": int(row[6] or 0),
+                "tipo_disparo": row[7] or "",
+                "destinatarios": dests,
+            },
+        )
+    finally:
+        conn.close()
+
+
 # --- gestao fornecedores ---
 
 

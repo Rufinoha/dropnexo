@@ -1,0 +1,106 @@
+{% extends "frm_base.html" %}
+
+{% block title %}Meu Plano — {{ MARCA_NOME }}{% endblock %}
+{% block topbar_title %}Meu Plano{% endblock %}
+
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('planos.static', filename='style/Cmeu_plano.css') }}" />
+{% endblock %}
+
+{% block content %}
+<div class="Cl_ContainerApoio Cl_PainelPagina mpl-page">
+  <div class="pt-page-title">
+    <h2>Meu plano</h2>
+    <p class="pt-page-desc">Assinatura, limites e opções da sua conta {{ MARCA_NOME }}.</p>
+  </div>
+
+  <section class="mpl-card mpl-atual">
+    <p class="mpl-kicker">Plano atual</p>
+    <div class="mpl-atual-row">
+      <div>
+        <h3 class="mpl-nome">{{ plano_atual.nome }}</h3>
+        <p class="mpl-meta">
+          {% if plano_atual.valor_centavos is not none %}
+            R$ {{ '%.2f'|format(plano_atual.valor_centavos / 100) }}
+            {% if plano_atual.periodicidade %}/ {{ plano_atual.periodicidade }}{% endif %}
+          {% else %}
+            Consulte a cobrança da sua conta
+          {% endif %}
+        </p>
+        {% if plano_atual.destaque %}
+        <p class="mpl-destaque">{{ plano_atual.destaque }}</p>
+        {% endif %}
+      </div>
+      <div class="mpl-atual-actions">
+        {% if pode_pagamento %}
+        <a href="{{ url_for('perfil.meu_perfil', aba='pagamento') }}" class="Cl_botaoprimario">Forma de pagamento</a>
+        {% endif %}
+        <a href="{{ url_for('perfil.meu_perfil') }}" class="Cl_botaosecundario">Meu perfil</a>
+      </div>
+    </div>
+    <dl class="mpl-resumo">
+      <div><dt>Slug interno</dt><dd>{{ plano_atual.slug }}</dd></div>
+      <div><dt>Perfil da conta</dt><dd>{{ tipo_rotulo }}</dd></div>
+      <div>
+        <dt>Espaço de imagens</dt>
+        <dd>
+          {% set b = armazenamento.bytes_imagens|default(0) %}
+          {% if b >= 1073741824 %}
+            {{ '%.2f'|format(b / 1073741824) }} GB
+          {% else %}
+            {{ '%.1f'|format(b / 1048576) }} MB
+          {% endif %}
+        </dd>
+      </div>
+      {% if plano_atual.email_cobranca %}
+      <div><dt>E-mail de cobrança</dt><dd>{{ plano_atual.email_cobranca }}</dd></div>
+      {% endif %}
+    </dl>
+  </section>
+
+  {% if segmentos %}
+  {% for seg in segmentos %}
+  <section class="mpl-catalogo">
+    <h3 class="mpl-sec-title">{{ seg.titulo }}</h3>
+    <p class="mpl-sec-desc">{{ seg.descricao }}</p>
+    <div class="mpl-grid">
+      {% for p in seg.planos %}
+      <article class="mpl-plan{% if p.slug == plano_atual.slug or p.featured %} is-featured{% endif %}{% if p.slug == plano_atual.slug or p._eh_atual %} is-atual{% endif %}">
+        {% if p.tag %}<span class="mpl-tag">{{ p.tag }}</span>{% endif %}
+        {% if p._eh_atual %}<span class="mpl-tag mpl-tag-atual">Seu plano</span>{% endif %}
+        <h4>{{ p.nome }}</h4>
+        <p class="mpl-preco">
+          {% if p.preco_mensal == 0 %}
+            Grátis
+          {% else %}
+            R$ {{ p.preco_mensal }}<span>/mês</span>
+          {% endif %}
+        </p>
+        {% if p.destaque %}<p class="mpl-plan-destaque">{{ p.destaque }}</p>{% endif %}
+        <ul class="mpl-limites">
+          {% for lim in p.limites %}
+          <li><strong>{{ lim.valor }}</strong> {{ lim.rotulo }}</li>
+          {% endfor %}
+        </ul>
+        <ul class="mpl-recursos">
+          {% for r in p.recursos %}
+          <li class="{% if r.on %}is-on{% else %}is-off{% endif %}">{{ r.label }}{% if r.sub %} <span>{{ r.sub }}</span>{% endif %}</li>
+          {% endfor %}
+        </ul>
+      </article>
+      {% endfor %}
+    </div>
+  </section>
+  {% endfor %}
+  {% endif %}
+
+  <p class="mpl-nota">
+    Os limites comerciais da vitrine podem evoluir. O plano cobrado na sua conta é o registrado em
+    <strong>{{ plano_atual.nome }}</strong>
+    {% if pode_pagamento %}
+    — gerencie cobrança em
+    <a href="{{ url_for('perfil.meu_perfil', aba='pagamento') }}">Forma de pagamento</a>.
+    {% endif %}
+  </p>
+</div>
+{% endblock %}

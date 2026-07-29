@@ -174,6 +174,7 @@ def aplicar_imagens_produto(
     if not urls:
         return None
 
+    # baixar_fn disponível; modo link não baixa, hibrido baixa temporárias, download baixa tudo.
     principal, mapa = aplicar_galeria_produto(
         cur,
         id_tenant=id_tenant,
@@ -182,7 +183,7 @@ def aplicar_imagens_produto(
         urls=urls,
         modo_imagem=modo_imagem,
         origem_fn=classificar_origem_bling,
-        baixar_fn=baixar_imagem if modo_imagem == "download" else None,
+        baixar_fn=baixar_imagem,
         pasta_sku_fn=pasta_imagens_sku,
         caminho_db_fn=caminho_db_imagem,
     )

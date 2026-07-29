@@ -340,9 +340,11 @@
         <label class="Bl_Field">
           <span>Modo das imagens</span>
           <select id="bl_modo_imagem">
-            <option value="link">Manter como link</option>
-            <option value="download">Baixar para o servidor</option>
+            <option value="hibrido">Híbrido — baixa só links temporários (recomendado)</option>
+            <option value="link">Somente link — renova na madrugada</option>
+            <option value="download">Baixar todas para o servidor</option>
           </select>
+          <span class="Bl_Hint" id="bl_armazenamento_hint" hidden></span>
         </label>
         <label class="Bl_Field">
           <span>Fonte principal</span>
@@ -433,5 +435,5 @@
 </div>
 {% endblock %}
 {% block page_js %}
-<script src="{{ url_for('static', filename='script/Sbling_integracao.js') }}?v=31"></script>
+<script src="{{ url_for('static', filename='script/Sbling_integracao.js') }}?v=32"></script>
 {% endblock %}

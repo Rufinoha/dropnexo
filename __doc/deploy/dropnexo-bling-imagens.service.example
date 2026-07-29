@@ -1,0 +1,17 @@
+# Companion de dropnexo-bling-imagens.timer.example
+# /etc/systemd/system/dropnexo-bling-imagens.service
+
+[Unit]
+Description=DropNexo revalidar imagens Bling
+After=network.target postgresql.service
+
+[Service]
+Type=oneshot
+User=www-data
+Group=www-data
+WorkingDirectory=/srv/dropnexo
+EnvironmentFile=/srv/dropnexo/.env
+ExecStart=/srv/dropnexo/venv/bin/python /srv/dropnexo/scripts/bling_revalidar_imagens.py --dias 3
+
+[Install]
+WantedBy=multi-user.target

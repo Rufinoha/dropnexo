@@ -82,13 +82,26 @@ def reagir_estoque_promocao(cur, id_variante: int, total_antes: int, total_depoi
 
 import os
 import re
+from datetime import timezone
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 from global_utils import agora_utc, url_imagem_produto
 
 MAX_IMAGENS_PRODUTO = 10
-HOSTS_BLING = ("bling.com.br", "orgbling.com.br")
+HOSTS_BLING = ("bling.com.br", "orgbling.com.br", "orgbling.s3.amazonaws.com")
+MODOS_IMAGEM_BLING = frozenset({"link", "hibrido", "download"})
+_QUERY_ASSINADA = frozenset(
+    {
+        "expires",
+        "signature",
+        "awsaccesskeyid",
+        "x-amz-signature",
+        "x-amz-expires",
+        "x-amz-credential",
+        "x-amz-security-token",
+    }
+)
 
 ATRIBUTOS_VISUAIS = ("cor", "color", "colour", "estampa", "modelo", "sabor")
 
@@ -106,11 +119,125 @@ def tipo_de_caminho(caminho: str | None) -> str:
     return "link" if caminho_eh_url(caminho) else "upload"
 
 
+def normalizar_modo_imagem_bling(modo: str | None) -> str:
+    m = (modo or "").strip().lower()
+    if m in MODOS_IMAGEM_BLING:
+        return m
+    return "hibrido"
+
+
+def url_imagem_temporaria(url: str | None) -> bool:
+    """Detecta URL assinada / hospedagem Bling que expira."""
+    u = (url or "").strip()
+    if not u.startswith(("http://", "https://")):
+        return False
+    parsed = urlparse(u)
+    host = (parsed.hostname or "").lower()
+    if "orgbling" in host:
+        return True
+    qs_keys = {
+        parte.split("=", 1)[0].lower()
+        for parte in (parsed.query or "").split("&")
+        if parte
+    }
+    return bool(qs_keys & _QUERY_ASSINADA)
+
+
+def expira_em_de_url(url: str | None) -> datetime | None:
+    """Extrai validade de URL assinada AWS (Expires unix ou X-Amz-Date + X-Amz-Expires)."""
+    u = (url or "").strip()
+    if not u.startswith(("http://", "https://")):
+        return None
+    qs = parse_qs(urlparse(u).query)
+    for key in ("Expires", "expires"):
+        vals = qs.get(key) or []
+        if not vals:
+            continue
+        try:
+            ts = int(str(vals[0]).strip())
+            if ts > 1_000_000_000:
+                return datetime.fromtimestamp(ts, tz=timezone.utc)
+        except (TypeError, ValueError, OSError, OverflowError):
+            pass
+    amz_exp = (qs.get("X-Amz-Expires") or qs.get("x-amz-expires") or [None])[0]
+    amz_date = (qs.get("X-Amz-Date") or qs.get("x-amz-date") or [None])[0]
+    if amz_exp and amz_date:
+        try:
+            segundos = int(str(amz_exp).strip())
+            raw = str(amz_date).strip()
+            if raw.endswith("Z") and "T" in raw:
+                inicio = datetime.strptime(raw, "%Y%m%dT%H%M%SZ").replace(tzinfo=timezone.utc)
+                return datetime.fromtimestamp(inicio.timestamp() + segundos, tz=timezone.utc)
+        except (TypeError, ValueError, OSError, OverflowError):
+            return None
+    return None
+
+
 def classificar_origem_bling(url: str) -> str:
     host = (urlparse(url).hostname or "").lower()
-    if any(h in host for h in HOSTS_BLING):
+    if "orgbling" in host or any(h in host for h in HOSTS_BLING):
+        return "bling_interna"
+    if url_imagem_temporaria(url):
         return "bling_interna"
     return "bling_externa"
+
+
+def recalcular_bytes_imagens_tenant(cur, id_tenant: int) -> int:
+    """Soma bytes de arquivos locais do tenant e persiste em tbl_tenant_armazenamento."""
+    total = 0
+    cur.execute(
+        """
+        SELECT i.caminho, i.tamanho_bytes
+        FROM tbl_produto_imagem i
+        JOIN tbl_produto p ON p.id = i.id_produto
+        WHERE p.id_tenant = %s
+        """,
+        (id_tenant,),
+    )
+    for caminho, tamanho in cur.fetchall():
+        if caminho_eh_url(caminho):
+            continue
+        if tamanho is not None and int(tamanho) > 0:
+            total += int(tamanho)
+            continue
+        rel = (caminho or "").replace("\\", "/").lstrip("/")
+        if ".." in rel:
+            continue
+        if rel.lower().startswith("upload/"):
+            p = _raiz_projeto() / rel.replace("/", os.sep)
+        elif rel.lower().startswith("imge/produtos/"):
+            p = _raiz_projeto() / "static" / rel.replace("/", os.sep)
+        else:
+            continue
+        if p.is_file():
+            try:
+                total += p.stat().st_size
+            except OSError:
+                pass
+
+    agora = agora_utc()
+    cur.execute(
+        """
+        INSERT INTO tbl_tenant_armazenamento (id_tenant, bytes_imagens, atualizado_em)
+        VALUES (%s, %s, %s)
+        ON CONFLICT (id_tenant) DO UPDATE SET
+            bytes_imagens = EXCLUDED.bytes_imagens,
+            atualizado_em = EXCLUDED.atualizado_em
+        """,
+        (id_tenant, total, agora),
+    )
+    return total
+
+
+def obter_bytes_imagens_tenant(cur, id_tenant: int) -> int:
+    cur.execute(
+        "SELECT bytes_imagens FROM tbl_tenant_armazenamento WHERE id_tenant = %s",
+        (id_tenant,),
+    )
+    row = cur.fetchone()
+    if row and row[0] is not None:
+        return int(row[0])
+    return recalcular_bytes_imagens_tenant(cur, id_tenant)
 
 
 def classificar_origem_manual(caminho: str) -> str:
@@ -345,48 +472,108 @@ def aplicar_galeria_produto(
     pasta_sku_fn=None,
     caminho_db_fn=None,
 ) -> tuple[str | None, dict[str, int]]:
-    """Importa URLs na galeria do pai. Retorna (caminho principal, mapa url→id)."""
+    """Importa URLs na galeria do pai. Retorna (caminho principal, mapa url→id).
+
+    modo_imagem (config Bling):
+      - download: baixa todas
+      - hibrido: baixa só URLs temporárias; externas ficam como link
+      - link: não baixa; grava URL + link_expira_em (job noturno renova)
+    """
     if not urls:
         return None, {}
 
-    modo = "link" if modo_imagem != "download" else "upload"
-    exigir_modo_compativel(cur, id_produto, modo)
+    modo_cfg = normalizar_modo_imagem_bling(modo_imagem)
+    baixar_tudo = modo_cfg == "download"
+    so_link = modo_cfg == "link"
+    # Substitui a galeria inteira — libera troca de modo.
     limpar_galeria_produto(cur, id_produto)
 
     mapa: dict[str, int] = {}
     principal: str | None = None
     origem_fn = origem_fn or classificar_origem_bling
+    tem_upload = False
+    tem_link = False
 
-    for idx, url in enumerate(urls[:MAX_IMAGENS_PRODUTO]):
-        caminho_db = url.strip()
-        origem = origem_fn(caminho_db) if modo == "link" else "manual_upload"
+    ordem = 0
+    for url in urls[:MAX_IMAGENS_PRODUTO]:
+        url_orig = url.strip()
+        if not url_orig:
+            continue
+        caminho_db = url_orig
+        origem = origem_fn(url_orig)
+        link_expira = None
+        tamanho_bytes = None
+        temporaria = url_imagem_temporaria(url_orig)
+        deve_baixar = bool(
+            not so_link
+            and baixar_fn
+            and pasta_sku_fn
+            and caminho_db_fn
+            and (baixar_tudo or temporaria)
+        )
 
-        if modo == "download" and baixar_fn and pasta_sku_fn and caminho_db_fn:
-            ext = Path(urlparse(url).path).suffix.lower() or ".jpg"
+        if deve_baixar:
+            ext = Path(urlparse(url_orig).path).suffix.lower() or ".jpg"
             if ext not in (".png", ".jpg", ".jpeg", ".webp"):
                 ext = ".jpg"
-            nome = f"{idx + 1:02d}-principal{ext}" if idx == 0 else f"{idx + 1:02d}-img{ext}"
+            nome = f"{ordem + 1:02d}-principal{ext}" if ordem == 0 else f"{ordem + 1:02d}-img{ext}"
             pasta = pasta_sku_fn(id_tenant, sku)
             destino = pasta / nome
-            baixar_fn(url, destino)
+            baixados = baixar_fn(url_orig, destino)
+            try:
+                tamanho_bytes = int(baixados) if baixados is not None else destino.stat().st_size
+            except (TypeError, OSError):
+                tamanho_bytes = None
             caminho_db = caminho_db_fn(id_tenant, sku, nome)
-            origem = "manual_upload"
+            if not origem.startswith("bling_"):
+                origem = "manual_upload"
+            elif origem == "bling_externa":
+                origem = "bling_interna"
+            tem_upload = True
+        else:
+            tem_link = True
+            if temporaria or so_link:
+                link_expira = expira_em_de_url(url_orig)
 
         cur.execute(
             """
-            INSERT INTO tbl_produto_imagem (id_produto, caminho, ordem, principal, origem)
-            VALUES (%s, %s, %s, %s, %s)
+            INSERT INTO tbl_produto_imagem (
+                id_produto, caminho, ordem, principal, origem, link_expira_em, tamanho_bytes
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
             RETURNING id
             """,
-            (id_produto, caminho_db, idx, idx == 0, origem),
+            (
+                id_produto,
+                caminho_db,
+                ordem,
+                ordem == 0,
+                origem,
+                link_expira,
+                tamanho_bytes,
+            ),
         )
         id_img = int(cur.fetchone()[0])
         mapa[caminho_db] = id_img
-        if idx == 0:
+        if url_orig != caminho_db:
+            mapa[url_orig] = id_img
+        if principal is None:
             principal = caminho_db
+        ordem += 1
+
+    if tem_upload:
+        modo = "upload"
+    elif tem_link:
+        modo = "link"
+    else:
+        modo = "link"
 
     definir_imagem_modo(cur, id_produto, modo)
     sincronizar_imagem_principal_produto(cur, id_produto)
+    try:
+        recalcular_bytes_imagens_tenant(cur, id_tenant)
+    except Exception:
+        pass
     return principal, mapa
 
 

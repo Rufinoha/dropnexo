@@ -213,6 +213,23 @@
         const el = document.getElementById(id);
         if (el && val) el.value = val;
       });
+      const modoImgEl = document.getElementById("bl_modo_imagem");
+      if (modoImgEl && cfg.modo_imagem && !["link", "hibrido", "download"].includes(cfg.modo_imagem)) {
+        modoImgEl.value = "hibrido";
+      }
+      const armHint = document.getElementById("bl_armazenamento_hint");
+      if (armHint) {
+        const bytes = Number(estado.armazenamento?.bytes_imagens || 0);
+        if (bytes > 0) {
+          const mb = bytes / (1024 * 1024);
+          const txt = mb >= 1024 ? `${(mb / 1024).toFixed(2)} GB` : `${mb.toFixed(1)} MB`;
+          armHint.hidden = false;
+          armHint.textContent = `Espaço de imagens neste tenant: ${txt}`;
+        } else {
+          armHint.hidden = false;
+          armHint.textContent = "Espaço de imagens neste tenant: 0 MB (ainda sem arquivos baixados).";
+        }
+      }
       if (ultimaSync) {
         ultimaSync.textContent = cfg.ultima_sync_produtos
           ? `Última importação de produtos: ${new Date(cfg.ultima_sync_produtos).toLocaleString("pt-BR")}`

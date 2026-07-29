@@ -10,6 +10,12 @@
       iconeTech: "configuracoes",
     },
     {
+      titulo: "Mala direta",
+      texto: "Disparo de e-mail para tenants (vendedor/fornecedor), com dashboard de aberturas e erros via Brevo.",
+      rota: "/configuracoes/mala-direta",
+      iconeTech: "novidades",
+    },
+    {
       titulo: "Fornecedores na plataforma",
       texto: "Cadastro PJ, ativação e depósitos dos tenants fornecedor (somente desenvolvedor).",
       rota: "/configuracoes/fornecedores-plataforma",

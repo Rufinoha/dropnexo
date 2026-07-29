@@ -1,8 +1,8 @@
 from pathlib import Path
 
-from flask import Blueprint, render_template
+from flask import Blueprint, render_template, session
 
-from global_utils import Var_ConectarBanco, login_obrigatorio
+from global_utils import Var_ConectarBanco, login_obrigatorio, plano_slug_app
 
 _MOD_DIR = Path(__file__).resolve().parent
 
@@ -14,6 +14,25 @@ planos_bp = Blueprint(
     static_folder="static",
     static_url_path="/static/sistema/planos",
 )
+
+_NOMES_PLANO_BANCO = {
+    "starter": "Starter",
+    "profissional": "Profissional",
+    "professional": "Profissional",
+    "empresarial": "Enterprise",
+    "enterprise": "Enterprise",
+}
+
+# Vitrine comercial → slug interno do tenant (aproximação)
+_MAPA_VITRINE_PARA_BANCO = {
+    "explorar": "starter",
+    "crescer": "professional",
+    "ativo": "professional",
+    "escalar": "enterprise",
+    "rede": "enterprise",
+    "pro": "enterprise",
+    "distribuidor": "enterprise",
+}
 
 
 def init_app(app):
@@ -319,12 +338,135 @@ def catalogo_planos():
     ]
 
 
+def _plano_atual_tenant(id_tenant: int, plano_sessao: str | None) -> dict:
+    slug = (plano_sessao or "starter").strip().lower() or "starter"
+    out = {
+        "slug": slug,
+        "nome": _NOMES_PLANO_BANCO.get(slug) or slug.title(),
+        "valor_centavos": None,
+        "periodicidade": None,
+        "destaque": "",
+        "email_cobranca": "",
+    }
+    try:
+        conn = Var_ConectarBanco()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT tc.plano_slug, p.nome, p.valor_centavos, p.periodicidade, p.descricao,
+                   tc.email_cobranca
+            FROM tbl_tenant_cobranca tc
+            JOIN tbl_plano p ON p.slug = tc.plano_slug
+            WHERE tc.id_tenant = %s
+            """,
+            (id_tenant,),
+        )
+        row = cur.fetchone()
+        if not row:
+            cur.execute(
+                """
+                SELECT slug, nome, valor_centavos, periodicidade, descricao
+                FROM tbl_plano WHERE slug = %s AND ativo = TRUE
+                """,
+                (slug if slug in ("starter", "professional", "enterprise") else "starter",),
+            )
+            p = cur.fetchone()
+            if p:
+                out.update(
+                    {
+                        "slug": p[0],
+                        "nome": p[1],
+                        "valor_centavos": p[2],
+                        "periodicidade": p[3],
+                        "destaque": p[4] or "",
+                    }
+                )
+        else:
+            out.update(
+                {
+                    "slug": row[0],
+                    "nome": row[1],
+                    "valor_centavos": row[2],
+                    "periodicidade": row[3],
+                    "destaque": row[4] or "",
+                    "email_cobranca": row[5] or "",
+                }
+            )
+        cur.close()
+        conn.close()
+    except Exception:
+        pass
+    return out
+
+
+def _marcar_plano_atual_vitrine(planos: list[dict], slug_banco: str) -> list[dict]:
+    alvo = plano_slug_app(slug_banco)
+    out = []
+    for p in planos:
+        item = dict(p)
+        vit = _MAPA_VITRINE_PARA_BANCO.get((p.get("slug") or "").lower(), "")
+        item["_eh_atual"] = plano_slug_app(vit) == alvo if vit else False
+        out.append(item)
+    return out
+
+
 @planos_bp.get("/meu-plano")
 @login_obrigatorio()
 def meu_plano():
+    id_tenant = session.get("id_tenant")
+    tipo = (session.get("tenant_tipo_negocio") or "vendedor").strip().lower()
+    plano_sessao = session.get("tenant_plano") or "starter"
+    atual = _plano_atual_tenant(id_tenant, plano_sessao)
+
+    home = catalogo_planos_home()
+    segmentos: list[dict] = []
+    if tipo in ("vendedor", "hibrido"):
+        segmentos.append(
+            {
+                "titulo": "Planos para vendedores",
+                "descricao": "Limites da vitrine comercial (pedidos, fornecedores e produtos).",
+                "planos": _marcar_plano_atual_vitrine(home["vendedor"], atual["slug"]),
+            }
+        )
+    if tipo in ("fornecedor", "hibrido"):
+        segmentos.append(
+            {
+                "titulo": "Planos para fornecedores",
+                "descricao": "Limites da vitrine comercial (pedidos, vendedores e SKUs).",
+                "planos": _marcar_plano_atual_vitrine(home["fornecedor"], atual["slug"]),
+            }
+        )
+
+    tipo_rotulo = {
+        "vendedor": "Vendedor",
+        "fornecedor": "Fornecedor",
+        "hibrido": "Híbrido",
+    }.get(tipo, tipo.title())
+
+    pode_pagamento = bool(
+        session.get("eh_desenvolvedor")
+        or (session.get("perfil_codigo") or "").lower() in ("dono", "admin", "financeiro")
+    )
+
+    armazenamento = {"bytes_imagens": 0}
+    try:
+        from fornecedor.catalogo.catalogo import obter_bytes_imagens_tenant
+
+        conn = Var_ConectarBanco()
+        cur = conn.cursor()
+        armazenamento["bytes_imagens"] = obter_bytes_imagens_tenant(cur, int(id_tenant))
+        conn.commit()
+        cur.close()
+        conn.close()
+    except Exception:
+        pass
+
     return render_template(
-        "em_breve.html",
-        titulo_pagina="Meu Plano",
-        descricao="Assinatura e limites da sua conta DropNexo.",
+        "frm_meu_plano.html",
         nav_ativo="",
+        plano_atual=atual,
+        segmentos=segmentos,
+        tipo_rotulo=tipo_rotulo,
+        pode_pagamento=pode_pagamento,
+        armazenamento=armazenamento,
     )

@@ -1,0 +1,142 @@
+{% extends "frm_base.html" %}
+{% block title %}Mala direta — {{ MARCA_NOME }}{% endblock %}
+{% set nav_ativo = 'config' %}
+{% block topbar_title %}Mala direta{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_mala_direta.css') }}?v=1" />
+{% endblock %}
+{% block content %}
+<div class="Cl_ContainerApoio cl-page-principal CfgMd_Wrap">
+  <div class="cl-page-title">
+    <h2>Mala direta</h2>
+    <p class="cl-page-desc">Envie e-mail para tenants e acompanhe aberturas/erros via webhook Brevo. Somente desenvolvedor.</p>
+  </div>
+  <p class="CfgMd_Aviso">
+    <a class="Cl_BtnLink" href="{{ url_for('config.configuracoes') }}">← Voltar às Configurações</a>
+  </p>
+
+  <div class="CfgMd_Webhook">
+    <strong>Webhook Brevo</strong>
+    <code id="cfg_md_webhook">{{ webhook_url }}</code>
+    <button type="button" class="Cl_botaosecundario" id="cfg_md_copiar_webhook">Copiar</button>
+    <span class="CfgMd_Hint">{% if brevo_ok %}Brevo configurado{% else %}Brevo incompleto no .env{% endif %} — cadastre a URL no Brevo (Transactional → Webhooks) com eventos delivered, opened, clicks, bounces, spam, blocked.</span>
+  </div>
+
+  <div class="CfgMd_Tabs">
+    <button type="button" class="CfgMd_Tab is-active" data-tab="novo">Novo disparo</button>
+    <button type="button" class="CfgMd_Tab" data-tab="historico">Histórico / dashboard</button>
+  </div>
+
+  <section class="CfgMd_Panel is-active" id="cfg_md_panel_novo">
+    <div class="CfgMd_Grid">
+      <section class="CfgMd_Card">
+        <div class="filter-panel">
+          <div class="filter-panel-fields">
+            <div class="filter-group" style="flex:1;min-width:12rem">
+              <label for="cfg_md_q">Buscar</label>
+              <input type="search" id="cfg_md_q" placeholder="Nome, slug, ID…" />
+            </div>
+            <div class="filter-group">
+              <label for="cfg_md_filtro">Público</label>
+              <select id="cfg_md_filtro">
+                <option value="ambos">Vendedor + Fornecedor</option>
+                <option value="vendedor">Só vendedor (inclui híbrido)</option>
+                <option value="fornecedor">Só fornecedor (inclui híbrido)</option>
+              </select>
+            </div>
+          </div>
+          <div class="filter-panel-actions">
+            <button type="button" class="Cl_BtnSalvar" id="cfg_md_btnBuscar">Buscar</button>
+          </div>
+        </div>
+        <div class="CfgMd_SelBar">
+          <label><input type="checkbox" id="cfg_md_todos" /> Selecionar todos da lista</label>
+          <span id="cfg_md_contagem" class="CfgMd_Hint">0 selecionados</span>
+        </div>
+        <div class="CfgMd_TabelaWrap">
+          <table class="Cl_TabelaPrincipal CfgMd_Tabela">
+            <thead>
+              <tr>
+                <th></th>
+                <th>ID</th>
+                <th>Nome</th>
+                <th>Tipo</th>
+                <th>E-mail</th>
+              </tr>
+            </thead>
+            <tbody id="cfg_md_tbody">
+              <tr><td colspan="5" class="CfgMd_Hint">Carregando…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="CfgMd_Card">
+        <h3>Mensagem</h3>
+        <label class="CfgMd_Field">
+          <span>Assunto</span>
+          <input type="text" id="cfg_md_assunto" maxlength="200" placeholder="Assunto do e-mail" />
+        </label>
+        <label class="CfgMd_Field">
+          <span>Mensagem</span>
+          <textarea id="cfg_md_corpo" rows="12" placeholder="Texto ou HTML simples…"></textarea>
+        </label>
+        <p class="CfgMd_Hint">Destinatário: e-mail comercial do tenant; se vazio, e-mail do usuário dono.</p>
+        <button type="button" class="Cl_botaoprimario" id="cfg_md_enviar">Enviar mala direta</button>
+      </section>
+    </div>
+  </section>
+
+  <section class="CfgMd_Panel" id="cfg_md_panel_historico" hidden>
+    <div class="CfgMd_Grid">
+      <section class="CfgMd_Card">
+        <div class="CfgMd_SelBar">
+          <h3 style="margin:0">Disparos</h3>
+          <button type="button" class="Cl_botaosecundario" id="cfg_md_refresh_hist">Atualizar</button>
+        </div>
+        <div class="CfgMd_TabelaWrap">
+          <table class="Cl_TabelaPrincipal CfgMd_Tabela">
+            <thead>
+              <tr>
+                <th>Data</th>
+                <th>Assunto</th>
+                <th>Total</th>
+                <th>Entregues</th>
+                <th>Abertos</th>
+                <th>Bounce</th>
+                <th>Erros</th>
+              </tr>
+            </thead>
+            <tbody id="cfg_md_hist_tbody">
+              <tr><td colspan="7" class="CfgMd_Hint">Carregando…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+      <section class="CfgMd_Card" id="cfg_md_detalhe_card">
+        <h3 id="cfg_md_detalhe_titulo">Selecione um disparo</h3>
+        <p class="CfgMd_Hint" id="cfg_md_detalhe_vazio">Clique em uma linha para ver destinatários e status do Brevo.</p>
+        <div id="cfg_md_detalhe_corpo" hidden>
+          <dl class="CfgMd_Resumo" id="cfg_md_detalhe_meta"></dl>
+          <div class="CfgMd_TabelaWrap">
+            <table class="Cl_TabelaPrincipal CfgMd_Tabela">
+              <thead>
+                <tr>
+                  <th>Tenant</th>
+                  <th>E-mail</th>
+                  <th>Status</th>
+                  <th>Último evento</th>
+                </tr>
+              </thead>
+              <tbody id="cfg_md_detalhe_tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </div>
+  </section>
+</div>
+{% endblock %}
+{% block page_js %}
+<script src="{{ url_for('config.static', filename='script/Sconfig_mala_direta.js') }}?v=1"></script>
+{% endblock %}
