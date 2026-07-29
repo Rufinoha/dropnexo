@@ -391,6 +391,55 @@ def api_meu_perfil_dados():
             (id_usuario, id_tenant),
         )
         row = cur.fetchone()
+
+        # DEV em suporte (troca de tenant) pode não ter vínculo em tbl_usuario_tenant.
+        if not row and session.get("eh_desenvolvedor"):
+            cur.execute(
+                """
+                SELECT u.id, u.nome, u.email, u.whatsapp, u.foto_caminho, u.eh_desenvolvedor,
+                       t.nome, t.plano
+                FROM tbl_usuario u
+                CROSS JOIN tbl_tenant t
+                WHERE u.id = %s AND t.id = %s AND t.ativo = TRUE
+                LIMIT 1
+                """,
+                (id_usuario, id_tenant),
+            )
+            row_dev = cur.fetchone()
+            if not row_dev:
+                return jsonify(success=False, message="Perfil não encontrado."), 404
+            tem_foto_custom = bool(row_dev[4])
+            foto_url = _url_publica_foto(row_dev[4] if tem_foto_custom else None)
+            perfil_codigo = (session.get("perfil_codigo") or "dono").lower()
+            return jsonify(
+                success=True,
+                perfil={
+                    "id_usuario": row_dev[0],
+                    "nome": row_dev[1],
+                    "email": row_dev[2],
+                    "whatsapp": row_dev[3] or "",
+                    "foto_url": foto_url,
+                    "foto_url_padrao": url_for("static", filename=FOTO_PADRAO_STATIC, _external=False),
+                    "tem_foto": tem_foto_custom,
+                    "papel": perfil_codigo,
+                    "papel_label": PERFIL_LABEL.get(perfil_codigo, "Suporte DEV"),
+                    "perfil_codigo": perfil_codigo,
+                    "perfil_nome": "Suporte (DEV)",
+                    "eh_desenvolvedor": bool(row_dev[5]),
+                    "ultimo_acesso_em": None,
+                    "tenant_nome": row_dev[6],
+                    "tenant_plano": row_dev[7],
+                    "modo_suporte_dev": True,
+                },
+                politica_senha={
+                    "min8": "Mínimo de 8 caracteres",
+                    "maiuscula": "1 letra maiúscula",
+                    "minuscula": "1 letra minúscula",
+                    "numero": "1 número",
+                    "especial": "1 caractere especial",
+                },
+            )
+
         if not row:
             return jsonify(success=False, message="Perfil não encontrado."), 404
 
