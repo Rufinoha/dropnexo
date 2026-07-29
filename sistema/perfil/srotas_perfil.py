@@ -239,6 +239,52 @@ def _abas_perfil_ctx() -> dict:
     }
 
 
+def _resolver_usuario_perfil(cur) -> tuple[int | None, bool]:
+    """Usuário a exibir/editar no Meu perfil.
+
+    - Usuário comum: sempre o logado (precisa vínculo ativo no tenant).
+    - DEV: sempre o dono do tenant da sessão (ou 1º usuário ativo se não houver dono).
+      modo_suporte_dev=True quando o dono ≠ usuário logado.
+    """
+    id_usuario = session.get("id_usuario")
+    id_tenant = session.get("id_tenant")
+    if not id_usuario or not id_tenant:
+        return None, False
+
+    id_sessao = int(id_usuario)
+
+    if session.get("eh_desenvolvedor"):
+        cur.execute(
+            """
+            SELECT ut.id_usuario
+            FROM tbl_usuario_tenant ut
+            JOIN tbl_usuario u ON u.id = ut.id_usuario
+            JOIN tbl_perfil pf ON pf.id = ut.id_perfil
+            WHERE ut.id_tenant = %s AND ut.ativo = TRUE AND u.ativo = TRUE
+            ORDER BY CASE WHEN lower(pf.codigo) = 'dono' THEN 0 ELSE 1 END, ut.id
+            LIMIT 1
+            """,
+            (id_tenant,),
+        )
+        row = cur.fetchone()
+        if not row:
+            return None, False
+        id_alvo = int(row[0])
+        return id_alvo, id_alvo != id_sessao
+
+    cur.execute(
+        """
+        SELECT 1 FROM tbl_usuario_tenant
+        WHERE id_usuario = %s AND id_tenant = %s AND ativo = TRUE
+        LIMIT 1
+        """,
+        (id_sessao, id_tenant),
+    )
+    if not cur.fetchone():
+        return None, False
+    return id_sessao, False
+
+
 def _exigir_aba(perfil_ok: bool):
     if not perfil_ok:
         return jsonify(success=False, message="Sem permissão para esta aba."), 403
@@ -368,7 +414,6 @@ def meu_perfil():
 @perfil_bp.get("/api/meu-perfil")
 @login_obrigatorio
 def api_meu_perfil_dados():
-    id_usuario = session["id_usuario"]
     id_tenant = session["id_tenant"]
 
     conn = None
@@ -376,6 +421,10 @@ def api_meu_perfil_dados():
     try:
         conn = Var_ConectarBanco()
         cur = conn.cursor()
+        id_usuario, modo_suporte_dev = _resolver_usuario_perfil(cur)
+        if not id_usuario:
+            return jsonify(success=False, message="Perfil não encontrado."), 404
+
         cur.execute(
             """
             SELECT u.id, u.nome, u.email, u.whatsapp, u.foto_caminho,
@@ -391,55 +440,6 @@ def api_meu_perfil_dados():
             (id_usuario, id_tenant),
         )
         row = cur.fetchone()
-
-        # DEV em suporte (troca de tenant) pode não ter vínculo em tbl_usuario_tenant.
-        if not row and session.get("eh_desenvolvedor"):
-            cur.execute(
-                """
-                SELECT u.id, u.nome, u.email, u.whatsapp, u.foto_caminho, u.eh_desenvolvedor,
-                       t.nome, t.plano
-                FROM tbl_usuario u
-                CROSS JOIN tbl_tenant t
-                WHERE u.id = %s AND t.id = %s AND t.ativo = TRUE
-                LIMIT 1
-                """,
-                (id_usuario, id_tenant),
-            )
-            row_dev = cur.fetchone()
-            if not row_dev:
-                return jsonify(success=False, message="Perfil não encontrado."), 404
-            tem_foto_custom = bool(row_dev[4])
-            foto_url = _url_publica_foto(row_dev[4] if tem_foto_custom else None)
-            perfil_codigo = (session.get("perfil_codigo") or "dono").lower()
-            return jsonify(
-                success=True,
-                perfil={
-                    "id_usuario": row_dev[0],
-                    "nome": row_dev[1],
-                    "email": row_dev[2],
-                    "whatsapp": row_dev[3] or "",
-                    "foto_url": foto_url,
-                    "foto_url_padrao": url_for("static", filename=FOTO_PADRAO_STATIC, _external=False),
-                    "tem_foto": tem_foto_custom,
-                    "papel": perfil_codigo,
-                    "papel_label": PERFIL_LABEL.get(perfil_codigo, "Suporte DEV"),
-                    "perfil_codigo": perfil_codigo,
-                    "perfil_nome": "Suporte (DEV)",
-                    "eh_desenvolvedor": bool(row_dev[5]),
-                    "ultimo_acesso_em": None,
-                    "tenant_nome": row_dev[6],
-                    "tenant_plano": row_dev[7],
-                    "modo_suporte_dev": True,
-                },
-                politica_senha={
-                    "min8": "Mínimo de 8 caracteres",
-                    "maiuscula": "1 letra maiúscula",
-                    "minuscula": "1 letra minúscula",
-                    "numero": "1 número",
-                    "especial": "1 caractere especial",
-                },
-            )
-
         if not row:
             return jsonify(success=False, message="Perfil não encontrado."), 404
 
@@ -465,6 +465,7 @@ def api_meu_perfil_dados():
                 "ultimo_acesso_em": row[7].isoformat() if row[7] else None,
                 "tenant_nome": row[8],
                 "tenant_plano": row[9],
+                "modo_suporte_dev": modo_suporte_dev,
             },
             politica_senha={
                 "min8": "Mínimo de 8 caracteres",
@@ -492,7 +493,6 @@ def api_meu_perfil_dados():
 @perfil_bp.put("/api/meu-perfil")
 @login_obrigatorio
 def api_meu_perfil_salvar():
-    id_usuario = session["id_usuario"]
     dados = request.get_json(silent=True) or {}
     nome = (dados.get("nome") or "").strip()
     whatsapp = (dados.get("whatsapp") or "").strip() or None
@@ -505,6 +505,10 @@ def api_meu_perfil_salvar():
     try:
         conn = Var_ConectarBanco()
         cur = conn.cursor()
+        id_usuario, modo_suporte_dev = _resolver_usuario_perfil(cur)
+        if not id_usuario:
+            return jsonify(success=False, message="Perfil não encontrado."), 404
+
         cur.execute(
             """
             UPDATE tbl_usuario SET nome = %s, whatsapp = %s
@@ -513,8 +517,15 @@ def api_meu_perfil_salvar():
             (nome, whatsapp, id_usuario),
         )
         conn.commit()
-        session["nome"] = nome
-        return jsonify(success=True, message="Dados salvos.", nome=nome)
+        # Em suporte, não altera o nome da sessão do DEV no shell.
+        if not modo_suporte_dev:
+            session["nome"] = nome
+        return jsonify(
+            success=True,
+            message="Dados salvos." + (" (usuário do tenant)" if modo_suporte_dev else ""),
+            nome=nome,
+            modo_suporte_dev=modo_suporte_dev,
+        )
     except Exception as e:
         if conn:
             try:
@@ -538,14 +549,10 @@ def api_meu_perfil_salvar():
 @perfil_bp.post("/api/meu-perfil/trocar-senha")
 @login_obrigatorio
 def api_meu_perfil_trocar_senha():
-    id_usuario = session["id_usuario"]
     dados = request.get_json(silent=True) or {}
     senha_atual = dados.get("senha_atual") or ""
     senha_nova = dados.get("senha_nova") or ""
     confirmar = dados.get("confirmar") or ""
-
-    if not senha_atual:
-        return jsonify(success=False, message="Informe a senha atual."), 400
 
     ok_senha, msg_senha = validar_politica_senha(senha_nova, confirmar)
     if not ok_senha:
@@ -556,17 +563,24 @@ def api_meu_perfil_trocar_senha():
     try:
         conn = Var_ConectarBanco()
         cur = conn.cursor()
-        cur.execute("SELECT senha_hash FROM tbl_usuario WHERE id = %s", (id_usuario,))
-        row = cur.fetchone()
-        if not row or not row[0]:
-            return jsonify(success=False, message="Conta sem senha definida."), 400
+        id_usuario, modo_suporte_dev = _resolver_usuario_perfil(cur)
+        if not id_usuario:
+            return jsonify(success=False, message="Perfil não encontrado."), 404
 
-        try:
-            ok_atual = bcrypt.checkpw(senha_atual.encode("utf-8"), row[0].encode("utf-8"))
-        except Exception:
-            ok_atual = False
-        if not ok_atual:
-            return jsonify(success=False, message="Senha atual incorreta."), 400
+        # Em suporte DEV redefine a senha do usuário do tenant sem a senha atual.
+        if not modo_suporte_dev:
+            if not senha_atual:
+                return jsonify(success=False, message="Informe a senha atual."), 400
+            cur.execute("SELECT senha_hash FROM tbl_usuario WHERE id = %s", (id_usuario,))
+            row = cur.fetchone()
+            if not row or not row[0]:
+                return jsonify(success=False, message="Conta sem senha definida."), 400
+            try:
+                ok_atual = bcrypt.checkpw(senha_atual.encode("utf-8"), row[0].encode("utf-8"))
+            except Exception:
+                ok_atual = False
+            if not ok_atual:
+                return jsonify(success=False, message="Senha atual incorreta."), 400
 
         senha_hash = bcrypt.hashpw(senha_nova.encode("utf-8"), bcrypt.gensalt(rounds=12)).decode("utf-8")
         cur.execute(
@@ -574,7 +588,12 @@ def api_meu_perfil_trocar_senha():
             (senha_hash, id_usuario),
         )
         conn.commit()
-        return jsonify(success=True, message="Senha alterada com sucesso.")
+        msg = (
+            "Senha do usuário do tenant redefinida."
+            if modo_suporte_dev
+            else "Senha alterada com sucesso."
+        )
+        return jsonify(success=True, message=msg, modo_suporte_dev=modo_suporte_dev)
     except Exception as e:
         if conn:
             try:
@@ -598,18 +617,23 @@ def api_meu_perfil_trocar_senha():
 @perfil_bp.post("/api/meu-perfil/foto")
 @login_obrigatorio
 def api_meu_perfil_foto_upload():
-    id_usuario = session["id_usuario"]
     arquivo = request.files.get("arquivo")
     if not arquivo or not arquivo.filename:
         return jsonify(success=False, message="Selecione uma imagem."), 400
 
     conn = None
+    cur = None
     try:
         arquivo.seek(0, os.SEEK_END)
         tamanho = arquivo.tell()
         arquivo.seek(0)
 
         conn = Var_ConectarBanco()
+        cur = conn.cursor()
+        id_usuario, modo_suporte_dev = _resolver_usuario_perfil(cur)
+        if not id_usuario:
+            return jsonify(success=False, message="Perfil não encontrado."), 404
+
         rel, err = _salvar_foto_usuario(
             conn,
             id_usuario=id_usuario,
@@ -625,6 +649,7 @@ def api_meu_perfil_foto_upload():
             message="Foto atualizada.",
             foto_url=_url_publica_foto(rel) + "?t=" + str(int(agora_utc().timestamp())),
             tem_foto=True,
+            modo_suporte_dev=modo_suporte_dev,
         )
     except Exception as e:
         if conn:
@@ -644,12 +669,15 @@ def api_meu_perfil_foto_upload():
 @perfil_bp.delete("/api/meu-perfil/foto")
 @login_obrigatorio
 def api_meu_perfil_foto_remover():
-    id_usuario = session["id_usuario"]
     conn = None
     cur = None
     try:
         conn = Var_ConectarBanco()
         cur = conn.cursor()
+        id_usuario, modo_suporte_dev = _resolver_usuario_perfil(cur)
+        if not id_usuario:
+            return jsonify(success=False, message="Perfil não encontrado."), 404
+
         cur.execute("SELECT foto_caminho FROM tbl_usuario WHERE id = %s", (id_usuario,))
         row = cur.fetchone()
         if not row:
@@ -663,6 +691,7 @@ def api_meu_perfil_foto_remover():
             message="Foto removida.",
             foto_url=_url_publica_foto(None),
             tem_foto=False,
+            modo_suporte_dev=modo_suporte_dev,
         )
     except Exception as e:
         if conn:
@@ -687,6 +716,8 @@ def api_meu_perfil_foto_remover():
 @perfil_bp.get("/api/meu-perfil/foto")
 @login_obrigatorio
 def api_meu_perfil_foto_arquivo():
+    # Sempre a foto do usuário da sessão (shell/header). Em suporte o Meu perfil
+    # usa foto_url estática do usuário do tenant — não este endpoint.
     id_usuario = session["id_usuario"]
     conn = None
     cur = None

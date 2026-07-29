@@ -5,6 +5,7 @@
   "use strict";
 
   const cfg = window.OSB_MEU_PERFIL || {};
+  let modoSuporteDev = false;
 
   function fmtData(iso) {
     if (!iso) return "—";
@@ -41,6 +42,8 @@
   }
 
   function syncHeaderAvatar() {
+    // Em suporte, o header continua sendo o DEV — não espelha o avatar do tenant.
+    if (modoSuporteDev) return;
     const headerUrl =
       cfg.apiFotoUrl || (window.OSB_SHELL && window.OSB_SHELL.apiFotoUsuario);
     if (window.OsbAvatar && typeof window.OsbAvatar.sync === "function") {
@@ -63,6 +66,19 @@
     if (ini) ini.hidden = true;
     if (btnRem) btnRem.hidden = !temFotoCustom;
     syncHeaderAvatar();
+  }
+
+  function aplicarModoSuporte(ativo) {
+    modoSuporteDev = !!ativo;
+    const aviso = document.getElementById("mp-aviso-suporte");
+    if (aviso) aviso.hidden = !modoSuporteDev;
+    const wrapAtual = document.getElementById("mp-wrap-senha-atual");
+    if (wrapAtual) wrapAtual.hidden = modoSuporteDev;
+    const desc = document.querySelector("#mp-panel-perfil .pt-page-desc");
+    if (desc && modoSuporteDev) {
+      desc.textContent =
+        "Perfil do dono deste tenant (modo suporte DEV). Use para ver o que o cliente vê.";
+    }
   }
 
   function renderRegrasSenha() {
@@ -105,6 +121,8 @@
       }
 
       const p = j.perfil;
+      aplicarModoSuporte(!!p.modo_suporte_dev);
+
       document.getElementById("mp-nome").value = p.nome || "";
       document.getElementById("mp-email").value = p.email || "";
       document.getElementById("mp-whatsapp").value = p.whatsapp || "";
@@ -116,8 +134,11 @@
       const ini = document.getElementById("mp-iniciais");
       if (ini) ini.textContent = iniciaisDe(p.nome);
 
-      const nomeTop = document.querySelector(".fg-user-name");
-      if (nomeTop && p.nome) nomeTop.textContent = p.nome;
+      // Só altera o nome do shell quando é o próprio usuário.
+      if (!modoSuporteDev) {
+        const nomeTop = document.querySelector(".fg-user-name");
+        if (nomeTop && p.nome) nomeTop.textContent = p.nome;
+      }
 
       aplicarFoto(p.foto_url || p.foto_url_padrao, !!p.tem_foto);
     } catch (err) {
@@ -149,8 +170,10 @@
 
       const ini = document.getElementById("mp-iniciais");
       if (ini) ini.textContent = iniciaisDe(nome);
-      const nomeTop = document.querySelector(".fg-user-name");
-      if (nomeTop) nomeTop.textContent = nome;
+      if (!modoSuporteDev && !j.modo_suporte_dev) {
+        const nomeTop = document.querySelector(".fg-user-name");
+        if (nomeTop) nomeTop.textContent = nome;
+      }
 
       if (typeof Swal !== "undefined") Swal.fire("Salvo", j.message || "Dados atualizados.", "success");
     } catch (err) {
