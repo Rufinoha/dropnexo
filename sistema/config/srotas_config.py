@@ -1096,6 +1096,285 @@ def marktplace_produtos_excluir():
         conn.close()
 
 
+# --- manutenção de tenant (DEV) ---
+
+MANUTENCAO_TENANT_PREFIX = "/configuracoes/manutencao-tenant"
+_TIPOS_NEGOCIO_OK = frozenset({"vendedor", "fornecedor", "hibrido"})
+_PLANOS_OK = frozenset({"starter", "professional", "enterprise"})
+
+
+def _contagens_tenant(cur, id_tenant: int) -> dict:
+    cur.execute(
+        """
+        SELECT
+          (SELECT COUNT(*)::int FROM tbl_produto WHERE id_tenant = %s),
+          (SELECT COUNT(*)::int FROM tbl_vinculo_vendedor_fornecedor WHERE id_tenant_fornecedor = %s),
+          (SELECT COUNT(*)::int FROM tbl_vinculo_vendedor_fornecedor WHERE id_tenant_vendedor = %s),
+          (SELECT COUNT(*)::int FROM tbl_pedido WHERE id_tenant_fornecedor = %s),
+          (SELECT COUNT(*)::int FROM tbl_pedido WHERE id_tenant_vendedor = %s),
+          (SELECT COUNT(*)::int FROM tbl_fornecedor_segmento WHERE id_tenant = %s)
+        """,
+        (id_tenant, id_tenant, id_tenant, id_tenant, id_tenant, id_tenant),
+    )
+    row = cur.fetchone() or (0, 0, 0, 0, 0, 0)
+    return {
+        "produtos": int(row[0] or 0),
+        "vinculos_como_fornecedor": int(row[1] or 0),
+        "vinculos_como_vendedor": int(row[2] or 0),
+        "pedidos_como_fornecedor": int(row[3] or 0),
+        "pedidos_como_vendedor": int(row[4] or 0),
+        "segmentos": int(row[5] or 0),
+    }
+
+
+@config_bp.get(MANUTENCAO_TENANT_PREFIX)
+@login_obrigatorio()
+def manutencao_tenant_pagina():
+    if not session.get("eh_desenvolvedor"):
+        return redirect(url_for("dashboard.index"))
+    return render_template("frm_config_manutencao_tenant.html", nav_ativo="config")
+
+
+@config_bp.get(f"{MANUTENCAO_TENANT_PREFIX}/dados")
+@login_obrigatorio()
+def manutencao_tenant_dados():
+    if (r := _exigir_dev()) is not None:
+        return r
+    q = (request.args.get("q") or "").strip()
+    tipo = (request.args.get("tipo") or "").strip().lower()
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        where = ["TRUE"]
+        params: list = []
+        if q:
+            where.append(
+                "(t.nome ILIKE %s OR t.slug ILIKE %s OR COALESCE(t.documento,'') ILIKE %s "
+                "OR CAST(t.id AS TEXT) = %s)"
+            )
+            like = f"%{q}%"
+            params.extend([like, like, like, q])
+        if tipo in _TIPOS_NEGOCIO_OK:
+            where.append("t.tipo_negocio = %s")
+            params.append(tipo)
+        cur.execute(
+            f"""
+            SELECT t.id, t.nome, t.slug, t.tipo_negocio, t.plano, t.ativo, t.documento,
+                   t.cidade, t.uf
+            FROM tbl_tenant t
+            WHERE {" AND ".join(where)}
+            ORDER BY t.id DESC
+            LIMIT 200
+            """,
+            params,
+        )
+        itens = []
+        for r in cur.fetchall():
+            itens.append(
+                {
+                    "id": int(r[0]),
+                    "nome": r[1] or "",
+                    "slug": r[2] or "",
+                    "tipo_negocio": (r[3] or "vendedor").lower(),
+                    "plano": (r[4] or "starter").lower(),
+                    "ativo": bool(r[5]),
+                    "documento": r[6] or "",
+                    "cidade": r[7] or "",
+                    "uf": r[8] or "",
+                }
+            )
+        return jsonify(success=True, itens=itens)
+    finally:
+        conn.close()
+
+
+@config_bp.get(f"{MANUTENCAO_TENANT_PREFIX}/<int:id_tenant>")
+@login_obrigatorio()
+def manutencao_tenant_detalhe(id_tenant: int):
+    if (r := _exigir_dev()) is not None:
+        return r
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT id, nome, slug, tipo_negocio, plano, ativo, documento,
+                   tipo_pessoa, nome_completo, cidade, uf, email_comercial, telefone_comercial
+            FROM tbl_tenant WHERE id = %s
+            """,
+            (id_tenant,),
+        )
+        row = cur.fetchone()
+        if not row:
+            return jsonify(success=False, message="Tenant não encontrado."), 404
+        contagens = _contagens_tenant(cur, id_tenant)
+        return jsonify(
+            success=True,
+            tenant={
+                "id": int(row[0]),
+                "nome": row[1] or "",
+                "slug": row[2] or "",
+                "tipo_negocio": (row[3] or "vendedor").lower(),
+                "plano": (row[4] or "starter").lower(),
+                "ativo": bool(row[5]),
+                "documento": row[6] or "",
+                "tipo_pessoa": row[7] or "",
+                "nome_completo": row[8] or "",
+                "cidade": row[9] or "",
+                "uf": row[10] or "",
+                "email_comercial": row[11] or "",
+                "telefone_comercial": row[12] or "",
+                "contagens": contagens,
+                "eh_tenant_sessao": int(session.get("id_tenant") or 0) == int(row[0]),
+            },
+        )
+    finally:
+        conn.close()
+
+
+@config_bp.post(f"{MANUTENCAO_TENANT_PREFIX}/salvar")
+@login_obrigatorio()
+def manutencao_tenant_salvar():
+    if (r := _exigir_dev()) is not None:
+        return r
+    from global_utils import plano_slug_banco
+
+    body = request.get_json(silent=True) or {}
+    try:
+        id_tenant = int(body.get("id") or 0)
+    except (TypeError, ValueError):
+        return jsonify(success=False, message="Tenant inválido."), 400
+    if id_tenant <= 0:
+        return jsonify(success=False, message="Tenant inválido."), 400
+
+    tipo = (body.get("tipo_negocio") or "").strip().lower()
+    if tipo not in _TIPOS_NEGOCIO_OK:
+        return jsonify(success=False, message="Tipo de negócio inválido."), 400
+
+    nome = (body.get("nome") or "").strip()
+    if not nome or len(nome) < 2:
+        return jsonify(success=False, message="Informe o nome do tenant."), 400
+
+    slug = (body.get("slug") or "").strip().lower()
+    slug = re.sub(r"[^a-z0-9\-]+", "-", slug).strip("-")
+    if not slug or len(slug) < 2:
+        return jsonify(success=False, message="Slug inválido."), 400
+
+    plano = plano_slug_banco(body.get("plano"))
+    if plano not in _PLANOS_OK:
+        plano = "starter"
+
+    ativo = bool(body.get("ativo"))
+    documento = re.sub(r"\D+", "", str(body.get("documento") or ""))
+    limpar_segmentos = bool(body.get("limpar_segmentos_fornecedor"))
+
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT tipo_negocio FROM tbl_tenant WHERE id = %s FOR UPDATE",
+            (id_tenant,),
+        )
+        row = cur.fetchone()
+        if not row:
+            return jsonify(success=False, message="Tenant não encontrado."), 404
+        tipo_antigo = (row[0] or "").lower()
+
+        cur.execute(
+            "SELECT id FROM tbl_tenant WHERE slug = %s AND id <> %s LIMIT 1",
+            (slug, id_tenant),
+        )
+        if cur.fetchone():
+            return jsonify(success=False, message="Slug já em uso por outro tenant."), 400
+
+        if documento:
+            cur.execute(
+                "SELECT id FROM tbl_tenant WHERE documento = %s AND id <> %s LIMIT 1",
+                (documento, id_tenant),
+            )
+            if cur.fetchone():
+                return jsonify(success=False, message="Documento já em uso por outro tenant."), 400
+
+        contagens = _contagens_tenant(cur, id_tenant)
+        avisos: list[str] = []
+        if tipo != tipo_antigo:
+            if tipo == "vendedor" and (
+                contagens["produtos"]
+                or contagens["vinculos_como_fornecedor"]
+                or contagens["pedidos_como_fornecedor"]
+            ):
+                avisos.append(
+                    "Tenant tinha dados de fornecedor; o tipo foi alterado mesmo assim. "
+                    "Considere híbrido se precisar do painel fornecedor."
+                )
+            if tipo == "fornecedor" and contagens["vinculos_como_vendedor"]:
+                avisos.append(
+                    "Tenant já tem vínculos como vendedor; confira se o perfil correto é híbrido."
+                )
+
+        cur.execute(
+            """
+            UPDATE tbl_tenant SET
+                nome = %s,
+                slug = %s,
+                tipo_negocio = %s,
+                plano = %s,
+                ativo = %s,
+                documento = NULLIF(%s, '')
+            WHERE id = %s
+            """,
+            (nome, slug, tipo, plano, ativo, documento, id_tenant),
+        )
+
+        segmentos_removidos = 0
+        if limpar_segmentos and tipo == "vendedor":
+            cur.execute(
+                "DELETE FROM tbl_fornecedor_segmento WHERE id_tenant = %s",
+                (id_tenant,),
+            )
+            segmentos_removidos = int(cur.rowcount or 0)
+
+        conn.commit()
+
+        sessao_atualizada = False
+        if int(session.get("id_tenant") or 0) == id_tenant:
+            from sistema.plataforma.sessao import modulo_padrao
+
+            session["tenant_nome"] = nome
+            session["tenant_slug"] = slug
+            session["tenant_plano"] = plano
+            session["tenant_tipo_negocio"] = tipo
+            session["modulo_ativo"] = modulo_padrao(tipo)
+            sessao_atualizada = True
+
+        msg = "Tenant atualizado."
+        if tipo != tipo_antigo:
+            msg = f"Tipo alterado de «{tipo_antigo}» para «{tipo}». Peça ao usuário para sair e entrar de novo."
+        if segmentos_removidos:
+            msg += f" {segmentos_removidos} segmento(s) de fornecedor removido(s)."
+
+        return jsonify(
+            success=True,
+            message=msg,
+            avisos=avisos,
+            sessao_atualizada=sessao_atualizada,
+            tenant={
+                "id": id_tenant,
+                "nome": nome,
+                "slug": slug,
+                "tipo_negocio": tipo,
+                "plano": plano,
+                "ativo": ativo,
+                "documento": documento,
+            },
+        )
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)[:300]), 400
+    finally:
+        conn.close()
+
+
 # --- gestao fornecedores ---
 
 

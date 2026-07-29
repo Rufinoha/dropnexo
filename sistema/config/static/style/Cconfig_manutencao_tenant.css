@@ -1,0 +1,84 @@
+.CfgMt_Aviso { margin-bottom: 1rem; }
+.CfgMt_Grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.9fr);
+  gap: 1.25rem;
+  align-items: start;
+}
+@media (max-width: 960px) {
+  .CfgMt_Grid { grid-template-columns: 1fr; }
+}
+.CfgMt_ListaCard,
+.CfgMt_FormCard {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 1rem 1.1rem;
+}
+.CfgMt_TabelaWrap { overflow-x: auto; margin-top: 0.75rem; }
+.CfgMt_Tabela tbody tr {
+  cursor: pointer;
+}
+.CfgMt_Tabela tbody tr:hover { background: #f8fafc; }
+.CfgMt_Tabela tbody tr.is-selected { background: #eff6ff; }
+.CfgMt_Hint { font-size: 0.875rem; color: #64748b; margin: 0.5rem 0 0; }
+.CfgMt_Campos {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+.CfgMt_Field { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.875rem; }
+.CfgMt_Field span { color: #334155; font-weight: 600; }
+.CfgMt_Field input,
+.CfgMt_Field select {
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 0.5rem 0.65rem;
+  font: inherit;
+}
+.CfgMt_Field--destaque select {
+  border-color: #021F81;
+  background: #f8fafc;
+  font-weight: 600;
+}
+.CfgMt_Switch {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  color: #334155;
+}
+.CfgMt_Counts {
+  margin-top: 1rem;
+  padding: 0.75rem;
+  background: #f8fafc;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  color: #475569;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.35rem 0.75rem;
+}
+.CfgMt_Warn {
+  margin-top: 0.75rem;
+  padding: 0.65rem 0.75rem;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: 8px;
+  color: #9a3412;
+  font-size: 0.85rem;
+}
+.CfgMt_Acoes { margin-top: 1rem; }
+.CfgMt_Badge {
+  display: inline-block;
+  padding: 0.12rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.CfgMt_Badge--vendedor { background: #dbeafe; color: #1e40af; }
+.CfgMt_Badge--fornecedor { background: #ffedd5; color: #9a3412; }
+.CfgMt_Badge--hibrido { background: #ede9fe; color: #5b21b6; }
+.CfgMt_MsgOk { color: #15803d; }
+.CfgMt_MsgErro { color: #b91c1c; }

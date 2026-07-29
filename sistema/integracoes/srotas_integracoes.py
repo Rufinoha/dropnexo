@@ -170,6 +170,15 @@ def url_icone_integracao(slug: str, *, icones_base_url: str = "") -> str:
     if slug == "tiktok":
         return url_for("tiktok.static", filename="imge/icone_tiktok.png")
     if slug == "amazon":
+        # Preferir PNG no static do hub (sempre disponível); blueprint amazon como fallback.
+        try:
+            from pathlib import Path
+
+            hub_png = Path(__file__).resolve().parent / "static" / "imge" / "integracoes" / "amazon.png"
+            if hub_png.is_file():
+                return url_for("integracoes.static", filename="imge/integracoes/amazon.png")
+        except Exception:
+            pass
         return url_for("amazon.static", filename="imge/icone_amazon.png")
     arquivo = _arquivo_icone_api(slug)
     if arquivo:

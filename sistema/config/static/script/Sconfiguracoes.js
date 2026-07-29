@@ -4,6 +4,12 @@
 
   const cards = [
     {
+      titulo: "Manutenção de tenant",
+      texto: "Corrigir tipo (vendedor / fornecedor / híbrido), plano, ativo e dados básicos — só desenvolvedor.",
+      rota: "/configuracoes/manutencao-tenant",
+      iconeTech: "configuracoes",
+    },
+    {
       titulo: "Fornecedores na plataforma",
       texto: "Cadastro PJ, ativação e depósitos dos tenants fornecedor (somente desenvolvedor).",
       rota: "/configuracoes/fornecedores-plataforma",

@@ -560,6 +560,64 @@
     return map[origem] || "";
   }
 
+  function linkDaImagem(img) {
+    const raw = (img?.caminho || img?.url || "").trim();
+    return raw;
+  }
+
+  async function abrirSwalLinkImagem(img, idx) {
+    const link = linkDaImagem(img);
+    if (!link) {
+      await Swal.fire({
+        icon: "info",
+        title: "Sem link",
+        text: "Esta imagem não tem URL/caminho cadastrado.",
+        confirmButtonColor: "#021F81",
+      });
+      return;
+    }
+    const isHttp = /^https?:\/\//i.test(link);
+    const ordem = rotuloOrdemImagem(idx);
+    const html = `
+      <p style="text-align:left;margin:0 0 8px;font-size:13px;color:#64748b">${ordem} · ${(img.extensao || "—").toUpperCase()}${rotuloOrigem(img.origem) ? ` · ${rotuloOrigem(img.origem)}` : ""}</p>
+      <input id="swal_img_link" class="swal2-input" value="${link.replace(/"/g, "&quot;")}" readonly style="font-size:12px;width:100%;box-sizing:border-box;margin:0" />
+    `;
+    const res = await Swal.fire({
+      title: "Link da imagem",
+      html,
+      showCancelButton: true,
+      showDenyButton: isHttp,
+      confirmButtonText: "Copiar",
+      denyButtonText: "Abrir",
+      cancelButtonText: "Fechar",
+      confirmButtonColor: "#021F81",
+      denyButtonColor: "#64748b",
+      focusConfirm: false,
+      preConfirm: async () => {
+        const input = document.getElementById("swal_img_link");
+        const txt = (input?.value || link).trim();
+        try {
+          await navigator.clipboard.writeText(txt);
+          return true;
+        } catch {
+          input?.select?.();
+          Swal.showValidationMessage("Não foi possível copiar. Selecione e copie manualmente (Ctrl+C).");
+          return false;
+        }
+      },
+    });
+    if (res.isConfirmed) {
+      await Swal.fire({
+        icon: "success",
+        title: "Copiado",
+        timer: 1200,
+        showConfirmButton: false,
+      });
+    } else if (res.isDenied && isHttp) {
+      window.open(link, "_blank", "noopener,noreferrer");
+    }
+  }
+
   function renderGaleria() {
     if (!el.galeria_imagens) return;
     if (el.imgContador) el.imgContador.textContent = `${galeriaImagens.length} / ${MAX_IMAGENS} imagens`;
@@ -573,7 +631,7 @@
     const drag = podeReordenarImagens();
     el.galeria_imagens.innerHTML = galeriaImagens
       .map(
-        (img, idx) => `<div class="Cat_GaleriaItem${drag ? " is-draggable" : ""}" data-idx="${idx}" ${drag ? 'draggable="true"' : ""}>
+        (img, idx) => `<div class="Cat_GaleriaItem${drag ? " is-draggable" : ""}" data-idx="${idx}" title="Duplo clique para ver o link" ${drag ? 'draggable="true"' : ""}>
         <span class="Cat_GaleriaOrdem" title="Arraste para reordenar">${rotuloOrdemImagem(idx)}</span>
         <button type="button" class="Cat_GaleriaRm" data-id="${img.id ?? ""}" data-idx="${idx}" title="Remover">×</button>
         <img src="${img.url || ""}" alt="" loading="lazy" draggable="false" />
@@ -585,6 +643,14 @@
       )
       .join("");
     if (el.avisoImgOrdem) el.avisoImgOrdem.hidden = !drag;
+    el.galeria_imagens.querySelectorAll(".Cat_GaleriaItem").forEach((item) => {
+      item.addEventListener("dblclick", (ev) => {
+        if (ev.target.closest(".Cat_GaleriaRm")) return;
+        const idx = Number(item.dataset.idx);
+        const img = galeriaImagens[idx];
+        if (img) abrirSwalLinkImagem(img, idx);
+      });
+    });
     if (drag) {
       el.galeria_imagens.querySelectorAll(".Cat_GaleriaItem.is-draggable").forEach((item) => {
         item.addEventListener("dragstart", (ev) => {
