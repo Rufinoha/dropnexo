@@ -177,6 +177,178 @@ def tupla_campos_produto_sql(campos: dict) -> tuple:
     )
 
 
+def _condicao_para_bling(val: Any) -> int | None:
+    """Bling: 1=Novo, 2=Usado, 3=Recondicionado."""
+    if val in (None, ""):
+        return None
+    if isinstance(val, (int, float)) and int(val) in (1, 2, 3):
+        return int(val)
+    u = str(val).strip().upper()
+    if u in ("NOVO", "N", "1"):
+        return 1
+    if u in ("USADO", "U", "2"):
+        return 2
+    if u in ("RECONDICIONADO", "R", "3"):
+        return 3
+    return None
+
+
+def _producao_para_bling(val: Any) -> str | None:
+    """Bling tipoProducao: P=Própria, T=Terceiros."""
+    if val in (None, ""):
+        return None
+    u = str(val).strip().upper()
+    if u in ("P", "PROPRIA", "PRÓPRIA", "PROPRIO", "PRÓPRIO"):
+        return "P"
+    if u in ("T", "TERCEIROS", "TERCEIRO"):
+        return "T"
+    if u in ("P", "T"):
+        return u
+    return u[:1] if u[:1] in ("P", "T") else None
+
+
+def montar_payload_export_bling(
+    *,
+    nome: str,
+    sku: str,
+    preco: float,
+    unidade: str | None = None,
+    descricao: str | None = None,
+    preco_custo: float | None = None,
+    marca: str | None = None,
+    gtin: str | None = None,
+    ncm: str | None = None,
+    cest: str | None = None,
+    origem_fiscal: str | None = None,
+    condicao: str | None = None,
+    peso_liquido_kg: float | None = None,
+    peso_bruto_kg: float | None = None,
+    altura_cm: float | None = None,
+    largura_cm: float | None = None,
+    profundidade_cm: float | None = None,
+    moq: int | None = None,
+    volumes: int | None = None,
+    frete_gratis: bool | None = None,
+    producao: str | None = None,
+    ativo: bool = True,
+    urls_imagem: list[str] | None = None,
+) -> dict[str, Any]:
+    """Monta payload POST/PUT /produtos a partir dos campos DropNexo mapeáveis no Bling."""
+    sku_s = (sku or "").strip()
+    payload: dict[str, Any] = {
+        "nome": (nome or sku_s or "Produto")[:120],
+        "codigo": sku_s,
+        "preco": float(preco or 0),
+        "tipo": "P",
+        "situacao": "A" if ativo else "I",
+        "formato": "S",
+        "unidade": ((unidade or "UN").strip()[:20] or "UN"),
+    }
+
+    desc = (descricao or "").strip()
+    if desc:
+        # Bling: curta + complementar
+        if len(desc) <= 5000:
+            payload["descricaoCurta"] = desc
+        else:
+            payload["descricaoCurta"] = desc[:5000]
+            payload["descricaoComplementar"] = desc[5000:15000]
+
+    pc = _f(preco_custo)
+    if pc is not None:
+        payload["precoCusto"] = pc
+
+    marca_s = _s(marca, 120)
+    if marca_s:
+        payload["marca"] = marca_s
+
+    gtin_s = _s(gtin, 20)
+    if gtin_s:
+        payload["gtin"] = gtin_s
+        # Mesmo EAN no 2º campo de código de barras do Bling (UI: GTIN/EAN tributário / embalagem).
+        payload["gtinEmbalagem"] = gtin_s
+
+    ncm_s = _s(ncm, 10)
+    cest_s = _s(cest, 10)
+    trib: dict[str, Any] = {}
+    if ncm_s:
+        payload["ncm"] = ncm_s
+        trib["ncm"] = ncm_s
+    if cest_s:
+        trib["cest"] = cest_s
+    if origem_fiscal not in (None, ""):
+        try:
+            orig = int(str(origem_fiscal).strip())
+            if 0 <= orig <= 8:
+                trib["origem"] = orig
+        except (TypeError, ValueError):
+            pass
+    if trib:
+        payload["tributacao"] = trib
+
+    cond = _condicao_para_bling(condicao)
+    if cond is not None:
+        payload["condicao"] = cond
+
+    pl = _f(peso_liquido_kg)
+    pb = _f(peso_bruto_kg)
+    if pl is not None:
+        payload["pesoLiquido"] = pl
+    if pb is not None:
+        payload["pesoBruto"] = pb
+    elif pl is not None:
+        payload["pesoBruto"] = pl
+
+    alt = _f(altura_cm)
+    lar = _f(largura_cm)
+    pro = _f(profundidade_cm)
+    if any(v is not None for v in (alt, lar, pro)):
+        dims: dict[str, Any] = {"unidadeMedida": 1}  # cm
+        if alt is not None:
+            dims["altura"] = alt
+        if lar is not None:
+            dims["largura"] = lar
+        if pro is not None:
+            dims["profundidade"] = pro
+        payload["dimensoes"] = dims
+
+    if moq not in (None, ""):
+        try:
+            payload["itensPorCaixa"] = max(1, int(moq))
+        except (TypeError, ValueError):
+            pass
+
+    if volumes not in (None, ""):
+        try:
+            payload["volumes"] = int(volumes)
+        except (TypeError, ValueError):
+            pass
+
+    if frete_gratis is not None:
+        payload["freteGratis"] = bool(frete_gratis)
+
+    prod = _producao_para_bling(producao)
+    if prod:
+        payload["tipoProducao"] = prod
+
+    links: list[str] = []
+    seen: set[str] = set()
+    for u in urls_imagem or []:
+        link = (u or "").strip()
+        if not link or link in seen:
+            continue
+        if not link.lower().startswith(("http://", "https://")):
+            continue
+        seen.add(link)
+        links.append(link)
+        if len(links) >= 6:
+            break
+    if links:
+        payload["midia"] = {"imagens": {"externas": [{"link": u} for u in links]}}
+
+    return payload
+
+
 def preco_referencia_grupo(pai: dict, variacoes: list[dict]) -> float:
     """Preço do pai: maior preço entre variações ou preço do pai."""
     precos = [_f(pai.get("preco")) or 0.0]

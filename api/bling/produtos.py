@@ -236,10 +236,10 @@ from typing import Any
 
 from api.bling.campos import (
     extrair_campos_produto_bling,
+    montar_payload_export_bling,
     preco_referencia_grupo,
     tupla_campos_produto_sql,
 )
-from api.bling.produtos import aplicar_imagens_produto, extrair_urls_imagem_bling
 from api.bling.categorias_bling import (
     extrair_id_categoria_produto,
     garantir_categoria_bling,
@@ -1447,6 +1447,136 @@ from typing import Any
 
 from api.bling.cliente import api_request, listar_depositos_bling
 from global_utils import agora_utc, obter_base_url
+import hashlib
+import hmac
+import os
+import time
+from urllib.parse import urlencode
+
+
+_IMG_PUBLICA_VALIDADE_S = 7 * 24 * 3600  # 7 dias — Bling precisa baixar na importação
+
+
+def assinatura_imagem_publica(caminho: str, exp: int) -> str:
+    secret = (os.getenv("SECRET_KEY") or "dev-inseguro").encode("utf-8")
+    raw = f"{caminho}|{exp}".encode("utf-8")
+    return hmac.new(secret, raw, hashlib.sha256).hexdigest()[:40]
+
+
+def validar_assinatura_imagem_publica(caminho: str, exp: int, sig: str) -> bool:
+    try:
+        exp_i = int(exp)
+    except (TypeError, ValueError):
+        return False
+    if exp_i < int(time.time()):
+        return False
+    esperado = assinatura_imagem_publica(caminho, exp_i)
+    return hmac.compare_digest(esperado, (sig or "").strip())
+
+
+def url_imagem_export_bling(caminho: str | None) -> str | None:
+    """URL absoluta pública para o Bling baixar a imagem (http externa ou local assinada)."""
+    s = (caminho or "").strip()
+    if not s:
+        return None
+    if s.lower().startswith(("http://", "https://")):
+        return s
+    rel = s.replace("\\", "/").lstrip("/")
+    if rel.lower().startswith("static/"):
+        rel = rel[7:]
+    # Só arquivos de produto sob upload/tenant*/produtos/
+    if not rel.lower().startswith("upload/tenant") or "/produtos/" not in rel.lower():
+        return None
+    exp = int(time.time()) + _IMG_PUBLICA_VALIDADE_S
+    sig = assinatura_imagem_publica(rel, exp)
+    base = obter_base_url().rstrip("/")
+    qs = urlencode({"c": rel, "e": exp, "s": sig})
+    return f"{base}/api/produto-imagem/publico?{qs}"
+
+
+def _f_bling(valor) -> float | None:
+    if valor in (None, ""):
+        return None
+    try:
+        n = float(valor)
+    except (TypeError, ValueError):
+        return None
+    if n != n:
+        return None
+    return n
+
+
+def _montar_payload_produto(
+    row: tuple,
+    *,
+    urls_imagem: list[str] | None = None,
+) -> dict[str, Any]:
+    (
+        _pv_id,
+        id_variante,
+        sku,
+        nome,
+        preco,
+        _estoque,
+        descricao,
+        unidade,
+        imagem_url,
+        ncm,
+        gtin,
+        peso_liq,
+        peso_bruto,
+        altura,
+        largura,
+        profundidade,
+        _id_produto,
+        preco_custo,
+        marca,
+        cest,
+        origem_fiscal,
+        condicao,
+        moq,
+        volumes,
+        frete_gratis,
+        producao,
+        ativo,
+    ) = row
+
+    links: list[str] = []
+    seen: set[str] = set()
+    for cand in [imagem_url, *(urls_imagem or [])]:
+        link = url_imagem_export_bling(cand)
+        if not link or link in seen:
+            continue
+        seen.add(link)
+        links.append(link)
+        if len(links) >= 6:
+            break
+
+    return montar_payload_export_bling(
+        nome=nome or "",
+        sku=(sku or "").strip(),
+        preco=float(preco or 0),
+        unidade=unidade,
+        descricao=descricao,
+        preco_custo=_f_bling(preco_custo),
+        marca=marca,
+        gtin=gtin,
+        ncm=ncm,
+        cest=cest,
+        origem_fiscal=origem_fiscal,
+        condicao=condicao or None,
+        peso_liquido_kg=_f_bling(peso_liq),
+        peso_bruto_kg=_f_bling(peso_bruto),
+        altura_cm=_f_bling(altura),
+        largura_cm=_f_bling(largura),
+        profundidade_cm=_f_bling(profundidade),
+        moq=moq,
+        volumes=volumes,
+        frete_gratis=bool(frete_gratis) if frete_gratis is not None else None,
+        producao=producao,
+        ativo=bool(ativo) if ativo is not None else True,
+        urls_imagem=links,
+    )
 
 
 def _registrar_log(
@@ -1527,112 +1657,6 @@ def _deposito_bling_padrao(id_tenant: int) -> str | None:
     return None
 
 
-def _f_bling(valor) -> float | None:
-    if valor in (None, ""):
-        return None
-    try:
-        n = float(valor)
-    except (TypeError, ValueError):
-        return None
-    if n != n:  # NaN
-        return None
-    return n
-
-
-def _link_imagem_publica_bling(caminho: str | None) -> str | None:
-    """URL absoluta que o Bling consiga baixar (só http/https públicos)."""
-    s = (caminho or "").strip()
-    if not s:
-        return None
-    if s.lower().startswith(("http://", "https://")):
-        return s
-    # Caminhos locais (upload/…) exigem sessão no DropNexo — Bling não acessa.
-    return None
-
-
-def _montar_payload_produto(
-    row: tuple,
-    *,
-    urls_imagem: list[str] | None = None,
-) -> dict[str, Any]:
-    (
-        _pv_id,
-        id_variante,
-        sku,
-        nome,
-        preco,
-        _estoque,
-        descricao,
-        unidade,
-        imagem_url,
-        ncm,
-        gtin,
-        peso_liq,
-        peso_bruto,
-        altura,
-        largura,
-        profundidade,
-        _id_produto,
-    ) = row
-    payload: dict[str, Any] = {
-        "nome": (nome or sku or f"Variante {id_variante}")[:120],
-        "codigo": sku,
-        "preco": float(preco or 0),
-        "tipo": "P",
-        "situacao": "A",
-        "formato": "S",
-        "unidade": (unidade or "UN")[:20],
-    }
-    if descricao:
-        payload["descricaoCurta"] = str(descricao)[:5000]
-    if ncm:
-        ncm_s = str(ncm).strip()[:10]
-        payload["ncm"] = ncm_s
-        payload["tributacao"] = {"ncm": ncm_s}
-    if gtin:
-        gtin_s = str(gtin).strip()[:20]
-        payload["gtin"] = gtin_s
-        # Mesmo valor no GTIN tributário (pedido comum quando há um único EAN).
-        payload["gtinTributario"] = gtin_s
-        payload["gtinEmbalagem"] = gtin_s
-
-    pl = _f_bling(peso_liq)
-    pb = _f_bling(peso_bruto)
-    if pl is not None:
-        payload["pesoLiquido"] = pl
-    if pb is not None:
-        payload["pesoBruto"] = pb
-    elif pl is not None:
-        payload["pesoBruto"] = pl
-
-    alt = _f_bling(altura)
-    lar = _f_bling(largura)
-    pro = _f_bling(profundidade)
-    if any(v is not None for v in (alt, lar, pro)):
-        dims: dict[str, Any] = {"unidadeMedida": 1}  # 1 = centímetros (DN armazena em cm)
-        if alt is not None:
-            dims["altura"] = alt
-        if lar is not None:
-            dims["largura"] = lar
-        if pro is not None:
-            dims["profundidade"] = pro
-        payload["dimensoes"] = dims
-
-    links: list[str] = []
-    seen: set[str] = set()
-    for cand in [imagem_url, *(urls_imagem or [])]:
-        link = _link_imagem_publica_bling(cand)
-        if not link or link in seen:
-            continue
-        seen.add(link)
-        links.append(link)
-        if len(links) >= 6:
-            break
-    if links:
-        payload["midia"] = {"imagens": {"externas": [{"link": u} for u in links]}}
-    return payload
-
-
 def _exportar_estoque_variante(
     cur,
     id_tenant: int,
@@ -1709,7 +1733,17 @@ def exportar_produtos_vendedor(
                COALESCE(v.altura_cm, p.altura_cm),
                COALESCE(v.largura_cm, p.largura_cm),
                COALESCE(v.profundidade_cm, p.profundidade_cm),
-               p.id
+               p.id,
+               COALESCE(v.preco_custo, p.preco_custo, p.valor_drop),
+               p.marca,
+               p.cest,
+               p.origem_fiscal,
+               COALESCE(NULLIF(TRIM(p.condicao), ''), NULLIF(TRIM(p.referencia), '')),
+               COALESCE(p.moq, 1),
+               p.volumes,
+               COALESCE(p.frete_gratis, FALSE),
+               p.producao,
+               COALESCE(v.ativo, p.ativo, TRUE)
         FROM tbl_produto_vendedor pv
         JOIN tbl_produto_variante v ON v.id = pv.id_variante
         JOIN tbl_produto p ON p.id = pv.id_produto
@@ -1735,10 +1769,9 @@ def exportar_produtos_vendedor(
             (ids_produtos,),
         )
         for id_prod, caminho in cur.fetchall():
-            link = _link_imagem_publica_bling(caminho)
-            if not link:
+            if not (caminho or "").strip():
                 continue
-            galeria_por_produto.setdefault(int(id_prod), []).append(link)
+            galeria_por_produto.setdefault(int(id_prod), []).append(caminho)
 
     exportados = 0
     atualizados = 0

@@ -1115,7 +1115,6 @@ import json
 from typing import Any
 
 from api.bling.cliente import obter_categoria_produto, obter_produto
-from api.bling.produtos import _iterar_listas_produtos, _preparar_jobs_importacao
 from core.dominio import flatten_arvore_com_caminho, montar_arvore_categorias
 
 
@@ -1157,6 +1156,8 @@ def coletar_ids_categoria_bling_do_escopo(
     incluir_subcategorias: bool,
 ) -> set[str]:
     """Categorias Bling usadas pelos produtos do lote (+ ancestrais)."""
+    from api.bling.produtos import _iterar_listas_produtos, _preparar_jobs_importacao
+
     _, ids_categoria_api = _montar_filtro_categorias_api(
         id_tenant,
         ids_categorias_bling=ids_categorias_bling,
@@ -1309,6 +1310,8 @@ def pre_analisar_mapeamento_categorias(
 
     exibir_modal = bool(pendentes) or any(m.get("editavel") for m in mapeadas)
     drop = listar_categorias_dropnexo_tenant(cur, id_tenant)
+    from api.bling.produtos import _iterar_listas_produtos
+
     _, ids_api = _montar_filtro_categorias_api(
         id_tenant,
         ids_categorias_bling=ids_categorias_bling,
