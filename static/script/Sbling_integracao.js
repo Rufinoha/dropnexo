@@ -35,6 +35,10 @@
   const chkPedidosExportarAuto = document.getElementById("bl_pedidos_exportar_auto");
   const inputPedidosDias = document.getElementById("bl_pedidos_dias");
   const ultimaSyncProdutosVd = document.getElementById("bl_ultima_sync_produtos_vd");
+  const exportResultVd = document.getElementById("bl_export_result_vd");
+  const exportStatsVd = document.getElementById("bl_export_stats_vd");
+  const exportFalhasVd = document.getElementById("bl_export_falhas_vd");
+  const exportFalhasListVd = document.getElementById("bl_export_falhas_list_vd");
   const ultimaSyncPedidosFn = document.getElementById("bl_ultima_sync_pedidos_fn");
   const pedidosExportWrap = document.getElementById("bl_pedidos_export_wrap");
   const alertDep = document.getElementById("bl_estoque_alert_dep");
@@ -1417,6 +1421,54 @@
     return j;
   }
 
+  function renderExportResultadoVendedor(dados) {
+    if (!exportResultVd || !exportStatsVd) return;
+    const d = dados || {};
+    const exportados = Number(d.exportados) || 0;
+    const atualizados = Number(d.atualizados) || 0;
+    const ignorados = Number(d.ignorados) || 0;
+    const estoque = Number(d.estoque_sincronizado) || 0;
+    const falhas = Array.isArray(d.falhas) ? d.falhas : [];
+    const semImg = Number(d.sem_imagem_publica) || 0;
+
+    exportResultVd.hidden = false;
+    exportStatsVd.innerHTML = [
+      `<span class="Bl_ExportStat is-ok"><strong>${exportados}</strong> exportados</span>`,
+      `<span class="Bl_ExportStat is-ok"><strong>${atualizados}</strong> atualizados</span>`,
+      `<span class="Bl_ExportStat${ignorados ? " is-warn" : ""}"><strong>${ignorados}</strong> ignorados</span>`,
+      `<span class="Bl_ExportStat"><strong>${estoque}</strong> estoque</span>`,
+      `<span class="Bl_ExportStat${falhas.length ? " is-erro" : " is-ok"}"><strong>${falhas.length}</strong> erros</span>`,
+      semImg
+        ? `<span class="Bl_ExportStat is-warn"><strong>${semImg}</strong> sem imagem pública</span>`
+        : "",
+    ].join("");
+
+    if (exportFalhasVd && exportFalhasListVd) {
+      if (!falhas.length) {
+        exportFalhasVd.hidden = true;
+        exportFalhasListVd.innerHTML = "";
+      } else {
+        exportFalhasVd.hidden = false;
+        exportFalhasListVd.innerHTML = falhas
+          .slice(0, 80)
+          .map(function (f) {
+            const sku = (f && f.sku) || "—";
+            const motivo = (f && f.motivo) || "Erro";
+            return (
+              '<li class="Bl_LogItem is-erro">' +
+              '<span class="Bl_LogStatus">erro</span>' +
+              '<span class="Bl_LogCorpo"><strong>' +
+              String(sku).replace(/</g, "&lt;") +
+              "</strong> — " +
+              String(motivo).replace(/</g, "&lt;") +
+              "</span></li>"
+            );
+          })
+          .join("");
+      }
+    }
+  }
+
   async function salvarEstoque() {
     const body = {
       estoque_baixa_pedido: chkBaixa?.checked === true,
@@ -1490,11 +1542,11 @@
 
   btnSyncProdutosVd?.addEventListener("click", async () => {
     const ok = await Swal.fire({
-      title: "Sincronizar Meus produtos?",
-      text: "Produtos ativos com SKU serão criados ou atualizados no Bling, com estoque quando habilitado.",
+      title: "Exportar Meus produtos ao Bling?",
+      text: "Produtos ativos com SKU serão criados ou atualizados no Bling (peso, dimensões, NCM, GTIN e imagem quando houver URL pública), com estoque se habilitado.",
       icon: "question",
       showCancelButton: true,
-      confirmButtonText: "Sincronizar",
+      confirmButtonText: "Exportar",
       cancelButtonText: "Cancelar",
       confirmButtonColor: "#021F81",
     });
@@ -1502,10 +1554,20 @@
     btnSyncProdutosVd.disabled = true;
     try {
       const j = await syncProdutos("vendedor");
+      const dados = j.dados || {};
+      renderExportResultadoVendedor(dados);
+      const nFalhas = Number(dados.total_falhas) || (Array.isArray(dados.falhas) ? dados.falhas.length : 0);
       await Swal.fire({
-        icon: "success",
-        title: "Sincronização concluída",
-        text: j.message || j.dados?.message || "Produtos enviados ao Bling.",
+        icon: nFalhas && !(dados.exportados || dados.atualizados) ? "error" : nFalhas ? "warning" : "success",
+        title: nFalhas ? "Exportação concluída com avisos" : "Exportação concluída",
+        html:
+          `<p>${(j.message || dados.message || "Produtos enviados ao Bling.").replace(/</g, "&lt;")}</p>` +
+          `<p style="margin-top:0.6rem;font-size:0.9rem">` +
+          `<strong>${Number(dados.exportados) || 0}</strong> exportados · ` +
+          `<strong>${Number(dados.atualizados) || 0}</strong> atualizados · ` +
+          `<strong>${nFalhas}</strong> erros` +
+          `</p>` +
+          (nFalhas ? "<p style=\"margin-top:0.4rem;font-size:0.85rem;color:#92400e\">Veja o log de erros abaixo do botão.</p>" : ""),
         confirmButtonColor: "#021F81",
       });
       await carregarStatus();

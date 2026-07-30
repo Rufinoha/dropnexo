@@ -3,7 +3,7 @@
 {% block title %}Bling — Integrações — {{ MARCA_NOME }}{% endblock %}
 {% block topbar_title %}Integração Bling{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('static', filename='style/Cbling_integracao.css') }}?v=19" />
+<link rel="stylesheet" href="{{ url_for('static', filename='style/Cbling_integracao.css') }}?v=20" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal Bl_Wrap">
@@ -232,10 +232,19 @@
 
       <div class="Bl_Actions Bl_Actions--config">
         <button type="button" class="Cl_BtnSalvar" id="bl_btn_salvar_produtos">Salvar</button>
-        <button type="button" class="Cl_botaoprimario" id="bl_btn_sync_produtos_vd">Sincronizar agora</button>
+        <button type="button" class="Cl_botaoprimario" id="bl_btn_sync_produtos_vd">Exportar produtos agora</button>
       </div>
 
       <p class="Bl_Meta" id="bl_ultima_sync_produtos_vd"></p>
+
+      <div class="Bl_ExportResult" id="bl_export_result_vd" hidden>
+        <h4 class="Bl_ExportResultTitle">Última exportação</h4>
+        <div class="Bl_ExportStats" id="bl_export_stats_vd"></div>
+        <div class="Bl_ExportFalhas" id="bl_export_falhas_vd" hidden>
+          <strong>Log de erros</strong>
+          <ul class="Bl_LogList" id="bl_export_falhas_list_vd"></ul>
+        </div>
+      </div>
       {% else %}
       <section class="Bl_EstoqueBlock">
         <h3 class="Bl_EstoqueBlockTitle">Produtos e estoque</h3>
@@ -435,5 +444,5 @@
 </div>
 {% endblock %}
 {% block page_js %}
-<script src="{{ url_for('static', filename='script/Sbling_integracao.js') }}?v=32"></script>
+<script src="{{ url_for('static', filename='script/Sbling_integracao.js') }}?v=33"></script>
 {% endblock %}

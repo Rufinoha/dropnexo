@@ -991,6 +991,77 @@
   100% { transform: translateX(72px); opacity: 0.35; }
 }
 
+.Bl_ExportResult {
+  margin-top: 1rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.Bl_ExportResultTitle {
+  margin: 0 0 0.65rem;
+  font-size: 0.92rem;
+  color: #0f172a;
+}
+
+.Bl_ExportStats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-bottom: 0.5rem;
+}
+
+.Bl_ExportStat {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.55rem;
+  border-radius: 999px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  font-size: 0.8rem;
+  color: #334155;
+}
+
+.Bl_ExportStat strong {
+  color: #0f172a;
+}
+
+.Bl_ExportStat.is-ok {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.Bl_ExportStat.is-warn {
+  border-color: #fde68a;
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.Bl_ExportStat.is-erro {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.Bl_ExportFalhas {
+  margin-top: 0.65rem;
+}
+
+.Bl_ExportFalhas strong {
+  display: block;
+  margin-bottom: 0.4rem;
+  font-size: 0.82rem;
+  color: #991b1b;
+}
+
+.Bl_ExportFalhas .Bl_LogList {
+  max-height: 220px;
+  overflow: auto;
+}
+
 @media (max-width: 720px) {
   .Bl_SyncGrid { grid-template-columns: 1fr; }
   .Bl_SubTab { font-size: 0.78rem; padding: 0.5rem 0.45rem; }
