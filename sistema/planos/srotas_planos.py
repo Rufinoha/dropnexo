@@ -493,7 +493,7 @@ def meu_plano():
 @planos_bp.get("/abrir-chamado")
 @login_obrigatorio()
 def abrir_chamado():
-    """Compat: redireciona para a Central de Demandas (HubSupport)."""
+    """Compat: redireciona para a Central de Chamados (HubSupport)."""
     from flask import redirect, url_for
 
     return redirect(url_for("demandas.demandas_pagina"))

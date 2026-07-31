@@ -172,6 +172,12 @@ class HubSupportClient:
             json_body={"corpo": corpo},
         )
 
+    def listar_anexos(self, chamado_ref: str | int) -> Any:
+        from urllib.parse import quote
+
+        ref = quote(str(chamado_ref), safe="")
+        return self.request("GET", f"chamados/{ref}/anexos", timeout=12, max_retries=1)
+
     def enviar_anexo(
         self,
         chamado_external_id: str,

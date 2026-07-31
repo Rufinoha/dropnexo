@@ -17,6 +17,9 @@ build/
 upload/**
 !upload/.gitkeep
 
+# Anexos espelhados de demandas (HubSupport) — dados locais
+static/anexos/
+
 # Certificados
 *.p12
 

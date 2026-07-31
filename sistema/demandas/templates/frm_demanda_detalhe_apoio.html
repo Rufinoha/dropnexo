@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Chamado</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style/global_utils.css') }}">
-  <link rel="stylesheet" href="{{ url_for('demandas.static', filename='style/Cdemanda_detalhe_apoio.css') }}?v=2">
+  <link rel="stylesheet" href="{{ url_for('demandas.static', filename='style/Cdemanda_detalhe_apoio.css') }}?v=4">
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </head>
 <body class="dem-det-body">
@@ -16,7 +16,7 @@
     </div>
     <div class="Cl_Titulo">
       <h1 id="tituloPagina">Chamado</h1>
-      <div class="Cl_Subtitulo" id="dem_apoio_subtitulo">Central de Demandas</div>
+      <div class="Cl_Subtitulo" id="dem_apoio_subtitulo">Central de Chamados</div>
     </div>
     <div class="Cl_MenuID dem-det-proto">
       <label for="id">Nº do chamado</label>
@@ -35,16 +35,22 @@
       </div>
 
       <nav class="dem-nav-menu" role="tablist">
-        <button type="button" class="dem-nav-item is-active" data-tab="chamado" role="tab" aria-selected="true">
+        <button type="button" class="dem-nav-item" data-tab="chamado" role="tab" aria-selected="false">
           <span class="dem-nav-copy">
             <strong>Chamado</strong>
             <em>Dados e solicitante</em>
           </span>
         </button>
-        <button type="button" class="dem-nav-item" data-tab="conversa" role="tab" aria-selected="false">
+        <button type="button" class="dem-nav-item is-active" data-tab="conversa" role="tab" aria-selected="true">
           <span class="dem-nav-copy">
             <strong>Conversa</strong>
             <em id="dem_navConversaMeta">Mensagens</em>
+          </span>
+        </button>
+        <button type="button" class="dem-nav-item" data-tab="anexos" role="tab" aria-selected="false">
+          <span class="dem-nav-copy">
+            <strong>Anexos</strong>
+            <em id="dem_navAnexosMeta">Arquivos</em>
           </span>
         </button>
       </nav>
@@ -55,7 +61,7 @@
     </aside>
 
     <main class="dem-main">
-      <section class="dem-tab is-active" id="dem_tab_chamado" role="tabpanel" data-tab-panel="chamado">
+      <section class="dem-tab" id="dem_tab_chamado" role="tabpanel" data-tab-panel="chamado" hidden>
         <div class="dem-card">
           <div class="dem-card-head">
             <h2>Informações do chamado</h2>
@@ -68,7 +74,7 @@
             </div>
             <div class="dem-field">
               <label>Status</label>
-              <input type="text" id="dem_campoStatus" disabled title="Alterado apenas pelo HubSupport">
+              <input type="text" id="dem_campoStatus" disabled>
             </div>
             <div class="dem-field">
               <label>Prioridade</label>
@@ -94,7 +100,7 @@
         </div>
       </section>
 
-      <section class="dem-tab" id="dem_tab_conversa" role="tabpanel" data-tab-panel="conversa" hidden>
+      <section class="dem-tab is-active" id="dem_tab_conversa" role="tabpanel" data-tab-panel="conversa">
         <div class="dem-card dem-card--thread">
           <div class="dem-card-head">
             <h2>Conversa</h2>
@@ -108,10 +114,40 @@
         <div class="dem-card dem-card--composer" id="dem_respostaBox">
           <div class="dem-card-head">
             <h2>Nova resposta</h2>
-            <span class="dem-card-hint">Mensagem obrigatória</span>
+            <span class="dem-card-hint">Mensagem ou anexo</span>
           </div>
           <label class="dem-sr-only" for="dem_respostaTxt">Mensagem</label>
           <textarea id="dem_respostaTxt" rows="4" placeholder="Escreva sua mensagem ao suporte…"></textarea>
+          <div class="dem-drop">
+            <label class="dem-file" for="dem_respostaAnexos">
+              <span class="dem-file-copy">
+                <strong>Anexar arquivos</strong>
+                <em id="dem_fileNome">PDF, imagem ou planilha · opcional</em>
+              </span>
+              <input type="file" id="dem_respostaAnexos" multiple hidden />
+            </label>
+          </div>
+        </div>
+      </section>
+
+      <section class="dem-tab" id="dem_tab_anexos" role="tabpanel" data-tab-panel="anexos" hidden>
+        <div class="dem-card" id="dem_anexosChamado">
+          <div class="dem-card-head">
+            <h2>Anexos do chamado</h2>
+            <span class="dem-card-hint" id="dem_anexosHint">—</span>
+          </div>
+          <ul class="dem-anexos-lista" id="dem_anexosChamadoLista"></ul>
+          <div class="dem-anexos-vazio" id="dem_anexosVazio" hidden>
+            <strong id="dem_anexosVazioTitulo">Sem arquivos</strong>
+            <span id="dem_anexosVazioTxt">Nenhum anexo registrado neste chamado.</span>
+            <button type="button" class="Cl_BtnCancelar dem-btn-resgatar-anexos" id="dem_btnResgatarAnexos">
+              Tentar espelhar do HubSupport
+            </button>
+          </div>
+          <p class="dem-anexos-help">
+            Para enviar um arquivo novo, use a aba <strong>Conversa</strong> e anexe junto da resposta.
+            Arquivos só no painel HubSupport entram aqui via webhook ou pelo botão de espelhamento.
+          </p>
         </div>
       </section>
     </main>
@@ -123,6 +159,6 @@
   </div>
 
   <script src="{{ url_for('static', filename='script/global_utils.js') }}"></script>
-  <script src="{{ url_for('demandas.static', filename='script/Sdemanda_detalhe_apoio.js') }}?v=2"></script>
+  <script src="{{ url_for('demandas.static', filename='script/Sdemanda_detalhe_apoio.js') }}?v=4"></script>
 </body>
 </html>

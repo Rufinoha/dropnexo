@@ -98,7 +98,7 @@
       }
       GlobalUtils.abrirJanelaApoioModal({
         rota: "/demandas/apoio",
-        titulo: "Novo chamado • Central de Demandas",
+        titulo: "Novo chamado • Central de Chamados",
         largura: 760,
         altura: 680,
         nivel: 1,
@@ -114,7 +114,7 @@
       GlobalUtils.abrirJanelaApoioModal({
         rota: "/demandas/apoio/detalhe",
         id: uuid,
-        titulo: titulo ? `Chamado — ${titulo}` : "Chamado • Central de Demandas",
+        titulo: titulo ? `Chamado — ${titulo}` : "Chamado • Central de Chamados",
         largura: 1140,
         altura: 860,
         nivel: 1,

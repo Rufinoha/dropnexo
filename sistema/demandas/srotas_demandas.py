@@ -1,4 +1,4 @@
-# sistema/demandas/srotas_demandas.py — Central de Demandas + webhook HubSupport
+# sistema/demandas/srotas_demandas.py — Central de Chamados + webhook HubSupport
 from __future__ import annotations
 
 import hashlib
@@ -7,7 +7,7 @@ import json
 import logging
 from pathlib import Path
 
-from flask import Blueprint, jsonify, render_template, request, session
+from flask import Blueprint, jsonify, render_template, request, send_file, session
 
 from global_utils import Var_ConectarBanco, login_obrigatorio
 
@@ -222,16 +222,96 @@ def api_responder(ref: str):
     id_u, id_t = _ids_sessao()
     if not id_u:
         return jsonify(success=False, message="Sessão inválida."), 401
-    body = request.get_json(silent=True) or {}
+
+    if request.content_type and "multipart/form-data" in request.content_type:
+        corpo = request.form.get("corpo") or request.form.get("mensagem") or ""
+        arquivos = request.files.getlist("anexos") or request.files.getlist("arquivo")
+    else:
+        body = request.get_json(silent=True) or {}
+        corpo = body.get("corpo") or body.get("mensagem") or ""
+        arquivos = []
+
+    anexos = []
+    for f in arquivos:
+        if f and f.filename:
+            anexos.append(
+                {"nome": f.filename, "conteudo": f.read(), "content_type": f.mimetype}
+            )
+
     conn = Var_ConectarBanco()
     try:
         from api.hubsupport.hubsupport_service import responder_chamado
 
-        result = responder_chamado(conn, id_u, id_t, ref, body.get("corpo") or "")
+        result = responder_chamado(
+            conn, id_u, id_t, ref, corpo, anexos=anexos or None
+        )
         conn.commit()
         return jsonify(success=True, message="Resposta enviada.", **result)
     except Exception as e:
         conn.rollback()
+        return _json_erro(e)
+    finally:
+        conn.close()
+
+
+@demandas_bp.get("/api/demandas/anexo/<path:ref>/<path:nome>")
+@login_obrigatorio()
+def api_anexo_download(ref: str, nome: str):
+    from urllib.parse import unquote
+
+    id_u, id_t = _ids_sessao()
+    if not id_u:
+        return jsonify(success=False, message="Sessão inválida."), 401
+    conn = Var_ConectarBanco()
+    try:
+        from api.hubsupport.hubsupport_service import baixar_anexo_local
+
+        full, nome_exibicao = baixar_anexo_local(
+            conn, id_u, id_t, unquote(ref or "").strip(), unquote(nome or "").strip()
+        )
+        return send_file(full, as_attachment=True, download_name=nome_exibicao, max_age=0)
+    except Exception as e:
+        return _json_erro(e)
+    finally:
+        conn.close()
+
+
+@demandas_bp.post("/api/demandas/anexos/resgatar/<path:ref>")
+@login_obrigatorio()
+def api_anexos_resgatar(ref: str):
+    from urllib.parse import unquote
+
+    id_u, id_t = _ids_sessao()
+    if not id_u:
+        return jsonify(success=False, message="Sessão inválida."), 401
+    ref_dec = unquote(ref or "").strip()
+    conn = Var_ConectarBanco()
+    try:
+        from api.hubsupport.hubsupport_anexos import resgatar_anexos_hubsupport
+        from api.hubsupport.hubsupport_service import detalhar_chamado
+
+        ch = detalhar_chamado(conn, id_u, id_t, ref_dec)
+        resultado = resgatar_anexos_hubsupport(conn, ch["external_id"])
+        conn.commit()
+        if resultado.get("ok"):
+            return jsonify(
+                success=True,
+                message=f"{resultado.get('quantidade') or 0} anexo(s) espelhado(s).",
+                **resultado,
+            )
+        return jsonify(
+            success=False,
+            message=(
+                "HubSupport não listou anexos agora. "
+                "Corrija GET /anexos ou reenvie o arquivo pela Conversa."
+            ),
+            **resultado,
+        ), 502
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
         return _json_erro(e)
     finally:
         conn.close()

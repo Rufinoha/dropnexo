@@ -23,7 +23,7 @@
     },
     {
       titulo: "HubSupport",
-      texto: "Chave de API, URL do webhook e diagnóstico da Central de Demandas (chamados de suporte).",
+      texto: "Chave de API, URL do webhook e diagnóstico da Central de Chamados (chamados de suporte).",
       rota: "/configuracoes/hubsupport",
       iconeTech: "life-buoy",
     },

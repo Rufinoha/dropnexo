@@ -1785,7 +1785,7 @@ def cupons_desconto_excluir():
         conn.close()
 
 
-# --- HubSupport (Central de Demandas) ---
+# --- HubSupport (Central de Chamados) ---
 HS_PREFIX = "/configuracoes/hubsupport"
 
 

@@ -1,7 +1,7 @@
 {% extends "frm_base.html" %}
-{% block title %}Central de Demandas — {{ MARCA_NOME }}{% endblock %}
+{% block title %}Central de Chamados — {{ MARCA_NOME }}{% endblock %}
 {% set nav_ativo = 'demandas' %}
-{% block topbar_title %}Central de Demandas{% endblock %}
+{% block topbar_title %}Central de Chamados{% endblock %}
 {% block head_extra %}
 <link rel="stylesheet" href="{{ url_for('demandas.static', filename='style/Cdemandas.css') }}?v=2" />
 <script defer src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -10,7 +10,7 @@
 <main class="content demandas-page">
   <div class="Cl_ConfigContainer">
 
-    <h2>Central de Demandas</h2>
+    <h2>Central de Chamados</h2>
     <p class="dem-subtitulo">
       Abra chamados de dúvida, sugestão ou problema. Acompanhe as respostas da equipe de suporte.
     </p>

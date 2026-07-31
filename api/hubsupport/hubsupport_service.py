@@ -387,16 +387,35 @@ def listar_chamados_tenant(
 def _append_interacao_cache(conn, external_id: str, item: dict) -> None:
     cur = conn.cursor()
     interacao_id = item.get("interacao_id") or item.get("id")
+    anexos_json = json.dumps(item.get("anexos") or [], ensure_ascii=False)
     if interacao_id:
         cur.execute(
             """
-            SELECT 1 FROM tbl_hubsupport_interacao
+            SELECT anexos_json FROM tbl_hubsupport_interacao
             WHERE external_id_chamado = %s AND interacao_id = %s
             LIMIT 1
             """,
             (external_id, str(interacao_id)),
         )
-        if cur.fetchone():
+        row = cur.fetchone()
+        if row:
+            # Reentrega de webhook / sync: completa anexos se o cache local estava vazio.
+            anexos_novos = item.get("anexos") or []
+            if anexos_novos:
+                atuais = row[0]
+                try:
+                    atuais_lista = json.loads(atuais or "[]") if not isinstance(atuais, list) else atuais
+                except Exception:
+                    atuais_lista = []
+                if not atuais_lista:
+                    cur.execute(
+                        """
+                        UPDATE tbl_hubsupport_interacao
+                        SET anexos_json = %s
+                        WHERE external_id_chamado = %s AND interacao_id = %s
+                        """,
+                        (anexos_json, external_id, str(interacao_id)),
+                    )
             return
     cur.execute(
         """
@@ -412,7 +431,7 @@ def _append_interacao_cache(conn, external_id: str, item: dict) -> None:
             (item.get("nome_autor") or "")[:120] or None,
             item.get("corpo") or "",
             item.get("created_at") or None,
-            json.dumps(item.get("anexos") or [], ensure_ascii=False),
+            anexos_json,
         ),
     )
 
@@ -516,25 +535,18 @@ def abrir_chamado(
         _log_api(conn, "abrir_chamado", False, str(e), e.status_code)
         raise
 
-    anexos_meta = []
-    for arq in anexos or []:
-        if not isinstance(arq, dict):
-            continue
-        nome = (arq.get("nome") or "anexo").strip() or "anexo"
-        conteudo = arq.get("conteudo") or b""
-        if not conteudo:
-            continue
-        try:
-            meta = client.enviar_anexo(
-                ext_chamado,
-                nome,
-                conteudo,
-                arq.get("content_type"),
-            )
-            anexos_meta.append({"nome": nome, "resposta": meta})
-        except HubSupportError as e:
-            _log_api(conn, "anexo_chamado", False, str(e), e.status_code)
-            raise
+    from api.hubsupport.hubsupport_anexos import enviar_anexos_chamado
+
+    try:
+        anexos_meta = enviar_anexos_chamado(
+            client,
+            ext_chamado,
+            anexos,
+            enviado_por=(usuario.get("nome") or "").strip() or "Você",
+        )
+    except HubSupportError as e:
+        _log_api(conn, "anexo_chamado", False, str(e), e.status_code)
+        raise
 
     hs_id = _extrair_hubsupport_id(resp if isinstance(resp, dict) else {})
     protocolo = ""
@@ -577,7 +589,7 @@ def abrir_chamado(
             "tipo_autor": "cliente",
             "nome_autor": (usuario.get("nome") or "").strip() or "Você",
             "corpo": mensagem,
-            "anexos": [{"nome": a["nome"]} for a in anexos_meta],
+            "anexos": anexos_meta,
         },
     )
 
@@ -616,6 +628,7 @@ def detalhar_chamado(conn, id_usuario: int, id_tenant: int, external_id: str) ->
     if not row:
         raise HubSupportError("Chamado não encontrado.", status_code=404)
 
+    # Detalhe = banco local + disco (padrão BARACAT). Sem GET HubSupport na abertura.
     protocolo, titulo, categoria, prioridade, status = (
         str(row[0] or ""),
         str(row[1] or ""),
@@ -623,44 +636,6 @@ def detalhar_chamado(conn, id_usuario: int, id_tenant: int, external_id: str) ->
         str(row[3] or "normal"),
         str(row[4] or "aberto"),
     )
-
-    # Tenta atualizar thread do HubSupport (falha silenciosa → cache local)
-    try:
-        client = HubSupportClient(conn=conn)
-        if client.configurado():
-            rem = client.detalhar_chamado(external_id)
-            data = rem.get("data") if isinstance(rem, dict) and isinstance(rem.get("data"), dict) else rem
-            if isinstance(data, dict):
-                if data.get("status"):
-                    status = str(data.get("status"))
-                if data.get("protocolo"):
-                    protocolo = str(data.get("protocolo"))
-                interacoes = data.get("interacoes") or data.get("itens") or []
-                if isinstance(interacoes, list):
-                    for it in interacoes:
-                        if not isinstance(it, dict):
-                            continue
-                        _append_interacao_cache(
-                            conn,
-                            external_id,
-                            {
-                                "interacao_id": it.get("id") or it.get("interacao_id"),
-                                "tipo_autor": (it.get("tipo_autor") or "agente").lower(),
-                                "nome_autor": it.get("nome_autor") or it.get("nome") or "",
-                                "corpo": it.get("corpo") or it.get("mensagem") or "",
-                                "created_at": it.get("created_at") or it.get("criado_em"),
-                            },
-                        )
-                cur.execute(
-                    """
-                    UPDATE tbl_hubsupport_chamado
-                    SET status = %s, protocolo = COALESCE(%s, protocolo), atualizado_em = NOW()
-                    WHERE external_id = %s AND id_tenant = %s
-                    """,
-                    (status, protocolo or None, external_id, int(id_tenant)),
-                )
-    except HubSupportError:
-        pass
 
     solicitante_nome = ""
     id_dono = int(row[5] or 0)
@@ -670,6 +645,18 @@ def detalhar_chamado(conn, id_usuario: int, id_tenant: int, external_id: str) ->
             solicitante_nome = (dono.get("nome") or "").strip()
         except HubSupportError:
             pass
+
+    from api.hubsupport.hubsupport_anexos import (
+        consolidar_anexos_thread,
+        listar_anexos_disco,
+        mesclar_anexos,
+        ordenar_anexos_mais_recentes,
+    )
+
+    thread = _listar_interacoes_cache(conn, external_id)
+    anexos_chamado = ordenar_anexos_mais_recentes(
+        mesclar_anexos(consolidar_anexos_thread(thread), listar_anexos_disco(external_id))
+    )
 
     return {
         "external_id": external_id,
@@ -686,8 +673,24 @@ def detalhar_chamado(conn, id_usuario: int, id_tenant: int, external_id: str) ->
         "solicitante_nome": solicitante_nome,
         "data_abertura": _fmt_data_iso(row[6]),
         "data_ultima_interacao": _fmt_data_iso(row[7]),
-        "interacoes": _listar_interacoes_cache(conn, external_id),
+        "interacoes": thread,
+        "anexos": anexos_chamado,
+        "anexos_status": "ok" if anexos_chamado else "vazio",
+        "fonte": "local",
     }
+
+
+def baixar_anexo_local(
+    conn, id_usuario: int, id_tenant: int, external_id: str, nome_armazenado: str
+) -> tuple[str, str]:
+    from api.hubsupport.hubsupport_anexos import resolver_caminho_anexo_local
+
+    external_id = (external_id or "").strip()
+    if not external_id.startswith(f"{PREFIX}:chamado:"):
+        external_id = external_id_chamado(external_id)
+    if not _chamado_autorizado(conn, id_usuario, id_tenant, external_id):
+        raise HubSupportError("Chamado não encontrado ou acesso negado.", status_code=403)
+    return resolver_caminho_anexo_local(external_id, nome_armazenado)
 
 
 def responder_chamado(
@@ -696,14 +699,16 @@ def responder_chamado(
     id_tenant: int,
     external_id: str,
     corpo: str,
+    *,
+    anexos: list | None = None,
 ) -> dict:
     external_id = (external_id or "").strip()
     if not external_id.startswith(f"{PREFIX}:chamado:"):
         external_id = external_id_chamado(external_id)
 
     corpo = (corpo or "").strip()
-    if len(corpo) < 2:
-        raise HubSupportError("Digite uma resposta válida.")
+    if len(corpo) < 2 and not (anexos or []):
+        raise HubSupportError("Digite uma resposta válida ou anexe um arquivo.")
 
     if not _chamado_autorizado(conn, id_usuario, id_tenant, external_id):
         raise HubSupportError("Chamado não encontrado ou acesso negado.", status_code=403)
@@ -711,22 +716,42 @@ def responder_chamado(
     garantir_provisionamento(conn, id_usuario, id_tenant)
     usuario = _carregar_usuario(conn, id_usuario)
     client = HubSupportClient(conn=conn)
+    nome_autor = (usuario.get("nome") or "").strip() or "Você"
+
+    if corpo:
+        try:
+            resp = client.criar_interacao(external_id, corpo)
+        except HubSupportError as e:
+            _log_api(conn, "responder_chamado", False, str(e), e.status_code)
+            raise
+    else:
+        resp = {}
+        corpo = "(anexo)"
+
+    from api.hubsupport.hubsupport_anexos import enviar_anexos_chamado
 
     try:
-        resp = client.criar_interacao(external_id, corpo)
+        anexos_meta = enviar_anexos_chamado(
+            client, external_id, anexos, enviado_por=nome_autor
+        )
     except HubSupportError as e:
-        _log_api(conn, "responder_chamado", False, str(e), e.status_code)
+        _log_api(conn, "anexo_chamado", False, str(e), e.status_code)
         raise
 
     _append_interacao_cache(
         conn,
         external_id,
         {
-            "interacao_id": _extrair_hubsupport_id(resp if isinstance(resp, dict) else {}) or str(uuid.uuid4()),
+            "interacao_id": _extrair_hubsupport_id(resp if isinstance(resp, dict) else {})
+            or str(uuid.uuid4()),
             "tipo_autor": "cliente",
-            "nome_autor": (usuario.get("nome") or "").strip() or "Você",
+            "nome_autor": nome_autor,
             "corpo": corpo,
+            "anexos": anexos_meta,
         },
+    )
+    preview = corpo if corpo != "(anexo)" else (
+        anexos_meta[0]["nome"] if anexos_meta else corpo
     )
     cur = conn.cursor()
     cur.execute(
@@ -738,10 +763,10 @@ def responder_chamado(
             atualizado_em = NOW()
         WHERE external_id = %s AND id_tenant = %s
         """,
-        (corpo[:240], external_id, int(id_tenant)),
+        (str(preview)[:240], external_id, int(id_tenant)),
     )
     _log_api(conn, "responder_chamado", True, external_id, 200)
-    return {"ok": True, "external_id": external_id}
+    return {"ok": True, "external_id": external_id, "anexos": anexos_meta}
 
 
 def webhook_delivery_processado(conn, delivery_id: str) -> bool:
@@ -833,6 +858,14 @@ def processar_webhook(
     if ext and not ext.startswith(f"{PREFIX}:"):
         return {"message": "Evento de outro sistema — ignorado.", "evento": evento}
 
+    from api.hubsupport.hubsupport_anexos import (
+        _lista_anexos_raw,
+        materializar_anexos_remotos,
+        mesclar_anexos,
+        normalizar_anexos_lista,
+        resgatar_anexos_hubsupport,
+    )
+
     if evento == "chamado.interacao.criada":
         tipo_autor = str(data.get("tipo_autor") or "").lower()
         corpo = (data.get("corpo") or "").strip()
@@ -849,6 +882,24 @@ def processar_webhook(
                 "chamado_external_id": ext,
             }
         nome_agente = str(data.get("nome_autor") or data.get("nome") or "Suporte").strip()
+        anexos_brutos = _lista_anexos_raw(data) or normalizar_anexos_lista(data)
+        for raw_a in anexos_brutos:
+            if isinstance(raw_a, dict):
+                raw_a.setdefault("enviado_por", nome_agente)
+                if occurred_at and not raw_a.get("enviado_em"):
+                    raw_a["enviado_em"] = occurred_at
+        anexos_meta = materializar_anexos_remotos(
+            conn, ext, anexos_brutos, log_fn=lambda c, op, ok, msg, st=None: _log_api(c, op, ok, msg, st)
+        )
+        resgate = resgatar_anexos_hubsupport(
+            conn, ext, log_fn=lambda c, op, ok, msg, st=None: _log_api(c, op, ok, msg, st)
+        )
+        if resgate.get("ok") and resgate.get("anexos"):
+            anexos_meta = mesclar_anexos(anexos_meta, resgate["anexos"])
+
+        if not corpo and not anexos_meta:
+            return {"message": "Interação sem conteúdo.", "evento": evento}
+
         _append_interacao_cache(
             conn,
             ext,
@@ -858,6 +909,7 @@ def processar_webhook(
                 "nome_autor": nome_agente,
                 "corpo": corpo or "(anexo)",
                 "created_at": occurred_at,
+                "anexos": anexos_meta,
             },
         )
         _atualizar_chamado_webhook(
@@ -865,12 +917,49 @@ def processar_webhook(
             ext,
             status=data.get("status"),
             protocolo=data.get("protocolo"),
-            preview=corpo,
+            preview=corpo or (anexos_meta[0].get("nome") if anexos_meta else None),
         )
         return {
             "message": "Resposta do suporte registrada.",
             "evento": evento,
             "chamado_external_id": ext,
+            "anexos": len(anexos_meta),
+        }
+
+    if evento in ("chamado.anexo.criado", "chamado.anexo.adicionado", "chamado.anexos.atualizados"):
+        if not ext:
+            return {"message": "Anexo ignorado — sem external_id.", "evento": evento}
+        cur = conn.cursor()
+        cur.execute("SELECT 1 FROM tbl_hubsupport_chamado WHERE external_id = %s LIMIT 1", (ext,))
+        if not cur.fetchone():
+            return {"message": "Chamado local não encontrado.", "evento": evento}
+        anexos_brutos = _lista_anexos_raw(data) or normalizar_anexos_lista(data)
+        metas = materializar_anexos_remotos(
+            conn, ext, anexos_brutos, log_fn=lambda c, op, ok, msg, st=None: _log_api(c, op, ok, msg, st)
+        )
+        if not metas:
+            resgate = resgatar_anexos_hubsupport(
+                conn, ext, log_fn=lambda c, op, ok, msg, st=None: _log_api(c, op, ok, msg, st)
+            )
+            metas = resgate.get("anexos") or []
+        if metas:
+            _append_interacao_cache(
+                conn,
+                ext,
+                {
+                    "interacao_id": data.get("interacao_id") or data.get("id") or f"anexo-{uuid.uuid4().hex[:8]}",
+                    "tipo_autor": "agente",
+                    "nome_autor": str(data.get("nome_autor") or "Suporte"),
+                    "corpo": "(anexo)",
+                    "created_at": occurred_at,
+                    "anexos": metas,
+                },
+            )
+            _atualizar_chamado_webhook(conn, ext, preview=metas[0].get("nome"))
+        return {
+            "message": "Anexo espelhado." if metas else "Anexo sem conteúdo baixável.",
+            "evento": evento,
+            "anexos": len(metas),
         }
 
     if evento == "chamado.status_alterado":
@@ -886,6 +975,10 @@ def processar_webhook(
         }
 
     if evento == "chamado.criado":
+        if ext:
+            resgatar_anexos_hubsupport(
+                conn, ext, log_fn=lambda c, op, ok, msg, st=None: _log_api(c, op, ok, msg, st)
+            )
         return {"message": "Criação já tratada na abertura local.", "evento": evento}
 
     return {"message": "Evento recebido.", "evento": evento}
