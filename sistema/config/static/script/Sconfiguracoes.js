@@ -22,6 +22,12 @@
       iconeTech: "shopping-bag",
     },
     {
+      titulo: "Assinaturas e faturamento",
+      texto: "Assinantes ativos com provisão (MRR), inadimplência / rebaixados e faturamento pago mês a mês.",
+      rota: "/configuracoes/assinaturas-faturamento",
+      iconeTech: "shopping-bag",
+    },
+    {
       titulo: "HubSupport",
       texto: "Chave de API, URL do webhook e diagnóstico da Central de Chamados (chamados de suporte).",
       rota: "/configuracoes/hubsupport",

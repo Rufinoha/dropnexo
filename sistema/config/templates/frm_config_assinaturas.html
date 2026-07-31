@@ -1,0 +1,165 @@
+{% extends "frm_base.html" %}
+{% block title %}Assinaturas e faturamento — {{ MARCA_NOME }}{% endblock %}
+{% set nav_ativo = 'config' %}
+{% block topbar_title %}Assinaturas e faturamento{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_assinaturas.css') }}?v=1" />
+{% endblock %}
+{% block content %}
+<div class="Cl_ContainerApoio cl-page-principal Asf_Wrap">
+  <div class="cl-page-title Asf_TitleRow">
+    <div>
+      <h2>Assinaturas e faturamento</h2>
+      <p class="cl-page-desc">
+        Visão do dono da plataforma: assinantes ativos com provisão de receita,
+        inadimplência e faturamento realizado mês a mês.
+      </p>
+    </div>
+    <button type="button" class="Cl_BtnCancelar" id="asf_btnAtualizar">Atualizar</button>
+  </div>
+
+  <p class="CfgCup_Aviso">
+    <a class="Cl_BtnLink" href="{{ url_for('config.configuracoes') }}">← Voltar às Configurações</a>
+  </p>
+
+  <nav class="Asf_Tabs" role="tablist" aria-label="Seções do painel">
+    <button type="button" class="Asf_Tab is-active" data-tab="ativas" role="tab" aria-selected="true">Ativas</button>
+    <button type="button" class="Asf_Tab" data-tab="inadimplencia" role="tab" aria-selected="false">Inadimplência</button>
+    <button type="button" class="Asf_Tab" data-tab="faturamento" role="tab" aria-selected="false">Faturamento</button>
+  </nav>
+
+  <p class="Asf_Status" id="asf_status">Carregando…</p>
+
+  <section class="Asf_Panel is-active" id="asf_tab_ativas" data-tab-panel="ativas" role="tabpanel">
+    <div class="Asf_Kpis" id="asf_ativas_kpis"></div>
+    <div class="Asf_Card">
+      <div class="Asf_CardHead">
+        <h3>Assinantes ativos</h3>
+        <span class="Asf_Hint" id="asf_ativas_hint">—</span>
+      </div>
+      <div class="Asf_TabelaWrap">
+        <table class="Cl_TabelaPrincipal Asf_Tabela">
+          <thead>
+            <tr>
+              <th>Tenant</th>
+              <th>Plano</th>
+              <th>Ciclo</th>
+              <th>Forma</th>
+              <th>MRR</th>
+              <th>Ciclo (valor)</th>
+              <th>Próx. cobrança</th>
+            </tr>
+          </thead>
+          <tbody id="asf_ativas_tbody">
+            <tr><td colspan="7" class="Asf_Hint">Carregando…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="Asf_Panel" id="asf_tab_inadimplencia" data-tab-panel="inadimplencia" role="tabpanel" hidden>
+    <div class="Asf_Kpis" id="asf_inad_kpis"></div>
+    <div class="Asf_Card">
+      <div class="Asf_CardHead">
+        <h3>Em atraso (ainda no plano pago)</h3>
+        <span class="Asf_Hint" id="asf_atraso_hint">—</span>
+      </div>
+      <div class="Asf_TabelaWrap">
+        <table class="Cl_TabelaPrincipal Asf_Tabela">
+          <thead>
+            <tr>
+              <th>Tenant</th>
+              <th>Plano</th>
+              <th>Fatura</th>
+              <th>Status</th>
+              <th>Vencimento</th>
+              <th>Valor</th>
+              <th>Forma</th>
+            </tr>
+          </thead>
+          <tbody id="asf_atraso_tbody">
+            <tr><td colspan="7" class="Asf_Hint">Carregando…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="Asf_Card">
+      <div class="Asf_CardHead">
+        <h3>Rebaixados ao gratuito</h3>
+        <span class="Asf_Hint" id="asf_rebaix_hint">Por inadimplência (rebaixado_em)</span>
+      </div>
+      <div class="Asf_TabelaWrap">
+        <table class="Cl_TabelaPrincipal Asf_Tabela">
+          <thead>
+            <tr>
+              <th>Tenant</th>
+              <th>Plano atual</th>
+              <th>Plano origem</th>
+              <th>Rebaixado em</th>
+              <th>Fatura</th>
+              <th>Valor</th>
+            </tr>
+          </thead>
+          <tbody id="asf_rebaix_tbody">
+            <tr><td colspan="6" class="Asf_Hint">Carregando…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="Asf_Panel" id="asf_tab_faturamento" data-tab-panel="faturamento" role="tabpanel" hidden>
+    <div class="Asf_Kpis" id="asf_fat_kpis"></div>
+    <div class="Asf_Grid2">
+      <div class="Asf_Card">
+        <div class="Asf_CardHead">
+          <h3>Faturamento mês a mês</h3>
+          <span class="Asf_Hint">Somente faturas pagas</span>
+        </div>
+        <div class="Asf_TabelaWrap">
+          <table class="Cl_TabelaPrincipal Asf_Tabela">
+            <thead>
+              <tr>
+                <th>Mês</th>
+                <th>Qtd</th>
+                <th>Total pago</th>
+              </tr>
+            </thead>
+            <tbody id="asf_meses_tbody">
+              <tr><td colspan="3" class="Asf_Hint">Carregando…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="Asf_Card">
+        <div class="Asf_CardHead">
+          <h3>Pagamentos recentes</h3>
+          <span class="Asf_Hint">Últimas 80 faturas pagas</span>
+        </div>
+        <div class="Asf_TabelaWrap">
+          <table class="Cl_TabelaPrincipal Asf_Tabela">
+            <thead>
+              <tr>
+                <th>Pago em</th>
+                <th>Tenant</th>
+                <th>Plano</th>
+                <th>Ciclo</th>
+                <th>Valor</th>
+              </tr>
+            </thead>
+            <tbody id="asf_pagos_tbody">
+              <tr><td colspan="5" class="Asf_Hint">Carregando…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script type="application/json" id="asf_cfg">{{ {
+  "apiDados": url_for("config.assinaturas_faturamento_dados")
+} | tojson }}</script>
+<script defer src="{{ url_for('config.static', filename='script/Sconfig_assinaturas.js') }}?v=1"></script>
+{% endblock %}

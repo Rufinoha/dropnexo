@@ -1785,6 +1785,35 @@ def cupons_desconto_excluir():
         conn.close()
 
 
+# --- Assinaturas e faturamento (painel SaaS) ---
+ASSINATURAS_PREFIX = "/configuracoes/assinaturas-faturamento"
+
+
+@config_bp.get(ASSINATURAS_PREFIX)
+@login_obrigatorio()
+def assinaturas_faturamento_pagina():
+    if not session.get("eh_desenvolvedor"):
+        return redirect(url_for("dashboard.index"))
+    return render_template("frm_config_assinaturas.html", nav_ativo="config")
+
+
+@config_bp.get(f"{ASSINATURAS_PREFIX}/dados")
+@login_obrigatorio()
+def assinaturas_faturamento_dados():
+    if (r := _exigir_dev()) is not None:
+        return r
+    from sistema.financeiro.assinaturas_painel import painel_assinaturas
+
+    conn = Var_ConectarBanco()
+    try:
+        painel = painel_assinaturas(conn)
+        return jsonify(success=True, **painel)
+    except Exception as e:
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
 # --- HubSupport (Central de Chamados) ---
 HS_PREFIX = "/configuracoes/hubsupport"
 

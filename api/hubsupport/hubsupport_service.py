@@ -384,14 +384,36 @@ def listar_chamados_tenant(
     }
 
 
+def _anexos_de_campo(raw) -> list:
+    if isinstance(raw, list):
+        return [a for a in raw if isinstance(a, dict)]
+    if isinstance(raw, dict):
+        return [raw]
+    if not raw:
+        return []
+    try:
+        parsed = json.loads(raw)
+    except Exception:
+        return []
+    if isinstance(parsed, list):
+        return [a for a in parsed if isinstance(a, dict)]
+    return []
+
+
 def _append_interacao_cache(conn, external_id: str, item: dict) -> None:
+    from api.hubsupport.hubsupport_anexos import mesclar_anexos
+
     cur = conn.cursor()
     interacao_id = item.get("interacao_id") or item.get("id")
-    anexos_json = json.dumps(item.get("anexos") or [], ensure_ascii=False)
+    anexos_novos = item.get("anexos") or []
+    if not isinstance(anexos_novos, list):
+        anexos_novos = []
+    corpo_novo = (item.get("corpo") or "").strip()
+
     if interacao_id:
         cur.execute(
             """
-            SELECT anexos_json FROM tbl_hubsupport_interacao
+            SELECT id, corpo, anexos_json FROM tbl_hubsupport_interacao
             WHERE external_id_chamado = %s AND interacao_id = %s
             LIMIT 1
             """,
@@ -399,24 +421,22 @@ def _append_interacao_cache(conn, external_id: str, item: dict) -> None:
         )
         row = cur.fetchone()
         if row:
-            # Reentrega de webhook / sync: completa anexos se o cache local estava vazio.
-            anexos_novos = item.get("anexos") or []
-            if anexos_novos:
-                atuais = row[0]
-                try:
-                    atuais_lista = json.loads(atuais or "[]") if not isinstance(atuais, list) else atuais
-                except Exception:
-                    atuais_lista = []
-                if not atuais_lista:
-                    cur.execute(
-                        """
-                        UPDATE tbl_hubsupport_interacao
-                        SET anexos_json = %s
-                        WHERE external_id_chamado = %s AND interacao_id = %s
-                        """,
-                        (anexos_json, external_id, str(interacao_id)),
-                    )
+            atuais = _anexos_de_campo(row[2])
+            merged = mesclar_anexos(atuais, anexos_novos) if anexos_novos else atuais
+            corpo_atual = (row[1] or "").strip()
+            corpo_final = corpo_atual
+            if corpo_novo and (not corpo_atual or corpo_atual == "(anexo)"):
+                corpo_final = corpo_novo
+            cur.execute(
+                """
+                UPDATE tbl_hubsupport_interacao
+                SET anexos_json = %s, corpo = %s
+                WHERE id = %s
+                """,
+                (json.dumps(merged, ensure_ascii=False), corpo_final, row[0]),
+            )
             return
+
     cur.execute(
         """
         INSERT INTO tbl_hubsupport_interacao (
@@ -431,7 +451,7 @@ def _append_interacao_cache(conn, external_id: str, item: dict) -> None:
             (item.get("nome_autor") or "")[:120] or None,
             item.get("corpo") or "",
             item.get("created_at") or None,
-            anexos_json,
+            json.dumps(anexos_novos, ensure_ascii=False),
         ),
     )
 
@@ -449,11 +469,12 @@ def _listar_interacoes_cache(conn, external_id: str) -> list[dict]:
     )
     out = []
     for row in cur.fetchall():
-        anexos = []
-        try:
-            anexos = json.loads(row[5] or "[]")
-        except Exception:
-            anexos = []
+        anexos = _anexos_de_campo(row[5])
+        tipo = (row[1] or "").lower()
+        corpo = (row[3] or "").strip()
+        # Bolha só "(anexo)" é redundante: o arquivo já vai na mensagem de texto / aba Anexos.
+        if tipo == "agente" and corpo == "(anexo)":
+            continue
         out.append(
             {
                 "id": row[0],
@@ -461,7 +482,7 @@ def _listar_interacoes_cache(conn, external_id: str) -> list[dict]:
                 "nome_autor": row[2] or ("Suporte" if row[1] == "agente" else "Você"),
                 "corpo": row[3] or "",
                 "created_at": _fmt_data_iso(row[4] or row[6]),
-                "anexos": anexos if isinstance(anexos, list) else [],
+                "anexos": anexos,
             }
         )
     return out
@@ -861,7 +882,6 @@ def processar_webhook(
     from api.hubsupport.hubsupport_anexos import (
         _lista_anexos_raw,
         materializar_anexos_remotos,
-        mesclar_anexos,
         normalizar_anexos_lista,
         resgatar_anexos_hubsupport,
     )
@@ -882,20 +902,24 @@ def processar_webhook(
                 "chamado_external_id": ext,
             }
         nome_agente = str(data.get("nome_autor") or data.get("nome") or "Suporte").strip()
-        anexos_brutos = _lista_anexos_raw(data) or normalizar_anexos_lista(data)
-        for raw_a in anexos_brutos:
-            if isinstance(raw_a, dict):
-                raw_a.setdefault("enviado_por", nome_agente)
-                if occurred_at and not raw_a.get("enviado_em"):
-                    raw_a["enviado_em"] = occurred_at
+        # Só anexos deste evento entram na bolha — não misturar GET /anexos do chamado inteiro.
+        anexos_brutos = []
+        for raw_a in (_lista_anexos_raw(data) or normalizar_anexos_lista(data)):
+            if not isinstance(raw_a, dict):
+                continue
+            item = dict(raw_a)
+            item.setdefault("enviado_por", nome_agente)
+            if occurred_at and not item.get("enviado_em"):
+                item["enviado_em"] = occurred_at
+            anexos_brutos.append(item)
         anexos_meta = materializar_anexos_remotos(
             conn, ext, anexos_brutos, log_fn=lambda c, op, ok, msg, st=None: _log_api(c, op, ok, msg, st)
         )
-        resgate = resgatar_anexos_hubsupport(
-            conn, ext, log_fn=lambda c, op, ok, msg, st=None: _log_api(c, op, ok, msg, st)
-        )
-        if resgate.get("ok") and resgate.get("anexos"):
-            anexos_meta = mesclar_anexos(anexos_meta, resgate["anexos"])
+        # Espelha disco (aba Anexos), sem colar todos os arquivos do chamado nesta mensagem.
+        if not anexos_meta:
+            resgatar_anexos_hubsupport(
+                conn, ext, log_fn=lambda c, op, ok, msg, st=None: _log_api(c, op, ok, msg, st)
+            )
 
         if not corpo and not anexos_meta:
             return {"message": "Interação sem conteúdo.", "evento": evento}
@@ -937,29 +961,38 @@ def processar_webhook(
         metas = materializar_anexos_remotos(
             conn, ext, anexos_brutos, log_fn=lambda c, op, ok, msg, st=None: _log_api(c, op, ok, msg, st)
         )
-        if not metas:
+        if not metas and not anexos_brutos:
+            # Payload sem arquivo: tenta espelhar no disco, sem criar bolha na conversa.
             resgate = resgatar_anexos_hubsupport(
                 conn, ext, log_fn=lambda c, op, ok, msg, st=None: _log_api(c, op, ok, msg, st)
             )
             metas = resgate.get("anexos") or []
-        if metas:
+        interacao_id = data.get("interacao_id") or data.get("id")
+        if metas and interacao_id:
+            # Vincula à mensagem existente — não cria bolha "(anexo)" separada.
             _append_interacao_cache(
                 conn,
                 ext,
                 {
-                    "interacao_id": data.get("interacao_id") or data.get("id") or f"anexo-{uuid.uuid4().hex[:8]}",
+                    "interacao_id": interacao_id,
                     "tipo_autor": "agente",
                     "nome_autor": str(data.get("nome_autor") or "Suporte"),
-                    "corpo": "(anexo)",
+                    "corpo": "",
                     "created_at": occurred_at,
                     "anexos": metas,
                 },
             )
+        if metas:
             _atualizar_chamado_webhook(conn, ext, preview=metas[0].get("nome"))
         return {
-            "message": "Anexo espelhado." if metas else "Anexo sem conteúdo baixável.",
+            "message": (
+                "Anexo espelhado."
+                if metas
+                else "Anexo sem conteúdo baixável."
+            ),
             "evento": evento,
             "anexos": len(metas),
+            "vinculado_interacao": bool(metas and interacao_id),
         }
 
     if evento == "chamado.status_alterado":
