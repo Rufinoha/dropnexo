@@ -11,6 +11,8 @@ PERIODOS = {
     "anual": {"meses": 12, "desconto_pct": 20, "rotulo": "Anual (−20%)"},
 }
 
+_CUPOM_ESCOPO_OK: bool | None = None
+
 
 def normalizar_periodo(periodo: str | None) -> str:
     p = (periodo or "mensal").strip().lower()
@@ -25,6 +27,42 @@ def normalizar_codigo(codigo: str | None) -> str:
 
 def _centavos(v: Decimal | float | int) -> int:
     return int(Decimal(str(v)).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+
+
+def _rollback_cur(cur) -> None:
+    try:
+        cur.connection.rollback()
+    except Exception:
+        pass
+
+
+def garantir_escopo_cupom(cur) -> bool:
+    """publico_alvo + tbl_cupom_tenant (SQL 092)."""
+    global _CUPOM_ESCOPO_OK
+    if _CUPOM_ESCOPO_OK is True:
+        return True
+    try:
+        cur.execute(
+            """
+            ALTER TABLE tbl_cupom_desconto
+                ADD COLUMN IF NOT EXISTS publico_alvo VARCHAR(20)
+            """
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS tbl_cupom_tenant (
+                id_cupom INTEGER NOT NULL REFERENCES tbl_cupom_desconto(id) ON DELETE CASCADE,
+                id_tenant INTEGER NOT NULL REFERENCES tbl_tenant(id) ON DELETE CASCADE,
+                PRIMARY KEY (id_cupom, id_tenant)
+            )
+            """
+        )
+        _CUPOM_ESCOPO_OK = True
+        return True
+    except Exception:
+        _rollback_cur(cur)
+        _CUPOM_ESCOPO_OK = False
+        return False
 
 
 def calcular_preco(
@@ -84,8 +122,81 @@ def calcular_preco(
     }
 
 
-def cupom_dict(row) -> dict:
-    # id, codigo, descricao, tipo, valor, periodo, valido_ate, usos_max, usos_count, ativo, criado
+def _normalizar_publico_alvo(raw) -> str | None:
+    v = (raw or "").strip().lower()
+    if not v or v in ("todos", "qualquer", "all", "*"):
+        return None
+    if v not in ("vendedor", "fornecedor"):
+        raise ValueError("Público do cupom inválido. Use vazio, vendedor ou fornecedor.")
+    return v
+
+
+def _normalizar_ids_tenants(raw) -> list[int]:
+    if raw is None or raw == "" or raw == []:
+        return []
+    if isinstance(raw, str):
+        partes = [p.strip() for p in raw.replace(";", ",").split(",") if p.strip()]
+        src = partes
+    elif isinstance(raw, (list, tuple, set)):
+        src = list(raw)
+    else:
+        src = [raw]
+    out: list[int] = []
+    vistos: set[int] = set()
+    for x in src:
+        try:
+            tid = int(x)
+        except (TypeError, ValueError):
+            continue
+        if tid > 0 and tid not in vistos:
+            out.append(tid)
+            vistos.add(tid)
+    return out
+
+
+def _carregar_mapa_tenants_cupom(cur, ids_cupom: list[int]) -> dict[int, list[int]]:
+    if not ids_cupom or not garantir_escopo_cupom(cur):
+        return {}
+    cur.execute(
+        """
+        SELECT id_cupom, id_tenant
+        FROM tbl_cupom_tenant
+        WHERE id_cupom = ANY(%s)
+        ORDER BY id_cupom, id_tenant
+        """,
+        (ids_cupom,),
+    )
+    out: dict[int, list[int]] = {}
+    for id_cupom, id_tenant in cur.fetchall():
+        out.setdefault(int(id_cupom), []).append(int(id_tenant))
+    return out
+
+
+def _sincronizar_tenants_cupom(cur, id_cupom: int, ids_tenants: list[int]) -> None:
+    if not garantir_escopo_cupom(cur):
+        if ids_tenants:
+            raise ValueError(
+                "Não foi possível restringir o cupom a tenants. Aplique o SQL 092 no banco."
+            )
+        return
+    cur.execute("DELETE FROM tbl_cupom_tenant WHERE id_cupom = %s", (id_cupom,))
+    for tid in ids_tenants:
+        cur.execute(
+            """
+            INSERT INTO tbl_cupom_tenant (id_cupom, id_tenant)
+            VALUES (%s, %s)
+            ON CONFLICT DO NOTHING
+            """,
+            (id_cupom, tid),
+        )
+
+
+def cupom_dict(row, *, ids_tenants: list[int] | None = None) -> dict:
+    # id, codigo, descricao, tipo, valor, periodo, valido_ate, usos_max, usos_count, ativo, criado[, publico]
+    publico = None
+    if len(row) > 11 and row[11]:
+        publico = str(row[11]).strip().lower() or None
+    ids = list(ids_tenants or [])
     return {
         "id": row[0],
         "codigo": row[1],
@@ -98,46 +209,82 @@ def cupom_dict(row) -> dict:
         "usos_count": int(row[8] or 0),
         "ativo": bool(row[9]),
         "criado_em": row[10].isoformat() if len(row) > 10 and row[10] else None,
+        "publico_alvo": publico,
+        "ids_tenants": ids,
         "ilimitado": row[7] is None,
         "esgotado": row[7] is not None and int(row[8] or 0) >= int(row[7]),
     }
 
 
-_CUPOM_COLS = """
-    id, codigo, descricao, tipo_desconto, valor_desconto, periodo,
-    valido_ate, usos_max, usos_count, ativo, criado_em
-"""
+def _cupom_cols(cur) -> str:
+    if garantir_escopo_cupom(cur):
+        return """
+            id, codigo, descricao, tipo_desconto, valor_desconto, periodo,
+            valido_ate, usos_max, usos_count, ativo, criado_em, publico_alvo
+        """
+    return """
+        id, codigo, descricao, tipo_desconto, valor_desconto, periodo,
+        valido_ate, usos_max, usos_count, ativo, criado_em
+    """
 
 
 def listar_cupons(cur, *, incluir_inativos: bool = True) -> list[dict]:
-    sql = f"SELECT {_CUPOM_COLS} FROM tbl_cupom_desconto"
+    cols = _cupom_cols(cur)
+    sql = f"SELECT {cols} FROM tbl_cupom_desconto"
     if not incluir_inativos:
         sql += " WHERE ativo = TRUE"
     sql += " ORDER BY criado_em DESC, id DESC"
     cur.execute(sql)
-    return [cupom_dict(r) for r in cur.fetchall()]
+    rows = cur.fetchall()
+    mapa = _carregar_mapa_tenants_cupom(cur, [int(r[0]) for r in rows])
+    return [cupom_dict(r, ids_tenants=mapa.get(int(r[0]), [])) for r in rows]
 
 
 def obter_cupom_por_codigo(cur, codigo: str) -> dict | None:
     cod = normalizar_codigo(codigo)
     if not cod:
         return None
+    cols = _cupom_cols(cur)
     cur.execute(
-        f"SELECT {_CUPOM_COLS} FROM tbl_cupom_desconto WHERE upper(codigo) = %s LIMIT 1",
+        f"SELECT {cols} FROM tbl_cupom_desconto WHERE upper(codigo) = %s LIMIT 1",
         (cod,),
     )
     row = cur.fetchone()
-    return cupom_dict(row) if row else None
+    if not row:
+        return None
+    mapa = _carregar_mapa_tenants_cupom(cur, [int(row[0])])
+    return cupom_dict(row, ids_tenants=mapa.get(int(row[0]), []))
 
 
 def obter_cupom_por_id(cur, id_cupom: int) -> dict | None:
-    cur.execute(f"SELECT {_CUPOM_COLS} FROM tbl_cupom_desconto WHERE id = %s", (id_cupom,))
+    cols = _cupom_cols(cur)
+    cur.execute(f"SELECT {cols} FROM tbl_cupom_desconto WHERE id = %s", (id_cupom,))
     row = cur.fetchone()
-    return cupom_dict(row) if row else None
+    if not row:
+        return None
+    mapa = _carregar_mapa_tenants_cupom(cur, [int(row[0])])
+    return cupom_dict(row, ids_tenants=mapa.get(int(row[0]), []))
 
 
-def validar_cupom_para_periodo(cur, codigo: str, periodo: str) -> dict:
-    """Valida cupom ativo, prazo, estoque e período. Retorna dict do cupom."""
+def _tipo_negocio_tenant(cur, id_tenant: int) -> str:
+    cur.execute(
+        "SELECT COALESCE(NULLIF(TRIM(tipo_negocio), ''), 'vendedor') FROM tbl_tenant WHERE id = %s",
+        (id_tenant,),
+    )
+    row = cur.fetchone()
+    if not row:
+        raise ValueError("Conta não encontrada para validar o cupom.")
+    return str(row[0] or "vendedor").strip().lower()
+
+
+def validar_cupom_para_periodo(
+    cur,
+    codigo: str,
+    periodo: str,
+    *,
+    id_tenant: int | None = None,
+) -> dict:
+    """Valida cupom ativo, prazo, estoque, período e escopo (tipo/tenant)."""
     p = normalizar_periodo(periodo)
     cupom = obter_cupom_por_codigo(cur, codigo)
     if not cupom:
@@ -155,6 +302,20 @@ def validar_cupom_para_periodo(cur, codigo: str, periodo: str) -> dict:
             raise ValueError("Este cupom expirou.")
     if cupom.get("esgotado"):
         raise ValueError("Este cupom esgotou o limite de usos.")
+
+    publico = (cupom.get("publico_alvo") or "").strip().lower() or None
+    ids_ok = list(cupom.get("ids_tenants") or [])
+    if publico or ids_ok:
+        if not id_tenant:
+            raise ValueError("Este cupom é restrito e não pode ser usado neste contexto.")
+        if ids_ok and int(id_tenant) not in ids_ok:
+            raise ValueError("Este cupom não está disponível para a sua conta.")
+        if publico:
+            tipo = _tipo_negocio_tenant(cur, int(id_tenant))
+            if publico == "vendedor" and tipo not in ("vendedor", "hibrido"):
+                raise ValueError("Este cupom é exclusivo para vendedores.")
+            if publico == "fornecedor" and tipo not in ("fornecedor", "hibrido"):
+                raise ValueError("Este cupom é exclusivo para fornecedores.")
     return cupom
 
 
@@ -191,20 +352,65 @@ def salvar_cupom(cur, dados: dict, *, id_cupom: int | None = None) -> dict:
 
     descricao = (dados.get("descricao") or "").strip()[:255] or None
     ativo = bool(dados.get("ativo", True))
+    publico_alvo = _normalizar_publico_alvo(dados.get("publico_alvo"))
+    ids_tenants = _normalizar_ids_tenants(
+        dados.get("ids_tenants") if "ids_tenants" in dados else dados.get("tenants")
+    )
+
+    if ids_tenants:
+        cur.execute(
+            "SELECT id FROM tbl_tenant WHERE id = ANY(%s)",
+            (ids_tenants,),
+        )
+        existentes = {int(r[0]) for r in cur.fetchall()}
+        faltando = [i for i in ids_tenants if i not in existentes]
+        if faltando:
+            raise ValueError(f"Tenant(s) inválido(s): {', '.join(str(x) for x in faltando)}.")
+
+    tem_escopo = garantir_escopo_cupom(cur)
+    if (publico_alvo or ids_tenants) and not tem_escopo:
+        raise ValueError(
+            "Escopo de cupom indisponível. Aplique o SQL 092 (__doc/sql/092_cupom_escopo_tenant.sql)."
+        )
 
     if id_cupom:
-        cur.execute(
-            """
-            UPDATE tbl_cupom_desconto SET
-              codigo = %s, descricao = %s, tipo_desconto = %s, valor_desconto = %s,
-              periodo = %s, valido_ate = %s, usos_max = %s, ativo = %s, atualizado_em = NOW()
-            WHERE id = %s
-            RETURNING id
-            """,
-            (codigo, descricao, tipo, valor, periodo, valido_ate, usos_max, ativo, id_cupom),
-        )
+        if tem_escopo:
+            cur.execute(
+                """
+                UPDATE tbl_cupom_desconto SET
+                  codigo = %s, descricao = %s, tipo_desconto = %s, valor_desconto = %s,
+                  periodo = %s, valido_ate = %s, usos_max = %s, ativo = %s,
+                  publico_alvo = %s, atualizado_em = NOW()
+                WHERE id = %s
+                RETURNING id
+                """,
+                (
+                    codigo,
+                    descricao,
+                    tipo,
+                    valor,
+                    periodo,
+                    valido_ate,
+                    usos_max,
+                    ativo,
+                    publico_alvo,
+                    id_cupom,
+                ),
+            )
+        else:
+            cur.execute(
+                """
+                UPDATE tbl_cupom_desconto SET
+                  codigo = %s, descricao = %s, tipo_desconto = %s, valor_desconto = %s,
+                  periodo = %s, valido_ate = %s, usos_max = %s, ativo = %s, atualizado_em = NOW()
+                WHERE id = %s
+                RETURNING id
+                """,
+                (codigo, descricao, tipo, valor, periodo, valido_ate, usos_max, ativo, id_cupom),
+            )
         if not cur.fetchone():
             raise ValueError("Cupom não encontrado.")
+        _sincronizar_tenants_cupom(cur, id_cupom, ids_tenants)
         return obter_cupom_por_id(cur, id_cupom) or {}
 
     cur.execute(
@@ -214,17 +420,40 @@ def salvar_cupom(cur, dados: dict, *, id_cupom: int | None = None) -> dict:
     if cur.fetchone():
         raise ValueError("Já existe um cupom com este código.")
 
-    cur.execute(
-        """
-        INSERT INTO tbl_cupom_desconto (
-          codigo, descricao, tipo_desconto, valor_desconto, periodo,
-          valido_ate, usos_max, ativo
-        ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
-        RETURNING id
-        """,
-        (codigo, descricao, tipo, valor, periodo, valido_ate, usos_max, ativo),
-    )
+    if tem_escopo:
+        cur.execute(
+            """
+            INSERT INTO tbl_cupom_desconto (
+              codigo, descricao, tipo_desconto, valor_desconto, periodo,
+              valido_ate, usos_max, ativo, publico_alvo
+            ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            RETURNING id
+            """,
+            (
+                codigo,
+                descricao,
+                tipo,
+                valor,
+                periodo,
+                valido_ate,
+                usos_max,
+                ativo,
+                publico_alvo,
+            ),
+        )
+    else:
+        cur.execute(
+            """
+            INSERT INTO tbl_cupom_desconto (
+              codigo, descricao, tipo_desconto, valor_desconto, periodo,
+              valido_ate, usos_max, ativo
+            ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+            RETURNING id
+            """,
+            (codigo, descricao, tipo, valor, periodo, valido_ate, usos_max, ativo),
+        )
     new_id = int(cur.fetchone()[0])
+    _sincronizar_tenants_cupom(cur, new_id, ids_tenants)
     return obter_cupom_por_id(cur, new_id) or {}
 
 
@@ -266,16 +495,44 @@ def periodos_opcoes() -> list[dict]:
     ]
 
 
+def listar_tenants_para_cupom(cur) -> list[dict[str, Any]]:
+    cur.execute(
+        """
+        SELECT id, nome, slug, COALESCE(NULLIF(TRIM(tipo_negocio), ''), 'vendedor')
+        FROM tbl_tenant
+        WHERE COALESCE(ativo, TRUE) = TRUE
+          AND COALESCE(NULLIF(TRIM(tipo_negocio), ''), 'vendedor')
+              IN ('vendedor', 'fornecedor', 'hibrido')
+        ORDER BY nome NULLS LAST, id
+        LIMIT 500
+        """
+    )
+    out = []
+    for r in cur.fetchall():
+        out.append(
+            {
+                "id": int(r[0]),
+                "nome": r[1] or f"Tenant #{r[0]}",
+                "slug": r[2] or "",
+                "tipo_negocio": str(r[3] or "vendedor").lower(),
+            }
+        )
+    return out
+
+
 def preview_assinatura(
     cur,
     *,
     valor_mensal_centavos: int,
     periodo: str,
     cupom_codigo: str | None = None,
+    id_tenant: int | None = None,
 ) -> dict:
     p = normalizar_periodo(periodo)
     cupom = None
     if cupom_codigo and cupom_codigo.strip():
-        cupom = validar_cupom_para_periodo(cur, cupom_codigo, p)
+        cupom = validar_cupom_para_periodo(
+            cur, cupom_codigo, p, id_tenant=id_tenant
+        )
     preco = calcular_preco(valor_mensal_centavos, p, cupom=cupom)
     return {"success": True, **preco, "periodos": periodos_opcoes()}

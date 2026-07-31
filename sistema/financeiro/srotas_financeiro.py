@@ -207,6 +207,7 @@ def api_preview_assinatura():
             valor_mensal_centavos=int(p["valor_centavos"]),
             periodo=periodo,
             cupom_codigo=cupom,
+            id_tenant=_id_tenant(),
         )
         data["plano_slug"] = plano
         data["plano_nome"] = p["nome"]

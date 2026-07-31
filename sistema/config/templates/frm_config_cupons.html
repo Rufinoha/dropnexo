@@ -3,15 +3,16 @@
 {% set nav_ativo = 'config' %}
 {% block topbar_title %}Cupom de Desconto{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_cupons.css') }}?v=1" />
+<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_cupons.css') }}?v=2" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal CfgCup_Wrap">
   <div class="cl-page-title">
     <h2>Cupom de Desconto</h2>
     <p class="cl-page-desc">
-      Cupons com validade, valor fixo ou percentual (até 100%), limite de usos e vínculo a um único ciclo
-      (mensal, semestral ou anual). Somente desenvolvedor.
+      Cupons com validade, valor fixo ou percentual (até 100%), limite de usos, ciclo
+      (mensal/semestral/anual) e escopo opcional por tipo ou tenant. Campos vazios = válido para qualquer um.
+      Somente desenvolvedor.
     </p>
   </div>
   <p class="CfgCup_Aviso">
@@ -31,6 +32,7 @@
               <th>Código</th>
               <th>Desconto</th>
               <th>Período</th>
+              <th>Escopo</th>
               <th>Validade</th>
               <th>Usos</th>
               <th>Status</th>
@@ -38,7 +40,7 @@
             </tr>
           </thead>
           <tbody id="cfg_cup_tbody">
-            <tr><td colspan="7" class="CfgCup_Hint">Carregando…</td></tr>
+            <tr><td colspan="8" class="CfgCup_Hint">Carregando…</td></tr>
           </tbody>
         </table>
       </div>
@@ -70,12 +72,27 @@
           </label>
         </div>
         <label class="CfgCup_Field">
-          <span>Válido somente para</span>
+          <span>Válido somente para ciclo</span>
           <select id="cfg_cup_periodo" required>
             <option value="mensal">Mensal</option>
             <option value="semestral">Semestral (−10% no ciclo)</option>
             <option value="anual">Anual (−20% no ciclo)</option>
           </select>
+        </label>
+        <label class="CfgCup_Field">
+          <span>Público (tipo de conta)</span>
+          <select id="cfg_cup_publico">
+            <option value="">Qualquer um</option>
+            <option value="vendedor">Somente vendedores</option>
+            <option value="fornecedor">Somente fornecedores</option>
+          </select>
+          <small>Vazio = vendedor e fornecedor</small>
+        </label>
+        <label class="CfgCup_Field">
+          <span>Tenants específicos (opcional)</span>
+          <input type="search" id="cfg_cup_tenant_filtro" placeholder="Filtrar por nome, slug ou #id…" />
+          <select id="cfg_cup_tenants" multiple size="7" class="CfgCup_Multi"></select>
+          <small>Vazio = qualquer tenant. Segure Ctrl/Cmd para marcar vários.</small>
         </label>
         <div class="CfgCup_Row">
           <label class="CfgCup_Field">
@@ -111,5 +128,5 @@
   "apiSalvar": url_for("config.cupons_desconto_salvar"),
   "apiExcluir": url_for("config.cupons_desconto_excluir")
 }|tojson }}</script>
-<script defer src="{{ url_for('config.static', filename='script/Sconfig_cupons.js') }}?v=1"></script>
+<script defer src="{{ url_for('config.static', filename='script/Sconfig_cupons.js') }}?v=3"></script>
 {% endblock %}

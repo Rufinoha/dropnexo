@@ -548,7 +548,9 @@ def emitir_fatura(
 
     cupom = None
     if cupom_codigo and str(cupom_codigo).strip():
-        cupom = validar_cupom_para_periodo(cur, cupom_codigo, periodo)
+        cupom = validar_cupom_para_periodo(
+            cur, cupom_codigo, periodo, id_tenant=int(id_tenant)
+        )
 
     preco = calcular_preco(int(plano["valor_centavos"]), periodo, cupom=cupom)
     valor_final = int(preco["valor_final_centavos"])

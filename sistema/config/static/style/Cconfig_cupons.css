@@ -53,6 +53,13 @@
   font: inherit;
   font-size: 0.95rem;
 }
+.CfgCup_Multi {
+  min-height: 9.5rem;
+  width: 100%;
+}
+.CfgCup_Field #cfg_cup_tenant_filtro {
+  margin-bottom: 0.2rem;
+}
 .CfgCup_Field small { color: #94a3b8; font-size: 0.75rem; }
 .CfgCup_Row {
   display: grid;

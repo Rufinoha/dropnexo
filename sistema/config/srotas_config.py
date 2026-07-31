@@ -1711,9 +1711,18 @@ def cupons_desconto_dados():
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
-        from sistema.financeiro.cupom import listar_cupons, periodos_opcoes
+        from sistema.financeiro.cupom import (
+            listar_cupons,
+            listar_tenants_para_cupom,
+            periodos_opcoes,
+        )
 
-        return jsonify(success=True, cupons=listar_cupons(cur), periodos=periodos_opcoes())
+        return jsonify(
+            success=True,
+            cupons=listar_cupons(cur),
+            periodos=periodos_opcoes(),
+            tenants=listar_tenants_para_cupom(cur),
+        )
     except Exception as e:
         return jsonify(success=False, message=str(e)), 500
     finally:
