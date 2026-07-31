@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Job diário financeiro — vencidas, avisos, rebaixamento 15 dias, renovações.
+"""Job diário financeiro — vencidas, avisos, rebaixamento boleto (7 dias úteis), renovações.
 
 Uso (cron):
   python scripts/financeiro_job_diario.py

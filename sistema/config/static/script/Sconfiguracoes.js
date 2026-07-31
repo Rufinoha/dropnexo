@@ -16,6 +16,18 @@
       iconeTech: "novidades",
     },
     {
+      titulo: "Cupom de Desconto",
+      texto: "Crie cupons com validade, % ou valor fixo, limite de usos e vínculo a mensal, semestral ou anual.",
+      rota: "/configuracoes/cupons-desconto",
+      iconeTech: "shopping-bag",
+    },
+    {
+      titulo: "HubSupport",
+      texto: "Chave de API, URL do webhook e diagnóstico da Central de Demandas (chamados de suporte).",
+      rota: "/configuracoes/hubsupport",
+      iconeTech: "life-buoy",
+    },
+    {
       titulo: "Fornecedores na plataforma",
       texto: "Cadastro PJ, ativação e depósitos dos tenants fornecedor (somente desenvolvedor).",
       rota: "/configuracoes/fornecedores-plataforma",

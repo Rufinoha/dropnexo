@@ -6,7 +6,7 @@
 {% block head_extra %}
 <link rel="stylesheet" href="{{ url_for('planos.static', filename='style/Cmeu_plano.css') }}" />
 {% if pode_pagamento %}
-<link rel="stylesheet" href="{{ url_for('static', filename='style/Cefi_cartao.css') }}?v=4" />
+<link rel="stylesheet" href="{{ url_for('static', filename='style/Cefi_cartao.css') }}?v=6" />
 {% endif %}
 {% endblock %}
 
@@ -139,8 +139,8 @@
   {% endif %}
 
   <p class="mpl-nota">
-    Ao assinar, a fatura é emitida e o plano só é liberado após o pagamento.
-    Sem pagamento por 15 dias após o vencimento, a conta volta ao Explorar (integrações ficam conectadas, mas bloqueadas).
+    No boleto, o plano é liberado na hora. Sem confirmação de pagamento em até 7 dias úteis, a conta volta ao Explorar
+    (integrações ficam conectadas, mas bloqueadas). No cartão, a liberação ocorre após a aprovação.
     Acompanhe em <a href="{{ url_for('financeiro.pagina') }}">Financeiro</a>.
     {% if pode_pagamento %}
     Configure e-mail de cobrança em
@@ -153,11 +153,12 @@
 {% if pode_pagamento %}
 <script id="mpl_cfg" type="application/json">{{ {
   "apiAssinar": url_for("financeiro.api_assinar"),
+  "apiPreview": url_for("financeiro.api_preview_assinatura"),
   "efiPayeeCode": efi_payee_code or "",
   "efiEnvironment": efi_environment or "sandbox",
   "urlFinanceiro": url_for("financeiro.pagina")
 }|tojson }}</script>
-<script defer src="{{ url_for('static', filename='script/Sefi_cartao.js') }}?v=4"></script>
-<script defer src="{{ url_for('planos.static', filename='script/Smeu_plano.js') }}?v=4"></script>
+<script defer src="{{ url_for('static', filename='script/Sefi_cartao.js') }}?v=7"></script>
+<script defer src="{{ url_for('planos.static', filename='script/Smeu_plano.js') }}?v=6"></script>
 {% endif %}
 {% endblock %}

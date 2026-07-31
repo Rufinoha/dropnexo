@@ -30,6 +30,8 @@
       environment: cfg.efiEnvironment || "sandbox",
       valorCentavos: valorCentavos || 0,
       planoNome: planoNome || "Plano DropNexo",
+      planoSlug: slugVitrine,
+      apiPreview: cfg.apiPreview || "",
       titulo: "Assinar plano",
     });
     if (!pay) return;
@@ -47,6 +49,8 @@
           forma_pagamento: pay.forma,
           payment_token: pay.payment_token || null,
           installments: pay.installments || 1,
+          periodicidade: pay.periodicidade || "mensal",
+          cupom: pay.cupom || null,
         }),
       });
       const j = await r.json();
@@ -62,7 +66,7 @@
       if (window.Swal) {
         await Swal.fire({
           icon: "success",
-          title: j.liberado ? "Plano liberado" : "Fatura emitida",
+          title: j.liberado ? "Plano liberado" : "Aguardando pagamento",
           html: "<p>" + (j.message || "") + "</p>" + extra,
           confirmButtonText: "Ir ao Financeiro",
           confirmButtonColor: "#021F81",

@@ -1,0 +1,42 @@
+{% extends "frm_base.html" %}
+{% block title %}Chamado — {{ MARCA_NOME }}{% endblock %}
+{% set nav_ativo = 'demandas' %}
+{% block topbar_title %}Detalhe do chamado{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('demandas.static', filename='style/Cdemandas.css') }}?v=1" />
+{% endblock %}
+{% block content %}
+<div class="Cl_ContainerApoio cl-page-principal Dem_Wrap">
+  <p class="Dem_Voltar">
+    <a class="Cl_BtnLink" href="{{ url_for('demandas.demandas_pagina') }}">← Voltar à Central de Demandas</a>
+  </p>
+  <div id="dem_detalhe_load" class="Dem_Empty">Carregando chamado…</div>
+  <div id="dem_detalhe" hidden>
+    <header class="Dem_DetalheHead">
+      <div>
+        <p class="Dem_Protocolo" id="dem_protocolo">—</p>
+        <h2 id="dem_titulo">—</h2>
+        <p class="cl-page-desc" id="dem_meta"></p>
+      </div>
+      <span class="Dem_Badge" id="dem_status">—</span>
+    </header>
+
+    <section class="Dem_Thread" id="dem_thread" aria-live="polite"></section>
+
+    <section class="Dem_Resposta" id="dem_resposta_box">
+      <label class="Cl_Label" for="dem_corpo">Sua resposta</label>
+      <textarea id="dem_corpo" class="Cl_Input Dem_Textarea" rows="4" placeholder="Escreva sua mensagem…"></textarea>
+      <p class="Dem_Err" id="dem_resp_err" hidden></p>
+      <button type="button" class="Cl_botaoprimario" id="dem_enviar_resp">Enviar resposta</button>
+    </section>
+    <p class="Dem_Help" id="dem_fechado_msg" hidden>Este chamado está fechado e não aceita novas respostas.</p>
+  </div>
+</div>
+
+<script type="application/json" id="dem_det_cfg">{{ {
+  "ref": chamado_ref,
+  "apiDetalhe": api_detalhe,
+  "apiResponder": api_responder
+} | tojson }}</script>
+<script defer src="{{ url_for('demandas.static', filename='script/Sdemanda_detalhe.js') }}?v=1"></script>
+{% endblock %}

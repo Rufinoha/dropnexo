@@ -7,7 +7,7 @@
   <meta name="robots" content="noindex, nofollow" />
   {% include "partials/marca_favicon.html" %}
   <link rel="stylesheet" href="{{ url_for('static', filename='style/global_utils.css') }}" />
-  <link rel="stylesheet" href="{{ url_for('static', filename='style/app_shell.css') }}?v=2" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style/app_shell.css') }}?v=3" />
   {% if session.get('id_usuario') %}
   <link rel="stylesheet" href="{{ url_for('static', filename='style/Cnovidades.css') }}" />
   {% endif %}
@@ -15,7 +15,7 @@
   <script defer src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <script defer src="{{ url_for('static', filename='script/global_utils.js') }}"></script>
-  <script defer src="{{ url_for('static', filename='script/app_shell.js') }}?v=2"></script>
+  <script defer src="{{ url_for('static', filename='script/app_shell.js') }}?v=3"></script>
 </head>
 <body class="fg-app">
   {% set nome_usuario = session.get('nome', 'Usuário') %}
@@ -169,9 +169,9 @@
                 <span class="fg-menu-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span>
                 <span>Financeiro</span>
               </a>
-              <a href="{{ url_for('planos.abrir_chamado') }}" class="fg-menu-item" role="menuitem">
+              <a href="{{ url_for('demandas.demandas_pagina') }}" class="fg-menu-item" role="menuitem">
                 <span class="fg-menu-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
-                <span>Abrir chamado</span>
+                <span>Central de Demandas</span>
               </a>
               <a href="{{ url_for('marktplace.pagina') }}" class="fg-menu-item" role="menuitem">
                 <span class="fg-menu-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg></span>
@@ -197,14 +197,24 @@
 
       <main class="fg-content">
         {% if session.get('id_usuario') and financeiro_alerta %}
-        <div class="fg-fin-banner" role="status">
+        <div
+          class="fg-fin-banner"
+          id="fg_fin_banner"
+          role="status"
+          data-fin-ref="{{ financeiro_alerta.referencia }}"
+          data-fin-status="{{ financeiro_alerta.status }}"
+          hidden
+        >
           <div class="fg-fin-banner-inner">
-            <strong>Financeiro:</strong>
-            fatura {{ financeiro_alerta.referencia }} está
-            {% if financeiro_alerta.status == 'vencido' %}vencida{% else %}emitida / pendente{% endif %}
-            ({{ financeiro_alerta.valor_formatado }}).
-            Sem pagamento por {{ financeiro_alerta.dias_graca }} dias após o vencimento, o plano pode voltar ao gratuito.
-            <a href="{{ url_for('financeiro.pagina') }}">Abrir Financeiro</a>
+            <div class="fg-fin-banner-text">
+              <strong>Financeiro:</strong>
+              fatura {{ financeiro_alerta.referencia }} está
+              {% if financeiro_alerta.status == 'vencido' %}vencida{% else %}emitida / pendente{% endif %}
+              ({{ financeiro_alerta.valor_formatado }}).
+              Sem pagamento do boleto em até {{ financeiro_alerta.dias_graca }} dias úteis, o plano pode voltar ao gratuito.
+              <a href="{{ url_for('financeiro.pagina') }}">Abrir Financeiro</a>
+            </div>
+            <button type="button" class="fg-fin-banner-close" id="fg_fin_banner_close" aria-label="Fechar aviso" title="Fechar">×</button>
           </div>
         </div>
         {% endif %}

@@ -1,4 +1,4 @@
-# sistema/financeiro/cobranca.py — assinatura, faturas Efi, inadimplência 15 dias
+# sistema/financeiro/cobranca.py — assinatura, faturas Efi, inadimplência boleto
 from __future__ import annotations
 
 import json
@@ -15,9 +15,72 @@ from sistema.planos.limites import limites_plano_tenant
 
 log = logging.getLogger(__name__)
 
-DIAS_GRACA_INADIMPLENCIA = 15
+# Boleto: libera na emissão; sem pagamento → rebaixa após N dias úteis
+DIAS_UTEIS_GRACA_BOLETO = 7
+# Demais formas (ex.: cartão pendente): dias corridos após vencimento
+DIAS_GRACA_INADIMPLENCIA = DIAS_UTEIS_GRACA_BOLETO
 PLANOS_PAGOS = ("professional", "scale", "enterprise")
 FORMAS = ("boleto", "pix", "cartao")
+
+
+def adicionar_dias_uteis(inicio: date, dias: int) -> date:
+    """Soma dias úteis (seg–sex), sem feriados."""
+    if dias <= 0:
+        return inicio
+    d = inicio
+    add = 0
+    while add < dias:
+        d += timedelta(days=1)
+        if d.weekday() < 5:
+            add += 1
+    return d
+
+
+def adicionar_meses(inicio: date, meses: int) -> date:
+    """Soma meses calendário mantendo o dia quando possível."""
+    meses = max(0, int(meses or 0))
+    y = inicio.year + (inicio.month - 1 + meses) // 12
+    m = (inicio.month - 1 + meses) % 12 + 1
+    # último dia do mês destino
+    if m == 12:
+        ultimo = date(y + 1, 1, 1) - timedelta(days=1)
+    else:
+        ultimo = date(y, m + 1, 1) - timedelta(days=1)
+    return date(y, m, min(inicio.day, ultimo.day))
+
+
+def prazo_rebaixa_boleto(criado_em: date | datetime | None) -> date | None:
+    if not criado_em:
+        return None
+    base = criado_em.date() if isinstance(criado_em, datetime) else criado_em
+    return adicionar_dias_uteis(base, DIAS_UTEIS_GRACA_BOLETO)
+
+
+def liberar_plano_tenant(cur, id_tenant: int, plano_slug: str, *, forma: str | None = None) -> None:
+    """Aplica o plano pago na conta (ex.: boleto na adesão)."""
+    slug = (plano_slug or "").strip().lower()
+    if slug not in PLANOS_PAGOS:
+        return
+    cur.execute("UPDATE tbl_tenant SET plano = %s WHERE id = %s", (slug, id_tenant))
+    if forma:
+        cur.execute(
+            """
+            UPDATE tbl_tenant_cobranca
+            SET plano_slug = %s, plano_slug_pendente = NULL,
+                forma_pagamento = %s, atualizado_em = NOW()
+            WHERE id_tenant = %s
+            """,
+            (slug, forma, id_tenant),
+        )
+    else:
+        cur.execute(
+            """
+            UPDATE tbl_tenant_cobranca
+            SET plano_slug = %s, plano_slug_pendente = NULL, atualizado_em = NOW()
+            WHERE id_tenant = %s
+            """,
+            (slug, id_tenant),
+        )
 
 STATUS_LABEL = {
     "pendente": "Emitida",
@@ -226,9 +289,10 @@ def referencia_mes(d: date | None = None) -> str:
 
 def fatura_dict(row) -> dict:
     # id, referencia, valor, status, forma, plano, link_boleto, codigo, pix, qr, link_pag,
-    # venc, pago, criado, efi_charge, efi_txid
+    # venc, pago, criado, efi_charge, efi_txid,
+    # periodicidade, meses, id_cupom, cupom_codigo, valor_cheio, desc_periodo, desc_cupom
     st = row[3] or "pendente"
-    return {
+    d = {
         "id": row[0],
         "referencia": row[1],
         "valor_centavos": int(row[2] or 0),
@@ -247,14 +311,30 @@ def fatura_dict(row) -> dict:
         "criado_em": row[13].isoformat() if row[13] else None,
         "efi_charge_id": row[14],
         "efi_txid": row[15] if len(row) > 15 else None,
+        "periodicidade": row[16] if len(row) > 16 else "mensal",
+        "meses_cobertos": int(row[17] or 1) if len(row) > 17 else 1,
+        "id_cupom": row[18] if len(row) > 18 else None,
+        "cupom_codigo": row[19] if len(row) > 19 else None,
+        "valor_cheio_centavos": int(row[20] or 0) if len(row) > 20 and row[20] is not None else None,
+        "desconto_periodo_centavos": int(row[21] or 0) if len(row) > 21 else 0,
+        "desconto_cupom_centavos": int(row[22] or 0) if len(row) > 22 else 0,
     }
+    return d
 
 
 _FATURA_COLS = """
     id, referencia, valor_centavos, status, forma_pagamento, plano_slug,
     link_boleto, codigo_barras, pix_copia_cola, pix_qrcode, link_pagamento,
-    vencimento_em, pago_em, criado_em, efi_charge_id, efi_txid
+    vencimento_em, pago_em, criado_em, efi_charge_id, efi_txid,
+    periodicidade, meses_cobertos, id_cupom, cupom_codigo,
+    valor_cheio_centavos, desconto_periodo_centavos, desconto_cupom_centavos
 """
+
+
+def referencia_assinatura(periodo: str, d: date | None = None) -> str:
+    base = (d or date.today()).strftime("%Y-%m")
+    suf = {"mensal": "", "semestral": "-S", "anual": "-A"}.get(periodo, "")
+    return f"{base}{suf}"
 
 
 def listar_faturas(cur, id_tenant: int, *, page: int = 1, por_pagina: int = 20) -> dict:
@@ -344,14 +424,17 @@ def _enviar_email_fatura(cur, id_tenant: int, fatura: dict, *, tipo: str) -> Non
         "pago": f"Pagamento confirmado — fatura {fatura['referencia']} • DropNexo",
     }
     mensagens = {
-        "emitida": "Sua fatura foi emitida. Pague até o vencimento para manter o plano ativo.",
+        "emitida": (
+            f"Sua fatura foi emitida e o plano já está liberado. "
+            f"Confirme o pagamento do boleto em até {DIAS_UTEIS_GRACA_BOLETO} dias úteis para mantê-lo ativo."
+        ),
         "aviso": (
-            f"Sua fatura está em atraso. Se permanecer sem pagamento por {DIAS_GRACA_INADIMPLENCIA} dias "
-            "após o vencimento, o plano volta ao gratuito (Explorar) e as integrações ficam bloqueadas "
+            f"Sua fatura de boleto ainda não foi paga. Sem confirmação em até {DIAS_UTEIS_GRACA_BOLETO} dias úteis "
+            "após a emissão, o plano volta ao gratuito (Explorar) e as integrações ficam bloqueadas "
             "(a conexão não é removida)."
         ),
         "rebaixado": (
-            "Sua conta voltou ao plano Explorar por inadimplência. "
+            "Sua conta voltou ao plano Explorar por falta de pagamento do boleto. "
             "Integrações permanecem conectadas, mas o acesso e as atualizações ficam bloqueados até assinar novamente."
         ),
         "pago": "Recebemos o pagamento. Seu plano permanece ativo.",
@@ -442,19 +525,36 @@ def emitir_fatura(
     payment_token: str | None = None,
     installments: int = 1,
     forcar_nova: bool = False,
+    periodicidade: str = "mensal",
+    cupom_codigo: str | None = None,
 ) -> dict:
     """Emite fatura do plano (assinatura ou renovação)."""
+    from sistema.financeiro.cupom import (
+        calcular_preco,
+        normalizar_periodo,
+        registrar_uso_cupom,
+        validar_cupom_para_periodo,
+    )
+
     forma = (forma or "boleto").strip().lower()
     if forma not in FORMAS:
         raise ValueError("Forma de pagamento inválida.")
+    periodo = normalizar_periodo(periodicidade)
     plano = obter_plano_db(cur, plano_slug)
     if not plano:
         raise ValueError("Plano não encontrado.")
     if int(plano["valor_centavos"] or 0) <= 0:
         raise ValueError("Plano gratuito não gera cobrança.")
 
+    cupom = None
+    if cupom_codigo and str(cupom_codigo).strip():
+        cupom = validar_cupom_para_periodo(cur, cupom_codigo, periodo)
+
+    preco = calcular_preco(int(plano["valor_centavos"]), periodo, cupom=cupom)
+    valor_final = int(preco["valor_final_centavos"])
+
     cli = _dados_cliente_cobranca(cur, id_tenant)
-    ref = referencia or referencia_mes()
+    ref = referencia or referencia_assinatura(periodo)
     if not forcar_nova:
         cur.execute(
             """
@@ -468,53 +568,70 @@ def emitir_fatura(
         ex = cur.fetchone()
         if ex:
             if ex[1] == "pago":
-                raise ValueError("Já existe fatura paga para este mês/plano.")
+                raise ValueError("Já existe fatura paga para este período/plano.")
             fat = obter_fatura(cur, id_tenant, int(ex[0]))
             if fat:
                 return fat
 
-    from api.efi.efi import efi_disponivel
-
-    if not efi_disponivel():
-        raise RuntimeError("Efi não configurada no servidor (.env).")
-
     email = cli["email_cobranca"] or ""
     venc = proximo_vencimento(cli["dia_vencimento"])
-    descricao = f"DropNexo — {plano['nome']} ({ref})"
-    cob = _criar_cobranca_efi(
-        cur,
-        id_tenant=id_tenant,
-        forma=forma,
-        valor_centavos=int(plano["valor_centavos"]),
-        descricao=descricao,
-        vencimento=venc,
-        nome_cliente=cli["nome_cliente"],
-        documento=cli["documento"],
-        email=email,
-        payment_token=payment_token,
-        installments=installments,
-        telefone=cli.get("telefone"),
-        endereco=cli.get("endereco"),
-    )
+    desc_periodo = preco["periodo_rotulo"]
+    descricao = f"DropNexo — {plano['nome']} · {desc_periodo} ({ref})"
 
-    status_ini = "pago" if forma == "cartao" and cob.get("pago") else "pendente"
+    cob: dict = {
+        "charge_id": None,
+        "txid": None,
+        "link_boleto": None,
+        "codigo_barras": None,
+        "pix_copia_cola": None,
+        "pix_qrcode": None,
+        "link_pagamento": None,
+        "pago": False,
+    }
+    cortesia = valor_final <= 0
+
+    if not cortesia:
+        from api.efi.efi import efi_disponivel
+
+        if not efi_disponivel():
+            raise RuntimeError("Efi não configurada no servidor (.env).")
+        cob = _criar_cobranca_efi(
+            cur,
+            id_tenant=id_tenant,
+            forma=forma,
+            valor_centavos=valor_final,
+            descricao=descricao,
+            vencimento=venc,
+            nome_cliente=cli["nome_cliente"],
+            documento=cli["documento"],
+            email=email,
+            payment_token=payment_token,
+            installments=installments,
+            telefone=cli.get("telefone"),
+            endereco=cli.get("endereco"),
+        )
+
+    status_ini = "pago" if cortesia or (forma == "cartao" and cob.get("pago")) else "pendente"
     cur.execute(
         """
         INSERT INTO tbl_fatura (
             id_tenant, referencia, valor_centavos, status, forma_pagamento, plano_slug,
             efi_charge_id, efi_txid, link_boleto, codigo_barras, pix_copia_cola, pix_qrcode,
-            link_pagamento, vencimento_em, pago_em, atualizado_em
+            link_pagamento, vencimento_em, pago_em, atualizado_em,
+            periodicidade, meses_cobertos, id_cupom, cupom_codigo,
+            valor_cheio_centavos, desconto_periodo_centavos, desconto_cupom_centavos
         ) VALUES (
             %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
-            CASE WHEN %s = 'pago' THEN NOW() ELSE NULL END, NOW()
+            CASE WHEN %s = 'pago' THEN NOW() ELSE NULL END, NOW(),
+            %s,%s,%s,%s,%s,%s,%s
         ) RETURNING id
         """,
         (
             id_tenant,
             ref,
-            int(plano["valor_centavos"]),
+            valor_final,
             status_ini,
-            forma,
+            forma if not cortesia else (forma or "boleto"),
             plano_slug,
             cob.get("charge_id"),
             cob.get("txid"),
@@ -525,6 +642,13 @@ def emitir_fatura(
             cob.get("link_pagamento"),
             venc,
             status_ini,
+            periodo,
+            int(preco["meses_cobertos"]),
+            cupom["id"] if cupom else None,
+            cupom["codigo"] if cupom else None,
+            int(preco["valor_cheio_centavos"]),
+            int(preco["desconto_periodo_centavos"]),
+            int(preco["desconto_cupom_centavos"]),
         ),
     )
     fid = int(cur.fetchone()[0])
@@ -536,11 +660,32 @@ def emitir_fatura(
         operacao="fatura_inserida",
         ok=True,
         efi_charge_id=cob.get("charge_id") or cob.get("txid"),
-        response_resumo={"id_fatura": fid, "status": status_ini},
+        response_resumo={"id_fatura": fid, "status": status_ini, "preco": preco},
+    )
+
+    if cupom and int(preco["desconto_cupom_centavos"] or 0) >= 0:
+        registrar_uso_cupom(
+            cur,
+            id_cupom=int(cupom["id"]),
+            id_tenant=id_tenant,
+            id_fatura=fid,
+            codigo=cupom["codigo"],
+            desconto_centavos=int(preco["desconto_cupom_centavos"]),
+        )
+
+    cur.execute(
+        """
+        UPDATE tbl_tenant_cobranca
+        SET periodicidade = %s, atualizado_em = NOW()
+        WHERE id_tenant = %s
+        """,
+        (periodo, id_tenant),
     )
 
     if status_ini == "pago":
-        aplicar_pagamento_fatura(cur, fid, origem="cartao_imediato")
+        aplicar_pagamento_fatura(cur, fid, origem="cartao_imediato" if not cortesia else "cortesia")
+    elif forma == "boleto":
+        liberar_plano_tenant(cur, id_tenant, plano_slug, forma=forma)
     else:
         cur.execute(
             """
@@ -565,13 +710,18 @@ def assinar_plano(
     forma: str = "boleto",
     payment_token: str | None = None,
     installments: int = 1,
+    periodicidade: str = "mensal",
+    cupom_codigo: str | None = None,
 ) -> dict:
+    from sistema.financeiro.cupom import normalizar_periodo
+
     slug = (plano_slug or "").strip().lower()
     if slug not in PLANOS_PAGOS:
         raise ValueError("Selecione um plano pago válido.")
     forma = (forma or "boleto").strip().lower()
     if forma == "pix":
         raise ValueError("PIX será liberado em breve. Use boleto ou cartão.")
+    periodo = normalizar_periodo(periodicidade)
     cli = _dados_cliente_cobranca(cur, id_tenant)
     doc = "".join(c for c in (cli["documento"] or "") if c.isdigit())
     if len(doc) not in (11, 14):
@@ -605,15 +755,27 @@ def assinar_plano(
         payment_token=payment_token,
         installments=installments,
         forcar_nova=False,
+        periodicidade=periodo,
+        cupom_codigo=cupom_codigo,
     )
+    if forma == "boleto" and fatura.get("status") in ("pendente", "vencido"):
+        liberar_plano_tenant(cur, id_tenant, slug, forma=forma)
+
+    pago = fatura.get("status") == "pago"
+    liberado = pago or forma == "boleto"
+    if pago:
+        msg = "Pagamento confirmado. Plano liberado."
+    elif forma == "boleto":
+        msg = (
+            f"Boleto gerado e plano liberado. Sem pagamento em até {DIAS_UTEIS_GRACA_BOLETO} dias úteis, "
+            "a conta volta ao Explorar (gratuito)."
+        )
+    else:
+        msg = "Fatura emitida. O plano será liberado após a confirmação do pagamento."
     return {
         "fatura": fatura,
-        "message": (
-            "Pagamento confirmado. Plano liberado."
-            if fatura.get("status") == "pago"
-            else "Fatura emitida. O plano será liberado após a confirmação do pagamento."
-        ),
-        "liberado": fatura.get("status") == "pago",
+        "message": msg,
+        "liberado": liberado,
     }
 
 
@@ -907,7 +1069,7 @@ def rebaixar_tenant_starter(cur, id_tenant: int, *, id_fatura: int | None = None
 
 
 def job_financeiro_diario(cur) -> dict:
-    """Marca vencidas, avisa atraso, rebaixa após 15 dias, emite renovações do dia."""
+    """Marca vencidas, avisa atraso, rebaixa boleto sem pagamento (7 dias úteis), renovações."""
     hoje = date.today()
     res = {"vencidas": 0, "avisos": 0, "rebaixados": 0, "renovacoes": 0, "erros": []}
 
@@ -922,44 +1084,76 @@ def job_financeiro_diario(cur) -> dict:
     )
     res["vencidas"] = len(cur.fetchall())
 
-    # aviso 1x após vencimento
+    # aviso 1x: boleto sem pagamento já no prazo de graça / vencido
     cur.execute(
-        f"""
-        SELECT id, id_tenant FROM tbl_fatura
-        WHERE status = 'vencido' AND avisado_em IS NULL
-          AND vencimento_em <= %s
-        """,
-        (hoje,),
+        """
+        SELECT id, id_tenant, forma_pagamento, criado_em, vencimento_em
+        FROM tbl_fatura
+        WHERE status IN ('pendente', 'vencido') AND avisado_em IS NULL
+        """
     )
-    for fid, tid in cur.fetchall():
+    for fid, tid, forma, criado, venc in cur.fetchall():
+        avisar = False
+        if (forma or "").lower() == "boleto":
+            base = criado.date() if isinstance(criado, datetime) else criado
+            if base:
+                # avisa a partir de 2 dias úteis antes do fim da graça
+                inicio_aviso = adicionar_dias_uteis(base, max(1, DIAS_UTEIS_GRACA_BOLETO - 2))
+                avisar = hoje >= inicio_aviso
+        elif venc and venc <= hoje:
+            avisar = True
+        if not avisar:
+            continue
         fat = obter_fatura(cur, int(tid), int(fid))
         if fat:
             _enviar_email_fatura(cur, int(tid), fat, tipo="aviso")
             cur.execute("UPDATE tbl_fatura SET avisado_em = NOW() WHERE id = %s", (fid,))
             res["avisos"] += 1
 
+    # Rebaixa: boleto sem pagamento após 7 dias úteis da emissão
+    cur.execute(
+        """
+        SELECT f.id, f.id_tenant, f.criado_em
+        FROM tbl_fatura f
+        JOIN tbl_tenant t ON t.id = f.id_tenant
+        WHERE f.status IN ('pendente', 'vencido')
+          AND lower(COALESCE(f.forma_pagamento, '')) = 'boleto'
+          AND f.rebaixado_em IS NULL
+          AND t.plano IS DISTINCT FROM 'starter'
+          AND f.criado_em::date <= %s
+        """,
+        (hoje - timedelta(days=DIAS_UTEIS_GRACA_BOLETO),),
+    )
+    for fid, tid, criado in cur.fetchall():
+        prazo = prazo_rebaixa_boleto(criado)
+        if prazo and hoje >= prazo:
+            rebaixar_tenant_starter(cur, int(tid), id_fatura=int(fid))
+            res["rebaixados"] += 1
+
+    # Demais formas: rebaixa por dias corridos após vencimento
     limite = hoje - timedelta(days=DIAS_GRACA_INADIMPLENCIA)
     cur.execute(
         """
-        SELECT f.id, f.id_tenant, t.plano
+        SELECT f.id, f.id_tenant
         FROM tbl_fatura f
         JOIN tbl_tenant t ON t.id = f.id_tenant
         WHERE f.status = 'vencido'
+          AND lower(COALESCE(f.forma_pagamento, '')) <> 'boleto'
           AND f.rebaixado_em IS NULL
           AND f.vencimento_em <= %s
           AND t.plano IS DISTINCT FROM 'starter'
         """,
         (limite,),
     )
-    for fid, tid, _plano in cur.fetchall():
+    for fid, tid in cur.fetchall():
         rebaixar_tenant_starter(cur, int(tid), id_fatura=int(fid))
         res["rebaixados"] += 1
 
-    # renovação: tenants pagos no dia de vencimento sem fatura do mês
-    ref = referencia_mes(hoje)
+    # renovação: no dia de vencimento, se a cobertura do ciclo anterior já acabou
     cur.execute(
         """
-        SELECT tc.id_tenant, tc.dia_vencimento, tc.forma_pagamento, tc.plano_slug
+        SELECT tc.id_tenant, tc.dia_vencimento, tc.forma_pagamento, tc.plano_slug,
+               COALESCE(NULLIF(tc.periodicidade, ''), 'mensal')
         FROM tbl_tenant_cobranca tc
         JOIN tbl_tenant t ON t.id = tc.id_tenant
         JOIN tbl_plano p ON p.slug = tc.plano_slug
@@ -969,19 +1163,42 @@ def job_financeiro_diario(cur) -> dict:
         """,
         (hoje.day,),
     )
-    for tid, _dia, forma, slug in cur.fetchall():
+    for tid, _dia, forma, slug, periodo in cur.fetchall():
         try:
+            periodo = (periodo or "mensal").strip().lower()
+            if periodo not in ("mensal", "semestral", "anual"):
+                periodo = "mensal"
             cur.execute(
                 """
-                SELECT 1 FROM tbl_fatura
-                WHERE id_tenant = %s AND referencia = %s AND status IN ('pendente','pago','vencido')
+                SELECT referencia, COALESCE(meses_cobertos, 1),
+                       COALESCE(pago_em, criado_em)::date, status
+                FROM tbl_fatura
+                WHERE id_tenant = %s AND plano_slug = %s
+                  AND status IN ('pendente', 'pago', 'vencido')
+                ORDER BY id DESC
                 LIMIT 1
                 """,
-                (tid, ref),
+                (tid, slug),
             )
-            if cur.fetchone():
-                continue
-            emitir_fatura(cur, int(tid), plano_slug=slug, forma=forma or "boleto", referencia=ref)
+            last = cur.fetchone()
+            if last:
+                meses = max(1, int(last[1] or 1))
+                base = last[2]
+                if base and hoje < adicionar_meses(base, meses):
+                    continue
+                ref = referencia_assinatura(periodo, hoje)
+                if last[0] == ref and last[3] in ("pendente", "pago", "vencido"):
+                    continue
+            else:
+                ref = referencia_assinatura(periodo, hoje)
+            emitir_fatura(
+                cur,
+                int(tid),
+                plano_slug=slug,
+                forma=forma or "boleto",
+                referencia=ref,
+                periodicidade=periodo,
+            )
             res["renovacoes"] += 1
         except Exception as e:
             res["erros"].append({"id_tenant": tid, "erro": str(e)})

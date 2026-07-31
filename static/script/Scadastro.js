@@ -277,7 +277,7 @@
 
   function tipoAtual() {
     const r = form.querySelector('input[name="tipo_pessoa"]:checked');
-    return r ? r.value : "F";
+    return r ? r.value : "J";
   }
 
   function sincronizarNomeUsuarioPf() {

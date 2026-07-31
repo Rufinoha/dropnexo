@@ -195,6 +195,85 @@
   overflow: auto;
 }
 
+.DnPay_Periodo {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.35rem;
+  margin-bottom: 0.85rem;
+}
+.DnPay_PeriodoBtn {
+  appearance: none;
+  border: 1px solid rgba(7, 20, 51, 0.12);
+  background: #fff;
+  border-radius: 12px;
+  padding: 0.55rem 0.35rem;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--dnp-muted);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+.DnPay_PeriodoBtn small {
+  display: block;
+  margin-top: 0.1rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--dnp-brass);
+}
+.DnPay_PeriodoBtn.is-active {
+  border-color: var(--dnp-navy);
+  color: var(--dnp-navy);
+  box-shadow: 0 0 0 3px rgba(2, 31, 129, 0.1);
+}
+.DnPay_Cupom {
+  margin-bottom: 1rem;
+}
+.DnPay_CupomField {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin: 0;
+}
+.DnPay_CupomField > span {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.DnPay_CupomRow {
+  display: flex;
+  gap: 0.4rem;
+}
+.DnPay_CupomRow input {
+  flex: 1;
+  border: 1px solid #d6d3cd;
+  border-radius: 10px;
+  padding: 0.55rem 0.65rem;
+  font: inherit;
+  text-transform: uppercase;
+}
+.DnPay_CupomBtn {
+  appearance: none;
+  border: 0;
+  border-radius: 10px;
+  padding: 0.55rem 0.85rem;
+  background: rgba(2, 31, 129, 0.08);
+  color: var(--dnp-navy);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.DnPay_CupomMsg {
+  margin: 0.35rem 0 0;
+  font-size: 0.78rem;
+  color: #64748b;
+  min-height: 1.1em;
+}
+.DnPay_CupomMsg.is-ok { color: #166534; }
+.DnPay_CupomMsg.is-err { color: #b91c1c; }
+
 .DnPay_Tabs {
   position: relative;
   display: grid;

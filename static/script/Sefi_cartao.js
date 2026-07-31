@@ -136,13 +136,26 @@
       '<h2 class="DnPay_Plan">' +
       plano +
       "</h2>" +
-      '<div class="DnPay_Price"><strong>' +
+      '<div class="DnPay_Price"><strong id="dnpay_valor_final">' +
       esc(valor) +
-      "</strong><span>/ mês</span></div>" +
-      '<p class="DnPay_AsideNote">Um só passo. Escolha como prefere pagar — o plano só libera após a confirmação.</p>' +
-      '<p class="DnPay_AsideFoot">Pagamento processado com segurança pela Efí.</p>' +
+      '</strong><span id="dnpay_valor_sufixo">/ mês</span></div>' +
+      '<p class="DnPay_AsideNote" id="dnpay_aside_note">Escolha o ciclo, cupom (opcional) e a forma de pagamento.</p>' +
+      '<p class="DnPay_AsideFoot" id="dnpay_aside_break">—</p>' +
       "</aside>" +
       '<main class="DnPay_Main">' +
+      '<div class="DnPay_Periodo" role="group" aria-label="Periodicidade">' +
+      '<button type="button" class="DnPay_PeriodoBtn is-active" data-periodo="mensal">Mensal</button>' +
+      '<button type="button" class="DnPay_PeriodoBtn" data-periodo="semestral">Semestral<small>−10%</small></button>' +
+      '<button type="button" class="DnPay_PeriodoBtn" data-periodo="anual">Anual<small>−20%</small></button>' +
+      "</div>" +
+      '<div class="DnPay_Cupom">' +
+      '<label class="DnPay_CupomField"><span>Cupom de desconto</span>' +
+      '<div class="DnPay_CupomRow">' +
+      '<input id="dnpay_cupom" maxlength="40" placeholder="Código do cupom" autocomplete="off" />' +
+      '<button type="button" class="DnPay_CupomBtn" id="dnpay_cupom_aplicar">Aplicar</button>' +
+      "</div></label>" +
+      '<p class="DnPay_CupomMsg" id="dnpay_cupom_msg"></p>' +
+      "</div>" +
       '<div class="DnPay_Tabs" role="tablist">' +
       '<button type="button" class="DnPay_Tab is-active" data-tab="cartao" role="tab">Cartão</button>' +
       '<button type="button" class="DnPay_Tab" data-tab="boleto" role="tab">Boleto</button>' +
@@ -183,8 +196,8 @@
       '<div class="DnPay_Boleto">' +
       '<div class="DnPay_Barcode" aria-hidden="true"></div>' +
       "<ul>" +
-      "<li>Compensação em até 1–2 dias úteis após o pagamento.</li>" +
-      "<li>O plano é liberado assim que a Efí confirmar.</li>" +
+      "<li>O plano é liberado assim que o boleto é gerado.</li>" +
+      "<li>Sem pagamento em até 7 dias úteis, a conta volta ao Explorar.</li>" +
       "<li>Acompanhe status e 2ª via em Financeiro.</li>" +
       "</ul></div></section>" +
       '<section class="DnPay_Pane" data-pane="pix">' +
@@ -243,13 +256,21 @@
       }, 280);
     });
 
-    num.addEventListener("blur", function () {
-      if (!getBrandRef.current || !opts.valorCentavos || !opts.payeeCode) return;
+    function valorParaParcelas() {
+      if (typeof opts.getValorFinal === "function") {
+        return parseInt(opts.getValorFinal(), 10) || 0;
+      }
+      return parseInt(opts.valorCentavos, 10) || 0;
+    }
+
+    function carregarParcelas() {
+      const total = valorParaParcelas();
+      if (!getBrandRef.current || !total || !opts.payeeCode) return;
       runEfi(opts.environment, function (api) {
         return api
           .setAccount(opts.payeeCode)
           .setBrand(getBrandRef.current)
-          .setTotal(opts.valorCentavos)
+          .setTotal(total)
           .getInstallments();
       })
         .then(function (res) {
@@ -270,7 +291,10 @@
         .catch(function () {
           sel.innerHTML = '<option value="1">1x sem juros</option>';
         });
-    });
+    }
+
+    num.addEventListener("blur", carregarParcelas);
+    opts.refreshInstallments = carregarParcelas;
 
     holder.addEventListener("input", function () {
       prevName.textContent = (holder.value || "").trim().toUpperCase() || "NOME NO CARTÃO";
@@ -357,22 +381,18 @@
     destroyCheckout();
 
     return ensureScript()
-      .catch(function (e) {
-        if (global.Swal) {
-          return Swal.fire({
-            icon: "error",
-            title: "Tokenizador",
-            text: (e && e.message) || "Não foi possível carregar o JS da Efi.",
-            confirmButtonColor: "#021F81",
-          }).then(function () {
-            return null;
-          });
-        }
-        return null;
+      .catch(function () {
+        // Boleto/cupom ainda funcionam sem o tokenizador
+        return false;
       })
       .then(function (ok) {
-        if (ok === null) return null;
-        setEnv(opts.environment);
+        if (ok !== false) {
+          try {
+            setEnv(opts.environment);
+          } catch (_) {
+            /* ignore */
+          }
+        }
 
         const wrap = document.createElement("div");
         wrap.innerHTML = buildMarkup(opts);
@@ -386,16 +406,138 @@
         });
 
         const brandRef = { current: "" };
-        wireCard(root, opts, brandRef);
+        const state = {
+          periodo: "mensal",
+          cupom: "",
+          valorFinal: opts.valorCentavos || 0,
+          preco: null,
+        };
+        const optsCard = Object.assign({}, opts);
+        optsCard.getValorFinal = function () {
+          return state.valorFinal;
+        };
+        wireCard(root, optsCard, brandRef);
 
         let tab = "cartao";
         const errEl = root.querySelector("#dnpay_error");
         const submitBtn = root.querySelector("#dnpay_submit");
+        const cupomMsg = root.querySelector("#dnpay_cupom_msg");
         const labels = {
           cartao: "Pagar com cartão",
           boleto: "Gerar boleto",
           pix: "PIX em breve",
         };
+
+        function aplicarPreco(preco) {
+          state.preco = preco;
+          state.valorFinal = int(preco.valor_final_centavos);
+          const elV = root.querySelector("#dnpay_valor_final");
+          const elS = root.querySelector("#dnpay_valor_sufixo");
+          const elN = root.querySelector("#dnpay_aside_note");
+          const elB = root.querySelector("#dnpay_aside_break");
+          if (elV) elV.textContent = preco.valor_final_formatado || money(state.valorFinal);
+          if (elS) {
+            elS.textContent =
+              preco.meses_cobertos > 1 ? " / " + preco.meses_cobertos + " meses" : "/ mês";
+          }
+          if (elN) {
+            elN.textContent = preco.periodo_rotulo
+              ? "Ciclo: " + preco.periodo_rotulo
+              : "Escolha o ciclo e a forma de pagamento.";
+          }
+          if (elB) {
+            const parts = [];
+            if (preco.desconto_periodo_centavos > 0) {
+              parts.push("−" + money(preco.desconto_periodo_centavos) + " ciclo");
+            }
+            if (preco.desconto_cupom_centavos > 0) {
+              parts.push("−" + money(preco.desconto_cupom_centavos) + " cupom");
+            }
+            elB.textContent = parts.length
+              ? "De " + (preco.valor_cheio_formatado || "") + " · " + parts.join(" · ")
+              : "Pagamento processado com segurança pela Efí.";
+          }
+          if (state.valorFinal <= 0) {
+            labels.cartao = "Ativar plano (cortesia)";
+            labels.boleto = "Ativar plano (cortesia)";
+            if (tab !== "pix") submitBtn.textContent = labels[tab];
+          } else {
+            labels.cartao = "Pagar com cartão";
+            labels.boleto = "Gerar boleto";
+            if (tab !== "pix") submitBtn.textContent = labels[tab];
+          }
+          if (typeof optsCard.refreshInstallments === "function") {
+            optsCard.refreshInstallments();
+          }
+        }
+
+        function int(n) {
+          return parseInt(n, 10) || 0;
+        }
+
+        function atualizarPreco() {
+          if (!opts.apiPreview || !opts.planoSlug) {
+            aplicarPreco({
+              valor_final_centavos: opts.valorCentavos || 0,
+              valor_final_formatado: money(opts.valorCentavos || 0),
+              meses_cobertos: state.periodo === "anual" ? 12 : state.periodo === "semestral" ? 6 : 1,
+              periodo_rotulo: state.periodo,
+              desconto_periodo_centavos: 0,
+              desconto_cupom_centavos: 0,
+            });
+            return Promise.resolve();
+          }
+          return fetch(opts.apiPreview, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify({
+              plano_slug: opts.planoSlug,
+              periodicidade: state.periodo,
+              cupom: state.cupom || null,
+            }),
+          })
+            .then(function (r) {
+              return r.json();
+            })
+            .then(function (j) {
+              if (!j.success) throw new Error(j.message || "Falha ao calcular preço");
+              aplicarPreco(j);
+              if (cupomMsg) {
+                if (state.cupom && j.desconto_cupom_centavos > 0) {
+                  cupomMsg.textContent = "Cupom aplicado: −" + money(j.desconto_cupom_centavos);
+                  cupomMsg.className = "DnPay_CupomMsg is-ok";
+                } else if (state.cupom) {
+                  cupomMsg.textContent = "Cupom sem desconto neste cálculo.";
+                  cupomMsg.className = "DnPay_CupomMsg";
+                } else {
+                  cupomMsg.textContent = "";
+                  cupomMsg.className = "DnPay_CupomMsg";
+                }
+              }
+            })
+            .catch(function (e) {
+              if (cupomMsg && state.cupom) {
+                cupomMsg.textContent = e.message || "Cupom inválido";
+                cupomMsg.className = "DnPay_CupomMsg is-err";
+                state.cupom = "";
+              }
+              return fetch(opts.apiPreview, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", Accept: "application/json" },
+                body: JSON.stringify({
+                  plano_slug: opts.planoSlug,
+                  periodicidade: state.periodo,
+                  cupom: null,
+                }),
+              })
+                .then(function (r) {
+                  return r.json();
+                })
+                .then(function (j) {
+                  if (j.success) aplicarPreco(j);
+                });
+            });
+        }
 
         function setTab(next) {
           tab = next;
@@ -422,6 +564,23 @@
           });
         });
 
+        root.querySelectorAll(".DnPay_PeriodoBtn").forEach(function (btn) {
+          btn.addEventListener("click", function () {
+            state.periodo = btn.getAttribute("data-periodo") || "mensal";
+            root.querySelectorAll(".DnPay_PeriodoBtn").forEach(function (b) {
+              b.classList.toggle("is-active", b === btn);
+            });
+            atualizarPreco();
+          });
+        });
+
+        root.querySelector("#dnpay_cupom_aplicar")?.addEventListener("click", function () {
+          state.cupom = (root.querySelector("#dnpay_cupom")?.value || "").trim().toUpperCase();
+          atualizarPreco();
+        });
+
+        atualizarPreco();
+
         return new Promise(function (resolve) {
           let settled = false;
           function finish(value) {
@@ -445,19 +604,32 @@
           }
           document.addEventListener("keydown", onKey);
 
+          function payloadBase(extra) {
+            return Object.assign(
+              {
+                forma: "boleto",
+                periodicidade: state.periodo,
+                cupom: state.cupom || null,
+                valor_final_centavos: state.valorFinal,
+              },
+              extra || {}
+            );
+          }
+
           submitBtn.addEventListener("click", function () {
             errEl.textContent = "";
             if (tab === "pix") return;
-            if (tab === "boleto") {
-              finish({ forma: "boleto" });
+            // Boleto ou valor zerado (cortesia 100%): sem tokenizar cartão
+            if (tab === "boleto" || state.valorFinal <= 0) {
+              finish(payloadBase({ forma: "boleto" }));
               return;
             }
             submitBtn.disabled = true;
             submitBtn.textContent = "Validando cartão…";
-            tokenizeCard(root, opts, brandRef.current)
+            tokenizeCard(root, optsCard, brandRef.current)
               .then(function (result) {
                 document.removeEventListener("keydown", onKey);
-                finish(result);
+                finish(payloadBase(result));
               })
               .catch(function (err) {
                 errEl.textContent =

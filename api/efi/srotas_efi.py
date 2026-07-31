@@ -177,7 +177,7 @@ def webhook_efi():
 
 @efi_bp.post("/api/financeiro/job-diario")
 def job_diario_financeiro():
-    """Cron: marcar vencidas, avisar, rebaixar após 15 dias, renovar no dia."""
+    """Cron: marcar vencidas, avisar, rebaixar boleto sem pagamento (7 dias úteis), renovar."""
     secret = (os.getenv("CRON_SECRET") or os.getenv("EFI_WEBHOOK_SECRET") or "").strip()
     token = (request.headers.get("X-Cron-Token") or request.args.get("token") or "").strip()
     if not secret or token != secret:

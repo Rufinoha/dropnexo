@@ -93,11 +93,11 @@
           <legend>Tipo de conta (PF / PJ)</legend>
           <div class="tipo-pessoa-opcoes">
             <label class="tipo-pessoa-label">
-              <input type="radio" name="tipo_pessoa" value="F" checked />
+              <input type="radio" name="tipo_pessoa" value="F" />
               <span>Pessoa física</span>
             </label>
             <label class="tipo-pessoa-label">
-              <input type="radio" name="tipo_pessoa" value="J" />
+              <input type="radio" name="tipo_pessoa" value="J" checked />
               <span>Pessoa jurídica</span>
             </label>
           </div>
@@ -107,22 +107,22 @@
           <legend id="legend-conta">Dados da conta</legend>
           <div class="cadastro-grid cadastro-grid-2">
             <label class="cadastro-field cadastro-field-span2">
-              <span id="lbl-documento">CPF</span>
-              <input type="text" name="documento" id="documento" required maxlength="18" autocomplete="off" />
+              <span id="lbl-documento">CNPJ</span>
+              <input type="text" name="documento" id="documento" required maxlength="18" autocomplete="off" placeholder="00.000.000/0000-00" />
             </label>
             <label class="cadastro-field cadastro-field-span2">
-              <span id="lbl-nome-completo">Nome completo</span>
+              <span id="lbl-nome-completo">Razão social</span>
               <input type="text" name="nome_completo" required maxlength="255" />
             </label>
           </div>
         </fieldset>
 
         <fieldset class="cadastro-section" id="secao-responsavel">
-          <legend id="legend-responsavel">Contato</legend>
+          <legend id="legend-responsavel">Responsável (dono)</legend>
           <div class="cadastro-grid cadastro-grid-2">
-            <label class="cadastro-field cadastro-field-span2" id="wrap-nome-usuario" hidden>
+            <label class="cadastro-field cadastro-field-span2" id="wrap-nome-usuario">
               <span>Seu nome</span>
-              <input type="text" name="nome_usuario" maxlength="255" />
+              <input type="text" name="nome_usuario" maxlength="255" required />
             </label>
             <label class="cadastro-field">
               <span>E-mail (login)</span>

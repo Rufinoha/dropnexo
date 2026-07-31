@@ -430,7 +430,34 @@
     });
   }
 
+  function initFinBannerDismiss() {
+    const banner = document.getElementById("fg_fin_banner");
+    const btn = document.getElementById("fg_fin_banner_close");
+    if (!banner || !btn) return;
+    const ref = banner.getAttribute("data-fin-ref") || "";
+    const st = banner.getAttribute("data-fin-status") || "";
+    const key = "dn_fin_banner_hide:" + ref + ":" + st;
+    try {
+      if (sessionStorage.getItem(key) === "1") {
+        banner.remove();
+        return;
+      }
+    } catch (_) {
+      /* ignore */
+    }
+    banner.hidden = false;
+    btn.addEventListener("click", function () {
+      try {
+        sessionStorage.setItem(key, "1");
+      } catch (_) {
+        /* ignore */
+      }
+      banner.remove();
+    });
+  }
+
   document.addEventListener("DOMContentLoaded", function () {
     carregarAvatarHeader();
+    initFinBannerDismiss();
   });
 })();

@@ -1,0 +1,92 @@
+{% extends "frm_base.html" %}
+{% block title %}HubSupport — {{ MARCA_NOME }}{% endblock %}
+{% set nav_ativo = 'config' %}
+{% block topbar_title %}HubSupport{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_hubsupport.css') }}?v=1" />
+{% endblock %}
+{% block content %}
+<div class="Cl_ContainerApoio cl-page-principal HsCfg_Wrap">
+  <div class="cl-page-title HsCfg_TitleRow">
+    <div>
+      <h2>Integração HubSupport</h2>
+      <p class="cl-page-desc">
+        Cole a chave de API criada em HubSupport → Configurações → Integrações.
+        Copie a URL do webhook abaixo e cadastre lá (eventos de chamado).
+      </p>
+    </div>
+    <div class="HsCfg_Acoes">
+      <button type="button" class="Cl_BtnCancelar" id="hs_btnTestar">Testar conexão</button>
+      <button type="button" class="Cl_botaoprimario" id="hs_btnSalvar">Salvar</button>
+    </div>
+  </div>
+
+  <p class="CfgCup_Aviso">
+    <a class="Cl_BtnLink" href="{{ url_for('config.configuracoes') }}">← Voltar às Configurações</a>
+  </p>
+
+  <div class="HsCfg_Status" id="hs_status">
+    <span class="HsCfg_Dot" id="hs_statusDot"></span>
+    <span id="hs_statusTxt">Carregando…</span>
+  </div>
+
+  <div class="HsCfg_Grid">
+    <section class="HsCfg_Panel">
+      <h3>Credenciais</h3>
+      <p class="HsCfg_Hint">
+        Valores salvos no banco têm prioridade sobre o <code>.env</code>.
+        Deixe o campo mascarado para manter o valor atual.
+      </p>
+
+      <label class="Cl_Label" for="hs_baseUrl">Base URL da API</label>
+      <input type="url" id="hs_baseUrl" class="Cl_Input" placeholder="https://hubsupport.com.br/api/v1/integration" />
+
+      <label class="Cl_Label" for="hs_apiToken">Chave de API (Bearer)</label>
+      <input type="password" id="hs_apiToken" class="Cl_Input HsCfg_Segredo" autocomplete="new-password"
+             placeholder="Cole a chave hs_live_…" />
+      <p class="HsCfg_Atual" id="hs_tokenAtual"></p>
+
+      <label class="Cl_Label" for="hs_webhookSecret">Secret do webhook</label>
+      <input type="password" id="hs_webhookSecret" class="Cl_Input HsCfg_Segredo" autocomplete="new-password"
+             placeholder="Secret gerado ao cadastrar o webhook no HubSupport" />
+      <p class="HsCfg_Atual" id="hs_webhookAtual"></p>
+      <p class="HsCfg_Hint">Portal padrão usado nos chamados: <code id="hs_portal">h74</code></p>
+    </section>
+
+    <section class="HsCfg_Panel">
+      <h3>Webhook (copie para o HubSupport)</h3>
+      <p class="HsCfg_Hint">
+        Em HubSupport → Integrações → <strong>Novo webhook</strong>, cole esta URL.
+        Eventos: <code>chamado.criado</code>, <code>chamado.status_alterado</code>,
+        <code>chamado.interacao.criada</code>, <code>chamado.anexo.criado</code>.
+      </p>
+      <label class="Cl_Label">URL pública do DropNexo</label>
+      <div class="HsCfg_CopyRow">
+        <input type="text" id="hs_webhookUrl" class="Cl_Input" readonly />
+        <button type="button" class="Cl_BtnCancelar" id="hs_btnCopiar">Copiar</button>
+      </div>
+      <div class="HsCfg_Stats" id="hs_stats"></div>
+    </section>
+  </div>
+
+  <section class="HsCfg_Logs">
+    <header class="HsCfg_LogsHead">
+      <h3>Logs de API</h3>
+      <button type="button" class="Cl_BtnCancelar" id="hs_btnRecarregar">Atualizar</button>
+    </header>
+    <div class="HsCfg_TabelaWrap" id="hs_apiLogs"></div>
+  </section>
+
+  <section class="HsCfg_Logs">
+    <header class="HsCfg_LogsHead"><h3>Logs de webhook</h3></header>
+    <div class="HsCfg_TabelaWrap" id="hs_whLogs"></div>
+  </section>
+</div>
+
+<script type="application/json" id="hs_cfg">{{ {
+  "apiDados": url_for("config.hubsupport_dados"),
+  "apiSalvar": url_for("config.hubsupport_salvar"),
+  "apiTestar": url_for("config.hubsupport_testar")
+} | tojson }}</script>
+<script defer src="{{ url_for('config.static', filename='script/Sconfig_hubsupport.js') }}?v=1"></script>
+{% endblock %}

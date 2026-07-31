@@ -1691,6 +1691,169 @@ def mala_direta_disparo_detalhe(id_envio: int):
         conn.close()
 
 
+# --- Cupom de Desconto ---
+CUPOM_PREFIX = "/configuracoes/cupons-desconto"
+
+
+@config_bp.get(CUPOM_PREFIX)
+@login_obrigatorio()
+def cupons_desconto_pagina():
+    if not session.get("eh_desenvolvedor"):
+        return redirect(url_for("dashboard.index"))
+    return render_template("frm_config_cupons.html", nav_ativo="config")
+
+
+@config_bp.get(f"{CUPOM_PREFIX}/dados")
+@login_obrigatorio()
+def cupons_desconto_dados():
+    if (r := _exigir_dev()) is not None:
+        return r
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        from sistema.financeiro.cupom import listar_cupons, periodos_opcoes
+
+        return jsonify(success=True, cupons=listar_cupons(cur), periodos=periodos_opcoes())
+    except Exception as e:
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
+@config_bp.post(f"{CUPOM_PREFIX}/salvar")
+@login_obrigatorio()
+def cupons_desconto_salvar():
+    if (r := _exigir_dev()) is not None:
+        return r
+    body = request.get_json(silent=True) or {}
+    id_cupom = body.get("id")
+    try:
+        id_cupom = int(id_cupom) if id_cupom not in (None, "", 0, "0") else None
+    except (TypeError, ValueError):
+        id_cupom = None
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        from sistema.financeiro.cupom import salvar_cupom
+
+        cupom = salvar_cupom(cur, body, id_cupom=id_cupom)
+        conn.commit()
+        return jsonify(success=True, message="Cupom salvo.", cupom=cupom)
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 400
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
+@config_bp.post(f"{CUPOM_PREFIX}/excluir")
+@login_obrigatorio()
+def cupons_desconto_excluir():
+    if (r := _exigir_dev()) is not None:
+        return r
+    body = request.get_json(silent=True) or {}
+    try:
+        id_cupom = int(body.get("id") or 0)
+    except (TypeError, ValueError):
+        id_cupom = 0
+    if not id_cupom:
+        return jsonify(success=False, message="Cupom inválido."), 400
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        # soft delete — desativa
+        cur.execute(
+            """
+            UPDATE tbl_cupom_desconto
+            SET ativo = FALSE, atualizado_em = NOW()
+            WHERE id = %s
+            RETURNING id
+            """,
+            (id_cupom,),
+        )
+        if not cur.fetchone():
+            return jsonify(success=False, message="Cupom não encontrado."), 404
+        conn.commit()
+        return jsonify(success=True, message="Cupom desativado.")
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
+# --- HubSupport (Central de Demandas) ---
+HS_PREFIX = "/configuracoes/hubsupport"
+
+
+@config_bp.get(HS_PREFIX)
+@login_obrigatorio()
+def hubsupport_pagina():
+    if not session.get("eh_desenvolvedor"):
+        return redirect(url_for("dashboard.index"))
+    return render_template("frm_config_hubsupport.html", nav_ativo="config")
+
+
+@config_bp.get(f"{HS_PREFIX}/dados")
+@login_obrigatorio()
+def hubsupport_dados():
+    if (r := _exigir_dev()) is not None:
+        return r
+    from global_utils import obter_base_url
+    from api.hubsupport.hubsupport_config import obter_painel_config
+
+    conn = Var_ConectarBanco()
+    try:
+        painel = obter_painel_config(conn, obter_base_url())
+        return jsonify(success=True, **painel)
+    except Exception as e:
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
+@config_bp.post(f"{HS_PREFIX}/salvar")
+@login_obrigatorio()
+def hubsupport_salvar():
+    if (r := _exigir_dev()) is not None:
+        return r
+    from global_utils import obter_base_url
+    from api.hubsupport.hubsupport_config import obter_painel_config, salvar_config_admin
+
+    payload = request.get_json(silent=True) or {}
+    conn = Var_ConectarBanco()
+    try:
+        salvar_config_admin(conn, payload)
+        conn.commit()
+        painel = obter_painel_config(conn, obter_base_url())
+        return jsonify(success=True, message="Configuração HubSupport salva.", **painel)
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
+@config_bp.post(f"{HS_PREFIX}/testar")
+@login_obrigatorio()
+def hubsupport_testar():
+    if (r := _exigir_dev()) is not None:
+        return r
+    from api.hubsupport.hubsupport_config import testar_conexao
+
+    conn = Var_ConectarBanco()
+    try:
+        resultado = testar_conexao(conn)
+        return jsonify(success=bool(resultado.get("ok")), **resultado)
+    except Exception as e:
+        return jsonify(success=False, ok=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
 # --- gestao fornecedores ---
 
 

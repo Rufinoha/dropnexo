@@ -1,0 +1,115 @@
+{% extends "frm_base.html" %}
+{% block title %}Cupom de Desconto — {{ MARCA_NOME }}{% endblock %}
+{% set nav_ativo = 'config' %}
+{% block topbar_title %}Cupom de Desconto{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_cupons.css') }}?v=1" />
+{% endblock %}
+{% block content %}
+<div class="Cl_ContainerApoio cl-page-principal CfgCup_Wrap">
+  <div class="cl-page-title">
+    <h2>Cupom de Desconto</h2>
+    <p class="cl-page-desc">
+      Cupons com validade, valor fixo ou percentual (até 100%), limite de usos e vínculo a um único ciclo
+      (mensal, semestral ou anual). Somente desenvolvedor.
+    </p>
+  </div>
+  <p class="CfgCup_Aviso">
+    <a class="Cl_BtnLink" href="{{ url_for('config.configuracoes') }}">← Voltar às Configurações</a>
+  </p>
+
+  <div class="CfgCup_Grid">
+    <section class="CfgCup_Card">
+      <div class="CfgCup_CardHead">
+        <h3>Cupons</h3>
+        <button type="button" class="Cl_botaoprimario" id="cfg_cup_novo">Novo cupom</button>
+      </div>
+      <div class="CfgCup_TabelaWrap">
+        <table class="Cl_TabelaPrincipal CfgCup_Tabela">
+          <thead>
+            <tr>
+              <th>Código</th>
+              <th>Desconto</th>
+              <th>Período</th>
+              <th>Validade</th>
+              <th>Usos</th>
+              <th>Status</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="cfg_cup_tbody">
+            <tr><td colspan="7" class="CfgCup_Hint">Carregando…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="CfgCup_Card" id="cfg_cup_form_card">
+      <h3 id="cfg_cup_form_title">Novo cupom</h3>
+      <form id="cfg_cup_form" class="CfgCup_Form" autocomplete="off">
+        <input type="hidden" id="cfg_cup_id" value="" />
+        <label class="CfgCup_Field">
+          <span>Código</span>
+          <input type="text" id="cfg_cup_codigo" maxlength="40" required placeholder="EX: BEMVINDO50" />
+        </label>
+        <label class="CfgCup_Field">
+          <span>Descrição (opcional)</span>
+          <input type="text" id="cfg_cup_desc" maxlength="255" placeholder="Campanha de lançamento" />
+        </label>
+        <div class="CfgCup_Row">
+          <label class="CfgCup_Field">
+            <span>Tipo</span>
+            <select id="cfg_cup_tipo">
+              <option value="percentual">Percentual (%)</option>
+              <option value="fixo">Valor fixo (R$)</option>
+            </select>
+          </label>
+          <label class="CfgCup_Field">
+            <span id="cfg_cup_valor_lbl">Valor (%)</span>
+            <input type="number" id="cfg_cup_valor" min="0" step="0.01" required value="10" />
+          </label>
+        </div>
+        <label class="CfgCup_Field">
+          <span>Válido somente para</span>
+          <select id="cfg_cup_periodo" required>
+            <option value="mensal">Mensal</option>
+            <option value="semestral">Semestral (−10% no ciclo)</option>
+            <option value="anual">Anual (−20% no ciclo)</option>
+          </select>
+        </label>
+        <div class="CfgCup_Row">
+          <label class="CfgCup_Field">
+            <span>Validade até</span>
+            <input type="date" id="cfg_cup_valido" />
+            <small>Vazio = sem data limite</small>
+          </label>
+          <label class="CfgCup_Field">
+            <span>Limite de usos</span>
+            <input type="number" id="cfg_cup_usos" min="1" step="1" placeholder="Ilimitado" />
+            <small>Vazio = ilimitado</small>
+          </label>
+        </div>
+        <label class="CfgCup_Check">
+          <input type="checkbox" id="cfg_cup_ativo" checked />
+          <span>Cupom ativo</span>
+        </label>
+        <p class="CfgCup_Hint">
+          O desconto do cupom é aplicado <strong>depois</strong> do desconto do ciclo (semestral/anual).
+        </p>
+        <div class="CfgCup_Actions">
+          <button type="submit" class="Cl_botaoprimario">Salvar</button>
+          <button type="button" class="Cl_botaosecundario" id="cfg_cup_cancelar">Limpar</button>
+        </div>
+      </form>
+    </section>
+  </div>
+</div>
+{% endblock %}
+{% block page_js %}
+<script id="cfg_cup_cfg" type="application/json">{{ {
+  "apiDados": url_for("config.cupons_desconto_dados"),
+  "apiSalvar": url_for("config.cupons_desconto_salvar"),
+  "apiExcluir": url_for("config.cupons_desconto_excluir")
+}|tojson }}</script>
+<script defer src="{{ url_for('config.static', filename='script/Sconfig_cupons.js') }}?v=1"></script>
+{% endblock %}

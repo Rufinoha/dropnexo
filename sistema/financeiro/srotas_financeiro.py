@@ -168,23 +168,7 @@ def api_fatura_detalhe(id_fatura: int):
         conn.close()
 
 
-@financeiro_bp.post("/api/financeiro/assinar")
-@login_obrigatorio()
-def api_assinar():
-    if not _pode_financeiro():
-        return jsonify(success=False, message="Sem permissão para assinar."), 403
-    tid = _id_tenant()
-    if not tid:
-        return jsonify(success=False, message="Sessão inválida."), 403
-    body = request.get_json(silent=True) or {}
-    plano = (body.get("plano_slug") or "").strip().lower()
-    forma = (body.get("forma_pagamento") or "boleto").strip().lower()
-    token = (body.get("payment_token") or "").strip() or None
-    try:
-        installments = max(1, min(12, int(body.get("installments") or 1)))
-    except (TypeError, ValueError):
-        installments = 1
-    # mapa vitrine → banco
+def _mapa_plano_vitrine(plano: str) -> str:
     mapa = {
         "crescer": "professional",
         "ativo": "professional",
@@ -196,7 +180,63 @@ def api_assinar():
         "scale": "scale",
         "enterprise": "enterprise",
     }
-    plano = mapa.get(plano, plano)
+    p = (plano or "").strip().lower()
+    return mapa.get(p, p)
+
+
+@financeiro_bp.post("/api/financeiro/preview-assinatura")
+@login_obrigatorio()
+def api_preview_assinatura():
+    if not _pode_financeiro():
+        return jsonify(success=False, message="Sem permissão."), 403
+    body = request.get_json(silent=True) or {}
+    plano = _mapa_plano_vitrine(body.get("plano_slug") or "")
+    periodo = (body.get("periodicidade") or "mensal").strip().lower()
+    cupom = (body.get("cupom") or body.get("cupom_codigo") or "").strip() or None
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        from sistema.financeiro.cobranca import obter_plano_db
+        from sistema.financeiro.cupom import preview_assinatura
+
+        p = obter_plano_db(cur, plano)
+        if not p or int(p["valor_centavos"] or 0) <= 0:
+            return jsonify(success=False, message="Plano inválido para cobrança."), 400
+        data = preview_assinatura(
+            cur,
+            valor_mensal_centavos=int(p["valor_centavos"]),
+            periodo=periodo,
+            cupom_codigo=cupom,
+        )
+        data["plano_slug"] = plano
+        data["plano_nome"] = p["nome"]
+        return jsonify(**data)
+    except ValueError as e:
+        return jsonify(success=False, message=str(e)), 400
+    except Exception as e:
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
+@financeiro_bp.post("/api/financeiro/assinar")
+@login_obrigatorio()
+def api_assinar():
+    if not _pode_financeiro():
+        return jsonify(success=False, message="Sem permissão para assinar."), 403
+    tid = _id_tenant()
+    if not tid:
+        return jsonify(success=False, message="Sessão inválida."), 403
+    body = request.get_json(silent=True) or {}
+    plano = _mapa_plano_vitrine(body.get("plano_slug") or "")
+    forma = (body.get("forma_pagamento") or "boleto").strip().lower()
+    token = (body.get("payment_token") or "").strip() or None
+    periodo = (body.get("periodicidade") or "mensal").strip().lower()
+    cupom = (body.get("cupom") or body.get("cupom_codigo") or "").strip() or None
+    try:
+        installments = max(1, min(12, int(body.get("installments") or 1)))
+    except (TypeError, ValueError):
+        installments = 1
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
@@ -207,6 +247,8 @@ def api_assinar():
             forma=forma,
             payment_token=token,
             installments=installments,
+            periodicidade=periodo,
+            cupom_codigo=cupom,
         )
         if result.get("liberado"):
             session["tenant_plano"] = plano

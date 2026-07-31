@@ -493,8 +493,7 @@ def meu_plano():
 @planos_bp.get("/abrir-chamado")
 @login_obrigatorio()
 def abrir_chamado():
-    """Placeholder — tela de chamado será implementada depois."""
-    return render_template(
-        "frm_abrir_chamado.html",
-        nav_ativo="",
-    )
+    """Compat: redireciona para a Central de Demandas (HubSupport)."""
+    from flask import redirect, url_for
+
+    return redirect(url_for("demandas.demandas_pagina"))
