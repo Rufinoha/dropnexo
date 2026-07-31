@@ -414,6 +414,8 @@ def _criar_cobranca_efi(
             valor_centavos=valor_centavos,
             descricao=descricao,
             vencimento=vencimento,
+            telefone=telefone,
+            endereco=endereco,
         )
 
     registrar_efi_log(

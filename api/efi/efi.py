@@ -114,13 +114,53 @@ def _doc_tipo(documento: str) -> tuple[str, str]:
     raise ValueError("Documento do cliente inválido (CPF/CNPJ).")
 
 
+def _customer_efi(
+    *,
+    nome_cliente: str,
+    documento: str,
+    email: str | None = None,
+    telefone: str | None = None,
+) -> dict[str, Any]:
+    """
+    Monta customer da API Cobranças.
+    CPF: name + cpf. CNPJ: juridical_person (cnpj não vai na raiz do customer).
+    """
+    tipo_doc, doc = _doc_tipo(documento)
+    nome = (nome_cliente or "Cliente")[:255]
+    customer: dict[str, Any] = {}
+    if email and "@" in email:
+        customer["email"] = email.strip()[:255]
+    phone = "".join(c for c in (telefone or "") if c.isdigit())
+    if len(phone) >= 10:
+        customer["phone_number"] = phone[-11:] if len(phone) > 11 else phone
+    if tipo_doc == "cpf":
+        customer["name"] = nome
+        customer["cpf"] = doc
+    else:
+        customer["juridical_person"] = {
+            "corporate_name": nome,
+            "cnpj": doc,
+        }
+    return customer
+
+
 def _raise_resp(resp: Any) -> dict:
     if isinstance(resp, str):
         raise RuntimeError(resp)
     if not isinstance(resp, dict):
         raise RuntimeError("Resposta inválida da Efi.")
-    if resp.get("code", 200) >= 400:
-        raise RuntimeError(str(resp.get("message") or resp))
+    code = resp.get("code", 200)
+    try:
+        code_n = int(code)
+    except (TypeError, ValueError):
+        code_n = 200
+    if code_n >= 400:
+        desc = resp.get("error_description") or resp.get("message") or resp
+        if isinstance(desc, dict):
+            prop = desc.get("property") or ""
+            msg = desc.get("message") or str(desc)
+            raise RuntimeError(f"Efi: {msg}" + (f" ({prop})" if prop else ""))
+        raise RuntimeError(str(desc))
     return resp
 
 
@@ -156,23 +196,43 @@ def criar_cobranca_boleto(
     valor_centavos: int,
     descricao: str,
     vencimento: date | None = None,
+    telefone: str | None = None,
+    endereco: dict | None = None,
 ) -> dict:
     """Cria cobrança one-step (boleto)."""
     if valor_centavos <= 0:
         raise ValueError("Valor da cobrança deve ser maior que zero.")
     venc = vencimento or (date.today() + timedelta(days=7))
-    tipo_doc, doc = _doc_tipo(documento)
+    customer = _customer_efi(
+        nome_cliente=nome_cliente,
+        documento=documento,
+        email=email or "contato@dropnexo.com.br",
+        telefone=telefone,
+    )
+    end = endereco or {}
+    street = (end.get("street") or end.get("logradouro") or "").strip()
+    number = (end.get("number") or end.get("numero") or "S/N").strip() or "S/N"
+    neighborhood = (end.get("neighborhood") or end.get("bairro") or "").strip()
+    zipcode = "".join(c for c in (end.get("zipcode") or end.get("cep") or "") if c.isdigit())
+    city = (end.get("city") or end.get("cidade") or "").strip()
+    state = (end.get("state") or end.get("uf") or "").strip().upper()[:2]
+    if street and neighborhood and len(zipcode) == 8 and city and state:
+        customer["address"] = {
+            "street": street[:200],
+            "number": number[:40],
+            "neighborhood": neighborhood[:100],
+            "zipcode": zipcode,
+            "city": city[:100],
+            "state": state,
+            "complement": (end.get("complement") or end.get("complemento") or "")[:100] or "",
+        }
     body = {
         "items": [{"name": descricao[:255], "value": int(valor_centavos), "amount": 1}],
         "metadata": {"notification_url": notification_url_efi()},
         "payment": {
             "banking_billet": {
                 "expire_at": venc.isoformat(),
-                "customer": {
-                    "name": (nome_cliente or "Cliente")[:255],
-                    "email": (email or "contato@dropnexo.com.br")[:255],
-                    tipo_doc: doc,
-                },
+                "customer": customer,
             }
         },
     }
@@ -264,16 +324,18 @@ def criar_cobranca_cartao(
     token = (payment_token or "").strip()
     if not token:
         raise ValueError("payment_token obrigatório para cartão.")
-    tipo_doc, doc = _doc_tipo(documento)
     phone = "".join(c for c in (telefone or "") if c.isdigit())
     if len(phone) < 10:
         phone = "11999999999"
-    customer: dict[str, Any] = {
-        "name": (nome_cliente or "Cliente")[:255],
-        "email": (email or "contato@dropnexo.com.br")[:255],
-        "phone_number": phone[-11:] if len(phone) > 11 else phone,
-        tipo_doc: doc,
-    }
+    customer = _customer_efi(
+        nome_cliente=nome_cliente,
+        documento=documento,
+        email=email or "contato@dropnexo.com.br",
+        telefone=phone,
+    )
+    # Cartão exige name na raiz mesmo para PJ
+    if "name" not in customer:
+        customer["name"] = (nome_cliente or "Cliente")[:255]
     credit: dict[str, Any] = {
         "customer": customer,
         "installments": max(1, min(12, int(installments or 1))),
