@@ -51,6 +51,12 @@ def _json_erro(exc, status: int = 400):
                 "Atualize o HubSupport com o ajuste de upsert por e-mail e tente novamente."
             )
             code = 409
+        elif "ck_cliente_pj_documento" in low:
+            msg = (
+                "Documento do tenant incompatível com Pessoa Jurídica no HubSupport "
+                "(CPF enviado como PJ). Atualize o DropNexo e tente novamente."
+            )
+            code = 400
         return jsonify(success=False, message=msg), code
     msg = str(exc) or "Erro inesperado."
     if "090_hubsupport" in msg or "UndefinedTable" in type(exc).__name__:

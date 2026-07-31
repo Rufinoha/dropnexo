@@ -139,10 +139,12 @@ def _carregar_tenant(conn, id_tenant: int) -> dict:
     cur.execute(
         """
         SELECT id,
-               COALESCE(NULLIF(TRIM(nome_fantasia), ''), NULLIF(TRIM(nome), ''), '') AS nome,
+               COALESCE(NULLIF(TRIM(nome_fantasia), ''), NULLIF(TRIM(nome), ''),
+                        NULLIF(TRIM(nome_completo), ''), NULLIF(TRIM(razao_social), ''), '') AS nome,
                COALESCE(documento, '') AS documento,
                COALESCE(NULLIF(TRIM(email_comercial), ''), '') AS email,
-               COALESCE(tipo_negocio, '') AS tipo_negocio
+               COALESCE(tipo_negocio, '') AS tipo_negocio,
+               COALESCE(tipo_pessoa, '') AS tipo_pessoa
         FROM tbl_tenant
         WHERE id = %s
         LIMIT 1
@@ -174,13 +176,45 @@ def _carregar_usuario(conn, id_usuario: int) -> dict:
     return dict(zip(cols, row))
 
 
+def _tipo_pessoa_hubsupport(tenant: dict) -> str:
+    """
+    HubSupport exige pf/pj coerente com o documento:
+    - PJ → CNPJ 14 dígitos
+    - PF → CPF 11 dígitos (ou sem documento)
+    DropNexo grava tipo_pessoa como F/J.
+    """
+    doc = re.sub(r"\D", "", tenant.get("documento") or "")
+    if len(doc) == 11:
+        return "pf"
+    if len(doc) == 14:
+        return "pj"
+
+    raw = (tenant.get("tipo_pessoa") or "").strip().upper()
+    if raw in ("F", "PF"):
+        return "pf"
+    if raw in ("J", "PJ"):
+        return "pj"
+    # sem documento confiável: PF evita ck_cliente_pj_documento
+    return "pf"
+
+
 def _payload_cliente(tenant: dict, id_tenant: int, email_fallback: str = "") -> dict:
     nome = (tenant.get("nome") or f"Tenant {id_tenant}").strip()
     documento = re.sub(r"\D", "", tenant.get("documento") or "")
     email = (tenant.get("email") or email_fallback or "").strip()
+    tipo = _tipo_pessoa_hubsupport(tenant)
+
+    # HubSupport: PJ exige CNPJ 14 dígitos — senão cai para PF (evita ck_cliente_pj_documento)
+    if tipo == "pj" and len(documento) != 14:
+        tipo = "pf"
+        if len(documento) != 11:
+            documento = ""
+    elif tipo == "pf" and documento and len(documento) != 11:
+        documento = ""
+
     out = {
         "external_id": external_id_empresa(id_tenant),
-        "tipo_pessoa": "pj",
+        "tipo_pessoa": tipo,
         "nome": nome,
     }
     if documento:
