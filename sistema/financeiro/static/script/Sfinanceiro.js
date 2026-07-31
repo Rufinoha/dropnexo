@@ -70,6 +70,8 @@
           f.id +
           '" data-valor="' +
           (f.valor_centavos || 0) +
+          '" data-plano="' +
+          esc(f.plano_slug || "Plano") +
           '">Gerar 2ª via</button>'
       );
     }
@@ -127,7 +129,11 @@
       });
       corpo.querySelectorAll("[data-regen]").forEach(function (btn) {
         btn.addEventListener("click", function () {
-          regenerar(+btn.getAttribute("data-regen"), +btn.getAttribute("data-valor") || 0);
+          regenerar(
+            +btn.getAttribute("data-regen"),
+            +btn.getAttribute("data-valor") || 0,
+            btn.getAttribute("data-plano") || "Fatura"
+          );
         });
       });
     } catch (e) {
@@ -135,53 +141,30 @@
     }
   }
 
-  async function regenerar(id, valorCentavos) {
-    if (typeof Swal === "undefined") {
-      if (!confirm("Gerar 2ª via?")) return;
+  async function regenerar(id, valorCentavos, planoNome) {
+    if (!window.DropNexoEfi || !DropNexoEfi.openCheckout) {
+      if (!confirm("Gerar 2ª via em boleto?")) return;
       await postRegenerar(id, { forma_pagamento: "boleto" });
       return;
     }
 
-    const { value: forma } = await Swal.fire({
-      title: "Gerar 2ª via",
-      html:
-        "<p>Escolha a forma da nova cobrança.</p>" +
-        '<select id="fin_forma" class="swal2-select">' +
-        '<option value="boleto">Boleto bancário</option>' +
-        '<option value="cartao">Cartão de crédito</option>' +
-        "</select>",
-      showCancelButton: true,
-      confirmButtonText: "Continuar",
-      confirmButtonColor: "#021F81",
-      preConfirm: function () {
-        return document.getElementById("fin_forma")?.value || "boleto";
-      },
+    const pay = await DropNexoEfi.openCheckout({
+      payeeCode: cfg.efiPayeeCode || "",
+      environment: cfg.efiEnvironment || "sandbox",
+      valorCentavos: valorCentavos || 0,
+      planoNome: planoNome || "Fatura DropNexo",
+      titulo: "Gerar 2ª via",
     });
-    if (!forma) return;
+    if (!pay) return;
 
-    const body = { forma_pagamento: forma };
-    if (forma === "cartao") {
-      if (!window.DropNexoEfi || !DropNexoEfi.promptCartao) {
-        Swal.fire({
-          icon: "error",
-          title: "Cartão",
-          text: "Script do cartão não carregou. Recarregue a página.",
-          confirmButtonColor: "#021F81",
-        });
-        return;
-      }
-      const tok = await DropNexoEfi.promptCartao({
-        payeeCode: cfg.efiPayeeCode || "",
-        environment: cfg.efiEnvironment || "sandbox",
-        valorCentavos: valorCentavos || 0,
-        titulo: "Pagar 2ª via",
-      });
-      if (!tok) return;
-      body.payment_token = tok.payment_token;
-      body.installments = tok.installments || 1;
+    const body = {
+      forma_pagamento: pay.forma,
+      payment_token: pay.payment_token || null,
+      installments: pay.installments || 1,
+    };
+    if (window.Swal) {
+      Swal.fire({ title: "Gerando cobrança…", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
     }
-
-    Swal.fire({ title: "Gerando cobrança…", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
     await postRegenerar(id, body);
   }
 

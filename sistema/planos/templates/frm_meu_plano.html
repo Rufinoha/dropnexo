@@ -6,7 +6,7 @@
 {% block head_extra %}
 <link rel="stylesheet" href="{{ url_for('planos.static', filename='style/Cmeu_plano.css') }}" />
 {% if pode_pagamento %}
-<link rel="stylesheet" href="{{ url_for('static', filename='style/Cefi_cartao.css') }}?v=1" />
+<link rel="stylesheet" href="{{ url_for('static', filename='style/Cefi_cartao.css') }}?v=4" />
 {% endif %}
 {% endblock %}
 
@@ -127,7 +127,7 @@
           {% endfor %}
         </ul>
         {% if pode_pagamento and p.preco_mensal and p.preco_mensal > 0 and not p._eh_atual %}
-        <button type="button" class="Cl_botaoprimario mpl-btn-assinar" data-plano="{{ p.slug }}" data-valor-centavos="{{ (p.preco_mensal * 100)|int }}">Assinar</button>
+        <button type="button" class="Cl_botaoprimario mpl-btn-assinar" data-plano="{{ p.slug }}" data-plano-nome="{{ p.nome }}" data-valor-centavos="{{ (p.preco_mensal * 100)|int }}">Assinar</button>
         {% elif p._eh_atual %}
         <p class="mpl-atual-hint">Plano atual da conta</p>
         {% endif %}
@@ -157,7 +157,7 @@
   "efiEnvironment": efi_environment or "sandbox",
   "urlFinanceiro": url_for("financeiro.pagina")
 }|tojson }}</script>
-<script defer src="{{ url_for('static', filename='script/Sefi_cartao.js') }}?v=3"></script>
-<script defer src="{{ url_for('planos.static', filename='script/Smeu_plano.js') }}?v=2"></script>
+<script defer src="{{ url_for('static', filename='script/Sefi_cartao.js') }}?v=4"></script>
+<script defer src="{{ url_for('planos.static', filename='script/Smeu_plano.js') }}?v=4"></script>
 {% endif %}
 {% endblock %}
