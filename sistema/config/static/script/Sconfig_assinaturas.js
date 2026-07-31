@@ -47,6 +47,10 @@
       .join("");
   }
 
+  function emptyRow(cols, msg) {
+    return `<tr><td colspan="${cols}" class="Asf_Empty">${esc(msg)}</td></tr>`;
+  }
+
   function renderAtivas(data) {
     const r = data?.resumo || {};
     el("asf_ativas_kpis").innerHTML = kpisHtml([
@@ -61,7 +65,7 @@
       : "Nenhum assinante pago ativo";
     const tb = el("asf_ativas_tbody");
     if (!itens.length) {
-      tb.innerHTML = `<tr><td colspan="7" class="Asf_Hint">Nenhum tenant com plano pago ativo.</td></tr>`;
+      tb.innerHTML = emptyRow(7, "Nenhum tenant com plano pago ativo.");
       return;
     }
     tb.innerHTML = itens
@@ -94,7 +98,7 @@
       : "Nenhum em atraso";
     const tba = el("asf_atraso_tbody");
     if (!atraso.length) {
-      tba.innerHTML = `<tr><td colspan="7" class="Asf_Hint">Nenhuma assinatura paga em atraso.</td></tr>`;
+      tba.innerHTML = emptyRow(7, "Nenhuma assinatura paga em atraso.");
     } else {
       tba.innerHTML = atraso
         .map((a) => {
@@ -119,7 +123,7 @@
       : "Nenhum rebaixamento registrado";
     const tbr = el("asf_rebaix_tbody");
     if (!rebaix.length) {
-      tbr.innerHTML = `<tr><td colspan="6" class="Asf_Hint">Nenhum rebaixamento por inadimplência.</td></tr>`;
+      tbr.innerHTML = emptyRow(6, "Nenhum rebaixamento por inadimplência.");
       return;
     }
     tbr.innerHTML = rebaix
@@ -150,7 +154,7 @@
     const meses = data?.meses || [];
     const tbm = el("asf_meses_tbody");
     if (!meses.length) {
-      tbm.innerHTML = `<tr><td colspan="3" class="Asf_Hint">Nenhum pagamento registrado.</td></tr>`;
+      tbm.innerHTML = emptyRow(3, "Nenhum pagamento registrado.");
     } else {
       tbm.innerHTML = meses
         .map(
@@ -166,7 +170,7 @@
     const pagos = data?.pagos_recentes || [];
     const tbp = el("asf_pagos_tbody");
     if (!pagos.length) {
-      tbp.innerHTML = `<tr><td colspan="5" class="Asf_Hint">Nenhum pagamento recente.</td></tr>`;
+      tbp.innerHTML = emptyRow(5, "Nenhum pagamento recente.");
       return;
     }
     tbp.innerHTML = pagos

@@ -3,7 +3,7 @@
 {% set nav_ativo = 'config' %}
 {% block topbar_title %}Assinaturas e faturamento{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_assinaturas.css') }}?v=1" />
+<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_assinaturas.css') }}?v=2" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal Asf_Wrap">
@@ -38,7 +38,7 @@
         <span class="Asf_Hint" id="asf_ativas_hint">—</span>
       </div>
       <div class="Asf_TabelaWrap">
-        <table class="Cl_TabelaPrincipal Asf_Tabela">
+        <table class="Asf_Tabela">
           <thead>
             <tr>
               <th>Tenant</th>
@@ -51,7 +51,7 @@
             </tr>
           </thead>
           <tbody id="asf_ativas_tbody">
-            <tr><td colspan="7" class="Asf_Hint">Carregando…</td></tr>
+            <tr><td colspan="7" class="Asf_Empty">Carregando…</td></tr>
           </tbody>
         </table>
       </div>
@@ -66,7 +66,7 @@
         <span class="Asf_Hint" id="asf_atraso_hint">—</span>
       </div>
       <div class="Asf_TabelaWrap">
-        <table class="Cl_TabelaPrincipal Asf_Tabela">
+        <table class="Asf_Tabela">
           <thead>
             <tr>
               <th>Tenant</th>
@@ -79,7 +79,7 @@
             </tr>
           </thead>
           <tbody id="asf_atraso_tbody">
-            <tr><td colspan="7" class="Asf_Hint">Carregando…</td></tr>
+            <tr><td colspan="7" class="Asf_Empty">Carregando…</td></tr>
           </tbody>
         </table>
       </div>
@@ -90,7 +90,7 @@
         <span class="Asf_Hint" id="asf_rebaix_hint">Por inadimplência (rebaixado_em)</span>
       </div>
       <div class="Asf_TabelaWrap">
-        <table class="Cl_TabelaPrincipal Asf_Tabela">
+        <table class="Asf_Tabela">
           <thead>
             <tr>
               <th>Tenant</th>
@@ -102,7 +102,7 @@
             </tr>
           </thead>
           <tbody id="asf_rebaix_tbody">
-            <tr><td colspan="6" class="Asf_Hint">Carregando…</td></tr>
+            <tr><td colspan="6" class="Asf_Empty">Carregando…</td></tr>
           </tbody>
         </table>
       </div>
@@ -118,7 +118,7 @@
           <span class="Asf_Hint">Somente faturas pagas</span>
         </div>
         <div class="Asf_TabelaWrap">
-          <table class="Cl_TabelaPrincipal Asf_Tabela">
+          <table class="Asf_Tabela Asf_Tabela--compact">
             <thead>
               <tr>
                 <th>Mês</th>
@@ -127,7 +127,7 @@
               </tr>
             </thead>
             <tbody id="asf_meses_tbody">
-              <tr><td colspan="3" class="Asf_Hint">Carregando…</td></tr>
+              <tr><td colspan="3" class="Asf_Empty">Carregando…</td></tr>
             </tbody>
           </table>
         </div>
@@ -138,7 +138,7 @@
           <span class="Asf_Hint">Últimas 80 faturas pagas</span>
         </div>
         <div class="Asf_TabelaWrap">
-          <table class="Cl_TabelaPrincipal Asf_Tabela">
+          <table class="Asf_Tabela">
             <thead>
               <tr>
                 <th>Pago em</th>
@@ -149,7 +149,7 @@
               </tr>
             </thead>
             <tbody id="asf_pagos_tbody">
-              <tr><td colspan="5" class="Asf_Hint">Carregando…</td></tr>
+              <tr><td colspan="5" class="Asf_Empty">Carregando…</td></tr>
             </tbody>
           </table>
         </div>
@@ -161,5 +161,5 @@
 <script type="application/json" id="asf_cfg">{{ {
   "apiDados": url_for("config.assinaturas_faturamento_dados")
 } | tojson }}</script>
-<script defer src="{{ url_for('config.static', filename='script/Sconfig_assinaturas.js') }}?v=1"></script>
+<script defer src="{{ url_for('config.static', filename='script/Sconfig_assinaturas.js') }}?v=2"></script>
 {% endblock %}

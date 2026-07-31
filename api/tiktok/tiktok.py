@@ -15,7 +15,7 @@ from urllib.parse import urlencode
 import requests
 
 from core.tokens import criptografar_token, descriptografar_token
-from global_utils import agora_utc, is_modo_producao, obter_base_url, obter_url_site_publico, url_imagem_produto
+from global_utils import agora_utc, is_modo_producao, obter_base_url, obter_url_site_publico
 
 _log = logging.getLogger(__name__)
 
@@ -791,16 +791,33 @@ def _sql_produtos_vitrine_tiktok(ids_produtos: list[int] | None = None) -> tuple
 
 
 def _imagem_publica_tiktok(imagem_path: str | None) -> str:
-    rel = url_imagem_produto(imagem_path)
-    if not rel:
-        return ""
-    if rel.lower().startswith(("http://", "https://")):
-        return rel
-    base = obter_base_url()
-    if not base:
-        return ""
-    path = rel if rel.startswith("/") else f"/{rel}"
-    return f"{base.rstrip('/')}{path}"
+    """URL pública estável (pipeline JPG compartilhado)."""
+    from api.bling.imagens_export import preparar_imagem_export
+
+    prep = preparar_imagem_export(imagem_path)
+    return str(prep.get("url") or "") if prep.get("ok") else ""
+
+
+def _links_imagens_tiktok(
+    cur,
+    *,
+    id_produto: int,
+    id_variante: int,
+    imagem_fallback: str = "",
+    max_links: int = 9,
+) -> list[str]:
+    from api.bling.imagens_export import (
+        coletar_caminhos_galeria_export,
+        preparar_links_export,
+    )
+
+    caminhos = coletar_caminhos_galeria_export(
+        cur,
+        id_produto=int(id_produto),
+        id_variante=int(id_variante),
+        imagem_fallback=imagem_fallback or "",
+    )
+    return preparar_links_export(caminhos, max_links=max_links).get("links") or []
 
 
 def _item_ja_vinculado_tiktok(cur, id_tenant: int, id_variante: int) -> str | None:
@@ -922,15 +939,25 @@ def _criar_produto_tiktok(
         )
     if preco <= 0:
         raise RuntimeError(f"Preço inválido para «{titulo}».")
-    img_url = _imagem_publica_tiktok(imagem)
-    if not img_url:
+    links = _links_imagens_tiktok(
+        cur,
+        id_produto=int(id_produto),
+        id_variante=int(id_variante),
+        imagem_fallback=imagem or "",
+        max_links=9,
+    )
+    if not links:
+        fallback = _imagem_publica_tiktok(imagem)
+        if fallback:
+            links = [fallback]
+    if not links:
         raise RuntimeError(f"«{titulo}»: foto pública obrigatória para publicar no TikTok Shop.")
 
     payload: dict[str, Any] = {
         "title": (titulo or sku or "Produto")[:255],
         "description": (descricao or titulo or "")[:5000],
         "category_id": categoria,
-        "main_images": [{"uri": img_url}],
+        "main_images": [{"uri": u} for u in links],
         "skus": [
             {
                 "seller_sku": sku[:100],

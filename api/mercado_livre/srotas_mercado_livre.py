@@ -194,6 +194,8 @@ def config_salvar():
             produtos_modo=body.get("produtos_modo") if "produtos_modo" in body else None,
             listing_type_padrao=body.get("listing_type_padrao") if "listing_type_padrao" in body else None,
             frete_gratis=body.get("frete_gratis") if "frete_gratis" in body else None,
+            garantia_tipo_padrao=body.get("garantia_tipo_padrao") if "garantia_tipo_padrao" in body else None,
+            garantia_tempo_padrao=body.get("garantia_tempo_padrao") if "garantia_tempo_padrao" in body else None,
         )
         conn.commit()
         return jsonify(success=True, message="Preferências salvas.")

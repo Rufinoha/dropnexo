@@ -15,7 +15,7 @@ from urllib.parse import urlencode
 import requests
 
 from core.tokens import criptografar_token, descriptografar_token
-from global_utils import agora_utc, is_modo_producao, obter_base_url, obter_url_site_publico, url_imagem_produto
+from global_utils import agora_utc, is_modo_producao, obter_base_url, obter_url_site_publico
 
 _log = logging.getLogger(__name__)
 
@@ -464,6 +464,7 @@ def _tem_colunas_anuncio_config(cur) -> bool:
 def _garantir_colunas_anuncio_config(cur) -> bool:
     global _ML_COLS_ANUNCIO_OK
     if _tem_colunas_anuncio_config(cur):
+        _garantir_colunas_garantia_ml(cur)
         return True
     try:
         cur.execute(
@@ -478,11 +479,74 @@ def _garantir_colunas_anuncio_config(cur) -> bool:
                 ADD COLUMN IF NOT EXISTS frete_gratis BOOLEAN NOT NULL DEFAULT FALSE
             """
         )
+        _garantir_colunas_garantia_ml(cur)
         _ML_COLS_ANUNCIO_OK = True
         return True
     except Exception:
         _rollback_cur(cur)
         _ML_COLS_ANUNCIO_OK = None
+        return False
+
+
+_ML_COLS_GARANTIA_OK: bool | None = None
+_ML_COLS_PRODUTO_EXTRA_OK: bool | None = None
+
+
+def _garantir_colunas_garantia_ml(cur) -> bool:
+    """Defaults de garantia na conta ML (SQL 091)."""
+    global _ML_COLS_GARANTIA_OK
+    if _ML_COLS_GARANTIA_OK is True:
+        return True
+    try:
+        cur.execute(
+            """
+            ALTER TABLE tbl_integracao_mercado_livre
+                ADD COLUMN IF NOT EXISTS garantia_tipo_padrao VARCHAR(80)
+            """
+        )
+        cur.execute(
+            """
+            ALTER TABLE tbl_integracao_mercado_livre
+                ADD COLUMN IF NOT EXISTS garantia_tempo_padrao VARCHAR(40)
+            """
+        )
+        _ML_COLS_GARANTIA_OK = True
+        return True
+    except Exception:
+        _rollback_cur(cur)
+        _ML_COLS_GARANTIA_OK = False
+        return False
+
+
+def _garantir_colunas_produto_ml_extra(cur) -> bool:
+    """garantia/vídeo em tbl_produto (SQL 091)."""
+    global _ML_COLS_PRODUTO_EXTRA_OK
+    if _ML_COLS_PRODUTO_EXTRA_OK is True:
+        return True
+    try:
+        cur.execute(
+            """
+            ALTER TABLE tbl_produto
+                ADD COLUMN IF NOT EXISTS garantia_tipo VARCHAR(80)
+            """
+        )
+        cur.execute(
+            """
+            ALTER TABLE tbl_produto
+                ADD COLUMN IF NOT EXISTS garantia_tempo VARCHAR(40)
+            """
+        )
+        cur.execute(
+            """
+            ALTER TABLE tbl_produto
+                ADD COLUMN IF NOT EXISTS video_youtube VARCHAR(120)
+            """
+        )
+        _ML_COLS_PRODUTO_EXTRA_OK = True
+        return True
+    except Exception:
+        _rollback_cur(cur)
+        _ML_COLS_PRODUTO_EXTRA_OK = False
         return False
 
 
@@ -506,6 +570,8 @@ def carregar_config_ml(cur, id_tenant: int) -> dict[str, Any]:
         "estoque_sync_ativo": False,
         "listing_type_padrao": "auto",
         "frete_gratis": False,
+        "garantia_tipo_padrao": "",
+        "garantia_tempo_padrao": "",
         "config_ext_disponivel": False,
         "ultima_sync_pedidos": None,
         "conectado_em": None,
@@ -517,9 +583,12 @@ def carregar_config_ml(cur, id_tenant: int) -> dict[str, Any]:
         return base
     ext = _garantir_colunas_config_ext(cur)
     anuncio_cfg = _garantir_colunas_anuncio_config(cur)
+    gar_cfg = _garantir_colunas_garantia_ml(cur)
     cols_ext = ""
     if anuncio_cfg:
         cols_ext = ", listing_type_padrao, frete_gratis"
+        if gar_cfg:
+            cols_ext += ", garantia_tipo_padrao, garantia_tempo_padrao"
     if ext:
         cur.execute(
             f"""
@@ -577,6 +646,9 @@ def carregar_config_ml(cur, id_tenant: int) -> dict[str, Any]:
             lt = (row[11] or "auto").strip()
             out["listing_type_padrao"] = lt if lt in _ML_LISTING_TYPES else "auto"
             out["frete_gratis"] = bool(row[12])
+            if gar_cfg and len(row) > 14:
+                out["garantia_tipo_padrao"] = (row[13] or "").strip()
+                out["garantia_tempo_padrao"] = (row[14] or "").strip()
     return out
 
 
@@ -590,6 +662,8 @@ def salvar_config_ml(
     estoque_sync_ativo: bool | None = None,
     listing_type_padrao: str | None = None,
     frete_gratis: bool | None = None,
+    garantia_tipo_padrao: str | None = None,
+    garantia_tempo_padrao: str | None = None,
 ) -> None:
     if not _tem_tabela_ml(cur):
         raise RuntimeError("Tabela tbl_integracao_mercado_livre não existe.")
@@ -598,7 +672,15 @@ def salvar_config_ml(
         updates["pedidos_importar_auto"] = bool(pedidos_importar_auto)
     precisa_ext = any(
         v is not None
-        for v in (produtos_exportar_auto, produtos_modo, estoque_sync_ativo, listing_type_padrao, frete_gratis)
+        for v in (
+            produtos_exportar_auto,
+            produtos_modo,
+            estoque_sync_ativo,
+            listing_type_padrao,
+            frete_gratis,
+            garantia_tipo_padrao,
+            garantia_tempo_padrao,
+        )
     )
     if precisa_ext and not _garantir_colunas_config_ext(cur):
         raise RuntimeError(
@@ -624,6 +706,15 @@ def salvar_config_ml(
             if not _garantir_colunas_anuncio_config(cur):
                 raise _erro_colunas_anuncio_ml()
             updates["frete_gratis"] = bool(frete_gratis)
+        if garantia_tipo_padrao is not None or garantia_tempo_padrao is not None:
+            if not _garantir_colunas_garantia_ml(cur):
+                raise RuntimeError(
+                    "Colunas de garantia ML indisponíveis. Aplique o SQL 091 no banco."
+                )
+            if garantia_tipo_padrao is not None:
+                updates["garantia_tipo_padrao"] = (garantia_tipo_padrao or "").strip()[:80] or None
+            if garantia_tempo_padrao is not None:
+                updates["garantia_tempo_padrao"] = (garantia_tempo_padrao or "").strip()[:40] or None
     if not updates:
         return
     set_parts = [f"{c} = %s" for c in updates]
@@ -636,7 +727,10 @@ def salvar_config_ml(
     if cur.rowcount == 0:
         cols = ["id_tenant", *updates.keys(), "atualizado_em"]
         placeholders = ", ".join(["%s"] * len(cols))
-        set_clause = ", ".join(f"{c} = EXCLUDED.{c}" for c in updates) + ", atualizado_em = EXCLUDED.atualizado_em"
+        set_clause = (
+            ", ".join(f"{c} = EXCLUDED.{c}" for c in updates)
+            + ", atualizado_em = EXCLUDED.atualizado_em"
+        )
         cur.execute(
             f"""
             INSERT INTO tbl_integracao_mercado_livre ({", ".join(cols)})
@@ -644,7 +738,8 @@ def salvar_config_ml(
             ON CONFLICT (id_tenant) DO UPDATE SET {set_clause}
             """,
             [id_tenant, *updates.values(), agora_utc()],
-    )
+        )
+
 
 # ── sync_pedidos ──────────────────────────────────
 
@@ -851,46 +946,14 @@ def _condicao_ml(condicao: str | None) -> str:
 
 
 def _imagem_publica_ml(imagem_path: str | None) -> str:
-    rel = url_imagem_produto(imagem_path)
-    if not rel:
-        return ""
-    if rel.lower().startswith(("http://", "https://")):
-        return rel
-    base = obter_base_url()
-    if not base:
-        return ""
-    path = rel if rel.startswith("/") else f"/{rel}"
-    return f"{base.rstrip('/')}{path}"
+    """URL pública estável (pipeline JPG compartilhado)."""
+    from api.bling.imagens_export import preparar_imagem_export
+
+    prep = preparar_imagem_export(imagem_path)
+    return str(prep.get("url") or "") if prep.get("ok") else ""
 
 
 _ML_MAX_PICTURES = 12
-
-
-def _raiz_projeto_ml() -> Path:
-    return Path(__file__).resolve().parents[2]
-
-
-def _arquivo_local_imagem_ml(imagem_path: str | None) -> Path | None:
-    """Resolve caminho de disco para foto de produto (static/imge ou upload/tenant)."""
-    raw = (imagem_path or "").strip().replace("\\", "/")
-    if not raw or raw.lower().startswith(("http://", "https://")):
-        return None
-    rel = raw.lstrip("/")
-    if rel.lower().startswith("static/"):
-        rel = rel[7:]
-    if ".." in rel.split("/"):
-        return None
-    root = _raiz_projeto_ml()
-    candidatos: list[Path] = []
-    if rel.lower().startswith("imge/"):
-        candidatos.append(root / "static" / rel.replace("/", os.sep))
-    candidatos.append(root / rel.replace("/", os.sep))
-    if rel.lower().startswith("upload/"):
-        candidatos.append(root / "static" / rel.replace("/", os.sep))
-    for p in candidatos:
-        if p.is_file():
-            return p
-    return None
 
 
 def _texto_plano_ml(texto: str | None) -> str:
@@ -977,42 +1040,14 @@ def _caminhos_galeria_ml(
     id_variante: int,
     imagem_fallback: str = "",
 ) -> list[str]:
-    """
-    Lista caminhos da galeria para o ML.
-    Usa seleção explícita da variação; se não houver, usa a galeria completa do pai.
-    (Antes caía em id_imagem_principal → só 1 foto.)
-    """
-    from fornecedor.catalogo.catalogo import listar_imagens_galeria_pai
+    from api.bling.imagens_export import coletar_caminhos_galeria_export
 
-    caminhos: list[str] = []
-    cur.execute(
-        """
-        SELECT i.caminho
-        FROM tbl_produto_variante_imagem vi
-        JOIN tbl_produto_imagem i ON i.id = vi.id_imagem
-        WHERE vi.id_variante = %s
-        ORDER BY vi.ordem ASC, vi.id_imagem ASC
-        """,
-        (int(id_variante),),
+    return coletar_caminhos_galeria_export(
+        cur,
+        id_produto=int(id_produto),
+        id_variante=int(id_variante),
+        imagem_fallback=imagem_fallback or "",
     )
-    for row in cur.fetchall():
-        c = (row[0] or "").strip()
-        if c:
-            caminhos.append(c)
-
-    if not caminhos:
-        try:
-            for img in listar_imagens_galeria_pai(cur, int(id_produto)):
-                c = (img.get("caminho") or "").strip()
-                if c:
-                    caminhos.append(c)
-        except Exception:
-            caminhos = []
-
-    fb = (imagem_fallback or "").strip()
-    if fb and fb not in caminhos:
-        caminhos.insert(0, fb)
-    return caminhos
 
 
 def _upload_picture_ml(cur, id_tenant: int, arquivo: Path) -> str | None:
@@ -1055,9 +1090,12 @@ def _coletar_pictures_ml(
 ) -> list[dict[str, str]]:
     """
     Monta pictures do anúncio.
-    Prefere upload multipart (arquivo local) — ML não depende de URL pública/login.
-    Fallback: source com URL absoluta.
+    1) Normaliza JPG (pipeline compartilhado)
+    2) Prefere upload multipart do cache JPG
+    3) Fallback: source com URL pública assinada
     """
+    from api.bling.imagens_export import caminho_arquivo_cache, preparar_imagem_export
+
     pictures: list[dict[str, str]] = []
     vistos: set[str] = set()
     for caminho in _caminhos_galeria_ml(
@@ -1066,12 +1104,16 @@ def _coletar_pictures_ml(
         id_variante=int(id_variante),
         imagem_fallback=imagem_fallback or "",
     ):
-        chave = caminho.strip().lower()
+        chave = (caminho or "").strip().lower()
         if not chave or chave in vistos:
             continue
         vistos.add(chave)
 
-        local = _arquivo_local_imagem_ml(caminho)
+        prep = preparar_imagem_export(caminho)
+        if not prep.get("ok"):
+            continue
+
+        local = caminho_arquivo_cache(prep.get("cache"))
         if local is not None:
             pic_id = _upload_picture_ml(cur, id_tenant, local)
             if pic_id:
@@ -1080,7 +1122,7 @@ def _coletar_pictures_ml(
                     break
                 continue
 
-        url = _imagem_publica_ml(caminho)
+        url = str(prep.get("url") or "").strip()
         if not url or url in vistos:
             continue
         vistos.add(url)
@@ -1136,8 +1178,13 @@ def _atualizar_anuncio_completo_ml(
     profundidade_cm: float | None = None,
     peso_kg: float | None = None,
     titulo: str = "",
+    attrs_variacao_dn: dict[str, str] | None = None,
+    garantia_tipo: str = "",
+    garantia_tempo: str = "",
+    video_youtube: str = "",
+    cfg: dict | None = None,
 ) -> None:
-    """Atualiza anúncio já vinculado: preço, estoque, fotos, descrição e atributos básicos."""
+    """Atualiza anúncio já vinculado: preço, estoque, fotos, descrição, attrs, garantia e vídeo."""
     from api.mercado_livre.eco_estoque import registrar_eco_ml_pendente
 
     ml_item_id = (ml_item_id or "").strip()
@@ -1158,8 +1205,12 @@ def _atualizar_anuncio_completo_ml(
     if pictures:
         payload["pictures"] = pictures
 
+    estado = _estado_anuncio_ml(cur, id_tenant, ml_item_id)
+    category_id = str(estado.get("category_id") or "").strip()
+    cat_attrs = _attrs_categoria_ml(cur, id_tenant, category_id) if category_id else []
+
     attrs = _montar_atributos_obrigatorios_ml(
-        [],
+        cat_attrs,
         marca=marca or "",
         gtin=gtin or "",
         titulo=titulo or "",
@@ -1170,9 +1221,24 @@ def _atualizar_anuncio_completo_ml(
         profundidade_cm=profundidade_cm,
         peso_kg=peso_kg,
         so_pacote=True,
+        attrs_variacao_dn=attrs_variacao_dn or {},
     )
     if attrs:
         payload["attributes"] = attrs
+
+    cfg = cfg or {}
+    gar_tipo = (garantia_tipo or cfg.get("garantia_tipo_padrao") or "").strip()
+    gar_tempo = (garantia_tempo or cfg.get("garantia_tempo_padrao") or "").strip()
+    if category_id and (gar_tipo or gar_tempo):
+        sale_terms = _montar_sale_terms_ml(
+            cur,
+            id_tenant,
+            category_id,
+            garantia_tipo=gar_tipo,
+            garantia_tempo=gar_tempo,
+        )
+        if sale_terms:
+            payload["sale_terms"] = sale_terms
 
     registrar_eco_ml_pendente(
         cur,
@@ -1182,7 +1248,30 @@ def _atualizar_anuncio_completo_ml(
         origem="dropnexo_export",
     )
     if payload:
-        api_request(cur, id_tenant, "PUT", f"/items/{ml_item_id}", json_body=payload)
+        try:
+            api_request(cur, id_tenant, "PUT", f"/items/{ml_item_id}", json_body=payload)
+        except RuntimeError as e:
+            msg = str(e).lower()
+            if payload.get("sale_terms") and (
+                "sale_term" in msg or "warranty" in msg or "garantia" in msg
+            ):
+                payload.pop("sale_terms", None)
+                api_request(cur, id_tenant, "PUT", f"/items/{ml_item_id}", json_body=payload)
+            else:
+                raise
+
+    video_id = _extrair_youtube_id_ml(video_youtube)
+    if video_id:
+        try:
+            api_request(
+                cur,
+                id_tenant,
+                "PUT",
+                f"/items/{ml_item_id}",
+                json_body={"video_id": video_id},
+            )
+        except RuntimeError as e:
+            _log.info("Vídeo ML não atualizado em %s: %s", ml_item_id, e)
 
     titulo_limpo = _normalizar_titulo_ml(titulo or "", max_len=60)
     if titulo_limpo and titulo_limpo != "Produto":
@@ -1629,17 +1718,189 @@ def _atributos_pacote_ml(
     profundidade_cm: float | None = None,
     peso_kg: float | None = None,
 ) -> list[dict]:
-    """Dimensões/peso do pacote (ML espera peso em gramas)."""
+    """Dimensões/peso do pacote com unidade (formato aceito pelo ML)."""
     out: list[dict] = []
     if altura_cm is not None and float(altura_cm) > 0:
-        out.append(_attr_valor_texto("SELLER_PACKAGE_HEIGHT", str(round(float(altura_cm), 2))))
+        out.append(
+            _attr_valor_texto("SELLER_PACKAGE_HEIGHT", f"{round(float(altura_cm), 2)} cm")
+        )
     if largura_cm is not None and float(largura_cm) > 0:
-        out.append(_attr_valor_texto("SELLER_PACKAGE_WIDTH", str(round(float(largura_cm), 2))))
+        out.append(
+            _attr_valor_texto("SELLER_PACKAGE_WIDTH", f"{round(float(largura_cm), 2)} cm")
+        )
     if profundidade_cm is not None and float(profundidade_cm) > 0:
-        out.append(_attr_valor_texto("SELLER_PACKAGE_LENGTH", str(round(float(profundidade_cm), 2))))
+        out.append(
+            _attr_valor_texto(
+                "SELLER_PACKAGE_LENGTH", f"{round(float(profundidade_cm), 2)} cm"
+            )
+        )
     if peso_kg is not None and float(peso_kg) > 0:
         gramas = max(1, int(round(float(peso_kg) * 1000)))
-        out.append(_attr_valor_texto("SELLER_PACKAGE_WEIGHT", str(gramas)))
+        out.append(_attr_valor_texto("SELLER_PACKAGE_WEIGHT", f"{gramas} g"))
+    return out
+
+
+_ML_ATTR_ALIAS = {
+    "cor": "COLOR",
+    "color": "COLOR",
+    "colour": "COLOR",
+    "estampa": "COLOR",
+    "tamanho": "SIZE",
+    "size": "SIZE",
+    "tam": "SIZE",
+    "voltagem": "VOLTAGE",
+    "voltage": "VOLTAGE",
+    "sabor": "FLAVOR",
+    "flavor": "FLAVOR",
+    "modelo": "MODEL",
+    "model": "MODEL",
+    "genero": "GENDER",
+    "gender": "GENDER",
+}
+
+
+def _parse_atributos_variante_ml(raw) -> dict[str, str]:
+    if isinstance(raw, dict):
+        src = raw
+    elif isinstance(raw, str) and raw.strip():
+        try:
+            src = json.loads(raw)
+        except (TypeError, ValueError):
+            return {}
+    else:
+        return {}
+    out: dict[str, str] = {}
+    if not isinstance(src, dict):
+        return out
+    for k, v in src.items():
+        nome = str(k or "").strip()
+        val = str(v or "").strip()
+        if nome and val:
+            out[nome] = val
+    return out
+
+
+def _attr_eh_variacao_ml(attr: dict) -> bool:
+    tags = _attr_tags_ml(attr)
+    if tags.get("allow_variations") or tags.get("variation_attribute"):
+        return True
+    # Domínios novos: CHILD_PK / PARENT_PK
+    hierarchy = str(attr.get("hierarchy") or tags.get("hierarchy") or "").upper()
+    return "CHILD" in hierarchy
+
+
+def _resolver_attr_id_ml(nome_dn: str, cat_attrs: list[dict]) -> str | None:
+    """Mapeia rótulo DropNexo (Cor/Tamanho) → id ML (COLOR/SIZE)."""
+    chave = re.sub(r"\s+", " ", (nome_dn or "").strip().lower())
+    if not chave:
+        return None
+    alias = _ML_ATTR_ALIAS.get(chave)
+    if alias:
+        for attr in cat_attrs:
+            if (attr.get("id") or "").strip().upper() == alias:
+                return alias
+    for attr in cat_attrs:
+        if not isinstance(attr, dict):
+            continue
+        aid = (attr.get("id") or "").strip()
+        nome_ml = (attr.get("name") or "").strip().lower()
+        if not aid:
+            continue
+        if nome_ml == chave or aid.lower() == chave:
+            return aid
+        if chave in nome_ml or nome_ml in chave:
+            return aid
+    return alias
+
+
+def _atributos_variacao_ml(cat_attrs: list[dict], attrs_dn: dict[str, str]) -> list[dict]:
+    """Atributos de variação (CHILD_PK) a partir de v.atributos."""
+    out: list[dict] = []
+    vistos: set[str] = set()
+    var_ids = {
+        (a.get("id") or "").strip()
+        for a in cat_attrs
+        if isinstance(a, dict) and _attr_eh_variacao_ml(a) and a.get("id")
+    }
+    for nome_dn, valor in (attrs_dn or {}).items():
+        aid = _resolver_attr_id_ml(nome_dn, cat_attrs)
+        if not aid or aid in vistos:
+            continue
+        # Se a categoria declara attrs de variação, prioriza esses IDs.
+        if var_ids and aid not in var_ids:
+            # Ainda envia se o alias for clássico (COLOR/SIZE) — ML costuma aceitar.
+            if aid not in ("COLOR", "SIZE", "VOLTAGE", "FLAVOR", "GENDER", "MODEL"):
+                continue
+        entry = _attr_valor_texto(aid, valor)
+        # Tenta value_id quando a categoria traz lista
+        for attr in cat_attrs:
+            if (attr.get("id") or "").strip() != aid:
+                continue
+            listed = _attr_valor_lista(attr, valor)
+            if listed:
+                entry = listed
+            break
+        out.append(entry)
+        vistos.add(aid)
+    return out
+
+
+def _extrair_youtube_id_ml(raw: str | None) -> str:
+    s = (raw or "").strip()
+    if not s:
+        return ""
+    if re.fullmatch(r"[A-Za-z0-9_-]{6,20}", s):
+        return s
+    m = re.search(
+        r"(?:youtu\.be/|youtube\.com/(?:watch\?v=|embed/|shorts/)|v=)([A-Za-z0-9_-]{6,20})",
+        s,
+    )
+    return m.group(1) if m else ""
+
+
+def _montar_sale_terms_ml(
+    cur,
+    id_tenant: int,
+    category_id: str,
+    *,
+    garantia_tipo: str = "",
+    garantia_tempo: str = "",
+) -> list[dict]:
+    tipo = (garantia_tipo or "").strip()
+    tempo = (garantia_tempo or "").strip()
+    if not tipo and not tempo:
+        return []
+    if not tipo:
+        tipo = "Garantia do vendedor"
+    if not tempo:
+        tempo = "90 dias"
+
+    termos_cat: list[dict] = []
+    if category_id:
+        try:
+            data = api_request(cur, id_tenant, "GET", f"/categories/{category_id}/sale_terms")
+            if isinstance(data, list):
+                termos_cat = data
+        except RuntimeError:
+            termos_cat = []
+
+    out: list[dict] = []
+    tipo_entry: dict | None = None
+    tempo_entry: dict | None = None
+    for term in termos_cat:
+        if not isinstance(term, dict):
+            continue
+        tid = (term.get("id") or "").strip()
+        if tid == "WARRANTY_TYPE":
+            tipo_entry = _attr_valor_lista(term, tipo) or _attr_valor_texto(tid, tipo)
+        elif tid == "WARRANTY_TIME":
+            tempo_entry = _attr_valor_lista(term, tempo) or _attr_valor_texto(tid, tempo)
+    if not tipo_entry:
+        tipo_entry = _attr_valor_texto("WARRANTY_TYPE", tipo)
+    if not tempo_entry:
+        tempo_entry = _attr_valor_texto("WARRANTY_TIME", tempo)
+    out.append(tipo_entry)
+    out.append(tempo_entry)
     return out
 
 
@@ -1656,6 +1917,7 @@ def _montar_atributos_obrigatorios_ml(
     profundidade_cm: float | None = None,
     peso_kg: float | None = None,
     so_pacote: bool = False,
+    attrs_variacao_dn: dict[str, str] | None = None,
 ) -> list[dict]:
     out: list[dict] = []
     vistos: set[str] = set()
@@ -1673,6 +1935,11 @@ def _montar_atributos_obrigatorios_ml(
             peso_kg=peso_kg,
         ):
             out.append(entry)
+        for entry in _atributos_variacao_ml(cat_attrs or [], attrs_variacao_dn or {}):
+            aid = entry.get("id")
+            if aid and aid not in vistos:
+                out.append(entry)
+                vistos.add(str(aid))
         return out
 
     for attr in cat_attrs:
@@ -1748,6 +2015,12 @@ def _montar_atributos_obrigatorios_ml(
             out.append(entry)
             vistos.add(aid)
 
+    for entry in _atributos_variacao_ml(cat_attrs, attrs_variacao_dn or {}):
+        aid = str(entry.get("id") or "")
+        if aid and aid not in vistos:
+            out.append(entry)
+            vistos.add(aid)
+
     # GTIN condicional: sem código, informar motivo
     if not gtin and "GTIN" not in vistos and "EMPTY_GTIN_REASON" not in vistos:
         precisa_gtin = any(
@@ -1802,6 +2075,12 @@ def _criar_anuncio_ml(
     largura_cm: float | None = None,
     profundidade_cm: float | None = None,
     peso_kg: float | None = None,
+    nome_pai: str = "",
+    attrs_variacao_dn: dict[str, str] | None = None,
+    garantia_tipo: str = "",
+    garantia_tempo: str = "",
+    video_youtube: str = "",
+    variations: list[dict] | None = None,
 ) -> str:
     titulo = _normalizar_titulo_ml(titulo or "Produto", max_len=60)
     if preco <= 0:
@@ -1813,7 +2092,7 @@ def _criar_anuncio_ml(
         id_variante=int(id_variante),
         imagem_fallback=imagem or "",
     )
-    if not pictures:
+    if not pictures and not variations:
         raise RuntimeError(
             f"«{titulo}»: nenhuma foto disponível para o anúncio no ML "
             "(verifique a galeria do produto)."
@@ -1834,6 +2113,8 @@ def _criar_anuncio_ml(
     cfg = cfg or {}
     listing_pref = (cfg.get("listing_type_padrao") or "auto").strip()
     frete_gratis = bool(cfg.get("frete_gratis"))
+    gar_tipo = (garantia_tipo or cfg.get("garantia_tipo_padrao") or "").strip()
+    gar_tempo = (garantia_tempo or cfg.get("garantia_tempo_padrao") or "").strip()
 
     listing_type = _resolver_listing_type_ml(
         cur, id_tenant, ml_user_id, category_id, listing_pref
@@ -1850,41 +2131,97 @@ def _criar_anuncio_ml(
         largura_cm=largura_cm,
         profundidade_cm=profundidade_cm,
         peso_kg=peso_kg,
+        attrs_variacao_dn=attrs_variacao_dn or {},
     )
 
-    family_name = _family_name_ml(titulo, marca, familia_map)
+    # User Products: família estável = nome do pai (agrupa variações), não o título da variante.
+    familia_base = (nome_pai or titulo or "").strip()
+    family_name = _family_name_ml(familia_base, marca, familia_map)
     usa_up = _seller_usa_user_products_ml(cur, id_tenant, ml_user_id, site_id)
 
     payload: dict[str, Any] = {
         "category_id": category_id,
-        "price": round(float(preco), 2),
         "currency_id": _moeda_site(site_id),
-        "available_quantity": max(1, int(estoque or 0)),
         "buying_mode": "buy_it_now",
         "listing_type_id": listing_type,
         "condition": _condicao_ml(condicao),
-        "pictures": pictures,
     }
-    if usa_up:
+    mapas_variacoes: list[tuple[int, int, str]] = []
+    if variations:
+        vars_api: list[dict] = []
+        for var in variations:
+            if not isinstance(var, dict):
+                continue
+            try:
+                vid_map = int(var.get("_id_variante_dn") or 0)
+                pid_map = int(var.get("_id_produto_dn") or id_produto)
+            except (TypeError, ValueError):
+                vid_map, pid_map = 0, int(id_produto)
+            sku_map = str(var.get("seller_custom_field") or sku or "")
+            if vid_map > 0:
+                mapas_variacoes.append((vid_map, pid_map, sku_map))
+            limpa = {k: v for k, v in var.items() if not str(k).startswith("_")}
+            vars_api.append(limpa)
+        payload["variations"] = vars_api
+        if pictures:
+            payload["pictures"] = pictures
+    else:
+        payload["price"] = round(float(preco), 2)
+        payload["available_quantity"] = max(1, int(estoque or 0))
+        payload["pictures"] = pictures
+
+    sale_terms = _montar_sale_terms_ml(
+        cur, id_tenant, category_id, garantia_tipo=gar_tipo, garantia_tempo=gar_tempo
+    )
+    if sale_terms:
+        payload["sale_terms"] = sale_terms
+
+    video_id = _extrair_youtube_id_ml(video_youtube)
+    if video_id:
+        payload["video_id"] = video_id
+
+    if usa_up and not variations:
         # User Products: family_name obrigatório; title é gerado pelo ML.
+        # variations[] não é aceito neste modo — 1 item por variante + mesmos family_name.
         payload["family_name"] = family_name
         payload["shipping"] = _montar_shipping_ml(frete_gratis)
     else:
-        payload["title"] = titulo
+        payload["title"] = _normalizar_titulo_ml(familia_base or titulo, max_len=60)
         payload["channels"] = ["marketplace"]
         payload["shipping"] = _montar_shipping_ml(frete_gratis)
-        if sku:
+        if sku and not variations:
             payload["seller_custom_field"] = sku[:100]
     if attrs:
         payload["attributes"] = attrs
 
-    resp = api_request(cur, id_tenant, "POST", "/items", json_body=payload)
+    try:
+        resp = api_request(cur, id_tenant, "POST", "/items", json_body=payload)
+    except RuntimeError as e:
+        msg = str(e).lower()
+        retried = False
+        if payload.get("video_id") and ("video" in msg or "youtube" in msg):
+            payload.pop("video_id", None)
+            retried = True
+            _log.info("ML rejeitou video_id ao criar «%s» — republicando sem vídeo.", titulo)
+        if payload.get("sale_terms") and (
+            "sale_term" in msg or "warranty" in msg or "garantia" in msg
+        ):
+            payload.pop("sale_terms", None)
+            retried = True
+            _log.info("ML rejeitou sale_terms ao criar «%s» — republicando sem garantia.", titulo)
+        if not retried:
+            raise
+        resp = api_request(cur, id_tenant, "POST", "/items", json_body=payload)
     item_id = str(resp.get("id") or "").strip()
     if not item_id:
         raise RuntimeError(f"«{titulo}»: ML não retornou id do anúncio.")
 
     _tentar_ativar_anuncio_ml(cur, id_tenant, item_id)
-    _salvar_map_produto_ml(cur, id_tenant, id_variante, id_produto, sku, item_id)
+    if mapas_variacoes:
+        for vid_map, pid_map, sku_map in mapas_variacoes:
+            _salvar_map_produto_ml(cur, id_tenant, vid_map, pid_map, sku_map, item_id)
+    else:
+        _salvar_map_produto_ml(cur, id_tenant, id_variante, id_produto, sku, item_id)
 
     texto_desc = _texto_plano_ml(descricao)
     if texto_desc:
@@ -1927,7 +2264,12 @@ def _sql_produtos_vitrine_ml(ids_produtos: list[int] | None = None) -> tuple[str
                COALESCE(v.altura_cm, p.altura_cm) AS altura_cm,
                COALESCE(v.largura_cm, p.largura_cm) AS largura_cm,
                COALESCE(v.profundidade_cm, p.profundidade_cm) AS profundidade_cm,
-               COALESCE(v.peso_bruto_kg, p.peso_bruto_kg, v.peso_liquido_kg, p.peso_liquido_kg) AS peso_kg
+               COALESCE(v.peso_bruto_kg, p.peso_bruto_kg, v.peso_liquido_kg, p.peso_liquido_kg) AS peso_kg,
+               COALESCE(NULLIF(TRIM(p.nome), ''), '') AS nome_pai,
+               v.atributos AS atributos_variante,
+               COALESCE(NULLIF(TRIM(p.garantia_tipo), ''), '') AS garantia_tipo,
+               COALESCE(NULLIF(TRIM(p.garantia_tempo), ''), '') AS garantia_tempo,
+               COALESCE(NULLIF(TRIM(p.video_youtube), ''), '') AS video_youtube
         FROM tbl_produto_vendedor pv
         JOIN tbl_produto_variante v ON v.id = pv.id_variante
         JOIN tbl_produto p ON p.id = pv.id_produto
@@ -1948,136 +2290,205 @@ def _float_ou_none(v) -> float | None:
     return f if f > 0 else None
 
 
+def _desempacotar_linha_vitrine_ml(row) -> dict[str, Any]:
+    """Normaliza a linha do SQL da vitrine ML (com ou sem colunas extras)."""
+    n = len(row) if row is not None else 0
+
+    def _at(i, default=None):
+        return row[i] if n > i else default
+
+    return {
+        "pv_id": _at(0),
+        "id_variante": int(_at(1) or 0),
+        "id_produto": int(_at(2) or 0),
+        "sku": (_at(3) or "").strip() if isinstance(_at(3), str) or _at(3) is None else str(_at(3) or "").strip(),
+        "titulo": _at(4) or "",
+        "preco": float(_at(5) or 0),
+        "descricao": _at(6) or "",
+        "imagem": _at(7) or "",
+        "estoque": int(_at(8) or 0),
+        "condicao": _at(9),
+        "marca": (_at(10) or "") if _at(10) is not None else "",
+        "gtin": (_at(11) or "") if _at(11) is not None else "",
+        "id_cat_vd": _at(12),
+        "altura_cm": _float_ou_none(_at(13)),
+        "largura_cm": _float_ou_none(_at(14)),
+        "profundidade_cm": _float_ou_none(_at(15)),
+        "peso_kg": _float_ou_none(_at(16)),
+        "nome_pai": (_at(17) or "") if n > 17 else "",
+        "attrs_variacao_dn": _parse_atributos_variante_ml(_at(18) if n > 18 else None),
+        "garantia_tipo": (_at(19) or "") if n > 19 else "",
+        "garantia_tempo": (_at(20) or "") if n > 20 else "",
+        "video_youtube": (_at(21) or "") if n > 21 else "",
+    }
+
+
+def _montar_variations_classic_ml(
+    cur,
+    id_tenant: int,
+    *,
+    category_id: str,
+    itens: list[dict],
+) -> list[dict]:
+    """Monta variations[] para sellers clássicos (não User Products)."""
+    cat_attrs = _attrs_categoria_ml(cur, id_tenant, category_id) if category_id else []
+    out: list[dict] = []
+    for d in itens:
+        attrs_dn = d.get("attrs_variacao_dn") or {}
+        combos = _atributos_variacao_ml(cat_attrs, attrs_dn)
+        if not combos:
+            # Sem combinação (Cor/Tamanho), variations[] não faz sentido.
+            return []
+        sku = (d.get("sku") or "").strip()
+        var: dict[str, Any] = {
+            "attribute_combinations": combos,
+            "price": round(float(d.get("preco") or 0), 2),
+            "available_quantity": max(0, int(d.get("estoque") or 0)),
+            "_id_variante_dn": int(d["id_variante"]),
+            "_id_produto_dn": int(d["id_produto"]),
+        }
+        if sku:
+            var["seller_custom_field"] = sku[:100]
+            var["attributes"] = [_attr_valor_texto("SELLER_SKU", sku[:100])]
+        out.append(var)
+    return out
+
+
 def _criar_anuncios_ml_lote(cur, id_tenant: int, cfg: dict, linhas: list) -> dict:
     ml_user_id = int(cfg.get("ml_user_id") or 0)
     site_id = (cfg.get("ml_site_id") or "MLB").upper()
     if not ml_user_id:
         raise RuntimeError("Perfil Mercado Livre sem user_id. Reconecte a conta.")
 
+    _garantir_colunas_produto_ml_extra(cur)
+
     exportados = 0
     atualizados = 0
     erros: list[str] = []
     resultados: list[dict] = []
     processados = 0
+    usa_up = _seller_usa_user_products_ml(cur, id_tenant, ml_user_id, site_id)
 
-    for row in linhas:
+    dados = [_desempacotar_linha_vitrine_ml(r) for r in linhas]
+    # Classic multi-variação: agrupa por produto quando ainda não vinculado.
+    grupos: dict[int, list[dict]] = {}
+    for d in dados:
+        grupos.setdefault(int(d["id_produto"]), []).append(d)
+
+    def _atualizar_um(d: dict) -> None:
+        nonlocal atualizados, processados
         if processados >= _ML_MAX_CRIAR_POR_SYNC:
-            break
-        (
-            _pv_id,
-            id_variante,
-            id_produto,
-            sku,
-            titulo,
-            preco,
-            descricao,
-            imagem,
-            estoque,
-            condicao,
-            marca,
-            gtin,
-            id_cat_vd,
-            altura_cm,
-            largura_cm,
-            profundidade_cm,
-            peso_kg,
-        ) = row
+            return
         processados += 1
-        nome = _titulo_exibicao_ml(titulo or "", sku or "")
-        sku_limpo = (sku or "").strip()
-        alt = _float_ou_none(altura_cm)
-        lar = _float_ou_none(largura_cm)
-        pro = _float_ou_none(profundidade_cm)
-        pes = _float_ou_none(peso_kg)
+        nome = _titulo_exibicao_ml(d["titulo"] or "", d["sku"] or "")
+        ml_item_id = _item_ja_vinculado_ml(cur, id_tenant, int(d["id_variante"]))
+        if not ml_item_id and d["sku"]:
+            ml_item_id = _buscar_item_ml_por_sku(cur, id_tenant, ml_user_id, d["sku"])
+        if not ml_item_id:
+            return
+        try:
+            _atualizar_anuncio_completo_ml(
+                cur,
+                id_tenant,
+                ml_item_id,
+                id_variante=int(d["id_variante"]),
+                id_produto=int(d["id_produto"]),
+                sku=d["sku"],
+                preco=float(d["preco"] or 0),
+                descricao=d["descricao"] or "",
+                imagem=d["imagem"] or "",
+                estoque=int(d["estoque"] or 0),
+                marca=d["marca"] or "",
+                gtin=d["gtin"] or "",
+                condicao=d["condicao"],
+                altura_cm=d["altura_cm"],
+                largura_cm=d["largura_cm"],
+                profundidade_cm=d["profundidade_cm"],
+                peso_kg=d["peso_kg"],
+                titulo=d["titulo"] or "",
+                attrs_variacao_dn=d.get("attrs_variacao_dn") or {},
+                garantia_tipo=d.get("garantia_tipo") or "",
+                garantia_tempo=d.get("garantia_tempo") or "",
+                video_youtube=d.get("video_youtube") or "",
+                cfg=cfg,
+            )
+            atualizados += 1
+            resultados.append(
+                {
+                    "id_produto": int(d["id_produto"]),
+                    "titulo": nome,
+                    "sku": d["sku"],
+                    "status": "ok",
+                    "acao": "atualizado",
+                    "mensagem": (
+                        "Anúncio atualizado no Mercado Livre "
+                        "(fotos, preço, estoque, variação, garantia e descrição)."
+                    ),
+                    "ml_item_id": ml_item_id,
+                }
+            )
+        except RuntimeError as e:
+            msg_user = _erro_ml_para_usuario(str(e)[:400])
+            if msg_user not in erros:
+                erros.append(msg_user)
+            resultados.append(
+                {
+                    "id_produto": int(d["id_produto"]),
+                    "titulo": nome,
+                    "sku": d["sku"],
+                    "status": "erro",
+                    "mensagem": msg_user,
+                }
+            )
 
-        ml_item_id = _item_ja_vinculado_ml(cur, id_tenant, int(id_variante))
-        if not ml_item_id and sku_limpo:
-            ml_item_id = _buscar_item_ml_por_sku(cur, id_tenant, ml_user_id, sku_limpo)
-
-        if ml_item_id:
-            try:
-                _atualizar_anuncio_completo_ml(
-                    cur,
-                    id_tenant,
-                    ml_item_id,
-                    id_variante=int(id_variante),
-                    id_produto=int(id_produto),
-                    sku=sku_limpo,
-                    preco=float(preco or 0),
-                    descricao=descricao or "",
-                    imagem=imagem or "",
-                    estoque=int(estoque or 0),
-                    marca=marca or "",
-                    gtin=gtin or "",
-                    condicao=condicao,
-                    altura_cm=alt,
-                    largura_cm=lar,
-                    profundidade_cm=pro,
-                    peso_kg=pes,
-                    titulo=titulo or "",
-                )
-                atualizados += 1
-                resultados.append(
-                    {
-                        "id_produto": int(id_produto),
-                        "titulo": nome,
-                        "sku": sku_limpo,
-                        "status": "ok",
-                        "acao": "atualizado",
-                        "mensagem": (
-                            "Anúncio atualizado no Mercado Livre "
-                            "(fotos, preço, estoque e descrição)."
-                        ),
-                        "ml_item_id": ml_item_id,
-                    }
-                )
-            except RuntimeError as e:
-                msg_user = _erro_ml_para_usuario(str(e)[:400])
-                if msg_user not in erros:
-                    erros.append(msg_user)
-                resultados.append(
-                    {
-                        "id_produto": int(id_produto),
-                        "titulo": nome,
-                        "sku": sku_limpo,
-                        "status": "erro",
-                        "mensagem": msg_user,
-                    }
-                )
-            continue
-
+    def _criar_um(d: dict, variations: list[dict] | None = None) -> None:
+        nonlocal exportados, processados
+        if processados >= _ML_MAX_CRIAR_POR_SYNC:
+            return
+        processados += 1
+        nome = _titulo_exibicao_ml(d["titulo"] or "", d["sku"] or "")
+        try:
+            id_cat = int(d["id_cat_vd"]) if d.get("id_cat_vd") else None
+        except (TypeError, ValueError):
+            id_cat = None
         try:
             ml_item_id = _criar_anuncio_ml(
                 cur,
                 id_tenant,
                 ml_user_id,
                 site_id,
-                id_variante=int(id_variante),
-                id_produto=int(id_produto),
-                sku=sku_limpo,
-                titulo=titulo or "",
-                preco=float(preco or 0),
-                descricao=descricao or "",
-                imagem=imagem or "",
-                estoque=int(estoque or 0),
-                condicao=condicao,
-                marca=marca or "",
-                gtin=gtin or "",
-                id_categoria_vendedor=int(id_cat_vd) if id_cat_vd else None,
+                id_variante=int(d["id_variante"]),
+                id_produto=int(d["id_produto"]),
+                sku=d["sku"],
+                titulo=d["titulo"] or "",
+                preco=float(d["preco"] or 0),
+                descricao=d["descricao"] or "",
+                imagem=d["imagem"] or "",
+                estoque=int(d["estoque"] or 0),
+                condicao=d["condicao"],
+                marca=d["marca"] or "",
+                gtin=d["gtin"] or "",
+                id_categoria_vendedor=id_cat,
                 cfg=cfg,
-                altura_cm=alt,
-                largura_cm=lar,
-                profundidade_cm=pro,
-                peso_kg=pes,
+                altura_cm=d["altura_cm"],
+                largura_cm=d["largura_cm"],
+                profundidade_cm=d["profundidade_cm"],
+                peso_kg=d["peso_kg"],
+                nome_pai=d.get("nome_pai") or "",
+                attrs_variacao_dn=d.get("attrs_variacao_dn") or {},
+                garantia_tipo=d.get("garantia_tipo") or "",
+                garantia_tempo=d.get("garantia_tempo") or "",
+                video_youtube=d.get("video_youtube") or "",
+                variations=variations,
             )
             exportados += 1
             estado = _estado_anuncio_ml(cur, id_tenant, ml_item_id)
             cat_usada = estado.get("category_id") or ""
             resultados.append(
                 {
-                    "id_produto": int(id_produto),
+                    "id_produto": int(d["id_produto"]),
                     "titulo": nome,
-                    "sku": sku_limpo,
+                    "sku": d["sku"],
                     "status": "ok",
                     "acao": "criado",
                     "mensagem": _mensagem_pos_publicacao_ml(estado, cat_usada),
@@ -2087,6 +2498,21 @@ def _criar_anuncios_ml_lote(cur, id_tenant: int, cfg: dict, linhas: list) -> dic
                     "ml_status": estado.get("status") or "",
                 }
             )
+            if variations:
+                for v in variations:
+                    vid = int(v.get("_id_variante_dn") or 0)
+                    if vid and vid != int(d["id_variante"]):
+                        resultados.append(
+                            {
+                                "id_produto": int(d["id_produto"]),
+                                "titulo": nome,
+                                "sku": str(v.get("seller_custom_field") or ""),
+                                "status": "ok",
+                                "acao": "criado",
+                                "mensagem": f"Variação vinculada ao anúncio {ml_item_id}.",
+                                "ml_item_id": ml_item_id,
+                            }
+                        )
         except RuntimeError as e:
             msg_tec = str(e)[:400]
             msg_user = _erro_ml_para_usuario(msg_tec)
@@ -2094,13 +2520,81 @@ def _criar_anuncios_ml_lote(cur, id_tenant: int, cfg: dict, linhas: list) -> dic
                 erros.append(msg_user)
             resultados.append(
                 {
-                    "id_produto": int(id_produto),
+                    "id_produto": int(d["id_produto"]),
                     "titulo": nome,
-                    "sku": sku_limpo,
+                    "sku": d["sku"],
                     "status": "erro",
                     "mensagem": msg_user,
                 }
             )
+
+    for _id_prod, grupo in grupos.items():
+        if processados >= _ML_MAX_CRIAR_POR_SYNC:
+            break
+
+        pendentes: list[dict] = []
+        for d in grupo:
+            ml_item_id = _item_ja_vinculado_ml(cur, id_tenant, int(d["id_variante"]))
+            if not ml_item_id and d["sku"]:
+                ml_item_id = _buscar_item_ml_por_sku(cur, id_tenant, ml_user_id, d["sku"])
+            if ml_item_id:
+                _atualizar_um(d)
+            else:
+                pendentes.append(d)
+
+        if not pendentes:
+            continue
+
+        # User Products (MLB): 1 anúncio por variante, mesmo family_name + attrs CHILD_PK.
+        if usa_up or len(pendentes) == 1:
+            for d in pendentes:
+                if processados >= _ML_MAX_CRIAR_POR_SYNC:
+                    break
+                _criar_um(d)
+            continue
+
+        # Classic: tenta 1 anúncio com variations[]; se falhar, cria um a um.
+        base = pendentes[0]
+        try:
+            id_cat = int(base["id_cat_vd"]) if base.get("id_cat_vd") else None
+        except (TypeError, ValueError):
+            id_cat = None
+        category_id, _fam = _mapa_categoria_ml(cur, id_tenant, id_cat)
+        if not category_id:
+            category_id = (
+                _prever_categoria_ml(cur, id_tenant, site_id, base.get("titulo") or "") or ""
+            )
+        variations = _montar_variations_classic_ml(
+            cur, id_tenant, category_id=category_id or "", itens=pendentes
+        )
+        if variations and len(variations) == len(pendentes):
+            before_err = len(resultados)
+            _criar_um(base, variations=variations)
+            # Se criou ok, não reprocessa o grupo; se errou, fallback 1 a 1.
+            criou = any(
+                r.get("acao") == "criado" and r.get("status") == "ok"
+                for r in resultados[before_err:]
+            )
+            if criou:
+                continue
+            # remove o erro do grupo e tenta individual
+            if resultados and resultados[-1].get("status") == "erro":
+                last = resultados.pop()
+                msg_rem = last.get("mensagem")
+                if (
+                    msg_rem
+                    and msg_rem in erros
+                    and not any(r.get("mensagem") == msg_rem for r in resultados)
+                ):
+                    erros.remove(msg_rem)
+            processados = max(0, processados - 1)
+
+        for d in pendentes:
+            if processados >= _ML_MAX_CRIAR_POR_SYNC:
+                break
+            if _item_ja_vinculado_ml(cur, id_tenant, int(d["id_variante"])):
+                continue
+            _criar_um(d)
 
     total = len(linhas)
     partes: list[str] = []
@@ -2199,6 +2693,7 @@ def exportar_produtos_ml(cur, id_tenant: int) -> dict:
         raise RuntimeError("Ative a exportação de produtos antes de sincronizar.")
 
     modo = cfg.get("produtos_modo") or "vincular_sku"
+    _garantir_colunas_produto_ml_extra(cur)
     sql, extra = _sql_produtos_vitrine_ml()
     cur.execute(sql, [id_tenant, *extra])
     linhas = cur.fetchall()
@@ -2216,27 +2711,9 @@ def exportar_produtos_ml(cur, id_tenant: int) -> dict:
     sem_sku = 0
     erros: list[str] = []
     for row in linhas:
-        (
-            _pv_id,
-            id_variante,
-            id_produto,
-            sku,
-            titulo,
-            preco,
-            descricao,
-            imagem,
-            estoque,
-            condicao,
-            marca,
-            gtin,
-            _id_cat,
-            altura_cm,
-            largura_cm,
-            profundidade_cm,
-            peso_kg,
-        ) = row
-        sku = (sku or "").strip()
-        ml_item = _item_ja_vinculado_ml(cur, id_tenant, int(id_variante))
+        d = _desempacotar_linha_vitrine_ml(row)
+        sku = d["sku"]
+        ml_item = _item_ja_vinculado_ml(cur, id_tenant, int(d["id_variante"]))
         if not ml_item:
             if not sku:
                 sem_sku += 1
@@ -2250,21 +2727,26 @@ def exportar_produtos_ml(cur, id_tenant: int) -> dict:
                 cur,
                 id_tenant,
                 ml_item,
-                id_variante=int(id_variante),
-                id_produto=int(id_produto),
+                id_variante=int(d["id_variante"]),
+                id_produto=int(d["id_produto"]),
                 sku=sku,
-                preco=float(preco or 0),
-                descricao=descricao or "",
-                imagem=imagem or "",
-                estoque=int(estoque or 0),
-                marca=marca or "",
-                gtin=gtin or "",
-                condicao=condicao,
-                altura_cm=_float_ou_none(altura_cm),
-                largura_cm=_float_ou_none(largura_cm),
-                profundidade_cm=_float_ou_none(profundidade_cm),
-                peso_kg=_float_ou_none(peso_kg),
-                titulo=titulo or "",
+                preco=float(d["preco"] or 0),
+                descricao=d["descricao"] or "",
+                imagem=d["imagem"] or "",
+                estoque=int(d["estoque"] or 0),
+                marca=d["marca"] or "",
+                gtin=d["gtin"] or "",
+                condicao=d["condicao"],
+                altura_cm=d["altura_cm"],
+                largura_cm=d["largura_cm"],
+                profundidade_cm=d["profundidade_cm"],
+                peso_kg=d["peso_kg"],
+                titulo=d["titulo"] or "",
+                attrs_variacao_dn=d.get("attrs_variacao_dn") or {},
+                garantia_tipo=d.get("garantia_tipo") or "",
+                garantia_tempo=d.get("garantia_tempo") or "",
+                video_youtube=d.get("video_youtube") or "",
+                cfg=cfg,
             )
             atualizados += 1
             vinculados += 1
@@ -2332,6 +2814,7 @@ def publicar_produtos_ml(cur, id_tenant: int, ids_produtos: list[int]) -> dict:
         )
 
     modo = cfg.get("produtos_modo") or "vincular_sku"
+    _garantir_colunas_produto_ml_extra(cur)
     sql, extra = _sql_produtos_vitrine_ml(ids)
     cur.execute(sql, [id_tenant, *extra])
     linhas = cur.fetchall()
@@ -2352,34 +2835,16 @@ def publicar_produtos_ml(cur, id_tenant: int, ids_produtos: list[int]) -> dict:
     erros: list[str] = []
     resultados: list[dict] = []
     for row in linhas:
-        (
-            _pv_id,
-            id_variante,
-            id_produto,
-            sku,
-            titulo,
-            preco,
-            descricao,
-            imagem,
-            estoque,
-            condicao,
-            marca,
-            gtin,
-            _id_cat,
-            altura_cm,
-            largura_cm,
-            profundidade_cm,
-            peso_kg,
-        ) = row
-        sku = (sku or "").strip()
-        nome = _titulo_exibicao_ml(titulo or "", sku)
-        ml_item = _item_ja_vinculado_ml(cur, id_tenant, int(id_variante))
+        d = _desempacotar_linha_vitrine_ml(row)
+        sku = d["sku"]
+        nome = _titulo_exibicao_ml(d["titulo"] or "", sku)
+        ml_item = _item_ja_vinculado_ml(cur, id_tenant, int(d["id_variante"]))
         if not ml_item:
             if not sku:
                 sem_sku += 1
                 resultados.append(
                     {
-                        "id_produto": int(id_produto),
+                        "id_produto": int(d["id_produto"]),
                         "titulo": nome,
                         "sku": sku,
                         "status": "erro",
@@ -2392,7 +2857,7 @@ def publicar_produtos_ml(cur, id_tenant: int, ids_produtos: list[int]) -> dict:
             nao_encontrados += 1
             resultados.append(
                 {
-                    "id_produto": int(id_produto),
+                    "id_produto": int(d["id_produto"]),
                     "titulo": nome,
                     "sku": sku,
                     "status": "erro",
@@ -2405,34 +2870,39 @@ def publicar_produtos_ml(cur, id_tenant: int, ids_produtos: list[int]) -> dict:
                 cur,
                 id_tenant,
                 ml_item,
-                id_variante=int(id_variante),
-                id_produto=int(id_produto),
+                id_variante=int(d["id_variante"]),
+                id_produto=int(d["id_produto"]),
                 sku=sku,
-                preco=float(preco or 0),
-                descricao=descricao or "",
-                imagem=imagem or "",
-                estoque=int(estoque or 0),
-                marca=marca or "",
-                gtin=gtin or "",
-                condicao=condicao,
-                altura_cm=_float_ou_none(altura_cm),
-                largura_cm=_float_ou_none(largura_cm),
-                profundidade_cm=_float_ou_none(profundidade_cm),
-                peso_kg=_float_ou_none(peso_kg),
-                titulo=titulo or "",
+                preco=float(d["preco"] or 0),
+                descricao=d["descricao"] or "",
+                imagem=d["imagem"] or "",
+                estoque=int(d["estoque"] or 0),
+                marca=d["marca"] or "",
+                gtin=d["gtin"] or "",
+                condicao=d["condicao"],
+                altura_cm=d["altura_cm"],
+                largura_cm=d["largura_cm"],
+                profundidade_cm=d["profundidade_cm"],
+                peso_kg=d["peso_kg"],
+                titulo=d["titulo"] or "",
+                attrs_variacao_dn=d.get("attrs_variacao_dn") or {},
+                garantia_tipo=d.get("garantia_tipo") or "",
+                garantia_tempo=d.get("garantia_tempo") or "",
+                video_youtube=d.get("video_youtube") or "",
+                cfg=cfg,
             )
             atualizados += 1
             vinculados += 1
             resultados.append(
                 {
-                    "id_produto": int(id_produto),
+                    "id_produto": int(d["id_produto"]),
                     "titulo": nome,
                     "sku": sku,
                     "status": "ok",
                     "acao": "atualizado",
                     "mensagem": (
                         "Anúncio atualizado no Mercado Livre "
-                        "(fotos, preço, estoque e descrição)."
+                        "(fotos, preço, estoque, variação, garantia e descrição)."
                     ),
                     "ml_item_id": ml_item,
                 }
@@ -2443,7 +2913,7 @@ def publicar_produtos_ml(cur, id_tenant: int, ids_produtos: list[int]) -> dict:
                 erros.append(msg_user)
             resultados.append(
                 {
-                    "id_produto": int(id_produto),
+                    "id_produto": int(d["id_produto"]),
                     "titulo": nome,
                     "sku": sku,
                     "status": "erro",

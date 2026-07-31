@@ -49,20 +49,21 @@
   border: 1px solid #e2e8f0;
   border-radius: 12px;
   background: #fff;
-  padding: 12px 14px;
+  padding: 14px 16px;
 }
 .Asf_Kpi strong {
   display: block;
-  font-size: 1.25rem;
+  font-size: 1.35rem;
   color: #0f172a;
-  margin-top: 4px;
+  margin-top: 6px;
+  letter-spacing: -0.02em;
 }
 .Asf_Kpi span {
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   color: #64748b;
-  font-weight: 600;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.04em;
 }
 .Asf_Kpi.is-warn strong { color: #b45309; }
 .Asf_Kpi.is-danger strong { color: #b91c1c; }
@@ -70,17 +71,20 @@
 
 .Asf_Card {
   border: 1px solid #e5e7eb;
-  border-radius: 12px;
+  border-radius: 14px;
   background: #fff;
-  padding: 16px;
+  padding: 18px 18px 10px;
   margin-bottom: 16px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 .Asf_CardHead {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
   gap: 12px;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #f1f5f9;
 }
 .Asf_CardHead h3 {
   margin: 0;
@@ -97,17 +101,103 @@
   .Asf_Grid2 { grid-template-columns: 1fr; }
 }
 
-.Asf_TabelaWrap { overflow-x: auto; }
-.Asf_Tabela td, .Asf_Tabela th { white-space: nowrap; }
-.Asf_Muted { color: #94a3b8; }
+/* Tabelas modernas (não usar Cl_TabelaPrincipal aqui — ele é wrapper + células de 3px) */
+.Asf_TabelaWrap {
+  width: 100%;
+  overflow-x: auto;
+  margin: 0 -4px;
+  padding: 0 4px 8px;
+}
+
+.Asf_Tabela {
+  width: 100% !important;
+  min-width: 640px;
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: auto !important;
+  font-size: 0.92rem;
+  background: transparent;
+  border: none !important;
+  border-radius: 0 !important;
+}
+
+.Asf_Tabela thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 10px 14px !important;
+  border: none !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+  background: #f8fafc !important;
+  color: #64748b !important;
+  font-size: 0.72rem !important;
+  font-weight: 700 !important;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  text-align: left;
+  white-space: nowrap;
+  box-shadow: none !important;
+}
+
+.Asf_Tabela tbody td {
+  padding: 14px !important;
+  border: none !important;
+  border-bottom: 1px solid #f1f5f9 !important;
+  color: #1e293b !important;
+  font-size: 0.92rem !important;
+  vertical-align: middle;
+  white-space: nowrap;
+  overflow: visible !important;
+  text-overflow: unset !important;
+  background: transparent !important;
+}
+
+.Asf_Tabela tbody tr:last-child td {
+  border-bottom: none !important;
+}
+
+.Asf_Tabela tbody tr:nth-child(even) {
+  background: transparent !important;
+}
+
+.Asf_Tabela tbody tr:hover td {
+  background: #f8fafc !important;
+}
+
+.Asf_Tabela td strong {
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.Asf_Tabela .Asf_Muted {
+  display: block;
+  margin-top: 3px;
+  color: #94a3b8;
+  font-size: 0.78rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.Asf_Tabela td.Asf_Empty {
+  padding: 36px 16px !important;
+  text-align: center;
+  color: #94a3b8 !important;
+  font-size: 0.9rem !important;
+  white-space: normal !important;
+  border-bottom: none !important;
+}
+
+.Asf_Tabela--compact { min-width: 360px; }
+
 .Asf_Badge {
   display: inline-block;
-  padding: 2px 8px;
+  padding: 4px 10px;
   border-radius: 999px;
-  font-size: 0.78rem;
+  font-size: 0.75rem;
   font-weight: 700;
   background: #f1f5f9;
   color: #334155;
+  line-height: 1.2;
 }
 .Asf_Badge.is-vencido { background: #fee2e2; color: #991b1b; }
 .Asf_Badge.is-pendente { background: #ffedd5; color: #9a3412; }

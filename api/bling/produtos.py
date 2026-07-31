@@ -1452,52 +1452,20 @@ import json
 from typing import Any
 
 from api.bling.cliente import api_request, listar_depositos_bling
+from api.bling.imagens_export import (
+    assinatura_imagem_publica,
+    preparar_imagem_export,
+    preparar_links_export,
+    preparar_links_export_bling,
+    validar_assinatura_imagem_publica,
+)
 from global_utils import agora_utc, obter_base_url
-import hashlib
-import hmac
-import os
-import time
-from urllib.parse import urlencode
-
-
-_IMG_PUBLICA_VALIDADE_S = 7 * 24 * 3600  # 7 dias — Bling precisa baixar na importação
-
-
-def assinatura_imagem_publica(caminho: str, exp: int) -> str:
-    secret = (os.getenv("SECRET_KEY") or "dev-inseguro").encode("utf-8")
-    raw = f"{caminho}|{exp}".encode("utf-8")
-    return hmac.new(secret, raw, hashlib.sha256).hexdigest()[:40]
-
-
-def validar_assinatura_imagem_publica(caminho: str, exp: int, sig: str) -> bool:
-    try:
-        exp_i = int(exp)
-    except (TypeError, ValueError):
-        return False
-    if exp_i < int(time.time()):
-        return False
-    esperado = assinatura_imagem_publica(caminho, exp_i)
-    return hmac.compare_digest(esperado, (sig or "").strip())
 
 
 def url_imagem_export_bling(caminho: str | None) -> str | None:
-    """URL absoluta pública para o Bling baixar a imagem (http externa ou local assinada)."""
-    s = (caminho or "").strip()
-    if not s:
-        return None
-    if s.lower().startswith(("http://", "https://")):
-        return s
-    rel = s.replace("\\", "/").lstrip("/")
-    if rel.lower().startswith("static/"):
-        rel = rel[7:]
-    # Só arquivos de produto sob upload/tenant*/produtos/
-    if not rel.lower().startswith("upload/tenant") or "/produtos/" not in rel.lower():
-        return None
-    exp = int(time.time()) + _IMG_PUBLICA_VALIDADE_S
-    sig = assinatura_imagem_publica(rel, exp)
-    base = obter_base_url().rstrip("/")
-    qs = urlencode({"c": rel, "e": exp, "s": sig})
-    return f"{base}/api/produto-imagem/publico?{qs}"
+    """URL absoluta pública (JPG normalizado em cache quando possível)."""
+    prep = preparar_imagem_export(caminho)
+    return prep.get("url") if prep.get("ok") else None
 
 
 def _f_bling(valor) -> float | None:
@@ -1547,18 +1515,15 @@ def _montar_payload_produto(
         ativo,
     ) = row
 
-    links: list[str] = []
-    seen: set[str] = set()
+    candidatos: list[str] = []
     for cand in [imagem_url, *(urls_imagem or [])]:
-        link = url_imagem_export_bling(cand)
-        if not link or link in seen:
-            continue
-        seen.add(link)
-        links.append(link)
-        if len(links) >= 6:
-            break
+        s = (cand or "").strip()
+        if s:
+            candidatos.append(s)
+    prep = preparar_links_export(candidatos, max_links=6)
+    links = prep.get("links") or []
 
-    return montar_payload_export_bling(
+    payload = montar_payload_export_bling(
         nome=nome or "",
         sku=(sku or "").strip(),
         preco=float(preco or 0),
@@ -1583,6 +1548,12 @@ def _montar_payload_produto(
         ativo=bool(ativo) if ativo is not None else True,
         urls_imagem=links,
     )
+    payload["_imagens_export"] = {
+        "qtd": len(links),
+        "fracas": int(prep.get("fracas") or 0),
+        "ignoradas": prep.get("ignoradas") or [],
+    }
+    return payload
 
 
 def _registrar_log(
@@ -1785,6 +1756,8 @@ def exportar_produtos_vendedor(
     estoque_ok = 0
     falhas: list[dict[str, str]] = []
     sem_imagem_publica = 0
+    imagens_fracas = 0
+    imagens_falhas: list[dict[str, str]] = []
 
     for row in linhas:
         sku = (row[2] or "").strip()
@@ -1796,8 +1769,21 @@ def exportar_produtos_vendedor(
 
         urls_galeria = galeria_por_produto.get(int(row[16]), [])
         payload = _montar_payload_produto(row, urls_imagem=urls_galeria)
+        img_meta = payload.pop("_imagens_export", None) or {}
         if not (payload.get("midia") or {}).get("imagens", {}).get("externas"):
             sem_imagem_publica += 1
+            motivos = img_meta.get("ignoradas") or []
+            if motivos:
+                imagens_falhas.append(
+                    {
+                        "sku": sku,
+                        "motivo": "; ".join(
+                            f"{m.get('caminho', '')}: {m.get('motivo', '')}" for m in motivos[:3]
+                        )[:280],
+                    }
+                )
+        elif int(img_meta.get("fracas") or 0) > 0:
+            imagens_fracas += int(img_meta.get("fracas") or 0)
 
         id_bling = _buscar_id_bling_mapa(cur, id_tenant, "vendedor", id_variante=id_variante, sku=sku)
         try:
@@ -1856,10 +1842,21 @@ def exportar_produtos_vendedor(
         f"{estoque_ok} estoque(s), {len(falhas)} falha(s)."
     )
     if sem_imagem_publica:
-        resumo += f" {sem_imagem_publica} sem imagem URL pública."
+        resumo += f" {sem_imagem_publica} sem imagem pública."
+    if imagens_fracas:
+        resumo += f" {imagens_fracas} imagem(ns) abaixo de 800px."
     status_log = "ok" if not falhas else ("aviso" if total_ok else "erro")
+    if sem_imagem_publica and status_log == "ok":
+        status_log = "aviso"
     detalhe_falhas = json.dumps(
-        {"falhas": falhas[:80], "sem_imagem_publica": sem_imagem_publica, "base_url": obter_base_url()},
+        {
+            "falhas": falhas[:80],
+            "sem_imagem_publica": sem_imagem_publica,
+            "imagens_fracas": imagens_fracas,
+            "imagens_falhas": imagens_falhas[:40],
+            "base_url": obter_base_url(),
+            "pipeline": "jpg_cache_v1",
+        },
         ensure_ascii=False,
     )[:4000]
     _registrar_log(cur, id_tenant, "vendedor", status_log, resumo, detalhe_falhas)
@@ -1872,5 +1869,7 @@ def exportar_produtos_vendedor(
         "falhas": falhas,
         "total_falhas": len(falhas),
         "sem_imagem_publica": sem_imagem_publica,
+        "imagens_fracas": imagens_fracas,
+        "imagens_falhas": imagens_falhas[:40],
         "message": resumo,
     }

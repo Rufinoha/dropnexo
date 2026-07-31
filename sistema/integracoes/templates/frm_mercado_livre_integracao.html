@@ -149,6 +149,30 @@
           </label>
         </div>
       </div>
+      <div class="Mp_Grid2" style="margin-top:0.85rem;display:grid;grid-template-columns:1fr 1fr;gap:0.75rem">
+        <div class="Cl_FormCampo">
+          <label for="ml_garantia_tipo">Garantia padrão (tipo)</label>
+          <select id="ml_garantia_tipo" data-ml-config="garantia_tipo_padrao">
+            <option value="">— Não enviar —</option>
+            <option value="Garantia do vendedor">Garantia do vendedor</option>
+            <option value="Garantia de fábrica">Garantia de fábrica</option>
+            <option value="Sem garantia">Sem garantia</option>
+          </select>
+        </div>
+        <div class="Cl_FormCampo">
+          <label for="ml_garantia_tempo">Garantia padrão (prazo)</label>
+          <select id="ml_garantia_tempo" data-ml-config="garantia_tempo_padrao">
+            <option value="">— Não enviar —</option>
+            <option value="30 dias">30 dias</option>
+            <option value="90 dias">90 dias</option>
+            <option value="6 meses">6 meses</option>
+            <option value="12 meses">12 meses</option>
+            <option value="24 meses">24 meses</option>
+            <option value="3 anos">3 anos</option>
+          </select>
+        </div>
+      </div>
+      <p class="Mp_Hint">Usado ao publicar quando o produto não tiver garantia própria no catálogo. Variações (cor/tamanho) saem dos atributos da variante; no Brasil (User Products) cada variação vira um anúncio com a mesma família.</p>
       <p class="Mp_Hint Mp_Hint--note">Origem de expedição: o ML usa o endereço e depósitos da sua conta de vendedor. Vincular depósitos do DropNexo ao ML será habilitado em breve.</p>
       <div class="Mp_Actions" style="margin-top:0.85rem">
         <button type="button" class="Cl_botaoprimario" id="ml_btn_mapear_categorias">Mapear categorias</button>

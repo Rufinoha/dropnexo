@@ -1378,6 +1378,12 @@ def catalogos_apoio():
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
+        try:
+            from api.mercado_livre.mercado_livre import _garantir_colunas_produto_ml_extra
+
+            _garantir_colunas_produto_ml_extra(cur)
+        except Exception:
+            pass
         cur.execute(
             """
             SELECT p.id, p.sku, p.nome, p.descricao, p.preco, p.preco_promocional,
@@ -1389,7 +1395,10 @@ def catalogos_apoio():
                    p.marca, p.grupo, p.valor_atacado, p.valor_dropshipping,
                    p.reposicao_estoque, p.dimensao_caixa_cm, p.peso_gramas, p.id_deposito_expedicao,
                    p.condicao, p.cest, p.origem_fiscal, p.frete_gratis, p.volumes, p.producao, p.valor_drop,
-                   COALESCE(p.valor_drop_manual, FALSE)
+                   COALESCE(p.valor_drop_manual, FALSE),
+                   COALESCE(NULLIF(TRIM(p.garantia_tipo), ''), ''),
+                   COALESCE(NULLIF(TRIM(p.garantia_tempo), ''), ''),
+                   COALESCE(NULLIF(TRIM(p.video_youtube), ''), '')
             FROM tbl_produto p
             LEFT JOIN tbl_produto_variante_estoque ve ON ve.id_variante = p.id_variante_padrao
             WHERE p.id = %s AND p.id_tenant = %s
@@ -1445,6 +1454,9 @@ def catalogos_apoio():
                 "producao": r[39] or "",
                 "valor_drop": float(r[40]) if r[40] is not None else None,
                 "valor_drop_manual": bool(r[41]),
+                "garantia_tipo": (r[42] if len(r) > 42 else "") or "",
+                "garantia_tempo": (r[43] if len(r) > 43 else "") or "",
+                "video_youtube": (r[44] if len(r) > 44 else "") or "",
                 "status_promocao": r[5] is not None and r[4] and float(r[5]) < float(r[4]),
             },
         )
@@ -1622,10 +1634,19 @@ def catalogos_salvar():
     frete_gratis = bool(body.get("frete_gratis"))
     volumes = body.get("volumes")
     volumes = int(volumes) if volumes not in (None, "") else None
+    garantia_tipo = (body.get("garantia_tipo") or "").strip()[:80] or None
+    garantia_tempo = (body.get("garantia_tempo") or "").strip()[:40] or None
+    video_youtube = (body.get("video_youtube") or "").strip()[:120] or None
 
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
+        try:
+            from api.mercado_livre.mercado_livre import _garantir_colunas_produto_ml_extra
+
+            _garantir_colunas_produto_ml_extra(cur)
+        except Exception:
+            pass
         _id = body.get("id")
         if not _id:
             from sistema.planos.limites import exigir_novo_produto_catalogo
@@ -1672,6 +1693,9 @@ def catalogos_salvar():
             frete_gratis,
             volumes,
             producao,
+            garantia_tipo,
+            garantia_tempo,
+            video_youtube,
             agora_utc(),
         )
         if _id:
@@ -1686,7 +1710,7 @@ def catalogos_salvar():
                     marca=%s, grupo=%s, valor_atacado=%s, valor_dropshipping=%s,
                     reposicao_estoque=%s, dimensao_caixa_cm=%s, peso_gramas=%s,
                     id_deposito_expedicao=%s, cest=%s, origem_fiscal=%s, frete_gratis=%s,
-                    volumes=%s, producao=%s,
+                    volumes=%s, producao=%s, garantia_tipo=%s, garantia_tempo=%s, video_youtube=%s,
                     origem = CASE WHEN origem IN ('arquivo', 'integracao') THEN 'editado' ELSE origem END,
                     atualizado_em=%s
                 WHERE id=%s AND id_tenant=%s
@@ -1708,10 +1732,11 @@ def catalogos_salvar():
                     altura_cm, largura_cm, profundidade_cm, prazo_envio_dias, moq,
                     marca, grupo, valor_atacado, valor_dropshipping, reposicao_estoque,
                     dimensao_caixa_cm, peso_gramas, id_deposito_expedicao,
-                    cest, origem_fiscal, frete_gratis, volumes, producao, atualizado_em
+                    cest, origem_fiscal, frete_gratis, volumes, producao,
+                    garantia_tipo, garantia_tempo, video_youtube, atualizado_em
                 ) VALUES (
                     %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
-                    %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s
+                    %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s
                 )
                 RETURNING id
                 """,
@@ -2133,6 +2158,22 @@ def catalogos_imagens_upload():
         return jsonify(success=False, message="Arquivo vazio."), 400
     if tamanho > MAX_BYTES_IMAGEM:
         return jsonify(success=False, message="Imagem deve ter no máximo 2 MB."), 400
+    bruto = arquivo.read()
+    if not bruto:
+        return jsonify(success=False, message="Arquivo vazio."), 400
+    try:
+        from api.bling.imagens_export import validar_imagem_upload_bytes
+
+        valid = validar_imagem_upload_bytes(bruto)
+    except ValueError as e:
+        return jsonify(success=False, message=str(e)), 400
+    except Exception:
+        valid = {"jpg": None, "aviso": None, "fraca": False}
+    # Preferimos gravar JPG normalizado (melhor para Bling/marketplaces).
+    gravar_jpg = valid.get("jpg") if isinstance(valid, dict) else None
+    if gravar_jpg:
+        ext = ".jpg"
+        tamanho = len(gravar_jpg)
     id_tenant = session.get("id_tenant")
     conn = Var_ConectarBanco()
     try:
@@ -2158,7 +2199,10 @@ def catalogos_imagens_upload():
         id_img = cur.fetchone()[0]
         pasta = _pasta_imagens_tenant(int(id_tenant))
         destino = pasta / f"{id_produto}_{id_img}{ext}"
-        arquivo.save(str(destino))
+        if gravar_jpg:
+            destino.write_bytes(gravar_jpg)
+        else:
+            destino.write_bytes(bruto)
         caminho_db = f"imge/produtos/{id_tenant}/{id_produto}_{id_img}{ext}"
         cur.execute(
             "SELECT COALESCE(MAX(ordem), -1) + 1 FROM tbl_produto_imagem WHERE id_produto = %s AND id != %s",
@@ -2169,18 +2213,23 @@ def catalogos_imagens_upload():
         cur.execute(
             """
             UPDATE tbl_produto_imagem
-            SET caminho = %s, ordem = %s, principal = %s, origem = 'manual_upload'
+            SET caminho = %s, ordem = %s, principal = %s, origem = 'manual_upload',
+                tamanho_bytes = %s
             WHERE id = %s
             RETURNING id, caminho, ordem, principal, origem
             """,
-            (caminho_db, ordem, principal, id_img),
+            (caminho_db, ordem, principal, tamanho, id_img),
         )
         row = cur.fetchone()
         _sincronizar_imagem_principal(cur, id_produto)
         conn.commit()
         img = _imagem_dict_row(row)
         img["tamanho_bytes"] = tamanho
-        return jsonify(success=True, message="Imagem enviada.", imagem=img)
+        msg = "Imagem enviada."
+        aviso = (valid or {}).get("aviso") if isinstance(valid, dict) else None
+        if aviso:
+            msg = f"Imagem enviada. Atenção: {aviso}"
+        return jsonify(success=True, message=msg, imagem=img, aviso=aviso)
     except ValueError as e:
         conn.rollback()
         return jsonify(success=False, message=str(e)), 400
@@ -2370,6 +2419,19 @@ def catalogos_imagem_upload():
     if tamanho > MAX_BYTES_IMAGEM:
         return jsonify(success=False, message="Imagem deve ter no máximo 2 MB."), 400
 
+    bruto = arquivo.read()
+    if not bruto:
+        return jsonify(success=False, message="Arquivo vazio."), 400
+    try:
+        from api.bling.imagens_export import validar_imagem_upload_bytes
+
+        valid = validar_imagem_upload_bytes(bruto)
+        if valid.get("jpg"):
+            ext = ".jpg"
+            bruto = valid["jpg"]
+    except ValueError as e:
+        return jsonify(success=False, message=str(e)), 400
+
     id_tenant = session.get("id_tenant")
     conn = Var_ConectarBanco()
     try:
@@ -2393,7 +2455,7 @@ def catalogos_imagem_upload():
                 pass
 
         destino = pasta / f"{id_produto}{ext}"
-        arquivo.save(str(destino))
+        destino.write_bytes(bruto)
 
         caminho_db = _caminho_db_imagem(int(id_tenant), id_produto, ext)
         cur.execute(
@@ -2401,9 +2463,14 @@ def catalogos_imagem_upload():
             (caminho_db, agora_utc(), id_produto, id_tenant),
         )
         conn.commit()
+        aviso = (valid or {}).get("aviso") if isinstance(valid, dict) else None
+        msg = "Imagem enviada."
+        if aviso:
+            msg = f"Imagem enviada. Atenção: {aviso}"
         return jsonify(
             success=True,
-            message="Imagem enviada.",
+            message=msg,
+            aviso=aviso,
             imagem_url=_imagem_url_resposta(caminho_db),
             imagem_caminho=caminho_db,
         )

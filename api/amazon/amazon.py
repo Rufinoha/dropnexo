@@ -12,7 +12,7 @@ from urllib.parse import quote, urlencode
 import requests
 
 from core.tokens import criptografar_token, descriptografar_token
-from global_utils import agora_utc, obter_base_url, url_imagem_produto
+from global_utils import agora_utc, obter_base_url
 
 _log = logging.getLogger(__name__)
 
@@ -734,16 +734,33 @@ def _sql_produtos_vitrine_amazon(ids_produtos: list[int] | None = None) -> tuple
 
 
 def _imagem_publica_amazon(imagem_path: str | None) -> str:
-    rel = url_imagem_produto(imagem_path)
-    if not rel:
-        return ""
-    if rel.lower().startswith(("http://", "https://")):
-        return rel
-    base = obter_base_url()
-    if not base:
-        return ""
-    path = rel if rel.startswith("/") else f"/{rel}"
-    return f"{base.rstrip('/')}{path}"
+    """URL pública estável (pipeline JPG compartilhado)."""
+    from api.bling.imagens_export import preparar_imagem_export
+
+    prep = preparar_imagem_export(imagem_path)
+    return str(prep.get("url") or "") if prep.get("ok") else ""
+
+
+def _links_imagens_amazon(
+    cur,
+    *,
+    id_produto: int,
+    id_variante: int,
+    imagem_fallback: str = "",
+    max_links: int = 6,
+) -> list[str]:
+    from api.bling.imagens_export import (
+        coletar_caminhos_galeria_export,
+        preparar_links_export,
+    )
+
+    caminhos = coletar_caminhos_galeria_export(
+        cur,
+        id_produto=int(id_produto),
+        id_variante=int(id_variante),
+        imagem_fallback=imagem_fallback or "",
+    )
+    return preparar_links_export(caminhos, max_links=max_links).get("links") or []
 
 
 def _item_ja_vinculado_amazon(cur, id_tenant: int, id_variante: int) -> str | None:
@@ -871,7 +888,14 @@ def _criar_listing_amazon(
         )
     if preco <= 0:
         raise RuntimeError(f"Preço inválido para «{titulo}».")
-    img_url = _imagem_publica_amazon(imagem)
+    links = _links_imagens_amazon(
+        cur,
+        id_produto=int(id_produto),
+        id_variante=int(id_variante),
+        imagem_fallback=imagem or "",
+        max_links=6,
+    )
+    img_url = (links[0] if links else "") or _imagem_publica_amazon(imagem)
     if not img_url:
         raise RuntimeError(f"«{titulo}»: foto pública obrigatória para publicar na Amazon.")
 
@@ -898,6 +922,11 @@ def _criar_listing_amazon(
             }
         ],
     }
+    extras = links[1:6]
+    if extras:
+        attributes["other_product_image_locator"] = [
+            {"media_location": u, "marketplace_id": mp} for u in extras
+        ]
     if gtin:
         attributes["externally_assigned_product_identifier"] = [
             {"type": "gtin", "value": gtin, "marketplace_id": mp}

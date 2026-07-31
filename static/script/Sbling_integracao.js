@@ -1430,6 +1430,8 @@
     const estoque = Number(d.estoque_sincronizado) || 0;
     const falhas = Array.isArray(d.falhas) ? d.falhas : [];
     const semImg = Number(d.sem_imagem_publica) || 0;
+    const imgFracas = Number(d.imagens_fracas) || 0;
+    const imgFalhas = Array.isArray(d.imagens_falhas) ? d.imagens_falhas : [];
 
     exportResultVd.hidden = false;
     exportStatsVd.innerHTML = [
@@ -1441,15 +1443,27 @@
       semImg
         ? `<span class="Bl_ExportStat is-warn"><strong>${semImg}</strong> sem imagem pública</span>`
         : "",
+      imgFracas
+        ? `<span class="Bl_ExportStat is-warn"><strong>${imgFracas}</strong> imagem(ns) fraca(s)</span>`
+        : "",
     ].join("");
 
+    const listaExtra = falhas.concat(
+      imgFalhas.map(function (f) {
+        return {
+          sku: (f && f.sku) || "—",
+          motivo: "Imagem: " + ((f && f.motivo) || "falha ao preparar"),
+        };
+      })
+    );
+
     if (exportFalhasVd && exportFalhasListVd) {
-      if (!falhas.length) {
+      if (!listaExtra.length) {
         exportFalhasVd.hidden = true;
         exportFalhasListVd.innerHTML = "";
       } else {
         exportFalhasVd.hidden = false;
-        exportFalhasListVd.innerHTML = falhas
+        exportFalhasListVd.innerHTML = listaExtra
           .slice(0, 80)
           .map(function (f) {
             const sku = (f && f.sku) || "—";

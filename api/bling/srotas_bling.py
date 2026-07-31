@@ -1222,14 +1222,17 @@ def api_estoque_sync_progresso(job_id: str):
 @bling_bp.get("/api/produto-imagem/publico")
 def api_produto_imagem_publico():
     """Serve imagem de produto sem login — URL assinada (exportação Bling)."""
-    from api.bling.produtos import validar_assinatura_imagem_publica
+    from api.bling.imagens_export import (
+        caminho_publico_permitido,
+        validar_assinatura_imagem_publica,
+    )
 
     caminho = (request.args.get("c") or "").strip().replace("\\", "/")
     exp = request.args.get("e") or ""
     sig = request.args.get("s") or ""
     if not caminho or ".." in caminho.split("/"):
         return jsonify(success=False, message="Caminho inválido."), 400
-    if not caminho.lower().startswith("upload/tenant") or "/produtos/" not in caminho.lower():
+    if not caminho_publico_permitido(caminho):
         return jsonify(success=False, message="Caminho não permitido."), 403
     if not validar_assinatura_imagem_publica(caminho, exp, sig):
         return jsonify(success=False, message="Link inválido ou expirado."), 403
@@ -1239,6 +1242,8 @@ def api_produto_imagem_publico():
         return jsonify(success=False, message="Arquivo não encontrado."), 404
 
     mime, _ = mimetypes.guess_type(str(arquivo))
+    if caminho.lower().endswith(".jpg") or caminho.lower().endswith(".jpeg"):
+        mime = "image/jpeg"
     return send_file(arquivo, mimetype=mime or "application/octet-stream", max_age=3600)
 
 

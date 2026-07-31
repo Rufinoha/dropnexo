@@ -31,6 +31,9 @@
     profundidade_cm: document.getElementById("profundidade_cm"),
     itens_por_caixa: document.getElementById("itens_por_caixa"),
     gtin: document.getElementById("gtin"),
+    garantia_tipo: document.getElementById("garantia_tipo"),
+    garantia_tempo: document.getElementById("garantia_tempo"),
+    video_youtube: document.getElementById("video_youtube"),
     ncm: document.getElementById("ncm"),
     cest: document.getElementById("cest"),
     origem_fiscal: document.getElementById("origem_fiscal"),
@@ -1021,6 +1024,9 @@
       profundidade_cm: el.profundidade_cm,
       itens_por_caixa: el.itens_por_caixa,
       gtin: el.gtin,
+      garantia_tipo: el.garantia_tipo,
+      garantia_tempo: el.garantia_tempo,
+      video_youtube: el.video_youtube,
       ncm: el.ncm,
       cest: el.cest,
       origem_fiscal: el.origem_fiscal,
@@ -1227,6 +1233,20 @@
     el.profundidade_cm.value = d.profundidade_cm ?? "";
     el.itens_por_caixa.value = d.moq ?? d.itens_por_caixa ?? 1;
     el.gtin.value = d.gtin || "";
+    function garantirOpcaoSelect(sel, valor) {
+      if (!sel || !valor) return;
+      const ok = Array.from(sel.options).some((o) => o.value === valor);
+      if (!ok) {
+        const opt = document.createElement("option");
+        opt.value = valor;
+        opt.textContent = valor;
+        sel.appendChild(opt);
+      }
+      sel.value = valor;
+    }
+    garantirOpcaoSelect(el.garantia_tipo, d.garantia_tipo || "");
+    garantirOpcaoSelect(el.garantia_tempo, d.garantia_tempo || "");
+    if (el.video_youtube) el.video_youtube.value = d.video_youtube || "";
     el.ncm.value = d.ncm || "";
     el.cest.value = d.cest || "";
     if (el.origem_fiscal) {
@@ -1308,6 +1328,9 @@
           largura_cm: el.largura_cm?.value || null,
           profundidade_cm: el.profundidade_cm?.value || null,
           gtin: (el.gtin?.value || "").trim(),
+          garantia_tipo: (el.garantia_tipo?.value || "").trim(),
+          garantia_tempo: (el.garantia_tempo?.value || "").trim(),
+          video_youtube: (el.video_youtube?.value || "").trim(),
           id_categoria: el.id_categoria?.value || null,
           quantidade: el.quantidade?.value ?? 0,
           imagem_url: imagemParaSalvar(),
@@ -1381,6 +1404,9 @@
       moq: el.itens_por_caixa?.value || 1,
       peso_gramas: pesoLiq ? Math.round(Number(pesoLiq) * 1000) : null,
       gtin: (el.gtin.value || "").trim(),
+      garantia_tipo: (el.garantia_tipo?.value || "").trim(),
+      garantia_tempo: (el.garantia_tempo?.value || "").trim(),
+      video_youtube: (el.video_youtube?.value || "").trim(),
       id_categoria: el.id_categoria.value || null,
       quantidade: el.quantidade.value,
       imagem_url: imagemParaSalvar(),
