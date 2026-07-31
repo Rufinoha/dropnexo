@@ -6,12 +6,16 @@
  *     payeeCode, environment, valorCentavos, titulo
  *   });
  *   // r => { payment_token, installments, card_mask } | null
+ *
+ * Importante: NÃO fazer await/Promise.resolve em EfiPay.CreditCard —
+ * o objeto fluente da Efi pode ser tratado como thenable e gera
+ * "Método 'then' solicitado inexistente".
  */
 (function (global) {
   "use strict";
 
   const CDN =
-    "https://cdn.jsdelivr.net/npm/payment-token-efi/dist/payment-token-efi-umd.min.js";
+    "https://cdn.jsdelivr.net/npm/payment-token-efi@3.2.1/dist/payment-token-efi-umd.min.js";
 
   const BRAND_LABEL = {
     visa: "Visa",
@@ -22,23 +26,34 @@
   };
 
   let scriptPromise = null;
+  let envReady = "";
 
   function digits(s) {
     return String(s || "").replace(/\D/g, "");
   }
 
-  function loadTokenizer() {
-    if (global.EfiPay && global.EfiPay.CreditCard) {
-      return Promise.resolve(global.EfiPay.CreditCard);
-    }
+  function efiApi() {
+    return global.EfiPay && global.EfiPay.CreditCard ? global.EfiPay.CreditCard : null;
+  }
+
+  function asPromise(value) {
+    if (value != null && typeof value.then === "function") return value;
+    return Promise.resolve(value);
+  }
+
+  function ensureScript() {
+    if (efiApi()) return Promise.resolve();
     if (scriptPromise) return scriptPromise;
     scriptPromise = new Promise(function (resolve, reject) {
       const s = document.createElement("script");
       s.src = CDN;
       s.async = true;
       s.onload = function () {
-        if (global.EfiPay && global.EfiPay.CreditCard) resolve(global.EfiPay.CreditCard);
-        else reject(new Error("Biblioteca Efi não carregou."));
+        if (efiApi()) resolve();
+        else {
+          scriptPromise = null;
+          reject(new Error("Biblioteca Efi não carregou."));
+        }
       };
       s.onerror = function () {
         scriptPromise = null;
@@ -47,6 +62,19 @@
       document.head.appendChild(s);
     });
     return scriptPromise;
+  }
+
+  function prepareEfi(environment) {
+    const env = environment === "production" ? "production" : "sandbox";
+    return ensureScript().then(function () {
+      const api = efiApi();
+      if (!api) throw new Error("Biblioteca Efi não disponível.");
+      if (envReady !== env) {
+        api.setEnvironment(env);
+        envReady = env;
+      }
+      return api;
+    });
   }
 
   function formatCardNumber(raw) {
@@ -122,7 +150,7 @@
     );
   }
 
-  function wirePreview(root) {
+  function wirePreview(root, environment) {
     const num = root.querySelector("#efi_number");
     const holder = root.querySelector("#efi_holder");
     const exp = root.querySelector("#efi_exp");
@@ -141,18 +169,21 @@
         : "•••• •••• •••• ••••";
       clearTimeout(brandTimer);
       if (d.length >= 6) {
-        brandTimer = setTimeout(async function () {
-          try {
-            const CC = await loadTokenizer();
-            const b = await CC.setCardNumber(d).verifyCardBrand();
-            brand = (b || "").toLowerCase();
-            brandLbl.textContent = BRAND_LABEL[brand] || brand || "Cartão";
-            brandLbl.dataset.brand = brand;
-          } catch {
-            brand = "";
-            brandLbl.textContent = "Cartão";
-            brandLbl.dataset.brand = "";
-          }
+        brandTimer = setTimeout(function () {
+          prepareEfi(environment)
+            .then(function (api) {
+              return asPromise(api.setCardNumber(d).verifyCardBrand());
+            })
+            .then(function (b) {
+              brand = String(b || "").toLowerCase();
+              brandLbl.textContent = BRAND_LABEL[brand] || brand || "Cartão";
+              brandLbl.dataset.brand = brand;
+            })
+            .catch(function () {
+              brand = "";
+              brandLbl.textContent = "Cartão";
+              brandLbl.dataset.brand = "";
+            });
         }, 280);
       } else {
         brand = "";
@@ -178,43 +209,39 @@
     };
   }
 
-  async function loadInstallments(opts, brand, selectEl) {
+  function loadInstallments(opts, brand, selectEl) {
     if (!opts.valorCentavos || opts.valorCentavos < 100 || !brand || !opts.payeeCode) {
       selectEl.innerHTML = '<option value="1">1x sem juros</option>';
-      return;
+      return Promise.resolve();
     }
-    try {
-      const CC = await loadTokenizer();
-      const res = await CC.setAccount(opts.payeeCode)
-        .setEnvironment(opts.environment || "sandbox")
-        .setBrand(brand)
-        .setTotal(opts.valorCentavos)
-        .getInstallments();
-      const list = (res && res.installments) || [];
-      if (!list.length) {
+    return prepareEfi(opts.environment)
+      .then(function (api) {
+        return asPromise(
+          api
+            .setAccount(opts.payeeCode)
+            .setBrand(brand)
+            .setTotal(opts.valorCentavos)
+            .getInstallments()
+        );
+      })
+      .then(function (res) {
+        const list = (res && res.installments) || [];
+        if (!list.length) {
+          selectEl.innerHTML = '<option value="1">1x sem juros</option>';
+          return;
+        }
+        selectEl.innerHTML = list
+          .map(function (it) {
+            const n = it.installment;
+            const cur = it.currency || "";
+            const juros = it.has_interest ? " com juros" : " sem juros";
+            return '<option value="' + n + '">' + n + "x de " + cur + juros + "</option>";
+          })
+          .join("");
+      })
+      .catch(function () {
         selectEl.innerHTML = '<option value="1">1x sem juros</option>';
-        return;
-      }
-      selectEl.innerHTML = list
-        .map(function (it) {
-          const n = it.installment;
-          const cur = it.currency || "";
-          const juros = it.has_interest ? " com juros" : " sem juros";
-          return (
-            '<option value="' +
-            n +
-            '">' +
-            n +
-            "x de " +
-            cur +
-            juros +
-            "</option>"
-          );
-        })
-        .join("");
-    } catch {
-      selectEl.innerHTML = '<option value="1">1x sem juros</option>';
-    }
+      });
   }
 
   /**
@@ -225,11 +252,11 @@
    * @param {string} [opts.titulo]
    * @returns {Promise<{payment_token:string, installments:number, card_mask:string}|null>}
    */
-  async function promptCartao(opts) {
+  function promptCartao(opts) {
     opts = opts || {};
-    if (!global.Swal) throw new Error("SweetAlert2 não disponível.");
+    if (!global.Swal) return Promise.reject(new Error("SweetAlert2 não disponível."));
     if (!opts.payeeCode) {
-      await Swal.fire({
+      return Swal.fire({
         icon: "warning",
         title: "Cartão indisponível",
         html:
@@ -237,138 +264,147 @@
           "(EFI_PAYEE_CODE_DEV / EFI_PAYEE_CODE_PROD).<br>" +
           "Painel Efi → API → Introdução.",
         confirmButtonColor: "#021F81",
+      }).then(function () {
+        return null;
       });
-      return null;
     }
 
-    try {
-      await loadTokenizer();
-    } catch (e) {
-      await Swal.fire({
-        icon: "error",
-        title: "Tokenizador",
-        text: e.message || "Não foi possível carregar o JS da Efi.",
-        confirmButtonColor: "#021F81",
-      });
-      return null;
-    }
-
-    let previewApi = null;
-    const result = await Swal.fire({
-      title: opts.titulo || "Cartão de crédito",
-      html: formHtml(opts),
-      width: 440,
-      showCancelButton: true,
-      confirmButtonText: "Pagar com cartão",
-      cancelButtonText: "Cancelar",
-      confirmButtonColor: "#021F81",
-      focusConfirm: false,
-      customClass: { popup: "EfiCard_Swal" },
-      didOpen: function () {
-        const popup = Swal.getPopup();
-        previewApi = wirePreview(popup);
-        const num = popup.querySelector("#efi_number");
-        const sel = popup.querySelector("#efi_installments");
-        num.addEventListener("blur", async function () {
-          const brand = previewApi.getBrand();
-          if (brand) await loadInstallments(opts, brand, sel);
+    return prepareEfi(opts.environment)
+      .catch(function (e) {
+        return Swal.fire({
+          icon: "error",
+          title: "Tokenizador",
+          text: (e && e.message) || "Não foi possível carregar o JS da Efi.",
+          confirmButtonColor: "#021F81",
+        }).then(function () {
+          return "ABORT";
         });
-        setTimeout(function () {
-          num.focus();
-        }, 50);
-      },
-      preConfirm: async function () {
-        const popup = Swal.getPopup();
-        const number = digits(popup.querySelector("#efi_number").value);
-        const holder = (popup.querySelector("#efi_holder").value || "").trim();
-        const exp = parseExpiry(popup.querySelector("#efi_exp").value);
-        const cvv = digits(popup.querySelector("#efi_cvv").value);
-        const doc = digits(popup.querySelector("#efi_doc").value);
-        const installments = parseInt(popup.querySelector("#efi_installments").value || "1", 10) || 1;
-        let brand = previewApi ? previewApi.getBrand() : "";
+      })
+      .then(function (apiOrAbort) {
+        if (apiOrAbort === "ABORT") return null;
 
-        if (number.length < 13 || number.length > 19) {
-          Swal.showValidationMessage("Número do cartão inválido.");
-          return false;
-        }
-        if (!holder || holder.length < 3) {
-          Swal.showValidationMessage("Informe o nome impresso no cartão.");
-          return false;
-        }
-        if (!exp) {
-          Swal.showValidationMessage("Validade inválida (use MM/AA).");
-          return false;
-        }
-        if (cvv.length < 3 || cvv.length > 4) {
-          Swal.showValidationMessage("CVV inválido.");
-          return false;
-        }
-        if (doc && doc.length !== 11 && doc.length !== 14) {
-          Swal.showValidationMessage("CPF/CNPJ do titular inválido.");
-          return false;
-        }
+        let previewApi = null;
+        return Swal.fire({
+          title: opts.titulo || "Cartão de crédito",
+          html: formHtml(opts),
+          width: 440,
+          showCancelButton: true,
+          confirmButtonText: "Pagar com cartão",
+          cancelButtonText: "Cancelar",
+          confirmButtonColor: "#021F81",
+          focusConfirm: false,
+          customClass: { popup: "EfiCard_Swal" },
+          didOpen: function () {
+            const popup = Swal.getPopup();
+            previewApi = wirePreview(popup, opts.environment);
+            const num = popup.querySelector("#efi_number");
+            const sel = popup.querySelector("#efi_installments");
+            num.addEventListener("blur", function () {
+              const brand = previewApi.getBrand();
+              if (brand) loadInstallments(opts, brand, sel);
+            });
+            setTimeout(function () {
+              num.focus();
+            }, 50);
+          },
+          preConfirm: function () {
+            const popup = Swal.getPopup();
+            const number = digits(popup.querySelector("#efi_number").value);
+            const holder = (popup.querySelector("#efi_holder").value || "").trim();
+            const exp = parseExpiry(popup.querySelector("#efi_exp").value);
+            const cvv = digits(popup.querySelector("#efi_cvv").value);
+            const doc = digits(popup.querySelector("#efi_doc").value);
+            const installments =
+              parseInt(popup.querySelector("#efi_installments").value || "1", 10) || 1;
+            let brand = previewApi ? previewApi.getBrand() : "";
 
-        const confirmBtn = Swal.getConfirmButton();
-        if (confirmBtn) {
-          confirmBtn.disabled = true;
-          confirmBtn.textContent = "Validando cartão…";
-        }
-        try {
-          const CC = await loadTokenizer();
-          if (!brand) {
-            brand = ((await CC.setCardNumber(number).verifyCardBrand()) || "").toLowerCase();
-          }
-          if (!brand || brand === "undefined" || brand === "null") {
-            Swal.showValidationMessage("Não foi possível identificar a bandeira do cartão.");
-            return false;
-          }
-          const cardData = {
-            brand: brand,
-            number: number,
-            cvv: cvv,
-            expirationMonth: exp.month,
-            expirationYear: exp.year,
-            holderName: holder,
-            reuse: false,
-          };
-          if (doc) cardData.holderDocument = doc;
-          const tokenRes = await CC.setAccount(opts.payeeCode)
-            .setEnvironment(opts.environment || "sandbox")
-            .setCreditCardData(cardData)
-            .getPaymentToken();
+            if (number.length < 13 || number.length > 19) {
+              Swal.showValidationMessage("Número do cartão inválido.");
+              return false;
+            }
+            if (!holder || holder.length < 3) {
+              Swal.showValidationMessage("Informe o nome impresso no cartão.");
+              return false;
+            }
+            if (!exp) {
+              Swal.showValidationMessage("Validade inválida (use MM/AA).");
+              return false;
+            }
+            if (cvv.length < 3 || cvv.length > 4) {
+              Swal.showValidationMessage("CVV inválido.");
+              return false;
+            }
+            if (doc && doc.length !== 11 && doc.length !== 14) {
+              Swal.showValidationMessage("CPF/CNPJ do titular inválido.");
+              return false;
+            }
 
-          const payment_token = tokenRes && tokenRes.payment_token;
-          if (!payment_token) {
-            Swal.showValidationMessage("Efi não retornou o token do cartão.");
-            return false;
-          }
-          return {
-            payment_token: payment_token,
-            installments: installments,
-            card_mask: (tokenRes && tokenRes.card_mask) || "",
-            brand: brand,
-          };
-        } catch (err) {
-          const msg =
-            (err && (err.error_description || err.error || err.message)) ||
-            "Falha ao tokenizar o cartão.";
-          Swal.showValidationMessage(String(msg));
-          return false;
-        } finally {
-          if (confirmBtn) {
-            confirmBtn.disabled = false;
-            confirmBtn.textContent = "Pagar com cartão";
-          }
-        }
-      },
-    });
+            const confirmBtn = Swal.getConfirmButton();
+            if (confirmBtn) {
+              confirmBtn.disabled = true;
+              confirmBtn.textContent = "Validando cartão…";
+            }
 
-    if (!result.isConfirmed) return null;
-    return result.value || null;
+            return prepareEfi(opts.environment)
+              .then(function (api) {
+                const brandP = brand
+                  ? Promise.resolve(brand)
+                  : asPromise(api.setCardNumber(number).verifyCardBrand()).then(function (b) {
+                      return String(b || "").toLowerCase();
+                    });
+                return brandP.then(function (b) {
+                  brand = b;
+                  if (!brand || brand === "undefined" || brand === "null") {
+                    throw new Error("Não foi possível identificar a bandeira do cartão.");
+                  }
+                  const cardData = {
+                    brand: brand,
+                    number: number,
+                    cvv: cvv,
+                    expirationMonth: exp.month,
+                    expirationYear: exp.year,
+                    holderName: holder,
+                    reuse: false,
+                  };
+                  if (doc) cardData.holderDocument = doc;
+                  return asPromise(
+                    api.setAccount(opts.payeeCode).setCreditCardData(cardData).getPaymentToken()
+                  );
+                });
+              })
+              .then(function (tokenRes) {
+                const payment_token = tokenRes && tokenRes.payment_token;
+                if (!payment_token) throw new Error("Efi não retornou o token do cartão.");
+                return {
+                  payment_token: payment_token,
+                  installments: installments,
+                  card_mask: (tokenRes && tokenRes.card_mask) || "",
+                  brand: brand,
+                };
+              })
+              .catch(function (err) {
+                const msg =
+                  (err && (err.error_description || err.error || err.message)) ||
+                  "Falha ao tokenizar o cartão.";
+                Swal.showValidationMessage(String(msg));
+                return false;
+              })
+              .finally(function () {
+                if (confirmBtn) {
+                  confirmBtn.disabled = false;
+                  confirmBtn.textContent = "Pagar com cartão";
+                }
+              });
+          },
+        }).then(function (result) {
+          if (!result.isConfirmed) return null;
+          return result.value || null;
+        });
+      });
   }
 
   global.DropNexoEfi = {
-    loadTokenizer: loadTokenizer,
+    prepareEfi: prepareEfi,
     promptCartao: promptCartao,
   };
 })(window);
