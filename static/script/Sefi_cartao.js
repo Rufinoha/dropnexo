@@ -1,15 +1,9 @@
 /**
- * Sefi_cartao.js — formulário de cartão + tokenizador Efi Pay (payment-token-efi)
+ * Sefi_cartao.js — formulário de cartão + tokenizador Efi Pay
  *
- * Uso:
- *   const r = await DropNexoEfi.promptCartao({
- *     payeeCode, environment, valorCentavos, titulo
- *   });
- *   // r => { payment_token, installments, card_mask } | null
- *
- * Importante: NÃO fazer await/Promise.resolve em EfiPay.CreditCard —
- * o objeto fluente da Efi pode ser tratado como thenable e gera
+ * EfiPay.CreditCard é um Proxy: acessar .then lança
  * "Método 'then' solicitado inexistente".
+ * Nunca retorne CreditCard de Promise/async/await/Promise.resolve.
  */
 (function (global) {
   "use strict";
@@ -32,24 +26,22 @@
     return String(s || "").replace(/\D/g, "");
   }
 
-  function efiApi() {
-    return global.EfiPay && global.EfiPay.CreditCard ? global.EfiPay.CreditCard : null;
-  }
-
-  function asPromise(value) {
-    if (value != null && typeof value.then === "function") return value;
-    return Promise.resolve(value);
+  /** Só use DEPOIS de ensureScript() — nunca coloque o retorno em Promise. */
+  function efi() {
+    return global.EfiPay.CreditCard;
   }
 
   function ensureScript() {
-    if (efiApi()) return Promise.resolve();
+    if (global.EfiPay && global.EfiPay.CreditCard) {
+      return Promise.resolve(true);
+    }
     if (scriptPromise) return scriptPromise;
     scriptPromise = new Promise(function (resolve, reject) {
       const s = document.createElement("script");
       s.src = CDN;
       s.async = true;
       s.onload = function () {
-        if (efiApi()) resolve();
+        if (global.EfiPay && global.EfiPay.CreditCard) resolve(true);
         else {
           scriptPromise = null;
           reject(new Error("Biblioteca Efi não carregou."));
@@ -64,16 +56,20 @@
     return scriptPromise;
   }
 
-  function prepareEfi(environment) {
+  function setEnv(environment) {
     const env = environment === "production" ? "production" : "sandbox";
+    if (envReady !== env) {
+      efi().setEnvironment(env);
+      envReady = env;
+    }
+  }
+
+  function runEfi(environment, fn) {
     return ensureScript().then(function () {
-      const api = efiApi();
-      if (!api) throw new Error("Biblioteca Efi não disponível.");
-      if (envReady !== env) {
-        api.setEnvironment(env);
-        envReady = env;
-      }
-      return api;
+      setEnv(environment);
+      // fn() pode devolver a Promise real de getPaymentToken/verifyCardBrand/etc.
+      // Nunca devolver o próprio CreditCard.
+      return fn(efi());
     });
   }
 
@@ -95,8 +91,7 @@
     const yy = d.slice(2);
     const month = parseInt(mm, 10);
     if (month < 1 || month > 12) return null;
-    const year = 2000 + parseInt(yy, 10);
-    return { month: mm, year: String(year) };
+    return { month: mm, year: String(2000 + parseInt(yy, 10)) };
   }
 
   function formHtml(opts) {
@@ -145,7 +140,7 @@
       "<span>Parcelas</span>" +
       '<select id="efi_installments"><option value="1">1x sem juros</option></select>' +
       "</label>" +
-      '<p class="EfiCard_Hint" id="efi_hint">Os dados do cartão não passam pelo DropNexo — só o token seguro da Efi.</p>' +
+      '<p class="EfiCard_Hint">Os dados do cartão não passam pelo DropNexo — só o token seguro da Efi.</p>' +
       "</div></div>"
     );
   }
@@ -168,33 +163,31 @@
         ? formatCardNumber(d.padEnd(Math.max(d.length, 16), "•")).slice(0, 23)
         : "•••• •••• •••• ••••";
       clearTimeout(brandTimer);
-      if (d.length >= 6) {
-        brandTimer = setTimeout(function () {
-          prepareEfi(environment)
-            .then(function (api) {
-              return asPromise(api.setCardNumber(d).verifyCardBrand());
-            })
-            .then(function (b) {
-              brand = String(b || "").toLowerCase();
-              brandLbl.textContent = BRAND_LABEL[brand] || brand || "Cartão";
-              brandLbl.dataset.brand = brand;
-            })
-            .catch(function () {
-              brand = "";
-              brandLbl.textContent = "Cartão";
-              brandLbl.dataset.brand = "";
-            });
-        }, 280);
-      } else {
+      if (d.length < 6) {
         brand = "";
         brandLbl.textContent = "Cartão";
         brandLbl.dataset.brand = "";
+        return;
       }
+      brandTimer = setTimeout(function () {
+        runEfi(environment, function (api) {
+          return api.setCardNumber(d).verifyCardBrand();
+        })
+          .then(function (b) {
+            brand = String(b || "").toLowerCase();
+            brandLbl.textContent = BRAND_LABEL[brand] || brand || "Cartão";
+            brandLbl.dataset.brand = brand;
+          })
+          .catch(function () {
+            brand = "";
+            brandLbl.textContent = "Cartão";
+            brandLbl.dataset.brand = "";
+          });
+      }, 280);
     });
 
     holder.addEventListener("input", function () {
-      const v = (holder.value || "").trim().toUpperCase();
-      prevName.textContent = v || "NOME NO CARTÃO";
+      prevName.textContent = (holder.value || "").trim().toUpperCase() || "NOME NO CARTÃO";
     });
 
     exp.addEventListener("input", function () {
@@ -204,7 +197,7 @@
 
     return {
       getBrand: function () {
-        return brand || (brandLbl.dataset.brand || "");
+        return brand || brandLbl.dataset.brand || "";
       },
     };
   }
@@ -212,18 +205,15 @@
   function loadInstallments(opts, brand, selectEl) {
     if (!opts.valorCentavos || opts.valorCentavos < 100 || !brand || !opts.payeeCode) {
       selectEl.innerHTML = '<option value="1">1x sem juros</option>';
-      return Promise.resolve();
+      return;
     }
-    return prepareEfi(opts.environment)
-      .then(function (api) {
-        return asPromise(
-          api
-            .setAccount(opts.payeeCode)
-            .setBrand(brand)
-            .setTotal(opts.valorCentavos)
-            .getInstallments()
-        );
-      })
+    runEfi(opts.environment, function (api) {
+      return api
+        .setAccount(opts.payeeCode)
+        .setBrand(brand)
+        .setTotal(opts.valorCentavos)
+        .getInstallments();
+    })
       .then(function (res) {
         const list = (res && res.installments) || [];
         if (!list.length) {
@@ -244,17 +234,11 @@
       });
   }
 
-  /**
-   * @param {object} opts
-   * @param {string} opts.payeeCode
-   * @param {string} [opts.environment]
-   * @param {number} [opts.valorCentavos]
-   * @param {string} [opts.titulo]
-   * @returns {Promise<{payment_token:string, installments:number, card_mask:string}|null>}
-   */
   function promptCartao(opts) {
     opts = opts || {};
-    if (!global.Swal) return Promise.reject(new Error("SweetAlert2 não disponível."));
+    if (!global.Swal) {
+      return Promise.reject(new Error("SweetAlert2 não disponível."));
+    }
     if (!opts.payeeCode) {
       return Swal.fire({
         icon: "warning",
@@ -269,20 +253,9 @@
       });
     }
 
-    return prepareEfi(opts.environment)
-      .catch(function (e) {
-        return Swal.fire({
-          icon: "error",
-          title: "Tokenizador",
-          text: (e && e.message) || "Não foi possível carregar o JS da Efi.",
-          confirmButtonColor: "#021F81",
-        }).then(function () {
-          return "ABORT";
-        });
-      })
-      .then(function (apiOrAbort) {
-        if (apiOrAbort === "ABORT") return null;
-
+    return ensureScript()
+      .then(function () {
+        setEnv(opts.environment);
         let previewApi = null;
         return Swal.fire({
           title: opts.titulo || "Cartão de crédito",
@@ -345,31 +318,36 @@
               confirmBtn.textContent = "Validando cartão…";
             }
 
-            return prepareEfi(opts.environment)
-              .then(function (api) {
-                const brandP = brand
-                  ? Promise.resolve(brand)
-                  : asPromise(api.setCardNumber(number).verifyCardBrand()).then(function (b) {
-                      return String(b || "").toLowerCase();
-                    });
-                return brandP.then(function (b) {
-                  brand = b;
-                  if (!brand || brand === "undefined" || brand === "null") {
-                    throw new Error("Não foi possível identificar a bandeira do cartão.");
-                  }
-                  const cardData = {
-                    brand: brand,
-                    number: number,
-                    cvv: cvv,
-                    expirationMonth: exp.month,
-                    expirationYear: exp.year,
-                    holderName: holder,
-                    reuse: false,
-                  };
-                  if (doc) cardData.holderDocument = doc;
-                  return asPromise(
-                    api.setAccount(opts.payeeCode).setCreditCardData(cardData).getPaymentToken()
-                  );
+            const brandStep = brand
+              ? Promise.resolve(brand)
+              : runEfi(opts.environment, function (api) {
+                  return api.setCardNumber(number).verifyCardBrand();
+                }).then(function (b) {
+                  return String(b || "").toLowerCase();
+                });
+
+            return brandStep
+              .then(function (b) {
+                brand = b;
+                if (!brand || brand === "undefined" || brand === "null") {
+                  throw new Error("Não foi possível identificar a bandeira do cartão.");
+                }
+                const cardData = {
+                  brand: brand,
+                  number: number,
+                  cvv: cvv,
+                  expirationMonth: exp.month,
+                  expirationYear: exp.year,
+                  holderName: holder,
+                  reuse: false,
+                };
+                if (doc) cardData.holderDocument = doc;
+
+                return runEfi(opts.environment, function (api) {
+                  return api
+                    .setAccount(opts.payeeCode)
+                    .setCreditCardData(cardData)
+                    .getPaymentToken();
                 });
               })
               .then(function (tokenRes) {
@@ -396,15 +374,25 @@
                 }
               });
           },
-        }).then(function (result) {
-          if (!result.isConfirmed) return null;
-          return result.value || null;
+        });
+      })
+      .then(function (result) {
+        if (!result || !result.isConfirmed) return null;
+        return result.value || null;
+      })
+      .catch(function (e) {
+        return Swal.fire({
+          icon: "error",
+          title: "Tokenizador",
+          text: (e && (e.error_description || e.message)) || "Não foi possível carregar o JS da Efi.",
+          confirmButtonColor: "#021F81",
+        }).then(function () {
+          return null;
         });
       });
   }
 
   global.DropNexoEfi = {
-    prepareEfi: prepareEfi,
     promptCartao: promptCartao,
   };
 })(window);
