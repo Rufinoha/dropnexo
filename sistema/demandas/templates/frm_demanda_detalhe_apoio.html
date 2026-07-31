@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chamado</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style/global_utils.css') }}">
+  <link rel="stylesheet" href="{{ url_for('demandas.static', filename='style/Cdemanda_detalhe_apoio.css') }}?v=2">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+</head>
+<body class="dem-det-body">
+
+  <div class="Cl_Header dem-det-top">
+    <div class="Cl_Logo">
+      <img src="{{ url_for('static', filename='imge/logotipo.png') }}" alt="Logo" onerror="this.style.display='none'">
+    </div>
+    <div class="Cl_Titulo">
+      <h1 id="tituloPagina">Chamado</h1>
+      <div class="Cl_Subtitulo" id="dem_apoio_subtitulo">Central de Demandas</div>
+    </div>
+    <div class="Cl_MenuID dem-det-proto">
+      <label for="id">Nº do chamado</label>
+      <input type="text" id="id" disabled>
+    </div>
+  </div>
+
+  <div class="Cl_ContainerApoio dem-det-shell">
+    <aside class="dem-nav" aria-label="Seções do chamado">
+      <div class="dem-nav-status" id="dem_navStatus">
+        <span class="dem-nav-dot" id="dem_navDot" aria-hidden="true"></span>
+        <div>
+          <strong id="dem_apoio_status">—</strong>
+          <em id="dem_navStatusHint">Atualizado pelo suporte</em>
+        </div>
+      </div>
+
+      <nav class="dem-nav-menu" role="tablist">
+        <button type="button" class="dem-nav-item is-active" data-tab="chamado" role="tab" aria-selected="true">
+          <span class="dem-nav-copy">
+            <strong>Chamado</strong>
+            <em>Dados e solicitante</em>
+          </span>
+        </button>
+        <button type="button" class="dem-nav-item" data-tab="conversa" role="tab" aria-selected="false">
+          <span class="dem-nav-copy">
+            <strong>Conversa</strong>
+            <em id="dem_navConversaMeta">Mensagens</em>
+          </span>
+        </button>
+      </nav>
+
+      <div class="dem-nav-note">
+        <p>O status é controlado pelo HubSupport. Aqui você acompanha e responde.</p>
+      </div>
+    </aside>
+
+    <main class="dem-main">
+      <section class="dem-tab is-active" id="dem_tab_chamado" role="tabpanel" data-tab-panel="chamado">
+        <div class="dem-card">
+          <div class="dem-card-head">
+            <h2>Informações do chamado</h2>
+            <span class="dem-card-hint">Somente leitura</span>
+          </div>
+          <div class="dem-form-grid">
+            <div class="dem-field dem-field--full">
+              <label>Assunto</label>
+              <input type="text" id="dem_campoTitulo" disabled>
+            </div>
+            <div class="dem-field">
+              <label>Status</label>
+              <input type="text" id="dem_campoStatus" disabled title="Alterado apenas pelo HubSupport">
+            </div>
+            <div class="dem-field">
+              <label>Prioridade</label>
+              <input type="text" id="dem_campoPrioridade" disabled>
+            </div>
+            <div class="dem-field">
+              <label>Tipo</label>
+              <input type="text" id="dem_campoCategoria" disabled>
+            </div>
+            <div class="dem-field">
+              <label>Abertura</label>
+              <input type="text" id="dem_campoAbertura" disabled>
+            </div>
+            <div class="dem-field dem-field--full">
+              <label>Solicitante</label>
+              <input type="text" id="dem_campoSolicitante" disabled>
+            </div>
+            <div class="dem-field dem-field--full">
+              <label>Última atualização</label>
+              <input type="text" id="dem_campoUltima" disabled>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="dem-tab" id="dem_tab_conversa" role="tabpanel" data-tab-panel="conversa" hidden>
+        <div class="dem-card dem-card--thread">
+          <div class="dem-card-head">
+            <h2>Conversa</h2>
+            <span class="dem-card-hint" id="dem_threadHint">Carregando…</span>
+          </div>
+          <div class="dem-thread" id="dem_thread">
+            <div class="dem-carregando">Carregando conversa…</div>
+          </div>
+        </div>
+
+        <div class="dem-card dem-card--composer" id="dem_respostaBox">
+          <div class="dem-card-head">
+            <h2>Nova resposta</h2>
+            <span class="dem-card-hint">Mensagem obrigatória</span>
+          </div>
+          <label class="dem-sr-only" for="dem_respostaTxt">Mensagem</label>
+          <textarea id="dem_respostaTxt" rows="4" placeholder="Escreva sua mensagem ao suporte…"></textarea>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="Cl_BotoesApoio">
+    <button type="button" id="dem_apoio_btnFechar" class="Cl_BtnCancelar">Fechar</button>
+    <button type="button" id="dem_apoio_btnResponder" class="Cl_BtnSalvar" hidden>Enviar resposta</button>
+  </div>
+
+  <script src="{{ url_for('static', filename='script/global_utils.js') }}"></script>
+  <script src="{{ url_for('demandas.static', filename='script/Sdemanda_detalhe_apoio.js') }}?v=2"></script>
+</body>
+</html>

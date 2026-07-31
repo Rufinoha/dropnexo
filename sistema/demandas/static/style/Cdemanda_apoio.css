@@ -1,0 +1,79 @@
+/* Demanda apoio — padrão BARACAT */
+
+.dem-apoio-wrap {
+  padding: 20px;
+}
+
+.dem-apoio-wrap .form-linha01,
+.dem-apoio-wrap .form-linha02,
+.dem-apoio-wrap .form-linha03,
+.dem-apoio-wrap .form-linha04 {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.dem-apoio-wrap .form-linha02 {
+  grid-template-columns: 1fr 1fr;
+}
+
+.dem-apoio-wrap .form-campo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.dem-apoio-wrap .form-campo label {
+  font-weight: 700;
+  font-size: 13px;
+  color: #1c2e3c;
+}
+
+.dem-apoio-wrap .form-campo input,
+.dem-apoio-wrap .form-campo select,
+.dem-apoio-wrap .form-campo textarea {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.dem-apoio-wrap textarea {
+  resize: vertical;
+  min-height: 120px;
+}
+
+.dem-contexto-tecnico {
+  margin-top: 4px;
+  padding: 10px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fafafa;
+}
+
+.dem-contexto-tecnico summary {
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 13px;
+  color: #1c2e3c;
+}
+
+.dem-contexto-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.dem-apoio-ajuda {
+  margin: 12px 0 0;
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.5;
+}
+
+@media (max-width: 640px) {
+  .dem-apoio-wrap .form-linha02,
+  .dem-contexto-grid {
+    grid-template-columns: 1fr;
+  }
+}

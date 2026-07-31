@@ -43,7 +43,15 @@ def _json_erro(exc, status: int = 400):
         code = exc.status_code or status
         if code >= 500:
             code = 502
-        return jsonify(success=False, message=str(exc) or "Erro HubSupport."), code
+        msg = str(exc) or "Erro HubSupport."
+        low = msg.lower()
+        if "uq_cliente_usuario_tenant_email" in low or "duplicate key" in low:
+            msg = (
+                "Este e-mail já existe no HubSupport (provavelmente pelo BARACAT). "
+                "Atualize o HubSupport com o ajuste de upsert por e-mail e tente novamente."
+            )
+            code = 409
+        return jsonify(success=False, message=msg), code
     msg = str(exc) or "Erro inesperado."
     if "090_hubsupport" in msg or "UndefinedTable" in type(exc).__name__:
         msg = (
@@ -77,20 +85,29 @@ def demandas_pagina():
     )
 
 
+@demandas_bp.get("/demandas/apoio")
+@login_obrigatorio()
+def demandas_apoio_novo():
+    return render_template(
+        "frm_demanda_apoio.html",
+        tenant_nome=session.get("tenant_nome") or "",
+        usuario_nome=session.get("nome") or "",
+    )
+
+
+@demandas_bp.get("/demandas/apoio/detalhe")
+@login_obrigatorio()
+def demandas_apoio_detalhe():
+    return render_template("frm_demanda_detalhe_apoio.html")
+
+
 @demandas_bp.get("/demandas/<path:ref>")
 @login_obrigatorio()
 def demandas_detalhe_pagina(ref: str):
-    from flask import url_for
+    """Compat: abre a listagem; o detalhe usa modal de apoio (padrão BARACAT)."""
+    from flask import redirect, url_for
 
-    return render_template(
-        "frm_demanda_detalhe.html",
-        nav_ativo="demandas",
-        chamado_ref=ref,
-        tenant_nome=session.get("tenant_nome") or "",
-        usuario_nome=session.get("nome") or "",
-        api_detalhe=url_for("demandas.api_detalhe", ref=ref),
-        api_responder=url_for("demandas.api_responder", ref=ref),
-    )
+    return redirect(url_for("demandas.demandas_pagina"))
 
 
 @demandas_bp.get("/api/demandas/listar")

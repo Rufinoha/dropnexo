@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Novo chamado</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style/global_utils.css') }}">
+  <link rel="stylesheet" href="{{ url_for('demandas.static', filename='style/Cdemanda_apoio.css') }}?v=2">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+</head>
+<body>
+  <div class="Cl_Header">
+    <div class="Cl_Logo">
+      <img src="{{ url_for('static', filename='imge/logotipo.png') }}" alt="Logo" onerror="this.style.display='none'">
+    </div>
+    <div class="Cl_Titulo">
+      <h1 id="tituloPagina">Novo chamado</h1>
+    </div>
+    <div class="Cl_MenuID">
+      <label for="id">Protocolo:</label>
+      <input type="text" id="id" value="NOVO" disabled>
+    </div>
+  </div>
+
+  <div class="Cl_ContainerApoio dem-apoio-wrap">
+    <div class="form-linha01">
+      <div class="form-campo">
+        <label for="dem_apoio_titulo">Assunto *</label>
+        <input type="text" id="dem_apoio_titulo" maxlength="200" placeholder="Resumo da demanda">
+      </div>
+    </div>
+
+    <div class="form-linha02">
+      <div class="form-campo">
+        <label for="dem_apoio_categoria">Tipo *</label>
+        <select id="dem_apoio_categoria">
+          <option value="duvida">Dúvida</option>
+          <option value="sugestao">Sugestão</option>
+          <option value="problema">Problema</option>
+        </select>
+      </div>
+      <div class="form-campo">
+        <label for="dem_apoio_prioridade">Prioridade *</label>
+        <select id="dem_apoio_prioridade">
+          <option value="baixa">Baixa</option>
+          <option value="normal" selected>Normal</option>
+          <option value="alta">Alta</option>
+          <option value="urgente">Urgente</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="form-linha03">
+      <div class="form-campo">
+        <label for="dem_apoio_mensagem">Descrição *</label>
+        <textarea id="dem_apoio_mensagem" rows="7" placeholder="Descreva com detalhes o que precisa"></textarea>
+      </div>
+    </div>
+
+    <div class="form-linha04">
+      <div class="form-campo">
+        <label for="dem_apoio_anexos">Anexos (opcional)</label>
+        <input type="file" id="dem_apoio_anexos" multiple>
+      </div>
+    </div>
+
+    <details class="dem-contexto-tecnico">
+      <summary>Contexto técnico (opcional)</summary>
+      <div class="dem-contexto-grid">
+        <div class="form-campo">
+          <label for="dem_apoio_modulo">Módulo</label>
+          <input type="text" id="dem_apoio_modulo" maxlength="80" placeholder="Ex.: financeiro, catálogo">
+        </div>
+        <div class="form-campo">
+          <label for="dem_apoio_tela">Tela</label>
+          <input type="text" id="dem_apoio_tela" maxlength="120" placeholder="Ex.: /meu-plano">
+        </div>
+      </div>
+    </details>
+
+    <p class="dem-apoio-ajuda">
+      Após enviar, você receberá um protocolo. Respostas aparecem nesta central.
+      Aberto como <strong>{{ usuario_nome }}</strong> · conta <strong>{{ tenant_nome }}</strong>.
+    </p>
+  </div>
+
+  <div class="Cl_BotoesApoio">
+    <button type="button" id="dem_apoio_btnSalvar" class="Cl_BtnSalvar">Enviar chamado</button>
+  </div>
+
+  <script src="{{ url_for('static', filename='script/global_utils.js') }}"></script>
+  <script src="{{ url_for('demandas.static', filename='script/Sdemanda_apoio.js') }}?v=2"></script>
+</body>
+</html>

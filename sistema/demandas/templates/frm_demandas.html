@@ -3,103 +3,80 @@
 {% set nav_ativo = 'demandas' %}
 {% block topbar_title %}Central de Demandas{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('demandas.static', filename='style/Cdemandas.css') }}?v=1" />
+<link rel="stylesheet" href="{{ url_for('demandas.static', filename='style/Cdemandas.css') }}?v=2" />
+<script defer src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 {% endblock %}
 {% block content %}
-<div class="Cl_ContainerApoio cl-page-principal Dem_Wrap">
-  <div class="cl-page-title Dem_TitleRow">
-    <div>
-      <h2>Central de Demandas</h2>
-      <p class="cl-page-desc">
-        Abra chamados de dúvida, sugestão ou problema. Acompanhe as respostas da equipe de suporte.
-        Os chamados desta conta ({{ tenant_nome or 'seu tenant' }}) ficam isolados das demais empresas.
-      </p>
-    </div>
-    <button type="button" class="Cl_botaoprimario" id="dem_novo">+ Novo chamado</button>
-  </div>
+<main class="content demandas-page">
+  <div class="Cl_ConfigContainer">
 
-  <div class="Dem_TabelaWrap">
-    <table class="Cl_TabelaPrincipal Dem_Tabela">
-      <thead>
-        <tr>
-          <th>Protocolo</th>
-          <th>Assunto</th>
-          <th>Tipo</th>
-          <th>Status</th>
-          <th>Prioridade</th>
-          <th>Abertura</th>
-          <th>Última atualização</th>
-        </tr>
-      </thead>
-      <tbody id="dem_tbody">
-        <tr><td colspan="7" class="Dem_Empty">Carregando…</td></tr>
-      </tbody>
-    </table>
-  </div>
-</div>
+    <h2>Central de Demandas</h2>
+    <p class="dem-subtitulo">
+      Abra chamados de dúvida, sugestão ou problema. Acompanhe as respostas da equipe de suporte.
+    </p>
 
-<dialog class="Dem_Modal" id="dem_modal" aria-labelledby="dem_modal_title">
-  <form method="dialog" id="dem_form" class="Dem_ModalInner">
-    <header class="Dem_ModalHead">
-      <h3 id="dem_modal_title">Novo chamado</h3>
-      <button type="button" class="Dem_ModalClose" id="dem_modal_close" aria-label="Fechar">×</button>
-    </header>
-    <div class="Dem_ModalBody">
-      <label class="Cl_Label" for="dem_titulo">Assunto *</label>
-      <input type="text" id="dem_titulo" class="Cl_Input" maxlength="200" required minlength="3" placeholder="Resumo do assunto" />
-
-      <div class="Dem_Row2">
-        <div>
-          <label class="Cl_Label" for="dem_categoria">Tipo *</label>
-          <select id="dem_categoria" class="Cl_Input">
-            <option value="duvida">Dúvida</option>
-            <option value="sugestao">Sugestão</option>
-            <option value="problema">Problema</option>
-          </select>
+    <section class="filter-panel" id="filtros-demandas">
+      <div class="filter-panel-fields">
+        <div class="filter-group">
+          <label for="dem_filtroAssunto">Assunto</label>
+          <input type="text" id="dem_filtroAssunto" class="Cl_Input" placeholder="Filtrar por assunto">
         </div>
-        <div>
-          <label class="Cl_Label" for="dem_prioridade">Prioridade *</label>
-          <select id="dem_prioridade" class="Cl_Input">
-            <option value="baixa">Baixa</option>
-            <option value="normal" selected>Normal</option>
-            <option value="alta">Alta</option>
-            <option value="urgente">Urgente</option>
+        <div class="filter-group">
+          <label for="dem_filtroStatus">Status</label>
+          <select id="dem_filtroStatus" class="Cl_Input">
+            <option value="">Todos</option>
+            <option value="aberto">Aberto</option>
+            <option value="em_atendimento">Em atendimento</option>
+            <option value="aguardando_cliente">Aguardando você</option>
+            <option value="fechado">Fechado</option>
+            <option value="cancelado">Cancelado</option>
           </select>
         </div>
       </div>
+      <div class="filter-panel-actions">
+        <button type="button" id="dem_btnFiltrar" class="btn btn-primary">Aplicar filtros</button>
+        <button type="button" id="dem_btnLimpar" class="btn btn-secondary">Limpar</button>
+      </div>
+    </section>
 
-      <label class="Cl_Label" for="dem_mensagem">Descrição *</label>
-      <textarea id="dem_mensagem" class="Cl_Input Dem_Textarea" rows="5" required minlength="5"
-        placeholder="Descreva o que aconteceu, o que você esperava e como reproduzir."></textarea>
-
-      <label class="Cl_Label" for="dem_anexos">Anexos (opcional)</label>
-      <input type="file" id="dem_anexos" class="Cl_Input" multiple />
-
-      <details class="Dem_Contexto">
-        <summary>Contexto técnico (opcional)</summary>
-        <label class="Cl_Label" for="dem_modulo">Módulo</label>
-        <input type="text" id="dem_modulo" class="Cl_Input" placeholder="ex.: financeiro" />
-        <label class="Cl_Label" for="dem_tela">Tela</label>
-        <input type="text" id="dem_tela" class="Cl_Input" placeholder="ex.: /meu-plano" />
-      </details>
-
-      <p class="Dem_Help">
-        Após enviar, você receberá um protocolo. Respostas aparecem nesta central.
-        Aberto por <strong>{{ usuario_nome }}</strong> · conta <strong>{{ tenant_nome }}</strong>.
-      </p>
-      <p class="Dem_Err" id="dem_form_err" hidden></p>
+    <div class="Cl_botaoIncluir">
+      <button type="button" id="dem_btnNovo" class="Cl_BtnIncluir">+ Novo chamado</button>
     </div>
-    <footer class="Dem_ModalFoot">
-      <button type="button" class="Cl_BtnCancelar" id="dem_cancelar">Cancelar</button>
-      <button type="submit" class="Cl_botaoprimario" id="dem_enviar">Abrir chamado</button>
-    </footer>
-  </form>
-</dialog>
 
-<script type="application/json" id="dem_cfg">{{ {
-  "apiListar": url_for("demandas.api_listar"),
-  "apiAbrir": url_for("demandas.api_abrir"),
-  "urlDetalheBase": url_for("demandas.demandas_pagina").rstrip("/")
-} | tojson }}</script>
-<script defer src="{{ url_for('demandas.static', filename='script/Sdemandas.js') }}?v=1"></script>
+    <div class="Cl_TabelaPrincipal" id="content-area-Demandas">
+      <table aria-label="Chamados de suporte">
+        <thead>
+          <tr>
+            <th>Protocolo</th>
+            <th>Assunto</th>
+            <th>Tipo</th>
+            <th>Status</th>
+            <th>Prioridade</th>
+            <th>Abertura</th>
+            <th>Última atualização</th>
+            <th class="col-acoes">Ações</th>
+          </tr>
+        </thead>
+        <tbody id="dem_tbody">
+          <tr class="Cl_Carregando">
+            <td colspan="8">Carregando chamados…</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="Cl_Paginacao">
+      <button type="button" class="Cl_direcao" id="dem_btnPrimeiro" disabled>Primeiro</button>
+      <button type="button" class="Cl_direcao" id="dem_btnAnterior" disabled>Anterior</button>
+      <span>
+        Página <span id="dem_paginaAtual">1</span> de
+        <span id="dem_totalPaginas">1</span>
+      </span>
+      <button type="button" class="Cl_direcao" id="dem_btnProximo" disabled>Próximo</button>
+      <button type="button" class="Cl_direcao" id="dem_btnUltimo" disabled>Último</button>
+    </div>
+
+  </div>
+</main>
+<script defer src="{{ url_for('demandas.static', filename='script/Sdemandas.js') }}?v=2"></script>
 {% endblock %}

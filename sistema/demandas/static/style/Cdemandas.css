@@ -1,88 +1,94 @@
-.Dem_Wrap { max-width: 1100px; }
-.Dem_TitleRow {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-.Dem_TabelaWrap { margin-top: 8px; overflow-x: auto; }
-.Dem_Tabela tbody tr { cursor: pointer; }
-.Dem_Tabela tbody tr:hover { background: #f8fafc; }
-.Dem_Empty { padding: 28px 12px; text-align: center; color: #64748b; }
-.Dem_Voltar { margin-bottom: 8px; }
+/* Central de Demandas — layout no padrão BARACAT (componentes no global) */
 
-.Dem_Modal {
-  border: none;
+.demandas-page .Cl_ConfigContainer {
+  max-width: 100%;
+  background: #fff;
+  border: 1px solid #e2e8f0;
   border-radius: 14px;
-  padding: 0;
-  max-width: 560px;
-  width: calc(100% - 32px);
-  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.22);
+  padding: 22px 24px 18px;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
 }
-.Dem_Modal::backdrop { background: rgba(15, 23, 42, 0.45); }
-.Dem_ModalInner { display: flex; flex-direction: column; }
-.Dem_ModalHead, .Dem_ModalFoot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 16px 18px;
-  border-bottom: 1px solid #e2e8f0;
-}
-.Dem_ModalFoot { border-bottom: 0; border-top: 1px solid #e2e8f0; justify-content: flex-end; }
-.Dem_ModalHead h3 { margin: 0; font-size: 1.15rem; }
-.Dem_ModalClose {
-  border: 0; background: transparent; font-size: 1.5rem; line-height: 1; cursor: pointer; color: #64748b;
-}
-.Dem_ModalBody { padding: 16px 18px; display: flex; flex-direction: column; gap: 8px; }
-.Dem_Row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.Dem_Textarea { min-height: 110px; resize: vertical; }
-.Dem_Contexto { margin-top: 6px; color: #475569; font-size: 0.92rem; }
-.Dem_Contexto summary { cursor: pointer; margin-bottom: 8px; }
-.Dem_Help { margin: 8px 0 0; font-size: 0.88rem; color: #64748b; line-height: 1.45; }
-.Dem_Err { color: #b91c1c; font-size: 0.9rem; margin: 4px 0 0; }
 
-.Dem_DetalheHead {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  align-items: flex-start;
-  margin-bottom: 18px;
-}
-.Dem_Protocolo { margin: 0 0 4px; color: #64748b; font-size: 0.9rem; }
-.Dem_Badge {
-  display: inline-flex;
-  padding: 6px 12px;
-  border-radius: 999px;
-  background: #e0e7ff;
+.demandas-page .Cl_ConfigContainer > h2 {
+  margin: 0 0 6px;
+  font-size: 1.45rem;
   color: #021F81;
-  font-weight: 600;
-  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.demandas-page .dem-subtitulo {
+  margin: 0 0 20px;
+  font-size: 14px;
+  color: #64748b;
+  max-width: 720px;
+  line-height: 1.45;
+}
+
+.demandas-page #content-area-Demandas table {
+  table-layout: auto !important;
+}
+
+.demandas-page #content-area-Demandas table th:nth-child(1),
+.demandas-page #content-area-Demandas table td:nth-child(1) {
+  width: 110px;
   white-space: nowrap;
 }
-.Dem_Thread { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
-.Dem_Msg {
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  padding: 12px 14px;
-  background: #fff;
-  max-width: 85%;
-}
-.Dem_Msg.is-cliente { align-self: flex-end; background: #f0f7ff; border-color: #bfdbfe; }
-.Dem_Msg.is-agente { align-self: flex-start; background: #f8fafc; }
-.Dem_MsgHead {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  font-size: 0.82rem;
-  color: #64748b;
-  margin-bottom: 6px;
-}
-.Dem_MsgBody { white-space: pre-wrap; color: #0f172a; line-height: 1.45; }
-.Dem_Resposta { border-top: 1px solid #e2e8f0; padding-top: 16px; display: flex; flex-direction: column; gap: 8px; }
 
-@media (max-width: 720px) {
-  .Dem_Row2 { grid-template-columns: 1fr; }
-  .Dem_Msg { max-width: 100%; }
+.demandas-page #content-area-Demandas table th:nth-child(3),
+.demandas-page #content-area-Demandas table td:nth-child(3),
+.demandas-page #content-area-Demandas table th:nth-child(4),
+.demandas-page #content-area-Demandas table td:nth-child(4),
+.demandas-page #content-area-Demandas table th:nth-child(5),
+.demandas-page #content-area-Demandas table td:nth-child(5) {
+  width: 110px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.demandas-page #content-area-Demandas table th:nth-child(6),
+.demandas-page #content-area-Demandas table td:nth-child(6),
+.demandas-page #content-area-Demandas table th:nth-child(7),
+.demandas-page #content-area-Demandas table td:nth-child(7) {
+  width: 130px;
+  text-align: center;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.demandas-page #content-area-Demandas table th.col-acoes,
+.demandas-page #content-area-Demandas table td.col-acoes {
+  width: 100px;
+  min-width: 100px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.demandas-page #content-area-Demandas table td:nth-child(2) {
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.demandas-page #content-area-Demandas tbody tr {
+  cursor: default;
+}
+
+.demandas-page .Cl_BtnAcao {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 4px 6px;
+  color: #021F81;
+  vertical-align: middle;
+}
+
+.demandas-page .Cl_BtnAcao:hover {
+  opacity: 0.8;
+}
+
+.demandas-page .Cl_Carregando td {
+  text-align: center;
+  color: #64748b;
+  padding: 28px 12px;
 }

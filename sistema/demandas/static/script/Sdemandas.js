@@ -1,11 +1,11 @@
 (function () {
   "use strict";
 
-  let cfg = {};
-  try {
-    cfg = JSON.parse(document.getElementById("dem_cfg")?.textContent || "{}");
-  } catch {
-    cfg = {};
+  if (window.__DEMANDAS_INIT__) return;
+  window.__DEMANDAS_INIT__ = true;
+
+  function el(id) {
+    return document.getElementById(id);
   }
 
   function esc(s) {
@@ -19,149 +19,195 @@
   function fmtData(v) {
     if (!v) return "—";
     try {
-      return new Date(v).toLocaleString("pt-BR");
+      const d = new Date(v);
+      if (Number.isNaN(d.getTime())) return esc(String(v));
+      return d.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
     } catch {
-      return String(v);
+      return esc(String(v));
     }
   }
 
-  async function carregar() {
-    const tbody = document.getElementById("dem_tbody");
-    if (!tbody || !cfg.apiListar) return;
-    tbody.innerHTML = '<tr><td colspan="7" class="Dem_Empty">Carregando…</td></tr>';
-    try {
-      const r = await fetch(cfg.apiListar, { credentials: "include", headers: { Accept: "application/json" } });
-      const j = await r.json();
-      if (!j.success) throw new Error(j.message || "Falha ao listar");
-      const lista = j.chamados || [];
-      if (!lista.length) {
-        tbody.innerHTML =
-          '<tr><td colspan="7" class="Dem_Empty">Você ainda não abriu chamados. Clique em Novo chamado.</td></tr>';
-        return;
-      }
-      tbody.innerHTML = lista
-        .map(function (c) {
-          const ref = encodeURIComponent(c.external_id || "");
-          return (
-            "<tr data-ref=\"" +
-            esc(c.external_id) +
-            "\">" +
-            "<td>" +
-            esc(c.protocolo || "—") +
-            "</td>" +
-            "<td>" +
-            esc(c.titulo || "—") +
-            "</td>" +
-            "<td>" +
-            esc(c.categoria_label || c.categoria || "—") +
-            "</td>" +
-            "<td>" +
-            esc(c.status_label || c.status || "—") +
-            "</td>" +
-            "<td>" +
-            esc(c.prioridade_label || c.prioridade || "—") +
-            "</td>" +
-            "<td>" +
-            esc(fmtData(c.data_abertura)) +
-            "</td>" +
-            "<td>" +
-            esc(fmtData(c.data_ultima_interacao)) +
-            "</td>" +
-            "</tr>"
-          );
-        })
-        .join("");
-      tbody.querySelectorAll("tr[data-ref]").forEach(function (tr) {
-        tr.addEventListener("click", function () {
-          const ref = tr.getAttribute("data-ref");
-          if (ref) window.location.href = (cfg.urlDetalheBase || "/demandas") + "/" + encodeURIComponent(ref);
+  function icone(nome) {
+    return window.Util?.gerarIconeTech?.(nome) ?? window.GlobalUtils?.gerarIconeTech?.(nome) ?? "";
+  }
+
+  const Hub = {
+    cache: [],
+    filtrado: [],
+    paginaAtual: 1,
+    porPagina: 20,
+    totalPaginas: 1,
+
+    init() {
+      this.bind();
+      this.carregar();
+    },
+
+    bind() {
+      el("dem_btnNovo")?.addEventListener("click", () => this.abrirNovo());
+
+      el("dem_btnFiltrar")?.addEventListener("click", () => {
+        this.paginaAtual = 1;
+        this.aplicarFiltroPaginacao();
+      });
+
+      el("dem_btnLimpar")?.addEventListener("click", () => {
+        if (el("dem_filtroAssunto")) el("dem_filtroAssunto").value = "";
+        if (el("dem_filtroStatus")) el("dem_filtroStatus").value = "";
+        this.paginaAtual = 1;
+        this.aplicarFiltroPaginacao();
+      });
+
+      const pag = [
+        ["dem_btnPrimeiro", () => { this.paginaAtual = 1; }],
+        ["dem_btnAnterior", () => { if (this.paginaAtual > 1) this.paginaAtual -= 1; }],
+        ["dem_btnProximo", () => { if (this.paginaAtual < this.totalPaginas) this.paginaAtual += 1; }],
+        ["dem_btnUltimo", () => { this.paginaAtual = this.totalPaginas; }],
+      ];
+      pag.forEach(([id, fn]) => {
+        el(id)?.addEventListener("click", () => {
+          fn();
+          this.renderTabela();
+          this.atualizarPaginacaoUI();
         });
       });
-    } catch (e) {
-      tbody.innerHTML =
-        '<tr><td colspan="7" class="Dem_Empty">' + esc(e.message || "Erro ao carregar") + "</td></tr>";
-    }
-  }
 
-  function abrirModal() {
-    const modal = document.getElementById("dem_modal");
-    const err = document.getElementById("dem_form_err");
-    if (err) {
-      err.hidden = true;
-      err.textContent = "";
-    }
-    document.getElementById("dem_form")?.reset();
-    document.getElementById("dem_prioridade").value = "normal";
-    modal?.showModal();
-  }
+      el("dem_tbody")?.addEventListener("click", (ev) => {
+        const btn = ev.target.closest("button[data-acao]");
+        if (!btn) return;
+        const uuid = btn.dataset.uuid || "";
+        if (!uuid) return;
+        if (btn.dataset.acao === "editar") {
+          this.abrirDetalhe(uuid, btn.dataset.titulo || "");
+        }
+      });
 
-  function fecharModal() {
-    document.getElementById("dem_modal")?.close();
-  }
+      window.addEventListener("message", (ev) => {
+        if (ev.origin !== window.location.origin) return;
+        const g = ev?.data?.grupo;
+        if (g === "atualizarTabela" || g === "demandas_atualizar") {
+          this.carregar();
+        }
+      });
+    },
 
-  async function enviar(e) {
-    e.preventDefault();
-    const err = document.getElementById("dem_form_err");
-    const btn = document.getElementById("dem_enviar");
-    const titulo = (document.getElementById("dem_titulo")?.value || "").trim();
-    const mensagem = (document.getElementById("dem_mensagem")?.value || "").trim();
-    if (titulo.length < 3 || mensagem.length < 5) {
-      if (err) {
-        err.hidden = false;
-        err.textContent = "Preencha assunto (mín. 3) e descrição (mín. 5).";
-      }
-      return;
-    }
-    const fd = new FormData();
-    fd.append("titulo", titulo);
-    fd.append("mensagem", mensagem);
-    fd.append("categoria", document.getElementById("dem_categoria")?.value || "duvida");
-    fd.append("prioridade", document.getElementById("dem_prioridade")?.value || "normal");
-    fd.append("modulo", document.getElementById("dem_modulo")?.value || "");
-    fd.append("tela", document.getElementById("dem_tela")?.value || "");
-    fd.append("url", window.location.pathname || "");
-    const files = document.getElementById("dem_anexos")?.files;
-    if (files) {
-      for (let i = 0; i < files.length; i++) fd.append("anexos", files[i]);
-    }
-    btn.disabled = true;
-    btn.textContent = "Enviando…";
-    try {
-      const r = await fetch(cfg.apiAbrir, { method: "POST", body: fd, credentials: "include" });
-      const j = await r.json();
-      if (!j.success) throw new Error(j.message || "Falha ao abrir chamado");
-      fecharModal();
-      const proto = (j.chamado && j.chamado.protocolo) || "";
-      if (window.Swal) {
-        await Swal.fire({
-          icon: "success",
-          title: "Chamado aberto",
-          text: proto ? "Protocolo: " + proto : "Sua demanda foi registrada.",
-          confirmButtonColor: "#021F81",
-        });
-      }
-      if (j.chamado && j.chamado.external_id) {
-        window.location.href =
-          (cfg.urlDetalheBase || "/demandas") + "/" + encodeURIComponent(j.chamado.external_id);
+    abrirNovo() {
+      if (!window.GlobalUtils?.abrirJanelaApoioModal) {
+        Swal.fire("Erro", "Modal institucional não disponível.", "error");
         return;
       }
-      carregar();
-    } catch (ex) {
-      if (err) {
-        err.hidden = false;
-        err.textContent = ex.message || "Erro";
-      }
-    } finally {
-      btn.disabled = false;
-      btn.textContent = "Abrir chamado";
-    }
-  }
+      GlobalUtils.abrirJanelaApoioModal({
+        rota: "/demandas/apoio",
+        titulo: "Novo chamado • Central de Demandas",
+        largura: 760,
+        altura: 680,
+        nivel: 1,
+        modulo: "DEMANDAS",
+      });
+    },
 
-  document.addEventListener("DOMContentLoaded", function () {
-    document.getElementById("dem_novo")?.addEventListener("click", abrirModal);
-    document.getElementById("dem_cancelar")?.addEventListener("click", fecharModal);
-    document.getElementById("dem_modal_close")?.addEventListener("click", fecharModal);
-    document.getElementById("dem_form")?.addEventListener("submit", enviar);
-    carregar();
-  });
+    abrirDetalhe(uuid, titulo) {
+      if (!window.GlobalUtils?.abrirJanelaApoioModal) {
+        Swal.fire("Erro", "Modal institucional não disponível.", "error");
+        return;
+      }
+      GlobalUtils.abrirJanelaApoioModal({
+        rota: "/demandas/apoio/detalhe",
+        id: uuid,
+        titulo: titulo ? `Chamado — ${titulo}` : "Chamado • Central de Demandas",
+        largura: 1140,
+        altura: 860,
+        nivel: 1,
+        modulo: "DEMANDAS",
+      });
+    },
+
+    async carregar() {
+      const tbody = el("dem_tbody");
+      if (tbody) {
+        tbody.innerHTML = `<tr class="Cl_Carregando"><td colspan="8">Carregando chamados…</td></tr>`;
+      }
+      try {
+        const r = await fetch("/api/demandas/listar?page=1&per_page=200", {
+          credentials: "include",
+          headers: { Accept: "application/json" },
+        });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok || !j.success) throw new Error(j.message || `Erro ao carregar (${r.status}).`);
+        this.cache = Array.isArray(j.chamados) ? j.chamados : [];
+        this.paginaAtual = 1;
+        this.aplicarFiltroPaginacao();
+      } catch (e) {
+        if (tbody) {
+          tbody.innerHTML = `<tr><td colspan="8">${esc(e.message || "Erro ao carregar.")}</td></tr>`;
+        }
+      }
+    },
+
+    aplicarFiltroPaginacao() {
+      const fAss = (el("dem_filtroAssunto")?.value || "").trim().toLowerCase();
+      const fSt = (el("dem_filtroStatus")?.value || "").trim().toLowerCase();
+      let lista = this.cache.slice();
+      if (fAss) lista = lista.filter((c) => String(c.titulo || "").toLowerCase().includes(fAss));
+      if (fSt) lista = lista.filter((c) => String(c.status || "").toLowerCase() === fSt);
+      this.filtrado = lista;
+      this.totalPaginas = lista.length ? Math.ceil(lista.length / this.porPagina) : 1;
+      if (this.paginaAtual > this.totalPaginas) this.paginaAtual = this.totalPaginas;
+      this.renderTabela();
+      this.atualizarPaginacaoUI();
+    },
+
+    renderTabela() {
+      const tbody = el("dem_tbody");
+      if (!tbody) return;
+      tbody.innerHTML = "";
+      if (!this.filtrado.length) {
+        tbody.innerHTML =
+          `<tr><td colspan="8">Você ainda não abriu chamados. Clique em «+ Novo chamado».</td></tr>`;
+        return;
+      }
+      const ini = (this.paginaAtual - 1) * this.porPagina;
+      const pagina = this.filtrado.slice(ini, ini + this.porPagina);
+      for (const c of pagina) {
+        const uuid = c.uuid || "";
+        const titulo = c.titulo || "Sem título";
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${esc(c.protocolo || "—")}</td>
+          <td title="${esc(titulo)}">${esc(titulo)}</td>
+          <td>${esc(c.categoria_label || c.categoria || "—")}</td>
+          <td>${esc(c.status_label || c.status || "—")}</td>
+          <td>${esc(c.prioridade_label || c.prioridade || "—")}</td>
+          <td>${fmtData(c.data_abertura)}</td>
+          <td>${fmtData(c.data_ultima_interacao || c.updated_at)}</td>
+          <td class="col-acoes">
+            <button type="button" class="Cl_BtnAcao" data-acao="editar" data-uuid="${esc(uuid)}"
+              data-titulo="${esc(titulo)}" title="Visualizar e responder" aria-label="Visualizar chamado">
+              ${icone("editar") || "👁"}
+            </button>
+          </td>`;
+        tbody.appendChild(tr);
+      }
+      try {
+        window.GlobalUtils?.refreshIcons?.();
+      } catch (_) {}
+    },
+
+    atualizarPaginacaoUI() {
+      const set = (id, val) => {
+        const n = el(id);
+        if (n) n.textContent = String(val);
+      };
+      set("dem_paginaAtual", this.paginaAtual);
+      set("dem_totalPaginas", this.totalPaginas);
+      const desPrimeiro = this.paginaAtual <= 1;
+      const desUltimo = this.paginaAtual >= this.totalPaginas;
+      if (el("dem_btnPrimeiro")) el("dem_btnPrimeiro").disabled = desPrimeiro;
+      if (el("dem_btnAnterior")) el("dem_btnAnterior").disabled = desPrimeiro;
+      if (el("dem_btnProximo")) el("dem_btnProximo").disabled = desUltimo;
+      if (el("dem_btnUltimo")) el("dem_btnUltimo").disabled = desUltimo;
+    },
+  };
+
+  document.addEventListener("DOMContentLoaded", () => Hub.init());
 })();
