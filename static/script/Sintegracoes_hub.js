@@ -286,7 +286,30 @@
     }
   }
 
-  function abrirIntegracao(slug, nome, conectado, ativa, dblclick = false, blingPapel = "") {
+  const planoHub = window.OSB_PLANOS_HUB || {};
+
+  async function bloquearPorPlanoGratis(nome) {
+    if (planoHub.integracao) return false;
+    const r = await Swal.fire({
+      title: nome || "Integração",
+      html: `<p style="color:#64748b;margin:0">${
+        planoHub.mensagemUpgrade ||
+        "No plano gratuito não é possível integrar com ERP e Marketplace. Deseja ver os planos disponíveis?"
+      }</p>`,
+      icon: "info",
+      showCancelButton: true,
+      confirmButtonText: "Ver planos",
+      cancelButtonText: "Agora não",
+      confirmButtonColor: "#021F81",
+    });
+    if (r.isConfirmed) {
+      window.location.href = planoHub.urlMeuPlano || "/meu-plano";
+    }
+    return true;
+  }
+
+  async function abrirIntegracao(slug, nome, conectado, ativa, dblclick = false, blingPapel = "") {
+    if (await bloquearPorPlanoGratis(nome)) return;
     if (!ativa) {
       Swal.fire({
         title: nome,

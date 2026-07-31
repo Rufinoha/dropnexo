@@ -1627,6 +1627,13 @@ def catalogos_salvar():
     try:
         cur = conn.cursor()
         _id = body.get("id")
+        if not _id:
+            from sistema.planos.limites import exigir_novo_produto_catalogo
+
+            try:
+                exigir_novo_produto_catalogo(cur, int(id_tenant))
+            except ValueError as e:
+                return jsonify(success=False, message=str(e)), 403
         campos = (
             nome,
             _sanitizar_descricao_html(body.get("descricao") or ""),
@@ -2447,6 +2454,10 @@ def catalogos_importar_modelo():
 def catalogos_importar():
     if (resp := _exigir_catalogo_escrita()) is not None:
         return resp
+    from sistema.planos.limites import limites_plano, mensagem_upgrade_importacao
+
+    if not limites_plano().get("importacao_planilha"):
+        return jsonify(success=False, message=mensagem_upgrade_importacao()), 403
 
     arquivo = request.files.get("arquivo")
     if not arquivo or not arquivo.filename:
@@ -2542,6 +2553,13 @@ def catalogos_importar():
                         )
                         atualizados += 1
                     else:
+                        from sistema.planos.limites import exigir_novo_produto_catalogo
+
+                        try:
+                            exigir_novo_produto_catalogo(cur, int(id_tenant))
+                        except ValueError as e:
+                            erros.append({"linha": num, "erro": str(e)})
+                            break
                         cur.execute(
                             """
                             INSERT INTO tbl_produto (
@@ -2567,6 +2585,13 @@ def catalogos_importar():
                         prod_id = cur.fetchone()[0]
                         inseridos += 1
                 else:
+                    from sistema.planos.limites import exigir_novo_produto_catalogo
+
+                    try:
+                        exigir_novo_produto_catalogo(cur, int(id_tenant))
+                    except ValueError as e:
+                        erros.append({"linha": num, "erro": str(e)})
+                        break
                     cur.execute(
                         """
                         INSERT INTO tbl_produto (

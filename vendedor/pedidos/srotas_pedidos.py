@@ -830,3 +830,34 @@ def pedidos_pagamento_retorno():
     if id_pedido:
         q += f"&id_pedido={id_pedido}"
     return redirect(f"/vendedor/pedidos?{q}")
+
+
+@vd_pedidos_bp.post("/vendedor/pedidos/<int:id_pedido>/email-teste")
+@login_obrigatorio()
+@exigir_modulo(MODULO_VENDEDOR)
+@exigir_permissao(codigo="vd_pedidos.ver")
+def pedido_email_teste(id_pedido: int):
+    """DEV: envia e-mail de layout sempre para hazael@h74.com.br."""
+    if not session.get("eh_desenvolvedor"):
+        return jsonify(success=False, message="Somente desenvolvedor."), 403
+    id_v = _id_vendedor()
+    if not id_v:
+        return jsonify(success=False, message="Sessão inválida."), 403
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        ped = obter_pedido(cur, id_pedido, id_vendedor=id_v)
+        if not ped:
+            return jsonify(success=False, message="Pedido não encontrado."), 404
+        from core.pedidos.notificacoes import enviar_teste_layout
+
+        ok, msg = enviar_teste_layout(cur, id_pedido, criado_por=_id_usuario())
+        conn.commit()
+        if not ok:
+            return jsonify(success=False, message=msg), 400
+        return jsonify(success=True, message=msg)
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()

@@ -466,33 +466,41 @@ def coerce_text(val, default: str = "") -> str:
     return default
 
 
-def plano_slug_app(plano: str | None) -> str:
-    """Slug interno (sessão, billing, Efí): starter | profissional | empresarial."""
+_PLANOS_BANCO = frozenset({"starter", "professional", "scale", "enterprise"})
+
+_ALIASES_PLANO_BANCO = {
+    "explorar": "starter",
+    "crescer": "professional",
+    "ativo": "professional",
+    "profissional": "professional",
+    "escalar": "scale",
+    "rede": "scale",
+    "escala": "scale",
+    "pro": "enterprise",
+    "distribuidor": "enterprise",
+    "empresarial": "enterprise",
+}
+
+
+def plano_slug_banco(plano: str | None) -> str:
+    """Valor aceito por tbl_tenant.plano: starter | professional | scale | enterprise."""
     p = coerce_text(plano, "starter").lower().strip()
-    if p in ("professional",):
-        return "profissional"
-    if p in ("enterprise",):
-        return "empresarial"
-    if p in ("profissional", "empresarial", "starter"):
+    p = _ALIASES_PLANO_BANCO.get(p, p)
+    if p in _PLANOS_BANCO:
         return p
     return "starter"
 
 
-def plano_slug_banco(plano: str | None) -> str:
-    """Valor aceito por tbl_tenant.plano (CHECK): starter | professional | enterprise."""
-    p = plano_slug_app(plano)
-    if p == "profissional":
-        return "professional"
-    if p == "empresarial":
-        return "enterprise"
-    return "starter"
+def plano_slug_app(plano: str | None) -> str:
+    """Alias legado; preferir plano_slug_banco."""
+    return plano_slug_banco(plano)
 
 
 def canais_resposta_por_plano(plano: str) -> list[str]:
-    p = (plano or "starter").lower()
-    if p in ("empresarial", "enterprise"):
+    p = plano_slug_banco(plano)
+    if p in ("scale", "enterprise"):
         return ["portal", "email", "whatsapp"]
-    if p in ("profissional", "professional"):
+    if p == "professional":
         return ["portal", "email"]
     return ["portal"]
 

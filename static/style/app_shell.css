@@ -833,6 +833,26 @@ body.fg-app {
   scrollbar-gutter: stable;
 }
 
+.fg-fin-banner {
+  margin: -0.5rem 0 1rem;
+  background: #fff7ed;
+  border: 1px solid #fdba74;
+  border-radius: 10px;
+  color: #9a3412;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.fg-fin-banner-inner {
+  padding: 0.75rem 1rem;
+}
+
+.fg-fin-banner a {
+  color: #021F81;
+  font-weight: 700;
+  margin-left: 0.35rem;
+}
+
 /* —— Dashboard / cards —— */
 .fg-page-hero {
   margin-bottom: 1.25rem;

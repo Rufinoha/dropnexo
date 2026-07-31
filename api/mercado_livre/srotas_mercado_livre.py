@@ -52,6 +52,14 @@ def _pode_integracoes() -> bool:
     )
 
 
+def _exigir_plano_sync():
+    from sistema.planos.limites import limites_plano, mensagem_upgrade_integracao
+
+    if limites_plano().get("integracao"):
+        return None
+    return jsonify(success=False, message=mensagem_upgrade_integracao()), 403
+
+
 def _exigir_vendedor():
     if session.get("eh_desenvolvedor"):
         return None
@@ -207,6 +215,8 @@ def config_salvar():
 def sync_pedidos():
     if not _pode_integracoes():
         return jsonify(success=False, message="Sem permissão."), 403
+    if (r := _exigir_plano_sync()) is not None:
+        return r
     if garantir_modulo_sessao() != "vendedor" and not session.get("eh_desenvolvedor"):
         return jsonify(success=False, message="Apenas vendedores."), 403
     id_tenant = session.get("id_tenant")
@@ -233,6 +243,8 @@ def sync_produtos():
     """Legado: sincronização em massa. Prefira publicar em Meus produtos."""
     if not _pode_integracoes():
         return jsonify(success=False, message="Sem permissão."), 403
+    if (r := _exigir_plano_sync()) is not None:
+        return r
     if garantir_modulo_sessao() != "vendedor" and not session.get("eh_desenvolvedor"):
         return jsonify(success=False, message="Apenas vendedores."), 403
     id_tenant = session.get("id_tenant")
@@ -343,6 +355,8 @@ def produtos_publicar():
 def sync_estoque():
     if not _pode_integracoes():
         return jsonify(success=False, message="Sem permissão."), 403
+    if (r := _exigir_plano_sync()) is not None:
+        return r
     if garantir_modulo_sessao() != "vendedor" and not session.get("eh_desenvolvedor"):
         return jsonify(success=False, message="Apenas vendedores."), 403
     id_tenant = session.get("id_tenant")

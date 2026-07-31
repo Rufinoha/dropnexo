@@ -235,6 +235,26 @@ def vendedores_responder():
             conn.commit()
             return jsonify(success=True, message="Vínculo encerrado. Produtos desativados e estoque zerado na vitrine.")
 
+        if acao == "aprovar":
+            from sistema.planos.limites import limites_plano, mensagem_limite_conexoes
+
+            lim = limites_plano(tipo_negocio="fornecedor")
+            limite_vd = lim.get("conexoes")
+            if limite_vd is not None:
+                cur.execute(
+                    """
+                    SELECT COUNT(*) FROM tbl_vinculo_vendedor_fornecedor
+                    WHERE id_tenant_fornecedor = %s AND status = 'ativo'
+                    """,
+                    (id_forn,),
+                )
+                aprovados = int(cur.fetchone()[0] or 0)
+                if aprovados >= int(limite_vd):
+                    return jsonify(
+                        success=False,
+                        message=mensagem_limite_conexoes(tipo="fornecedor", limite=int(limite_vd)),
+                    ), 403
+
         novo = "ativo" if acao == "aprovar" else "recusado"
         cur.execute(
             """

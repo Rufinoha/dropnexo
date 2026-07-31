@@ -224,8 +224,11 @@ def catalogo_integracoes_modulo(icones_base_url: str, modulo: str | None = None)
 
 
 def render_pagina_integracoes(*, nav_codigo: str, icones_base_url: str):
+    from sistema.planos.limites import limites_plano, mensagem_upgrade_integracao
+
     mod = garantir_modulo_sessao()
     copy = hub_copy_integracoes(mod)
+    lim = limites_plano()
     return render_template(
         "frm_integracoes_hub.html",
         nav_codigo=nav_codigo,
@@ -236,6 +239,9 @@ def render_pagina_integracoes(*, nav_codigo: str, icones_base_url: str):
             catalogo_integracoes_modulo(icones_base_url, mod),
             ensure_ascii=False,
         ),
+        plano_integracao=bool(lim.get("integracao")),
+        plano_upgrade_msg=mensagem_upgrade_integracao(),
+        url_meu_plano="/meu-plano",
     )
 
 
@@ -278,6 +284,15 @@ def _pode_ver_integracoes() -> bool:
 
 def _redir_hub(erro: str):
     return redirect(url_for("integracoes.pagina", erro=erro))
+
+
+def _exigir_plano_integracao():
+    """Hub continua visível; páginas/OAuth de conexão exigem plano pago."""
+    from sistema.planos.limites import limites_plano, mensagem_upgrade_integracao
+
+    if limites_plano().get("integracao"):
+        return None
+    return _redir_hub(mensagem_upgrade_integracao())
 
 
 def _exigir_modulo(*modulos: str):
@@ -323,6 +338,8 @@ def _bling_papel_padrao() -> str:
 def pagina_bling():
     if not _pode_ver_integracoes():
         return redirect(url_for("dashboard.index"))
+    if (r := _exigir_plano_integracao()) is not None:
+        return r
     papel = (request.args.get("papel") or _bling_papel_padrao()).strip().lower()
     if papel not in ("catalogo", "pedidos"):
         papel = _bling_papel_padrao()
@@ -351,6 +368,8 @@ def pagina_bling():
 def pagina_mercadopago():
     if not _pode_ver_integracoes():
         return redirect(url_for("dashboard.index"))
+    if (r := _exigir_plano_integracao()) is not None:
+        return r
     if (r := _exigir_modulo(MODULO_FORNECEDOR)) is not None:
         return r
     from api.mercadopago.mercadopago import mp_conectado
@@ -379,6 +398,8 @@ def pagina_mercadopago():
 def pagina_pix_manual():
     if not _pode_ver_integracoes():
         return redirect(url_for("dashboard.index"))
+    if (r := _exigir_plano_integracao()) is not None:
+        return r
     if (r := _exigir_modulo(MODULO_FORNECEDOR)) is not None:
         return r
     from api.pix_manual.pix_manual import pix_manual_ativo
@@ -407,6 +428,8 @@ def pagina_pix_manual():
 def pagina_melhor_envio():
     if not _pode_ver_integracoes():
         return redirect(url_for("dashboard.index"))
+    if (r := _exigir_plano_integracao()) is not None:
+        return r
     if (r := _exigir_modulo(MODULO_VENDEDOR)) is not None:
         return r
     from api.melhor_envio.melhor_envio import me_conectado
@@ -436,6 +459,8 @@ def pagina_melhor_envio():
 def pagina_mercado_livre():
     if not _pode_ver_integracoes():
         return redirect(url_for("dashboard.index"))
+    if (r := _exigir_plano_integracao()) is not None:
+        return r
     if (r := _exigir_modulo(MODULO_VENDEDOR)) is not None:
         return r
     from api.mercado_livre.mercado_livre import ml_conectado
@@ -465,6 +490,8 @@ def pagina_mercado_livre():
 def pagina_tiktok():
     if not _pode_ver_integracoes():
         return redirect(url_for("dashboard.index"))
+    if (r := _exigir_plano_integracao()) is not None:
+        return r
     if (r := _exigir_modulo(MODULO_VENDEDOR)) is not None:
         return r
     from api.tiktok.tiktok import tiktok_conectado
@@ -494,6 +521,8 @@ def pagina_tiktok():
 def pagina_amazon():
     if not _pode_ver_integracoes():
         return redirect(url_for("dashboard.index"))
+    if (r := _exigir_plano_integracao()) is not None:
+        return r
     if (r := _exigir_modulo(MODULO_VENDEDOR)) is not None:
         return r
     from api.amazon.amazon import amazon_conectado

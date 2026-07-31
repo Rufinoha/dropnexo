@@ -16,20 +16,19 @@ planos_bp = Blueprint(
 )
 
 _NOMES_PLANO_BANCO = {
-    "starter": "Starter",
-    "profissional": "Profissional",
-    "professional": "Profissional",
-    "empresarial": "Enterprise",
-    "enterprise": "Enterprise",
+    "starter": "Explorar",
+    "professional": "Crescer",
+    "scale": "Escalar",
+    "enterprise": "Pro",
 }
 
-# Vitrine comercial → slug interno do tenant (aproximação)
+# Vitrine comercial → slug interno do tenant
 _MAPA_VITRINE_PARA_BANCO = {
     "explorar": "starter",
     "crescer": "professional",
     "ativo": "professional",
-    "escalar": "enterprise",
-    "rede": "enterprise",
+    "escalar": "scale",
+    "rede": "scale",
     "pro": "enterprise",
     "distribuidor": "enterprise",
 }
@@ -79,24 +78,26 @@ def catalogo_planos_home():
             "cta_gratis": cta_gratis,
         }
 
-    integ_off = rec("Integrações (Bling, ERP, marketplaces)", False)
-    integ_on = rec("Integrações (Bling, ERP, marketplaces)", True)
-    import_off = rec("Importação em massa (CSV / XLSX)", False)
-    import_on = rec("Importação em massa (CSV / XLSX)", True)
-    sync_off = rec("Sync automático agendado", False)
-    sync_on = rec("Sync automático agendado", True)
+    integ_off = rec("Integração com ERP e Marketplace", False)
+    integ_on = rec("Integração com ERP e Marketplace", True)
+    import_off = rec("Importar planilha de produtos", False)
+    import_on = rec("Importar planilha de produtos", True)
+    email_off = rec("Aviso por e-mail (pedido e status)", False)
+    email_on = rec("Aviso por e-mail (pedido e status)", True)
 
     vendedor = [
         plano(
             "explorar",
             "Explorar",
             0,
-            [("25", "pedidos/mês"), ("3", "fornecedores"), ("50", "produtos")],
+            [("25", "pedidos/mês"), ("1", "fornecedor"), ("50", "produtos")],
             [
                 rec("Rede B2B e catálogo manual", True),
                 rec("Pedidos na plataforma", True),
                 integ_off,
                 import_off,
+                email_off,
+                rec("Abrir chamado de suporte", True),
             ],
             destaque="Conheça a rede sem custo fixo",
             cta_gratis=True,
@@ -105,12 +106,13 @@ def catalogo_planos_home():
             "crescer",
             "Crescer",
             79,
-            [("150", "pedidos/mês"), ("10", "fornecedores"), ("500", "produtos")],
+            [("150", "pedidos/mês"), ("3", "fornecedores"), ("500", "produtos")],
             [
                 rec("Tudo do Explorar", True),
                 integ_on,
                 import_on,
-                rec("Até 3 usuários na equipe", True),
+                email_on,
+                rec("Até 3 pessoas na equipe", True),
             ],
             destaque="Primeira automação com ERP e lojas",
             featured=True,
@@ -123,11 +125,10 @@ def catalogo_planos_home():
             [("600", "pedidos/mês"), ("30", "fornecedores"), ("2.000", "produtos")],
             [
                 rec("Tudo do Crescer", True),
-                sync_on,
-                rec("Precificação em lote", True),
-                rec("Até 8 usuários", True),
+                rec("Alterar preços em lote", True),
+                rec("Até 8 pessoas na equipe", True),
             ],
-            destaque="Operação estável com sync recorrente",
+            destaque="Operação com mais volume e equipe",
         ),
         plano(
             "pro",
@@ -136,11 +137,10 @@ def catalogo_planos_home():
             [("2.000", "pedidos/mês"), ("80", "fornecedores"), ("10.000", "produtos")],
             [
                 rec("Tudo do Escalar", True),
-                rec("API e webhooks", True),
-                rec("Relatórios e exportações", True),
-                rec("Usuários ampliados", True),
+                rec("Relatórios e exportar dados", True),
+                rec("Equipe ampliada", True),
             ],
-            destaque="Alto volume e integrações avançadas",
+            destaque="Alto volume na operação",
         ),
     ]
 
@@ -149,12 +149,14 @@ def catalogo_planos_home():
             "explorar",
             "Explorar",
             0,
-            [("40", "pedidos/mês"), ("5", "vendedores"), ("150", "SKUs")],
+            [("40", "pedidos/mês"), ("5", "vendedores aprovados"), ("150", "produtos")],
             [
                 rec("Catálogo e depósito manual", True, "1 depósito"),
-                rec("Aprovar vendedores na rede", True),
+                rec("Ver todas as solicitações de vendedores", True),
                 integ_off,
                 import_off,
+                email_off,
+                rec("Abrir chamado de suporte", True),
             ],
             destaque="Publique e receba pedidos manualmente",
             cta_gratis=True,
@@ -163,11 +165,12 @@ def catalogo_planos_home():
             "ativo",
             "Ativo",
             99,
-            [("200", "pedidos/mês"), ("20", "vendedores"), ("800", "SKUs")],
+            [("200", "pedidos/mês"), ("20", "vendedores aprovados"), ("800", "produtos")],
             [
                 rec("Tudo do Explorar", True),
                 integ_on,
                 import_on,
+                email_on,
                 rec("Até 2 depósitos", True),
             ],
             destaque="Conecte seu ERP e escale a rede",
@@ -178,11 +181,10 @@ def catalogo_planos_home():
             "rede",
             "Rede",
             249,
-            [("800", "pedidos/mês"), ("60", "vendedores"), ("3.000", "SKUs")],
+            [("800", "pedidos/mês"), ("60", "vendedores aprovados"), ("3.000", "produtos")],
             [
                 rec("Tudo do Ativo", True),
-                sync_on,
-                rec("Destaque na vitrine", True),
+                rec("Destaque na vitrine para vendedores", True),
                 rec("Até 5 depósitos", True),
             ],
             destaque="Distribuidor em expansão",
@@ -191,12 +193,11 @@ def catalogo_planos_home():
             "distribuidor",
             "Distribuidor",
             499,
-            [("3.000", "pedidos/mês"), ("150", "vendedores"), ("15.000", "SKUs")],
+            [("3.000", "pedidos/mês"), ("Ilimitados", "vendedores aprovados"), ("15.000", "produtos")],
             [
                 rec("Tudo da Rede", True),
-                rec("API e webhooks", True),
-                rec("Logs estendidos de integração", True),
                 rec("Equipe ampliada", True),
+                rec("Vários depósitos", True),
             ],
             destaque="Indústria e multi-depósito",
         ),
@@ -368,7 +369,7 @@ def _plano_atual_tenant(id_tenant: int, plano_sessao: str | None) -> dict:
                 SELECT slug, nome, valor_centavos, periodicidade, descricao
                 FROM tbl_plano WHERE slug = %s AND ativo = TRUE
                 """,
-                (slug if slug in ("starter", "professional", "enterprise") else "starter",),
+                (slug if slug in ("starter", "professional", "scale", "enterprise") else "starter",),
             )
             p = cur.fetchone()
             if p:
@@ -449,15 +450,29 @@ def meu_plano():
     )
 
     armazenamento = {"bytes_imagens": 0}
+    uso_cotas: list[dict] = []
     try:
         from fornecedor.catalogo.catalogo import obter_bytes_imagens_tenant
+        from sistema.planos.limites import uso_cotas_tenant
 
         conn = Var_ConectarBanco()
         cur = conn.cursor()
         armazenamento["bytes_imagens"] = obter_bytes_imagens_tenant(cur, int(id_tenant))
+        uso_cotas = uso_cotas_tenant(cur, int(id_tenant), tipo)
         conn.commit()
         cur.close()
         conn.close()
+    except Exception:
+        pass
+
+    efi_payee_code = ""
+    efi_environment = "sandbox"
+    try:
+        from api.efi.efi import efi_front_config
+
+        efi_cfg = efi_front_config()
+        efi_payee_code = efi_cfg.get("payee_code") or ""
+        efi_environment = efi_cfg.get("environment") or "sandbox"
     except Exception:
         pass
 
@@ -469,4 +484,17 @@ def meu_plano():
         tipo_rotulo=tipo_rotulo,
         pode_pagamento=pode_pagamento,
         armazenamento=armazenamento,
+        uso_cotas=uso_cotas,
+        efi_payee_code=efi_payee_code,
+        efi_environment=efi_environment,
+    )
+
+
+@planos_bp.get("/abrir-chamado")
+@login_obrigatorio()
+def abrir_chamado():
+    """Placeholder — tela de chamado será implementada depois."""
+    return render_template(
+        "frm_abrir_chamado.html",
+        nav_ativo="",
     )

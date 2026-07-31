@@ -493,7 +493,13 @@ def ativar_produto():
             return jsonify(success=False, message="Produto indisponível ou fornecedor não aprovado."), 404
 
         id_fornecedor = int(rows[0][2])
+        from sistema.planos.limites import exigir_novo_produto_vendedor
         from vendedor.meus_produtos.servico_meus_produtos import espelhar_depositos_fornecedor
+
+        try:
+            exigir_novo_produto_vendedor(cur, int(id_vendedor), int(id_produto))
+        except ValueError as e:
+            return jsonify(success=False, message=str(e)), 403
 
         espelhar_depositos_fornecedor(cur, int(id_vendedor), id_fornecedor, id_produto=id_produto)
 
@@ -561,7 +567,13 @@ def ativar():
         row = cur.fetchone()
         if not row:
             return jsonify(success=False, message="Produto indisponível ou fornecedor não aprovado."), 404
+        from sistema.planos.limites import exigir_novo_produto_vendedor
         from vendedor.meus_produtos.servico_meus_produtos import espelhar_depositos_fornecedor
+
+        try:
+            exigir_novo_produto_vendedor(cur, int(id_vendedor), int(row[1]))
+        except ValueError as e:
+            return jsonify(success=False, message=str(e)), 403
 
         espelhar_depositos_fornecedor(cur, int(id_vendedor), int(row[2]), id_produto=int(row[1]))
         preco_forn = float(row[3] or 0)

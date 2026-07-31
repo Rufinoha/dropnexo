@@ -165,6 +165,14 @@
                 <span class="fg-menu-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg></span>
                 <span>Meu Plano</span>
               </a>
+              <a href="{{ url_for('financeiro.pagina') }}" class="fg-menu-item" role="menuitem">
+                <span class="fg-menu-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span>
+                <span>Financeiro</span>
+              </a>
+              <a href="{{ url_for('planos.abrir_chamado') }}" class="fg-menu-item" role="menuitem">
+                <span class="fg-menu-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+                <span>Abrir chamado</span>
+              </a>
               <a href="{{ url_for('marktplace.pagina') }}" class="fg-menu-item" role="menuitem">
                 <span class="fg-menu-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg></span>
                 <span>Marktplace</span>
@@ -188,6 +196,18 @@
       </header>
 
       <main class="fg-content">
+        {% if session.get('id_usuario') and financeiro_alerta %}
+        <div class="fg-fin-banner" role="status">
+          <div class="fg-fin-banner-inner">
+            <strong>Financeiro:</strong>
+            fatura {{ financeiro_alerta.referencia }} está
+            {% if financeiro_alerta.status == 'vencido' %}vencida{% else %}emitida / pendente{% endif %}
+            ({{ financeiro_alerta.valor_formatado }}).
+            Sem pagamento por {{ financeiro_alerta.dias_graca }} dias após o vencimento, o plano pode voltar ao gratuito.
+            <a href="{{ url_for('financeiro.pagina') }}">Abrir Financeiro</a>
+          </div>
+        </div>
+        {% endif %}
         {% block content %}{% endblock %}
         <footer class="fg-page-footer">© {{ MARCA_NOME }} · {{ MARCA_FAMILIA }}</footer>
       </main>

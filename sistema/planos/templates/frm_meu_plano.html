@@ -5,6 +5,9 @@
 
 {% block head_extra %}
 <link rel="stylesheet" href="{{ url_for('planos.static', filename='style/Cmeu_plano.css') }}" />
+{% if pode_pagamento %}
+<link rel="stylesheet" href="{{ url_for('static', filename='style/Cefi_cartao.css') }}?v=1" />
+{% endif %}
 {% endblock %}
 
 {% block content %}
@@ -58,6 +61,42 @@
     </dl>
   </section>
 
+  {% if uso_cotas %}
+  <section class="mpl-card mpl-uso">
+    <p class="mpl-kicker">Uso do plano</p>
+    <h3 class="mpl-uso-title">Pedidos do mês e produtos</h3>
+    <div class="mpl-uso-grid">
+      {% for u in uso_cotas %}
+      <div class="mpl-uso-bloco">
+        <p class="mpl-uso-papel">{{ u.papel_rotulo }} · {{ u.plano_nome }}</p>
+        {% for chave in ['pedidos', 'produtos'] %}
+        {% set item = u[chave] %}
+        {% set lim = item.limite %}
+        {% set usado = item.usado %}
+        {% if lim and lim > 0 %}
+          {% set pct = ((usado * 100) // lim) %}
+          {% if pct > 100 %}{% set pct = 100 %}{% endif %}
+        {% else %}
+          {% set pct = 0 %}
+        {% endif %}
+        <div class="mpl-uso-item{% if lim is not none and usado >= lim %} is-limit{% elif lim and pct >= 80 %} is-warn{% endif %}">
+          <div class="mpl-uso-head">
+            <span>{{ item.rotulo }}</span>
+            <strong>
+              {{ usado }}{% if lim is not none %} / {{ lim }}{% else %} / ∞{% endif %}
+            </strong>
+          </div>
+          <div class="mpl-uso-bar" aria-hidden="true">
+            <span style="width: {{ pct }}%;"></span>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
   {% if segmentos %}
   {% for seg in segmentos %}
   <section class="mpl-catalogo">
@@ -87,6 +126,11 @@
           <li class="{% if r.on %}is-on{% else %}is-off{% endif %}">{{ r.label }}{% if r.sub %} <span>{{ r.sub }}</span>{% endif %}</li>
           {% endfor %}
         </ul>
+        {% if pode_pagamento and p.preco_mensal and p.preco_mensal > 0 and not p._eh_atual %}
+        <button type="button" class="Cl_botaoprimario mpl-btn-assinar" data-plano="{{ p.slug }}" data-valor-centavos="{{ (p.preco_mensal * 100)|int }}">Assinar</button>
+        {% elif p._eh_atual %}
+        <p class="mpl-atual-hint">Plano atual da conta</p>
+        {% endif %}
       </article>
       {% endfor %}
     </div>
@@ -95,12 +139,25 @@
   {% endif %}
 
   <p class="mpl-nota">
-    Os limites comerciais da vitrine podem evoluir. O plano cobrado na sua conta é o registrado em
-    <strong>{{ plano_atual.nome }}</strong>
+    Ao assinar, a fatura é emitida e o plano só é liberado após o pagamento.
+    Sem pagamento por 15 dias após o vencimento, a conta volta ao Explorar (integrações ficam conectadas, mas bloqueadas).
+    Acompanhe em <a href="{{ url_for('financeiro.pagina') }}">Financeiro</a>.
     {% if pode_pagamento %}
-    — gerencie cobrança em
+    Configure e-mail de cobrança em
     <a href="{{ url_for('perfil.meu_perfil', aba='pagamento') }}">Forma de pagamento</a>.
     {% endif %}
   </p>
 </div>
+{% endblock %}
+{% block page_js %}
+{% if pode_pagamento %}
+<script id="mpl_cfg" type="application/json">{{ {
+  "apiAssinar": url_for("financeiro.api_assinar"),
+  "efiPayeeCode": efi_payee_code or "",
+  "efiEnvironment": efi_environment or "sandbox",
+  "urlFinanceiro": url_for("financeiro.pagina")
+}|tojson }}</script>
+<script defer src="{{ url_for('static', filename='script/Sefi_cartao.js') }}?v=1"></script>
+<script defer src="{{ url_for('planos.static', filename='script/Smeu_plano.js') }}?v=2"></script>
+{% endif %}
 {% endblock %}

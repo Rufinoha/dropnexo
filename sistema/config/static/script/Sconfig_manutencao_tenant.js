@@ -101,7 +101,7 @@
       el.nome.value = t.nome || "";
       el.slug.value = t.slug || "";
       el.tipo.value = t.tipo_negocio || "vendedor";
-      el.plano.value = ["starter", "professional", "enterprise"].includes(t.plano)
+      el.plano.value = ["starter", "professional", "scale", "enterprise"].includes(t.plano)
         ? t.plano
         : "starter";
       el.documento.value = t.documento || "";

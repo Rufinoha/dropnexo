@@ -90,6 +90,8 @@
   const elBtnSalvar = document.getElementById("pd_btnSalvar");
   const elBtnConfirmar = document.getElementById("pd_btnConfirmar");
   const elBtnCancelar = document.getElementById("pd_btnCancelar");
+  const elBtnEmailTeste = document.getElementById("pd_btnEmailTeste");
+  const ehDev = !!(window.OSB_SHELL && window.OSB_SHELL.ehDesenvolvedor);
 
   const fmt = (v) =>
     Number(v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -234,6 +236,10 @@
           (p.origem || "manual") === "manual"
       ) && !bloqueadoIntegracao;
     if (elBtnCancelar) elBtnCancelar.hidden = !podeCancelar;
+
+    if (elBtnEmailTeste) {
+      elBtnEmailTeste.hidden = !(ehDev && pedidosGrupo.some((p) => p.id));
+    }
   }
 
   function preencherFormulario(grupo) {
@@ -1889,9 +1895,52 @@
     }
   }
 
+  async function enviarEmailTesteLayout() {
+    const idPed = (pedidoFocoAnexo || pedidosGrupo.find((p) => p.id)?.id) || null;
+    if (!idPed) {
+      mostrarMsg("Abra um pedido salvo para testar o e-mail.", true);
+      return;
+    }
+    elBtnEmailTeste.disabled = true;
+    try {
+      const r = await fetch(`/vendedor/pedidos/${idPed}/email-teste`, {
+        method: "POST",
+        headers: { Accept: "application/json" },
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.success) {
+        throw new Error(j.message || "Falha ao enviar e-mail de teste.");
+      }
+      if (window.Swal) {
+        Swal.fire({
+          icon: "success",
+          title: "E-mail teste",
+          text: j.message || "Enviado para hazael@h74.com.br",
+          confirmButtonColor: "#021F81",
+        });
+      } else {
+        mostrarMsg(j.message || "E-mail de teste enviado.", false);
+      }
+    } catch (e) {
+      if (window.Swal) {
+        Swal.fire({
+          icon: "error",
+          title: "E-mail teste",
+          text: e.message || "Erro",
+          confirmButtonColor: "#021F81",
+        });
+      } else {
+        mostrarMsg(e.message || "Erro", true);
+      }
+    } finally {
+      elBtnEmailTeste.disabled = false;
+    }
+  }
+
   document.getElementById("pd_btnNovo")?.addEventListener("click", abrirModal);
   document.getElementById("pd_btnFechar")?.addEventListener("click", fecharModal);
   elBtnCancelar?.addEventListener("click", cancelarPedidoGrupo);
+  elBtnEmailTeste?.addEventListener("click", enviarEmailTesteLayout);
 
   document.querySelectorAll(".Pd_WizNavItem").forEach((btn) => {
     btn.addEventListener("click", () => irPainel(btn.dataset.painel));

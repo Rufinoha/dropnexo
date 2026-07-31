@@ -1007,6 +1007,24 @@ def salvar_rascunho(
     return {"id_grupo": id_grupo, "numero_grupo": num_grupo, "pedidos_ids": pedidos_ids}
 
 
+def _exigir_cota_confirmacao_grupo(cur, id_vendedor: int, ids: list[int]) -> None:
+    from collections import Counter
+
+    from sistema.planos.limites import exigir_limite_pedidos_mes
+
+    por_forn: Counter[int] = Counter()
+    for id_pedido in ids:
+        ped = obter_pedido(cur, id_pedido, id_vendedor=id_vendedor)
+        if not ped:
+            continue
+        id_f = int(ped.get("id_tenant_fornecedor") or 0)
+        if id_f:
+            por_forn[id_f] += 1
+    exigir_limite_pedidos_mes(cur, int(id_vendedor), "vendedor", quantidade=len(ids))
+    for id_f, n in por_forn.items():
+        exigir_limite_pedidos_mes(cur, id_f, "fornecedor", quantidade=n)
+
+
 def confirmar_grupo(cur, id_vendedor: int, id_grupo: int, id_usuario: int | None = None) -> list[int]:
     cv = col_status_vendedor(cur)
     cur.execute(
@@ -1019,12 +1037,20 @@ def confirmar_grupo(cur, id_vendedor: int, id_grupo: int, id_usuario: int | None
     ids = [int(r[0]) for r in cur.fetchall()]
     if not ids:
         raise ValueError("Nenhum pedido em rascunho para confirmar.")
+    _exigir_cota_confirmacao_grupo(cur, id_vendedor, ids)
     for id_pedido in ids:
-        confirmar_pedido(cur, id_vendedor, id_pedido, id_usuario=id_usuario)
+        confirmar_pedido(cur, id_vendedor, id_pedido, id_usuario=id_usuario, _checar_cota=False)
     return ids
 
 
-def confirmar_pedido(cur, id_vendedor: int, id_pedido: int, id_usuario: int | None = None) -> None:
+def confirmar_pedido(
+    cur,
+    id_vendedor: int,
+    id_pedido: int,
+    id_usuario: int | None = None,
+    *,
+    _checar_cota: bool = True,
+) -> None:
     ped = obter_pedido(cur, id_pedido, id_vendedor=id_vendedor)
     if not ped:
         raise ValueError("Pedido não encontrado.")
@@ -1032,6 +1058,15 @@ def confirmar_pedido(cur, id_vendedor: int, id_pedido: int, id_usuario: int | No
         raise ValueError("Somente pedidos em rascunho podem ser confirmados.")
     if not ped["itens"]:
         raise ValueError("Pedido sem itens.")
+
+    if _checar_cota:
+        from sistema.planos.limites import exigir_capacidade_pedido_novo
+
+        exigir_capacidade_pedido_novo(
+            cur,
+            int(id_vendedor),
+            int(ped.get("id_tenant_fornecedor") or 0),
+        )
 
     itens_reserva = [(i["id_variante"], i["quantidade"]) for i in ped["itens"]]
     reservar_itens_pedido(cur, itens_reserva)
@@ -1056,6 +1091,12 @@ def confirmar_pedido(cur, id_vendedor: int, id_pedido: int, id_usuario: int | No
         "Pedido confirmado; estoque reservado. Aguardando pagamento.",
         id_usuario,
     )
+    try:
+        from core.pedidos.notificacoes import notificar_evento_pedido
+
+        notificar_evento_pedido(cur, id_pedido, "confirmado", criado_por=id_usuario)
+    except Exception:
+        pass
 
 
 def cancelar_pedido(
@@ -1118,6 +1159,12 @@ def cancelar_pedido(
         (STATUS_CANCELADO, agora, agora, id_pedido),
     )
     registrar_historico(cur, id_pedido, "cancelado", motivo or "Pedido cancelado.", id_usuario)
+    try:
+        from core.pedidos.notificacoes import notificar_evento_pedido
+
+        notificar_evento_pedido(cur, id_pedido, "cancelado", criado_por=id_usuario)
+    except Exception:
+        pass
 
 
 def listar_pedidos_por_id_ml(cur, id_vendedor: int, id_ml_pedido: str) -> list[int]:
@@ -1346,6 +1393,12 @@ def marcar_pedido_pago(
         from api.bling.pedidos import tentar_exportar_pedido_fornecedor_apos_pagamento
 
         tentar_exportar_pedido_fornecedor_apos_pagamento(cur, id_pedido)
+    except Exception:
+        pass
+    try:
+        from core.pedidos.notificacoes import notificar_evento_pedido
+
+        notificar_evento_pedido(cur, id_pedido, "pago", criado_por=id_usuario)
     except Exception:
         pass
     return True
@@ -1690,6 +1743,10 @@ def importar_pedido_bling(
         if existente:
             continue
 
+        from sistema.planos.limites import exigir_capacidade_pedido_novo
+
+        exigir_capacidade_pedido_novo(cur, id_vendedor, id_forn)
+
         subtotal = sum(i["valor_drop"] * i["quantidade"] for i in itens)
         taxa = _taxa_pedido_fornecedor(cur, id_forn)
         total = subtotal + taxa
@@ -1925,6 +1982,10 @@ def importar_pedido_ml(
         existente = _pedido_ja_importado_ml(cur, id_vendedor, id_ml_pedido, id_forn)
         if existente:
             continue
+
+        from sistema.planos.limites import exigir_capacidade_pedido_novo
+
+        exigir_capacidade_pedido_novo(cur, id_vendedor, id_forn)
 
         subtotal = sum(i["valor_drop"] * i["quantidade"] for i in itens)
         taxa = _taxa_pedido_fornecedor(cur, id_forn)
@@ -2168,6 +2229,10 @@ def importar_pedido_tiktok(
         if existente:
             continue
 
+        from sistema.planos.limites import exigir_capacidade_pedido_novo
+
+        exigir_capacidade_pedido_novo(cur, id_vendedor, id_forn)
+
         subtotal = sum(i["valor_drop"] * i["quantidade"] for i in itens)
         taxa = _taxa_pedido_fornecedor(cur, id_forn)
         total = subtotal + taxa
@@ -2410,6 +2475,10 @@ def importar_pedido_amazon(
         if existente:
             continue
 
+        from sistema.planos.limites import exigir_capacidade_pedido_novo
+
+        exigir_capacidade_pedido_novo(cur, id_vendedor, id_forn)
+
         subtotal = sum(i["valor_drop"] * i["quantidade"] for i in itens)
         taxa = _taxa_pedido_fornecedor(cur, id_forn)
         total = subtotal + taxa
@@ -2589,6 +2658,7 @@ def marcar_em_expedicao(
     codigo_rastreio: str | None = None,
     transportadora: str | None = None,
     id_usuario: int | None = None,
+    _notificar: bool = True,
 ) -> None:
     ped = obter_pedido(cur, id_pedido, id_fornecedor=id_fornecedor)
     if not ped:
@@ -2662,6 +2732,13 @@ def marcar_em_expedicao(
         exportar_status_pedido_amazon(cur, id_pedido, evento="expedido")
     except Exception:
         pass
+    if _notificar:
+        try:
+            from core.pedidos.notificacoes import notificar_evento_pedido
+
+            notificar_evento_pedido(cur, id_pedido, "expedido", criado_por=id_usuario)
+        except Exception:
+            pass
 
 
 def marcar_entregue(
@@ -2685,6 +2762,7 @@ def marcar_entregue(
             id_pedido,
             id_fornecedor=id_fornecedor or ped["id_tenant_fornecedor"],
             id_usuario=id_usuario,
+            _notificar=False,
         )
 
     agora = agora_utc()
@@ -2723,6 +2801,12 @@ def marcar_entregue(
         from api.amazon.pedidos_amazon import exportar_status_pedido_amazon
 
         exportar_status_pedido_amazon(cur, id_pedido, evento="entregue")
+    except Exception:
+        pass
+    try:
+        from core.pedidos.notificacoes import notificar_evento_pedido
+
+        notificar_evento_pedido(cur, id_pedido, "entregue", criado_por=id_usuario)
     except Exception:
         pass
 

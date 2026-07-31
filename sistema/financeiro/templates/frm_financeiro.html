@@ -1,0 +1,81 @@
+{% extends "frm_base.html" %}
+{% block title %}Financeiro — {{ MARCA_NOME }}{% endblock %}
+{% block topbar_title %}Financeiro{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('financeiro.static', filename='style/Cfinanceiro.css') }}?v=1" />
+{% if not sem_acesso %}
+<link rel="stylesheet" href="{{ url_for('static', filename='style/Cefi_cartao.css') }}?v=1" />
+{% endif %}
+{% endblock %}
+{% block content %}
+<div class="Cl_ContainerApoio Cl_PainelPagina Fin_Page">
+  <div class="pt-page-title">
+    <h2>Financeiro</h2>
+    <p class="pt-page-desc">Faturas emitidas, status de pagamento e 2ª via de cobrança.</p>
+  </div>
+
+  {% if sem_acesso %}
+  <div class="Fin_Card">
+    <p>Somente o dono, admin ou perfil financeiro podem acessar este módulo.</p>
+  </div>
+  {% else %}
+  <div class="Fin_Aviso">
+    <strong>Importante:</strong> se uma fatura ficar sem pagamento por <strong>{{ dias_graca }} dias</strong> após o vencimento,
+    o sistema pode cancelar o plano atual e voltar ao <strong>Explorar (gratuito)</strong>.
+    Você perde as funcionalidades pagas. Integrações <em>não são desconectadas</em>, mas o acesso às telas e as atualizações/sync ficam bloqueados até regularizar.
+  </div>
+
+  <div class="Fin_Card">
+    <div class="Fin_CardHead">
+      <h3>Faturas</h3>
+      <span class="Fin_Meta" id="fin_metaEfi">{% if efi_ok %}Efi configurada{% else %}Efi não configurada no .env{% endif %}{% if efi_pix_ok %} · PIX ok{% else %} · PIX sem chave{% endif %}</span>
+    </div>
+    <div class="Fin_TableWrap">
+      <table class="Fin_Table" id="fin_tabela">
+        <thead>
+          <tr>
+            <th>Referência</th>
+            <th>Plano</th>
+            <th>Valor</th>
+            <th>Vencimento</th>
+            <th>Forma</th>
+            <th>Status</th>
+            <th>Ações</th>
+          </tr>
+        </thead>
+        <tbody id="fin_corpo">
+          <tr><td colspan="7" class="Fin_Empty">Carregando…</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="Fin_Pag" id="fin_paginacao" hidden></p>
+  </div>
+
+  {% if eh_dev %}
+  <div class="Fin_Card Fin_Dev">
+    <div class="Fin_CardHead">
+      <h3>Log Efi ↔ DropNexo <span class="Fin_DevBadge">DEV</span></h3>
+      <button type="button" class="Cl_botaoFiltro" id="fin_btnLogs">Atualizar log</button>
+    </div>
+    <div class="Fin_LogBox" id="fin_logs">
+      <p class="Fin_Empty">Clique em Atualizar log.</p>
+    </div>
+  </div>
+  {% endif %}
+  {% endif %}
+</div>
+{% endblock %}
+{% block page_js %}
+{% if not sem_acesso %}
+<script id="fin_cfg" type="application/json">{{ {
+  "apiFaturas": url_for("financeiro.api_faturas"),
+  "apiRegenerarBase": "/api/financeiro/faturas",
+  "apiLogs": url_for("financeiro.api_efi_logs") if eh_dev else "",
+  "efiPayeeCode": efi_payee_code or "",
+  "efiEnvironment": efi_environment or "sandbox",
+  "ehDev": eh_dev
+}|tojson }}</script>
+<script defer src="{{ url_for('static', filename='script/Sefi_cartao.js') }}?v=1"></script>
+<script defer src="{{ url_for('financeiro.static', filename='script/Sfinanceiro.js') }}?v=2"></script>
+{% endif %}
+{% endblock %}

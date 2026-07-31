@@ -1100,7 +1100,7 @@ def marktplace_produtos_excluir():
 
 MANUTENCAO_TENANT_PREFIX = "/configuracoes/manutencao-tenant"
 _TIPOS_NEGOCIO_OK = frozenset({"vendedor", "fornecedor", "hibrido"})
-_PLANOS_OK = frozenset({"starter", "professional", "enterprise"})
+_PLANOS_OK = frozenset({"starter", "professional", "scale", "enterprise"})
 
 
 def _contagens_tenant(cur, id_tenant: int) -> dict:

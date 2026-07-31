@@ -256,6 +256,19 @@ def processar_fila_webhook(cur, fila_id: int) -> dict[str, Any]:
         )
         return {"ok": False, "motivo": "tenant_nao_encontrado"}
 
+    from sistema.financeiro.cobranca import tenant_pode_usar_integracao
+
+    if not tenant_pode_usar_integracao(cur, int(id_tenant)):
+        cur.execute(
+            """
+            UPDATE tbl_integracao_bling_webhook_fila
+            SET id_tenant = %s, status = 'ignorado', processado_em = %s, erro = %s
+            WHERE id = %s
+            """,
+            (id_tenant, agora_utc(), "plano_sem_integracao", fila_id),
+        )
+        return {"ok": True, "ignorado": True, "motivo": "plano_sem_integracao"}
+
     cur.execute(
         "UPDATE tbl_integracao_bling_webhook_fila SET status = 'processando' WHERE id = %s",
         (fila_id,),

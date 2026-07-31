@@ -1,0 +1,86 @@
+.Fin_Page .pt-page-title { margin-bottom: 1rem; }
+.Fin_Page .pt-page-title h2 { margin: 0 0 0.35rem; font-size: 1.35rem; color: #1c2e3b; }
+.Fin_Page .pt-page-desc { margin: 0; color: #64748b; font-size: 0.9rem; }
+
+.Fin_Aviso {
+  background: #fff7ed;
+  border: 1px solid #fdba74;
+  color: #9a3412;
+  border-radius: 10px;
+  padding: 0.9rem 1rem;
+  margin-bottom: 1.25rem;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.Fin_Card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 1.1rem 1.2rem;
+  margin-bottom: 1.25rem;
+}
+
+.Fin_CardHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.85rem;
+}
+
+.Fin_CardHead h3 { margin: 0; font-size: 1.05rem; color: #1c2e3b; }
+.Fin_Meta { font-size: 0.8rem; color: #64748b; }
+
+.Fin_TableWrap { overflow-x: auto; }
+.Fin_Table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.Fin_Table th, .Fin_Table td {
+  padding: 0.65rem 0.5rem;
+  border-bottom: 1px solid #eef2f7;
+  text-align: left;
+  vertical-align: middle;
+}
+.Fin_Table th { color: #64748b; font-weight: 600; font-size: 0.78rem; text-transform: uppercase; }
+.Fin_Empty { color: #94a3b8; text-align: center !important; padding: 1.5rem !important; }
+
+.Fin_Badge {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+.Fin_Badge--ok { background: #dcfce7; color: #166534; }
+.Fin_Badge--warn { background: #fef3c7; color: #92400e; }
+.Fin_Badge--danger { background: #fee2e2; color: #991b1b; }
+.Fin_Badge--muted { background: #f1f5f9; color: #64748b; }
+
+.Fin_Acoes { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.Fin_Pag { margin: 0.75rem 0 0; font-size: 0.85rem; color: #64748b; }
+
+.Fin_DevBadge {
+  display: inline-block;
+  margin-left: 0.35rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  background: #021F81;
+  color: #fff;
+  font-size: 0.65rem;
+  vertical-align: middle;
+}
+
+.Fin_LogBox {
+  max-height: 360px;
+  overflow: auto;
+  background: #0f172a;
+  color: #e2e8f0;
+  border-radius: 8px;
+  padding: 0.75rem;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+.Fin_LogItem { border-bottom: 1px solid #1e293b; padding: 0.5rem 0; }
+.Fin_LogItem:last-child { border-bottom: 0; }
+.Fin_LogOk { color: #86efac; }
+.Fin_LogFail { color: #fca5a5; }

@@ -635,6 +635,9 @@ def _salvar_produto(
             id_produto_existente = None
 
     if not id_produto_existente:
+        from sistema.planos.limites import exigir_novo_produto_catalogo
+
+        exigir_novo_produto_catalogo(cur, int(id_tenant))
         cur.execute(
             """
             INSERT INTO tbl_produto (
@@ -827,6 +830,9 @@ def _salvar_produto_grupo_variacoes(
             id_produto_existente = None
 
     if not id_produto_existente:
+        from sistema.planos.limites import exigir_novo_produto_catalogo
+
+        exigir_novo_produto_catalogo(cur, int(id_tenant))
         cur.execute(
             """
             INSERT INTO tbl_produto (

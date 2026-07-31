@@ -1114,6 +1114,27 @@ def solicitar_vinculo():
         snap["aceite_declaracao_apto"] = True
         snap["aceite_declaracao_em"] = agora
 
+        from sistema.planos.limites import limites_plano, mensagem_limite_conexoes
+
+        lim = limites_plano(tipo_negocio="vendedor")
+        limite_forn = lim.get("conexoes")
+        if limite_forn is not None:
+            cur.execute(
+                """
+                SELECT COUNT(*) FROM tbl_vinculo_vendedor_fornecedor
+                WHERE id_tenant_vendedor = %s
+                  AND status IN ('ativo', 'aguardando')
+                  AND id_tenant_fornecedor <> %s
+                """,
+                (id_vendedor, id_forn),
+            )
+            usados = int(cur.fetchone()[0] or 0)
+            if usados >= int(limite_forn):
+                return jsonify(
+                    success=False,
+                    message=mensagem_limite_conexoes(tipo="vendedor", limite=int(limite_forn)),
+                ), 403
+
         cur.execute(
             """
             SELECT status FROM tbl_vinculo_vendedor_fornecedor
@@ -1433,7 +1454,13 @@ def loja_ativar_produto():
         if not rows:
             return jsonify(success=False, message="Produto não encontrado."), 404
 
+        from sistema.planos.limites import exigir_novo_produto_vendedor
         from vendedor.meus_produtos.servico_meus_produtos import espelhar_depositos_fornecedor
+
+        try:
+            exigir_novo_produto_vendedor(cur, int(id_vendedor), int(id_produto))
+        except ValueError as e:
+            return jsonify(success=False, message=str(e)), 403
 
         espelhar_depositos_fornecedor(cur, int(id_vendedor), id_fornecedor, id_produto=id_produto)
 

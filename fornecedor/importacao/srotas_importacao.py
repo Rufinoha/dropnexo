@@ -75,6 +75,14 @@ def _exigir_escrita():
     return jsonify(success=False, message="Sem permissão para importar."), 403
 
 
+def _exigir_plano_importacao():
+    from sistema.planos.limites import limites_plano, mensagem_upgrade_importacao
+
+    if limites_plano().get("importacao_planilha"):
+        return None
+    return jsonify(success=False, message=mensagem_upgrade_importacao()), 403
+
+
 def _bling_conectado(cur, id_tenant: int) -> bool:
     cur.execute(
         "SELECT status FROM tbl_integracao_bling WHERE id_tenant = %s",
@@ -376,6 +384,8 @@ def importacao_bling_estoque():
 def importacao_arquivo():
     if (resp := _exigir_escrita()) is not None:
         return resp
+    if (resp := _exigir_plano_importacao()) is not None:
+        return resp
 
     arquivo = request.files.get("arquivo")
     if not arquivo or not arquivo.filename:
@@ -513,6 +523,9 @@ def importacao_arquivo():
                         )
                         atualizados += 1
                     else:
+                        from sistema.planos.limites import exigir_novo_produto_catalogo
+
+                        exigir_novo_produto_catalogo(cur, int(id_tenant))
                         cur.execute(
                             """
                             INSERT INTO tbl_produto (
@@ -541,6 +554,9 @@ def importacao_arquivo():
                         prod_id = cur.fetchone()[0]
                         inseridos += 1
                 else:
+                    from sistema.planos.limites import exigir_novo_produto_catalogo
+
+                    exigir_novo_produto_catalogo(cur, int(id_tenant))
                     cur.execute(
                         """
                         INSERT INTO tbl_produto (

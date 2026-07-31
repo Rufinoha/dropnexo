@@ -34,7 +34,14 @@
 
 <script id="fn_int_catalogo" type="application/json">{{ categorias_json|safe }}</script>
 <script id="fn_int_modulo" type="application/json">"{{ modulo_ativo|default('vendedor') }}"</script>
+<script>
+  window.OSB_PLANOS_HUB = {
+    integracao: {{ 'true' if plano_integracao else 'false' }},
+    mensagemUpgrade: {{ plano_upgrade_msg|tojson }},
+    urlMeuPlano: {{ url_meu_plano|tojson }},
+  };
+</script>
 {% endblock %}
 {% block page_js %}
-<script src="{{ url_for('static', filename='script/Sintegracoes_hub.js') }}?v=9"></script>
+<script src="{{ url_for('static', filename='script/Sintegracoes_hub.js') }}?v=10"></script>
 {% endblock %}

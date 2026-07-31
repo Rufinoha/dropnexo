@@ -264,6 +264,9 @@
 
     <footer class="Pd_ModalFoot">
       <p id="pd_msg" class="Pd_Msg" role="status" hidden></p>
+      {% if session.get('eh_desenvolvedor') %}
+      <button type="button" class="Cl_BtnCancelar" id="pd_btnEmailTeste" hidden title="Envia layout de e-mail para hazael@h74.com.br">E-mail teste (DEV)</button>
+      {% endif %}
       <button type="button" class="Cl_BtnExcluir" id="pd_btnCancelar" hidden>Cancelar pedido</button>
       <button type="button" class="Cl_BtnCancelar" id="pd_btnSalvar">Salvar rascunho</button>
       <button type="button" class="Cl_BtnSalvar" id="pd_btnConfirmar">Confirmar pedido</button>
@@ -273,6 +276,6 @@
 {% endblock %}
 {% block page_js %}
 <script defer src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
-<script defer src="{{ url_for('vd_pedidos.static', filename='script/Svd_pedidos.js') }}?v=24"></script>
+<script defer src="{{ url_for('vd_pedidos.static', filename='script/Svd_pedidos.js') }}?v=25"></script>
 <script id="pd_cfg" type="application/json">{{ {"mp_icone": url_for("mercadopago.static", filename="imge/icone_mercadopago.png")}|tojson }}</script>
 {% endblock %}

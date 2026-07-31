@@ -1,0 +1,70 @@
+{% extends "cadastro/emails/base_email.html" %}
+
+{% block conteudo %}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+  <tr>
+    <td style="padding:0;margin:0;">
+      <p style="margin:0 0 12px 0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;">
+        Olá{% if nome_destinatario %}, <strong>{{ nome_destinatario }}</strong>{% endif %}.
+      </p>
+      <p style="margin:0 0 14px 0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;">
+        {{ mensagem_principal }}
+      </p>
+
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:8px 0 16px 0;background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;">
+        <tr>
+          <td style="padding:14px 16px;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.7;color:#111827;">
+            <div style="margin:0 0 6px 0;"><strong>Pedido:</strong> {{ numero_pedido }}</div>
+            <div style="margin:0 0 6px 0;"><strong>Status:</strong> {{ status_label }}</div>
+            {% if papel_label %}<div style="margin:0 0 6px 0;"><strong>Conta:</strong> {{ papel_label }}</div>{% endif %}
+            {% if nome_contraparte %}<div style="margin:0 0 6px 0;"><strong>{{ rotulo_contraparte }}:</strong> {{ nome_contraparte }}</div>{% endif %}
+            {% if cliente_nome %}<div style="margin:0 0 6px 0;"><strong>Cliente:</strong> {{ cliente_nome }}</div>{% endif %}
+            <div style="margin:0;"><strong>Total:</strong> {{ valor_total_fmt }}</div>
+          </td>
+        </tr>
+      </table>
+
+      {% if itens and itens|length %}
+      <p style="margin:0 0 8px 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.6;color:#374151;">
+        <strong>Itens</strong>
+      </p>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 16px 0;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;">
+        {% for item in itens %}
+        <tr>
+          <td style="padding:10px 12px;border-bottom:1px solid #eef2f7;font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#111827;">
+            {{ item.nome }}{% if item.sku %} <span style="color:#6b7280;">(SKU {{ item.sku }})</span>{% endif %}
+            <div style="color:#6b7280;margin-top:2px;">Qtd {{ item.quantidade }} · {{ item.valor_fmt }}</div>
+          </td>
+        </tr>
+        {% endfor %}
+      </table>
+      {% endif %}
+
+      {% if codigo_rastreio %}
+      <p style="margin:0 0 14px 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.6;color:#374151;">
+        <strong>Rastreio:</strong> {{ codigo_rastreio }}{% if transportadora %} · {{ transportadora }}{% endif %}
+      </p>
+      {% endif %}
+
+      {% if link_pedido %}
+      <table role="presentation" cellpadding="0" cellspacing="0" align="center" style="margin:18px auto 10px auto;">
+        <tr>
+          <td align="center" bgcolor="#2C6BF3" style="border-radius:10px;">
+            <a href="{{ link_pedido }}"
+               style="display:inline-block;padding:12px 22px;font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:10px;">
+              Ver pedido no DropNexo
+            </a>
+          </td>
+        </tr>
+      </table>
+      {% endif %}
+
+      {% if aviso_teste %}
+      <p style="margin:16px 0 0 0;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.6;color:#9ca3af;">
+        {{ aviso_teste }}
+      </p>
+      {% endif %}
+    </td>
+  </tr>
+</table>
+{% endblock %}

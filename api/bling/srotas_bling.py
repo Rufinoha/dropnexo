@@ -118,7 +118,11 @@ def _pode_integracoes() -> bool:
 
 def _pode_bling_sync() -> bool:
     """Integrações ou edição de catálogo (importar do Bling na lista de produtos)."""
-    return _pode_integracoes() or usuario_tem_permissao("catalogos.editar")
+    if not (_pode_integracoes() or usuario_tem_permissao("catalogos.editar")):
+        return False
+    from sistema.planos.limites import limites_plano
+
+    return bool(limites_plano().get("integracao"))
 
 
 def _config_dict(row) -> dict:
@@ -273,8 +277,12 @@ def api_status():
 @bling_bp.get("/api/integracoes/bling/oauth/iniciar")
 @login_obrigatorio()
 def oauth_iniciar():
+    from sistema.planos.limites import limites_plano, mensagem_upgrade_integracao
+
     if not _pode_integracoes():
         return jsonify(success=False, message="Sem permissão."), 403
+    if not limites_plano().get("integracao"):
+        return redirect(url_for("integracoes.pagina", erro=mensagem_upgrade_integracao()))
     if not bling_configurado():
         return redirect(url_for("integracoes.pagina", erro="Integração Bling indisponível. Tente novamente mais tarde."))
 
