@@ -72,14 +72,49 @@ def registrar_efi_log(
         log.exception("Falha ao gravar tbl_efi_log")
 
 
+def _email_fallback_tenant(cur, id_tenant: int) -> str:
+    """E-mail de cobrança: dono → comercial → qualquer usuário ativo."""
+    try:
+        from core.pedidos.notificacoes import email_dono_tenant
+
+        email, _ = email_dono_tenant(cur, id_tenant)
+        if email and "@" in email:
+            return email.strip()
+    except Exception:
+        pass
+    cur.execute(
+        """
+        SELECT COALESCE(NULLIF(trim(t.email_comercial), ''), '')
+        FROM tbl_tenant t WHERE t.id = %s
+        """,
+        (id_tenant,),
+    )
+    row = cur.fetchone()
+    email = (row[0] if row else "") or ""
+    if email and "@" in email:
+        return email.strip()
+    cur.execute(
+        """
+        SELECT u.email FROM tbl_usuario_tenant ut
+        JOIN tbl_usuario u ON u.id = ut.id_usuario
+        WHERE ut.id_tenant = %s AND ut.ativo AND u.ativo
+          AND u.email IS NOT NULL AND trim(u.email) <> ''
+        ORDER BY ut.id LIMIT 1
+        """,
+        (id_tenant,),
+    )
+    row = cur.fetchone()
+    return ((row[0] if row else "") or "").strip()
+
+
 def garantir_cobranca_tenant(cur, id_tenant: int) -> None:
     cur.execute("SELECT 1 FROM tbl_tenant_cobranca WHERE id_tenant = %s", (id_tenant,))
     if cur.fetchone():
         return
-    cur.execute("SELECT plano, email_comercial FROM tbl_tenant WHERE id = %s", (id_tenant,))
+    cur.execute("SELECT plano FROM tbl_tenant WHERE id = %s", (id_tenant,))
     row = cur.fetchone()
     plano = (row[0] if row else None) or "starter"
-    email = row[1] if row else None
+    email = _email_fallback_tenant(cur, id_tenant) or None
     cur.execute(
         """
         INSERT INTO tbl_tenant_cobranca (id_tenant, plano_slug, email_cobranca, inicio_cobranca)
@@ -130,9 +165,22 @@ def _dados_cliente_cobranca(cur, id_tenant: int) -> dict:
     row = cur.fetchone()
     if not row:
         raise ValueError("Cobrança não configurada.")
+    email = (row[1] or "").strip()
+    if not email or "@" not in email:
+        email = _email_fallback_tenant(cur, id_tenant)
+        if email:
+            cur.execute(
+                """
+                UPDATE tbl_tenant_cobranca
+                SET email_cobranca = %s, atualizado_em = NOW()
+                WHERE id_tenant = %s
+                  AND (email_cobranca IS NULL OR trim(email_cobranca) = '')
+                """,
+                (email, id_tenant),
+            )
     return {
         "dia_vencimento": int(row[0] or 15),
-        "email_cobranca": (row[1] or "").strip(),
+        "email_cobranca": email,
         "forma_pagamento": (row[2] or "boleto").strip().lower(),
         "plano_slug": row[3],
         "plano_slug_pendente": row[4],
@@ -526,8 +574,11 @@ def assinar_plano(
     doc = "".join(c for c in (cli["documento"] or "") if c.isdigit())
     if len(doc) not in (11, 14):
         raise ValueError("Cadastre CPF/CNPJ da empresa em Meu perfil antes de assinar.")
-    if not (cli["email_cobranca"] or "").strip():
-        raise ValueError("Informe o e-mail de cobrança em Meu perfil → Forma de pagamento.")
+    if not (cli["email_cobranca"] or "").strip() or "@" not in (cli["email_cobranca"] or ""):
+        raise ValueError(
+            "Não encontramos e-mail para cobrança. Cadastre o e-mail do usuário dono "
+            "ou informe em Meu perfil → Forma de pagamento."
+        )
     if forma == "cartao":
         end = cli.get("endereco") or {}
         cep = "".join(c for c in (end.get("cep") or "") if c.isdigit())
