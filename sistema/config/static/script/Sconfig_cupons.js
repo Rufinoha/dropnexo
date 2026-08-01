@@ -8,6 +8,10 @@
     cfg = {};
   }
 
+  function util() {
+    return window.Util || { gerarIconeTech: () => "…" };
+  }
+
   function esc(s) {
     return String(s ?? "")
       .replace(/&/g, "&amp;")
@@ -50,6 +54,26 @@
     });
   }
 
+  async function desativar(id) {
+    const c = await Swal.fire({
+      title: "Desativar este cupom?",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Sim, desativar",
+      cancelButtonText: "Cancelar",
+    });
+    if (!c.isConfirmed) return;
+    const r = await fetch(cfg.apiExcluir, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ id: id }),
+    });
+    const j = await r.json();
+    if (!r.ok || !j.success) throw new Error(j.message || "Erro ao desativar.");
+    await Swal.fire("OK", j.message || "Cupom desativado.", "success");
+    await carregar();
+  }
+
   async function carregar() {
     const tbody = document.getElementById("cfg_cup_tbody");
     if (!tbody || !cfg.apiDados) return;
@@ -62,6 +86,7 @@
         tbody.innerHTML = '<tr><td colspan="8" class="CfgCup_Hint">Nenhum cupom ainda.</td></tr>';
         return;
       }
+      const u = util();
       tbody.innerHTML = lista
         .map(function (c) {
           const usos =
@@ -74,6 +99,21 @@
           if (c.esgotado) {
             badge = '<span class="CfgCup_Badge CfgCup_Badge--warn">Esgotado</span>';
           }
+          const acoes =
+            '<td class="Cl_TableActions">' +
+            '<button type="button" class="Cl_BtnAcao btnEditar" data-id="' +
+            c.id +
+            '" title="Editar">' +
+            u.gerarIconeTech("editar") +
+            "</button>" +
+            (c.ativo
+              ? '<button type="button" class="Cl_BtnAcao btnInativar" data-id="' +
+                c.id +
+                '" title="Desativar">' +
+                u.gerarIconeTech("excluir") +
+                "</button>"
+              : "") +
+            "</td>";
           return (
             "<tr>" +
             "<td><strong>" +
@@ -97,38 +137,12 @@
             "<td>" +
             badge +
             "</td>" +
-            '<td><button type="button" class="Cl_botaoFiltro" data-edit="' +
-            c.id +
-            '">Editar</button> ' +
-            (c.ativo
-              ? '<button type="button" class="Cl_botaoFiltro" data-off="' + c.id + '">Desativar</button>'
-              : "") +
-            "</td></tr>"
+            acoes +
+            "</tr>"
           );
         })
         .join("");
-
-      tbody.querySelectorAll("[data-edit]").forEach(function (btn) {
-        btn.addEventListener("click", function () {
-          abrirApoio(+btn.getAttribute("data-edit"));
-        });
-      });
-      tbody.querySelectorAll("[data-off]").forEach(function (btn) {
-        btn.addEventListener("click", async function () {
-          const id = +btn.getAttribute("data-off");
-          if (!confirm("Desativar este cupom?")) return;
-          const r = await fetch(cfg.apiExcluir, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", Accept: "application/json" },
-            body: JSON.stringify({ id: id }),
-          });
-          const j = await r.json();
-          if (window.Swal) {
-            Swal.fire(j.success ? "OK" : "Erro", j.message || "", j.success ? "success" : "error");
-          }
-          if (j.success) carregar();
-        });
-      });
+      window.lucide?.createIcons?.();
     } catch (e) {
       tbody.innerHTML = '<tr><td colspan="8" class="CfgCup_Hint">' + esc(e.message) + "</td></tr>";
     }
@@ -137,6 +151,21 @@
   document.addEventListener("DOMContentLoaded", function () {
     document.getElementById("cfg_cup_novo")?.addEventListener("click", function () {
       abrirApoio(null);
+    });
+    document.getElementById("cfg_cup_tbody")?.addEventListener("click", function (ev) {
+      const btn = ev.target.closest(".Cl_BtnAcao");
+      if (!btn) return;
+      const id = +btn.getAttribute("data-id");
+      if (!id) return;
+      if (btn.classList.contains("btnEditar")) {
+        abrirApoio(id);
+        return;
+      }
+      if (btn.classList.contains("btnInativar")) {
+        desativar(id).catch(function (e) {
+          Swal.fire("Erro", e.message, "error");
+        });
+      }
     });
     window.addEventListener("message", function (ev) {
       if (!ev.data?.grupo) return;

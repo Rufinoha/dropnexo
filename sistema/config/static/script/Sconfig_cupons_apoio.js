@@ -6,7 +6,7 @@
   let tenantsCache = [];
   let planosCache = [];
   const tenantsSel = new Map(); // id -> {id,nome,slug,tipo}
-  const planosSel = new Map(); // slug -> {slug,nome}
+  const planosSel = new Map(); // key (slug|tipo) -> {key,slug,tipo_negocio,nome}
 
   let cfg = {};
   try {
@@ -84,15 +84,14 @@
     if (!el.planoCombo) return;
     const opts = ['<option value="">Selecione…</option>'];
     planosCache.forEach(function (p) {
-      if (planosSel.has(p.slug)) return;
+      const key = p.key || p.slug;
+      if (planosSel.has(key)) return;
       opts.push(
         '<option value="' +
-          esc(p.slug) +
+          esc(key) +
           '">' +
-          esc(p.nome || p.slug) +
-          " (" +
-          esc(p.slug) +
-          ")</option>"
+          esc(p.nome || key) +
+          "</option>"
       );
     });
     el.planoCombo.innerHTML = opts.join("");
@@ -118,7 +117,7 @@
           "</strong><span>" +
           esc(t.tipo_negocio || "") +
           (t.slug ? " · " + esc(t.slug) : "") +
-          '</span></div><button type="button" data-rm-tenant="' +
+          '</span></div><button type="button" class="Cl_BtnCancelar" data-rm-tenant="' +
           t.id +
           '">Remover</button></li>'
         );
@@ -143,15 +142,16 @@
     }
     el.listaPlanos.innerHTML = itens
       .map(function (p) {
+        const key = p.key || p.slug;
         return (
-          '<li class="Cup_Chip" data-pslug="' +
-          esc(p.slug) +
+          '<li class="Cup_Chip" data-pkey="' +
+          esc(key) +
           '"><div><strong>' +
-          esc(p.nome || p.slug) +
+          esc(p.nome || key) +
           "</strong><span>" +
-          esc(p.slug) +
-          '</span></div><button type="button" data-rm-plano="' +
-          esc(p.slug) +
+          esc(key) +
+          '</span></div><button type="button" class="Cl_BtnCancelar" data-rm-plano="' +
+          esc(key) +
           '">Remover</button></li>'
         );
       })
@@ -204,11 +204,15 @@
       tenantsSel.set(+tid, t || { id: +tid, nome: "Tenant #" + tid, slug: "", tipo_negocio: "" });
     });
     planosSel.clear();
-    (d.planos_slug || []).forEach(function (slug) {
+    (d.planos_slug || []).forEach(function (chave) {
       const p = planosCache.find(function (x) {
-        return x.slug === slug;
+        return (x.key || x.slug) === chave || x.slug === chave;
       });
-      planosSel.set(slug, p || { slug: slug, nome: slug });
+      if (p) {
+        planosSel.set(p.key || p.slug, p);
+      } else {
+        planosSel.set(chave, { key: chave, slug: chave, nome: chave });
+      }
     });
     renderTenants();
     renderPlanos();
@@ -282,13 +286,13 @@
     renderTenants();
   });
   el.btnAddPlano?.addEventListener("click", function () {
-    const slug = (el.planoCombo?.value || "").trim();
-    if (!slug) return;
+    const key = (el.planoCombo?.value || "").trim();
+    if (!key) return;
     const p = planosCache.find(function (x) {
-      return x.slug === slug;
+      return (x.key || x.slug) === key;
     });
     if (!p) return;
-    planosSel.set(slug, p);
+    planosSel.set(p.key || p.slug, p);
     renderPlanos();
   });
   el.btnSalvar?.addEventListener("click", function () {

@@ -33,8 +33,8 @@
             <th>Escopo</th>
             <th>Validade</th>
             <th>Usos</th>
-            <th>Status</th>
-            <th></th>
+              <th>Status</th>
+              <th class="Cl_TableActions">Ações</th>
           </tr>
         </thead>
         <tbody id="cfg_cup_tbody">
@@ -52,5 +52,5 @@
   "rotaIncluir": url_for("config.cupons_desconto_incluir"),
   "rotaEditar": url_for("config.cupons_desconto_editar")
 }|tojson }}</script>
-<script defer src="{{ url_for('config.static', filename='script/Sconfig_cupons.js') }}?v=4"></script>
+<script defer src="{{ url_for('config.static', filename='script/Sconfig_cupons.js') }}?v=5"></script>
 {% endblock %}

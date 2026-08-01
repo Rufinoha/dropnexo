@@ -1,3 +1,5 @@
+/* Layout do apoio de cupom — cores/campos/botões vêm do global_utils.css */
+
 html:has(.Cup_ApoioBody),
 html:has(.Cup_ApoioBody) body {
   height: 100%;
@@ -30,34 +32,29 @@ html:has(.Cup_ApoioBody) body {
   box-sizing: border-box;
 }
 
-.Cup_ApoioWrap .Cl_FormCampo {
+.Cup_ApoioWrap .form-campo {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
   margin: 0;
   min-width: 0;
 }
 
-.Cup_ApoioWrap .Cl_FormCampo > label:not(.Cl_Switch) {
-  font-size: 12px;
+.Cup_ApoioWrap .form-campo > label {
   font-weight: 600;
-  color: #475569;
+  margin-bottom: 0;
 }
 
-.Cup_ApoioWrap .Cl_FormCampo input,
-.Cup_ApoioWrap .Cl_FormCampo select {
-  border: 1px solid #d1d9e6;
-  border-radius: 8px;
-  padding: 9px 12px;
-  font-size: 14px;
-  background: #fff;
+.Cup_ApoioWrap .form-campo input,
+.Cup_ApoioWrap .form-campo select,
+.Cup_ApoioWrap .form-campo textarea {
   width: 100%;
-  box-sizing: border-box;
 }
 
-.Cup_ApoioWrap .Cl_FormCampo small {
-  color: #94a3b8;
+.Cup_ApoioWrap .form-campo small {
+  color: #64748b;
   font-size: 12px;
+  font-weight: 400;
 }
 
 .Cup_Head {
@@ -83,7 +80,7 @@ html:has(.Cup_ApoioBody) body {
   display: grid;
   grid-template-columns: 180px 1fr;
   gap: 0;
-  border: 1px solid #dde3ee;
+  border: 1px solid #e5e7eb;
   border-radius: 12px;
   overflow: hidden;
   background: #fff;
@@ -94,8 +91,8 @@ html:has(.Cup_ApoioBody) body {
   flex-direction: column;
   gap: 4px;
   padding: 10px 8px;
-  background: #e8edf5;
-  border-right: 1px solid #dde3ee;
+  background: #f3f4f6;
+  border-right: 1px solid #e5e7eb;
 }
 
 .Cup_SideTab {
@@ -146,6 +143,12 @@ html:has(.Cup_ApoioBody) body {
 
 .Cup_AddGrow { flex: 1 1 auto; }
 
+.Cup_AddRow .Cl_BtnIncluir {
+  flex: 0 0 auto;
+  margin: 0;
+  white-space: nowrap;
+}
+
 .Cup_ChipList {
   list-style: none;
   margin: 14px 0 0;
@@ -161,9 +164,9 @@ html:has(.Cup_ApoioBody) body {
   justify-content: space-between;
   gap: 10px;
   padding: 10px 12px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #e5e7eb;
   border-radius: 10px;
-  background: #f8fafc;
+  background: #f9fafb;
 }
 
 .Cup_Chip strong {
@@ -177,14 +180,10 @@ html:has(.Cup_ApoioBody) body {
   font-size: 12px;
 }
 
-.Cup_Chip button {
-  border: 1px solid #cbd5e1;
-  background: #fff;
-  border-radius: 8px;
-  padding: 6px 10px;
-  cursor: pointer;
-  font-size: 12px;
-  color: #b91c1c;
+.Cup_Chip .Cl_BtnCancelar {
+  flex: 0 0 auto;
+  padding: 6px 12px;
+  font-size: 13px;
 }
 
 .Cup_Empty {
@@ -200,7 +199,7 @@ html:has(.Cup_ApoioBody) body {
     flex-direction: row;
     overflow-x: auto;
     border-right: none;
-    border-bottom: 1px solid #dde3ee;
+    border-bottom: 1px solid #e5e7eb;
   }
   .Cup_Grid2 { grid-template-columns: 1fr; }
 }

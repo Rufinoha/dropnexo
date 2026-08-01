@@ -61,7 +61,7 @@ def garantir_escopo_cupom(cur) -> bool:
             """
             CREATE TABLE IF NOT EXISTS tbl_cupom_plano (
                 id_cupom INTEGER NOT NULL REFERENCES tbl_cupom_desconto(id) ON DELETE CASCADE,
-                plano_slug VARCHAR(40) NOT NULL,
+                plano_slug VARCHAR(60) NOT NULL,
                 PRIMARY KEY (id_cupom, plano_slug)
             )
             """
@@ -200,7 +200,12 @@ def _sincronizar_tenants_cupom(cur, id_cupom: int, ids_tenants: list[int]) -> No
         )
 
 
+def _chave_plano_cupom(slug: str, tipo_negocio: str) -> str:
+    return f"{(slug or '').strip().lower()}|{(tipo_negocio or '').strip().lower()}"
+
+
 def _normalizar_planos_slug(raw) -> list[str]:
+    """Aceita slug legado ('starter') ou chave 'starter|vendedor'."""
     if raw is None or raw == "" or raw == []:
         return []
     if isinstance(raw, str):
@@ -212,10 +217,22 @@ def _normalizar_planos_slug(raw) -> list[str]:
     out: list[str] = []
     vistos: set[str] = set()
     for x in src:
-        slug = str(x or "").strip().lower()
-        if slug and slug not in vistos:
-            out.append(slug)
-            vistos.add(slug)
+        if isinstance(x, dict):
+            slug = str(x.get("slug") or x.get("plano_slug") or "").strip().lower()
+            tipo = str(x.get("tipo_negocio") or x.get("tipo") or "").strip().lower()
+            chave = _chave_plano_cupom(slug, tipo) if tipo in ("vendedor", "fornecedor") else slug
+        else:
+            chave = str(x or "").strip().lower()
+        if not chave:
+            continue
+        if "|" in chave:
+            slug, tipo = chave.split("|", 1)
+            if not slug or tipo not in ("vendedor", "fornecedor"):
+                raise ValueError(f"Plano inválido: {chave}")
+            chave = _chave_plano_cupom(slug, tipo)
+        if chave not in vistos:
+            out.append(chave)
+            vistos.add(chave)
     return out
 
 
@@ -252,7 +269,7 @@ def _sincronizar_planos_cupom(cur, id_cupom: int, planos_slug: list[str]) -> Non
             VALUES (%s, %s)
             ON CONFLICT DO NOTHING
             """,
-            (id_cupom, slug),
+            (id_cupom, slug[:60]),
         )
 
 
@@ -415,7 +432,16 @@ def validar_cupom_para_periodo(
         slug = (plano_slug or "").strip().lower()
         if not slug:
             raise ValueError("Este cupom é válido só para planos específicos.")
-        if slug not in planos_ok:
+        tipo_conta = ""
+        if id_tenant:
+            tipo_conta = _tipo_negocio_tenant(cur, int(id_tenant))
+        candidatos = {slug}
+        if tipo_conta in ("vendedor", "fornecedor"):
+            candidatos.add(_chave_plano_cupom(slug, tipo_conta))
+        elif tipo_conta == "hibrido":
+            candidatos.add(_chave_plano_cupom(slug, "vendedor"))
+            candidatos.add(_chave_plano_cupom(slug, "fornecedor"))
+        if not candidatos.intersection(planos_ok):
             raise ValueError("Este cupom não é válido para o plano selecionado.")
     return cupom
 
@@ -472,12 +498,15 @@ def salvar_cupom(cur, dados: dict, *, id_cupom: int | None = None) -> dict:
             raise ValueError(f"Tenant(s) inválido(s): {', '.join(str(x) for x in faltando)}.")
 
     if planos_slug:
+        slugs_base = []
+        for chave in planos_slug:
+            slugs_base.append(chave.split("|", 1)[0] if "|" in chave else chave)
         cur.execute(
             "SELECT slug FROM tbl_plano WHERE ativo = TRUE AND lower(slug) = ANY(%s)",
-            ([s.lower() for s in planos_slug],),
+            ([s.lower() for s in slugs_base],),
         )
         existentes_p = {str(r[0]).strip().lower() for r in cur.fetchall()}
-        faltando_p = [s for s in planos_slug if s not in existentes_p]
+        faltando_p = [s for s in slugs_base if s not in existentes_p]
         if faltando_p:
             raise ValueError(f"Plano(s) inválido(s): {', '.join(faltando_p)}.")
 
@@ -637,6 +666,7 @@ def listar_tenants_para_cupom(cur) -> list[dict[str, Any]]:
 
 
 def listar_planos_para_cupom(cur) -> list[dict[str, Any]]:
+    """Uma opção por plano × perfil (vendedor/fornecedor), rótulo: Nome | Perfil."""
     try:
         cur.execute(
             """
@@ -656,15 +686,28 @@ def listar_planos_para_cupom(cur) -> list[dict[str, Any]]:
             ORDER BY nome, slug
             """
         )
-    out = []
+    base = []
     for r in cur.fetchall():
-        out.append(
+        base.append(
             {
                 "slug": str(r[0] or "").strip().lower(),
-                "nome": r[1] or str(r[0] or ""),
+                "nome_base": r[1] or str(r[0] or ""),
                 "valor_centavos": int(r[2] or 0),
             }
         )
+    out: list[dict[str, Any]] = []
+    for tipo, rotulo in (("vendedor", "Vendedor"), ("fornecedor", "Fornecedor")):
+        for p in base:
+            chave = _chave_plano_cupom(p["slug"], tipo)
+            out.append(
+                {
+                    "key": chave,
+                    "slug": p["slug"],
+                    "tipo_negocio": tipo,
+                    "nome": f"{p['nome_base']} | {rotulo}",
+                    "valor_centavos": p["valor_centavos"],
+                }
+            )
     return out
 
 

@@ -6,7 +6,7 @@
   {% include "partials/marca_favicon.html" %}
   <link rel="stylesheet" href="{{ url_for('static', filename='style/global_utils.css') }}" />
   <link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_crud.css') }}" />
-  <link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_cupons_apoio.css') }}?v=1" />
+  <link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_cupons_apoio.css') }}?v=2" />
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </head>
 <body class="Cup_ApoioBody">
@@ -14,11 +14,11 @@
 
   <div class="Cl_ContainerApoio Cup_ApoioWrap">
     <header class="Cup_Head">
-      <div class="Cl_FormCampo Cup_HeadCodigo">
+      <div class="form-campo Cup_HeadCodigo">
         <label for="codigo">Código *</label>
         <input type="text" id="codigo" maxlength="40" placeholder="EX: BEMVINDO50" />
       </div>
-      <div class="Cl_FormCampo Cup_HeadDesc">
+      <div class="form-campo Cup_HeadDesc">
         <label for="descricao">Descrição</label>
         <input type="text" id="descricao" maxlength="255" placeholder="Campanha de lançamento" />
       </div>
@@ -39,18 +39,18 @@
       <div class="Cup_Panels">
         <section class="Cup_Panel is-active" data-panel="geral">
           <div class="Cup_Grid2">
-            <div class="Cl_FormCampo">
+            <div class="form-campo">
               <label for="tipo_desconto">Tipo</label>
               <select id="tipo_desconto">
                 <option value="percentual">Percentual (%)</option>
                 <option value="fixo">Valor fixo (R$)</option>
               </select>
             </div>
-            <div class="Cl_FormCampo">
+            <div class="form-campo">
               <label for="valor_desconto" id="valor_lbl">Valor (%)</label>
               <input type="number" id="valor_desconto" min="0" step="0.01" value="10" />
             </div>
-            <div class="Cl_FormCampo">
+            <div class="form-campo">
               <label for="periodo">Válido somente para ciclo</label>
               <select id="periodo">
                 <option value="mensal">Mensal</option>
@@ -58,7 +58,7 @@
                 <option value="anual">Anual (−20% no ciclo)</option>
               </select>
             </div>
-            <div class="Cl_FormCampo">
+            <div class="form-campo">
               <label for="publico_alvo">Público (tipo de conta)</label>
               <select id="publico_alvo">
                 <option value="">Qualquer um</option>
@@ -67,12 +67,12 @@
               </select>
               <small>Vazio = vendedor e fornecedor</small>
             </div>
-            <div class="Cl_FormCampo">
+            <div class="form-campo">
               <label for="valido_ate">Validade até</label>
               <input type="date" id="valido_ate" />
               <small>Vazio = sem data limite</small>
             </div>
-            <div class="Cl_FormCampo">
+            <div class="form-campo">
               <label for="usos_max">Limite de usos</label>
               <input type="number" id="usos_max" min="1" step="1" placeholder="Ilimitado" />
               <small>Vazio = ilimitado</small>
@@ -88,29 +88,29 @@
             Inclua um ou mais tenants. Lista vazia = cupom válido para qualquer conta.
           </p>
           <div class="Cup_AddRow">
-            <div class="Cl_FormCampo Cup_AddGrow">
+            <div class="form-campo Cup_AddGrow">
               <label for="tenant_combo">Tenant</label>
               <select id="tenant_combo">
                 <option value="">Selecione…</option>
               </select>
             </div>
-            <button type="button" class="Cl_botaoprimario" id="btnAddTenant">Incluir</button>
+            <button type="button" class="Cl_BtnIncluir" id="btnAddTenant">Incluir</button>
           </div>
           <ul class="Cup_ChipList" id="lista_tenants"></ul>
         </section>
 
         <section class="Cup_Panel" data-panel="planos" hidden>
           <p class="Cup_Hint">
-            Inclua um ou mais planos. Lista vazia = cupom válido para qualquer plano.
+            Inclua planos de vendedor e/ou fornecedor. Lista vazia = válido para qualquer plano.
           </p>
           <div class="Cup_AddRow">
-            <div class="Cl_FormCampo Cup_AddGrow">
+            <div class="form-campo Cup_AddGrow">
               <label for="plano_combo">Plano</label>
               <select id="plano_combo">
                 <option value="">Selecione…</option>
               </select>
             </div>
-            <button type="button" class="Cl_botaoprimario" id="btnAddPlano">Incluir</button>
+            <button type="button" class="Cl_BtnIncluir" id="btnAddPlano">Incluir</button>
           </div>
           <ul class="Cup_ChipList" id="lista_planos"></ul>
         </section>
@@ -120,7 +120,7 @@
 
   <div class="Cl_BotoesApoio">
     <button type="button" class="Cl_BtnSalvar" id="btnSalvar">Salvar</button>
-    <button type="button" class="Cl_BtnAuxiliar" id="btnCancelar">Cancelar</button>
+    <button type="button" class="Cl_BtnCancelar" id="btnCancelar">Cancelar</button>
   </div>
 
   <script id="cup_apoio_cfg" type="application/json">{{ {
@@ -129,6 +129,6 @@
     "apiSalvar": url_for("config.cupons_desconto_salvar")
   }|tojson }}</script>
   <script src="{{ url_for('static', filename='script/global_utils.js') }}"></script>
-  <script src="{{ url_for('config.static', filename='script/Sconfig_cupons_apoio.js') }}?v=1"></script>
+  <script src="{{ url_for('config.static', filename='script/Sconfig_cupons_apoio.js') }}?v=2"></script>
 </body>
 </html>
