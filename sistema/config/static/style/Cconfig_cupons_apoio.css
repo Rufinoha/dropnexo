@@ -1,0 +1,206 @@
+html:has(.Cup_ApoioBody),
+html:has(.Cup_ApoioBody) body {
+  height: 100%;
+  overflow: hidden;
+}
+
+.Cup_ApoioBody {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: #f0f3f9;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.Cup_ApoioWrap.Cl_ContainerApoio {
+  margin: 0;
+  padding: 16px 18px 8px;
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.Cup_ApoioWrap .Cl_FormCampo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  min-width: 0;
+}
+
+.Cup_ApoioWrap .Cl_FormCampo > label:not(.Cl_Switch) {
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.Cup_ApoioWrap .Cl_FormCampo input,
+.Cup_ApoioWrap .Cl_FormCampo select {
+  border: 1px solid #d1d9e6;
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 14px;
+  background: #fff;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.Cup_ApoioWrap .Cl_FormCampo small {
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.Cup_Head {
+  display: grid;
+  grid-template-columns: 220px 1fr auto;
+  gap: 12px;
+  align-items: end;
+  flex: 0 0 auto;
+  margin-bottom: 12px;
+}
+
+.Cup_HeadAtivo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 6px;
+  white-space: nowrap;
+}
+
+.Cup_Shell {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  gap: 0;
+  border: 1px solid #dde3ee;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.Cup_SideNav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 8px;
+  background: #e8edf5;
+  border-right: 1px solid #dde3ee;
+}
+
+.Cup_SideTab {
+  border: none;
+  background: transparent;
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 13px;
+  color: #64748b;
+  cursor: pointer;
+}
+
+.Cup_SideTab.is-active {
+  background: #fff;
+  color: #1c2e3b;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+
+.Cup_Panels {
+  min-height: 0;
+  overflow: auto;
+  padding: 16px 18px;
+}
+
+.Cup_Panel[hidden] { display: none !important; }
+
+.Cup_Grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.Cup_Hint {
+  margin: 14px 0 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.Cup_AddRow {
+  display: flex;
+  gap: 10px;
+  align-items: end;
+  margin-top: 8px;
+}
+
+.Cup_AddGrow { flex: 1 1 auto; }
+
+.Cup_ChipList {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.Cup_Chip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.Cup_Chip strong {
+  display: block;
+  color: #1e293b;
+  font-size: 13px;
+}
+
+.Cup_Chip span {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.Cup_Chip button {
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  border-radius: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 12px;
+  color: #b91c1c;
+}
+
+.Cup_Empty {
+  color: #94a3b8;
+  font-size: 13px;
+  padding: 18px 4px;
+}
+
+@media (max-width: 820px) {
+  .Cup_Head { grid-template-columns: 1fr; }
+  .Cup_Shell { grid-template-columns: 1fr; }
+  .Cup_SideNav {
+    flex-direction: row;
+    overflow-x: auto;
+    border-right: none;
+    border-bottom: 1px solid #dde3ee;
+  }
+  .Cup_Grid2 { grid-template-columns: 1fr; }
+}

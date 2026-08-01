@@ -1703,6 +1703,86 @@ def cupons_desconto_pagina():
     return render_template("frm_config_cupons.html", nav_ativo="config")
 
 
+@config_bp.get(f"{CUPOM_PREFIX}/incluir")
+@login_obrigatorio()
+def cupons_desconto_incluir():
+    if not session.get("eh_desenvolvedor"):
+        return redirect(url_for("dashboard.index"))
+    return render_template("frm_config_cupons_apoio.html")
+
+
+@config_bp.get(f"{CUPOM_PREFIX}/editar")
+@login_obrigatorio()
+def cupons_desconto_editar():
+    if not session.get("eh_desenvolvedor"):
+        return redirect(url_for("dashboard.index"))
+    return render_template("frm_config_cupons_apoio.html")
+
+
+@config_bp.post(f"{CUPOM_PREFIX}/apoio")
+@login_obrigatorio()
+def cupons_desconto_apoio():
+    if (r := _exigir_dev()) is not None:
+        return r
+    body = request.get_json(silent=True) or {}
+    try:
+        id_cupom = int(body.get("id") or 0)
+    except (TypeError, ValueError):
+        id_cupom = 0
+    if id_cupom <= 0:
+        return jsonify(success=False, message="ID inválido."), 400
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        from sistema.financeiro.cupom import (
+            listar_planos_para_cupom,
+            listar_tenants_para_cupom,
+            obter_cupom_por_id,
+            periodos_opcoes,
+        )
+
+        cupom = obter_cupom_por_id(cur, id_cupom)
+        if not cupom:
+            return jsonify(success=False, message="Cupom não encontrado."), 404
+        return jsonify(
+            success=True,
+            dados=cupom,
+            tenants=listar_tenants_para_cupom(cur),
+            planos=listar_planos_para_cupom(cur),
+            periodos=periodos_opcoes(),
+        )
+    except Exception as e:
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
+@config_bp.get(f"{CUPOM_PREFIX}/combos")
+@login_obrigatorio()
+def cupons_desconto_combos():
+    if (r := _exigir_dev()) is not None:
+        return r
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        from sistema.financeiro.cupom import (
+            listar_planos_para_cupom,
+            listar_tenants_para_cupom,
+            periodos_opcoes,
+        )
+
+        return jsonify(
+            success=True,
+            tenants=listar_tenants_para_cupom(cur),
+            planos=listar_planos_para_cupom(cur),
+            periodos=periodos_opcoes(),
+        )
+    except Exception as e:
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
 @config_bp.get(f"{CUPOM_PREFIX}/dados")
 @login_obrigatorio()
 def cupons_desconto_dados():
@@ -1713,6 +1793,7 @@ def cupons_desconto_dados():
         cur = conn.cursor()
         from sistema.financeiro.cupom import (
             listar_cupons,
+            listar_planos_para_cupom,
             listar_tenants_para_cupom,
             periodos_opcoes,
         )
@@ -1722,6 +1803,7 @@ def cupons_desconto_dados():
             cupons=listar_cupons(cur),
             periodos=periodos_opcoes(),
             tenants=listar_tenants_para_cupom(cur),
+            planos=listar_planos_para_cupom(cur),
         )
     except Exception as e:
         return jsonify(success=False, message=str(e)), 500

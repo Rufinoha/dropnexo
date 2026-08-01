@@ -37,7 +37,7 @@ def _rollback_cur(cur) -> None:
 
 
 def garantir_escopo_cupom(cur) -> bool:
-    """publico_alvo + tbl_cupom_tenant (SQL 092)."""
+    """publico_alvo + tbl_cupom_tenant (092) + tbl_cupom_plano (093)."""
     global _CUPOM_ESCOPO_OK
     if _CUPOM_ESCOPO_OK is True:
         return True
@@ -54,6 +54,15 @@ def garantir_escopo_cupom(cur) -> bool:
                 id_cupom INTEGER NOT NULL REFERENCES tbl_cupom_desconto(id) ON DELETE CASCADE,
                 id_tenant INTEGER NOT NULL REFERENCES tbl_tenant(id) ON DELETE CASCADE,
                 PRIMARY KEY (id_cupom, id_tenant)
+            )
+            """
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS tbl_cupom_plano (
+                id_cupom INTEGER NOT NULL REFERENCES tbl_cupom_desconto(id) ON DELETE CASCADE,
+                plano_slug VARCHAR(40) NOT NULL,
+                PRIMARY KEY (id_cupom, plano_slug)
             )
             """
         )
@@ -191,12 +200,74 @@ def _sincronizar_tenants_cupom(cur, id_cupom: int, ids_tenants: list[int]) -> No
         )
 
 
-def cupom_dict(row, *, ids_tenants: list[int] | None = None) -> dict:
+def _normalizar_planos_slug(raw) -> list[str]:
+    if raw is None or raw == "" or raw == []:
+        return []
+    if isinstance(raw, str):
+        src = [p.strip() for p in raw.replace(";", ",").split(",") if p.strip()]
+    elif isinstance(raw, (list, tuple, set)):
+        src = list(raw)
+    else:
+        src = [raw]
+    out: list[str] = []
+    vistos: set[str] = set()
+    for x in src:
+        slug = str(x or "").strip().lower()
+        if slug and slug not in vistos:
+            out.append(slug)
+            vistos.add(slug)
+    return out
+
+
+def _carregar_mapa_planos_cupom(cur, ids_cupom: list[int]) -> dict[int, list[str]]:
+    if not ids_cupom or not garantir_escopo_cupom(cur):
+        return {}
+    cur.execute(
+        """
+        SELECT id_cupom, plano_slug
+        FROM tbl_cupom_plano
+        WHERE id_cupom = ANY(%s)
+        ORDER BY id_cupom, plano_slug
+        """,
+        (ids_cupom,),
+    )
+    out: dict[int, list[str]] = {}
+    for id_cupom, slug in cur.fetchall():
+        out.setdefault(int(id_cupom), []).append(str(slug).strip().lower())
+    return out
+
+
+def _sincronizar_planos_cupom(cur, id_cupom: int, planos_slug: list[str]) -> None:
+    if not garantir_escopo_cupom(cur):
+        if planos_slug:
+            raise ValueError(
+                "Não foi possível restringir o cupom a planos. Aplique o SQL 093 no banco."
+            )
+        return
+    cur.execute("DELETE FROM tbl_cupom_plano WHERE id_cupom = %s", (id_cupom,))
+    for slug in planos_slug:
+        cur.execute(
+            """
+            INSERT INTO tbl_cupom_plano (id_cupom, plano_slug)
+            VALUES (%s, %s)
+            ON CONFLICT DO NOTHING
+            """,
+            (id_cupom, slug),
+        )
+
+
+def cupom_dict(
+    row,
+    *,
+    ids_tenants: list[int] | None = None,
+    planos_slug: list[str] | None = None,
+) -> dict:
     # id, codigo, descricao, tipo, valor, periodo, valido_ate, usos_max, usos_count, ativo, criado[, publico]
     publico = None
     if len(row) > 11 and row[11]:
         publico = str(row[11]).strip().lower() or None
     ids = list(ids_tenants or [])
+    planos = list(planos_slug or [])
     return {
         "id": row[0],
         "codigo": row[1],
@@ -211,6 +282,7 @@ def cupom_dict(row, *, ids_tenants: list[int] | None = None) -> dict:
         "criado_em": row[10].isoformat() if len(row) > 10 and row[10] else None,
         "publico_alvo": publico,
         "ids_tenants": ids,
+        "planos_slug": planos,
         "ilimitado": row[7] is None,
         "esgotado": row[7] is not None and int(row[8] or 0) >= int(row[7]),
     }
@@ -236,8 +308,17 @@ def listar_cupons(cur, *, incluir_inativos: bool = True) -> list[dict]:
     sql += " ORDER BY criado_em DESC, id DESC"
     cur.execute(sql)
     rows = cur.fetchall()
-    mapa = _carregar_mapa_tenants_cupom(cur, [int(r[0]) for r in rows])
-    return [cupom_dict(r, ids_tenants=mapa.get(int(r[0]), [])) for r in rows]
+    ids = [int(r[0]) for r in rows]
+    mapa_t = _carregar_mapa_tenants_cupom(cur, ids)
+    mapa_p = _carregar_mapa_planos_cupom(cur, ids)
+    return [
+        cupom_dict(
+            r,
+            ids_tenants=mapa_t.get(int(r[0]), []),
+            planos_slug=mapa_p.get(int(r[0]), []),
+        )
+        for r in rows
+    ]
 
 
 def obter_cupom_por_codigo(cur, codigo: str) -> dict | None:
@@ -252,8 +333,14 @@ def obter_cupom_por_codigo(cur, codigo: str) -> dict | None:
     row = cur.fetchone()
     if not row:
         return None
-    mapa = _carregar_mapa_tenants_cupom(cur, [int(row[0])])
-    return cupom_dict(row, ids_tenants=mapa.get(int(row[0]), []))
+    cid = int(row[0])
+    mapa_t = _carregar_mapa_tenants_cupom(cur, [cid])
+    mapa_p = _carregar_mapa_planos_cupom(cur, [cid])
+    return cupom_dict(
+        row,
+        ids_tenants=mapa_t.get(cid, []),
+        planos_slug=mapa_p.get(cid, []),
+    )
 
 
 def obter_cupom_por_id(cur, id_cupom: int) -> dict | None:
@@ -262,8 +349,14 @@ def obter_cupom_por_id(cur, id_cupom: int) -> dict | None:
     row = cur.fetchone()
     if not row:
         return None
-    mapa = _carregar_mapa_tenants_cupom(cur, [int(row[0])])
-    return cupom_dict(row, ids_tenants=mapa.get(int(row[0]), []))
+    cid = int(row[0])
+    mapa_t = _carregar_mapa_tenants_cupom(cur, [cid])
+    mapa_p = _carregar_mapa_planos_cupom(cur, [cid])
+    return cupom_dict(
+        row,
+        ids_tenants=mapa_t.get(cid, []),
+        planos_slug=mapa_p.get(cid, []),
+    )
 
 
 def _tipo_negocio_tenant(cur, id_tenant: int) -> str:
@@ -283,8 +376,9 @@ def validar_cupom_para_periodo(
     periodo: str,
     *,
     id_tenant: int | None = None,
+    plano_slug: str | None = None,
 ) -> dict:
-    """Valida cupom ativo, prazo, estoque, período e escopo (tipo/tenant)."""
+    """Valida cupom ativo, prazo, estoque, período e escopo (tipo/tenant/plano)."""
     p = normalizar_periodo(periodo)
     cupom = obter_cupom_por_codigo(cur, codigo)
     if not cupom:
@@ -305,6 +399,7 @@ def validar_cupom_para_periodo(
 
     publico = (cupom.get("publico_alvo") or "").strip().lower() or None
     ids_ok = list(cupom.get("ids_tenants") or [])
+    planos_ok = list(cupom.get("planos_slug") or [])
     if publico or ids_ok:
         if not id_tenant:
             raise ValueError("Este cupom é restrito e não pode ser usado neste contexto.")
@@ -316,6 +411,12 @@ def validar_cupom_para_periodo(
                 raise ValueError("Este cupom é exclusivo para vendedores.")
             if publico == "fornecedor" and tipo not in ("fornecedor", "hibrido"):
                 raise ValueError("Este cupom é exclusivo para fornecedores.")
+    if planos_ok:
+        slug = (plano_slug or "").strip().lower()
+        if not slug:
+            raise ValueError("Este cupom é válido só para planos específicos.")
+        if slug not in planos_ok:
+            raise ValueError("Este cupom não é válido para o plano selecionado.")
     return cupom
 
 
@@ -356,6 +457,9 @@ def salvar_cupom(cur, dados: dict, *, id_cupom: int | None = None) -> dict:
     ids_tenants = _normalizar_ids_tenants(
         dados.get("ids_tenants") if "ids_tenants" in dados else dados.get("tenants")
     )
+    planos_slug = _normalizar_planos_slug(
+        dados.get("planos_slug") if "planos_slug" in dados else dados.get("planos")
+    )
 
     if ids_tenants:
         cur.execute(
@@ -367,10 +471,20 @@ def salvar_cupom(cur, dados: dict, *, id_cupom: int | None = None) -> dict:
         if faltando:
             raise ValueError(f"Tenant(s) inválido(s): {', '.join(str(x) for x in faltando)}.")
 
+    if planos_slug:
+        cur.execute(
+            "SELECT slug FROM tbl_plano WHERE ativo = TRUE AND lower(slug) = ANY(%s)",
+            ([s.lower() for s in planos_slug],),
+        )
+        existentes_p = {str(r[0]).strip().lower() for r in cur.fetchall()}
+        faltando_p = [s for s in planos_slug if s not in existentes_p]
+        if faltando_p:
+            raise ValueError(f"Plano(s) inválido(s): {', '.join(faltando_p)}.")
+
     tem_escopo = garantir_escopo_cupom(cur)
-    if (publico_alvo or ids_tenants) and not tem_escopo:
+    if (publico_alvo or ids_tenants or planos_slug) and not tem_escopo:
         raise ValueError(
-            "Escopo de cupom indisponível. Aplique o SQL 092 (__doc/sql/092_cupom_escopo_tenant.sql)."
+            "Escopo de cupom indisponível. Aplique os SQL 092/093 no banco."
         )
 
     if id_cupom:
@@ -411,6 +525,7 @@ def salvar_cupom(cur, dados: dict, *, id_cupom: int | None = None) -> dict:
         if not cur.fetchone():
             raise ValueError("Cupom não encontrado.")
         _sincronizar_tenants_cupom(cur, id_cupom, ids_tenants)
+        _sincronizar_planos_cupom(cur, id_cupom, planos_slug)
         return obter_cupom_por_id(cur, id_cupom) or {}
 
     cur.execute(
@@ -454,6 +569,7 @@ def salvar_cupom(cur, dados: dict, *, id_cupom: int | None = None) -> dict:
         )
     new_id = int(cur.fetchone()[0])
     _sincronizar_tenants_cupom(cur, new_id, ids_tenants)
+    _sincronizar_planos_cupom(cur, new_id, planos_slug)
     return obter_cupom_por_id(cur, new_id) or {}
 
 
@@ -520,6 +636,38 @@ def listar_tenants_para_cupom(cur) -> list[dict[str, Any]]:
     return out
 
 
+def listar_planos_para_cupom(cur) -> list[dict[str, Any]]:
+    try:
+        cur.execute(
+            """
+            SELECT slug, nome, COALESCE(valor_centavos, 0)
+            FROM tbl_plano
+            WHERE ativo = TRUE
+            ORDER BY ordem NULLS LAST, nome, slug
+            """
+        )
+    except Exception:
+        _rollback_cur(cur)
+        cur.execute(
+            """
+            SELECT slug, nome, COALESCE(valor_centavos, 0)
+            FROM tbl_plano
+            WHERE ativo = TRUE
+            ORDER BY nome, slug
+            """
+        )
+    out = []
+    for r in cur.fetchall():
+        out.append(
+            {
+                "slug": str(r[0] or "").strip().lower(),
+                "nome": r[1] or str(r[0] or ""),
+                "valor_centavos": int(r[2] or 0),
+            }
+        )
+    return out
+
+
 def preview_assinatura(
     cur,
     *,
@@ -527,12 +675,17 @@ def preview_assinatura(
     periodo: str,
     cupom_codigo: str | None = None,
     id_tenant: int | None = None,
+    plano_slug: str | None = None,
 ) -> dict:
     p = normalizar_periodo(periodo)
     cupom = None
     if cupom_codigo and cupom_codigo.strip():
         cupom = validar_cupom_para_periodo(
-            cur, cupom_codigo, p, id_tenant=id_tenant
+            cur,
+            cupom_codigo,
+            p,
+            id_tenant=id_tenant,
+            plano_slug=plano_slug,
         )
     preco = calcular_preco(valor_mensal_centavos, p, cupom=cupom)
     return {"success": True, **preco, "periodos": periodos_opcoes()}

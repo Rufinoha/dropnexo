@@ -208,6 +208,7 @@ def api_preview_assinatura():
             periodo=periodo,
             cupom_codigo=cupom,
             id_tenant=_id_tenant(),
+            plano_slug=plano,
         )
         data["plano_slug"] = plano
         data["plano_nome"] = p["nome"]
