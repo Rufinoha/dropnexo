@@ -3,7 +3,7 @@
 {% set nav_ativo = 'config' %}
 {% block topbar_title %}Assinaturas e faturamento{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_assinaturas.css') }}?v=2" />
+<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_assinaturas.css') }}?v=3" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal Asf_Wrap">
@@ -12,7 +12,7 @@
       <h2>Assinaturas e faturamento</h2>
       <p class="cl-page-desc">
         Visão do dono da plataforma: assinantes ativos com provisão de receita,
-        inadimplência e faturamento realizado mês a mês.
+        inadimplência, cobranças em aberto e faturamento (emitido × pago) mês a mês.
       </p>
     </div>
     <button type="button" class="Cl_BtnCancelar" id="asf_btnAtualizar">Atualizar</button>
@@ -110,49 +110,93 @@
   </section>
 
   <section class="Asf_Panel" id="asf_tab_faturamento" data-tab-panel="faturamento" role="tabpanel" hidden>
-    <div class="Asf_Kpis" id="asf_fat_kpis"></div>
-    <div class="Asf_Grid2">
-      <div class="Asf_Card">
-        <div class="Asf_CardHead">
-          <h3>Faturamento mês a mês</h3>
-          <span class="Asf_Hint">Somente faturas pagas</span>
-        </div>
-        <div class="Asf_TabelaWrap">
-          <table class="Asf_Tabela Asf_Tabela--compact">
-            <thead>
-              <tr>
-                <th>Mês</th>
-                <th>Qtd</th>
-                <th>Total pago</th>
-              </tr>
-            </thead>
-            <tbody id="asf_meses_tbody">
-              <tr><td colspan="3" class="Asf_Empty">Carregando…</td></tr>
-            </tbody>
-          </table>
-        </div>
+    <div class="Asf_Filtros">
+      <div class="form-campo">
+        <label for="asf_mes">Mês (competência)</label>
+        <select id="asf_mes">
+          <option value="1">Janeiro</option>
+          <option value="2">Fevereiro</option>
+          <option value="3">Março</option>
+          <option value="4">Abril</option>
+          <option value="5">Maio</option>
+          <option value="6">Junho</option>
+          <option value="7">Julho</option>
+          <option value="8">Agosto</option>
+          <option value="9">Setembro</option>
+          <option value="10">Outubro</option>
+          <option value="11">Novembro</option>
+          <option value="12">Dezembro</option>
+        </select>
       </div>
-      <div class="Asf_Card">
-        <div class="Asf_CardHead">
-          <h3>Pagamentos recentes</h3>
-          <span class="Asf_Hint">Últimas 80 faturas pagas</span>
-        </div>
-        <div class="Asf_TabelaWrap">
-          <table class="Asf_Tabela">
-            <thead>
-              <tr>
-                <th>Pago em</th>
-                <th>Tenant</th>
-                <th>Plano</th>
-                <th>Ciclo</th>
-                <th>Valor</th>
-              </tr>
-            </thead>
-            <tbody id="asf_pagos_tbody">
-              <tr><td colspan="5" class="Asf_Empty">Carregando…</td></tr>
-            </tbody>
-          </table>
-        </div>
+      <div class="form-campo">
+        <label for="asf_ano">Ano</label>
+        <select id="asf_ano"></select>
+      </div>
+      <p class="Asf_FiltroHint">
+        Competência = mês do <strong>vencimento</strong> da fatura.
+        Assim o boleto que vence em agosto entra em agosto (mesmo se emitido em julho).
+      </p>
+    </div>
+
+    <div class="Asf_Kpis" id="asf_fat_kpis"></div>
+
+    <div class="Asf_Card">
+      <div class="Asf_CardHead">
+        <h3>Ano <span id="asf_graf_ano">—</span> — Faturado × Pago</h3>
+        <span class="Asf_Hint" id="asf_graf_hint">Por mês de vencimento</span>
+      </div>
+      <div class="Asf_Legenda">
+        <span class="Asf_LegendaItem"><i class="Asf_Dot Asf_Dot--fat"></i> Faturado (emitido)</span>
+        <span class="Asf_LegendaItem"><i class="Asf_Dot Asf_Dot--pago"></i> Faturado e pago</span>
+      </div>
+      <div class="Asf_Chart" id="asf_chart" aria-label="Gráfico anual faturado versus pago"></div>
+    </div>
+
+    <div class="Asf_Card">
+      <div class="Asf_CardHead">
+        <h3>Cobranças em aberto</h3>
+        <span class="Asf_Hint" id="asf_aberto_hint">Emitidas / vencidas — receita que pode entrar</span>
+      </div>
+      <div class="Asf_TabelaWrap">
+        <table class="Asf_Tabela">
+          <thead>
+            <tr>
+              <th>Vencimento</th>
+              <th>Tenant</th>
+              <th>Plano</th>
+              <th>Ref.</th>
+              <th>Status</th>
+              <th>Forma</th>
+              <th>Valor</th>
+            </tr>
+          </thead>
+          <tbody id="asf_aberto_tbody">
+            <tr><td colspan="7" class="Asf_Empty">Carregando…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="Asf_Card">
+      <div class="Asf_CardHead">
+        <h3>Pagamentos recentes</h3>
+        <span class="Asf_Hint">Últimas 80 faturas pagas</span>
+      </div>
+      <div class="Asf_TabelaWrap">
+        <table class="Asf_Tabela">
+          <thead>
+            <tr>
+              <th>Pago em</th>
+              <th>Tenant</th>
+              <th>Plano</th>
+              <th>Ciclo</th>
+              <th>Valor</th>
+            </tr>
+          </thead>
+          <tbody id="asf_pagos_tbody">
+            <tr><td colspan="5" class="Asf_Empty">Carregando…</td></tr>
+          </tbody>
+        </table>
       </div>
     </div>
   </section>
@@ -161,5 +205,5 @@
 <script type="application/json" id="asf_cfg">{{ {
   "apiDados": url_for("config.assinaturas_faturamento_dados")
 } | tojson }}</script>
-<script defer src="{{ url_for('config.static', filename='script/Sconfig_assinaturas.js') }}?v=2"></script>
+<script defer src="{{ url_for('config.static', filename='script/Sconfig_assinaturas.js') }}?v=3"></script>
 {% endblock %}

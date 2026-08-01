@@ -23,7 +23,7 @@
     },
     {
       titulo: "Assinaturas e faturamento",
-      texto: "Assinantes ativos com provisão (MRR), inadimplência / rebaixados e faturamento pago mês a mês.",
+      texto: "Assinantes ativos (MRR), inadimplência, cobranças em aberto e faturado × pago por mês/ano.",
       rota: "/configuracoes/assinaturas-faturamento",
       iconeTech: "shopping-bag",
     },

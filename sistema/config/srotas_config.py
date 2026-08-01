@@ -1921,9 +1921,18 @@ def assinaturas_faturamento_dados():
         return r
     from sistema.financeiro.assinaturas_painel import painel_assinaturas
 
+    try:
+        ano = int(request.args.get("ano") or 0) or None
+    except (TypeError, ValueError):
+        ano = None
+    try:
+        mes = int(request.args.get("mes") or 0) or None
+    except (TypeError, ValueError):
+        mes = None
+
     conn = Var_ConectarBanco()
     try:
-        painel = painel_assinaturas(conn)
+        painel = painel_assinaturas(conn, ano=ano, mes=mes)
         return jsonify(success=True, **painel)
     except Exception as e:
         return jsonify(success=False, message=str(e)), 500

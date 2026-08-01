@@ -78,8 +78,40 @@ def _proxima_cobranca_estimada(dia_vencimento: int | None, hoje: date | None = N
     return cand
 
 
-def painel_assinaturas(conn) -> dict[str, Any]:
+_MESES_CURTOS = (
+    "Jan",
+    "Fev",
+    "Mar",
+    "Abr",
+    "Mai",
+    "Jun",
+    "Jul",
+    "Ago",
+    "Set",
+    "Out",
+    "Nov",
+    "Dez",
+)
+
+# Competência do mês = vencimento (fallback: emissão)
+_SQL_MES_COMPETENCIA = "date_trunc('month', COALESCE(f.vencimento_em, f.criado_em))::date"
+
+
+def painel_assinaturas(
+    conn,
+    *,
+    ano: int | None = None,
+    mes: int | None = None,
+) -> dict[str, Any]:
     cur = conn.cursor()
+    hoje = date.today()
+    ano_sel = int(ano or hoje.year)
+    if ano_sel < 2000 or ano_sel > 2100:
+        ano_sel = hoje.year
+    mes_sel = int(mes or hoje.month)
+    if mes_sel < 1 or mes_sel > 12:
+        mes_sel = hoje.month
+    mes_ref = date(ano_sel, mes_sel, 1)
 
     # ── Ativas ──────────────────────────────────────────────────────────
     cur.execute(
@@ -252,37 +284,32 @@ def painel_assinaturas(conn) -> dict[str, Any]:
             }
         )
 
-    # ── Faturamento mês a mês (pago) ────────────────────────────────────
+    # ── Faturamento: competência = mês do vencimento ────────────────────
+    # Faturado = emitidas no mês (pendente/vencido/pago)
+    # Pago     = dessas, as que estão pagas (mesmo mês de competência)
+    # Aberto   = pendente/vencido (todas, e também filtro do mês)
     cur.execute(
-        """
+        f"""
         SELECT
-          date_trunc('month', f.pago_em)::date AS mes,
+          COALESCE(SUM(f.valor_centavos), 0)::bigint,
           COUNT(*)::int,
-          COALESCE(SUM(f.valor_centavos), 0)::bigint
+          COALESCE(SUM(CASE WHEN f.status = 'pago' THEN f.valor_centavos ELSE 0 END), 0)::bigint,
+          COUNT(*) FILTER (WHERE f.status = 'pago')::int,
+          COALESCE(SUM(CASE WHEN f.status IN ('pendente', 'vencido') THEN f.valor_centavos ELSE 0 END), 0)::bigint,
+          COUNT(*) FILTER (WHERE f.status IN ('pendente', 'vencido'))::int
         FROM tbl_fatura f
-        WHERE f.status = 'pago'
-          AND f.pago_em IS NOT NULL
-        GROUP BY 1
-        ORDER BY 1 DESC
-        LIMIT 36
-        """
+        WHERE f.status IN ('pendente', 'vencido', 'pago')
+          AND {_SQL_MES_COMPETENCIA} = %s
+        """,
+        (mes_ref,),
     )
-    meses = []
-    for row in cur.fetchall():
-        mes = row[0]
-        total = int(row[2] or 0)
-        label = "—"
-        if isinstance(mes, date):
-            label = f"{mes.month:02d}/{mes.year}"
-        meses.append(
-            {
-                "mes": _fmt_data(mes),
-                "mes_label": label,
-                "qtd": int(row[1] or 0),
-                "total_centavos": total,
-                "total": _fmt_reais(total),
-            }
-        )
+    row_comp = cur.fetchone() or (0, 0, 0, 0, 0, 0)
+    faturado_mes_centavos = int(row_comp[0] or 0)
+    faturado_mes_qtd = int(row_comp[1] or 0)
+    pago_mes_centavos = int(row_comp[2] or 0)
+    pago_mes_qtd = int(row_comp[3] or 0)
+    aberto_mes_centavos = int(row_comp[4] or 0)
+    aberto_mes_qtd = int(row_comp[5] or 0)
 
     cur.execute(
         """
@@ -290,14 +317,111 @@ def painel_assinaturas(conn) -> dict[str, Any]:
           COALESCE(SUM(f.valor_centavos), 0)::bigint,
           COUNT(*)::int
         FROM tbl_fatura f
-        WHERE f.status = 'pago'
-          AND f.pago_em IS NOT NULL
-          AND date_trunc('month', f.pago_em) = date_trunc('month', CURRENT_TIMESTAMP)
+        WHERE f.status IN ('pendente', 'vencido')
         """
     )
-    row_mes = cur.fetchone() or (0, 0)
-    pago_mes_centavos = int(row_mes[0] or 0)
-    pago_mes_qtd = int(row_mes[1] or 0)
+    row_ab_tot = cur.fetchone() or (0, 0)
+    aberto_total_centavos = int(row_ab_tot[0] or 0)
+    aberto_total_qtd = int(row_ab_tot[1] or 0)
+
+    cur.execute(
+        """
+        SELECT
+          f.id, f.id_tenant, t.nome, f.referencia, f.plano_slug, f.valor_centavos,
+          f.status, f.forma_pagamento, f.vencimento_em, f.criado_em,
+          COALESCE(NULLIF(f.periodicidade, ''), 'mensal')
+        FROM tbl_fatura f
+        JOIN tbl_tenant t ON t.id = f.id_tenant
+        WHERE f.status IN ('pendente', 'vencido')
+        ORDER BY f.vencimento_em ASC NULLS LAST, f.id ASC
+        LIMIT 200
+        """
+    )
+    em_aberto = []
+    for row in cur.fetchall():
+        forma = (row[7] or "").strip().lower()
+        periodo = _periodo_ok(row[10])
+        plano = str(row[4] or "")
+        st = (row[6] or "").strip().lower()
+        venc = row[8]
+        no_mes = False
+        if isinstance(venc, datetime):
+            no_mes = venc.year == ano_sel and venc.month == mes_sel
+        elif isinstance(venc, date):
+            no_mes = venc.year == ano_sel and venc.month == mes_sel
+        em_aberto.append(
+            {
+                "id_fatura": int(row[0]),
+                "id_tenant": int(row[1]),
+                "nome": (row[2] or "").strip() or f"Tenant #{row[1]}",
+                "referencia": row[3] or "",
+                "plano": plano,
+                "plano_label": PLANO_LABEL.get(plano, plano or "—"),
+                "valor_centavos": int(row[5] or 0),
+                "valor": _fmt_reais(row[5]),
+                "status": st,
+                "status_label": {"pendente": "Emitida", "vencido": "Vencida"}.get(st, st),
+                "forma_pagamento": forma,
+                "forma_label": FORMA_LABEL.get(forma, forma or "—"),
+                "vencimento_em": _fmt_data(venc),
+                "vencimento_br": _fmt_data_br(venc),
+                "criado_em": _fmt_data(row[9]),
+                "criado_br": _fmt_data_br(row[9]),
+                "periodicidade_label": PERIODO_LABEL.get(periodo, periodo),
+                "no_mes_selecionado": no_mes,
+            }
+        )
+
+    # Série anual (12 meses): faturado × pago por competência
+    cur.execute(
+        f"""
+        SELECT
+          {_SQL_MES_COMPETENCIA} AS mes,
+          COALESCE(SUM(f.valor_centavos), 0)::bigint AS faturado,
+          COALESCE(SUM(CASE WHEN f.status = 'pago' THEN f.valor_centavos ELSE 0 END), 0)::bigint AS pago,
+          COUNT(*)::int AS qtd_faturado,
+          COUNT(*) FILTER (WHERE f.status = 'pago')::int AS qtd_pago
+        FROM tbl_fatura f
+        WHERE f.status IN ('pendente', 'vencido', 'pago')
+          AND EXTRACT(YEAR FROM COALESCE(f.vencimento_em, f.criado_em)) = %s
+        GROUP BY 1
+        ORDER BY 1
+        """,
+        (ano_sel,),
+    )
+    mapa_ano: dict[int, dict] = {}
+    for row in cur.fetchall():
+        mdate = row[0]
+        if not isinstance(mdate, date):
+            continue
+        mapa_ano[mdate.month] = {
+            "faturado_centavos": int(row[1] or 0),
+            "pago_centavos": int(row[2] or 0),
+            "qtd_faturado": int(row[3] or 0),
+            "qtd_pago": int(row[4] or 0),
+        }
+
+    serie_ano = []
+    for m in range(1, 13):
+        d = mapa_ano.get(m) or {
+            "faturado_centavos": 0,
+            "pago_centavos": 0,
+            "qtd_faturado": 0,
+            "qtd_pago": 0,
+        }
+        serie_ano.append(
+            {
+                "mes": m,
+                "mes_label": _MESES_CURTOS[m - 1],
+                "mes_ref": f"{ano_sel}-{m:02d}-01",
+                "faturado_centavos": d["faturado_centavos"],
+                "faturado": _fmt_reais(d["faturado_centavos"]),
+                "pago_centavos": d["pago_centavos"],
+                "pago": _fmt_reais(d["pago_centavos"]),
+                "qtd_faturado": d["qtd_faturado"],
+                "qtd_pago": d["qtd_pago"],
+            }
+        )
 
     cur.execute(
         """
@@ -362,13 +486,34 @@ def painel_assinaturas(conn) -> dict[str, Any]:
             "rebaixados": rebaixados,
         },
         "faturamento": {
+            "filtros": {
+                "ano": ano_sel,
+                "mes": mes_sel,
+                "mes_label": f"{mes_sel:02d}/{ano_sel}",
+            },
             "resumo": {
+                "faturado_mes_centavos": faturado_mes_centavos,
+                "faturado_mes": _fmt_reais(faturado_mes_centavos),
+                "faturado_mes_qtd": faturado_mes_qtd,
                 "pago_mes_centavos": pago_mes_centavos,
                 "pago_mes": _fmt_reais(pago_mes_centavos),
                 "pago_mes_qtd": pago_mes_qtd,
-                "meses_com_dados": len(meses),
+                "aberto_mes_centavos": aberto_mes_centavos,
+                "aberto_mes": _fmt_reais(aberto_mes_centavos),
+                "aberto_mes_qtd": aberto_mes_qtd,
+                "aberto_total_centavos": aberto_total_centavos,
+                "aberto_total": _fmt_reais(aberto_total_centavos),
+                "aberto_total_qtd": aberto_total_qtd,
             },
-            "meses": meses,
+            "em_aberto": em_aberto,
+            "serie_ano": {
+                "ano": ano_sel,
+                "meses": serie_ano,
+                "faturado_ano_centavos": sum(x["faturado_centavos"] for x in serie_ano),
+                "faturado_ano": _fmt_reais(sum(x["faturado_centavos"] for x in serie_ano)),
+                "pago_ano_centavos": sum(x["pago_centavos"] for x in serie_ano),
+                "pago_ano": _fmt_reais(sum(x["pago_centavos"] for x in serie_ano)),
+            },
             "pagos_recentes": pagos_recentes,
         },
     }

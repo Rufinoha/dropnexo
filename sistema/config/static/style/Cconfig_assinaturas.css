@@ -202,3 +202,125 @@
 .Asf_Badge.is-vencido { background: #fee2e2; color: #991b1b; }
 .Asf_Badge.is-pendente { background: #ffedd5; color: #9a3412; }
 .Asf_Badge.is-starter { background: #e2e8f0; color: #475569; }
+
+.Asf_Filtros {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 14px 18px;
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+}
+.Asf_Filtros .form-campo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  min-width: 140px;
+}
+.Asf_Filtros .form-campo label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.Asf_Filtros .form-campo select {
+  min-width: 160px;
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #fff;
+  color: #1e293b;
+  font-size: 0.95rem;
+}
+.Asf_FiltroHint {
+  flex: 1 1 220px;
+  margin: 0;
+  font-size: 0.86rem;
+  color: #64748b;
+  line-height: 1.4;
+}
+
+.Asf_Legenda {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px 20px;
+  margin: 0 0 14px;
+  font-size: 0.86rem;
+  color: #475569;
+}
+.Asf_LegendaItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.Asf_Dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  display: inline-block;
+}
+.Asf_Dot--fat { background: #94a3b8; }
+.Asf_Dot--pago { background: #15803d; }
+
+.Asf_Chart {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 8px;
+  align-items: end;
+  min-height: 220px;
+  padding: 8px 4px 4px;
+  border-top: 1px solid #f1f5f9;
+}
+.Asf_BarGroup {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  background: transparent;
+  padding: 6px 2px;
+  cursor: pointer;
+  border-radius: 8px;
+  min-width: 0;
+}
+.Asf_BarGroup:hover { background: #f8fafc; }
+.Asf_BarGroup.is-sel { background: #eef2ff; }
+.Asf_Bars {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 3px;
+  width: 100%;
+  height: 160px;
+}
+.Asf_Bar {
+  width: 10px;
+  min-height: 2px;
+  border-radius: 4px 4px 2px 2px;
+  transition: height 0.2s ease;
+}
+.Asf_Bar--fat { background: #94a3b8; }
+.Asf_Bar--pago { background: #15803d; }
+.Asf_BarLabel {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+}
+
+.Asf_Tabela tbody tr.is-mes td {
+  background: #fff7ed !important;
+}
+
+@media (max-width: 720px) {
+  .Asf_Chart {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    min-height: 280px;
+  }
+  .Asf_Bars { height: 120px; }
+}

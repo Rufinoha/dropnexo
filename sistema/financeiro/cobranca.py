@@ -287,6 +287,71 @@ def referencia_mes(d: date | None = None) -> str:
     return (d or date.today()).strftime("%Y-%m")
 
 
+_FATURA_REF_OK: bool | None = None
+
+
+def _rollback_cur(cur) -> None:
+    try:
+        cur.connection.rollback()
+    except Exception:
+        pass
+
+
+def garantir_referencia_fatura(cur) -> None:
+    """referencia precisa caber YYYY-MM-S / YYYY-MM-A (semestral/anual)."""
+    global _FATURA_REF_OK
+    if _FATURA_REF_OK is True:
+        return
+    try:
+        cur.execute(
+            """
+            SELECT character_maximum_length
+            FROM information_schema.columns
+            WHERE table_name = 'tbl_fatura'
+              AND column_name = 'referencia'
+              AND table_schema IN (current_schema(), 'public')
+            LIMIT 1
+            """
+        )
+        row = cur.fetchone()
+        lim = int(row[0]) if row and row[0] is not None else None
+        if lim is not None and lim >= 20:
+            _FATURA_REF_OK = True
+            return
+        cur.execute(
+            """
+            ALTER TABLE tbl_fatura
+                ALTER COLUMN referencia TYPE VARCHAR(20)
+            """
+        )
+        _FATURA_REF_OK = True
+    except Exception as e:
+        _rollback_cur(cur)
+        # Revalida: DBA pode ter aplicado o ALTER manualmente
+        try:
+            cur.execute(
+                """
+                SELECT character_maximum_length
+                FROM information_schema.columns
+                WHERE table_name = 'tbl_fatura'
+                  AND column_name = 'referencia'
+                  AND table_schema IN (current_schema(), 'public')
+                LIMIT 1
+                """
+            )
+            row = cur.fetchone()
+            lim = int(row[0]) if row and row[0] is not None else None
+            if lim is not None and lim >= 20:
+                _FATURA_REF_OK = True
+                return
+        except Exception:
+            _rollback_cur(cur)
+        raise RuntimeError(
+            "Campo referencia da fatura está limitado (VARCHAR curto). "
+            "Aplique no banco: ALTER TABLE tbl_fatura ALTER COLUMN referencia TYPE VARCHAR(20);"
+        ) from e
+
+
 def fatura_dict(row) -> dict:
     # id, referencia, valor, status, forma, plano, link_boleto, codigo, pix, qr, link_pag,
     # venc, pago, criado, efi_charge, efi_txid,
@@ -535,6 +600,8 @@ def emitir_fatura(
         registrar_uso_cupom,
         validar_cupom_para_periodo,
     )
+
+    garantir_referencia_fatura(cur)
 
     forma = (forma or "boleto").strip().lower()
     if forma not in FORMAS:

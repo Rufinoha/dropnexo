@@ -4,6 +4,9 @@
   const cfg = JSON.parse(document.getElementById("asf_cfg")?.textContent || "{}");
   let cache = null;
   let tabAtual = "ativas";
+  const hoje = new Date();
+  let filtroMes = hoje.getMonth() + 1;
+  let filtroAno = hoje.getFullYear();
 
   function el(id) {
     return document.getElementById(id);
@@ -49,6 +52,26 @@
 
   function emptyRow(cols, msg) {
     return `<tr><td colspan="${cols}" class="Asf_Empty">${esc(msg)}</td></tr>`;
+  }
+
+  function preencherAnos() {
+    const sel = el("asf_ano");
+    if (!sel || sel.options.length) return;
+    const y0 = hoje.getFullYear();
+    for (let y = y0 + 1; y >= y0 - 5; y--) {
+      const opt = document.createElement("option");
+      opt.value = String(y);
+      opt.textContent = String(y);
+      sel.appendChild(opt);
+    }
+    sel.value = String(filtroAno);
+    const mes = el("asf_mes");
+    if (mes) mes.value = String(filtroMes);
+  }
+
+  function lerFiltros() {
+    filtroMes = parseInt(el("asf_mes")?.value || filtroMes, 10) || filtroMes;
+    filtroAno = parseInt(el("asf_ano")?.value || filtroAno, 10) || filtroAno;
   }
 
   function renderAtivas(data) {
@@ -143,27 +166,96 @@
       .join("");
   }
 
+  function renderChart(serie) {
+    const box = el("asf_chart");
+    if (!box) return;
+    const meses = serie?.meses || [];
+    const ano = serie?.ano || filtroAno;
+    el("asf_graf_ano").textContent = String(ano);
+    el("asf_graf_hint").textContent = `Ano ${ano} · ${serie?.faturado_ano || "R$ 0,00"} faturado · ${serie?.pago_ano || "R$ 0,00"} pago`;
+
+    let max = 0;
+    meses.forEach((m) => {
+      max = Math.max(max, Number(m.faturado_centavos || 0), Number(m.pago_centavos || 0));
+    });
+    if (max <= 0) max = 1;
+
+    box.innerHTML = meses
+      .map((m) => {
+        const fat = Number(m.faturado_centavos || 0);
+        const pago = Number(m.pago_centavos || 0);
+        const hFat = Math.round((fat / max) * 100);
+        const hPago = Math.round((pago / max) * 100);
+        const on = Number(m.mes) === filtroMes ? " is-sel" : "";
+        return `<button type="button" class="Asf_BarGroup${on}" data-mes="${esc(m.mes)}" title="${esc(m.mes_label)}: faturado ${esc(m.faturado)} · pago ${esc(m.pago)}">
+          <div class="Asf_Bars">
+            <div class="Asf_Bar Asf_Bar--fat" style="height:${hFat}%"></div>
+            <div class="Asf_Bar Asf_Bar--pago" style="height:${hPago}%"></div>
+          </div>
+          <span class="Asf_BarLabel">${esc(m.mes_label)}</span>
+        </button>`;
+      })
+      .join("");
+
+    box.querySelectorAll(".Asf_BarGroup").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const m = parseInt(btn.getAttribute("data-mes") || "0", 10);
+        if (!m) return;
+        const mesSel = el("asf_mes");
+        if (mesSel) mesSel.value = String(m);
+        carregar();
+      });
+    });
+  }
+
   function renderFat(data) {
     const r = data?.resumo || {};
+    const f = data?.filtros || {};
+    if (f.mes) {
+      filtroMes = Number(f.mes);
+      const mesSel = el("asf_mes");
+      if (mesSel) mesSel.value = String(filtroMes);
+    }
+    if (f.ano) {
+      filtroAno = Number(f.ano);
+      const anoSel = el("asf_ano");
+      if (anoSel) anoSel.value = String(filtroAno);
+    }
+
+    const mesLbl = f.mes_label || `${String(filtroMes).padStart(2, "0")}/${filtroAno}`;
     el("asf_fat_kpis").innerHTML = kpisHtml([
-      { label: "Pago neste mês", value: r.pago_mes || "R$ 0,00", cls: "is-ok" },
-      { label: "Faturas no mês", value: String(r.pago_mes_qtd ?? 0) },
-      { label: "Meses com dados", value: String(r.meses_com_dados ?? 0) },
+      { label: `Faturado ${mesLbl}`, value: r.faturado_mes || "R$ 0,00" },
+      { label: `Pago ${mesLbl}`, value: r.pago_mes || "R$ 0,00", cls: "is-ok" },
+      { label: `Em aberto ${mesLbl}`, value: r.aberto_mes || "R$ 0,00", cls: "is-warn" },
+      { label: "Em aberto (total)", value: r.aberto_total || "R$ 0,00", cls: "is-danger" },
     ]);
 
-    const meses = data?.meses || [];
-    const tbm = el("asf_meses_tbody");
-    if (!meses.length) {
-      tbm.innerHTML = emptyRow(3, "Nenhum pagamento registrado.");
+    renderChart(data?.serie_ano);
+
+    const abertos = data?.em_aberto || [];
+    const noMes = abertos.filter((a) => a.no_mes_selecionado).length;
+    el("asf_aberto_hint").textContent = abertos.length
+      ? `${abertos.length} em aberto · ${noMes} com vencimento em ${mesLbl}`
+      : "Nenhuma cobrança em aberto";
+    const tba = el("asf_aberto_tbody");
+    if (!abertos.length) {
+      tba.innerHTML = emptyRow(7, "Nenhuma fatura emitida/vencida em aberto.");
     } else {
-      tbm.innerHTML = meses
-        .map(
-          (m) => `<tr>
-          <td><strong>${esc(m.mes_label)}</strong></td>
-          <td>${esc(m.qtd)}</td>
-          <td><strong>${esc(m.total)}</strong></td>
-        </tr>`
-        )
+      tba.innerHTML = abertos
+        .map((a) => {
+          const st = String(a.status || "").toLowerCase();
+          const badge = st === "vencido" ? "is-vencido" : "is-pendente";
+          const rowCls = a.no_mes_selecionado ? ' class="is-mes"' : "";
+          return `<tr${rowCls}>
+          <td><strong>${esc(a.vencimento_br)}</strong><div class="Asf_Muted">emitida ${esc(a.criado_br || "—")}</div></td>
+          <td><strong>${esc(a.nome)}</strong><div class="Asf_Muted">#${esc(a.id_tenant)}</div></td>
+          <td>${esc(a.plano_label)}</td>
+          <td>${esc(a.referencia || a.id_fatura)}</td>
+          <td><span class="Asf_Badge ${badge}">${esc(a.status_label || a.status)}</span></td>
+          <td>${esc(a.forma_label)}</td>
+          <td><strong>${esc(a.valor)}</strong></td>
+        </tr>`;
+        })
         .join("");
     }
 
@@ -191,13 +283,17 @@
     renderAtivas(j.ativas);
     renderInad(j.inadimplencia);
     renderFat(j.faturamento);
-    setStatus("Atualizado agora.");
+    setStatus(`Atualizado agora · competência ${filtroMes.toString().padStart(2, "0")}/${filtroAno}.`);
   }
 
   async function carregar() {
     setStatus("Carregando…");
+    lerFiltros();
     try {
-      const r = await fetch(cfg.apiDados || "/configuracoes/assinaturas-faturamento/dados", {
+      const url = new URL(cfg.apiDados || "/configuracoes/assinaturas-faturamento/dados", window.location.origin);
+      url.searchParams.set("ano", String(filtroAno));
+      url.searchParams.set("mes", String(filtroMes));
+      const r = await fetch(url.toString(), {
         credentials: "include",
         headers: { Accept: "application/json" },
       });
@@ -213,10 +309,13 @@
   }
 
   document.addEventListener("DOMContentLoaded", () => {
+    preencherAnos();
     document.querySelectorAll(".Asf_Tab").forEach((btn) => {
       btn.addEventListener("click", () => setTab(btn.getAttribute("data-tab")));
     });
     el("asf_btnAtualizar")?.addEventListener("click", carregar);
+    el("asf_mes")?.addEventListener("change", carregar);
+    el("asf_ano")?.addEventListener("change", carregar);
     setTab("ativas");
     carregar();
   });
