@@ -7,6 +7,8 @@
   let planosCache = [];
   const tenantsSel = new Map(); // id -> {id,nome,slug,tipo}
   const planosSel = new Map(); // key (slug|tipo) -> {key,slug,tipo_negocio,nome}
+  let tenantPendente = null;
+  let comboTenant = null;
 
   let cfg = {};
   try {
@@ -27,7 +29,8 @@
     publico: document.getElementById("publico_alvo"),
     valido: document.getElementById("valido_ate"),
     usos: document.getElementById("usos_max"),
-    tenantCombo: document.getElementById("tenant_combo"),
+    tenantId: document.getElementById("tenant_id"),
+    tenantDisplay: document.getElementById("tenant_combo_display"),
     planoCombo: document.getElementById("plano_combo"),
     listaTenants: document.getElementById("lista_tenants"),
     listaPlanos: document.getElementById("lista_planos"),
@@ -60,24 +63,48 @@
     });
   }
 
-  function fillTenantCombo() {
-    if (!el.tenantCombo) return;
-    const opts = ['<option value="">Selecione…</option>'];
-    tenantsCache.forEach(function (t) {
-      if (tenantsSel.has(+t.id)) return;
-      opts.push(
-        '<option value="' +
-          t.id +
-          '">#' +
-          t.id +
-          " — " +
-          esc(t.nome || t.slug || "Tenant") +
-          " (" +
-          esc(t.tipo_negocio || "?") +
-          ")</option>"
-      );
-    });
-    el.tenantCombo.innerHTML = opts.join("");
+  function limparTenantCombo() {
+    tenantPendente = null;
+    if (el.tenantId) el.tenantId.value = "";
+    if (el.tenantDisplay) el.tenantDisplay.value = "";
+  }
+
+  function initComboTenant() {
+    if (comboTenant) return comboTenant;
+    if (!window.Util?.combobox_personalisado) {
+      console.warn("[Cupom] Util.combobox_personalisado ainda não carregou.");
+      return null;
+    }
+    if (!cfg.apiComboTenants) {
+      console.warn("[Cupom] apiComboTenants não configurada.");
+      return null;
+    }
+    try {
+      comboTenant = Util.combobox_personalisado({
+        seletor: "#tenant_combo",
+        caracteres: 2,
+        rota: cfg.apiComboTenants,
+        limite: 20,
+        campoOcultoId: "tenant_id",
+        col_l1: ["titulo", false],
+        col_l2: ["tipo_negocio", "Tipo"],
+        col_l3: ["slug", "Slug"],
+        onSelect: function (item) {
+          tenantPendente = item
+            ? {
+                id: +item.id,
+                nome: item.nome || item.titulo || "Tenant #" + item.id,
+                slug: item.slug || "",
+                tipo_negocio: item.tipo_negocio || "",
+              }
+            : null;
+        },
+      });
+    } catch (e) {
+      console.error("[Cupom] Falha ao iniciar combobox de tenants:", e);
+      return null;
+    }
+    return comboTenant;
   }
 
   function fillPlanoCombo() {
@@ -102,7 +129,6 @@
     const itens = Array.from(tenantsSel.values());
     if (!itens.length) {
       el.listaTenants.innerHTML = '<li class="Cup_Empty">Nenhum tenant selecionado (vale para todos).</li>';
-      fillTenantCombo();
       return;
     }
     el.listaTenants.innerHTML = itens
@@ -129,7 +155,6 @@
         renderTenants();
       });
     });
-    fillTenantCombo();
   }
 
   function renderPlanos() {
@@ -178,6 +203,7 @@
     if (el.usos) el.usos.value = "";
     tenantsSel.clear();
     planosSel.clear();
+    limparTenantCombo();
     renderTenants();
     renderPlanos();
     syncValorLabel();
@@ -214,6 +240,7 @@
         planosSel.set(chave, { key: chave, slug: chave, nome: chave });
       }
     });
+    limparTenantCombo();
     renderTenants();
     renderPlanos();
     syncValorLabel();
@@ -225,7 +252,6 @@
     if (!r.ok || !j.success) throw new Error(j.message || "Erro ao carregar combos.");
     tenantsCache = j.tenants || [];
     planosCache = j.planos || [];
-    fillTenantCombo();
     fillPlanoCombo();
   }
 
@@ -274,17 +300,32 @@
     window.parent.GlobalUtils?.fecharJanelaApoio(nivelModal);
   }
 
-  el.tipo?.addEventListener("change", syncValorLabel);
-  el.btnAddTenant?.addEventListener("click", function () {
-    const tid = +(el.tenantCombo?.value || 0);
-    if (!tid) return;
-    const t = tenantsCache.find(function (x) {
-      return +x.id === tid;
-    });
-    if (!t) return;
+  function incluirTenantSelecionado() {
+    const tid = +(el.tenantId?.value || tenantPendente?.id || 0);
+    if (!tid) {
+      Swal.fire("Atenção", "Selecione um tenant na lista.", "warning");
+      return;
+    }
+    if (tenantsSel.has(tid)) {
+      limparTenantCombo();
+      return;
+    }
+    let t = tenantPendente && +tenantPendente.id === tid ? tenantPendente : null;
+    if (!t) {
+      t = tenantsCache.find(function (x) {
+        return +x.id === tid;
+      });
+    }
+    if (!t) {
+      t = { id: tid, nome: "Tenant #" + tid, slug: "", tipo_negocio: "" };
+    }
     tenantsSel.set(tid, t);
+    limparTenantCombo();
     renderTenants();
-  });
+  }
+
+  el.tipo?.addEventListener("change", syncValorLabel);
+  el.btnAddTenant?.addEventListener("click", incluirTenantSelecionado);
   el.btnAddPlano?.addEventListener("click", function () {
     const key = (el.planoCombo?.value || "").trim();
     if (!key) return;
@@ -314,6 +355,7 @@
     nivelModal = nivel || 1;
     if (el.id) el.id.value = idCupom ? String(idCupom) : "";
     try {
+      initComboTenant();
       await carregarCombos();
       if (idCupom > 0) await carregarApoio(idCupom);
       else limparForm();

@@ -89,10 +89,19 @@
           </p>
           <div class="Cup_AddRow">
             <div class="form-campo Cup_AddGrow">
-              <label for="tenant_combo">Tenant</label>
-              <select id="tenant_combo">
-                <option value="">Selecione…</option>
-              </select>
+              <label id="tenant_combo_label" for="tenant_combo_display">Tenant</label>
+              <div id="tenant_combo" class="Cl_SelectLike" role="combobox" aria-labelledby="tenant_combo_label" aria-haspopup="listbox">
+                <input type="text" id="tenant_combo_display" class="Cl_SelectDisplay" placeholder="Buscar tenant…" autocomplete="off" readonly />
+                <div class="Cl_Caret"></div>
+                <div class="Cl_ComboPanel" aria-hidden="true">
+                  <div class="Cl_ComboSearch">
+                    <input class="Cl_ComboSearchInput" placeholder="Digite 2 caracteres ou mais…" autocomplete="off" />
+                  </div>
+                  <div class="Cl_ComboStatus">Digite 2+ para pesquisar</div>
+                  <div class="Cl_ComboLista"></div>
+                </div>
+              </div>
+              <input type="hidden" id="tenant_id" />
             </div>
             <button type="button" class="Cl_BtnIncluir" id="btnAddTenant">Incluir</button>
           </div>
@@ -125,10 +134,11 @@
 
   <script id="cup_apoio_cfg" type="application/json">{{ {
     "apiCombos": url_for("config.cupons_desconto_combos"),
+    "apiComboTenants": url_for("config.cupons_desconto_combo_tenants"),
     "apiApoio": url_for("config.cupons_desconto_apoio"),
     "apiSalvar": url_for("config.cupons_desconto_salvar")
   }|tojson }}</script>
   <script src="{{ url_for('static', filename='script/global_utils.js') }}"></script>
-  <script src="{{ url_for('config.static', filename='script/Sconfig_cupons_apoio.js') }}?v=2"></script>
+  <script src="{{ url_for('config.static', filename='script/Sconfig_cupons_apoio.js') }}?v=3"></script>
 </body>
 </html>

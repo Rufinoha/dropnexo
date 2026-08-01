@@ -1783,6 +1783,32 @@ def cupons_desconto_combos():
         conn.close()
 
 
+@config_bp.get(f"{CUPOM_PREFIX}/combo-tenants")
+@login_obrigatorio()
+def cupons_desconto_combo_tenants():
+    """Combobox personalizada BARACAT — GET ?filtro=&limitar= → {sucesso, dados}."""
+    if (r := _exigir_dev()) is not None:
+        return r
+    termo = (request.args.get("filtro") or "").strip()
+    try:
+        limite = min(40, max(1, int(request.args.get("limitar") or 20)))
+    except (TypeError, ValueError):
+        limite = 20
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        from sistema.financeiro.cupom import combobox_tenants_para_cupom
+
+        return jsonify(
+            sucesso=True,
+            dados=combobox_tenants_para_cupom(cur, termo, limitar=limite),
+        )
+    except Exception as e:
+        return jsonify(sucesso=False, mensagem=str(e)), 500
+    finally:
+        conn.close()
+
+
 @config_bp.get(f"{CUPOM_PREFIX}/dados")
 @login_obrigatorio()
 def cupons_desconto_dados():

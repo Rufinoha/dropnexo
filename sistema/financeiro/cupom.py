@@ -665,6 +665,60 @@ def listar_tenants_para_cupom(cur) -> list[dict[str, Any]]:
     return out
 
 
+def combobox_tenants_para_cupom(
+    cur, filtro: str = "", limitar: int = 20
+) -> list[dict[str, Any]]:
+    """Busca remota no padrão BARACAT (sucesso/dados) para combobox personalizada."""
+    termo = (filtro or "").strip()
+    try:
+        limite = min(40, max(1, int(limitar or 20)))
+    except (TypeError, ValueError):
+        limite = 20
+
+    params: list[Any] = []
+    where_extra = ""
+    if termo:
+        if termo.isdigit():
+            where_extra = "AND (t.id = %s OR t.nome ILIKE %s OR COALESCE(t.slug, '') ILIKE %s)"
+            like = f"%{termo}%"
+            params.extend([int(termo), like, like])
+        else:
+            where_extra = "AND (t.nome ILIKE %s OR COALESCE(t.slug, '') ILIKE %s)"
+            like = f"%{termo}%"
+            params.extend([like, like])
+
+    cur.execute(
+        f"""
+        SELECT t.id, t.nome, t.slug,
+               COALESCE(NULLIF(TRIM(t.tipo_negocio), ''), 'vendedor')
+        FROM tbl_tenant t
+        WHERE COALESCE(t.ativo, TRUE) = TRUE
+          AND COALESCE(NULLIF(TRIM(t.tipo_negocio), ''), 'vendedor')
+              IN ('vendedor', 'fornecedor', 'hibrido')
+          {where_extra}
+        ORDER BY t.nome NULLS LAST, t.id
+        LIMIT %s
+        """,
+        (*params, limite),
+    )
+    out = []
+    for r in cur.fetchall():
+        tid = int(r[0])
+        nome = r[1] or f"Tenant #{tid}"
+        slug = r[2] or ""
+        tipo = str(r[3] or "vendedor").lower()
+        out.append(
+            {
+                "id": tid,
+                "nome": nome,
+                "titulo": f"#{tid} — {nome}",
+                "slug": slug,
+                "tipo_negocio": tipo,
+            }
+        )
+    return out
+
+
 def listar_planos_para_cupom(cur) -> list[dict[str, Any]]:
     """Uma opção por plano × perfil (vendedor/fornecedor), rótulo: Nome | Perfil."""
     try:
