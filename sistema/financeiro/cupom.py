@@ -36,11 +36,42 @@ def _rollback_cur(cur) -> None:
         pass
 
 
+def _escopo_cupom_existe(cur) -> bool:
+    """Detecta SQL 092/093 sem exigir permissão de DDL."""
+    cur.execute(
+        """
+        SELECT
+          EXISTS (
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_name = 'tbl_cupom_desconto'
+              AND column_name = 'publico_alvo'
+              AND table_schema IN (current_schema(), 'public')
+          )
+          AND to_regclass('tbl_cupom_tenant') IS NOT NULL
+          AND to_regclass('tbl_cupom_plano') IS NOT NULL
+        """
+    )
+    row = cur.fetchone()
+    return bool(row and row[0])
+
+
 def garantir_escopo_cupom(cur) -> bool:
-    """publico_alvo + tbl_cupom_tenant (092) + tbl_cupom_plano (093)."""
+    """publico_alvo + tbl_cupom_tenant (092) + tbl_cupom_plano (093).
+
+    Prioriza detecção (SELECT). Só tenta DDL se faltar algo — o usuário da app
+    muitas vezes não tem CREATE/ALTER, e CREATE IF NOT EXISTS ainda exige CREATE.
+    """
     global _CUPOM_ESCOPO_OK
     if _CUPOM_ESCOPO_OK is True:
         return True
+    try:
+        if _escopo_cupom_existe(cur):
+            _CUPOM_ESCOPO_OK = True
+            return True
+    except Exception:
+        _rollback_cur(cur)
+
     try:
         cur.execute(
             """
@@ -66,12 +97,21 @@ def garantir_escopo_cupom(cur) -> bool:
             )
             """
         )
-        _CUPOM_ESCOPO_OK = True
-        return True
+        if _escopo_cupom_existe(cur):
+            _CUPOM_ESCOPO_OK = True
+            return True
     except Exception:
         _rollback_cur(cur)
-        _CUPOM_ESCOPO_OK = False
-        return False
+        # DDL falhou (sem permissão). Revalida: SQL manual pode já ter aplicado.
+        try:
+            if _escopo_cupom_existe(cur):
+                _CUPOM_ESCOPO_OK = True
+                return True
+        except Exception:
+            _rollback_cur(cur)
+
+    _CUPOM_ESCOPO_OK = False
+    return False
 
 
 def calcular_preco(
