@@ -215,9 +215,14 @@
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: vinculoAtual.id, acao, mensagem: mensagem || "", motivo: mensagem || "" }),
     });
-    const j = await r.json();
-    if (window.Swal) Swal.fire(j.success ? "OK" : "Erro", j.message, j.success ? "success" : "error");
-    else alert(j.message);
+    let j = {};
+    try {
+      j = await r.json();
+    } catch (_) {
+      j = { success: false, message: "Erro no servidor (" + r.status + "). Tente novamente." };
+    }
+    if (window.Swal) Swal.fire(j.success ? "OK" : "Erro", j.message || "Falha", j.success ? "success" : "error");
+    else alert(j.message || "Falha");
     if (j.success) {
       fechar();
       carregar();

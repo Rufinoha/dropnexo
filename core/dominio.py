@@ -134,8 +134,52 @@ def _rollback_vinculo(cur) -> None:
         pass
 
 
+def _garantir_check_status_pausado(cur) -> None:
+    """Garante que o CHECK de status aceite 'pausado' (SQL 095)."""
+    cur.execute(
+        """
+        SELECT pg_get_constraintdef(c.oid)
+        FROM pg_constraint c
+        JOIN pg_class t ON t.oid = c.conrelid
+        JOIN pg_namespace n ON n.oid = t.relnamespace
+        WHERE c.contype = 'c'
+          AND t.relname = 'tbl_vinculo_vendedor_fornecedor'
+          AND n.nspname IN (current_schema(), 'public')
+          AND pg_get_constraintdef(c.oid) ILIKE '%status%'
+        LIMIT 1
+        """
+    )
+    row = cur.fetchone()
+    defn = (row[0] or "") if row else ""
+    if "pausado" in defn.lower():
+        return
+    cur.execute(
+        """
+        ALTER TABLE tbl_vinculo_vendedor_fornecedor
+          DROP CONSTRAINT IF EXISTS tbl_vinculo_vendedor_fornecedor_status_check
+        """
+    )
+    cur.execute(
+        """
+        ALTER TABLE tbl_vinculo_vendedor_fornecedor
+          ADD CONSTRAINT tbl_vinculo_vendedor_fornecedor_status_check
+          CHECK (
+            (status)::text = ANY (
+              ARRAY[
+                'aguardando'::character varying,
+                'ativo'::character varying,
+                'pausado'::character varying,
+                'recusado'::character varying,
+                'inativo'::character varying
+              ]::text[]
+            )
+          )
+        """
+    )
+
+
 def garantir_colunas_vinculo_status(cur) -> None:
-    """motivo + auditoria de pausa/encerramento (SQL 095)."""
+    """motivo + auditoria + CHECK com 'pausado' (SQL 095)."""
     global _VINCOLO_COLS_OK
     if _VINCOLO_COLS_OK is True:
         return
@@ -149,16 +193,15 @@ def garantir_colunas_vinculo_status(cur) -> None:
             LIMIT 1
             """
         )
-        if cur.fetchone():
-            _VINCOLO_COLS_OK = True
-            return
-        for ddl in (
-            "ALTER TABLE tbl_vinculo_vendedor_fornecedor ADD COLUMN IF NOT EXISTS motivo_status TEXT",
-            "ALTER TABLE tbl_vinculo_vendedor_fornecedor ADD COLUMN IF NOT EXISTS status_alterado_em TIMESTAMPTZ",
-            "ALTER TABLE tbl_vinculo_vendedor_fornecedor ADD COLUMN IF NOT EXISTS status_alterado_por_usuario INTEGER",
-            "ALTER TABLE tbl_vinculo_vendedor_fornecedor ADD COLUMN IF NOT EXISTS status_alterado_por_lado VARCHAR(20)",
-        ):
-            cur.execute(ddl)
+        if not cur.fetchone():
+            for ddl in (
+                "ALTER TABLE tbl_vinculo_vendedor_fornecedor ADD COLUMN IF NOT EXISTS motivo_status TEXT",
+                "ALTER TABLE tbl_vinculo_vendedor_fornecedor ADD COLUMN IF NOT EXISTS status_alterado_em TIMESTAMPTZ",
+                "ALTER TABLE tbl_vinculo_vendedor_fornecedor ADD COLUMN IF NOT EXISTS status_alterado_por_usuario INTEGER",
+                "ALTER TABLE tbl_vinculo_vendedor_fornecedor ADD COLUMN IF NOT EXISTS status_alterado_por_lado VARCHAR(20)",
+            ):
+                cur.execute(ddl)
+        _garantir_check_status_pausado(cur)
         _VINCOLO_COLS_OK = True
     except Exception:
         _rollback_vinculo(cur)
@@ -172,14 +215,30 @@ def garantir_colunas_vinculo_status(cur) -> None:
                 LIMIT 1
                 """
             )
-            if cur.fetchone():
+            cols_ok = bool(cur.fetchone())
+            cur.execute(
+                """
+                SELECT 1
+                FROM pg_constraint c
+                JOIN pg_class t ON t.oid = c.conrelid
+                JOIN pg_namespace n ON n.oid = t.relnamespace
+                WHERE c.contype = 'c'
+                  AND t.relname = 'tbl_vinculo_vendedor_fornecedor'
+                  AND n.nspname IN (current_schema(), 'public')
+                  AND pg_get_constraintdef(c.oid) ILIKE '%pausado%'
+                LIMIT 1
+                """
+            )
+            check_ok = bool(cur.fetchone())
+            if cols_ok and check_ok:
                 _VINCOLO_COLS_OK = True
                 return
         except Exception:
             _rollback_vinculo(cur)
         raise RuntimeError(
-            "Colunas de status do vínculo indisponíveis. "
-            "Aplique o SQL 095_vinculo_pausar_encerrar.sql no banco."
+            "Colunas/CHECK de status do vínculo indisponíveis. "
+            "Aplique o SQL 095_vinculo_pausar_encerrar.sql no banco "
+            "(inclui status 'pausado' no CHECK)."
         )
 
 

@@ -1280,6 +1280,9 @@ def vinculo_acao():
     except RuntimeError as e:
         conn.rollback()
         return jsonify(success=False, message=str(e)), 500
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=f"Falha ao processar vínculo: {e}"), 500
     finally:
         conn.close()
 
