@@ -255,22 +255,68 @@ def _zerar_estoque_vitrine_vinculo(cur, id_vendedor: int, id_fornecedor: int) ->
     return int(cur.rowcount or 0)
 
 
+def _email_links_vinculo() -> dict:
+    import os
+    from datetime import datetime
+
+    from global_utils import obter_base_url
+
+    base = obter_base_url()
+    return {
+        "url_politica_privacidade": os.getenv("URL_POLITICA_PRIVACIDADE") or f"{base}/privacidade",
+        "url_politica_interna": os.getenv("URL_POLITICA_INTERNA") or f"{base}/politica-interna",
+        "url_dpo": os.getenv("URL_DPO") or f"{base}/dpo",
+        "ano": datetime.now().year,
+    }
+
+
 def _enviar_email_vinculo(
     cur,
     *,
     id_destinatario_tenant: int,
+    destinatario_e_vendedor: bool,
     assunto: str,
-    html: str,
+    status_label: str,
+    acao_label: str,
+    acao_sufixo: str | None,
+    nome_ator: str,
+    nome_parceiro: str,
+    detalhes: str,
+    motivo: str | None,
     tag: str,
 ) -> None:
-    from core.pedidos.notificacoes import email_dono_tenant
+    from flask import render_template
 
-    email, _nome = email_dono_tenant(cur, id_destinatario_tenant)
+    from api.brevo.srotas_brevo import enviar_email
+    from core.pedidos.notificacoes import email_dono_tenant
+    from global_utils import obter_base_url
+
+    email, nome_dest = email_dono_tenant(cur, id_destinatario_tenant)
     if not email:
         return
+    base = obter_base_url().rstrip("/")
+    if destinatario_e_vendedor:
+        link_acao = f"{base}/fornecedores"
+        texto_botao = "Ver fornecedores"
+    else:
+        link_acao = f"{base}/fornecedor/vendedores"
+        texto_botao = "Ver vendedores parceiros"
     try:
-        from api.brevo.srotas_brevo import enviar_email
-
+        html = render_template(
+            "vinculos/emails/evento_vinculo.html",
+            titulo_email=assunto,
+            nome_destinatario=nome_dest or "",
+            status_label=status_label,
+            acao_label=acao_label,
+            acao_sufixo=acao_sufixo or "",
+            nome_ator=nome_ator,
+            nome_parceiro=nome_parceiro,
+            motivo=(motivo or "").strip() or None,
+            detalhes=detalhes,
+            link_acao=link_acao,
+            texto_botao=texto_botao,
+            **_email_links_vinculo(),
+        )
         enviar_email([email], assunto, html, tag=tag)
     except Exception:
         pass
@@ -362,20 +408,21 @@ def pausar_vinculo(
     outro = vinc["id_tenant_vendedor"] if lado == "fornecedor" else vinc["id_tenant_fornecedor"]
     quem = nome_fn if lado == "fornecedor" else nome_vd
     com = nome_vd if lado == "fornecedor" else nome_fn
-    html = (
-        f"<p>Olá,</p>"
-        f"<p>O vínculo entre <strong>{esc_html(quem)}</strong> e <strong>{esc_html(com)}</strong> "
-        f"foi <strong>pausado</strong>.</p>"
-        f"<p>Os estoques dos produtos desse vínculo foram zerados e novos produtos ficam bloqueados "
-        f"até a retomada.</p>"
-        f"<p><strong>Motivo:</strong> {esc_html(motivo)}</p>"
-        f"<p>Pedidos já abertos continuam normalmente.</p>"
-    )
     _enviar_email_vinculo(
         cur,
         id_destinatario_tenant=outro,
+        destinatario_e_vendedor=(lado == "fornecedor"),
         assunto="Vínculo pausado • DropNexo",
-        html=html,
+        status_label="Pausado",
+        acao_label="pausado",
+        acao_sufixo=None,
+        nome_ator=quem,
+        nome_parceiro=com,
+        detalhes=(
+            "Os estoques dos produtos desse vínculo foram zerados e novos produtos "
+            "ficam bloqueados até a retomada."
+        ),
+        motivo=motivo,
         tag="dropnexo_vinculo_pausado",
     )
     return {"status": "pausado", "produtos_zerados": qtd, "motivo": motivo}
@@ -431,18 +478,21 @@ def despausar_vinculo(
     outro = vinc["id_tenant_vendedor"] if lado == "fornecedor" else vinc["id_tenant_fornecedor"]
     quem = nome_fn if lado == "fornecedor" else nome_vd
     com = nome_vd if lado == "fornecedor" else nome_fn
-    html = (
-        f"<p>Olá,</p>"
-        f"<p>O vínculo entre <strong>{esc_html(quem)}</strong> e <strong>{esc_html(com)}</strong> "
-        f"foi <strong>retomado</strong> (despausado).</p>"
-        f"<p>A operação de catálogo e novos produtos volta a ficar liberada. "
-        f"Os estoques serão atualizados conforme a sincronização/operação normal.</p>"
-    )
     _enviar_email_vinculo(
         cur,
         id_destinatario_tenant=outro,
+        destinatario_e_vendedor=(lado == "fornecedor"),
         assunto="Vínculo retomado • DropNexo",
-        html=html,
+        status_label="Retomado",
+        acao_label="retomado",
+        acao_sufixo="(despausado)",
+        nome_ator=quem,
+        nome_parceiro=com,
+        detalhes=(
+            "A operação de catálogo e novos produtos volta a ficar liberada. "
+            "Os estoques serão atualizados conforme a sincronização/operação normal."
+        ),
+        motivo=None,
         tag="dropnexo_vinculo_despausado",
     )
     return {"status": "ativo"}
@@ -498,20 +548,21 @@ def encerrar_vinculo(
     outro = vinc["id_tenant_vendedor"] if lado == "fornecedor" else vinc["id_tenant_fornecedor"]
     quem = nome_fn if lado == "fornecedor" else nome_vd
     com = nome_vd if lado == "fornecedor" else nome_fn
-    html = (
-        f"<p>Olá,</p>"
-        f"<p>O vínculo entre <strong>{esc_html(quem)}</strong> e <strong>{esc_html(com)}</strong> "
-        f"foi <strong>encerrado</strong>.</p>"
-        f"<p>Os estoques foram zerados. Para voltar a operar juntos, será necessário "
-        f"<strong>solicitar o vínculo novamente</strong> e aguardar aprovação.</p>"
-        f"<p><strong>Motivo:</strong> {esc_html(motivo)}</p>"
-        f"<p>Pedidos já abertos continuam normalmente.</p>"
-    )
     _enviar_email_vinculo(
         cur,
         id_destinatario_tenant=outro,
+        destinatario_e_vendedor=(lado == "fornecedor"),
         assunto="Vínculo encerrado • DropNexo",
-        html=html,
+        status_label="Encerrado",
+        acao_label="encerrado",
+        acao_sufixo=None,
+        nome_ator=quem,
+        nome_parceiro=com,
+        detalhes=(
+            "Os estoques foram zerados. Para voltar a operar juntos, será necessário "
+            "solicitar o vínculo novamente e aguardar aprovação."
+        ),
+        motivo=motivo,
         tag="dropnexo_vinculo_encerrado",
     )
     return {"status": "inativo", "produtos_zerados": qtd, "motivo": motivo}

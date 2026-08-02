@@ -1,0 +1,53 @@
+{% extends "cadastro/emails/base_email.html" %}
+
+{% block conteudo %}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+  <tr>
+    <td style="padding:0;margin:0;">
+      <p style="margin:0 0 12px 0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;">
+        Olá{% if nome_destinatario %}, <strong>{{ nome_destinatario }}</strong>{% endif %}.
+      </p>
+      <p style="margin:0 0 14px 0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;">
+        O vínculo entre <strong>{{ nome_ator }}</strong> e <strong>{{ nome_parceiro }}</strong>
+        foi <strong>{{ acao_label }}</strong>{% if acao_sufixo %} {{ acao_sufixo }}{% endif %}.
+      </p>
+
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:8px 0 16px 0;background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;">
+        <tr>
+          <td style="padding:14px 16px;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.7;color:#111827;">
+            <div style="margin:0 0 6px 0;"><strong>Status:</strong> {{ status_label }}</div>
+            <div style="margin:0 0 6px 0;"><strong>Conta:</strong> {{ nome_ator }}</div>
+            <div style="margin:0 0 6px 0;"><strong>Parceiro:</strong> {{ nome_parceiro }}</div>
+            {% if motivo %}
+            <div style="margin:0;"><strong>Motivo:</strong> {{ motivo }}</div>
+            {% endif %}
+          </td>
+        </tr>
+      </table>
+
+      {% if detalhes %}
+      <p style="margin:0 0 14px 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.6;color:#374151;">
+        {{ detalhes }}
+      </p>
+      {% endif %}
+
+      <p style="margin:0 0 14px 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.6;color:#374151;">
+        Pedidos já abertos continuam normalmente.
+      </p>
+
+      {% if link_acao %}
+      <table role="presentation" cellpadding="0" cellspacing="0" align="center" style="margin:18px auto 10px auto;">
+        <tr>
+          <td align="center" bgcolor="#2C6BF3" style="border-radius:10px;">
+            <a href="{{ link_acao }}"
+               style="display:inline-block;padding:12px 22px;font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:10px;">
+              {{ texto_botao or "Abrir no DropNexo" }}
+            </a>
+          </td>
+        </tr>
+      </table>
+      {% endif %}
+    </td>
+  </tr>
+</table>
+{% endblock %}
