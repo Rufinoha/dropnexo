@@ -114,8 +114,8 @@ _POR_TIPO_BANCO = {
             depositos=1,
         ),
         "professional": lambda: _base(
-            slug_comercial="ativo",
-            nome="Ativo",
+            slug_comercial="conectar",
+            nome="Conectar",
             gratuito=False,
             pedidos_mes=200,
             conexoes=20,
@@ -127,8 +127,8 @@ _POR_TIPO_BANCO = {
             depositos=2,
         ),
         "scale": lambda: _base(
-            slug_comercial="rede",
-            nome="Rede",
+            slug_comercial="expandir",
+            nome="Expandir",
             gratuito=False,
             pedidos_mes=800,
             conexoes=60,
@@ -141,8 +141,8 @@ _POR_TIPO_BANCO = {
             depositos=5,
         ),
         "enterprise": lambda: _base(
-            slug_comercial="distribuidor",
-            nome="Distribuidor",
+            slug_comercial="hub",
+            nome="Hub",
             gratuito=False,
             pedidos_mes=3000,
             conexoes=None,

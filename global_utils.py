@@ -81,6 +81,23 @@ def init_app(app):
             "CONTATO_EMAIL": CONTATO_EMAIL,
         }
 
+    @app.context_processor
+    def _inject_vinculo_alertas():
+        from flask import session
+
+        if not session.get("id_tenant") or not session.get("id_usuario"):
+            return {"vinculo_alertas": []}
+        try:
+            from core.dominio import listar_alertas_vinculo_tenant
+
+            conn = Var_ConectarBanco()
+            cur = conn.cursor()
+            alertas = listar_alertas_vinculo_tenant(cur, int(session["id_tenant"]))
+            conn.close()
+            return {"vinculo_alertas": alertas}
+        except Exception:
+            return {"vinculo_alertas": []}
+
 
 def url_imagem_produto(imagem_url: str | None) -> str:
     """Converte caminho local (imge/produtos/..., upload/tenant...) ou URL externa para URL servível."""
@@ -471,13 +488,16 @@ _PLANOS_BANCO = frozenset({"starter", "professional", "scale", "enterprise"})
 _ALIASES_PLANO_BANCO = {
     "explorar": "starter",
     "crescer": "professional",
-    "ativo": "professional",
+    "conectar": "professional",
+    "ativo": "professional",  # legado fornecedor
     "profissional": "professional",
     "escalar": "scale",
-    "rede": "scale",
+    "expandir": "scale",
+    "rede": "scale",  # legado fornecedor
     "escala": "scale",
     "pro": "enterprise",
-    "distribuidor": "enterprise",
+    "hub": "enterprise",
+    "distribuidor": "enterprise",  # legado fornecedor
     "empresarial": "enterprise",
 }
 

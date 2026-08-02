@@ -947,6 +947,9 @@ def rede():
                 )"""
             )
             params.append(ids_segmentos)
+        from core.dominio import garantir_colunas_vinculo_status
+
+        garantir_colunas_vinculo_status(cur)
         cur.execute(
             f"""
             SELECT t.id, COALESCE(t.nome_fantasia, t.nome), t.cidade, t.uf,
@@ -957,7 +960,8 @@ def rede():
                    (SELECT COUNT(DISTINCT pv.id_produto)::int
                     FROM tbl_produto_vendedor pv
                     WHERE pv.id_tenant_vendedor = %s AND pv.id_tenant_fornecedor = t.id),
-                   v.mensagem_resposta
+                   v.mensagem_resposta, v.motivo_status,
+                   v.status_alterado_por_lado, v.status_alterado_por_usuario
             FROM tbl_tenant t
             LEFT JOIN tbl_vinculo_vendedor_fornecedor v
                 ON v.id_tenant_fornecedor = t.id AND v.id_tenant_vendedor = %s
@@ -968,6 +972,7 @@ def rede():
             [id_vendedor, id_vendedor] + params,
         )
         cards = []
+        uid = session.get("id_usuario")
         for row in cur.fetchall():
             tid = row[0]
             cur.execute(
@@ -985,6 +990,11 @@ def rede():
             segmentos = [r[1] for r in seg_rows]
             ids_seg = [r[0] for r in seg_rows]
             st = row[7] or "nenhum"
+            pode_despausar = (
+                st == "pausado"
+                and (row[12] or "") == "vendedor"
+                and (row[13] is None or (uid is not None and int(row[13]) == int(uid)))
+            )
             cards.append(
                 {
                     "id": tid,
@@ -1000,6 +1010,8 @@ def rede():
                     "status_vinculo": st,
                     "id_vinculo": row[6],
                     "motivo_recusa": row[10] or "" if st == "recusado" else "",
+                    "motivo_status": row[11] or "",
+                    "pode_despausar": pode_despausar,
                 }
             )
         return jsonify(success=True, fornecedores=cards)
@@ -1185,11 +1197,19 @@ def solicitar_vinculo():
         conn.close()
 
 
-@vd_fornecedores_bp.post("/fornecedores/desconectar")
+@vd_fornecedores_bp.post("/fornecedores/vinculo-acao")
 @login_obrigatorio()
 @exigir_modulo(MODULO_VENDEDOR)
 @exigir_permissao(codigo="fornecedores.ver")
-def desconectar():
+def vinculo_acao():
+    """Pausar / despausar / encerrar vínculo (lado vendedor)."""
+    from core.dominio import (
+        despausar_vinculo,
+        encerrar_vinculo,
+        garantir_colunas_vinculo_status,
+        pausar_vinculo,
+    )
+
     id_vendedor = session.get("id_tenant")
     if not id_vendedor:
         return jsonify(success=False, message="Sessão inválida."), 403
@@ -1198,6 +1218,129 @@ def desconectar():
         id_forn = int(body.get("id_fornecedor"))
     except (TypeError, ValueError):
         return jsonify(success=False, message="Fornecedor inválido."), 400
+    acao = (body.get("acao") or "").strip().lower()
+    if acao not in ("pausar", "despausar", "encerrar"):
+        return jsonify(success=False, message="Ação inválida."), 400
+    motivo = (body.get("motivo") or body.get("mensagem") or "").strip()
+    if acao in ("pausar", "encerrar") and len(motivo) < 5:
+        return jsonify(success=False, message="Informe o motivo (mínimo 5 caracteres)."), 400
+
+    uid = session.get("id_usuario")
+    uid_i = int(uid) if uid else None
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        garantir_colunas_vinculo_status(cur)
+        cur.execute(
+            """
+            SELECT id, status, status_alterado_por_lado, status_alterado_por_usuario
+            FROM tbl_vinculo_vendedor_fornecedor
+            WHERE id_tenant_vendedor = %s AND id_tenant_fornecedor = %s
+            """,
+            (int(id_vendedor), id_forn),
+        )
+        row = cur.fetchone()
+        if not row:
+            return jsonify(success=False, message="Vínculo não encontrado."), 404
+        id_vinculo = int(row[0])
+        if acao == "pausar":
+            pausar_vinculo(
+                cur,
+                id_vinculo,
+                id_tenant_ator=int(id_vendedor),
+                lado="vendedor",
+                id_usuario=uid_i,
+                motivo=motivo,
+            )
+            msg = "Vínculo pausado. Estoques zerados e novos produtos bloqueados."
+        elif acao == "despausar":
+            despausar_vinculo(
+                cur,
+                id_vinculo,
+                id_tenant_ator=int(id_vendedor),
+                lado="vendedor",
+                id_usuario=uid_i,
+            )
+            msg = "Vínculo retomado (despausado)."
+        else:
+            encerrar_vinculo(
+                cur,
+                id_vinculo,
+                id_tenant_ator=int(id_vendedor),
+                lado="vendedor",
+                id_usuario=uid_i,
+                motivo=motivo,
+            )
+            msg = "Vínculo encerrado. Estoques zerados; para retomar, solicite novamente."
+        conn.commit()
+        return jsonify(success=True, message=msg)
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 400
+    except RuntimeError as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
+@vd_fornecedores_bp.post("/fornecedores/desconectar")
+@login_obrigatorio()
+@exigir_modulo(MODULO_VENDEDOR)
+@exigir_permissao(codigo="fornecedores.ver")
+def desconectar():
+    """Compat: usa encerrar com motivo quando informado; senão mantém excluir/converter legado."""
+    from core.dominio import encerrar_vinculo, garantir_colunas_vinculo_status
+
+    id_vendedor = session.get("id_tenant")
+    if not id_vendedor:
+        return jsonify(success=False, message="Sessão inválida."), 403
+    body = request.get_json(silent=True) or {}
+    try:
+        id_forn = int(body.get("id_fornecedor"))
+    except (TypeError, ValueError):
+        return jsonify(success=False, message="Fornecedor inválido."), 400
+
+    motivo = (body.get("motivo") or body.get("mensagem") or "").strip()
+    if motivo or (body.get("acao") or "").strip().lower() == "encerrar":
+        if len(motivo) < 5:
+            return jsonify(success=False, message="Informe o motivo (mínimo 5 caracteres)."), 400
+        uid = session.get("id_usuario")
+        uid_i = int(uid) if uid else None
+        conn = Var_ConectarBanco()
+        try:
+            cur = conn.cursor()
+            garantir_colunas_vinculo_status(cur)
+            cur.execute(
+                """
+                SELECT id FROM tbl_vinculo_vendedor_fornecedor
+                WHERE id_tenant_vendedor = %s AND id_tenant_fornecedor = %s
+                  AND status IN ('ativo', 'pausado')
+                """,
+                (int(id_vendedor), id_forn),
+            )
+            row = cur.fetchone()
+            if not row:
+                return jsonify(success=False, message="Vínculo não encontrado ou já encerrado."), 404
+            encerrar_vinculo(
+                cur,
+                int(row[0]),
+                id_tenant_ator=int(id_vendedor),
+                lado="vendedor",
+                id_usuario=uid_i,
+                motivo=motivo,
+            )
+            conn.commit()
+            return jsonify(
+                success=True,
+                message="Vínculo encerrado. Estoques zerados; para retomar, solicite novamente.",
+            )
+        except ValueError as e:
+            conn.rollback()
+            return jsonify(success=False, message=str(e)), 400
+        finally:
+            conn.close()
+
     acao = (body.get("acao_produtos") or "excluir").strip().lower()
     if acao not in ("excluir", "converter"):
         return jsonify(success=False, message="Ação inválida para os produtos."), 400
@@ -1430,12 +1573,17 @@ def loja_ativar_produto():
             (id_vendedor, id_fornecedor),
         )
         vinc = cur.fetchone()
-        if not vinc or vinc[0] != "ativo":
+        st = (vinc[0] if vinc else "") or ""
+        if st == "pausado":
+            return jsonify(
+                success=False,
+                message="Vínculo pausado. Despause o vínculo para integrar novos produtos.",
+            ), 403
+        if st != "ativo":
             return jsonify(
                 success=False,
                 message="Vínculo com o fornecedor não está ativo. Solicite aprovação primeiro.",
-            ),
-            403
+            ), 403
 
         cur.execute(
             """

@@ -8,7 +8,12 @@ from pathlib import Path
 from flask import Blueprint, jsonify, render_template, request, session
 
 from global_utils import Var_ConectarBanco, exigir_modulo, exigir_permissao, login_obrigatorio
-from core.dominio import inativar_vinculo, montar_snapshot_vendedor
+from core.dominio import (
+    despausar_vinculo,
+    encerrar_vinculo,
+    montar_snapshot_vendedor,
+    pausar_vinculo,
+)
 from sistema.plataforma.sessao import MODULO_FORNECEDOR
 
 _MOD = Path(__file__).resolve().parent
@@ -106,7 +111,12 @@ def vendedores_dados():
             JOIN tbl_tenant t ON t.id = v.id_tenant_vendedor
             WHERE {' AND '.join(where)}
             ORDER BY
-                CASE v.status WHEN 'aguardando' THEN 0 WHEN 'ativo' THEN 1 ELSE 2 END,
+                CASE v.status
+                  WHEN 'aguardando' THEN 0
+                  WHEN 'ativo' THEN 1
+                  WHEN 'pausado' THEN 2
+                  ELSE 3
+                END,
                 v.solicitado_em DESC
             LIMIT 200
             """,
@@ -149,11 +159,15 @@ def vendedores_detalhe(id_vinculo: int):
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
+        from core.dominio import garantir_colunas_vinculo_status
+
+        garantir_colunas_vinculo_status(cur)
         cur.execute(
             """
             SELECT v.id, v.status, v.solicitado_em, v.respondido_em,
                    v.mensagem_solicitacao, v.mensagem_resposta, v.snapshot_vendedor,
-                   v.id_tenant_vendedor
+                   v.id_tenant_vendedor, v.motivo_status, v.status_alterado_por_lado,
+                   v.status_alterado_por_usuario
             FROM tbl_vinculo_vendedor_fornecedor v
             WHERE v.id = %s AND v.id_tenant_fornecedor = %s
             """,
@@ -168,6 +182,15 @@ def vendedores_detalhe(id_vinculo: int):
         live = montar_snapshot_vendedor(cur, id_vendedor, snap.get("id_usuario"))
 
         merged = {**live, **{k: v for k, v in snap.items() if v not in (None, "")}}
+        uid = session.get("id_usuario")
+        pode_despausar = (
+            (row[1] or "") == "pausado"
+            and (row[9] or "") == "fornecedor"
+            and (
+                row[10] is None
+                or (uid is not None and int(row[10]) == int(uid))
+            )
+        )
 
         return jsonify(
             success=True,
@@ -178,6 +201,9 @@ def vendedores_detalhe(id_vinculo: int):
                 "respondido_em": row[3].isoformat() if row[3] else "",
                 "mensagem_solicitacao": row[4] or "",
                 "mensagem_resposta": row[5] or "",
+                "motivo_status": row[8] or "",
+                "status_alterado_por_lado": row[9] or "",
+                "pode_despausar": pode_despausar,
             },
             vendedor={
                 "nome": merged.get("nome_fantasia") or merged.get("tenant_nome") or merged.get("nome_completo"),
@@ -220,20 +246,62 @@ def vendedores_responder():
     except (TypeError, ValueError):
         return jsonify(success=False, message="Vínculo inválido."), 400
     acao = (body.get("acao") or "").strip().lower()
-    if acao not in ("aprovar", "recusar", "inativar"):
+    if acao not in ("aprovar", "recusar", "inativar", "pausar", "despausar"):
         return jsonify(success=False, message="Ação inválida."), 400
 
-    mensagem = (body.get("mensagem") or "").strip()
+    mensagem = (body.get("mensagem") or body.get("motivo") or "").strip()
     if acao == "recusar" and len(mensagem) < 5:
         return jsonify(success=False, message="Informe o motivo da recusa (mínimo 5 caracteres)."), 400
+    if acao in ("inativar", "pausar") and len(mensagem) < 5:
+        return jsonify(
+            success=False,
+            message="Informe o motivo (mínimo 5 caracteres).",
+        ), 400
+
+    uid = session.get("id_usuario")
+    uid_i = int(uid) if uid else None
 
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
         if acao == "inativar":
-            inativar_vinculo(cur, id_vinculo, id_forn)
+            encerrar_vinculo(
+                cur,
+                id_vinculo,
+                id_tenant_ator=id_forn,
+                lado="fornecedor",
+                id_usuario=uid_i,
+                motivo=mensagem,
+            )
             conn.commit()
-            return jsonify(success=True, message="Vínculo encerrado. Produtos desativados e estoque zerado na vitrine.")
+            return jsonify(
+                success=True,
+                message="Vínculo encerrado. Estoques zerados; o vendedor precisará solicitar novamente.",
+            )
+        if acao == "pausar":
+            pausar_vinculo(
+                cur,
+                id_vinculo,
+                id_tenant_ator=id_forn,
+                lado="fornecedor",
+                id_usuario=uid_i,
+                motivo=mensagem,
+            )
+            conn.commit()
+            return jsonify(
+                success=True,
+                message="Vínculo pausado. Estoques zerados e novos produtos bloqueados.",
+            )
+        if acao == "despausar":
+            despausar_vinculo(
+                cur,
+                id_vinculo,
+                id_tenant_ator=id_forn,
+                lado="fornecedor",
+                id_usuario=uid_i,
+            )
+            conn.commit()
+            return jsonify(success=True, message="Vínculo retomado (despausado).")
 
         if acao == "aprovar":
             from sistema.planos.limites import limites_plano, mensagem_limite_conexoes
@@ -244,7 +312,7 @@ def vendedores_responder():
                 cur.execute(
                     """
                     SELECT COUNT(*) FROM tbl_vinculo_vendedor_fornecedor
-                    WHERE id_tenant_fornecedor = %s AND status = 'ativo'
+                    WHERE id_tenant_fornecedor = %s AND status IN ('ativo', 'pausado')
                     """,
                     (id_forn,),
                 )
@@ -270,5 +338,11 @@ def vendedores_responder():
         conn.commit()
         msg = "Vendedor aprovado." if novo == "ativo" else "Solicitação recusada. O vendedor verá o motivo informado."
         return jsonify(success=True, message=msg)
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 400
+    except RuntimeError as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 500
     finally:
         conn.close()

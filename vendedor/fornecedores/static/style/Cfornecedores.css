@@ -610,3 +610,107 @@
     flex-wrap: wrap;
   }
 }
+
+/* SweetAlert — pausar / encerrar vínculo */
+.VdVinculoSwalPopup {
+  border-radius: 16px !important;
+  padding: 1.5rem 1.35rem 1.25rem !important;
+}
+
+.VdVinculoSwalTitle {
+  font-size: 1.25rem !important;
+  font-weight: 700 !important;
+  color: #0f172a !important;
+  padding: 0 !important;
+}
+
+.VdVinculoSwalHtml {
+  margin: 0.75rem 0 0 !important;
+  padding: 0 !important;
+  text-align: left !important;
+  overflow: visible !important;
+}
+
+.VdVinculoSwal {
+  width: 100%;
+  box-sizing: border-box;
+  text-align: left;
+}
+
+.VdVinculoSwal__info {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin: 0 0 14px;
+  color: #334155;
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.VdVinculoSwal__lead {
+  margin: 0 0 8px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.VdVinculoSwal__info ul {
+  margin: 0;
+  padding-left: 1.15rem;
+}
+
+.VdVinculoSwal__info li {
+  margin: 0.3rem 0;
+}
+
+.VdVinculoSwal__label {
+  display: block;
+  margin: 0 0 6px;
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.VdVinculoSwal__label span {
+  color: #b91c1c;
+}
+
+.VdVinculoSwal__textarea {
+  display: block;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-height: 96px;
+  margin: 0 !important;
+  padding: 10px 12px !important;
+  box-sizing: border-box !important;
+  border: 1px solid #cbd5e1 !important;
+  border-radius: 10px !important;
+  background: #fff !important;
+  color: #0f172a !important;
+  font: inherit !important;
+  font-size: 0.95rem !important;
+  line-height: 1.4 !important;
+  resize: vertical;
+  outline: none;
+}
+
+.VdVinculoSwal__textarea:focus {
+  border-color: #64748b !important;
+  box-shadow: 0 0 0 3px rgba(100, 116, 139, 0.18);
+}
+
+.VdVinculoSwalActions {
+  margin-top: 1.1rem !important;
+  gap: 10px !important;
+}
+
+.VdVinculoSwalConfirm,
+.VdVinculoSwalCancel {
+  border-radius: 10px !important;
+  font-weight: 700 !important;
+  padding: 0.65rem 1.15rem !important;
+  margin: 0 !important;
+}

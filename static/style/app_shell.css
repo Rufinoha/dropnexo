@@ -882,6 +882,34 @@ body.fg-app {
   background: rgba(154, 52, 18, 0.08);
 }
 
+.fg-vinculo-banners {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin: -0.25rem 0 1rem;
+}
+
+.fg-vinculo-banner {
+  border-radius: 10px;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.fg-vinculo-banner.is-pausado {
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  color: #92400e;
+}
+
+.fg-vinculo-banner.is-encerrado {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+}
+
+.fg-vinculo-banner.is-pausado .fg-fin-banner-close { color: #92400e; }
+.fg-vinculo-banner.is-encerrado .fg-fin-banner-close { color: #991b1b; }
+
 /* —— Dashboard / cards —— */
 .fg-page-hero {
   margin-bottom: 1.25rem;

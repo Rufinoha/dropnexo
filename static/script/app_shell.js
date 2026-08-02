@@ -456,8 +456,39 @@
     });
   }
 
+  function initVinculoBannerDismiss() {
+    const wrap = document.getElementById("fg_vinculo_banners");
+    if (!wrap) return;
+    wrap.querySelectorAll(".fg-vinculo-banner").forEach(function (banner) {
+      const id = banner.getAttribute("data-vinculo-id") || "";
+      const st = banner.getAttribute("data-vinculo-status") || "";
+      const em = banner.getAttribute("data-vinculo-em") || "";
+      const key = "dn_vinculo_banner_hide:" + id + ":" + st + ":" + em;
+      try {
+        if (sessionStorage.getItem(key) === "1") {
+          banner.remove();
+          return;
+        }
+      } catch (_) {
+        /* ignore */
+      }
+      banner.hidden = false;
+      const btn = banner.querySelector(".fg-vinculo-banner-close");
+      if (!btn) return;
+      btn.addEventListener("click", function () {
+        try {
+          sessionStorage.setItem(key, "1");
+        } catch (_) {
+          /* ignore */
+        }
+        banner.remove();
+      });
+    });
+  }
+
   document.addEventListener("DOMContentLoaded", function () {
     carregarAvatarHeader();
     initFinBannerDismiss();
+    initVinculoBannerDismiss();
   });
 })();

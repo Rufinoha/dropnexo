@@ -7,12 +7,23 @@ from typing import Any
 from sistema.financeiro.cobranca import PLANOS_PAGOS
 from sistema.financeiro.cupom import PERIODOS, calcular_preco
 
+# Fallback genérico (sem tipo). Preferir nome_plano_comercial().
 PLANO_LABEL = {
-    "starter": "Starter",
-    "professional": "Professional",
-    "scale": "Scale",
-    "enterprise": "Enterprise",
+    "starter": "Explorar",
+    "professional": "Crescer / Conectar",
+    "scale": "Escalar / Expandir",
+    "enterprise": "Pro / Hub",
 }
+
+
+def nome_plano_comercial(slug: str | None, tipo_negocio: str | None = None) -> str:
+    from sistema.planos.limites import limites_plano
+
+    s = (slug or "").strip().lower()
+    tipo = (tipo_negocio or "").strip().lower()
+    if tipo in ("vendedor", "fornecedor"):
+        return limites_plano(plano=s, tipo_negocio=tipo).get("nome") or PLANO_LABEL.get(s, s or "—")
+    return PLANO_LABEL.get(s, s or "—")
 PERIODO_LABEL = {k: v["rotulo"] for k, v in PERIODOS.items()}
 FORMA_LABEL = {
     "boleto": "Boleto",
@@ -151,7 +162,7 @@ def painel_assinaturas(
             "nome": (row[1] or "").strip() or f"Tenant #{row[0]}",
             "slug": row[2] or "",
             "plano": plano,
-            "plano_label": PLANO_LABEL.get(plano, (row[11] or plano)),
+            "plano_label": nome_plano_comercial(plano, row[4]),
             "tipo_negocio": row[4] or "",
             "periodicidade": periodo,
             "periodicidade_label": PERIODO_LABEL.get(periodo, periodo),
@@ -198,7 +209,7 @@ def painel_assinaturas(
     cur.execute(
         """
         SELECT DISTINCT ON (t.id)
-          t.id, t.nome, t.slug, t.plano,
+          t.id, t.nome, t.slug, t.plano, t.tipo_negocio,
           f.id, f.referencia, f.status, f.forma_pagamento, f.valor_centavos,
           f.vencimento_em, f.avisado_em, f.criado_em,
           COALESCE(NULLIF(f.periodicidade, ''), NULLIF(tc.periodicidade, ''), 'mensal')
@@ -219,27 +230,27 @@ def painel_assinaturas(
     em_atraso = []
     atraso_total = 0
     for row in cur.fetchall():
-        valor = int(row[8] or 0)
+        valor = int(row[9] or 0)
         atraso_total += valor
-        forma = (row[7] or "").strip().lower()
-        periodo = _periodo_ok(row[12])
+        forma = (row[8] or "").strip().lower()
+        periodo = _periodo_ok(row[13])
         em_atraso.append(
             {
                 "id_tenant": int(row[0]),
                 "nome": (row[1] or "").strip() or f"Tenant #{row[0]}",
                 "slug": row[2] or "",
                 "plano": row[3] or "",
-                "plano_label": PLANO_LABEL.get(str(row[3] or ""), str(row[3] or "")),
-                "id_fatura": int(row[4]),
-                "referencia": row[5] or "",
-                "status": row[6] or "",
+                "plano_label": nome_plano_comercial(row[3], row[4]),
+                "id_fatura": int(row[5]),
+                "referencia": row[6] or "",
+                "status": row[7] or "",
                 "forma_pagamento": forma,
                 "forma_label": FORMA_LABEL.get(forma, forma or "—"),
                 "valor_centavos": valor,
                 "valor": _fmt_reais(valor),
-                "vencimento_em": _fmt_data(row[9]),
-                "vencimento_br": _fmt_data_br(row[9]),
-                "avisado_em": _fmt_data(row[10]),
+                "vencimento_em": _fmt_data(row[10]),
+                "vencimento_br": _fmt_data_br(row[10]),
+                "avisado_em": _fmt_data(row[11]),
                 "periodicidade": periodo,
                 "periodicidade_label": PERIODO_LABEL.get(periodo, periodo),
             }
@@ -249,7 +260,7 @@ def painel_assinaturas(
     cur.execute(
         """
         SELECT
-          t.id, t.nome, t.slug, t.plano,
+          t.id, t.nome, t.slug, t.plano, t.tipo_negocio,
           f.id, f.referencia, f.valor_centavos, f.rebaixado_em,
           f.plano_slug, f.status, f.forma_pagamento
         FROM tbl_fatura f
@@ -261,24 +272,25 @@ def painel_assinaturas(
     )
     rebaixados = []
     for row in cur.fetchall():
-        forma = (row[10] or "").strip().lower()
-        plano_orig = str(row[8] or "")
+        forma = (row[11] or "").strip().lower()
+        tipo = row[4]
+        plano_orig = str(row[9] or "")
         rebaixados.append(
             {
                 "id_tenant": int(row[0]),
                 "nome": (row[1] or "").strip() or f"Tenant #{row[0]}",
                 "slug": row[2] or "",
                 "plano_atual": row[3] or "",
-                "plano_atual_label": PLANO_LABEL.get(str(row[3] or ""), str(row[3] or "")),
-                "id_fatura": int(row[4]),
-                "referencia": row[5] or "",
-                "valor_centavos": int(row[6] or 0),
-                "valor": _fmt_reais(row[6]),
-                "rebaixado_em": _fmt_data(row[7]),
-                "rebaixado_br": _fmt_data_br(row[7]),
+                "plano_atual_label": nome_plano_comercial(row[3], tipo),
+                "id_fatura": int(row[5]),
+                "referencia": row[6] or "",
+                "valor_centavos": int(row[7] or 0),
+                "valor": _fmt_reais(row[7]),
+                "rebaixado_em": _fmt_data(row[8]),
+                "rebaixado_br": _fmt_data_br(row[8]),
                 "plano_origem": plano_orig,
-                "plano_origem_label": PLANO_LABEL.get(plano_orig, plano_orig or "—"),
-                "status_fatura": row[9] or "",
+                "plano_origem_label": nome_plano_comercial(plano_orig, tipo),
+                "status_fatura": row[10] or "",
                 "forma_label": FORMA_LABEL.get(forma, forma or "—"),
                 "ainda_starter": str(row[3] or "").lower() == "starter",
             }
@@ -329,7 +341,7 @@ def painel_assinaturas(
         SELECT
           f.id, f.id_tenant, t.nome, f.referencia, f.plano_slug, f.valor_centavos,
           f.status, f.forma_pagamento, f.vencimento_em, f.criado_em,
-          COALESCE(NULLIF(f.periodicidade, ''), 'mensal')
+          COALESCE(NULLIF(f.periodicidade, ''), 'mensal'), t.tipo_negocio
         FROM tbl_fatura f
         JOIN tbl_tenant t ON t.id = f.id_tenant
         WHERE f.status IN ('pendente', 'vencido')
@@ -356,7 +368,7 @@ def painel_assinaturas(
                 "nome": (row[2] or "").strip() or f"Tenant #{row[1]}",
                 "referencia": row[3] or "",
                 "plano": plano,
-                "plano_label": PLANO_LABEL.get(plano, plano or "—"),
+                "plano_label": nome_plano_comercial(plano, row[11] if len(row) > 11 else None),
                 "valor_centavos": int(row[5] or 0),
                 "valor": _fmt_reais(row[5]),
                 "status": st,
@@ -428,7 +440,7 @@ def painel_assinaturas(
         SELECT
           f.id, f.id_tenant, t.nome, f.referencia, f.plano_slug, f.valor_centavos,
           f.pago_em, f.forma_pagamento,
-          COALESCE(NULLIF(f.periodicidade, ''), 'mensal')
+          COALESCE(NULLIF(f.periodicidade, ''), 'mensal'), t.tipo_negocio
         FROM tbl_fatura f
         JOIN tbl_tenant t ON t.id = f.id_tenant
         WHERE f.status = 'pago'
@@ -449,7 +461,7 @@ def painel_assinaturas(
                 "nome": (row[2] or "").strip() or f"Tenant #{row[1]}",
                 "referencia": row[3] or "",
                 "plano": plano,
-                "plano_label": PLANO_LABEL.get(plano, plano or "—"),
+                "plano_label": nome_plano_comercial(plano, row[9] if len(row) > 9 else None),
                 "valor_centavos": int(row[5] or 0),
                 "valor": _fmt_reais(row[5]),
                 "pago_em": _fmt_data(row[6]),

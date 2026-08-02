@@ -853,6 +853,7 @@ MOTIVOS_PAUSA: dict[str, str] = {
     "produto_inativo": "O produto foi desativado pelo fornecedor.",
     "variante_inativa": "Esta variação foi desativada pelo fornecedor.",
     "vinculo_inativo": "O vínculo com o fornecedor não está ativo.",
+    "vinculo_pausado": "O vínculo com o fornecedor está pausado (estoques zerados).",
 }
 
 CAMPOS_READONLY_INTEGRADO = frozenset({
@@ -900,7 +901,10 @@ def _motivo_tempo_real(
 ) -> str | None:
     if id_tenant_produto == id_tenant_vendedor:
         return None
-    if (vinculo_status or "").lower() != "ativo":
+    st_vinc = (vinculo_status or "").lower()
+    if st_vinc == "pausado":
+        return "vinculo_pausado"
+    if st_vinc != "ativo":
         return "vinculo_inativo"
     if not visivel_rede:
         return "fornecedor_oculto_rede"

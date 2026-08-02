@@ -26,11 +26,14 @@ _NOMES_PLANO_BANCO = {
 _MAPA_VITRINE_PARA_BANCO = {
     "explorar": "starter",
     "crescer": "professional",
-    "ativo": "professional",
+    "conectar": "professional",
+    "ativo": "professional",  # legado fornecedor
     "escalar": "scale",
-    "rede": "scale",
+    "expandir": "scale",
+    "rede": "scale",  # legado fornecedor
     "pro": "enterprise",
-    "distribuidor": "enterprise",
+    "hub": "enterprise",
+    "distribuidor": "enterprise",  # legado fornecedor
 }
 
 
@@ -162,8 +165,8 @@ def catalogo_planos_home():
             cta_gratis=True,
         ),
         plano(
-            "ativo",
-            "Ativo",
+            "conectar",
+            "Conectar",
             99,
             [("200", "pedidos/mês"), ("20", "vendedores aprovados"), ("800", "produtos")],
             [
@@ -173,29 +176,29 @@ def catalogo_planos_home():
                 email_on,
                 rec("Até 2 depósitos", True),
             ],
-            destaque="Conecte seu ERP e escale a rede",
+            destaque="Conecte seu ERP e integre a operação",
             featured=True,
             tag="Recomendado",
         ),
         plano(
-            "rede",
-            "Rede",
+            "expandir",
+            "Expandir",
             249,
             [("800", "pedidos/mês"), ("60", "vendedores aprovados"), ("3.000", "produtos")],
             [
-                rec("Tudo do Ativo", True),
+                rec("Tudo do Conectar", True),
                 rec("Destaque na vitrine para vendedores", True),
                 rec("Até 5 depósitos", True),
             ],
-            destaque="Distribuidor em expansão",
+            destaque="Mais vendedores e volume na rede",
         ),
         plano(
-            "distribuidor",
-            "Distribuidor",
+            "hub",
+            "Hub",
             499,
             [("3.000", "pedidos/mês"), ("Ilimitados", "vendedores aprovados"), ("15.000", "produtos")],
             [
-                rec("Tudo da Rede", True),
+                rec("Tudo do Expandir", True),
                 rec("Equipe ampliada", True),
                 rec("Vários depósitos", True),
             ],
@@ -340,10 +343,14 @@ def catalogo_planos():
 
 
 def _plano_atual_tenant(id_tenant: int, plano_sessao: str | None) -> dict:
-    slug = (plano_sessao or "starter").strip().lower() or "starter"
+    from sistema.planos.limites import limites_plano, tipo_negocio_sessao
+
+    slug = plano_slug_app(plano_sessao or "starter")
+    tipo = tipo_negocio_sessao()
+    lim = limites_plano(plano=slug, tipo_negocio=tipo)
     out = {
         "slug": slug,
-        "nome": _NOMES_PLANO_BANCO.get(slug) or slug.title(),
+        "nome": lim.get("nome") or _NOMES_PLANO_BANCO.get(slug) or slug.title(),
         "valor_centavos": None,
         "periodicidade": None,
         "destaque": "",
@@ -376,7 +383,6 @@ def _plano_atual_tenant(id_tenant: int, plano_sessao: str | None) -> dict:
                 out.update(
                     {
                         "slug": p[0],
-                        "nome": p[1],
                         "valor_centavos": p[2],
                         "periodicidade": p[3],
                         "destaque": p[4] or "",
@@ -386,13 +392,16 @@ def _plano_atual_tenant(id_tenant: int, plano_sessao: str | None) -> dict:
             out.update(
                 {
                     "slug": row[0],
-                    "nome": row[1],
                     "valor_centavos": row[2],
                     "periodicidade": row[3],
                     "destaque": row[4] or "",
                     "email_cobranca": row[5] or "",
                 }
             )
+        # Nome comercial sempre pelo perfil (vendedor/fornecedor), não pelo nome do banco
+        slug_final = plano_slug_app(out.get("slug") or slug)
+        out["slug"] = slug_final
+        out["nome"] = limites_plano(plano=slug_final, tipo_negocio=tipo).get("nome") or out["nome"]
         cur.close()
         conn.close()
     except Exception:

@@ -34,8 +34,9 @@
     const map = {
       ativo: { cls: "is-ativo", txt: "Conectado — pode integrar produtos" },
       aguardando: { cls: "is-pending", txt: "Aguardando aprovação do fornecedor" },
+      pausado: { cls: "", txt: "Vínculo pausado — novos produtos bloqueados até despausar" },
       recusado: { cls: "", txt: "Vínculo não aprovado — solicite novamente na lista" },
-      inativo: { cls: "", txt: "Vínculo encerrado" },
+      inativo: { cls: "", txt: "Vínculo encerrado — solicite novamente na lista" },
       nenhum: { cls: "", txt: "Solicite vínculo para integrar produtos" },
     };
     const m = map[st] || map.nenhum;
@@ -76,7 +77,8 @@
     if (el.vazio) el.vazio.hidden = true;
 
     const vinculoAtivo = statusVinculo === "ativo";
-    const podeSolicitar = !vinculoAtivo && statusVinculo !== "aguardando";
+    const podeSolicitar =
+      !vinculoAtivo && statusVinculo !== "aguardando" && statusVinculo !== "pausado";
 
     el.grid.innerHTML = produtos
       .map((p) => {

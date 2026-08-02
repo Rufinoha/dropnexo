@@ -218,6 +218,27 @@
           </div>
         </div>
         {% endif %}
+        {% if session.get('id_usuario') and vinculo_alertas %}
+        <div class="fg-vinculo-banners" id="fg_vinculo_banners">
+          {% for a in vinculo_alertas %}
+          <div
+            class="fg-vinculo-banner {% if a.status == 'pausado' %}is-pausado{% else %}is-encerrado{% endif %}"
+            data-vinculo-id="{{ a.id }}"
+            data-vinculo-status="{{ a.status }}"
+            data-vinculo-em="{{ a.alterado_em }}"
+            hidden
+          >
+            <div class="fg-fin-banner-inner">
+              <div class="fg-fin-banner-text">
+                <strong>{% if a.status == 'pausado' %}Vínculo pausado:{% else %}Vínculo encerrado:{% endif %}</strong>
+                {{ a.texto }}
+              </div>
+              <button type="button" class="fg-fin-banner-close fg-vinculo-banner-close" aria-label="Fechar aviso" title="Fechar">×</button>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
         {% block content %}{% endblock %}
         <footer class="fg-page-footer">© {{ MARCA_NOME }} · {{ MARCA_FAMILIA }}</footer>
       </main>

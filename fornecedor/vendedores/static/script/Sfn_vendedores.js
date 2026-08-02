@@ -15,6 +15,7 @@
   const statusMap = {
     aguardando: { cls: "is-aguardando", label: "Aguardando aprovação" },
     ativo: { cls: "is-ativo", label: "Vínculo ativo" },
+    pausado: { cls: "is-pausado", label: "Vínculo pausado" },
     recusado: { cls: "", label: "Recusado" },
     inativo: { cls: "", label: "Encerrado" },
   };
@@ -45,6 +46,48 @@
     if (!modal) return;
     modal.hidden = false;
     modal.setAttribute("aria-hidden", "false");
+  }
+
+  async function pedirMotivoEConfirmar({ title, htmlInfo, confirmText, confirmColor }) {
+    if (!window.Swal) {
+      const m = prompt((title || "") + "\nMotivo (obrigatório):");
+      if (!m || m.trim().length < 5) return null;
+      return m.trim();
+    }
+    const r = await Swal.fire({
+      title,
+      width: 520,
+      html: `
+        <div class="VdVinculoSwal">
+          <div class="VdVinculoSwal__info">${htmlInfo}</div>
+          <label class="VdVinculoSwal__label" for="vd_motivoAcao">Motivo <span>*</span></label>
+          <textarea id="vd_motivoAcao" class="VdVinculoSwal__textarea" rows="4" placeholder="Explique o motivo com clareza…"></textarea>
+        </div>`,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: confirmText || "Confirmar",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: confirmColor || "#b91c1c",
+      cancelButtonColor: "#94a3b8",
+      focusConfirm: false,
+      customClass: {
+        popup: "VdVinculoSwalPopup",
+        title: "VdVinculoSwalTitle",
+        htmlContainer: "VdVinculoSwalHtml",
+        actions: "VdVinculoSwalActions",
+        confirmButton: "VdVinculoSwalConfirm",
+        cancelButton: "VdVinculoSwalCancel",
+      },
+      preConfirm: () => {
+        const txt = (document.getElementById("vd_motivoAcao")?.value || "").trim();
+        if (txt.length < 5) {
+          Swal.showValidationMessage("Informe o motivo com pelo menos 5 caracteres.");
+          return false;
+        }
+        return txt;
+      },
+    });
+    return r.isConfirmed ? r.value : null;
   }
 
   function renderCards(rows) {
@@ -80,14 +123,6 @@
 
     modalBody.innerHTML = `
       <div class="VdParceiros_Secao">
-        <h4>Resumo na plataforma</h4>
-        <div class="VdParceiros_Stats">
-          <span class="VdParceiros_Stat">${esc(v.tempo_plataforma)}</span>
-          <span class="VdParceiros_Stat">${v.qtd_fornecedores_ativos || 0} fornecedor(es) ativo(s)</span>
-          <span class="VdParceiros_Stat">${v.qtd_produtos_vitrine || 0} produto(s) na vitrine</span>
-        </div>
-      </div>
-      <div class="VdParceiros_Secao">
         <h4>Dados básicos</h4>
         <dl class="VdParceiros_Dl">
           <dt>Nome</dt><dd>${esc(v.nome)}</dd>
@@ -108,11 +143,8 @@
         </dl>
       </div>
       ${
-        v.faturamento_ultimo_ano || v.tamanho_empresa
-          ? `<div class="VdParceiros_Secao"><h4>Perfil comercial</h4><dl class="VdParceiros_Dl">
-          <dt>Faturamento</dt><dd>${esc(v.faturamento_ultimo_ano || "—")}</dd>
-          <dt>Porte</dt><dd>${esc(v.tamanho_empresa || "—")}</dd>
-        </dl></div>`
+        vin.motivo_status
+          ? `<div class="VdParceiros_Secao"><h4>Motivo da última ação</h4><p>${esc(vin.motivo_status)}</p></div>`
           : ""
       }
       ${
@@ -140,7 +172,17 @@
       } else if (vin.status === "ativo") {
         modalFooter.hidden = false;
         modalFooter.innerHTML = `
-          <button type="button" class="Cl_BtnLink" id="vd_btnInativar">Encerrar vínculo</button>`;
+          <button type="button" class="Cl_BtnCancelar" id="vd_btnPausar">Pausar vínculo</button>
+          <button type="button" class="Cl_BtnExcluir" id="vd_btnInativar">Encerrar vínculo</button>`;
+      } else if (vin.status === "pausado") {
+        modalFooter.hidden = false;
+        modalFooter.innerHTML = `
+          ${
+            vin.pode_despausar
+              ? '<button type="button" class="Cl_BtnSalvar" id="vd_btnDespausar">Despausar vínculo</button>'
+              : '<span class="Asf_Hint" style="align-self:center">Somente quem pausou pode despausar.</span>'
+          }
+          <button type="button" class="Cl_BtnExcluir" id="vd_btnInativar">Encerrar vínculo</button>`;
       } else {
         modalFooter.hidden = true;
         modalFooter.innerHTML = "";
@@ -171,7 +213,7 @@
       method: "POST",
       credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: vinculoAtual.id, acao, mensagem: mensagem || "" }),
+      body: JSON.stringify({ id: vinculoAtual.id, acao, mensagem: mensagem || "", motivo: mensagem || "" }),
     });
     const j = await r.json();
     if (window.Swal) Swal.fire(j.success ? "OK" : "Erro", j.message, j.success ? "success" : "error");
@@ -207,7 +249,7 @@
     carregarDetalhe(card.getAttribute("data-id"));
   });
 
-  modalFooter?.addEventListener("click", (e) => {
+  modalFooter?.addEventListener("click", async (e) => {
     if (e.target.id === "vd_btnAprovar") responder("aprovar");
     if (e.target.id === "vd_btnRecusar") {
       const box = document.getElementById("vd_recusaBox");
@@ -221,15 +263,48 @@
       }
       responder("recusar", txt);
     }
-    if (e.target.id === "vd_btnInativar") {
-      Swal?.fire({
-        title: "Encerrar vínculo?",
-        text: "Produtos serão desativados e estoque zerado na vitrine.",
-        icon: "warning",
-        showCancelButton: true,
-      }).then((c) => {
-        if (c.isConfirmed) responder("inativar");
+    if (e.target.id === "vd_btnPausar") {
+      const motivo = await pedirMotivoEConfirmar({
+        title: "Pausar vínculo?",
+        htmlInfo:
+          "<p class='VdVinculoSwal__lead'>O que acontece</p><ul>" +
+          "<li>O vínculo <strong>não é desfeito</strong> (não precisa solicitar de novo)</li>" +
+          "<li>Estoques deste vendedor são <strong>zerados</strong></li>" +
+          "<li>Produtos ficam visíveis com estoque 0</li>" +
+          "<li>Novos produtos ficam bloqueados até despausar</li>" +
+          "<li>O vendedor recebe e-mail e aviso na plataforma</li></ul>",
+        confirmText: "Pausar vínculo",
+        confirmColor: "#b45309",
       });
+      if (motivo) responder("pausar", motivo);
+    }
+    if (e.target.id === "vd_btnDespausar") {
+      const ok = window.Swal
+        ? (
+            await Swal.fire({
+              title: "Despausar vínculo?",
+              text: "A operação volta ao normal. Estoques serão atualizados conforme a sincronização.",
+              icon: "question",
+              showCancelButton: true,
+              confirmButtonText: "Despausar",
+            })
+          ).isConfirmed
+        : confirm("Despausar vínculo?");
+      if (ok) responder("despausar");
+    }
+    if (e.target.id === "vd_btnInativar") {
+      const motivo = await pedirMotivoEConfirmar({
+        title: "Encerrar vínculo?",
+        htmlInfo:
+          "<p class='VdVinculoSwal__lead'>O que acontece</p><ul>" +
+          "<li>O vínculo é <strong>encerrado</strong></li>" +
+          "<li>Para voltar, o vendedor precisa <strong>solicitar e ser aprovado</strong> de novo</li>" +
+          "<li>Estoques são <strong>zerados</strong>; produtos ficam visíveis com estoque 0</li>" +
+          "<li>O vendedor recebe e-mail e aviso na plataforma</li></ul>",
+        confirmText: "Encerrar vínculo",
+        confirmColor: "#b91c1c",
+      });
+      if (motivo) responder("inativar", motivo);
     }
   });
 

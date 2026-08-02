@@ -760,7 +760,9 @@ def combobox_tenants_para_cupom(
 
 
 def listar_planos_para_cupom(cur) -> list[dict[str, Any]]:
-    """Uma opção por plano × perfil (vendedor/fornecedor), rótulo: Nome | Perfil."""
+    """Uma opção por plano × perfil (vendedor/fornecedor), rótulo: Nome comercial | Perfil."""
+    from sistema.planos.limites import limites_plano
+
     try:
         cur.execute(
             """
@@ -793,12 +795,16 @@ def listar_planos_para_cupom(cur) -> list[dict[str, Any]]:
     for tipo, rotulo in (("vendedor", "Vendedor"), ("fornecedor", "Fornecedor")):
         for p in base:
             chave = _chave_plano_cupom(p["slug"], tipo)
+            nome_com = (
+                limites_plano(plano=p["slug"], tipo_negocio=tipo).get("nome")
+                or p["nome_base"]
+            )
             out.append(
                 {
                     "key": chave,
                     "slug": p["slug"],
                     "tipo_negocio": tipo,
-                    "nome": f"{p['nome_base']} | {rotulo}",
+                    "nome": f"{nome_com} | {rotulo}",
                     "valor_centavos": p["valor_centavos"],
                 }
             )

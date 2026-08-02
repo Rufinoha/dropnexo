@@ -112,7 +112,7 @@
       { label: "Em atraso", value: String(r.qtd_atraso ?? 0), cls: "is-danger" },
       { label: "Valor em atraso", value: r.valor_atraso || "R$ 0,00", cls: "is-warn" },
       { label: "Rebaixamentos", value: String(r.qtd_rebaixados ?? 0) },
-      { label: "Ainda no Starter", value: String(r.qtd_ainda_starter ?? 0) },
+      { label: "Ainda no Explorar", value: String(r.qtd_ainda_starter ?? 0) },
     ]);
 
     const atraso = data?.em_atraso || [];
@@ -142,7 +142,7 @@
 
     const rebaix = data?.rebaixados || [];
     el("asf_rebaix_hint").textContent = rebaix.length
-      ? `${rebaix.length} registro(s) · ${r.qtd_ainda_starter || 0} ainda no Starter`
+      ? `${rebaix.length} registro(s) · ${r.qtd_ainda_starter || 0} ainda no Explorar`
       : "Nenhum rebaixamento registrado";
     const tbr = el("asf_rebaix_tbody");
     if (!rebaix.length) {

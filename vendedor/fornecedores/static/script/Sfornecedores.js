@@ -15,8 +15,9 @@
     nenhum: { cls: "", txt: "Não conectado", badge: "Não conectado" },
     aguardando: { cls: "is-pending", txt: "Aguardando aprovação", badge: "Aguardando" },
     ativo: { cls: "is-active", txt: "Conectado", badge: "Conectado" },
+    pausado: { cls: "is-pending", txt: "Vínculo pausado", badge: "Pausado" },
     recusado: { cls: "is-denied", txt: "Não aprovado", badge: "Recusado" },
-    inativo: { cls: "is-denied", txt: "Vínculo encerrado", badge: "Inativo" },
+    inativo: { cls: "is-denied", txt: "Vínculo encerrado", badge: "Encerrado" },
   };
 
   function esc(s) {
@@ -97,7 +98,8 @@
     grid.innerHTML = lista
       .map((f) => {
         const st = statusLabel[f.status_vinculo] || statusLabel.nenhum;
-        const podeVinculo = !["ativo", "aguardando"].includes(f.status_vinculo || "nenhum");
+        const stVin = f.status_vinculo || "nenhum";
+        const podeVinculo = !["ativo", "aguardando", "pausado"].includes(stVin);
         const chips = (f.segmentos || [])
           .map((s) => `<span class="Forn_Chip">${esc(s)}</span>`)
           .join("");
@@ -111,10 +113,24 @@
           .toUpperCase();
         const qtd = Number(f.qtd_produtos) || 0;
         const qtdVitrine = Number(f.qtd_produtos_vitrine) || 0;
-        const conectado = (f.status_vinculo || "nenhum") === "ativo";
+        const conectado = stVin === "ativo";
+        const pausado = stVin === "pausado";
+        let acoesVinculo = "";
+        if (conectado) {
+          acoesVinculo =
+            '<button type="button" class="Forn_CardBtn Forn_CardBtn--primary" data-acao="pausar">Pausar</button>' +
+            '<button type="button" class="Forn_CardBtn Forn_CardBtn--danger" data-acao="encerrar">Encerrar</button>';
+        } else if (pausado) {
+          if (f.pode_despausar) {
+            acoesVinculo =
+              '<button type="button" class="Forn_CardBtn Forn_CardBtn--primary" data-acao="despausar">Despausar</button>';
+          }
+          acoesVinculo +=
+            '<button type="button" class="Forn_CardBtn Forn_CardBtn--danger" data-acao="encerrar">Encerrar</button>';
+        }
         return `
         <article class="Forn_Card ${st.cls}" data-id="${f.id}" data-nome="${attrEsc(f.nome)}"
-          data-status="${f.status_vinculo || "nenhum"}" data-qtd-vitrine="${qtdVitrine}" tabindex="0" role="button"
+          data-status="${stVin}" data-qtd-vitrine="${qtdVitrine}" tabindex="0" role="button"
           aria-label="Abrir catálogo de ${esc(f.nome)}">
           <div class="Forn_CardTop">
             <div class="Forn_CardBrand">
@@ -127,6 +143,7 @@
           </div>
           <div class="Forn_CardChips">${chips || '<span class="Forn_Chip Forn_Chip--muted">Sem segmento</span>'}</div>
           ${f.motivo_recusa ? `<p class="Forn_CardRecusa" title="${attrEsc(f.motivo_recusa)}">Motivo: ${esc(f.motivo_recusa)}</p>` : ""}
+          ${f.motivo_status && (pausado || stVin === "inativo") ? `<p class="Forn_CardRecusa" title="${attrEsc(f.motivo_status)}">Motivo: ${esc(f.motivo_status)}</p>` : ""}
           <div class="Forn_CardMetaRow">
             <span class="Forn_CardStat">
               <strong>${qtd}</strong> ${qtd === 1 ? "produto" : "produtos"}
@@ -135,11 +152,7 @@
           </div>
           <div class="Forn_CardFooter">
             <button type="button" class="Forn_CardBtn Forn_CardBtn--ghost" data-acao="loja">Ver catálogo</button>
-            ${
-              conectado
-                ? '<button type="button" class="Forn_CardBtn Forn_CardBtn--danger" data-acao="desconectar">Desconectar</button>'
-                : ""
-            }
+            ${acoesVinculo}
             ${
               podeVinculo
                 ? '<button type="button" class="Forn_CardBtn Forn_CardBtn--primary" data-acao="vinculo">Solicitar vínculo</button>'
@@ -194,110 +207,128 @@
     }
   }
 
-  function htmlOpcoesProdutos(qtd) {
-    const label =
-      qtd === 1
-        ? "Você tem <strong>1 produto</strong> deste fornecedor em Meus produtos."
-        : `Você tem <strong>${qtd} produtos</strong> deste fornecedor em Meus produtos.`;
-    return `
-      <p style="text-align:left;margin:0 0 0.75rem;line-height:1.45">${label} O que deseja fazer?</p>
-      <div class="Forn_DesconectarOpcoes">
-        <label class="Forn_DesconectarOpt">
-          <input type="radio" name="acao_produtos" value="excluir" checked />
-          <span><strong>Excluir</strong> — remover da vitrine</span>
-        </label>
-        <label class="Forn_DesconectarOpt">
-          <input type="radio" name="acao_produtos" value="converter" />
-          <span><strong>Manter como produto próprio</strong> — sem vínculo com o fornecedor; você poderá editar todos os campos</span>
-        </label>
-      </div>`;
+  async function pedirMotivoVinculo({ title, htmlInfo, confirmText, confirmColor }) {
+    if (!window.Swal) {
+      const m = prompt((title || "") + "\nMotivo (obrigatório):");
+      if (!m || m.trim().length < 5) return null;
+      return m.trim();
+    }
+    const r = await Swal.fire({
+      title,
+      width: 520,
+      html: `
+        <div class="VdVinculoSwal">
+          <div class="VdVinculoSwal__info">${htmlInfo}</div>
+          <label class="VdVinculoSwal__label" for="fn_motivoVinculo">Motivo <span>*</span></label>
+          <textarea id="fn_motivoVinculo" class="VdVinculoSwal__textarea" rows="4" placeholder="Explique o motivo com clareza…"></textarea>
+        </div>`,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: confirmText || "Confirmar",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: confirmColor || "#b91c1c",
+      cancelButtonColor: "#94a3b8",
+      focusConfirm: false,
+      customClass: {
+        popup: "VdVinculoSwalPopup",
+        title: "VdVinculoSwalTitle",
+        htmlContainer: "VdVinculoSwalHtml",
+        actions: "VdVinculoSwalActions",
+        confirmButton: "VdVinculoSwalConfirm",
+        cancelButton: "VdVinculoSwalCancel",
+      },
+      preConfirm: () => {
+        const txt = (document.getElementById("fn_motivoVinculo")?.value || "").trim();
+        if (txt.length < 5) {
+          Swal.showValidationMessage("Informe o motivo com pelo menos 5 caracteres.");
+          return false;
+        }
+        return txt;
+      },
+    });
+    return r.isConfirmed ? r.value : null;
   }
 
-  async function desconectarFornecedor(card) {
+  async function acaoVinculo(card, acao) {
     const id = Number(card.getAttribute("data-id"));
     const nome = card.getAttribute("data-nome") || "fornecedor";
-    const qtdVitrine = Number(card.getAttribute("data-qtd-vitrine") || 0);
     if (!id) return;
 
-    const avisoCatalogo =
-      "Os produtos deste fornecedor <strong>não aparecerão mais</strong> no catálogo da rede.";
-
-    if (!window.Swal) {
-      if (!confirm(`Desconectar de ${nome}? ${avisoCatalogo.replace(/<[^>]+>/g, "")}`)) return;
-      let acao = "excluir";
-      if (qtdVitrine > 0) {
-        const manter = confirm(
-          `Há ${qtdVitrine} produto(s) em Meus produtos. OK = manter como próprio; Cancelar = excluir.`
-        );
-        acao = manter ? "converter" : "excluir";
-      }
+    if (acao === "despausar") {
+      const ok = window.Swal
+        ? (
+            await Swal.fire({
+              title: "Despausar vínculo?",
+              html: `<p style="text-align:left;margin:0;line-height:1.45">Retomar operação com <strong>${esc(nome)}</strong>? Estoques voltam conforme a sincronização.</p>`,
+              icon: "question",
+              showCancelButton: true,
+              confirmButtonText: "Despausar",
+            })
+          ).isConfirmed
+        : confirm("Despausar vínculo?");
+      if (!ok) return;
       try {
-        const r = await fetch("/fornecedores/desconectar", {
+        const r = await fetch("/fornecedores/vinculo-acao", {
           method: "POST",
           credentials: "same-origin",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id_fornecedor: id, acao_produtos: acao }),
+          body: JSON.stringify({ id_fornecedor: id, acao: "despausar" }),
         });
         const j = await r.json();
-        alert(j.message || (j.success ? "Desconectado." : "Erro."));
-        if (j.success) carregar();
+        if (!j.success) throw new Error(j.message || "Falha ao despausar.");
+        if (window.Swal) await Swal.fire("OK", j.message, "success");
+        else alert(j.message);
+        carregar();
       } catch (e) {
-        alert(e.message);
+        if (window.Swal) Swal.fire("Erro", e.message, "error");
+        else alert(e.message);
       }
       return;
     }
 
-    const passo1 = await Swal.fire({
-      title: "Desconectar fornecedor?",
-      html: `<p style="text-align:left;margin:0;line-height:1.45">
-        Tem certeza que deseja desconectar de <strong>${esc(nome)}</strong>?<br><br>
-        ${avisoCatalogo}
-      </p>`,
-      icon: "warning",
-      showCancelButton: true,
-      confirmButtonText: "Continuar",
-      cancelButtonText: "Cancelar",
-      confirmButtonColor: "#b91c1c",
-    });
-    if (!passo1.isConfirmed) return;
-
-    let acaoProdutos = "excluir";
-    if (qtdVitrine > 0) {
-      const passo2 = await Swal.fire({
-        title: "Produtos em Meus produtos",
-        html: htmlOpcoesProdutos(qtdVitrine),
-        icon: "question",
-        showCancelButton: true,
-        confirmButtonText: "Desconectar",
-        cancelButtonText: "Voltar",
-        confirmButtonColor: "#b91c1c",
-        focusConfirm: false,
-        preConfirm: () => {
-          const sel = document.querySelector('input[name="acao_produtos"]:checked');
-          if (!sel) {
-            Swal.showValidationMessage("Escolha o que fazer com os produtos.");
-            return false;
-          }
-          return sel.value;
-        },
-      });
-      if (!passo2.isConfirmed) return;
-      acaoProdutos = passo2.value;
-    }
-
+    const configs = {
+      pausar: {
+        title: "Pausar vínculo?",
+        confirmText: "Pausar vínculo",
+        confirmColor: "#b45309",
+        htmlInfo:
+          `<p class="VdVinculoSwal__lead">Com ${esc(nome)}</p><ul>` +
+          "<li>O vínculo <strong>não é desfeito</strong></li>" +
+          "<li>Estoques são <strong>zerados</strong> (produtos ficam visíveis com 0)</li>" +
+          "<li>Novos produtos ficam bloqueados até despausar</li>" +
+          "<li>O fornecedor recebe e-mail e aviso</li></ul>",
+      },
+      encerrar: {
+        title: "Encerrar vínculo?",
+        confirmText: "Encerrar vínculo",
+        confirmColor: "#b91c1c",
+        htmlInfo:
+          `<p class="VdVinculoSwal__lead">Com ${esc(nome)}</p><ul>` +
+          "<li>O vínculo é <strong>encerrado</strong></li>" +
+          "<li>Para voltar, será preciso <strong>solicitar e ser aprovado</strong> de novo</li>" +
+          "<li>Estoques são <strong>zerados</strong> (produtos ficam visíveis com 0)</li>" +
+          "<li>O fornecedor recebe e-mail e aviso</li></ul>",
+      },
+    };
+    const cfg = configs[acao];
+    if (!cfg) return;
+    const motivo = await pedirMotivoVinculo(cfg);
+    if (!motivo) return;
     try {
-      const r = await fetch("/fornecedores/desconectar", {
+      const r = await fetch("/fornecedores/vinculo-acao", {
         method: "POST",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id_fornecedor: id, acao_produtos: acaoProdutos }),
+        body: JSON.stringify({ id_fornecedor: id, acao, motivo }),
       });
       const j = await r.json();
-      if (!j.success) throw new Error(j.message || "Não foi possível desconectar.");
-      await Swal.fire("Desconectado", j.message, "success");
+      if (!j.success) throw new Error(j.message || "Falha na operação.");
+      if (window.Swal) await Swal.fire("OK", j.message, "success");
+      else alert(j.message);
       carregar();
     } catch (e) {
-      Swal.fire("Erro", e.message, "error");
+      if (window.Swal) Swal.fire("Erro", e.message, "error");
+      else alert(e.message);
     }
   }
 
@@ -317,8 +348,8 @@
         solicitarVinculoCard(card);
         return;
       }
-      if (acao === "desconectar") {
-        desconectarFornecedor(card);
+      if (acao === "pausar" || acao === "despausar" || acao === "encerrar") {
+        acaoVinculo(card, acao);
         return;
       }
       if (acao === "loja" && id) {

@@ -169,19 +169,9 @@ def api_fatura_detalhe(id_fatura: int):
 
 
 def _mapa_plano_vitrine(plano: str) -> str:
-    mapa = {
-        "crescer": "professional",
-        "ativo": "professional",
-        "escalar": "scale",
-        "rede": "scale",
-        "pro": "enterprise",
-        "distribuidor": "enterprise",
-        "professional": "professional",
-        "scale": "scale",
-        "enterprise": "enterprise",
-    }
-    p = (plano or "").strip().lower()
-    return mapa.get(p, p)
+    from global_utils import plano_slug_banco
+
+    return plano_slug_banco(plano)
 
 
 @financeiro_bp.post("/api/financeiro/preview-assinatura")

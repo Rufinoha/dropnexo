@@ -2,13 +2,13 @@
 {% block title %}Vendedores — {{ MARCA_NOME }}{% endblock %}
 {% block topbar_title %}Vendedores parceiros{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('fn_vendedores.static', filename='style/Cfn_vendedores.css') }}?v=2" />
+<link rel="stylesheet" href="{{ url_for('fn_vendedores.static', filename='style/Cfn_vendedores.css') }}?v=3" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal VdParceiros_Page">
   <div class="cl-page-title">
     <h2>Vendedores parceiros</h2>
-    <p class="cl-page-desc">Aprove solicitações, encerre vínculos (produtos desativados e estoque zerado na vitrine).</p>
+    <p class="cl-page-desc">Aprove solicitações, pause ou encerre vínculos (estoques zerados na vitrine).</p>
     <p class="VdParceiros_Hint">Clique duas vezes em um card para ver os detalhes e tomar a decisão.</p>
   </div>
   <div id="vd_lista" class="VdParceiros_Grid" aria-live="polite"></div>
@@ -28,5 +28,5 @@
 {% endblock %}
 {% block page_js %}
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-<script src="{{ url_for('fn_vendedores.static', filename='script/Sfn_vendedores.js') }}?v=3"></script>
+<script src="{{ url_for('fn_vendedores.static', filename='script/Sfn_vendedores.js') }}?v=7"></script>
 {% endblock %}
