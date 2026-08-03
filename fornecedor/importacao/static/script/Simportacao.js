@@ -325,6 +325,8 @@
     }
     const fd = new FormData();
     fd.append("arquivo", file);
+    const idLayout = qs("#impLayout")?.value;
+    if (idLayout) fd.append("id_layout", idLayout);
 
     Swal.fire({ title: "Importando…", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
     try {

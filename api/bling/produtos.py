@@ -621,12 +621,20 @@ def _salvar_produto(
                 unidade = %s, gtin = %s, ncm = %s, marca = %s, referencia = %s, condicao = %s,
                 peso_liquido_kg = %s, peso_bruto_kg = %s, altura_cm = %s, largura_cm = %s,
                 profundidade_cm = %s, moq = %s, volumes = %s, frete_gratis = %s,
-                origem_fiscal = %s, cest = %s, producao = %s, ativo = %s,
+                origem_fiscal = %s, cest = %s, producao = %s,
+                publicado = CASE WHEN %s THEN publicado ELSE FALSE END,
                 id_categoria = COALESCE(%s, id_categoria), atualizado_em = %s
             WHERE id = %s AND id_tenant = %s
             RETURNING id
             """,
-            vals + (id_categoria, agora, id_produto_existente, id_tenant),
+            vals
+            + (
+                bool(campos.get("ativo", True)),
+                id_categoria,
+                agora,
+                id_produto_existente,
+                id_tenant,
+            ),
         )
         row = cur.fetchone()
         if row and row[0]:
@@ -644,11 +652,11 @@ def _salvar_produto(
                 id_tenant, id_categoria, nome, descricao, sku, preco, preco_custo, unidade,
                 gtin, ncm, marca, referencia, condicao, peso_liquido_kg, peso_bruto_kg,
                 altura_cm, largura_cm, profundidade_cm, moq, volumes, frete_gratis,
-                origem_fiscal, cest, producao, ativo, publicado, formato, tipo, origem,
+                origem_fiscal, cest, producao, publicado, formato, tipo, origem,
                 id_importacao_lote, atualizado_em
             ) VALUES (
                 %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                %s, %s, %s, %s, %s, %s, FALSE, 'S', 'P', %s, %s, %s
+                %s, %s, %s, %s, %s, FALSE, 'S', 'P', %s, %s, %s
             ) RETURNING id
             """,
             (
@@ -815,12 +823,21 @@ def _salvar_produto_grupo_variacoes(
                 unidade = %s, gtin = %s, ncm = %s, marca = %s, referencia = %s, condicao = %s,
                 peso_liquido_kg = %s, peso_bruto_kg = %s, altura_cm = %s, largura_cm = %s,
                 profundidade_cm = %s, moq = %s, volumes = %s, frete_gratis = %s,
-                origem_fiscal = %s, cest = %s, producao = %s, ativo = %s, formato = 'E',
+                origem_fiscal = %s, cest = %s, producao = %s,
+                publicado = CASE WHEN %s THEN publicado ELSE FALSE END,
+                formato = 'E',
                 id_categoria = COALESCE(%s, id_categoria), atualizado_em = %s
             WHERE id = %s AND id_tenant = %s
             RETURNING id
             """,
-            vals + (id_categoria, agora, id_produto_existente, id_tenant),
+            vals
+            + (
+                bool(campos.get("ativo", True)),
+                id_categoria,
+                agora,
+                id_produto_existente,
+                id_tenant,
+            ),
         )
         row = cur.fetchone()
         if row and row[0]:
@@ -839,11 +856,11 @@ def _salvar_produto_grupo_variacoes(
                 id_tenant, id_categoria, nome, descricao, sku, preco, preco_custo, unidade,
                 gtin, ncm, marca, referencia, condicao, peso_liquido_kg, peso_bruto_kg,
                 altura_cm, largura_cm, profundidade_cm, moq, volumes, frete_gratis,
-                origem_fiscal, cest, producao, ativo, publicado, formato, tipo, origem,
+                origem_fiscal, cest, producao, publicado, formato, tipo, origem,
                 id_importacao_lote, atualizado_em
             ) VALUES (
                 %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                %s, %s, %s, %s, %s, %s, FALSE, 'E', 'P', %s, %s, %s
+                %s, %s, %s, %s, %s, FALSE, 'E', 'P', %s, %s, %s
             ) RETURNING id
             """,
             (
@@ -1720,13 +1737,13 @@ def exportar_produtos_vendedor(
                p.volumes,
                COALESCE(p.frete_gratis, FALSE),
                p.producao,
-               COALESCE(v.ativo, p.ativo, TRUE)
+               COALESCE(v.ativo, TRUE)
         FROM tbl_produto_vendedor pv
         JOIN tbl_produto_variante v ON v.id = pv.id_variante
         JOIN tbl_produto p ON p.id = pv.id_produto
         LEFT JOIN tbl_produto_variante_estoque e ON e.id_variante = v.id
         WHERE pv.id_tenant_vendedor = %s AND pv.ativo = TRUE
-          AND v.ativo = TRUE AND p.ativo = TRUE
+          AND v.ativo = TRUE AND p.publicado = TRUE
         ORDER BY p.nome, v.ordem, v.id
         """,
         (id_tenant,),

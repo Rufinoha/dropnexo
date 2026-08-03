@@ -697,6 +697,7 @@ _ICONES_SVG = {
     "users": '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
     "package": '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>',
     "shopping-bag": '<path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/>',
+    "store": '<path d="M3 9l1-4h16l1 4"/><path d="M3 9v11a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V9"/><path d="M3 9h18"/><path d="M10 13h4v8h-4z"/>',
     "plug": '<circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2"/>',
     "settings": '<circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2"/>',
 }
@@ -735,6 +736,8 @@ def carregar_menu_sidebar() -> list[dict]:
                 FROM tbl_menu m
                 WHERE m.status = TRUE AND m.pai = TRUE AND m.parent_id IS NULL
                   AND COALESCE(m.contexto_modulo, 'comum') = ANY(%s)
+                  AND COALESCE(m.nav_codigo, '') <> 'config'
+                  AND COALESCE(m.data_page, '') <> '/configuracoes'
                 ORDER BY m.ordem NULLS LAST, m.nome_menu
                 """,
                 (list(ctx_filtro),),
@@ -748,6 +751,8 @@ def carregar_menu_sidebar() -> list[dict]:
                 WHERE pm.id_perfil = %s AND m.status = TRUE
                   AND m.pai = TRUE AND m.parent_id IS NULL
                   AND COALESCE(m.contexto_modulo, 'comum') = ANY(%s)
+                  AND COALESCE(m.nav_codigo, '') <> 'config'
+                  AND COALESCE(m.data_page, '') <> '/configuracoes'
                 ORDER BY m.ordem NULLS LAST, m.nome_menu
                 """,
                 (id_perfil, list(ctx_filtro)),
@@ -796,6 +801,7 @@ def _menu_sidebar_fallback(mod_ativo: str = "vendedor") -> list[dict]:
     return comum + [
         {"nome": "Fornecedores", "url": url_for("vd_fornecedores.pagina"), "icone_svg": _ICONES_SVG["users"], "nav_codigo": "fornecedores"},
         {"nome": "Meus produtos", "url": url_for("vd_meus_produtos.pagina"), "icone_svg": _ICONES_SVG["shopping-bag"], "nav_codigo": "produtos"},
+        {"nome": "Loja Virtual", "url": url_for("vd_loja_virtual.pagina"), "icone_svg": _ICONES_SVG["store"], "nav_codigo": "vd_loja_virtual"},
     ]
 
 

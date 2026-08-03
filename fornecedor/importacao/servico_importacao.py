@@ -727,47 +727,18 @@ def excluir_lote(cur, id_tenant: int, id_lote: int, modulo: str = MODULO_CATALOG
     return {"produtos_removidos": removidos}
 
 
-def garantir_layout_padrao_csv(cur, id_tenant: int) -> int:
-    cur.execute(
-        """
-        SELECT id FROM tbl_importacao_layout
-        WHERE id_tenant = %s AND modulo = %s AND padrao = TRUE
-        LIMIT 1
-        """,
-        (id_tenant, MODULO_CATALOGO),
-    )
-    row = cur.fetchone()
-    if row:
-        return int(row[0])
+def _gravar_campos_layout(cur, id_layout: int, campos: list[dict]) -> None:
+    from fornecedor.importacao.campos_catalogo import aplicar_obrigatoriedade_sistema
 
-    cur.execute(
-        """
-        INSERT INTO tbl_importacao_layout (
-            id_tenant, modulo, nome, descricao, ativo, padrao, tipo_arquivo
-        ) VALUES (%s, %s, %s, %s, TRUE, TRUE, 'csv')
-        RETURNING id
-        """,
-        (
-            id_tenant,
-            MODULO_CATALOGO,
-            "Catálogo CSV padrão",
-            "sku;nome;descricao;preco;preco_promocional;quantidade;categoria;unidade;publicado;ativo",
-        ),
-    )
-    id_layout = int(cur.fetchone()[0])
-    campos = [
-        ("sku", "sku", False, 1),
-        ("nome", "nome", True, 2),
-        ("descricao", "descricao", False, 3),
-        ("preco", "preco", False, 4),
-        ("preco_promocional", "preco_promocional", False, 5),
-        ("quantidade", "quantidade", False, 6),
-        ("categoria", "categoria", False, 7),
-        ("unidade", "unidade", False, 8),
-        ("publicado", "publicado", False, 9),
-        ("ativo", "ativo", False, 10),
-    ]
-    for campo, coluna, obrig, ordem in campos:
+    cur.execute("DELETE FROM tbl_importacao_layout_campo WHERE id_layout = %s", (id_layout,))
+    for c in aplicar_obrigatoriedade_sistema(campos):
+        campo = c["campo_interno"]
+        coluna = c.get("coluna_arquivo") or campo
+        obrig = bool(c.get("obrigatorio"))
+        try:
+            ordem = int(c.get("ordem") or 0)
+        except (TypeError, ValueError):
+            ordem = 0
         cur.execute(
             """
             INSERT INTO tbl_importacao_layout_campo (
@@ -776,6 +747,75 @@ def garantir_layout_padrao_csv(cur, id_tenant: int) -> int:
             """,
             (id_layout, campo, coluna, obrig, ordem),
         )
+
+
+def sincronizar_campos_layout(cur, id_layout: int, *, modo_imagens: str = "colunas") -> None:
+    """Garante que o layout tenha todos os campos base; preserva mapeamentos existentes."""
+    base = {c["campo_interno"]: c for c in campos_base_layout(MODULO_CATALOGO, modo_imagens=modo_imagens)}
+    cur.execute(
+        """
+        SELECT campo_interno, coluna_arquivo, ordem
+        FROM tbl_importacao_layout_campo WHERE id_layout = %s
+        """,
+        (id_layout,),
+    )
+    atuais = {r[0]: {"coluna_arquivo": r[1], "ordem": r[2]} for r in cur.fetchall()}
+    merged: list[dict] = []
+    for campo, meta in base.items():
+        item = dict(meta)
+        if campo in atuais:
+            item["coluna_arquivo"] = atuais[campo]["coluna_arquivo"] or campo
+            if atuais[campo]["ordem"]:
+                item["ordem"] = atuais[campo]["ordem"]
+        merged.append(item)
+    # mantém campos extras do usuário (se houver)
+    for campo, meta in atuais.items():
+        if campo not in base:
+            merged.append(
+                {
+                    "campo_interno": campo,
+                    "coluna_arquivo": meta["coluna_arquivo"] or campo,
+                    "obrigatorio": False,
+                    "ordem": meta["ordem"] or 999,
+                }
+            )
+    _gravar_campos_layout(cur, id_layout, merged)
+
+
+def garantir_layout_padrao_csv(cur, id_tenant: int) -> int:
+    garantir_colunas_layout_imagens(cur)
+    cur.execute(
+        """
+        SELECT id, COALESCE(modo_imagens, 'colunas')
+        FROM tbl_importacao_layout
+        WHERE id_tenant = %s AND modulo = %s AND padrao = TRUE
+        LIMIT 1
+        """,
+        (id_tenant, MODULO_CATALOGO),
+    )
+    row = cur.fetchone()
+    if row:
+        id_layout = int(row[0])
+        sincronizar_campos_layout(cur, id_layout, modo_imagens=row[1] or "colunas")
+        return id_layout
+
+    cur.execute(
+        """
+        INSERT INTO tbl_importacao_layout (
+            id_tenant, modulo, nome, descricao, ativo, padrao, tipo_arquivo,
+            modo_imagens, delimitador_imagens
+        ) VALUES (%s, %s, %s, %s, TRUE, TRUE, 'csv', 'colunas', ';')
+        RETURNING id
+        """,
+        (
+            id_tenant,
+            MODULO_CATALOGO,
+            "Catálogo CSV padrão",
+            "Layout DropNexo com campos de qualidade, variações e imagens",
+        ),
+    )
+    id_layout = int(cur.fetchone()[0])
+    _gravar_campos_layout(cur, id_layout, campos_base_layout(MODULO_CATALOGO, modo_imagens="colunas"))
     return id_layout
 
 
@@ -805,23 +845,27 @@ def listar_layouts(cur, id_tenant: int, modulo: str = MODULO_CATALOGO) -> list[d
 
 MAX_LAYOUTS_POR_MODULO = 3
 
-CAMPOS_BASE_CATALOGO = [
-    {"campo_interno": "sku", "obrigatorio": False, "ordem": 1},
-    {"campo_interno": "nome", "obrigatorio": True, "ordem": 2},
-    {"campo_interno": "descricao", "obrigatorio": False, "ordem": 3},
-    {"campo_interno": "preco", "obrigatorio": False, "ordem": 4},
-    {"campo_interno": "preco_promocional", "obrigatorio": False, "ordem": 5},
-    {"campo_interno": "quantidade", "obrigatorio": False, "ordem": 6},
-    {"campo_interno": "categoria", "obrigatorio": False, "ordem": 7},
-    {"campo_interno": "unidade", "obrigatorio": False, "ordem": 8},
-    {"campo_interno": "publicado", "obrigatorio": False, "ordem": 9},
-    {"campo_interno": "ativo", "obrigatorio": False, "ordem": 10},
-]
+
+def garantir_colunas_layout_imagens(cur) -> None:
+    cur.execute(
+        """
+        ALTER TABLE tbl_importacao_layout
+          ADD COLUMN IF NOT EXISTS modo_imagens VARCHAR(20) NOT NULL DEFAULT 'colunas'
+        """
+    )
+    cur.execute(
+        """
+        ALTER TABLE tbl_importacao_layout
+          ADD COLUMN IF NOT EXISTS delimitador_imagens VARCHAR(5) NOT NULL DEFAULT ';'
+        """
+    )
 
 
-def campos_base_layout(modulo: str = MODULO_CATALOGO) -> list[dict]:
+def campos_base_layout(modulo: str = MODULO_CATALOGO, *, modo_imagens: str = "colunas") -> list[dict]:
+    from fornecedor.importacao.campos_catalogo import campos_base_catalogo
+
     if modulo == MODULO_CATALOGO:
-        return [dict(c) for c in CAMPOS_BASE_CATALOGO]
+        return campos_base_catalogo(modo_imagens=modo_imagens)
     return []
 
 
@@ -874,9 +918,13 @@ def listar_layouts_admin(
 
 
 def obter_layout_detalhe(cur, id_tenant: int, id_layout: int, modulo: str = MODULO_CATALOGO) -> dict | None:
+    from fornecedor.importacao.campos_catalogo import aplicar_obrigatoriedade_sistema
+
+    garantir_colunas_layout_imagens(cur)
     cur.execute(
         """
-        SELECT id, nome, descricao, ativo, padrao, modulo, tipo_arquivo
+        SELECT id, nome, descricao, ativo, padrao, modulo, tipo_arquivo,
+               COALESCE(modo_imagens, 'colunas'), COALESCE(delimitador_imagens, ';')
         FROM tbl_importacao_layout
         WHERE id = %s AND id_tenant = %s AND modulo = %s
         """,
@@ -885,6 +933,8 @@ def obter_layout_detalhe(cur, id_tenant: int, id_layout: int, modulo: str = MODU
     row = cur.fetchone()
     if not row:
         return None
+    modo = row[7] or "colunas"
+    sincronizar_campos_layout(cur, int(row[0]), modo_imagens=modo)
     layout = {
         "id": row[0],
         "nome": row[1],
@@ -894,6 +944,8 @@ def obter_layout_detalhe(cur, id_tenant: int, id_layout: int, modulo: str = MODU
         "padrao": row[4],
         "modulo": row[5],
         "tipo_arquivo": row[6],
+        "modo_imagens": modo,
+        "delimitador_imagens": row[8] or ";",
     }
     cur.execute(
         """
@@ -904,7 +956,7 @@ def obter_layout_detalhe(cur, id_tenant: int, id_layout: int, modulo: str = MODU
         """,
         (id_layout,),
     )
-    layout["campos"] = [
+    campos = [
         {
             "id": r[0],
             "campo_interno": r[1],
@@ -914,6 +966,7 @@ def obter_layout_detalhe(cur, id_tenant: int, id_layout: int, modulo: str = MODU
         }
         for r in cur.fetchall()
     ]
+    layout["campos"] = aplicar_obrigatoriedade_sistema(campos)
     return layout
 
 
@@ -926,6 +979,7 @@ def _contar_layouts(cur, id_tenant: int, modulo: str) -> int:
 
 
 def salvar_layout_importacao(cur, id_tenant: int, payload: dict) -> int:
+    garantir_colunas_layout_imagens(cur)
     modulo = (payload.get("modulo") or MODULO_CATALOGO).strip()
     nome = (payload.get("nome") or payload.get("nome_layout") or "").strip()
     if not nome:
@@ -933,6 +987,10 @@ def salvar_layout_importacao(cur, id_tenant: int, payload: dict) -> int:
     descricao = (payload.get("descricao") or "").strip() or None
     ativo = bool(payload.get("ativo", True))
     padrao = bool(payload.get("padrao", False))
+    modo_imagens = (payload.get("modo_imagens") or "colunas").strip().lower()
+    if modo_imagens not in ("colunas", "unico"):
+        modo_imagens = "colunas"
+    delimitador = (payload.get("delimitador_imagens") or ";").strip()[:5] or ";"
     campos = payload.get("campos") if isinstance(payload.get("campos"), list) else []
     layout_id = payload.get("id")
 
@@ -956,47 +1014,30 @@ def salvar_layout_importacao(cur, id_tenant: int, payload: dict) -> int:
         cur.execute(
             """
             UPDATE tbl_importacao_layout
-            SET nome = %s, descricao = %s, ativo = %s, padrao = %s
+            SET nome = %s, descricao = %s, ativo = %s, padrao = %s,
+                modo_imagens = %s, delimitador_imagens = %s
             WHERE id = %s AND id_tenant = %s
             """,
-            (nome, descricao, ativo, padrao, id_layout, id_tenant),
+            (nome, descricao, ativo, padrao, modo_imagens, delimitador, id_layout, id_tenant),
         )
-        cur.execute("DELETE FROM tbl_importacao_layout_campo WHERE id_layout = %s", (id_layout,))
     else:
         if _contar_layouts(cur, id_tenant, modulo) >= MAX_LAYOUTS_POR_MODULO:
             raise ValueError(f"Máximo de {MAX_LAYOUTS_POR_MODULO} layouts por módulo.")
         cur.execute(
             """
             INSERT INTO tbl_importacao_layout (
-                id_tenant, modulo, nome, descricao, ativo, padrao, tipo_arquivo
-            ) VALUES (%s, %s, %s, %s, %s, %s, 'csv')
+                id_tenant, modulo, nome, descricao, ativo, padrao, tipo_arquivo,
+                modo_imagens, delimitador_imagens
+            ) VALUES (%s, %s, %s, %s, %s, %s, 'csv', %s, %s)
             RETURNING id
             """,
-            (id_tenant, modulo, nome, descricao, ativo, padrao),
+            (id_tenant, modulo, nome, descricao, ativo, padrao, modo_imagens, delimitador),
         )
         id_layout = int(cur.fetchone()[0])
 
-    ordem_auto = 1
-    for c in campos:
-        campo = (c.get("campo_interno") or "").strip()
-        if not campo:
-            continue
-        coluna = (c.get("coluna_arquivo") or campo).strip()
-        obrig = bool(c.get("obrigatorio", False))
-        try:
-            ordem = int(c.get("ordem") or ordem_auto)
-        except (TypeError, ValueError):
-            ordem = ordem_auto
-        cur.execute(
-            """
-            INSERT INTO tbl_importacao_layout_campo (
-                id_layout, campo_interno, coluna_arquivo, obrigatorio, ordem
-            ) VALUES (%s, %s, %s, %s, %s)
-            """,
-            (id_layout, campo, coluna, obrig, ordem),
-        )
-        ordem_auto += 1
-
+    if not campos:
+        campos = campos_base_layout(modulo, modo_imagens=modo_imagens)
+    _gravar_campos_layout(cur, id_layout, campos)
     return id_layout
 
 

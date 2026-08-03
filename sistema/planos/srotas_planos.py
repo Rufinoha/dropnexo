@@ -128,7 +128,6 @@ def catalogo_planos_home():
             [("600", "pedidos/mês"), ("30", "fornecedores"), ("2.000", "produtos")],
             [
                 rec("Tudo do Crescer", True),
-                rec("Alterar preços em lote", True),
                 rec("Até 8 pessoas na equipe", True),
             ],
             destaque="Operação com mais volume e equipe",
@@ -140,7 +139,6 @@ def catalogo_planos_home():
             [("2.000", "pedidos/mês"), ("80", "fornecedores"), ("10.000", "produtos")],
             [
                 rec("Tudo do Escalar", True),
-                rec("Relatórios e exportar dados", True),
                 rec("Equipe ampliada", True),
             ],
             destaque="Alto volume na operação",
@@ -187,7 +185,6 @@ def catalogo_planos_home():
             [("800", "pedidos/mês"), ("60", "vendedores aprovados"), ("3.000", "produtos")],
             [
                 rec("Tudo do Conectar", True),
-                rec("Destaque na vitrine para vendedores", True),
                 rec("Até 5 depósitos", True),
             ],
             destaque="Mais vendedores e volume na rede",

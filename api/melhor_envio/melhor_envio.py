@@ -708,6 +708,9 @@ _log = logging.getLogger(__name__)
 _RAIZ_UPLOAD = Path(__file__).resolve().parents[2]
 
 _COLUNAS_ME_OK: bool | None = None
+_COLUNA_FRETE_MODO_OK: bool | None = None
+
+FRETE_MODOS = ("integracao", "dropnexo", "manual")
 
 
 def _float(v) -> float:
@@ -736,6 +739,44 @@ def _pedido_tem_colunas_me(cur) -> bool:
     )
     _COLUNAS_ME_OK = cur.fetchone() is not None
     return _COLUNAS_ME_OK
+
+
+def _pedido_tem_frete_modo(cur) -> bool:
+    global _COLUNA_FRETE_MODO_OK
+    if _COLUNA_FRETE_MODO_OK is not None:
+        return _COLUNA_FRETE_MODO_OK
+    cur.execute(
+        """
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'tbl_pedido'
+          AND column_name = 'frete_modo'
+        LIMIT 1
+        """
+    )
+    _COLUNA_FRETE_MODO_OK = cur.fetchone() is not None
+    return _COLUNA_FRETE_MODO_OK
+
+
+def normalizar_frete_modo(modo: str | None) -> str:
+    m = (modo or "").strip().lower()
+    if m in ("melhor_envio", "me", "dropnexo"):
+        return "dropnexo"
+    if m in ("integracao", "ml", "tiktok", "amazon", "mercado_livre"):
+        return "integracao"
+    if m == "manual":
+        return "manual"
+    return ""
+
+
+def _set_frete_modo(cur, id_pedido: int, modo: str) -> None:
+    modo_n = normalizar_frete_modo(modo)
+    if not modo_n or not _pedido_tem_frete_modo(cur):
+        return
+    cur.execute(
+        "UPDATE tbl_pedido SET frete_modo = %s, atualizado_em = %s WHERE id = %s",
+        (modo_n, agora_utc(), id_pedido),
+    )
 
 
 def _dimensoes_efetivas(variante: dict, produto: dict) -> dict[str, float]:
@@ -1044,35 +1085,62 @@ def escolher_frete_pedido(
     if prazo is None:
         prazo = opcao.get("delivery_time")
 
-    cur.execute(
-        """
-        UPDATE tbl_pedido SET
-            valor_frete = %s,
-            me_service_id = %s,
-            me_preco_cotado = %s,
-            me_prazo_dias = %s,
-            me_cotacao_json = %s::jsonb,
-            me_etiqueta_status = 'pendente',
-            atualizado_em = %s
-        WHERE id = %s AND id_tenant_vendedor = %s
-        """,
-        (
-            preco,
-            int(service_id),
-            preco,
-            int(prazo) if prazo is not None else None,
-            json.dumps(opcao, ensure_ascii=False),
-            agora_utc(),
-            id_pedido,
-            id_vendedor,
-        ),
-    )
+    if _pedido_tem_frete_modo(cur):
+        cur.execute(
+            """
+            UPDATE tbl_pedido SET
+                valor_frete = %s,
+                me_service_id = %s,
+                me_preco_cotado = %s,
+                me_prazo_dias = %s,
+                me_cotacao_json = %s::jsonb,
+                me_etiqueta_status = 'pendente',
+                frete_modo = 'dropnexo',
+                atualizado_em = %s
+            WHERE id = %s AND id_tenant_vendedor = %s
+            """,
+            (
+                preco,
+                int(service_id),
+                preco,
+                int(prazo) if prazo is not None else None,
+                json.dumps(opcao, ensure_ascii=False),
+                agora_utc(),
+                id_pedido,
+                id_vendedor,
+            ),
+        )
+    else:
+        cur.execute(
+            """
+            UPDATE tbl_pedido SET
+                valor_frete = %s,
+                me_service_id = %s,
+                me_preco_cotado = %s,
+                me_prazo_dias = %s,
+                me_cotacao_json = %s::jsonb,
+                me_etiqueta_status = 'pendente',
+                atualizado_em = %s
+            WHERE id = %s AND id_tenant_vendedor = %s
+            """,
+            (
+                preco,
+                int(service_id),
+                preco,
+                int(prazo) if prazo is not None else None,
+                json.dumps(opcao, ensure_ascii=False),
+                agora_utc(),
+                id_pedido,
+                id_vendedor,
+            ),
+        )
     return {
         "id_pedido": id_pedido,
         "valor_frete": preco,
         "me_service_id": int(service_id),
         "me_prazo_dias": int(prazo) if prazo is not None else None,
         "nome": opcao.get("name") or "",
+        "frete_modo": "dropnexo",
     }
 
 
@@ -1117,24 +1185,45 @@ def definir_modo_frete_manual(
     rastreio = (codigo_rastreio or "").strip() or None
     transp = (transportadora or "").strip() or None
 
-    cur.execute(
-        """
-        UPDATE tbl_pedido SET
-            valor_frete = %s,
-            me_service_id = NULL,
-            me_preco_cotado = NULL,
-            me_prazo_dias = NULL,
-            me_cotacao_json = NULL,
-            me_order_id = NULL,
-            me_protocol = NULL,
-            me_etiqueta_status = 'manual',
-            codigo_rastreio = COALESCE(%s, codigo_rastreio),
-            transportadora = COALESCE(%s, transportadora),
-            atualizado_em = %s
-        WHERE id = %s AND id_tenant_vendedor = %s
-        """,
-        (vf, rastreio, transp, agora_utc(), id_pedido, id_vendedor),
-    )
+    if _pedido_tem_frete_modo(cur):
+        cur.execute(
+            """
+            UPDATE tbl_pedido SET
+                valor_frete = %s,
+                me_service_id = NULL,
+                me_preco_cotado = NULL,
+                me_prazo_dias = NULL,
+                me_cotacao_json = NULL,
+                me_order_id = NULL,
+                me_protocol = NULL,
+                me_etiqueta_status = 'manual',
+                frete_modo = 'manual',
+                codigo_rastreio = COALESCE(%s, codigo_rastreio),
+                transportadora = COALESCE(%s, transportadora),
+                atualizado_em = %s
+            WHERE id = %s AND id_tenant_vendedor = %s
+            """,
+            (vf, rastreio, transp, agora_utc(), id_pedido, id_vendedor),
+        )
+    else:
+        cur.execute(
+            """
+            UPDATE tbl_pedido SET
+                valor_frete = %s,
+                me_service_id = NULL,
+                me_preco_cotado = NULL,
+                me_prazo_dias = NULL,
+                me_cotacao_json = NULL,
+                me_order_id = NULL,
+                me_protocol = NULL,
+                me_etiqueta_status = 'manual',
+                codigo_rastreio = COALESCE(%s, codigo_rastreio),
+                transportadora = COALESCE(%s, transportadora),
+                atualizado_em = %s
+            WHERE id = %s AND id_tenant_vendedor = %s
+            """,
+            (vf, rastreio, transp, agora_utc(), id_pedido, id_vendedor),
+        )
     return {
         "id_pedido": id_pedido,
         "frete_modo": "manual",
@@ -1144,8 +1233,8 @@ def definir_modo_frete_manual(
     }
 
 
-def definir_modo_frete_melhor_envio(cur, id_vendedor: int, id_pedido: int) -> dict:
-    """Volta ao fluxo Melhor Envio (cotação integrada)."""
+def definir_modo_frete_dropnexo(cur, id_vendedor: int, id_pedido: int) -> dict:
+    """Fluxo DropNexo (cotação/compra via Melhor Envio e outras integrações internas)."""
     if not _pedido_tem_colunas_me(cur):
         raise ValueError("Execute a migração SQL 066_pedido_melhor_envio no banco.")
     ped = obter_pedido(cur, id_pedido, id_vendedor=id_vendedor)
@@ -1154,23 +1243,96 @@ def definir_modo_frete_melhor_envio(cur, id_vendedor: int, id_pedido: int) -> di
     if not _frete_editavel_status(status_vendedor_pedido(ped)):
         raise ValueError("Só é possível alterar o frete em pedidos em rascunho, importados ou aguardando pagamento.")
 
-    cur.execute(
-        """
-        UPDATE tbl_pedido SET
-            valor_frete = 0,
-            me_service_id = NULL,
-            me_preco_cotado = NULL,
-            me_prazo_dias = NULL,
-            me_cotacao_json = NULL,
-            me_order_id = NULL,
-            me_protocol = NULL,
-            me_etiqueta_status = NULL,
-            atualizado_em = %s
-        WHERE id = %s AND id_tenant_vendedor = %s
-        """,
-        (agora_utc(), id_pedido, id_vendedor),
-    )
-    return {"id_pedido": id_pedido, "frete_modo": "melhor_envio"}
+    if _pedido_tem_frete_modo(cur):
+        cur.execute(
+            """
+            UPDATE tbl_pedido SET
+                valor_frete = 0,
+                me_service_id = NULL,
+                me_preco_cotado = NULL,
+                me_prazo_dias = NULL,
+                me_cotacao_json = NULL,
+                me_order_id = NULL,
+                me_protocol = NULL,
+                me_etiqueta_status = NULL,
+                frete_modo = 'dropnexo',
+                atualizado_em = %s
+            WHERE id = %s AND id_tenant_vendedor = %s
+            """,
+            (agora_utc(), id_pedido, id_vendedor),
+        )
+    else:
+        cur.execute(
+            """
+            UPDATE tbl_pedido SET
+                valor_frete = 0,
+                me_service_id = NULL,
+                me_preco_cotado = NULL,
+                me_prazo_dias = NULL,
+                me_cotacao_json = NULL,
+                me_order_id = NULL,
+                me_protocol = NULL,
+                me_etiqueta_status = NULL,
+                atualizado_em = %s
+            WHERE id = %s AND id_tenant_vendedor = %s
+            """,
+            (agora_utc(), id_pedido, id_vendedor),
+        )
+    return {"id_pedido": id_pedido, "frete_modo": "dropnexo"}
+
+
+def definir_modo_frete_melhor_envio(cur, id_vendedor: int, id_pedido: int) -> dict:
+    """Alias legado → DropNexo (Melhor Envio)."""
+    return definir_modo_frete_dropnexo(cur, id_vendedor, id_pedido)
+
+
+def definir_modo_frete_integracao(cur, id_vendedor: int, id_pedido: int) -> dict:
+    """Frete/etiqueta vindos do canal que gerou o pedido (ML, TikTok, Amazon…)."""
+    if not _pedido_tem_colunas_me(cur):
+        raise ValueError("Execute a migração SQL 066_pedido_melhor_envio no banco.")
+    ped = obter_pedido(cur, id_pedido, id_vendedor=id_vendedor)
+    if not ped:
+        raise ValueError("Pedido não encontrado.")
+    if not _frete_editavel_status(status_vendedor_pedido(ped)):
+        raise ValueError("Só é possível alterar o frete em pedidos em rascunho, importados ou aguardando pagamento.")
+    origem = (ped.get("origem") or "").strip().lower()
+    if origem not in ("mercado_livre", "tiktok", "amazon"):
+        raise ValueError("Modo Integração só está disponível para pedidos de marketplace.")
+
+    if _pedido_tem_frete_modo(cur):
+        cur.execute(
+            """
+            UPDATE tbl_pedido SET
+                me_service_id = NULL,
+                me_preco_cotado = NULL,
+                me_prazo_dias = NULL,
+                me_cotacao_json = NULL,
+                me_order_id = NULL,
+                me_protocol = NULL,
+                me_etiqueta_status = NULL,
+                frete_modo = 'integracao',
+                atualizado_em = %s
+            WHERE id = %s AND id_tenant_vendedor = %s
+            """,
+            (agora_utc(), id_pedido, id_vendedor),
+        )
+    else:
+        cur.execute(
+            """
+            UPDATE tbl_pedido SET
+                me_service_id = NULL,
+                me_preco_cotado = NULL,
+                me_prazo_dias = NULL,
+                me_cotacao_json = NULL,
+                me_order_id = NULL,
+                me_protocol = NULL,
+                me_etiqueta_status = NULL,
+                atualizado_em = %s
+            WHERE id = %s AND id_tenant_vendedor = %s
+            """,
+            (agora_utc(), id_pedido, id_vendedor),
+        )
+    return {"id_pedido": id_pedido, "frete_modo": "integracao", "origem": origem}
 
 
 def salvar_frete_manual(
@@ -1196,14 +1358,14 @@ def salvar_frete_manual(
 def frete_resumo_pedido(cur, id_pedido: int) -> dict:
     if not _pedido_tem_colunas_me(cur):
         return {}
-    cur.execute(
-        """
-        SELECT valor_frete, me_service_id, me_preco_cotado, me_prazo_dias, me_cotacao_json,
-               me_etiqueta_status, me_order_id, me_protocol, codigo_rastreio, transportadora
-        FROM tbl_pedido WHERE id = %s
-        """,
-        (id_pedido,),
+    tem_modo = _pedido_tem_frete_modo(cur)
+    cols = (
+        "valor_frete, me_service_id, me_preco_cotado, me_prazo_dias, me_cotacao_json, "
+        "me_etiqueta_status, me_order_id, me_protocol, codigo_rastreio, transportadora"
     )
+    if tem_modo:
+        cols += ", frete_modo, origem"
+    cur.execute(f"SELECT {cols} FROM tbl_pedido WHERE id = %s", (id_pedido,))
     row = cur.fetchone()
     if not row:
         return {}
@@ -1215,12 +1377,26 @@ def frete_resumo_pedido(cur, id_pedido: int) -> dict:
             cotacao = {}
     elif not isinstance(cotacao, dict):
         cotacao = {}
+    etiq_st = row[5] or ""
+    modo = ""
+    if tem_modo:
+        modo = normalizar_frete_modo(row[10])
+        origem = (row[11] or "").strip().lower() if len(row) > 11 else ""
+    else:
+        origem = ""
+    if not modo:
+        if etiq_st == "manual":
+            modo = "manual"
+        elif row[1]:
+            modo = "dropnexo"
+        elif origem in ("mercado_livre", "tiktok", "amazon"):
+            modo = "integracao"
     return {
         "valor_frete": _float(row[0]),
         "me_service_id": row[1],
         "me_preco_cotado": _float(row[2]) if row[2] is not None else None,
         "me_prazo_dias": row[3],
-        "me_etiqueta_status": row[5] or "",
+        "me_etiqueta_status": etiq_st,
         "me_order_id": row[6] or "",
         "me_protocol": row[7] or "",
         "codigo_rastreio": row[8] or "",
@@ -1229,7 +1405,7 @@ def frete_resumo_pedido(cur, id_pedido: int) -> dict:
         "frete_transportadora": (
             cotacao.get("company", {}).get("name") if isinstance(cotacao.get("company"), dict) else ""
         ),
-        "frete_modo": "manual" if (row[5] or "") == "manual" else ("melhor_envio" if row[1] else ""),
+        "frete_modo": modo,
     }
 
 
@@ -1590,17 +1766,30 @@ def tentar_contratar_etiqueta_apos_pagamento(
     """Chamado após pagamento confirmado — não interrompe o fluxo em caso de erro."""
     if not _pedido_tem_colunas_me(cur):
         return None
-    cur.execute(
-        """
-        SELECT id_tenant_vendedor, me_service_id, me_etiqueta_status
-        FROM tbl_pedido WHERE id = %s
-        """,
-        (id_pedido,),
-    )
+    tem_modo = _pedido_tem_frete_modo(cur)
+    if tem_modo:
+        cur.execute(
+            """
+            SELECT id_tenant_vendedor, me_service_id, me_etiqueta_status, frete_modo
+            FROM tbl_pedido WHERE id = %s
+            """,
+            (id_pedido,),
+        )
+    else:
+        cur.execute(
+            """
+            SELECT id_tenant_vendedor, me_service_id, me_etiqueta_status, NULL
+            FROM tbl_pedido WHERE id = %s
+            """,
+            (id_pedido,),
+        )
     row = cur.fetchone()
     if not row:
         return None
     id_vendedor, service_id, etiq_status = int(row[0]), row[1], row[2] or ""
+    modo = normalizar_frete_modo(row[3])
+    if modo in ("manual", "integracao"):
+        return None
     if not service_id or etiq_status in ("manual",):
         return None
     if etiq_status not in ("pendente", "erro", ""):

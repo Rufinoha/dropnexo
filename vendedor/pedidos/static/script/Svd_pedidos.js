@@ -158,16 +158,58 @@
     atualizarResumo();
   }
 
+  function origemTemIntegracaoFrete(ped) {
+    const o = (ped.origem || "").toLowerCase();
+    return o === "mercado_livre" || o === "tiktok" || o === "amazon";
+  }
+
+  function normalizarModoFreteUi(modo) {
+    const m = String(modo || "").toLowerCase();
+    if (m === "me" || m === "melhor_envio" || m === "dropnexo") return "dropnexo";
+    if (m === "ml" || m === "tiktok" || m === "amazon" || m === "integracao" || m === "mercado_livre") {
+      return "integracao";
+    }
+    if (m === "manual") return "manual";
+    return "";
+  }
+
   function inferirModoFrete(ped) {
-    if ((ped.origem || "") === "mercado_livre") return "ml";
-    if ((ped.origem || "") === "tiktok") return "tiktok";
-    if ((ped.origem || "") === "amazon") return "amazon";
-    if (freteModoPorPedido[ped.id]) return freteModoPorPedido[ped.id];
-    if (ped.frete_modo === "manual" || ped.me_etiqueta_status === "manual") return "manual";
-    if (ped.me_service_id) return "me";
+    if (freteModoPorPedido[ped.id]) return normalizarModoFreteUi(freteModoPorPedido[ped.id]) || freteModoPorPedido[ped.id];
+    const salvo = normalizarModoFreteUi(ped.frete_modo);
+    if (salvo) return salvo;
+    if (ped.me_etiqueta_status === "manual") return "manual";
+    if (ped.me_service_id) return "dropnexo";
+    if (origemTemIntegracaoFrete(ped)) return "integracao";
     const temEtiqueta = (ped.anexos || []).some((a) => a.tipo === "etiqueta");
     if (temEtiqueta) return "manual";
-    return meFreteConectado ? "me" : "manual";
+    return meFreteConectado ? "dropnexo" : "manual";
+  }
+
+  function freteDocsStatus(ped) {
+    const tipos = new Set((ped.anexos || []).map((a) => a.tipo));
+    const temEtiqueta = tipos.has("etiqueta");
+    const temFiscal = tipos.has("nf") || tipos.has("declaracao");
+    const faltando = [];
+    if (!temEtiqueta) faltando.push("etiqueta");
+    if (!temFiscal) faltando.push("NF ou declaração");
+    return {
+      ok: temEtiqueta && temFiscal,
+      temEtiqueta,
+      temFiscal,
+      temNf: tipos.has("nf"),
+      temDeclaracao: tipos.has("declaracao"),
+      faltando,
+    };
+  }
+
+  function renderFreteDocsChecklist(ped) {
+    const d = freteDocsStatus(ped);
+    return `
+      <div class="Pd_FreteDocsCheck ${d.ok ? "is-ok" : "is-pendente"}">
+        <span class="${d.temEtiqueta ? "is-ok" : ""}">Etiqueta ${d.temEtiqueta ? "✓" : "—"}</span>
+        <span class="${d.temFiscal ? "is-ok" : ""}">NF ou declaração ${d.temFiscal ? "✓" : "—"}</span>
+        ${d.ok ? "" : `<small class="Pd_Hint">Falta: ${esc(d.faltando.join(", "))}.</small>`}
+      </div>`;
   }
 
   function sincronizarModoFreteDoGrupo() {
@@ -179,7 +221,12 @@
   function sincronizarFreteDoGrupo() {
     fretePorPedido = {};
     (pedidosGrupo || []).forEach((p) => {
-      if (p.valor_frete > 0 || p.me_service_id || p.frete_modo === "manual" || p.me_etiqueta_status === "manual") {
+      if (
+        p.valor_frete > 0 ||
+        p.me_service_id ||
+        normalizarModoFreteUi(p.frete_modo) === "manual" ||
+        p.me_etiqueta_status === "manual"
+      ) {
         fretePorPedido[p.id] = {
           valor: Number(p.valor_frete || p.me_preco_cotado || 0),
           escolhido: { id: p.me_service_id, nome: p.frete_nome || "" },
@@ -345,18 +392,25 @@
     const lista = (ped.anexos || []).filter((a) => a.tipo === tipo);
     const inpId = `pd_anexo_inp_${ped.id}_${tipo}`;
     const st = stV(ped);
+    const docFrete = tipo === "nf" || tipo === "etiqueta" || tipo === "declaracao";
     const podeEnviar =
       st !== "cancelado" &&
-      !["pago", "em_expedicao", "entregue"].includes(st) &&
-      ((ped.origem || "manual") === "manual" || ["importado", "aguardando_pagamento"].includes(st));
+      st !== "entregue" &&
+      st !== "em_expedicao" &&
+      (docFrete
+        ? true
+        : !["pago"].includes(st) &&
+          ((ped.origem || "manual") === "manual" || ["importado", "aguardando_pagamento"].includes(st)));
+    const accept = docFrete ? ".pdf,application/pdf" : ".pdf,.xml,.png,.jpg,.jpeg,.webp";
+    const hint = docFrete ? "Somente PDF — máx. 5 MB" : "PDF, XML ou imagem — máx. 5 MB";
     return `
       <div class="Pd_AnexoBloco" id="pd_anexo_${ped.id}_${tipo}">
         <h5>${esc(rotulo)}</h5>
         <div class="Pd_AnexoUpload">
-          <input type="file" id="${inpId}" class="Pd_AnexoInput" hidden accept=".pdf,.xml,.png,.jpg,.jpeg,.webp" data-upload-anexo="${ped.id}" data-tipo="${tipo}" ${podeEnviar ? "" : "disabled"} />
+          <input type="file" id="${inpId}" class="Pd_AnexoInput" hidden accept="${accept}" data-upload-anexo="${ped.id}" data-tipo="${tipo}" ${podeEnviar ? "" : "disabled"} />
           ${podeEnviar ? `<label for="${inpId}" class="Cl_botaoFiltro Pd_AnexoBtn">Escolher arquivo</label>` : ""}
           <span class="Pd_AnexoFileName" data-anexo-label="${ped.id}_${tipo}">Nenhum arquivo escolhido</span>
-          <span class="Pd_Hint">PDF, XML ou imagem — máx. 5 MB</span>
+          <span class="Pd_Hint">${hint}</span>
         </div>
         <ul class="Pd_AnexoItens">
           ${lista.length
@@ -398,15 +452,11 @@
           </div>
         </div>
         ${renderBlocoAnexo(p, "nf", "Nota fiscal")}
+        ${renderBlocoAnexo(p, "declaracao", "Declaração de conteúdo")}
         ${renderBlocoAnexo(p, "etiqueta", "Etiqueta de envio")}
-        ${(p.origem || "") === "mercado_livre"
+        ${origemTemIntegracaoFrete(p) && (p.origem || "") !== "amazon"
           ? `<div class="Pd_AnexoMl" style="margin-top:0.75rem">
-              <button type="button" class="Cl_botaoFiltro" data-ml-etiqueta="${p.id}">Baixar etiqueta ML</button>
-            </div>`
-          : ""}
-        ${(p.origem || "") === "tiktok"
-          ? `<div class="Pd_AnexoMl" style="margin-top:0.75rem">
-              <button type="button" class="Cl_botaoFiltro" data-tt-etiqueta="${p.id}">Baixar etiqueta TikTok</button>
+              <button type="button" class="Cl_botaoFiltro" data-puxar-integracao="${p.id}">Puxar da integração</button>
             </div>`
           : ""}
         ${(p.origem || "") === "amazon"
@@ -424,43 +474,22 @@
     elAnexosLista.querySelectorAll("[data-del-anexo]").forEach((btn) => {
       btn.addEventListener("click", () => excluirAnexo(+btn.dataset.delAnexo));
     });
-    elAnexosLista.querySelectorAll("[data-ml-etiqueta]").forEach((btn) => {
+    elAnexosLista.querySelectorAll("[data-puxar-integracao]").forEach((btn) => {
       btn.addEventListener("click", async () => {
         btn.disabled = true;
         try {
-          const j = await baixarEtiquetaMl(+btn.dataset.mlEtiqueta);
+          const j = await puxarIntegracaoPedido(+btn.dataset.puxarIntegracao);
           renderAnexos();
           atualizarNavAnexos();
           Swal.fire({
             icon: "success",
-            title: "Etiqueta ML",
-            text: j.message || "Etiqueta baixada.",
-            timer: 1800,
+            title: "Integração",
+            text: j.message || "Documentos puxados.",
+            timer: 2000,
             showConfirmButton: false,
           });
         } catch (e) {
-          Swal.fire({ icon: "error", title: "Etiqueta ML", text: e.message, confirmButtonColor: "#021F81" });
-        } finally {
-          btn.disabled = false;
-        }
-      });
-    });
-    elAnexosLista.querySelectorAll("[data-tt-etiqueta]").forEach((btn) => {
-      btn.addEventListener("click", async () => {
-        btn.disabled = true;
-        try {
-          const j = await baixarEtiquetaTiktok(+btn.dataset.ttEtiqueta);
-          renderAnexos();
-          atualizarNavAnexos();
-          Swal.fire({
-            icon: "success",
-            title: "Etiqueta TikTok",
-            text: j.message || "Etiqueta baixada.",
-            timer: 1800,
-            showConfirmButton: false,
-          });
-        } catch (e) {
-          Swal.fire({ icon: "error", title: "Etiqueta TikTok", text: e.message, confirmButtonColor: "#021F81" });
+          Swal.fire({ icon: "error", title: "Integração", text: e.message, confirmButtonColor: "#021F81" });
         } finally {
           btn.disabled = false;
         }
@@ -686,11 +715,12 @@
 
   function etiquetaStatusHtml(ped) {
     const modo = inferirModoFrete(ped);
-    if (modo === "manual") {
+    if (modo === "manual" || modo === "integracao") {
       const etiquetas = (ped.anexos || []).filter((a) => a.tipo === "etiqueta");
       if (!etiquetas.length) return "";
       const rastreio = ped.codigo_rastreio || "";
-      return `<p class="Pd_EtiquetaStatus Pd_EtiquetaStatus--gerada">Etiqueta anexada (envio próprio)${rastreio ? ` — rastreio <strong>${esc(rastreio)}</strong>` : ""}</p>`;
+      const rotulo = modo === "integracao" ? "Etiqueta da integração" : "Etiqueta anexada (manual)";
+      return `<p class="Pd_EtiquetaStatus Pd_EtiquetaStatus--gerada">${rotulo}${rastreio ? ` — rastreio <strong>${esc(rastreio)}</strong>` : ""}</p>`;
     }
     if (!ped.me_service_id) return "";
     const st = (ped.me_etiqueta_status || "").toLowerCase();
@@ -698,7 +728,7 @@
     const proto = ped.me_protocol || "";
     let txt = "";
     if (st === "gerada") {
-      txt = `Etiqueta gerada${rastreio ? ` — rastreio <strong>${esc(rastreio)}</strong>` : ""}${proto ? ` <small>(${esc(proto)})</small>` : ""}`;
+      txt = `Etiqueta DropNexo gerada${rastreio ? ` — rastreio <strong>${esc(rastreio)}</strong>` : ""}${proto ? ` <small>(${esc(proto)})</small>` : ""}`;
     } else if (st === "erro") {
       txt = "Falha ao gerar etiqueta no Melhor Envio.";
     } else if (st === "pendente" && stV(ped) === "pago") {
@@ -727,20 +757,21 @@
   }
 
   async function setFreteModo(idPed, modo) {
+    const modoApi = normalizarModoFreteUi(modo) || modo;
     const r = await fetch(`/vendedor/pedidos/${idPed}/frete/modo`, {
       method: "POST",
       credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ modo: modo === "manual" ? "manual" : "melhor_envio" }),
+      body: JSON.stringify({ modo: modoApi }),
     });
     const j = await r.json();
     if (!r.ok || !j.success) throw new Error(j.message || "Erro ao alterar modo de frete.");
-    freteModoPorPedido[idPed] = modo;
+    freteModoPorPedido[idPed] = modoApi;
     const ped = pedidosGrupo.find((p) => p.id === idPed);
     if (ped) {
-      ped.frete_modo = modo === "manual" ? "manual" : "melhor_envio";
-      ped.me_etiqueta_status = modo === "manual" ? "manual" : "";
-      if (modo !== "manual") {
+      ped.frete_modo = j.frete_modo || modoApi;
+      ped.me_etiqueta_status = modoApi === "manual" ? "manual" : "";
+      if (modoApi !== "dropnexo") {
         ped.me_service_id = null;
         fretePorPedido[idPed] = {};
       }
@@ -777,59 +808,80 @@
 
   function renderFreteModoTabs(ped, modo) {
     const dis = freteEditavelPedido(ped) ? "" : "disabled";
+    const temCanal = origemTemIntegracaoFrete(ped);
     const meHint = meFreteConectado ? "" : ' title="Conecte o Melhor Envio em Integrações → Frete"';
+    const intDis = !temCanal ? "disabled" : dis;
+    const intHint = !temCanal ? ' title="Disponível só para pedidos de marketplace"' : "";
     return `
       <div class="Pd_FreteModo" role="tablist" aria-label="Forma de envio">
-        <button type="button" class="Pd_FreteModoBtn${modo === "me" ? " is-active" : ""}" data-frete-modo="me" data-ped="${ped.id}" ${dis}${meHint}>Melhor Envio</button>
-        <button type="button" class="Pd_FreteModoBtn${modo === "manual" ? " is-active" : ""}" data-frete-modo="manual" data-ped="${ped.id}" ${dis}>Minha etiqueta</button>
+        <button type="button" class="Pd_FreteModoBtn${modo === "integracao" ? " is-active" : ""}" data-frete-modo="integracao" data-ped="${ped.id}" ${intDis}${intHint}>Integração</button>
+        <button type="button" class="Pd_FreteModoBtn${modo === "dropnexo" ? " is-active" : ""}" data-frete-modo="dropnexo" data-ped="${ped.id}" ${dis}${meHint}>DropNexo</button>
+        <button type="button" class="Pd_FreteModoBtn${modo === "manual" ? " is-active" : ""}" data-frete-modo="manual" data-ped="${ped.id}" ${dis}>Manual</button>
       </div>`;
   }
 
-  function renderFreteMl(ped) {
-    const etiquetas = (ped.anexos || []).filter((a) => a.tipo === "etiqueta");
+  function renderListaAnexosTipo(ped, tipo, vazioMsg, podeRemover) {
+    const lista = (ped.anexos || []).filter((a) => a.tipo === tipo);
+    if (!lista.length) return `<li class="Pd_Hint">${esc(vazioMsg)}</li>`;
+    return lista
+      .map(
+        (a) => `
+      <li>
+        <a href="/vendedor/pedidos/anexos/arquivo?caminho=${encodeURIComponent(a.caminho)}" target="_blank" rel="noopener">${esc(a.nome_original)}</a>
+        ${podeRemover ? `<button type="button" class="Pd_BtnLink Pd_BtnLink--danger" data-del-anexo="${a.id}">Remover</button>` : ""}
+      </li>`
+      )
+      .join("");
+  }
+
+  function renderUploadPdfFrete(ped, tipo, rotulo) {
+    const inpId = `pd_frete_up_${ped.id}_${tipo}`;
+    const pode = freteEditavelPedido(ped) || ["pago", "aguardando_pagamento", "importado"].includes(stV(ped));
+    const st = stV(ped);
+    const bloqueado = st === "cancelado" || st === "entregue" || st === "em_expedicao";
+    const ok = pode && !bloqueado;
+    return `
+      <div class="Pd_FreteUploadBloco">
+        <h6>${esc(rotulo)}</h6>
+        <div class="Pd_AnexoUpload">
+          <input type="file" id="${inpId}" class="Pd_AnexoInput" hidden accept=".pdf,application/pdf" data-frete-doc-upload="${ped.id}" data-tipo="${tipo}" ${ok ? "" : "disabled"} />
+          ${ok ? `<label for="${inpId}" class="Cl_botaoFiltro Pd_AnexoBtn">Anexar PDF</label>` : ""}
+          <span class="Pd_Hint">Somente PDF · máx. 5 MB</span>
+        </div>
+        <ul class="Pd_AnexoItens Pd_FreteEtqLista">
+          ${renderListaAnexosTipo(ped, tipo, "Nenhum arquivo.", ok)}
+        </ul>
+      </div>`;
+  }
+
+  function renderFreteIntegracao(ped) {
     const origem = (ped.origem || "").toLowerCase();
     const isTt = origem === "tiktok";
     const isAmz = origem === "amazon";
     const canal = isAmz ? "Amazon" : isTt ? "TikTok Shop" : "Mercado Livre";
     if (isAmz) {
       return `
-      <div class="Pd_FreteMl">
-        <p class="Pd_Hint">Pedido da Amazon. Gerencie etiqueta e envio no Seller Central (ou logística Amazon).</p>
-        <ul class="Pd_AnexoItens Pd_FreteEtqLista" style="margin-top:0.75rem">
-          ${etiquetas.length
-            ? etiquetas
-                .map(
-                  (a) => `
-            <li>
-              <a href="/vendedor/pedidos/anexos/arquivo?caminho=${encodeURIComponent(a.caminho)}" target="_blank" rel="noopener">${esc(a.nome_original)}</a>
-            </li>`
-                )
-                .join("")
-            : `<li class="Pd_Hint">Sem etiqueta anexada neste pedido.</li>`}
-        </ul>
+      <div class="Pd_FreteIntegracao">
+        <p class="Pd_Hint">Pedido da <strong>Amazon</strong>. A etiqueta fica no Seller Central — anexe em PDF abaixo (ou use o modo Manual).</p>
+        ${renderFreteDocsChecklist(ped)}
+        ${renderUploadPdfFrete(ped, "etiqueta", "Etiqueta de frete")}
+        ${renderUploadPdfFrete(ped, "nf", "Nota fiscal")}
+        ${renderUploadPdfFrete(ped, "declaracao", "Declaração de conteúdo")}
       </div>`;
     }
-    const btnAttr = isTt ? `data-tt-etiqueta="${ped.id}"` : `data-ml-etiqueta="${ped.id}"`;
-    const btnTxt = isTt ? "Baixar etiqueta TikTok" : "Baixar etiqueta ML";
     const hint = isTt
-      ? "Pedido do TikTok Shop. Baixe a etiqueta quando a logística liberar."
-      : "Pedido do Mercado Livre. Baixe a etiqueta do Mercado Envios quando estiver disponível (<code>ready_to_ship</code>).";
+      ? "Pedido do TikTok Shop. Puxamos a etiqueta (e NF, se existir) da integração."
+      : "Pedido do Mercado Livre. Puxamos a etiqueta do Mercado Envios e a NF/declaração, se já tiver sido emitida.";
     return `
-      <div class="Pd_FreteMl">
+      <div class="Pd_FreteIntegracao">
         <p class="Pd_Hint">${hint}</p>
-        <button type="button" class="Cl_botaoFiltro" ${btnAttr}>${btnTxt}</button>
-        <ul class="Pd_AnexoItens Pd_FreteEtqLista" style="margin-top:0.75rem">
-          ${etiquetas.length
-            ? etiquetas
-                .map(
-                  (a) => `
-            <li>
-              <a href="/vendedor/pedidos/anexos/arquivo?caminho=${encodeURIComponent(a.caminho)}" target="_blank" rel="noopener">${esc(a.nome_original)}</a>
-            </li>`
-                )
-                .join("")
-            : `<li class="Pd_Hint">Nenhuma etiqueta baixada ainda.</li>`}
-        </ul>
+        <button type="button" class="Cl_botaoFiltro" data-puxar-integracao="${ped.id}">Puxar da integração (${esc(canal)})</button>
+        ${renderFreteDocsChecklist(ped)}
+        <div class="Pd_FreteDocsGrid">
+          ${renderUploadPdfFrete(ped, "etiqueta", "Etiqueta")}
+          ${renderUploadPdfFrete(ped, "nf", "Nota fiscal")}
+          ${renderUploadPdfFrete(ped, "declaracao", "Declaração (se não houver NF)")}
+        </div>
       </div>`;
   }
 
@@ -869,31 +921,17 @@
   }
 
   function renderFreteManual(ped) {
-    const etiquetas = (ped.anexos || []).filter((a) => a.tipo === "etiqueta");
-    const inpId = `pd_frete_etq_inp_${ped.id}`;
     const pode = freteEditavelPedido(ped);
     const valorRef = Number(ped.valor_frete || fretePorPedido[ped.id]?.valor || 0);
     return `
       <div class="Pd_FreteManual">
-        <p class="Pd_Hint">Anexe a etiqueta em PDF de outra transportadora (Correios, Jadlog, etc.). O fornecedor verá o arquivo nos anexos do pedido.</p>
-        <div class="Pd_AnexoUpload">
-          <input type="file" id="${inpId}" class="Pd_AnexoInput" hidden accept=".pdf,.png,.jpg,.jpeg,.webp" data-frete-upload="${ped.id}" ${pode ? "" : "disabled"} />
-          ${pode ? `<label for="${inpId}" class="Cl_botaoFiltro Pd_AnexoBtn">Escolher PDF ou imagem</label>` : ""}
-          <span class="Pd_Hint">Máx. 5 MB</span>
+        <p class="Pd_Hint">Anexe em PDF a <strong>etiqueta de frete</strong> e a <strong>nota fiscal</strong> ou <strong>declaração de conteúdo</strong>.</p>
+        ${renderFreteDocsChecklist(ped)}
+        <div class="Pd_FreteDocsGrid">
+          ${renderUploadPdfFrete(ped, "etiqueta", "Etiqueta de frete")}
+          ${renderUploadPdfFrete(ped, "nf", "Nota fiscal")}
+          ${renderUploadPdfFrete(ped, "declaracao", "Declaração de conteúdo")}
         </div>
-        <ul class="Pd_AnexoItens Pd_FreteEtqLista">
-          ${etiquetas.length
-            ? etiquetas
-                .map(
-                  (a) => `
-            <li>
-              <a href="/vendedor/pedidos/anexos/arquivo?caminho=${encodeURIComponent(a.caminho)}" target="_blank" rel="noopener">${esc(a.nome_original)}</a>
-              ${pode ? `<button type="button" class="Pd_BtnLink Pd_BtnLink--danger" data-del-anexo="${a.id}">Remover</button>` : ""}
-            </li>`
-                )
-                .join("")
-            : '<li class="Pd_Hint">Nenhuma etiqueta anexada ainda.</li>'}
-        </ul>
         <div class="Pd_FreteManualCampos">
           <label class="Pd_FieldMini">
             <span>Valor do frete (referência)</span>
@@ -912,23 +950,39 @@
       </div>`;
   }
 
-  function renderFreteMe(ped, frete, escolhido, opcoesHtml) {
-    if (!meFreteConectado) {
-      return `<p class="Pd_Hint">Conecte o <strong>Melhor Envio</strong> em Integrações → Frete para cotar e comprar etiquetas automaticamente.</p>`;
-    }
-    return `
+  function renderFreteDropnexo(ped, frete, escolhido, opcoesHtml) {
+    const integHtml = meFreteConectado
+      ? `
       <div class="Pd_FreteMeHead">
-        <button type="button" class="Cl_botaoFiltro" data-cotar="${ped.id}" ${freteEditavelPedido(ped) ? "" : "disabled"}>Cotar</button>
+        <button type="button" class="Cl_botaoFiltro" data-cotar="${ped.id}" ${freteEditavelPedido(ped) ? "" : "disabled"}>Cotar frete</button>
       </div>
-      <div class="Pd_FreteOpcoes">${opcoesHtml}</div>`;
+      <div class="Pd_FreteOpcoes">${opcoesHtml}</div>
+      ${etiquetaStatusHtml(ped)}`
+      : `<p class="Pd_Hint">Conecte o <strong>Melhor Envio</strong> em Integrações → Frete para cotar e comprar etiquetas pelo DropNexo.</p>`;
+    return `
+      <div class="Pd_FreteDropnexo">
+        <p class="Pd_Hint">Integrações internas do DropNexo. Hoje: <strong>Melhor Envio</strong> — cote, escolha e a etiqueta é comprada após o pagamento.</p>
+        ${integHtml}
+        ${renderFreteDocsChecklist(ped)}
+        <div class="Pd_FreteDocsGrid">
+          ${renderUploadPdfFrete(ped, "nf", "Nota fiscal")}
+          ${renderUploadPdfFrete(ped, "declaracao", "Declaração de conteúdo")}
+        </div>
+      </div>`;
   }
 
-  async function enviarEtiquetaFrete(input) {
-    const idPed = +input.dataset.freteUpload;
+  async function enviarDocFrete(input) {
+    const idPed = +input.dataset.freteDocUpload;
+    const tipo = input.dataset.tipo || "etiqueta";
     const file = input.files?.[0];
     if (!idPed || !file) return;
+    if (!/\.pdf$/i.test(file.name || "")) {
+      if (window.Swal) Swal.fire({ icon: "warning", title: "PDF", text: "Envie somente arquivo PDF.", confirmButtonColor: "#021F81" });
+      input.value = "";
+      return;
+    }
     const fd = new FormData();
-    fd.append("tipo", "etiqueta");
+    fd.append("tipo", tipo);
     fd.append("arquivo", file);
     input.disabled = true;
     try {
@@ -939,23 +993,54 @@
       });
       const j = await parseJsonResp(r);
       if (!j.success) throw new Error(j.message || "Erro ao enviar.");
-      await setFreteModo(idPed, "manual");
       const ped = pedidosGrupo.find((p) => p.id === idPed);
+      const modoAtual = ped ? inferirModoFrete(ped) : "";
+      if (modoAtual === "manual" || (tipo === "etiqueta" && modoAtual !== "integracao" && modoAtual !== "dropnexo")) {
+        try {
+          await setFreteModo(idPed, modoAtual === "integracao" ? "integracao" : "manual");
+        } catch (_) {
+          /* ignore se status não editável */
+        }
+      }
       if (ped) {
         ped.anexos = ped.anexos || [];
         ped.anexos.push(j.anexo);
       }
       await renderFretePainel();
+      if (painelAtivo === "anexos") renderAnexos();
       atualizarNavAnexos();
       if (window.Swal) {
-        Swal.fire({ icon: "success", title: "Etiqueta anexada", timer: 1600, showConfirmButton: false });
+        Swal.fire({ icon: "success", title: "Arquivo anexado", timer: 1600, showConfirmButton: false });
       }
     } catch (e) {
-      if (window.Swal) Swal.fire({ icon: "error", title: "Etiqueta", text: e.message, confirmButtonColor: "#021F81" });
+      if (window.Swal) Swal.fire({ icon: "error", title: "Anexo", text: e.message, confirmButtonColor: "#021F81" });
     } finally {
       input.value = "";
       input.disabled = false;
     }
+  }
+
+  async function puxarIntegracaoPedido(idPed) {
+    const r = await fetch(`/vendedor/pedidos/${idPed}/frete/integracao/puxar`, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+    const j = await parseJsonResp(r);
+    if (!r.ok || !j.success) throw new Error(j.message || "Erro ao puxar da integração.");
+    const ped = pedidosGrupo.find((p) => p.id === idPed);
+    if (ped) {
+      ped.frete_modo = "integracao";
+      freteModoPorPedido[idPed] = "integracao";
+      if (Array.isArray(j.anexos)) ped.anexos = j.anexos;
+      else {
+        ped.anexos = ped.anexos || [];
+        if (j.etiqueta?.anexo && !j.etiqueta.ja_existia) ped.anexos.push(j.etiqueta.anexo);
+        if (j.fiscal?.anexo && !j.fiscal.ja_existia) ped.anexos.push(j.fiscal.anexo);
+      }
+    }
+    return j;
   }
 
   async function renderFretePainel() {
@@ -987,22 +1072,22 @@
           ? renderFreteOpcoes(ped, frete.opcoes)
           : escolhido
             ? `<p class="Pd_Hint">Frete selecionado: <strong>${esc(escolhido.nome || frete.nome || "")}</strong> — ${fmt(frete.valor || 0)}</p>`
-            : '<p class="Pd_Hint">Clique em Cotar para ver as opções do Melhor Envio.</p>';
-        const etiquetaHtml = etiquetaStatusHtml(ped);
-        const isMl = modo === "ml" || modo === "tiktok" || modo === "amazon";
-        const corpo = isMl
-          ? renderFreteMl(ped)
-          : modo === "manual"
-            ? renderFreteManual(ped)
-            : renderFreteMe(ped, frete, escolhido, opcoesHtml);
+            : '<p class="Pd_Hint">Clique em Cotar frete para ver as opções do Melhor Envio.</p>';
+        const origem = (ped.origem || "").toLowerCase();
         const canalLabel =
-          modo === "amazon"
+          origem === "amazon"
             ? " · Amazon"
-            : modo === "tiktok"
+            : origem === "tiktok"
               ? " · TikTok Shop"
-              : modo === "ml"
+              : origem === "mercado_livre"
                 ? " · Mercado Livre"
                 : "";
+        const corpo =
+          modo === "integracao"
+            ? renderFreteIntegracao(ped)
+            : modo === "manual"
+              ? renderFreteManual(ped)
+              : renderFreteDropnexo(ped, frete, escolhido, opcoesHtml);
         return `
         <article class="Pd_FreteCard" data-frete-ped="${ped.id}" data-frete-modo-atual="${modo}">
           <div class="Pd_FreteCardHead">
@@ -1011,52 +1096,29 @@
               <small class="Pd_Hint">Pedido ${esc(ped.numero || "")}${canalLabel}</small>
             </div>
           </div>
-          ${isMl ? "" : renderFreteModoTabs(ped, modo)}
-          ${isMl ? "" : etiquetaHtml}
+          ${renderFreteModoTabs(ped, modo)}
           <div class="Pd_FreteCorpo">${corpo}</div>
         </article>`;
       })
       .join("");
 
-    elFreteConteudo.querySelectorAll("[data-ml-etiqueta]").forEach((btn) => {
+    elFreteConteudo.querySelectorAll("[data-puxar-integracao]").forEach((btn) => {
       btn.addEventListener("click", async () => {
         btn.disabled = true;
         try {
-          const j = await baixarEtiquetaMl(+btn.dataset.mlEtiqueta);
+          const j = await puxarIntegracaoPedido(+btn.dataset.puxarIntegracao);
           await renderFretePainel();
           if (painelAtivo === "anexos") renderAnexos();
           atualizarNavAnexos();
           Swal.fire({
             icon: "success",
-            title: "Etiqueta ML",
-            text: j.message || "Etiqueta baixada.",
-            timer: 1800,
+            title: "Integração",
+            text: j.message || "Documentos puxados.",
+            timer: 2200,
             showConfirmButton: false,
           });
         } catch (e) {
-          Swal.fire({ icon: "error", title: "Etiqueta ML", text: e.message, confirmButtonColor: "#021F81" });
-        } finally {
-          btn.disabled = false;
-        }
-      });
-    });
-    elFreteConteudo.querySelectorAll("[data-tt-etiqueta]").forEach((btn) => {
-      btn.addEventListener("click", async () => {
-        btn.disabled = true;
-        try {
-          const j = await baixarEtiquetaTiktok(+btn.dataset.ttEtiqueta);
-          await renderFretePainel();
-          if (painelAtivo === "anexos") renderAnexos();
-          atualizarNavAnexos();
-          Swal.fire({
-            icon: "success",
-            title: "Etiqueta TikTok",
-            text: j.message || "Etiqueta baixada.",
-            timer: 1800,
-            showConfirmButton: false,
-          });
-        } catch (e) {
-          Swal.fire({ icon: "error", title: "Etiqueta TikTok", text: e.message, confirmButtonColor: "#021F81" });
+          Swal.fire({ icon: "error", title: "Integração", text: e.message, confirmButtonColor: "#021F81" });
         } finally {
           btn.disabled = false;
         }
@@ -1066,14 +1128,23 @@
     elFreteConteudo.querySelectorAll("[data-frete-modo]").forEach((btn) => {
       btn.addEventListener("click", async () => {
         const idPed = +btn.dataset.ped;
-        const modo = btn.dataset.freteModo;
+        const modo = normalizarModoFreteUi(btn.dataset.freteModo) || btn.dataset.freteModo;
         if (inferirModoFrete(pedidosGrupo.find((p) => p.id === idPed) || {}) === modo) return;
         btn.disabled = true;
         try {
           await setFreteModo(idPed, modo);
           await renderFretePainel();
-          if (modo === "me" && meFreteConectado && freteEditavelPedido(pedidosGrupo.find((p) => p.id === idPed) || {})) {
+          const ped = pedidosGrupo.find((p) => p.id === idPed) || {};
+          if (modo === "dropnexo" && meFreteConectado && freteEditavelPedido(ped)) {
             await cotarFretePedido(idPed);
+          }
+          if (modo === "integracao" && origemTemIntegracaoFrete(ped) && (ped.origem || "") !== "amazon") {
+            try {
+              await puxarIntegracaoPedido(idPed);
+              await renderFretePainel();
+            } catch (_) {
+              /* deixa o usuário tentar pelo botão */
+            }
           }
         } catch (e) {
           Swal.fire({ icon: "error", title: "Frete", text: e.message, confirmButtonColor: "#021F81" });
@@ -1086,8 +1157,8 @@
     elFreteConteudo.querySelectorAll("[data-cotar]").forEach((btn) => {
       btn.addEventListener("click", () => cotarFretePedido(+btn.dataset.cotar));
     });
-    elFreteConteudo.querySelectorAll("[data-frete-upload]").forEach((inp) => {
-      inp.addEventListener("change", () => enviarEtiquetaFrete(inp));
+    elFreteConteudo.querySelectorAll("[data-frete-doc-upload]").forEach((inp) => {
+      inp.addEventListener("change", () => enviarDocFrete(inp));
     });
     elFreteConteudo.querySelectorAll("[data-salvar-manual]").forEach((btn) => {
       btn.addEventListener("click", async () => {
@@ -1150,15 +1221,27 @@
     }
     await carregarStatusMeFrete();
     await renderFretePainel();
-    if (pedidosGrupo.length && meFreteConectado) {
-      for (const ped of pedidosGrupo) {
-        if (!freteEditavelPedido(ped)) continue;
-        if (inferirModoFrete(ped) !== "me") continue;
+    for (const ped of pedidosGrupo) {
+      const modo = inferirModoFrete(ped);
+      if (modo === "dropnexo" && meFreteConectado && freteEditavelPedido(ped)) {
         if (!fretePorPedido[ped.id]?.opcoes?.length && !fretePorPedido[ped.id]?.escolhido) {
           await cotarFretePedido(ped.id);
         }
       }
+      if (
+        modo === "integracao" &&
+        origemTemIntegracaoFrete(ped) &&
+        (ped.origem || "") !== "amazon" &&
+        !(ped.anexos || []).some((a) => a.tipo === "etiqueta")
+      ) {
+        try {
+          await puxarIntegracaoPedido(ped.id);
+        } catch (_) {
+          /* silencioso — botão manual permanece */
+        }
+      }
     }
+    await renderFretePainel();
   }
 
   async function renderPayIntegracoes() {

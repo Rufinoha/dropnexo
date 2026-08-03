@@ -19,6 +19,7 @@
     btnLimpar: document.getElementById("ob_btnLimpar"),
     btnIncluir: document.getElementById("ob_btnIncluir"),
     btnImportar: document.getElementById("ob_btnImportar"),
+    btnExportar: document.getElementById("ob_btnExportar"),
     btnImportarBling: document.getElementById("ob_btnImportarBling"),
     btnToggleExpandTodos: document.getElementById("ob_btnToggleExpandTodos"),
     chkTodos: document.getElementById("ob_chkTodos"),
@@ -105,12 +106,16 @@
     return ativo === false ? '<span class="Cat_BadgeInativo">Inativo</span>' : "";
   }
 
+  function badgeNaoPublicado(publicado) {
+    return publicado === false ? '<span class="Cat_BadgeInativo">Não publicado</span>' : "";
+  }
+
   function renderNomePai(l) {
     const badge =
       l.formato === "E"
         ? `<span class="Cat_BadgeVar">${Number(l.qtd_variantes || 0)} variações</span>`
         : `<span class="Cat_BadgeSimples">Simples</span>`;
-    return `<div class="Cat_PaiCell"><strong class="Cat_PaiNome">${escapeHtml(l.nome)}</strong>${badge}${badgeInativo(l.ativo)}</div>`;
+    return `<div class="Cat_PaiCell"><strong class="Cat_PaiNome">${escapeHtml(l.nome)}</strong>${badge}${badgeNaoPublicado(l.publicado)}</div>`;
   }
 
   function renderNomeVar(l) {
@@ -169,12 +174,15 @@
     el.bulkActions.addEventListener("click", async (ev) => {
       const btn = ev.target.closest("[data-bulk]");
       if (!btn) return;
-      const ids = [...selecionados];
-      if (!ids.length) return;
       try {
+        if (btn.dataset.bulk === "exportar") {
+          await exportarLista();
+          return;
+        }
+        const ids = [...selecionados];
+        if (!ids.length) return;
         if (btn.dataset.bulk === "excluir") await excluirLote(ids);
         else if (btn.dataset.bulk === "categoria") await associarCategoriaLote(ids);
-        else if (btn.dataset.bulk === "exportar") await swalEmDesenvolvimento("Exportação da lista");
         else if (btn.dataset.bulk === "estoque") await sincronizarEstoqueLote(ids);
         else if (btn.dataset.bulk === "etiquetas") await swalEmDesenvolvimento("Impressão de etiquetas");
         else if (btn.dataset.bulk === "rede") await alternarPublicacaoRedeLote(ids);
@@ -182,6 +190,30 @@
         await Swal.fire("Erro", e.message, "error");
       }
     });
+  }
+
+  async function exportarLista() {
+    const escolha = await Swal.fire({
+      title: "Exportar catálogo",
+      text: "Será gerado o arquivo conforme o filtro atual da tela.",
+      icon: "question",
+      showDenyButton: true,
+      showCancelButton: true,
+      confirmButtonText: "CSV",
+      denyButtonText: "Excel",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#021F81",
+    });
+    if (escolha.isDismissed) return;
+    const formato = escolha.isDenied ? "xlsx" : "csv";
+    const p = new URLSearchParams({
+      formato,
+      busca: (el.filtroBusca?.value || "").trim(),
+      id_categoria: el.filtroCategoria?.value || "",
+      tipo: el.filtroTipo?.value || "",
+      ativos: el.filtroAtivos?.checked ? "sim" : "nao",
+    });
+    window.location.href = `${BASE}/exportar?${p}`;
   }
 
   async function swalEmDesenvolvimento(recurso) {
@@ -369,7 +401,7 @@
     const aberto = isPaiVar && !recolhidos.has(l.id);
     const rowCls = [
       isVar ? "Cat_RowVar" : "Cat_RowPai",
-      l.ativo === false ? "Cat_RowInativo" : "",
+      (isVar ? l.ativo === false : l.publicado === false) ? "Cat_RowInativo" : "",
       isVar && l.primeira_variante ? "Cat_RowVar--first" : "",
       isVar && l.ultima_variante ? "Cat_RowVar--ultima" : "",
       isPaiVar ? "Cat_RowPai--com-var" : "",
@@ -428,9 +460,9 @@
     const somenteAtivos = !!el.filtroAtivos?.checked;
     const qtd = Number(total || 0);
     if (somenteAtivos) {
-      elResumo.textContent = `${qtd} produto(s) — somente ativos`;
+      elResumo.textContent = `${qtd} produto(s) — somente publicados`;
     } else {
-      elResumo.textContent = `${qtd} produto(s) — ativos e inativos`;
+      elResumo.textContent = `${qtd} produto(s) — publicados e não publicados`;
     }
     elResumo.hidden = false;
   }
@@ -563,6 +595,7 @@
   el.btnImportar?.addEventListener("click", () => {
     window.CatImportacao?.abrir?.();
   });
+  el.btnExportar?.addEventListener("click", () => exportarLista().catch((e) => Swal.fire("Erro", e.message, "error")));
 
   window.addEventListener("catalogo:importacao-concluida", () => {
     carregar().catch((e) => Swal.fire("Erro", e.message, "error"));

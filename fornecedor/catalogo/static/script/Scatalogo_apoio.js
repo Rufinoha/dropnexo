@@ -20,7 +20,6 @@
     unidade: document.getElementById("unidade"),
     lista_unidades: document.getElementById("lista_unidades"),
     condicao: document.getElementById("condicao"),
-    ativo: document.getElementById("ativo"),
     publicado: document.getElementById("publicado"),
     descricao: document.getElementById("descricao"),
     marca: document.getElementById("marca"),
@@ -357,7 +356,11 @@
       if (el.btnAdicionarVariacao) el.btnAdicionarVariacao.hidden = integrado;
       if (el.publicado) {
         const pubLbl = el.publicado.closest("label");
-        if (pubLbl) pubLbl.hidden = integrado;
+        const pubTxt = pubLbl?.querySelector("span:last-child");
+        if (pubLbl) pubLbl.hidden = false;
+        if (pubTxt) {
+          pubTxt.textContent = integrado ? "Ativo na vitrine" : "Publicado";
+        }
       }
       syncModoImagemIntegrado();
     }
@@ -1258,8 +1261,9 @@
     if (el.frete_gratis) el.frete_gratis.checked = !!d.frete_gratis;
     el.id_categoria.value = d.id_categoria ? String(d.id_categoria) : "";
     el.quantidade.value = d.quantidade ?? 0;
-    el.ativo.checked = d.ativo !== false;
-    el.publicado.checked = !!d.publicado;
+    if (el.publicado) {
+      el.publicado.checked = isVendedor && integrado ? d.ativo !== false : !!d.publicado;
+    }
     el.btnExcluir.style.display = "inline-block";
     integrado = !!d.integrado;
     camposReadonly = new Set(d.campos_readonly || []);
@@ -1334,7 +1338,6 @@
           id_categoria: el.id_categoria?.value || null,
           quantidade: el.quantidade?.value ?? 0,
           imagem_url: imagemParaSalvar(),
-          ativo: !!el.ativo.checked,
           publicado: !!el.publicado?.checked,
           id_deposito: document.getElementById("id_deposito")?.value || null,
         };
@@ -1358,7 +1361,7 @@
           : (el.descricao?.value || "").trim(),
         preco: el.preco?.value,
         imagem_url: imagemParaSalvar(),
-        ativo: !!el.ativo.checked,
+        ativo: !!el.publicado?.checked,
         id_categoria: el.id_categoria?.value || null,
       };
       const r = await fetch(`${apiBase()}/salvar`, {
@@ -1410,7 +1413,6 @@
       id_categoria: el.id_categoria.value || null,
       quantidade: el.quantidade.value,
       imagem_url: imagemParaSalvar(),
-      ativo: !!el.ativo.checked,
       publicado: !!el.publicado.checked,
     };
     const r = await fetch(`${apiBase()}/salvar`, {

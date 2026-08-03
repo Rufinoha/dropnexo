@@ -106,15 +106,17 @@ def vendedores_dados():
             SELECT v.id, v.status, v.solicitado_em, v.respondido_em,
                    COALESCE(t.nome_fantasia, t.nome), t.cidade, t.uf,
                    t.email_comercial, t.telefone_comercial,
-                   v.snapshot_vendedor, v.mensagem_solicitacao, v.mensagem_resposta
+                   v.snapshot_vendedor, v.mensagem_solicitacao, v.mensagem_resposta,
+                   COALESCE(t.razao_social, ''), COALESCE(t.documento, ''),
+                   COALESCE(t.nome_completo, '')
             FROM tbl_vinculo_vendedor_fornecedor v
             JOIN tbl_tenant t ON t.id = v.id_tenant_vendedor
             WHERE {' AND '.join(where)}
             ORDER BY
                 CASE v.status
-                  WHEN 'aguardando' THEN 0
-                  WHEN 'ativo' THEN 1
-                  WHEN 'pausado' THEN 2
+                  WHEN 'pausado' THEN 0
+                  WHEN 'aguardando' THEN 1
+                  WHEN 'ativo' THEN 2
                   ELSE 3
                 END,
                 v.solicitado_em DESC
@@ -125,6 +127,11 @@ def vendedores_dados():
         dados = []
         for row in cur.fetchall():
             snap = _parse_snapshot(row[9])
+            responsavel = (
+                (snap.get("usuario_nome") or "").strip()
+                or (row[14] or "").strip()
+                or ""
+            )
             dados.append(
                 {
                     "id": row[0],
@@ -138,6 +145,9 @@ def vendedores_dados():
                     "telefone": row[8] or snap.get("celular_comercial") or snap.get("telefone_comercial") or "",
                     "mensagem_solicitacao": row[10] or "",
                     "mensagem_resposta": row[11] or "",
+                    "razao_social": (row[12] or snap.get("razao_social") or "").strip(),
+                    "documento": (row[13] or snap.get("documento") or "").strip(),
+                    "responsavel": responsavel,
                 }
             )
         return jsonify(success=True, dados=dados)

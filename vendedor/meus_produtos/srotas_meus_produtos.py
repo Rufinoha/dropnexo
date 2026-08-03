@@ -245,6 +245,177 @@ def _montar_linhas_kits(cur, id_tenant: int, busca: str, somente_ativos: bool) -
     return linhas
 
 
+@vd_meus_produtos_bp.get("/meus-produtos/exportar")
+@login_obrigatorio()
+@exigir_permissao(codigo="produtos.ver")
+def meus_produtos_exportar():
+    """Exporta somente produtos próprios (nunca catálogo do fornecedor)."""
+    from flask import Response
+
+    from fornecedor.importacao.exportacao_catalogo import (
+        colunas_para_contexto,
+        gerar_csv,
+        gerar_xlsx,
+        listar_linhas_export_vendedor,
+    )
+
+    id_tenant = _id_tenant_sessao()
+    if not id_tenant:
+        return jsonify(success=False, message="Sessão inválida."), 403
+
+    formato = (request.args.get("formato") or "csv").strip().lower()
+    busca = (request.args.get("busca") or "").strip()
+    id_categoria = (request.args.get("id_categoria") or "").strip()
+    filtro_tipo = (request.args.get("tipo") or "").strip().lower()
+    somente_publicados = (request.args.get("ativos") or "sim").strip().lower() != "nao"
+
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        linhas = listar_linhas_export_vendedor(
+            cur,
+            int(id_tenant),
+            busca=busca,
+            id_categoria=id_categoria,
+            filtro_tipo=filtro_tipo,
+            somente_publicados=somente_publicados,
+        )
+        colunas = colunas_para_contexto("vendedor")
+        if formato in ("xlsx", "excel"):
+            data = gerar_xlsx(linhas, colunas)
+            return Response(
+                data,
+                mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                headers={"Content-Disposition": "attachment; filename=meus_produtos_dropnexo.xlsx"},
+            )
+        data = gerar_csv(linhas, colunas)
+        return Response(
+            data,
+            mimetype="text/csv; charset=utf-8",
+            headers={"Content-Disposition": "attachment; filename=meus_produtos_dropnexo.csv"},
+        )
+    finally:
+        conn.close()
+
+
+@vd_meus_produtos_bp.post("/meus-produtos/importar/arquivo")
+@login_obrigatorio()
+@exigir_permissao(codigo="produtos.editar")
+def meus_produtos_importar_arquivo():
+    """Importa CSV apenas no catálogo próprio do vendedor (Meus produtos)."""
+    import csv
+    import io
+
+    from fornecedor.importacao.motor_csv import MAX_LINHAS_CSV, montar_mapa_colunas, processar_linhas_csv
+    from fornecedor.importacao.servico_importacao import (
+        MODULO_CATALOGO,
+        ORIGEM_ARQUIVO,
+        STATUS_CONCLUIDO,
+        STATUS_ERRO,
+        criar_lote,
+        finalizar_lote,
+        garantir_layout_padrao_csv,
+        obter_layout_detalhe,
+        registrar_erro_lote,
+    )
+    from sistema.planos.limites import limites_plano, mensagem_upgrade_importacao
+
+    if not limites_plano().get("importacao_planilha"):
+        return jsonify(success=False, message=mensagem_upgrade_importacao()), 403
+
+    id_tenant = _id_tenant_sessao()
+    if not id_tenant:
+        return jsonify(success=False, message="Sessão inválida."), 403
+
+    arquivo = request.files.get("arquivo")
+    if not arquivo or not arquivo.filename:
+        return jsonify(success=False, message="Selecione um arquivo CSV."), 400
+    if not arquivo.filename.lower().endswith(".csv"):
+        return jsonify(success=False, message="Envie um arquivo .csv"), 400
+    raw = arquivo.read()
+    if not raw:
+        return jsonify(success=False, message="Arquivo vazio."), 400
+    if len(raw) > 2 * 1024 * 1024:
+        return jsonify(success=False, message="CSV deve ter no máximo 2 MB."), 400
+
+    texto = raw.decode("utf-8-sig", errors="replace")
+    delim = ";" if ";" in texto.splitlines()[0] else ","
+    reader = csv.DictReader(io.StringIO(texto), delimiter=delim)
+    if not reader.fieldnames:
+        return jsonify(success=False, message="Cabeçalho do CSV inválido."), 400
+    mapa_arquivo = montar_mapa_colunas(list(reader.fieldnames))
+    rows = []
+    for num, row in enumerate(reader, start=2):
+        if len(rows) >= MAX_LINHAS_CSV:
+            break
+        rows.append((num, row))
+
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        id_layout = garantir_layout_padrao_csv(cur, int(id_tenant))
+        layout = obter_layout_detalhe(cur, int(id_tenant), id_layout, MODULO_CATALOGO)
+        id_lote, numero = criar_lote(
+            cur,
+            id_tenant=int(id_tenant),
+            modulo=MODULO_CATALOGO,
+            origem=ORIGEM_ARQUIVO,
+            id_usuario=int(session["id_usuario"]) if session.get("id_usuario") else None,
+            id_layout=id_layout,
+            nome_arquivo=arquivo.filename,
+            meta={"contexto": "vendedor_meus_produtos"},
+        )
+        resultado = processar_linhas_csv(
+            cur,
+            id_tenant=int(id_tenant),
+            rows=rows,
+            campos_layout=(layout or {}).get("campos") or [],
+            mapa_arquivo=mapa_arquivo,
+            modo_imagens=(layout or {}).get("modo_imagens") or "colunas",
+            delimitador_imagens=(layout or {}).get("delimitador_imagens") or ";",
+            id_lote=id_lote,
+            origem=ORIGEM_ARQUIVO,
+        )
+        for err in resultado.get("erros") or []:
+            registrar_erro_lote(
+                cur,
+                id_tenant=int(id_tenant),
+                id_lote=id_lote,
+                modulo=MODULO_CATALOGO,
+                linha_arquivo=err.get("linha"),
+                sku_registro=err.get("sku") or "",
+                mensagem=err.get("erro") or "Erro",
+                origem=ORIGEM_ARQUIVO,
+            )
+        inseridos = int(resultado.get("inseridos") or 0)
+        atualizados = int(resultado.get("atualizados") or 0)
+        rejeitadas = int(resultado.get("rejeitadas") or 0)
+        status = STATUS_ERRO if inseridos + atualizados == 0 else STATUS_CONCLUIDO
+        finalizar_lote(
+            cur,
+            id_lote,
+            status=status,
+            total_linhas=int(resultado.get("total_linhas") or 0),
+            total_importadas=inseridos,
+            total_atualizadas=atualizados,
+            total_rejeitadas=rejeitadas,
+        )
+        conn.commit()
+        return jsonify(
+            success=True,
+            message=f"Importação {numero} concluída.",
+            inseridos=inseridos,
+            atualizados=atualizados,
+            rejeitadas=rejeitadas,
+            erros=(resultado.get("erros") or [])[:50],
+        )
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
 @vd_meus_produtos_bp.get("/meus-produtos/dados")
 @login_obrigatorio()
 @exigir_permissao(codigo="produtos.ver")
@@ -778,7 +949,7 @@ def apoio_produto():
             cur.execute(
                 """
                 SELECT p.id, p.sku, p.nome, p.descricao, p.preco, p.preco_promocional,
-                       p.unidade, p.id_categoria, p.imagem_url, p.ativo, p.publicado,
+                       p.unidade, p.id_categoria, p.imagem_url, p.publicado,
                        p.formato, p.tipo, p.preco_custo, p.gtin, p.ncm, p.referencia,
                        p.peso_liquido_kg, p.peso_bruto_kg, p.altura_cm, p.largura_cm, p.profundidade_cm,
                        p.prazo_envio_dias, p.moq, p.id_variante_padrao,
@@ -809,39 +980,38 @@ def apoio_produto():
                     "id_categoria": r[7],
                     "imagem_url": _imagem_url_resposta(r[8]),
                     "imagem_caminho": r[8] or "",
-                    "ativo": bool(r[9]),
-                    "publicado": bool(r[10]),
-                    "formato": r[11] or "S",
-                    "tipo": r[12] or "P",
-                    "preco_custo": float(r[13]) if r[13] is not None else None,
-                    "gtin": r[14] or "",
-                    "ncm": r[15] or "",
-                    "referencia": r[16] or "",
-                    "condicao": r[34] or r[16] or "",
-                    "peso_liquido_kg": float(r[17]) if r[17] is not None else None,
-                    "peso_bruto_kg": float(r[18]) if r[18] is not None else None,
-                    "altura_cm": float(r[19]) if r[19] is not None else None,
-                    "largura_cm": float(r[20]) if r[20] is not None else None,
-                    "profundidade_cm": float(r[21]) if r[21] is not None else None,
-                    "prazo_envio_dias": r[22],
-                    "moq": int(r[23] or 1),
-                    "id_variante_padrao": r[24],
-                    "quantidade": int(r[25] or 0),
-                    "marca": r[26] or "",
-                    "grupo": r[27] or "",
-                    "valor_atacado": float(r[28]) if r[28] is not None else float(r[4] or 0),
-                    "valor_dropshipping": float(r[29]) if r[29] is not None else None,
-                    "reposicao_estoque": bool(r[30]),
-                    "dimensao_caixa_cm": r[31] or "",
-                    "peso_gramas": int(r[32]) if r[32] is not None else None,
-                    "id_deposito": r[33],
-                    "cest": r[35] or "",
-                    "origem_fiscal": r[36] or "",
-                    "frete_gratis": bool(r[37]),
-                    "volumes": int(r[38]) if r[38] is not None else None,
-                    "producao": r[39] or "",
-                    "valor_drop": float(r[40]) if r[40] is not None else None,
-                    "valor_drop_manual": bool(r[41]),
+                    "publicado": bool(r[9]),
+                    "formato": r[10] or "S",
+                    "tipo": r[11] or "P",
+                    "preco_custo": float(r[12]) if r[12] is not None else None,
+                    "gtin": r[13] or "",
+                    "ncm": r[14] or "",
+                    "referencia": r[15] or "",
+                    "condicao": r[33] or r[15] or "",
+                    "peso_liquido_kg": float(r[16]) if r[16] is not None else None,
+                    "peso_bruto_kg": float(r[17]) if r[17] is not None else None,
+                    "altura_cm": float(r[18]) if r[18] is not None else None,
+                    "largura_cm": float(r[19]) if r[19] is not None else None,
+                    "profundidade_cm": float(r[20]) if r[20] is not None else None,
+                    "prazo_envio_dias": r[21],
+                    "moq": int(r[22] or 1),
+                    "id_variante_padrao": r[23],
+                    "quantidade": int(r[24] or 0),
+                    "marca": r[25] or "",
+                    "grupo": r[26] or "",
+                    "valor_atacado": float(r[27]) if r[27] is not None else float(r[4] or 0),
+                    "valor_dropshipping": float(r[28]) if r[28] is not None else None,
+                    "reposicao_estoque": bool(r[29]),
+                    "dimensao_caixa_cm": r[30] or "",
+                    "peso_gramas": int(r[31]) if r[31] is not None else None,
+                    "id_deposito": r[32],
+                    "cest": r[34] or "",
+                    "origem_fiscal": r[35] or "",
+                    "frete_gratis": bool(r[36]),
+                    "volumes": int(r[37]) if r[37] is not None else None,
+                    "producao": r[38] or "",
+                    "valor_drop": float(r[39]) if r[39] is not None else None,
+                    "valor_drop_manual": bool(r[40]),
                     "status_promocao": r[5] is not None and r[4] and float(r[5]) < float(r[4]),
                     "modo_vendedor": True,
                     "integrado": False,
@@ -863,7 +1033,7 @@ def apoio_produto():
         cur.execute(
             """
             SELECT p.id, p.sku, p.nome, p.descricao, p.preco, p.preco_promocional,
-                   p.unidade, p.id_categoria, p.imagem_url, p.ativo, p.publicado,
+                   p.unidade, p.id_categoria, p.imagem_url, p.publicado,
                    p.formato, p.tipo, p.preco_custo, p.gtin, p.ncm, p.referencia,
                    p.peso_liquido_kg, p.peso_bruto_kg, p.altura_cm, p.largura_cm, p.profundidade_cm,
                    p.prazo_envio_dias, p.moq, p.id_variante_padrao,
@@ -898,7 +1068,7 @@ def apoio_produto():
         descricao = (vit[1] or "").strip() if vit and vit[1] else (r[3] or "")
         img_vit = (vit[2] or "").strip() if vit and vit[2] else ""
         preco_venda = float(vit[3]) if vit and vit[3] is not None else float(r[4] or 0)
-        ativo_vit = bool(vit[4]) if vit else bool(r[9])
+        ativo_vit = bool(vit[4]) if vit else True
         integrado = produto_integrado(cur, id_tenant, pid)
         id_categoria_vendedor = None
         cur.execute(
@@ -918,9 +1088,9 @@ def apoio_produto():
             id_forn = int(cur.fetchone()[0])
             fornecedor_apoio = montar_fornecedor_produto_apoio(cur, id_tenant, id_forn)
         estoque_meta: dict = {}
-        if r[24]:
-            estoque_meta = _enriquecer_meta_pausa(cur, id_tenant, int(r[24]))
-        quantidade = estoque_meta.get("estoque", int(r[25] or 0))
+        if r[23]:
+            estoque_meta = _enriquecer_meta_pausa(cur, id_tenant, int(r[23]))
+        quantidade = estoque_meta.get("estoque", int(r[24] or 0))
 
         return jsonify(
             success=True,
@@ -937,41 +1107,41 @@ def apoio_produto():
                 "imagem_caminho": img_vit or r[8] or "",
                 "ativo": ativo_vit,
                 "publicado": True,
-                "formato": r[11] or "S",
-                "tipo": r[12] or "P",
-                "preco_custo": float(r[13]) if r[13] is not None else None,
-                "gtin": r[14] or "",
-                "ncm": r[15] or "",
-                "referencia": r[16] or "",
-                "condicao": r[34] or r[16] or "",
-                "peso_liquido_kg": float(r[17]) if r[17] is not None else None,
-                "peso_bruto_kg": float(r[18]) if r[18] is not None else None,
-                "altura_cm": float(r[19]) if r[19] is not None else None,
-                "largura_cm": float(r[20]) if r[20] is not None else None,
-                "profundidade_cm": float(r[21]) if r[21] is not None else None,
-                "prazo_envio_dias": r[22],
-                "moq": int(r[23] or 1),
-                "id_variante_padrao": r[24],
+                "formato": r[10] or "S",
+                "tipo": r[11] or "P",
+                "preco_custo": float(r[12]) if r[12] is not None else None,
+                "gtin": r[13] or "",
+                "ncm": r[14] or "",
+                "referencia": r[15] or "",
+                "condicao": r[33] or r[15] or "",
+                "peso_liquido_kg": float(r[16]) if r[16] is not None else None,
+                "peso_bruto_kg": float(r[17]) if r[17] is not None else None,
+                "altura_cm": float(r[18]) if r[18] is not None else None,
+                "largura_cm": float(r[19]) if r[19] is not None else None,
+                "profundidade_cm": float(r[20]) if r[20] is not None else None,
+                "prazo_envio_dias": r[21],
+                "moq": int(r[22] or 1),
+                "id_variante_padrao": r[23],
                 "quantidade": quantidade,
-                "estoque_real": estoque_meta.get("estoque_real", int(r[25] or 0)),
+                "estoque_real": estoque_meta.get("estoque_real", int(r[24] or 0)),
                 "pausado": estoque_meta.get("pausado", False),
                 "pausado_motivo": estoque_meta.get("pausado_motivo"),
                 "pausado_msg": estoque_meta.get("pausado_msg", ""),
-                "marca": r[26] or "",
-                "grupo": r[27] or "",
-                "valor_atacado": float(r[28]) if r[28] is not None else float(r[4] or 0),
-                "valor_dropshipping": float(r[29]) if r[29] is not None else None,
-                "reposicao_estoque": bool(r[30]),
-                "dimensao_caixa_cm": r[31] or "",
-                "peso_gramas": int(r[32]) if r[32] is not None else None,
-                "id_deposito": r[33],
-                "cest": r[35] or "",
-                "origem_fiscal": r[36] or "",
-                "frete_gratis": bool(r[37]),
-                "volumes": int(r[38]) if r[38] is not None else None,
-                "producao": r[39] or "",
-                "valor_drop": float(r[40]) if r[40] is not None else None,
-                "valor_drop_manual": bool(r[41]),
+                "marca": r[25] or "",
+                "grupo": r[26] or "",
+                "valor_atacado": float(r[27]) if r[27] is not None else float(r[4] or 0),
+                "valor_dropshipping": float(r[28]) if r[28] is not None else None,
+                "reposicao_estoque": bool(r[29]),
+                "dimensao_caixa_cm": r[30] or "",
+                "peso_gramas": int(r[31]) if r[31] is not None else None,
+                "id_deposito": r[32],
+                "cest": r[34] or "",
+                "origem_fiscal": r[35] or "",
+                "frete_gratis": bool(r[36]),
+                "volumes": int(r[37]) if r[37] is not None else None,
+                "producao": r[38] or "",
+                "valor_drop": float(r[39]) if r[39] is not None else None,
+                "valor_drop_manual": bool(r[40]),
                 "status_promocao": r[5] is not None and r[4] and float(r[5]) < float(r[4]),
                 "modo_vendedor": True,
                 "integrado": integrado,
@@ -1797,7 +1967,7 @@ def rede_opcoes():
         where = [
             "p.id_tenant <> %s",
             "p.publicado = TRUE",
-            "p.ativo = TRUE",
+            "p.publicado = TRUE",
             "v.ativo = TRUE",
         ]
         params: list = [id_tenant]

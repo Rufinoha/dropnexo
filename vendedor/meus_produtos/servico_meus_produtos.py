@@ -435,7 +435,7 @@ def montar_fornecedor_produto_apoio(cur, id_vendedor: int, id_fornecedor: int) -
                t.site,
                COALESCE(v.status, 'nenhum'),
                (SELECT COUNT(*)::int FROM tbl_produto p
-                WHERE p.id_tenant = t.id AND p.ativo = TRUE AND p.publicado = TRUE)
+                WHERE p.id_tenant = t.id AND p.publicado = TRUE)
         FROM tbl_tenant t
         LEFT JOIN tbl_vinculo_vendedor_fornecedor v
             ON v.id_tenant_fornecedor = t.id AND v.id_tenant_vendedor = %s
@@ -678,7 +678,7 @@ def buscar_produtos_proprios(
                 where.append(frag)
                 params.extend(frag_params)
         if somente_ativos:
-            where.append("p.ativo = TRUE")
+            where.append("p.publicado = TRUE")
             where.append("v.ativo = TRUE")
         frag_int, frag_int_params = sql_filtro_integracao_variante(
             filtro_integracao, id_tenant, alias_variante="v"
@@ -746,7 +746,7 @@ def buscar_produtos_proprios(
     elif filtro_tipo == "com_variacoes":
         where.append("p.formato = 'E'")
     if somente_ativos:
-        where.append("p.ativo = TRUE")
+        where.append("p.publicado = TRUE")
     frag_int, frag_int_params = sql_filtro_integracao_produto(
         filtro_integracao, id_tenant, alias_produto="p"
     )
@@ -758,7 +758,7 @@ def buscar_produtos_proprios(
     filtro_var_ativo = " AND v.ativo" if somente_ativos else ""
     cur.execute(
         f"""
-        SELECT p.id, p.sku, p.nome, p.formato, p.publicado, p.ativo,
+        SELECT p.id, p.sku, p.nome, p.formato, p.publicado,
                COALESCE(p.unidade, 'UN'),
                c.nome AS categoria,
                p.id_categoria,
@@ -785,18 +785,17 @@ def buscar_produtos_proprios(
             "nome": r[2],
             "formato": r[3] or "S",
             "publicado": bool(r[4]),
-            "ativo": bool(r[5]),
-            "unidade": r[6] or "UN",
-            "categoria": r[7] or "",
-            "id_categoria": r[8],
-            "qtd_variantes": int(r[9] or 0),
-            "preco_min": float(r[10] or 0),
-            "preco_max": float(r[11] or 0),
-            "preco": float(r[10] or 0),
-            "estoque": int(r[12] or 0),
-            "imagem_url": _imagem_url_resposta(r[13]),
+            "unidade": r[5] or "UN",
+            "categoria": r[6] or "",
+            "id_categoria": r[7],
+            "qtd_variantes": int(r[8] or 0),
+            "preco_min": float(r[9] or 0),
+            "preco_max": float(r[10] or 0),
+            "preco": float(r[9] or 0),
+            "estoque": int(r[11] or 0),
+            "imagem_url": _imagem_url_resposta(r[12]),
             "origem": "proprio",
-            "_sort_ts": r[14],
+            "_sort_ts": r[13],
         }
         for r in cur.fetchall()
     ]
@@ -850,7 +849,6 @@ from global_utils import agora_utc
 MOTIVOS_PAUSA: dict[str, str] = {
     "fornecedor_oculto_rede": "O fornecedor ocultou a empresa na rede de vendedores.",
     "produto_despublicado": "O fornecedor retirou este produto da rede.",
-    "produto_inativo": "O produto foi desativado pelo fornecedor.",
     "variante_inativa": "Esta variação foi desativada pelo fornecedor.",
     "vinculo_inativo": "O vínculo com o fornecedor não está ativo.",
     "vinculo_pausado": "O vínculo com o fornecedor está pausado (estoques zerados).",
@@ -893,7 +891,6 @@ def _motivo_tempo_real(
     *,
     id_tenant_produto: int,
     id_tenant_vendedor: int,
-    produto_ativo: bool,
     produto_publicado: bool,
     variante_ativa: bool,
     visivel_rede: bool,
@@ -910,8 +907,6 @@ def _motivo_tempo_real(
         return "fornecedor_oculto_rede"
     if not produto_publicado:
         return "produto_despublicado"
-    if not produto_ativo:
-        return "produto_inativo"
     if not variante_ativa:
         return "variante_inativa"
     return None
@@ -922,7 +917,7 @@ def avaliar_pausa_variante(cur, id_tenant_vendedor: int, id_variante: int) -> tu
     cur.execute(
         """
         SELECT pv.pausado_motivo,
-               p.id_tenant, p.ativo, p.publicado,
+               p.id_tenant, p.publicado,
                v.ativo,
                COALESCE(r.visivel_rede_vendedor, FALSE),
                vinc.status
@@ -945,11 +940,10 @@ def avaliar_pausa_variante(cur, id_tenant_vendedor: int, id_variante: int) -> tu
     motivo_rt = _motivo_tempo_real(
         id_tenant_produto=int(row[1]),
         id_tenant_vendedor=id_tenant_vendedor,
-        produto_ativo=bool(row[2]),
-        produto_publicado=bool(row[3]),
-        variante_ativa=bool(row[4]),
-        visivel_rede=bool(row[5]),
-        vinculo_status=row[6],
+        produto_publicado=bool(row[2]),
+        variante_ativa=bool(row[3]),
+        visivel_rede=bool(row[4]),
+        vinculo_status=row[5],
     )
     if motivo_rt:
         return True, motivo_rt, mensagem_pausa(motivo_rt)

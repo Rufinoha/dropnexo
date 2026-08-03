@@ -13,7 +13,7 @@
       return "Oculto — vendedores não encontram sua empresa na rede.";
     }
     if (qtd === 0) {
-      return "Ativado, mas ainda sem produtos ativos — cadastre ao menos 1 produto ativo para aparecer.";
+      return "Ativado, mas ainda sem produtos publicados — publique ao menos 1 produto para aparecer.";
     }
     if (d.aparece_na_rede) {
       return `Visível na rede — ${qtd} produto(s) ativo(s) no catálogo.`;

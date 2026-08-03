@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Layout de importação</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style/global_utils.css') }}">
-  <link rel="stylesheet" href="{{ url_for('fn_importacao.static', filename='style/Cimportacao.css') }}?v=4">
+  <link rel="stylesheet" href="{{ url_for('fn_importacao.static', filename='style/Cimportacao.css') }}?v=5">
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </head>
 <body class="imp-layout-apoio-body">
@@ -41,9 +41,27 @@
     </div>
 
     <div class="imp-layout-apoio-card">
+      <h3 class="imp-layout-section-title">Imagens no arquivo</h3>
+      <div class="imp-layout-apoio-grid">
+        <div class="imp-field">
+          <label for="impLayModoImg">Como as imagens vêm no CSV?</label>
+          <select id="impLayModoImg">
+            <option value="colunas">Colunas separadas (imagem_1, imagem_2…)</option>
+            <option value="unico">Campo único com URLs separadas</option>
+          </select>
+        </div>
+        <div class="imp-field" id="impLayDelimWrap" hidden>
+          <label for="impLayDelim">Delimitador das URLs</label>
+          <input id="impLayDelim" type="text" maxlength="5" value=";" placeholder=";" />
+        </div>
+      </div>
+      <p class="imp-hint">Máximo de 10 imagens por produto. A primeira URL válida vira a principal.</p>
+    </div>
+
+    <div class="imp-layout-apoio-card">
       <div class="imp-layout-apoio-toolbar">
         <input id="impLayFiltro" type="search" placeholder="Filtrar campo…" />
-        <button type="button" class="Cl_botaoFiltro" id="impLayBtnCampos">Carregar campos</button>
+        <button type="button" class="Cl_botaoFiltro" id="impLayBtnCampos">Recarregar campos</button>
       </div>
       <div class="Cl_TabelaPrincipal imp-table-wrap">
         <table class="imp-table">
@@ -60,7 +78,7 @@
           </tbody>
         </table>
       </div>
-      <p class="imp-hint">Use o nome exato da coluna no arquivo CSV (ex.: <strong>preco_promocional</strong>).</p>
+      <p class="imp-hint">O sistema define o que é obrigatório. Você só mapeia o nome da coluna no arquivo. Variações usam <code>sku_pai</code> + <code>atributos</code>.</p>
     </div>
 
     <div class="imp-layout-apoio-footer">
@@ -73,6 +91,6 @@
   </div>
 
   <script src="{{ url_for('static', filename='script/global_utils.js') }}"></script>
-  <script src="{{ url_for('fn_importacao.static', filename='script/Simportacao_layout.js') }}?v=4"></script>
+  <script src="{{ url_for('fn_importacao.static', filename='script/Simportacao_layout.js') }}?v=5"></script>
 </body>
 </html>

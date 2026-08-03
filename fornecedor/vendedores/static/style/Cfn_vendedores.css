@@ -6,6 +6,56 @@
   margin: 0.25rem 0 0;
 }
 
+.VdParceiros_Filtros {
+  margin-top: 1rem;
+}
+
+.VdParceiros_Filtros .filter-panel-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+}
+
+.VdParceiros_Filtros .filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.VdParceiros_Filtros .filter-group label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #64748b;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.VdParceiros_Filtros .filter-group input,
+.VdParceiros_Filtros .filter-group select {
+  min-height: 40px;
+  padding: 0.45rem 0.7rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #fff;
+  font: inherit;
+  color: #0f172a;
+}
+
+.VdParceiros_Filtros .filter-group input:focus,
+.VdParceiros_Filtros .filter-group select:focus {
+  outline: none;
+  border-color: #64748b;
+  box-shadow: 0 0 0 3px rgba(100, 116, 139, 0.16);
+}
+
+.VdParceiros_Filtros .filter-panel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.85rem;
+}
+
 .VdParceiros_Grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));

@@ -1,0 +1,254 @@
+/* Dashboard — módulo Vendedor */
+
+.DashVd {
+  display: flex;
+  flex-direction: column;
+  gap: 1.35rem;
+}
+
+.DashVd_Loading,
+.DashVd_Erro {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.95rem;
+}
+
+.DashVd_Erro {
+  color: #b91c1c;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 12px;
+  padding: 0.85rem 1rem;
+}
+
+.DashVd_Secao {
+  margin: 0;
+}
+
+.DashVd_SecaoHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.65rem;
+}
+
+.DashVd_Titulo {
+  margin: 0 0 0.65rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.DashVd_SecaoHead .DashVd_Titulo {
+  margin: 0;
+}
+
+.DashVd_OkCard {
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #047857;
+  border-radius: 12px;
+  padding: 0.9rem 1.1rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.DashVd_Alertas {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.DashVd_Alerta {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.9rem 1.05rem;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+}
+
+.DashVd_Alerta.is-alta {
+  border-color: #fecaca;
+  background: #fff7f7;
+}
+
+.DashVd_Alerta.is-media {
+  border-color: #fde68a;
+  background: #fffbeb;
+}
+
+.DashVd_Alerta.is-baixa {
+  border-color: #bfdbfe;
+  background: #f8fbff;
+}
+
+.DashVd_AlertaTitulo {
+  margin: 0 0 0.2rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.DashVd_AlertaTexto {
+  margin: 0;
+  font-size: 0.86rem;
+  color: #64748b;
+  line-height: 1.45;
+}
+
+.DashVd_Alerta a {
+  flex-shrink: 0;
+  align-self: center;
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: #021f81;
+  text-decoration: none;
+}
+
+.DashVd_Alerta a:hover {
+  text-decoration: underline;
+}
+
+.DashVd_Kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.DashVd_Kpi {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 1rem 1.05rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.DashVd_KpiVal {
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: #021f81;
+  letter-spacing: -0.02em;
+}
+
+.DashVd_KpiLbl {
+  font-size: 0.8rem;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.DashVd_Pedidos {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.DashVd_PedVazio {
+  margin: 0;
+  color: #94a3b8;
+  font-size: 0.92rem;
+  padding: 0.75rem 0;
+}
+
+.DashVd_Ped {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr 0.9fr auto;
+  gap: 0.65rem;
+  align-items: center;
+  padding: 0.75rem 0.95rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.DashVd_Ped:hover {
+  border-color: #93c5fd;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.05);
+}
+
+.DashVd_PedNum {
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.DashVd_PedMeta {
+  font-size: 0.82rem;
+  color: #64748b;
+}
+
+.DashVd_PedStatus {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #334155;
+}
+
+.DashVd_PedValor {
+  font-weight: 700;
+  color: #021f81;
+  text-align: right;
+}
+
+.DashVd_Atalhos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.DashVd_Atalho {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.55rem 0.95rem;
+  border-radius: 999px;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #1e293b;
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-decoration: none;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+
+.DashVd_Atalho:hover {
+  border-color: #2c6bf3;
+  background: #e8f0ff;
+  color: #021f81;
+}
+
+@media (max-width: 900px) {
+  .DashVd_Kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .DashVd_Ped {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .DashVd_PedValor {
+    text-align: left;
+  }
+}
+
+@media (max-width: 560px) {
+  .DashVd_Alerta {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .DashVd_Kpis {
+    grid-template-columns: 1fr;
+  }
+
+  .DashVd_Ped {
+    grid-template-columns: 1fr;
+  }
+}

@@ -149,7 +149,7 @@ def contar_produtos_ativos_fornecedor(cur, id_fornecedor: int) -> int:
     cur.execute(
         """
         SELECT COUNT(*)::int FROM tbl_produto
-        WHERE id_tenant = %s AND ativo = TRUE
+        WHERE id_tenant = %s AND publicado = TRUE
         """,
         (id_fornecedor,),
     )
@@ -164,7 +164,7 @@ def salvar_visivel_rede_vendedor(cur, id_fornecedor: int, visivel: bool) -> None
 
 
 def sql_fornecedor_elegivel_rede_vendedor(alias_tenant: str = "t") -> str:
-    """Regras de negócio: switch ativo + ao menos 1 produto ativo."""
+    """Regras de negócio: switch ativo + ao menos 1 produto publicado."""
     a = alias_tenant
     return f"""
         EXISTS (
@@ -173,7 +173,7 @@ def sql_fornecedor_elegivel_rede_vendedor(alias_tenant: str = "t") -> str:
         )
         AND EXISTS (
             SELECT 1 FROM tbl_produto p
-            WHERE p.id_tenant = {a}.id AND p.ativo = TRUE
+            WHERE p.id_tenant = {a}.id AND p.publicado = TRUE
         )
     """
 

@@ -229,7 +229,7 @@ def _buscar_item_vitrine(cur, id_vendedor: int, id_variante: int) -> dict | None
         JOIN tbl_produto_variante v ON v.id = pv.id_variante
         JOIN tbl_produto p ON p.id = pv.id_produto
         WHERE pv.id_tenant_vendedor = %s AND pv.id_variante = %s AND pv.ativo = TRUE
-          AND v.ativo = TRUE AND p.ativo = TRUE
+          AND v.ativo = TRUE AND p.publicado = TRUE
         """,
         (id_vendedor, id_variante),
     )
@@ -647,7 +647,7 @@ def combobox_produtos_pedido(
         "pv.id_tenant_vendedor = %s",
         "pv.ativo = TRUE",
         "v.ativo = TRUE",
-        "p.ativo = TRUE",
+        "p.publicado = TRUE",
         # Somente filhos vendáveis: simples (S) ou variações (E), nunca o pai placeholder
         """(
             p.formato = 'S'
@@ -721,7 +721,7 @@ def buscar_produtos_pedido(cur, id_vendedor: int, termo: str = "", id_fornecedor
         "pv.id_tenant_vendedor = %s",
         "pv.ativo = TRUE",
         "v.ativo = TRUE",
-        "p.ativo = TRUE",
+        "p.publicado = TRUE",
     ]
     params: list[Any] = [id_vendedor]
     if id_fornecedor:
@@ -1495,7 +1495,7 @@ def _resolver_item_meus_produtos_por_variante(
         FROM tbl_produto_variante v
         JOIN tbl_produto p ON p.id = v.id_produto
         WHERE p.id_tenant = %s AND v.id = %s
-          AND p.ativo = TRUE AND v.ativo = TRUE
+          AND p.publicado = TRUE AND v.ativo = TRUE
         LIMIT 1
         """,
         (id_vendedor, int(id_variante)),
@@ -1532,7 +1532,7 @@ def _resolver_item_meus_produtos_por_sku(cur, id_vendedor: int, sku: str) -> dic
         JOIN tbl_produto_variante v ON v.id = pv.id_variante
         JOIN tbl_produto p ON p.id = pv.id_produto
         WHERE pv.id_tenant_vendedor = %s AND TRIM(v.sku) = %s AND pv.ativo = TRUE
-          AND v.ativo = TRUE AND p.ativo = TRUE
+          AND v.ativo = TRUE AND p.publicado = TRUE
         LIMIT 1
         """,
         (id_vendedor, sku),
@@ -1562,7 +1562,7 @@ def _resolver_item_meus_produtos_por_sku(cur, id_vendedor: int, sku: str) -> dic
         FROM tbl_produto_variante v
         JOIN tbl_produto p ON p.id = v.id_produto
         WHERE p.id_tenant = %s AND TRIM(v.sku) = %s
-          AND p.ativo = TRUE AND v.ativo = TRUE
+          AND p.publicado = TRUE AND v.ativo = TRUE
         LIMIT 1
         """,
         (id_vendedor, sku),
@@ -2650,6 +2650,32 @@ def importar_pedido_amazon(
     return ids_criados
 
 
+def pedido_docs_frete_ok(cur, id_pedido: int) -> dict:
+    """Expedição exige etiqueta + (NF ou declaração de conteúdo)."""
+    anexos = listar_anexos_pedido(cur, int(id_pedido))
+    tipos = {(a.get("tipo") or "").strip().lower() for a in anexos}
+    tem_etiqueta = "etiqueta" in tipos
+    tem_fiscal = "nf" in tipos or "declaracao" in tipos
+    faltando = []
+    if not tem_etiqueta:
+        faltando.append("etiqueta de frete")
+    if not tem_fiscal:
+        faltando.append("nota fiscal ou declaração de conteúdo")
+    return {
+        "ok": tem_etiqueta and tem_fiscal,
+        "tem_etiqueta": tem_etiqueta,
+        "tem_nf": "nf" in tipos,
+        "tem_declaracao": "declaracao" in tipos,
+        "tem_fiscal": tem_fiscal,
+        "faltando": faltando,
+        "message": (
+            "Documentos de frete ok."
+            if tem_etiqueta and tem_fiscal
+            else ("Falta: " + ", ".join(faltando) + ".")
+        ),
+    }
+
+
 def marcar_em_expedicao(
     cur,
     id_pedido: int,
@@ -2665,6 +2691,13 @@ def marcar_em_expedicao(
         raise ValueError("Pedido não encontrado.")
     if status_vendedor_pedido(ped) != STATUS_PAGO:
         raise ValueError("Somente pedidos pagos podem ser expedidos.")
+
+    docs = pedido_docs_frete_ok(cur, id_pedido)
+    if not docs.get("ok"):
+        raise ValueError(
+            docs.get("message")
+            or "Anexe a etiqueta de frete e a NF ou declaração de conteúdo antes de expedir."
+        )
 
     itens_baixa: list[tuple[int, int, int | None]] = []
     for item in ped["itens"]:
@@ -3069,7 +3102,7 @@ def registrar_anexo_pedido(
     if not _tem_tabela_anexo(cur):
         raise ValueError("Anexos ainda não disponíveis. Execute a migração SQL 063_pedido_anexo.")
     tipo = (tipo or "").strip().lower()
-    if tipo not in ("nf", "etiqueta", "comprovante_pix"):
+    if tipo not in ("nf", "etiqueta", "declaracao", "comprovante_pix"):
         raise ValueError("Tipo de anexo inválido.")
     ped = obter_pedido(cur, id_pedido, id_vendedor=id_vendedor)
     if not ped:

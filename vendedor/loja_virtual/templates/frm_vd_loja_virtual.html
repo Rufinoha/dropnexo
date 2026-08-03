@@ -1,0 +1,67 @@
+{% extends "frm_base.html" %}
+{% block title %}Loja Virtual — {{ MARCA_NOME }}{% endblock %}
+{% block topbar_title %}Loja Virtual{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('vd_loja_virtual.static', filename='style/Cvd_loja_virtual.css') }}?v=2" />
+{% endblock %}
+{% block content %}
+<div class="LvSoon_Stage">
+  <div class="LvSoon_Glow" aria-hidden="true"></div>
+
+  <article class="LvSoon_Card" id="lv_card">
+    <header class="LvSoon_Head">
+      <span class="LvSoon_Badge">Em breve</span>
+      <p class="LvSoon_Kicker">Sua vitrine na internet</p>
+      <h2 class="LvSoon_Title">Venda com a cara da sua marca</h2>
+      <p class="LvSoon_Lead">
+        Uma loja completa — categorias, produtos, carrinho, checkout e domínio próprio —
+        ligada ao que você já opera no DropNexo.
+      </p>
+    </header>
+
+    <div class="LvSoon_Mock" aria-hidden="true">
+      <div class="LvSoon_MockBar">
+        <span></span><span></span><span></span>
+        <em>sualoja.com.br</em>
+      </div>
+      <div class="LvSoon_MockGrid">
+        <div></div><div></div><div></div>
+      </div>
+    </div>
+
+    <div id="lv_painelInteresse" class="LvSoon_Painel">
+      <p class="LvSoon_Hint" id="lv_hint">
+        Escolha até <strong>3 prioridades</strong> e entre na lista. Quem demonstra interesse
+        ajuda a definir a ordem de liberação.
+      </p>
+
+      <div class="LvSoon_Chips" id="lv_chips" role="group" aria-label="Prioridades da loja"></div>
+
+      <div class="LvSoon_Actions">
+        <button type="button" class="LvSoon_Btn" id="lv_btnInteresse" disabled>
+          Quero prioridade de acesso
+        </button>
+        <p class="LvSoon_Social" id="lv_social">Carregando interesse da rede…</p>
+      </div>
+    </div>
+
+    <div id="lv_painelOk" class="LvSoon_Ok" hidden>
+      <div class="LvSoon_Ticket">
+        <div class="LvSoon_TicketStamp">Reservado</div>
+        <p class="LvSoon_TicketLabel">Lista de prioridade</p>
+        <h3 class="LvSoon_TicketTitle">Você está dentro</h3>
+        <p class="LvSoon_TicketText">
+          Assim que a Loja Virtual abrir as portas, sua conta entra no radar de liberação.
+        </p>
+        <ul class="LvSoon_TicketPrios" id="lv_priosOk"></ul>
+        <p class="LvSoon_Social" id="lv_socialOk"></p>
+        <button type="button" class="LvSoon_BtnGhost" id="lv_btnEditar">Ajustar prioridades</button>
+      </div>
+    </div>
+  </article>
+</div>
+{% endblock %}
+{% block page_js %}
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="{{ url_for('vd_loja_virtual.static', filename='script/Svd_loja_virtual.js') }}?v=1"></script>
+{% endblock %}

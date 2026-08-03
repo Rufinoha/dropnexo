@@ -13,7 +13,6 @@ from api.bling.sync_progresso import iniciar_importacao_bling_async, obter_progr
 from api.bling.produtos import importar_produtos
 from api.bling.categorias_bling import aplicar_mapeamento_categorias, pre_analisar_mapeamento_categorias, validar_mapeamento_para_importacao
 from fornecedor.importacao.servico_importacao import montar_payload_erro
-from fornecedor.parametros.precificacao import aplicar_valor_drop_produto_e_variantes
 from fornecedor.importacao.servico_importacao import (
     MODULO_CATALOGO,
     ORIGEM_ARQUIVO,
@@ -402,12 +401,12 @@ def importacao_arquivo():
     id_tenant = int(session.get("id_tenant"))
     id_usuario = session.get("id_usuario")
     filename = arquivo.filename
+    id_layout_req = request.form.get("id_layout", type=int)
 
-    from fornecedor.catalogo.srotas_catalogo import (  # noqa: WPS433 — reutiliza parser
+    from fornecedor.importacao.motor_csv import (
         MAX_LINHAS_CSV,
-        _normalizar_bool,
-        _parse_decimal,
-        _resolver_categoria,
+        montar_mapa_colunas,
+        processar_linhas_csv,
     )
 
     texto = raw.decode("utf-8-sig", errors="replace")
@@ -416,16 +415,25 @@ def importacao_arquivo():
     if not reader.fieldnames:
         return jsonify(success=False, message="Cabeçalho do CSV inválido."), 400
 
-    mapa = {}
-    for col in reader.fieldnames:
-        chave = (col or "").strip().lower()
-        if chave:
-            mapa[chave] = col
+    mapa_arquivo = montar_mapa_colunas(list(reader.fieldnames))
+    rows: list[tuple[int, dict]] = []
+    for num, row in enumerate(reader, start=2):
+        if len(rows) >= MAX_LINHAS_CSV:
+            break
+        rows.append((num, row))
 
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
-        id_layout = garantir_layout_padrao_csv(cur, id_tenant)
+        if id_layout_req:
+            layout = obter_layout_detalhe(cur, id_tenant, id_layout_req, MODULO_CATALOGO)
+        else:
+            id_layout_padrao = garantir_layout_padrao_csv(cur, id_tenant)
+            layout = obter_layout_detalhe(cur, id_tenant, id_layout_padrao, MODULO_CATALOGO)
+        if not layout:
+            return jsonify(success=False, message="Layout de importação não encontrado."), 400
+
+        id_layout = int(layout["id"])
         id_lote, numero = criar_lote(
             cur,
             id_tenant=id_tenant,
@@ -434,193 +442,40 @@ def importacao_arquivo():
             id_usuario=int(id_usuario) if id_usuario else None,
             id_layout=id_layout,
             nome_arquivo=filename,
-            meta={"layout": "csv_padrao"},
+            meta={
+                "layout": layout.get("nome"),
+                "modo_imagens": layout.get("modo_imagens"),
+            },
         )
 
-        inseridos = 0
-        atualizados = 0
-        rejeitadas = 0
-        total_linhas = 0
+        resultado = processar_linhas_csv(
+            cur,
+            id_tenant=id_tenant,
+            rows=rows,
+            campos_layout=layout.get("campos") or [],
+            mapa_arquivo=mapa_arquivo,
+            modo_imagens=layout.get("modo_imagens") or "colunas",
+            delimitador_imagens=layout.get("delimitador_imagens") or ";",
+            id_lote=id_lote,
+            origem=ORIGEM_ARQUIVO,
+        )
 
-        for num, row in enumerate(reader, start=2):
-            if num - 2 >= MAX_LINHAS_CSV:
-                registrar_erro_lote(
-                    cur,
-                    id_tenant=id_tenant,
-                    id_lote=id_lote,
-                    modulo=MODULO_CATALOGO,
-                    linha_arquivo=num,
-                    mensagem=f"Máximo de {MAX_LINHAS_CSV} linhas por importação.",
-                )
-                rejeitadas += 1
-                break
-            total_linhas += 1
+        for err in resultado.get("erros") or []:
+            registrar_erro_lote(
+                cur,
+                id_tenant=id_tenant,
+                id_lote=id_lote,
+                modulo=MODULO_CATALOGO,
+                linha_arquivo=err.get("linha"),
+                sku_registro=err.get("sku") or "",
+                mensagem=err.get("erro") or "Erro",
+                origem=ORIGEM_ARQUIVO,
+            )
 
-            def cel(*nomes):
-                for n in nomes:
-                    c = mapa.get(n)
-                    if c is not None:
-                        return (row.get(c) or "").strip()
-                return ""
-
-            nome = cel("nome")
-            if not nome:
-                if any((row.get(mapa[k]) or "").strip() for k in mapa if k != "nome"):
-                    registrar_erro_lote(
-                        cur,
-                        id_tenant=id_tenant,
-                        id_lote=id_lote,
-                        modulo=MODULO_CATALOGO,
-                        linha_arquivo=num,
-                        mensagem="Nome obrigatório.",
-                    )
-                    rejeitadas += 1
-                continue
-
-            sku = cel("sku") or None
-            preco = _parse_decimal(cel("preco"))
-            promo_raw = cel("preco_promocional")
-            preco_promocional = _parse_decimal(promo_raw) if promo_raw else None
-            quantidade = max(0, int(_parse_decimal(cel("quantidade"), "0")))
-            id_categoria = _resolver_categoria(cur, id_tenant, cel("categoria"))
-            unidade = (cel("unidade") or "UN").strip()[:20] or "UN"
-            publicado = _normalizar_bool(cel("publicado"), False)
-            ativo = _normalizar_bool(cel("ativo"), True)
-            descricao = cel("descricao")
-
-            try:
-                prod_id = None
-                criando = True
-                if sku:
-                    cur.execute(
-                        "SELECT id FROM tbl_produto WHERE id_tenant = %s AND sku = %s",
-                        (id_tenant, sku),
-                    )
-                    found = cur.fetchone()
-                    if found:
-                        prod_id = found[0]
-                        criando = False
-                        cur.execute(
-                            """
-                            UPDATE tbl_produto SET
-                                nome=%s, descricao=%s, preco=%s, preco_promocional=%s,
-                                unidade=%s, id_categoria=%s, ativo=%s, publicado=%s, atualizado_em=%s
-                            WHERE id=%s AND id_tenant=%s
-                            """,
-                            (
-                                nome,
-                                descricao,
-                                preco,
-                                preco_promocional,
-                                unidade,
-                                id_categoria,
-                                ativo,
-                                publicado,
-                                agora_utc(),
-                                prod_id,
-                                id_tenant,
-                            ),
-                        )
-                        atualizados += 1
-                    else:
-                        from sistema.planos.limites import exigir_novo_produto_catalogo
-
-                        exigir_novo_produto_catalogo(cur, int(id_tenant))
-                        cur.execute(
-                            """
-                            INSERT INTO tbl_produto (
-                                id_tenant, sku, nome, descricao, preco, preco_promocional,
-                                unidade, id_categoria, ativo, publicado, origem,
-                                id_importacao_lote, atualizado_em
-                            ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                            RETURNING id
-                            """,
-                            (
-                                id_tenant,
-                                sku,
-                                nome,
-                                descricao,
-                                preco,
-                                preco_promocional,
-                                unidade,
-                                id_categoria,
-                                ativo,
-                                publicado,
-                                ORIGEM_ARQUIVO,
-                                id_lote,
-                                agora_utc(),
-                            ),
-                        )
-                        prod_id = cur.fetchone()[0]
-                        inseridos += 1
-                else:
-                    from sistema.planos.limites import exigir_novo_produto_catalogo
-
-                    exigir_novo_produto_catalogo(cur, int(id_tenant))
-                    cur.execute(
-                        """
-                        INSERT INTO tbl_produto (
-                            id_tenant, nome, descricao, preco, preco_promocional,
-                            unidade, id_categoria, ativo, publicado, origem,
-                            id_importacao_lote, atualizado_em
-                        ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                        RETURNING id
-                        """,
-                        (
-                            id_tenant,
-                            nome,
-                            descricao,
-                            preco,
-                            preco_promocional,
-                            unidade,
-                            id_categoria,
-                            ativo,
-                            publicado,
-                            ORIGEM_ARQUIVO,
-                            id_lote,
-                            agora_utc(),
-                        ),
-                    )
-                    prod_id = cur.fetchone()[0]
-                    inseridos += 1
-
-                cur.execute(
-                    """
-                    INSERT INTO tbl_produto_estoque (id_produto, quantidade, atualizado_em)
-                    VALUES (%s, %s, %s)
-                    ON CONFLICT (id_produto) DO UPDATE SET
-                        quantidade = EXCLUDED.quantidade, atualizado_em = EXCLUDED.atualizado_em
-                    """,
-                    (prod_id, quantidade, agora_utc()),
-                )
-                if prod_id:
-                    aplicar_valor_drop_produto_e_variantes(cur, id_tenant, prod_id, publicar=False, forcar=True)
-                if criando and prod_id:
-                    pass  # origem/lote já definidos no INSERT
-            except Exception as ex:
-                rejeitadas += 1
-                payload_erro = montar_payload_erro(
-                    mensagem_tecnica=str(ex),
-                    origem="arquivo",
-                    extra={
-                        "linha_arquivo": num,
-                        "linha": {k: row.get(mapa[k]) for k in mapa if mapa.get(k)},
-                    },
-                    traceback_txt=traceback.format_exc(),
-                )
-                registrar_erro_lote(
-                    cur,
-                    id_tenant=id_tenant,
-                    id_lote=id_lote,
-                    modulo=MODULO_CATALOGO,
-                    linha_arquivo=num,
-                    nome_registro=nome,
-                    sku_registro=sku or "",
-                    mensagem=str(ex),
-                    payload=payload_erro,
-                    origem="arquivo",
-                )
-
+        inseridos = int(resultado.get("inseridos") or 0)
+        atualizados = int(resultado.get("atualizados") or 0)
+        rejeitadas = int(resultado.get("rejeitadas") or 0)
+        total_linhas = int(resultado.get("total_linhas") or 0)
         status = STATUS_ERRO if inseridos + atualizados == 0 else STATUS_CONCLUIDO
         finalizar_lote(
             cur,
@@ -671,7 +526,8 @@ def importacao_layout_editar():
 @exigir_permissao(codigo="catalogos.ver")
 def importacao_layout_campos_base():
     modulo = (request.args.get("modulo") or MODULO_CATALOGO).strip()
-    dados = campos_base_layout(modulo)
+    modo = (request.args.get("modo_imagens") or "colunas").strip().lower()
+    dados = campos_base_layout(modulo, modo_imagens=modo)
     if not dados:
         return jsonify(success=False, message="Módulo sem campos base configurados."), 400
     return jsonify(success=True, dados=dados)

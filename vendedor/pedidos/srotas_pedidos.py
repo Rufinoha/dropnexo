@@ -22,6 +22,7 @@ from core.pedidos.servico import (
     obter_contexto_pedido_vendedor,
     obter_grupo_pedido,
     obter_pedido,
+    pedido_docs_frete_ok,
     registrar_anexo_pedido,
     salvar_rascunho,
     taxas_fornecedores_vendedor,
@@ -30,9 +31,11 @@ from api.mercadopago.mercadopago import iniciar_pagamento, meios_pagamento_pedid
 from api.melhor_envio.melhor_envio import (
     contratar_etiqueta_pedido,
     cotar_frete_pedido,
+    definir_modo_frete_dropnexo,
+    definir_modo_frete_integracao,
     definir_modo_frete_manual,
-    definir_modo_frete_melhor_envio,
     escolher_frete_pedido,
+    normalizar_frete_modo,
     salvar_frete_manual,
     status_melhor_envio_vendedor,
 )
@@ -266,6 +269,9 @@ def pedido_anexos_upload(id_pedido: int):
     ext = _extensao_anexo(arquivo.filename)
     if not ext:
         return jsonify(success=False, message="Use PDF, XML, PNG ou JPG."), 400
+    # Frete / fiscal do pedido: sempre PDF
+    if tipo in ("etiqueta", "nf", "declaracao") and ext != ".pdf":
+        return jsonify(success=False, message="Envie o arquivo em PDF."), 400
     stream = arquivo.stream
     stream.seek(0, 2)
     tamanho = stream.tell()
@@ -298,8 +304,9 @@ def pedido_anexos_upload(id_pedido: int):
         )
         if tipo == "comprovante_pix":
             marcar_comprovante_enviado(cur, id_pedido, id_vendedor=id_v)
+        docs = pedido_docs_frete_ok(cur, id_pedido)
         conn.commit()
-        return jsonify(success=True, message="Anexo enviado.", anexo=anexo)
+        return jsonify(success=True, message="Anexo enviado.", anexo=anexo, frete_docs=docs)
     except ValueError as e:
         conn.rollback()
         return jsonify(success=False, message=str(e)), 400
@@ -456,7 +463,7 @@ def pedidos_frete_modo(id_pedido: int):
     if not id_v:
         return jsonify(success=False, message="Sessão inválida."), 403
     body = request.get_json(silent=True) or {}
-    modo = (body.get("modo") or "").strip().lower()
+    modo = normalizar_frete_modo(body.get("modo"))
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
@@ -469,10 +476,15 @@ def pedidos_frete_modo(id_pedido: int):
                 codigo_rastreio=body.get("codigo_rastreio"),
                 transportadora=body.get("transportadora"),
             )
-        elif modo in ("melhor_envio", "me"):
-            res = definir_modo_frete_melhor_envio(cur, id_v, id_pedido)
+        elif modo == "dropnexo":
+            res = definir_modo_frete_dropnexo(cur, id_v, id_pedido)
+        elif modo == "integracao":
+            res = definir_modo_frete_integracao(cur, id_v, id_pedido)
         else:
-            return jsonify(success=False, message="Modo inválido. Use manual ou melhor_envio."), 400
+            return jsonify(
+                success=False,
+                message="Modo inválido. Use integracao, dropnexo ou manual.",
+            ), 400
         conn.commit()
         return jsonify(success=True, message="Modo de frete atualizado.", **res)
     except ValueError as e:
@@ -608,6 +620,81 @@ def pedidos_tiktok_baixar_etiqueta(id_pedido: int):
     except Exception as e:
         conn.rollback()
         return jsonify(success=False, message=str(e)[:300]), 400
+    finally:
+        conn.close()
+
+
+@vd_pedidos_bp.post("/vendedor/pedidos/<int:id_pedido>/frete/integracao/puxar")
+@login_obrigatorio()
+@exigir_modulo(MODULO_VENDEDOR)
+@exigir_permissao(codigo="vd_pedidos.editar")
+def pedidos_frete_integracao_puxar(id_pedido: int):
+    """Puxa etiqueta (+ NF/declaração se existir) do canal de origem."""
+    id_v = _id_vendedor()
+    if not id_v:
+        return jsonify(success=False, message="Sessão inválida."), 403
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        ped = obter_pedido(cur, id_pedido, id_vendedor=id_v)
+        if not ped:
+            return jsonify(success=False, message="Pedido não encontrado."), 404
+        origem = (ped.get("origem") or "").strip().lower()
+        pasta = _pasta_anexos_tenant(id_v)
+        uid = _id_usuario()
+
+        # Garante modo integração (se ainda editável)
+        try:
+            definir_modo_frete_integracao(cur, id_v, id_pedido)
+        except ValueError:
+            pass
+
+        if origem == "mercado_livre":
+            from api.mercado_livre.pedidos_ml import puxar_documentos_integracao_ml
+
+            res = puxar_documentos_integracao_ml(cur, id_v, id_pedido, pasta, id_usuario=uid)
+        elif origem == "tiktok":
+            from api.tiktok.pedidos_tiktok import puxar_documentos_integracao_tiktok
+
+            res = puxar_documentos_integracao_tiktok(cur, id_v, id_pedido, pasta, id_usuario=uid)
+        elif origem == "amazon":
+            return jsonify(
+                success=False,
+                message="Amazon: baixe a etiqueta no Seller Central e anexe em PDF no modo Manual, ou use o fallback de anexos abaixo.",
+            ), 400
+        else:
+            return jsonify(success=False, message="Pedido sem integração de marketplace."), 400
+
+        anexos = listar_anexos_pedido(cur, id_pedido, id_vendedor=id_v)
+        docs = pedido_docs_frete_ok(cur, id_pedido)
+        conn.commit()
+        return jsonify(success=True, anexos=anexos, frete_docs=docs, **res)
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 400
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)[:300]), 400
+    finally:
+        conn.close()
+
+
+@vd_pedidos_bp.get("/vendedor/pedidos/<int:id_pedido>/frete/docs")
+@login_obrigatorio()
+@exigir_modulo(MODULO_VENDEDOR)
+@exigir_permissao(codigo="vd_pedidos.ver")
+def pedidos_frete_docs(id_pedido: int):
+    id_v = _id_vendedor()
+    if not id_v:
+        return jsonify(success=False, message="Sessão inválida."), 403
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        ped = obter_pedido(cur, id_pedido, id_vendedor=id_v)
+        if not ped:
+            return jsonify(success=False, message="Pedido não encontrado."), 404
+        docs = pedido_docs_frete_ok(cur, id_pedido)
+        return jsonify(success=True, frete_docs=docs)
     finally:
         conn.close()
 

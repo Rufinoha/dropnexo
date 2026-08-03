@@ -19,6 +19,9 @@
     btnFiltrar: document.getElementById("ob_btnFiltrar"),
     btnLimpar: document.getElementById("ob_btnLimpar"),
     btnIncluir: document.getElementById("ob_btnIncluir"),
+    btnImportar: document.getElementById("ob_btnImportar"),
+    btnExportar: document.getElementById("ob_btnExportar"),
+    arquivoImport: document.getElementById("ob_arquivoImport"),
     btnToggleExpandTodos: document.getElementById("ob_btnToggleExpandTodos"),
     chkTodos: document.getElementById("ob_chkTodos"),
     bulkRow: document.getElementById("ob_bulkRow"),
@@ -116,6 +119,10 @@
     return ativo === false ? '<span class="Cat_BadgeInativo">Inativo</span>' : "";
   }
 
+  function badgeNaoPublicado(publicado) {
+    return publicado === false ? '<span class="Cat_BadgeInativo">Não publicado</span>' : "";
+  }
+
   function badgePausado(l) {
     if (!l.pausado) return "";
     const tip = escapeHtml(l.pausado_msg || "Produto pausado");
@@ -139,7 +146,9 @@
     } else {
       badge = '<span class="Cat_BadgeSimples">Simples</span>';
     }
-    return `<div class="Cat_PaiCell"><strong class="Cat_PaiNome">${escapeHtml(l.nome)}</strong>${badge}${badgeOrigem(l)}${badgeInativo(l.ativo)}${badgePausado(l)}</div>`;
+    const sit =
+      l.origem === "proprio" ? badgeNaoPublicado(l.publicado) : badgeInativo(l.ativo);
+    return `<div class="Cat_PaiCell"><strong class="Cat_PaiNome">${escapeHtml(l.nome)}</strong>${badge}${badgeOrigem(l)}${sit}${badgePausado(l)}</div>`;
   }
 
   function renderNomeVar(l) {
@@ -904,7 +913,13 @@
     const aberto = isPaiVar && !recolhidos.has(l.id);
     const rowCls = [
       isVar ? "Cat_RowVar" : "Cat_RowPai",
-      l.ativo === false ? "Cat_RowInativo" : "",
+      (isVar
+        ? l.ativo === false
+        : l.origem === "proprio"
+          ? l.publicado === false
+          : l.ativo === false)
+        ? "Cat_RowInativo"
+        : "",
       isVar && l.primeira_variante ? "Cat_RowVar--first" : "",
       isVar && l.ultima_variante ? "Cat_RowVar--ultima" : "",
       isPaiVar ? "Cat_RowPai--com-var" : "",
@@ -1134,6 +1149,62 @@
     if (el.chkTodos.checked) visiveis.forEach((id) => selecionados.add(id));
     else selecionados.clear();
     renderTabela();
+  });
+
+  async function exportarMeusProdutos() {
+    const escolha = await Swal.fire({
+      title: "Exportar Meus produtos",
+      text: "Somente produtos próprios, conforme o filtro da tela (nunca o catálogo do fornecedor).",
+      icon: "question",
+      showDenyButton: true,
+      showCancelButton: true,
+      confirmButtonText: "CSV",
+      denyButtonText: "Excel",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#021F81",
+    });
+    if (escolha.isDismissed) return;
+    const formato = escolha.isDenied ? "xlsx" : "csv";
+    const p = new URLSearchParams({
+      formato,
+      busca: (el.filtroBusca?.value || "").trim(),
+      id_categoria: el.filtroCategoria?.value || "",
+      tipo: el.filtroTipo?.value || "",
+      ativos: el.filtroAtivos?.checked ? "sim" : "nao",
+    });
+    window.location.href = `${BASE}/exportar?${p}`;
+  }
+
+  async function importarMeusProdutosArquivo(file) {
+    if (!file) return;
+    const fd = new FormData();
+    fd.append("arquivo", file);
+    Swal.fire({ title: "Importando…", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    try {
+      const r = await fetch(`${BASE}/importar/arquivo`, { method: "POST", body: fd, credentials: "include" });
+      const j = await r.json();
+      Swal.close();
+      if (!r.ok || !j.success) throw new Error(j.message || "Falha na importação.");
+      await Swal.fire({
+        icon: (j.rejeitadas || 0) > 0 ? "warning" : "success",
+        title: "Concluído",
+        text: j.message,
+        confirmButtonColor: "#021F81",
+      });
+      await carregar();
+    } catch (e) {
+      Swal.close();
+      await Swal.fire("Erro", e.message, "error");
+    } finally {
+      if (el.arquivoImport) el.arquivoImport.value = "";
+    }
+  }
+
+  el.btnExportar?.addEventListener("click", () => exportarMeusProdutos().catch((e) => Swal.fire("Erro", e.message, "error")));
+  el.btnImportar?.addEventListener("click", () => el.arquivoImport?.click());
+  el.arquivoImport?.addEventListener("change", () => {
+    const f = el.arquivoImport?.files?.[0];
+    if (f) importarMeusProdutosArquivo(f);
   });
 
   el.btnIncluir?.addEventListener("click", () => {

@@ -88,6 +88,7 @@ def resolver_url_menu(data_page: str, nav_codigo: str | None = None) -> str:
         "vd_usuarios": "vd_usuarios.usuarios",
         "vd_depositos": "vd_depositos.depositos",
         "vd_categorias": "vd_categorias.categorias",
+        "vd_loja_virtual": "vd_loja_virtual.pagina",
         "integracoes": "integracoes.pagina",
         "fn_parametros": "fn_parametros.parametros_pagina",
     }
@@ -114,6 +115,7 @@ def resolver_url_menu(data_page: str, nav_codigo: str | None = None) -> str:
         "/vendedor/usuarios": "vd_usuarios.usuarios",
         "/vendedor/depositos": "vd_depositos.depositos",
         "/vendedor/categorias": "vd_categorias.categorias",
+        "/vendedor/loja-virtual": "vd_loja_virtual.pagina",
         "/configuracoes/fornecedores-plataforma": "config.fornecedores_plataforma",
     }
     endpoint = rotas_por_nav.get(nav) or rotas.get(page)

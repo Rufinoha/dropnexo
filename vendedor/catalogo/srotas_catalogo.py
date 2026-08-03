@@ -78,7 +78,7 @@ def _contar_sem_categoria(cur, id_vendedor: int, id_forn: str | None) -> int:
         JOIN tbl_vinculo_vendedor_fornecedor vinc
             ON vinc.id_tenant_fornecedor = p.id_tenant
            AND vinc.id_tenant_vendedor = %s AND vinc.status = 'ativo'
-        WHERE p.publicado = TRUE AND p.ativo = TRUE AND p.id_categoria IS NULL{extra}
+        WHERE p.publicado = TRUE AND p.id_categoria IS NULL{extra}
         """,
         params,
     )
@@ -104,7 +104,7 @@ def _listar_categorias_combos(cur, id_vendedor: int, id_forn: str | None) -> lis
         JOIN tbl_vinculo_vendedor_fornecedor vinc
             ON vinc.id_tenant_fornecedor = p.id_tenant
            AND vinc.id_tenant_vendedor = %s AND vinc.status = 'ativo'
-        WHERE p.publicado = TRUE AND p.ativo = TRUE
+        WHERE p.publicado = TRUE
           AND p.id_categoria IS NOT NULL{extra}
         GROUP BY LOWER(TRIM(c.nome))
         HAVING COUNT(DISTINCT p.id) > 0
@@ -140,7 +140,7 @@ def _where_catalogo(
         "vinc.status = 'ativo'",
         "vinc.id_tenant_vendedor = %s",
         "p.publicado = TRUE",
-        "p.ativo = TRUE",
+        "p.publicado = TRUE",
         "var.ativo = TRUE",
     ]
     params: list = [id_vendedor]
@@ -249,7 +249,7 @@ def combos():
             SELECT t.id, COALESCE(NULLIF(TRIM(t.nome_fantasia), ''), t.nome),
                    (SELECT COUNT(DISTINCT p.id)::int
                     FROM tbl_produto p
-                    WHERE p.id_tenant = t.id AND p.publicado = TRUE AND p.ativo = TRUE)
+                    WHERE p.id_tenant = t.id AND p.publicado = TRUE)
             FROM tbl_vinculo_vendedor_fornecedor vinc
             JOIN tbl_tenant t ON t.id = vinc.id_tenant_fornecedor
             WHERE vinc.id_tenant_vendedor = %s AND vinc.status = 'ativo'
@@ -397,7 +397,7 @@ def produto_detalhe(id_produto: int):
                 ON vinc.id_tenant_fornecedor = p.id_tenant
                AND vinc.id_tenant_vendedor = %s AND vinc.status = 'ativo'
             LEFT JOIN tbl_categoria c ON c.id = p.id_categoria AND c.id_tenant = p.id_tenant
-            WHERE p.id = %s AND p.publicado = TRUE AND p.ativo = TRUE
+            WHERE p.id = %s AND p.publicado = TRUE
             """,
             (id_vendedor, id_produto),
         )
@@ -484,7 +484,7 @@ def ativar_produto():
             JOIN tbl_vinculo_vendedor_fornecedor vinc
                 ON vinc.id_tenant_fornecedor = p.id_tenant
                AND vinc.id_tenant_vendedor = %s AND vinc.status = 'ativo'
-            WHERE p.id = %s AND p.publicado = TRUE AND p.ativo = TRUE AND v.ativo = TRUE
+            WHERE p.id = %s AND p.publicado = TRUE AND v.ativo = TRUE
             """,
             (id_vendedor, id_produto),
         )

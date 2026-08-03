@@ -268,7 +268,7 @@ def _stats_categorias_segmento(cur, id_tenant: int, id_segmento: int) -> tuple[l
         """
         SELECT c.id, c.nome,
                (SELECT COUNT(*)::int FROM tbl_produto p
-                WHERE p.id_categoria = c.id AND p.id_tenant = %s AND p.ativo = TRUE)
+                WHERE p.id_categoria = c.id AND p.id_tenant = %s AND p.publicado = TRUE)
         FROM tbl_categoria c
         WHERE c.id_tenant = %s AND c.id_segmento = %s AND c.ativo = TRUE
           AND COALESCE(c.nivel, 1) = 1
@@ -283,7 +283,7 @@ def _stats_categorias_segmento(cur, id_tenant: int, id_segmento: int) -> tuple[l
         """
         SELECT COUNT(*)::int FROM tbl_produto p
         JOIN tbl_categoria c ON c.id = p.id_categoria
-        WHERE p.id_tenant = %s AND c.id_segmento = %s AND p.ativo = TRUE
+        WHERE p.id_tenant = %s AND c.id_segmento = %s AND p.publicado = TRUE
         """,
         (id_tenant, id_segmento),
     )

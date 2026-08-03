@@ -173,7 +173,6 @@ def tupla_campos_produto_sql(campos: dict) -> tuple:
         campos.get("origem_fiscal"),
         campos.get("cest"),
         campos.get("producao"),
-        campos.get("ativo"),
     )
 
 

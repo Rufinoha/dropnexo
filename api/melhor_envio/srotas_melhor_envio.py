@@ -261,13 +261,20 @@ def _processar_evento_etiqueta(cur, payload: dict) -> None:
 
     if evento in ("order.posted", "order.generated", "order.released") or status in ("posted", "generated", "released"):
         if status_pedido == "pago":
-            marcar_em_expedicao(
-                cur,
-                id_pedido,
-                id_fornecedor=id_fornecedor,
-                codigo_rastreio=tracking or None,
-                transportadora=transportadora,
-            )
+            try:
+                marcar_em_expedicao(
+                    cur,
+                    id_pedido,
+                    id_fornecedor=id_fornecedor,
+                    codigo_rastreio=tracking or None,
+                    transportadora=transportadora,
+                )
+            except ValueError as e:
+                _log.info(
+                    "ME webhook pedido %s não expedido ainda: %s",
+                    id_pedido,
+                    e,
+                )
     elif evento == "order.delivered" or status == "delivered":
         if status_pedido in ("pago", "em_expedicao"):
             marcar_entregue(cur, id_pedido, id_fornecedor=id_fornecedor)

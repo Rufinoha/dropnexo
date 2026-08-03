@@ -61,7 +61,7 @@
       const links = comprovantes
         .map(
           (a) =>
-            `<li><a href="/vendedor/pedidos/anexos/arquivo?caminho=${encodeURIComponent(a.caminho)}" target="_blank">${a.nome_original}</a></li>`
+            `<li><a href="/fornecedor/pedidos/anexos/arquivo?caminho=${encodeURIComponent(a.caminho)}" target="_blank">${a.nome_original}</a></li>`
         )
         .join("");
       foot.innerHTML = `
@@ -78,11 +78,19 @@
       return;
     }
     if (stV(p) === "pago") {
+      const tipos = new Set((p.anexos || []).map((a) => a.tipo));
+      const temEtq = tipos.has("etiqueta");
+      const temFiscal = tipos.has("nf") || tipos.has("declaracao");
+      const pronto = temEtq && temFiscal;
+      const falta = [];
+      if (!temEtq) falta.push("etiqueta de frete");
+      if (!temFiscal) falta.push("NF ou declaração");
       foot.innerHTML = `
         <div class="PdFn_ExpForm">
+          ${pronto ? "" : `<p class="PdFn_Hint" style="color:#9a3412">Falta para expedir: ${falta.join(", ")}.</p>`}
           <label>Transportadora <input type="text" id="pd_fn_transportadora" placeholder="Opcional" /></label>
           <label>Código rastreio <input type="text" id="pd_fn_rastreio" placeholder="Opcional" /></label>
-          <button type="button" class="Cl_botaoprimario" id="pd_fn_btn_expedir">Marcar em expedição</button>
+          <button type="button" class="Cl_botaoprimario" id="pd_fn_btn_expedir" ${pronto ? "" : "disabled"}>Marcar em expedição</button>
         </div>`;
       document.getElementById("pd_fn_btn_expedir")?.addEventListener("click", () => expedir(p.id));
     } else if (stV(p) === "em_expedicao") {
@@ -158,6 +166,15 @@
     const p = j.pedido;
     pedidoAtual = p;
     titulo.textContent = `Pedido ${p.numero}`;
+    const docs = (p.anexos || []).filter((a) => ["etiqueta", "nf", "declaracao"].includes(a.tipo));
+    const docsHtml = docs.length
+      ? `<ul style="margin:0.35rem 0 0;padding-left:1.1rem">${docs
+          .map(
+            (a) =>
+              `<li><a href="/fornecedor/pedidos/anexos/arquivo?caminho=${encodeURIComponent(a.caminho)}" target="_blank" rel="noopener">${esc(a.tipo)} — ${esc(a.nome_original)}</a></li>`
+          )
+          .join("")}</ul>`
+      : `<p class="PdFn_Hint">Sem etiqueta/NF/declaração anexadas.</p>`;
     body.innerHTML = `
       <p><strong>Vendedor:</strong> ${esc(p.vendedor_nome || "")}</p>
       <p><strong>Cliente:</strong> ${esc(p.cliente_nome)} — ${esc(p.cliente_telefone || "")}</p>
@@ -165,6 +182,7 @@
       <p><strong>Total:</strong> ${fmt(p.valor_total)} ${p.valor_taxa_pedido > 0 ? `(incl. taxa ${fmt(p.valor_taxa_pedido)})` : ""}</p>
       <p>${badge(stV(p))}</p>
       ${p.codigo_rastreio ? `<p><strong>Rastreio:</strong> ${esc(p.codigo_rastreio)}</p>` : ""}
+      <div style="margin-top:0.85rem"><strong>Documentos de frete</strong>${docsHtml}</div>
       <table class="PdFn_Table" style="margin-top:1rem"><thead><tr><th>Produto</th><th>Qtd</th><th>Drop</th></tr></thead>
       <tbody>${(p.itens || []).map((i) => `<tr><td>${esc(i.nome_produto)}</td><td>${i.quantidade}</td><td>${fmt(i.subtotal_drop)}</td></tr>`).join("")}</tbody></table>`;
     renderAcoes(p);

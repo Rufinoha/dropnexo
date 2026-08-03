@@ -6,16 +6,25 @@
   const modalBody = document.getElementById("vd_modalBody");
   const modalFooter = document.getElementById("vd_modalFooter");
   const fecharModal = document.getElementById("vd_fecharModal");
+  const fNome = document.getElementById("vd_fNome");
+  const fRazao = document.getElementById("vd_fRazao");
+  const fDoc = document.getElementById("vd_fDoc");
+  const fStatus = document.getElementById("vd_fStatus");
+  const btnFiltrar = document.getElementById("vd_btnFiltrar");
+  const btnLimpar = document.getElementById("vd_btnLimparFiltro");
 
   if (!lista) return;
 
   let dadosCache = [];
   let vinculoAtual = null;
 
+  const STATUS_VISIVEIS = ["pausado", "aguardando", "ativo"];
+  const ORDEM_STATUS = { pausado: 0, aguardando: 1, ativo: 2 };
+
   const statusMap = {
     aguardando: { cls: "is-aguardando", label: "Aguardando aprovação" },
-    ativo: { cls: "is-ativo", label: "Vínculo ativo" },
-    pausado: { cls: "is-pausado", label: "Vínculo pausado" },
+    ativo: { cls: "is-ativo", label: "Vinculado" },
+    pausado: { cls: "is-pausado", label: "Pausado" },
     recusado: { cls: "", label: "Recusado" },
     inativo: { cls: "", label: "Encerrado" },
   };
@@ -90,10 +99,58 @@
     return r.isConfirmed ? r.value : null;
   }
 
+  function soDigitos(s) {
+    return String(s || "").replace(/\D/g, "");
+  }
+
+  function contem(hay, needle) {
+    if (!needle) return true;
+    return String(hay || "")
+      .toLowerCase()
+      .includes(String(needle).toLowerCase());
+  }
+
+  function ordenarCards(rows) {
+    return rows.slice().sort((a, b) => {
+      const oa = ORDEM_STATUS[a.status] ?? 9;
+      const ob = ORDEM_STATUS[b.status] ?? 9;
+      if (oa !== ob) return oa - ob;
+      const da = a.solicitado_em || "";
+      const db = b.solicitado_em || "";
+      return db.localeCompare(da);
+    });
+  }
+
+  function aplicarFiltros() {
+    const nomeQ = (fNome?.value || "").trim();
+    const razaoQ = (fRazao?.value || "").trim();
+    const docQ = soDigitos(fDoc?.value || "");
+    const stQ = (fStatus?.value || "").trim();
+
+    const filtrados = dadosCache.filter((v) => {
+      if (!STATUS_VISIVEIS.includes(v.status)) return false;
+      if (stQ && v.status !== stQ) return false;
+      if (nomeQ) {
+        const okNome = contem(v.nome, nomeQ) || contem(v.responsavel, nomeQ);
+        if (!okNome) return false;
+      }
+      if (razaoQ && !contem(v.razao_social, razaoQ)) return false;
+      if (docQ && !soDigitos(v.documento).includes(docQ)) return false;
+      return true;
+    });
+
+    renderCards(ordenarCards(filtrados));
+  }
+
   function renderCards(rows) {
     if (!rows.length) {
       lista.innerHTML = "";
-      if (vazio) vazio.hidden = false;
+      if (vazio) {
+        vazio.hidden = false;
+        vazio.textContent = dadosCache.length
+          ? "Nenhum resultado para os filtros informados."
+          : "Nenhuma solicitação ou vínculo.";
+      }
       return;
     }
     if (vazio) vazio.hidden = true;
@@ -101,9 +158,11 @@
       .map((v) => {
         const st = statusMap[v.status] || { cls: "", label: v.status };
         const loc = [v.cidade, v.uf].filter(Boolean).join(" / ") || "—";
+        const resp = (v.responsavel || "").trim();
         return `
         <article class="VdParceiros_Card ${st.cls}" data-id="${v.id}" tabindex="0" title="Clique duas vezes para detalhes">
           <h3 class="VdParceiros_CardNome">${esc(v.nome)}</h3>
+          ${resp ? `<p class="VdParceiros_CardMeta">Responsável: ${esc(resp)}</p>` : ""}
           <p class="VdParceiros_CardMeta">${esc(loc)}</p>
           <p class="VdParceiros_CardMeta">Solicitado: ${fmtData(v.solicitado_em)}</p>
           <div class="VdParceiros_CardFoot">
@@ -237,7 +296,7 @@
       return;
     }
     dadosCache = j.dados || [];
-    renderCards(dadosCache);
+    aplicarFiltros();
   }
 
   lista.addEventListener("click", (e) => {
@@ -320,6 +379,24 @@
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && modal && !modal.hidden) fechar();
   });
+
+  btnFiltrar?.addEventListener("click", aplicarFiltros);
+  btnLimpar?.addEventListener("click", () => {
+    if (fNome) fNome.value = "";
+    if (fRazao) fRazao.value = "";
+    if (fDoc) fDoc.value = "";
+    if (fStatus) fStatus.value = "";
+    aplicarFiltros();
+  });
+  [fNome, fRazao, fDoc].forEach((el) => {
+    el?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        aplicarFiltros();
+      }
+    });
+  });
+  fStatus?.addEventListener("change", aplicarFiltros);
 
   carregar();
 })();

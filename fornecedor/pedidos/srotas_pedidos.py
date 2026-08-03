@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from flask import Blueprint, jsonify, render_template, request, session
+from flask import Blueprint, jsonify, render_template, request, send_file, session
 
 from global_utils import Var_ConectarBanco, exigir_modulo, exigir_permissao, login_obrigatorio
 from core.pedidos.servico import (
@@ -16,6 +16,7 @@ from api.pix_manual.pix_manual import confirmar_pix_manual, rejeitar_comprovante
 from sistema.plataforma.sessao import MODULO_FORNECEDOR
 
 _MOD = Path(__file__).resolve().parent
+_RAIZ = _MOD.parent.parent
 fn_pedidos_bp = Blueprint(
     "fn_pedidos",
     __name__,
@@ -111,6 +112,49 @@ def pedidos_dados():
         return jsonify(success=True, pedidos=listar_pedidos_fornecedor(cur, id_f, status))
     finally:
         conn.close()
+
+
+@fn_pedidos_bp.get("/fornecedor/pedidos/anexos/arquivo")
+@login_obrigatorio()
+@exigir_modulo(MODULO_FORNECEDOR)
+@exigir_permissao(codigo="fn_pedidos.ver")
+def pedido_anexo_arquivo():
+    """Serve anexo do pedido se o fornecedor for dono do pedido."""
+    import mimetypes
+    import os
+
+    id_f = _id_fornecedor()
+    if not id_f:
+        return jsonify(success=False, message="Sessão inválida."), 403
+    caminho = (request.args.get("caminho") or "").strip().replace("\\", "/")
+    if not caminho or ".." in caminho.split("/"):
+        return jsonify(success=False, message="Caminho inválido."), 400
+    if not caminho.lower().startswith("upload/tenant"):
+        return jsonify(success=False, message="Arquivo não permitido."), 403
+
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT 1
+            FROM tbl_pedido_anexo a
+            JOIN tbl_pedido p ON p.id = a.id_pedido
+            WHERE p.id_tenant_fornecedor = %s AND a.caminho = %s
+            LIMIT 1
+            """,
+            (id_f, caminho),
+        )
+        if not cur.fetchone():
+            return jsonify(success=False, message="Arquivo não encontrado."), 404
+    finally:
+        conn.close()
+
+    arquivo = _RAIZ / caminho.replace("/", os.sep)
+    if not arquivo.is_file():
+        return jsonify(success=False, message="Arquivo não encontrado."), 404
+    mime, _ = mimetypes.guess_type(str(arquivo))
+    return send_file(arquivo, mimetype=mime or "application/octet-stream", max_age=3600)
 
 
 @fn_pedidos_bp.get("/fornecedor/pedidos/<int:id_pedido>")

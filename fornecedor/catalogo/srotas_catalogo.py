@@ -450,7 +450,6 @@ def variante_rede_valida(cur, id_variante: int, id_tenant_vendedor: int) -> bool
         WHERE v.id = %s
           AND p.id_tenant <> %s
           AND p.publicado = TRUE
-          AND p.ativo = TRUE
           AND v.ativo = TRUE
           AND t.ativo = TRUE
           AND t.tipo_negocio IN ('fornecedor', 'hibrido')
@@ -806,15 +805,26 @@ MAX_IMAGENS_PRODUTO = 10
 MAX_LINHAS_CSV = 500
 COLUNAS_CSV = (
     "sku",
+    "sku_pai",
+    "atributos",
     "nome",
     "descricao",
     "preco",
-    "preco_promocional",
-    "quantidade",
-    "categoria",
     "unidade",
+    "categoria",
+    "peso_bruto_kg",
+    "altura_cm",
+    "largura_cm",
+    "profundidade_cm",
+    "ncm",
+    "gtin",
+    "origem_fiscal",
+    "peso_liquido_kg",
+    "quantidade",
+    "marca",
     "publicado",
-    "ativo",
+    "imagem_1",
+    "imagem_2",
 )
 
 
@@ -1053,7 +1063,6 @@ def _catalogo_montar_linhas_pai(
                     "estoque": None,
                     "estoque_total": estoque_total,
                     "qtd_variantes": len(vars_p),
-                    "ativo": p["ativo"],
                     "publicado": p.get("publicado", False),
                     "imagem_url": p["imagem_url"],
                 }
@@ -1095,7 +1104,6 @@ def _catalogo_montar_linhas_pai(
                 "estoque": p["estoque"] if p["formato"] != "E" else None,
                 "estoque_total": estoque_total,
                 "qtd_variantes": len(vars_p) if p["formato"] == "E" else int(p.get("qtd_variantes") or 0),
-                "ativo": p["ativo"],
                 "publicado": p.get("publicado", False),
                 "imagem_url": p["imagem_url"],
             }
@@ -1131,7 +1139,7 @@ def catalogos_dados():
                 where.append("p.id_categoria = %s")
                 params.append(int(id_categoria))
             if somente_ativos:
-                where.append("p.ativo = TRUE")
+                where.append("p.publicado = TRUE")
                 where.append("v.ativo = TRUE")
             where_sql = " AND ".join(where)
 
@@ -1210,7 +1218,7 @@ def catalogos_dados():
         elif filtro_tipo == "com_variacoes":
             where.append("p.formato = 'E'")
         if somente_ativos:
-            where.append("p.ativo = TRUE")
+            where.append("p.publicado = TRUE")
 
         where_sql = " AND ".join(where)
         filtro_var_ativo = " AND v.ativo" if somente_ativos else ""
@@ -1223,7 +1231,7 @@ def catalogos_dados():
         total = int(cur.fetchone()[0] or 0)
         cur.execute(
             f"""
-            SELECT p.id, p.sku, p.nome, p.formato, p.publicado, p.ativo,
+            SELECT p.id, p.sku, p.nome, p.formato, p.publicado,
                    COALESCE(p.unidade, 'UN'),
                    c.nome AS categoria,
                    (SELECT COUNT(*) FROM tbl_produto_variante v WHERE v.id_produto = p.id{filtro_var_ativo}),
@@ -1249,15 +1257,14 @@ def catalogos_dados():
                 "nome": r[2],
                 "formato": r[3] or "S",
                 "publicado": bool(r[4]),
-                "ativo": bool(r[5]),
-                "unidade": r[6] or "UN",
-                "categoria": r[7] or "",
-                "qtd_variantes": int(r[8] or 0),
-                "preco_min": float(r[9] or 0),
-                "preco_max": float(r[10] or 0),
-                "preco": float(r[9] or 0),
-                "estoque": int(r[11] or 0),
-                "imagem_url": _imagem_url_resposta(r[12]),
+                "unidade": r[5] or "UN",
+                "categoria": r[6] or "",
+                "qtd_variantes": int(r[7] or 0),
+                "preco_min": float(r[8] or 0),
+                "preco_max": float(r[9] or 0),
+                "preco": float(r[8] or 0),
+                "estoque": int(r[10] or 0),
+                "imagem_url": _imagem_url_resposta(r[11]),
             }
             for r in cur.fetchall()
         ]
@@ -1387,7 +1394,7 @@ def catalogos_apoio():
         cur.execute(
             """
             SELECT p.id, p.sku, p.nome, p.descricao, p.preco, p.preco_promocional,
-                   p.unidade, p.id_categoria, p.imagem_url, p.ativo, p.publicado,
+                   p.unidade, p.id_categoria, p.imagem_url, p.publicado,
                    p.formato, p.tipo, p.preco_custo, p.gtin, p.ncm, p.referencia,
                    p.peso_liquido_kg, p.peso_bruto_kg, p.altura_cm, p.largura_cm, p.profundidade_cm,
                    p.prazo_envio_dias, p.moq, p.id_variante_padrao,
@@ -1421,42 +1428,41 @@ def catalogos_apoio():
                 "id_categoria": r[7],
                 "imagem_url": _imagem_url_resposta(r[8]),
                 "imagem_caminho": r[8] or "",
-                "ativo": bool(r[9]),
-                "publicado": bool(r[10]),
-                "formato": r[11] or "S",
-                "tipo": r[12] or "P",
-                "preco_custo": float(r[13]) if r[13] is not None else None,
-                "gtin": r[14] or "",
-                "ncm": r[15] or "",
-                "referencia": r[16] or "",
-                "condicao": r[34] or r[16] or "",
-                "peso_liquido_kg": float(r[17]) if r[17] is not None else None,
-                "peso_bruto_kg": float(r[18]) if r[18] is not None else None,
-                "altura_cm": float(r[19]) if r[19] is not None else None,
-                "largura_cm": float(r[20]) if r[20] is not None else None,
-                "profundidade_cm": float(r[21]) if r[21] is not None else None,
-                "prazo_envio_dias": r[22],
-                "moq": int(r[23] or 1),
-                "id_variante_padrao": r[24],
-                "quantidade": int(r[25] or 0),
-                "marca": r[26] or "",
-                "grupo": r[27] or "",
-                "valor_atacado": float(r[28]) if r[28] is not None else float(r[4] or 0),
-                "valor_dropshipping": float(r[29]) if r[29] is not None else None,
-                "reposicao_estoque": bool(r[30]),
-                "dimensao_caixa_cm": r[31] or "",
-                "peso_gramas": int(r[32]) if r[32] is not None else None,
-                "id_deposito": r[33],
-                "cest": r[35] or "",
-                "origem_fiscal": r[36] or "",
-                "frete_gratis": bool(r[37]),
-                "volumes": int(r[38]) if r[38] is not None else None,
-                "producao": r[39] or "",
-                "valor_drop": float(r[40]) if r[40] is not None else None,
-                "valor_drop_manual": bool(r[41]),
-                "garantia_tipo": (r[42] if len(r) > 42 else "") or "",
-                "garantia_tempo": (r[43] if len(r) > 43 else "") or "",
-                "video_youtube": (r[44] if len(r) > 44 else "") or "",
+                "publicado": bool(r[9]),
+                "formato": r[10] or "S",
+                "tipo": r[11] or "P",
+                "preco_custo": float(r[12]) if r[12] is not None else None,
+                "gtin": r[13] or "",
+                "ncm": r[14] or "",
+                "referencia": r[15] or "",
+                "condicao": r[33] or r[15] or "",
+                "peso_liquido_kg": float(r[16]) if r[16] is not None else None,
+                "peso_bruto_kg": float(r[17]) if r[17] is not None else None,
+                "altura_cm": float(r[18]) if r[18] is not None else None,
+                "largura_cm": float(r[19]) if r[19] is not None else None,
+                "profundidade_cm": float(r[20]) if r[20] is not None else None,
+                "prazo_envio_dias": r[21],
+                "moq": int(r[22] or 1),
+                "id_variante_padrao": r[23],
+                "quantidade": int(r[24] or 0),
+                "marca": r[25] or "",
+                "grupo": r[26] or "",
+                "valor_atacado": float(r[27]) if r[27] is not None else float(r[4] or 0),
+                "valor_dropshipping": float(r[28]) if r[28] is not None else None,
+                "reposicao_estoque": bool(r[29]),
+                "dimensao_caixa_cm": r[30] or "",
+                "peso_gramas": int(r[31]) if r[31] is not None else None,
+                "id_deposito": r[32],
+                "cest": r[34] or "",
+                "origem_fiscal": r[35] or "",
+                "frete_gratis": bool(r[36]),
+                "volumes": int(r[37]) if r[37] is not None else None,
+                "producao": r[38] or "",
+                "valor_drop": float(r[39]) if r[39] is not None else None,
+                "valor_drop_manual": bool(r[40]),
+                "garantia_tipo": (r[41] if len(r) > 41 else "") or "",
+                "garantia_tempo": (r[42] if len(r) > 42 else "") or "",
+                "video_youtube": (r[43] if len(r) > 43 else "") or "",
                 "status_promocao": r[5] is not None and r[4] and float(r[5]) < float(r[4]),
             },
         )
@@ -1664,7 +1670,6 @@ def catalogos_salvar():
             (body.get("unidade") or "UN").strip()[:20],
             int(id_categoria) if id_categoria else None,
             (body.get("imagem_url") or "").strip() or None,
-            _normalizar_bool(body.get("ativo"), True),
             _normalizar_bool(body.get("publicado"), False),
             formato,
             (body.get("tipo") or "P").strip()[:2],
@@ -1703,7 +1708,7 @@ def catalogos_salvar():
                 """
                 UPDATE tbl_produto SET
                     nome=%s, descricao=%s, sku=%s, preco=%s, preco_promocional=%s,
-                    unidade=%s, id_categoria=%s, imagem_url=%s, ativo=%s, publicado=%s,
+                    unidade=%s, id_categoria=%s, imagem_url=%s, publicado=%s,
                     formato=%s, tipo=%s, preco_custo=%s, gtin=%s, ncm=%s, referencia=%s, condicao=%s,
                     peso_liquido_kg=%s, peso_bruto_kg=%s, altura_cm=%s, largura_cm=%s,
                     profundidade_cm=%s, prazo_envio_dias=%s, moq=%s,
@@ -1727,7 +1732,7 @@ def catalogos_salvar():
                 """
                 INSERT INTO tbl_produto (
                     id_tenant, nome, descricao, sku, preco, preco_promocional,
-                    unidade, id_categoria, imagem_url, ativo, publicado, formato, tipo,
+                    unidade, id_categoria, imagem_url, publicado, formato, tipo,
                     preco_custo, gtin, ncm, referencia, condicao, peso_liquido_kg, peso_bruto_kg,
                     altura_cm, largura_cm, profundidade_cm, prazo_envio_dias, moq,
                     marca, grupo, valor_atacado, valor_dropshipping, reposicao_estoque,
@@ -1735,7 +1740,7 @@ def catalogos_salvar():
                     cest, origem_fiscal, frete_gratis, volumes, producao,
                     garantia_tipo, garantia_tempo, video_youtube, atualizado_em
                 ) VALUES (
-                    %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
+                    %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
                     %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s
                 )
                 RETURNING id
@@ -1753,7 +1758,7 @@ def catalogos_salvar():
                 """
                 UPDATE tbl_produto_variante SET
                     sku = COALESCE(%s, sku), nome_exibicao = %s, preco = %s,
-                    preco_promocional = %s, preco_custo = %s, imagem_url = %s, ativo = %s, atualizado_em = %s
+                    preco_promocional = %s, preco_custo = %s, imagem_url = %s, atualizado_em = %s
                 WHERE id = %s
                 """,
                 (
@@ -1763,7 +1768,6 @@ def catalogos_salvar():
                     preco_promocional,
                     preco_custo,
                     (body.get("imagem_url") or "").strip() or None,
-                    _normalizar_bool(body.get("ativo"), True),
                     agora_utc(),
                     vid,
                 ),
@@ -1979,6 +1983,55 @@ def catalogos_rede_publicar():
     except Exception as e:
         conn.rollback()
         return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
+@fn_catalogo_bp.get("/catalogos/exportar")
+@login_obrigatorio()
+@exigir_permissao(codigos=["catalogos.ver", "produtos.ver"])
+def catalogos_exportar():
+    """Exporta catálogo do fornecedor conforme filtro da tela (CSV ou Excel)."""
+    from flask import Response
+
+    from fornecedor.importacao.exportacao_catalogo import (
+        colunas_para_contexto,
+        gerar_csv,
+        gerar_xlsx,
+        listar_linhas_export_fornecedor,
+    )
+
+    formato = (request.args.get("formato") or "csv").strip().lower()
+    busca = (request.args.get("busca") or "").strip()
+    id_categoria = (request.args.get("id_categoria") or "").strip()
+    filtro_tipo = (request.args.get("tipo") or "").strip().lower()
+    somente_publicados = (request.args.get("ativos") or "sim").strip().lower() != "nao"
+    id_tenant = session.get("id_tenant")
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        linhas = listar_linhas_export_fornecedor(
+            cur,
+            int(id_tenant),
+            busca=busca,
+            id_categoria=id_categoria,
+            filtro_tipo=filtro_tipo,
+            somente_publicados=somente_publicados,
+        )
+        colunas = colunas_para_contexto("fornecedor")
+        if formato in ("xlsx", "excel"):
+            data = gerar_xlsx(linhas, colunas)
+            return Response(
+                data,
+                mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                headers={"Content-Disposition": "attachment; filename=catalogo_dropnexo.xlsx"},
+            )
+        data = gerar_csv(linhas, colunas)
+        return Response(
+            data,
+            mimetype="text/csv; charset=utf-8",
+            headers={"Content-Disposition": "attachment; filename=catalogo_dropnexo.csv"},
+        )
     finally:
         conn.close()
 
@@ -2584,7 +2637,6 @@ def catalogos_importar():
             id_categoria = _resolver_categoria(cur, id_tenant, cel("categoria"))
             unidade = (cel("unidade") or "UN").strip()[:20] or "UN"
             publicado = _normalizar_bool(cel("publicado"), False)
-            ativo = _normalizar_bool(cel("ativo"), True)
             descricao = cel("descricao")
 
             try:
@@ -2601,7 +2653,7 @@ def catalogos_importar():
                             """
                             UPDATE tbl_produto SET
                                 nome=%s, descricao=%s, preco=%s, preco_promocional=%s,
-                                unidade=%s, id_categoria=%s, ativo=%s, publicado=%s, atualizado_em=%s
+                                unidade=%s, id_categoria=%s, publicado=%s, atualizado_em=%s
                             WHERE id=%s AND id_tenant=%s
                             """,
                             (
@@ -2611,7 +2663,6 @@ def catalogos_importar():
                                 preco_promocional,
                                 unidade,
                                 id_categoria,
-                                ativo,
                                 publicado,
                                 agora_utc(),
                                 prod_id,
@@ -2631,8 +2682,8 @@ def catalogos_importar():
                             """
                             INSERT INTO tbl_produto (
                                 id_tenant, sku, nome, descricao, preco, preco_promocional,
-                                unidade, id_categoria, ativo, publicado, atualizado_em
-                            ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                                unidade, id_categoria, publicado, atualizado_em
+                            ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                             RETURNING id
                             """,
                             (
@@ -2644,7 +2695,6 @@ def catalogos_importar():
                                 preco_promocional,
                                 unidade,
                                 id_categoria,
-                                ativo,
                                 publicado,
                                 agora_utc(),
                             ),
@@ -2663,8 +2713,8 @@ def catalogos_importar():
                         """
                         INSERT INTO tbl_produto (
                             id_tenant, nome, descricao, preco, preco_promocional,
-                            unidade, id_categoria, ativo, publicado, atualizado_em
-                        ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                            unidade, id_categoria, publicado, atualizado_em
+                        ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
                         RETURNING id
                         """,
                         (
@@ -2675,7 +2725,6 @@ def catalogos_importar():
                             preco_promocional,
                             unidade,
                             id_categoria,
-                            ativo,
                             publicado,
                             agora_utc(),
                         ),

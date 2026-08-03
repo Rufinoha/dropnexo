@@ -2,6 +2,11 @@
 {% block title %}Dashboard — {{ MARCA_NOME }}{% endblock %}
 {% set nav_ativo = 'inicio' %}
 {% block topbar_title %}Dashboard{% endblock %}
+{% block head_extra %}
+{% if modulo_ativo in ('vendedor', 'fornecedor') %}
+<link rel="stylesheet" href="{{ url_for('dashboard.static', filename='style/Cdashboard_vendedor.css') }}?v=2" />
+{% endif %}
+{% endblock %}
 {% block content %}
 <section class="fg-page-hero">
   <h2>Olá, {{ session.get('nome', '') }}!</h2>
@@ -21,26 +26,84 @@
   </p>
 </section>
 
+{% if modulo_ativo == 'vendedor' %}
+<div class="Cl_ContainerApoio Cl_PainelPagina DashVd" id="dash_vd" data-loading="1">
+  <p class="DashVd_Loading" id="dash_vd_loading">Carregando painel…</p>
+  <div id="dash_vd_erro" class="DashVd_Erro" hidden></div>
+
+  <section class="DashVd_Secao" id="dash_vd_alertas_wrap" hidden>
+    <h3 class="DashVd_Titulo">Precisa da sua atenção</h3>
+    <div id="dash_vd_alertas" class="DashVd_Alertas"></div>
+  </section>
+
+  <section class="DashVd_Secao" id="dash_vd_ok" hidden>
+    <div class="DashVd_OkCard">Tudo em dia por aqui. Nenhum alerta no momento.</div>
+  </section>
+
+  <section class="DashVd_Secao">
+    <h3 class="DashVd_Titulo">Últimos 7 dias</h3>
+    <div class="DashVd_Kpis" id="dash_vd_kpis">
+      <article class="DashVd_Kpi"><span class="DashVd_KpiVal" data-k="pedidos">—</span><span class="DashVd_KpiLbl">Pedidos</span></article>
+      <article class="DashVd_Kpi"><span class="DashVd_KpiVal" data-k="fat">—</span><span class="DashVd_KpiLbl">Faturamento</span></article>
+      <article class="DashVd_Kpi"><span class="DashVd_KpiVal" data-k="produtos">—</span><span class="DashVd_KpiLbl">Produtos ativos</span></article>
+      <article class="DashVd_Kpi"><span class="DashVd_KpiVal" data-k="forn">—</span><span class="DashVd_KpiLbl">Fornecedores ativos</span></article>
+    </div>
+  </section>
+
+  <section class="DashVd_Secao">
+    <div class="DashVd_SecaoHead">
+      <h3 class="DashVd_Titulo">Pedidos recentes</h3>
+      <a class="Cl_BtnLink" href="{{ url_for('vd_pedidos.pedidos') }}">Ver todos</a>
+    </div>
+    <div id="dash_vd_pedidos" class="DashVd_Pedidos"></div>
+  </section>
+</div>
+
+{% elif modulo_ativo == 'fornecedor' %}
+<div class="Cl_ContainerApoio Cl_PainelPagina DashVd" id="dash_fn" data-loading="1">
+  <p class="DashVd_Loading" id="dash_fn_loading">Carregando painel…</p>
+  <div id="dash_fn_erro" class="DashVd_Erro" hidden></div>
+
+  <section class="DashVd_Secao" id="dash_fn_alertas_wrap" hidden>
+    <h3 class="DashVd_Titulo">Precisa da sua atenção</h3>
+    <div id="dash_fn_alertas" class="DashVd_Alertas"></div>
+  </section>
+
+  <section class="DashVd_Secao" id="dash_fn_ok" hidden>
+    <div class="DashVd_OkCard">Tudo em dia por aqui. Nenhum alerta no momento.</div>
+  </section>
+
+  <section class="DashVd_Secao">
+    <h3 class="DashVd_Titulo">Últimos 7 dias</h3>
+    <div class="DashVd_Kpis" id="dash_fn_kpis">
+      <article class="DashVd_Kpi"><span class="DashVd_KpiVal" data-k="pedidos">—</span><span class="DashVd_KpiLbl">Pedidos</span></article>
+      <article class="DashVd_Kpi"><span class="DashVd_KpiVal" data-k="fat">—</span><span class="DashVd_KpiLbl">Faturamento</span></article>
+      <article class="DashVd_Kpi"><span class="DashVd_KpiVal" data-k="vendedores">—</span><span class="DashVd_KpiLbl">Vendedores ativos</span></article>
+      <article class="DashVd_Kpi"><span class="DashVd_KpiVal" data-k="aguardando">—</span><span class="DashVd_KpiLbl">Aguardando aprovação</span></article>
+    </div>
+  </section>
+
+  <section class="DashVd_Secao">
+    <div class="DashVd_SecaoHead">
+      <h3 class="DashVd_Titulo">Pedidos recentes</h3>
+      <a class="Cl_BtnLink" href="{{ url_for('fn_pedidos.pedidos') }}">Ver todos</a>
+    </div>
+    <div id="dash_fn_pedidos" class="DashVd_Pedidos"></div>
+  </section>
+</div>
+
+{% else %}
 <div class="Cl_ContainerApoio Cl_PainelPagina">
   <p style="margin:0 0 1rem;color:#5c6570;">
-    {%- if tipo_negocio == 'hibrido' -%}
-    Conta híbrida: use o seletor <strong>Módulo</strong> na barra lateral para alternar entre Fornecedor (catálogo, Bling) e Vendedor.
-    {%- elif tipo_negocio == 'fornecedor' or modulo_ativo == 'fornecedor' -%}
-    Bem-vindo ao DropNexo. Gerencie catálogos, integrações e produtos no menu Fornecedor.
-    {%- else -%}
-    Bem-vindo ao DropNexo. Busque fornecedores e gerencie seus produtos de revenda.
-    {%- endif -%}
+    Bem-vindo ao DropNexo. Use o seletor de módulo na barra lateral para continuar.
   </p>
-  <div class="fg-shortcuts" style="display:flex;flex-wrap:wrap;gap:10px;">
-    {% if tipo_negocio == 'fornecedor' or (tipo_negocio == 'hibrido' and modulo_ativo == 'fornecedor') %}
-    <a class="Cl_botaoprimario" style="text-decoration:none;display:inline-block;" href="{{ url_for('fn_catalogo.pagina') }}">Catálogos</a>
-    <a class="Cl_botaosecundario" style="text-decoration:none;display:inline-block;" href="{{ url_for('integracoes.pagina') }}">Integrações</a>
-    {% elif tipo_negocio == 'hibrido' %}
-    <a class="Cl_botaoprimario" style="text-decoration:none;display:inline-block;" href="{{ url_for('fn_catalogo.pagina') }}">Abrir módulo Fornecedor</a>
-    {% else %}
-    <a class="Cl_botaoprimario" style="text-decoration:none;display:inline-block;" href="{{ url_for('vd_fornecedores.pagina') }}">Buscar fornecedores</a>
-    <a class="Cl_botaosecundario" style="text-decoration:none;display:inline-block;margin-left:8px;" href="{{ url_for('vd_meus_produtos.pagina') }}">Meus produtos</a>
-    {% endif %}
-  </div>
 </div>
+{% endif %}
+{% endblock %}
+{% block page_js %}
+{% if modulo_ativo == 'vendedor' %}
+<script src="{{ url_for('dashboard.static', filename='script/Sdashboard_vendedor.js') }}?v=2"></script>
+{% elif modulo_ativo == 'fornecedor' %}
+<script src="{{ url_for('dashboard.static', filename='script/Sdashboard_fornecedor.js') }}?v=1"></script>
+{% endif %}
 {% endblock %}

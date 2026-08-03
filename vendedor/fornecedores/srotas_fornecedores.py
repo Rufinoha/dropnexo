@@ -134,7 +134,7 @@ def _clonar_produto_para_vendedor(
     cur.execute(
         """
         SELECT nome, descricao, sku, preco, preco_promocional, unidade, id_categoria, imagem_url,
-               ativo, publicado, formato, tipo, preco_custo, gtin, ncm, referencia, condicao,
+               publicado, formato, tipo, preco_custo, gtin, ncm, referencia, condicao,
                peso_liquido_kg, peso_bruto_kg, altura_cm, largura_cm, profundidade_cm,
                prazo_envio_dias, moq, marca, grupo, valor_atacado, valor_dropshipping,
                reposicao_estoque, dimensao_caixa_cm, peso_gramas, id_deposito_expedicao,
@@ -157,14 +157,14 @@ def _clonar_produto_para_vendedor(
         """
         INSERT INTO tbl_produto (
             id_tenant, nome, descricao, sku, preco, preco_promocional, unidade, id_categoria,
-            imagem_url, ativo, publicado, formato, tipo, preco_custo, gtin, ncm, referencia,
+            imagem_url, publicado, formato, tipo, preco_custo, gtin, ncm, referencia,
             condicao, peso_liquido_kg, peso_bruto_kg, altura_cm, largura_cm, profundidade_cm,
             prazo_envio_dias, moq, marca, grupo, valor_atacado, valor_dropshipping,
             reposicao_estoque, dimensao_caixa_cm, peso_gramas, id_deposito_expedicao,
             cest, origem_fiscal, frete_gratis, volumes, producao, valor_drop, valor_drop_manual,
             origem, atualizado_em
         ) VALUES (
-            %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
+            %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
             %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'manual',%s
         )
         RETURNING id
@@ -179,10 +179,10 @@ def _clonar_produto_para_vendedor(
             p[5] or "UN",
             id_categoria,
             imagem_url,
-            True,
             False,
-            p[10] or "S",
-            p[11] or "P",
+            p[9] or "S",
+            p[10] or "P",
+            p[11],
             p[12],
             p[13],
             p[14],
@@ -193,23 +193,22 @@ def _clonar_produto_para_vendedor(
             p[19],
             p[20],
             p[21],
-            p[22],
-            p[23] or 1,
+            p[22] or 1,
+            p[23],
             p[24],
             p[25],
             p[26],
-            p[27],
-            bool(p[28]),
+            bool(p[27]),
+            p[28],
             p[29],
-            p[30],
             None,
+            p[31],
             p[32],
-            p[33],
-            bool(p[34]),
+            bool(p[33]),
+            p[34],
             p[35],
             p[36],
-            p[37],
-            bool(p[38]),
+            bool(p[37]),
             agora_utc(),
         ),
     )
@@ -572,7 +571,7 @@ def _where_rede(id_tenant: int, busca: str, id_fornecedor: str, id_categoria: st
     where = [
         "p.id_tenant <> %s",
         "p.publicado = TRUE",
-        "p.ativo = TRUE",
+        "p.publicado = TRUE",
         "v.ativo = TRUE",
         "t.ativo = TRUE",
         "t.tipo_negocio IN ('fornecedor', 'hibrido')",
@@ -680,7 +679,7 @@ def combos():
             SELECT t.id, t.nome, COUNT(p.id)::int
             FROM tbl_tenant t
             INNER JOIN tbl_produto p ON p.id_tenant = t.id
-                AND p.publicado = TRUE AND p.ativo = TRUE
+                AND p.publicado = TRUE
             WHERE t.id <> %s
               AND t.ativo = TRUE
               AND t.tipo_negocio IN ('fornecedor', 'hibrido')
@@ -715,7 +714,7 @@ def categorias():
             FROM tbl_categoria c
             INNER JOIN tbl_produto p ON p.id_categoria = c.id
                 AND p.id_tenant = c.id_tenant
-                AND p.publicado = TRUE AND p.ativo = TRUE
+                AND p.publicado = TRUE
             WHERE c.id_tenant = %s AND c.ativo = TRUE
             ORDER BY c.nome
             """,
@@ -833,7 +832,7 @@ def variante_detalhe(id_variante: int):
             LEFT JOIN tbl_categoria c ON c.id = p.id_categoria
             LEFT JOIN tbl_produto_variante_estoque e ON e.id_variante = v.id
             WHERE v.id = %s AND p.id_tenant <> %s
-              AND p.publicado = TRUE AND p.ativo = TRUE AND v.ativo = TRUE
+              AND p.publicado = TRUE AND v.ativo = TRUE
               AND t.ativo = TRUE AND t.tipo_negocio IN ('fornecedor', 'hibrido')
             """,
             (id_variante, id_tenant),
@@ -956,7 +955,7 @@ def rede():
                    t.telefone_comercial, t.email_comercial,
                    v.id AS id_vinculo, COALESCE(v.status, 'nenhum'),
                    (SELECT COUNT(*)::int FROM tbl_produto p
-                    WHERE p.id_tenant = t.id AND p.ativo = TRUE),
+                    WHERE p.id_tenant = t.id AND p.publicado = TRUE),
                    (SELECT COUNT(DISTINCT pv.id_produto)::int
                     FROM tbl_produto_vendedor pv
                     WHERE pv.id_tenant_vendedor = %s AND pv.id_tenant_fornecedor = t.id),
@@ -1411,7 +1410,7 @@ def loja_dados(id_fornecedor: int):
         where_prod = [
             "p.id_tenant = %s",
             "p.publicado = TRUE",
-            "p.ativo = TRUE",
+            "p.publicado = TRUE",
         ]
         params_prod: list = [id_fornecedor]
         if busca:
@@ -1597,7 +1596,7 @@ def loja_ativar_produto():
             JOIN tbl_produto p ON p.id = v.id_produto
             LEFT JOIN tbl_categoria c ON c.id = p.id_categoria
             WHERE p.id = %s AND p.id_tenant = %s
-              AND p.publicado = TRUE AND p.ativo = TRUE AND v.ativo = TRUE
+              AND p.publicado = TRUE AND v.ativo = TRUE
             """,
             (id_produto, id_fornecedor),
         )
@@ -1663,7 +1662,7 @@ def catalogo_fornecedor(id_fornecedor: int):
             SELECT COUNT(*)
             FROM tbl_produto_variante v
             JOIN tbl_produto p ON p.id = v.id_produto
-            WHERE p.id_tenant = %s AND p.publicado = TRUE AND p.ativo = TRUE AND v.ativo = TRUE
+            WHERE p.id_tenant = %s AND p.publicado = TRUE AND v.ativo = TRUE
             """,
             (id_fornecedor,),
         )
@@ -1675,7 +1674,7 @@ def catalogo_fornecedor(id_fornecedor: int):
             FROM tbl_produto_variante v
             JOIN tbl_produto p ON p.id = v.id_produto
             LEFT JOIN tbl_produto_variante_estoque e ON e.id_variante = v.id
-            WHERE p.id_tenant = %s AND p.publicado = TRUE AND p.ativo = TRUE AND v.ativo = TRUE
+            WHERE p.id_tenant = %s AND p.publicado = TRUE AND v.ativo = TRUE
             ORDER BY p.nome
             LIMIT %s OFFSET %s
             """,

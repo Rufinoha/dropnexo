@@ -22,9 +22,6 @@ def _base(
     integracao: bool,
     importacao_planilha: bool,
     email_pedidos: bool,
-    preco_lote: bool = False,
-    relatorios: bool = False,
-    destaque_vitrine: bool = False,
     depositos: int | None = None,
 ) -> dict[str, Any]:
     return {
@@ -38,9 +35,6 @@ def _base(
         "integracao": integracao,
         "importacao_planilha": importacao_planilha,
         "email_pedidos": email_pedidos,
-        "preco_lote": preco_lote,
-        "relatorios": relatorios,
-        "destaque_vitrine": destaque_vitrine,
         "depositos": depositos,
     }
 
@@ -82,7 +76,6 @@ _POR_TIPO_BANCO = {
             integracao=True,
             importacao_planilha=True,
             email_pedidos=True,
-            preco_lote=True,
         ),
         "enterprise": lambda: _base(
             slug_comercial="pro",
@@ -95,8 +88,6 @@ _POR_TIPO_BANCO = {
             integracao=True,
             importacao_planilha=True,
             email_pedidos=True,
-            preco_lote=True,
-            relatorios=True,
         ),
     },
     "fornecedor": {
@@ -137,7 +128,6 @@ _POR_TIPO_BANCO = {
             integracao=True,
             importacao_planilha=True,
             email_pedidos=True,
-            destaque_vitrine=True,
             depositos=5,
         ),
         "enterprise": lambda: _base(
@@ -151,7 +141,6 @@ _POR_TIPO_BANCO = {
             integracao=True,
             importacao_planilha=True,
             email_pedidos=True,
-            destaque_vitrine=True,
             depositos=None,
         ),
     },

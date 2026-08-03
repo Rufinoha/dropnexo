@@ -854,3 +854,184 @@ def baixar_etiqueta_ml(
         "id_ml_shipment": ship_id,
         "ja_existia": False,
     }
+
+
+def baixar_nf_ml(
+    cur,
+    id_vendedor: int,
+    id_pedido: int,
+    pasta_destino,
+    *,
+    id_usuario: int | None = None,
+) -> dict[str, Any]:
+    """Tenta baixar NF/declaração emitida no Mercado Livre (best-effort)."""
+    from pathlib import Path
+    from urllib.parse import urlparse
+
+    from api.mercado_livre.mercado_livre import api_request, api_request_bytes, ml_conectado
+    from core.pedidos.servico import (
+        listar_anexos_pedido,
+        obter_pedido,
+        registrar_anexo_pedido,
+        salvar_id_ml_shipment,
+    )
+
+    ped = obter_pedido(cur, int(id_pedido), id_vendedor=int(id_vendedor))
+    if not ped:
+        raise ValueError("Pedido não encontrado.")
+    if (ped.get("origem") or "") != "mercado_livre":
+        raise ValueError("Pedido não é do Mercado Livre.")
+    if not ml_conectado(cur, int(id_vendedor)):
+        raise ValueError("Mercado Livre não conectado.")
+
+    ship_id = _resolver_shipment_id_pedido(cur, int(id_vendedor), ped)
+    order_id = ped.get("id_ml_pedido")
+    if ship_id:
+        salvar_id_ml_shipment(cur, int(id_pedido), ship_id)
+
+    existentes = listar_anexos_pedido(cur, int(id_pedido), id_vendedor=int(id_vendedor))
+    for a in existentes:
+        if a.get("tipo") in ("nf", "declaracao") and str(a.get("nome_original") or "").startswith(
+            ("nf_ml_", "declaracao_ml_")
+        ):
+            return {
+                "message": "Documento fiscal ML já anexado.",
+                "anexo": a,
+                "ja_existia": True,
+                "tipo": a.get("tipo"),
+            }
+
+    content = None
+    tipo_anexo = "nf"
+    nome_base = f"nf_ml_{ship_id or order_id or id_pedido}"
+    last_err = None
+
+    # 1) fiscal-info do shipment (href XML/PDF quando disponível)
+    if ship_id:
+        try:
+            info = api_request(cur, int(id_vendedor), "GET", f"/shipments/{ship_id}/fiscal-info")
+            fiscal_list = []
+            if isinstance(info, dict):
+                fiscal_list = info.get("fiscal_data") or []
+                if isinstance(info.get("invoice"), dict):
+                    fiscal_list = [info] + list(fiscal_list)
+            for bloco in fiscal_list:
+                if not isinstance(bloco, dict):
+                    continue
+                inv = bloco.get("invoice") if isinstance(bloco.get("invoice"), dict) else bloco
+                doc = inv.get("document") if isinstance(inv.get("document"), dict) else {}
+                href = (doc.get("href") or inv.get("href") or "").strip()
+                doc_type = str(doc.get("type") or inv.get("type") or "").lower()
+                if "dce" in doc_type:
+                    tipo_anexo = "declaracao"
+                    nome_base = f"declaracao_ml_{ship_id}"
+                if href:
+                    path = href if href.startswith("http") else href
+                    # api_request_bytes aceita path absoluto ou relativo
+                    parsed = urlparse(path)
+                    req_path = path if parsed.scheme else path
+                    content = api_request_bytes(cur, int(id_vendedor), "GET", req_path)
+                    if content:
+                        break
+        except RuntimeError as e:
+            last_err = e
+
+    # 2) endpoints comuns de invoice do pedido/shipment
+    if not content:
+        candidatos = []
+        if ship_id:
+            candidatos.extend(
+                [
+                    (f"/shipments/{ship_id}/invoice", None),
+                    (f"/shipments/{ship_id}/documents/invoice", None),
+                ]
+            )
+        if order_id:
+            candidatos.append((f"/orders/{order_id}/invoice", None))
+            pack = ped.get("id_ml_pack") or ped.get("pack_id")
+            if pack:
+                candidatos.append((f"/packs/{pack}/fiscal_documents", None))
+
+        for path, params in candidatos:
+            try:
+                content = api_request_bytes(
+                    cur, int(id_vendedor), "GET", path, params=params
+                )
+                if content and len(content) >= 80:
+                    break
+            except RuntimeError as e:
+                last_err = e
+                content = None
+
+    if not content or len(content) < 80:
+        raise ValueError(
+            str(last_err)
+            if last_err
+            else "Nota fiscal / declaração ainda não disponível no Mercado Livre."
+        )
+
+    pasta = Path(pasta_destino)
+    pasta.mkdir(parents=True, exist_ok=True)
+    is_xml = content[:5].lstrip().startswith(b"<?xml") or content[:1] == b"<"
+    is_zip = content[:2] == b"PK"
+    ext = ".xml" if is_xml else (".zip" if is_zip else ".pdf")
+    nome_arquivo = f"{nome_base}{ext}"
+    destino = pasta / f"{id_pedido}_{tipo_anexo}_{int(datetime.now(timezone.utc).timestamp())}{ext}"
+    destino.write_bytes(content)
+    caminho_db = f"upload/tenant{id_vendedor}/pedidos/{destino.name}"
+    anexo = registrar_anexo_pedido(
+        cur,
+        int(id_vendedor),
+        int(id_pedido),
+        tipo_anexo,
+        nome_arquivo,
+        caminho_db,
+        len(content),
+        id_usuario=id_usuario,
+    )
+    return {
+        "message": (
+            "Declaração ML baixada."
+            if tipo_anexo == "declaracao"
+            else "Nota fiscal ML baixada."
+        ),
+        "anexo": anexo,
+        "tipo": tipo_anexo,
+        "ja_existia": False,
+    }
+
+
+def puxar_documentos_integracao_ml(
+    cur,
+    id_vendedor: int,
+    id_pedido: int,
+    pasta_destino,
+    *,
+    id_usuario: int | None = None,
+) -> dict[str, Any]:
+    """Puxa etiqueta e, se existir, NF/declaração do Mercado Livre."""
+    out: dict[str, Any] = {"origem": "mercado_livre", "etiqueta": None, "fiscal": None, "avisos": []}
+    try:
+        out["etiqueta"] = baixar_etiqueta_ml(
+            cur, id_vendedor, id_pedido, pasta_destino, id_usuario=id_usuario
+        )
+    except ValueError as e:
+        out["avisos"].append(str(e))
+    try:
+        out["fiscal"] = baixar_nf_ml(
+            cur, id_vendedor, id_pedido, pasta_destino, id_usuario=id_usuario
+        )
+    except ValueError as e:
+        out["avisos"].append(str(e))
+
+    if not out["etiqueta"] and not out["fiscal"]:
+        raise ValueError(out["avisos"][0] if out["avisos"] else "Nada disponível na integração.")
+
+    msgs = []
+    if out["etiqueta"]:
+        msgs.append(out["etiqueta"].get("message") or "Etiqueta ok.")
+    if out["fiscal"]:
+        msgs.append(out["fiscal"].get("message") or "Documento fiscal ok.")
+    out["message"] = " ".join(msgs)
+    out["ok"] = True
+    return out

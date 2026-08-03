@@ -209,7 +209,7 @@ def parametros_rede_visibilidade_salvar():
         if visivel and qtd == 0:
             msg = (
                 "Opção ativada. Você só aparecerá para vendedores quando tiver "
-                "ao menos 1 produto ativo no catálogo."
+                "ao menos 1 produto publicado no catálogo."
             )
         elif visivel:
             msg = "Sua empresa está visível na rede de vendedores."

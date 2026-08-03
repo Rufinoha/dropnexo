@@ -123,7 +123,7 @@ def arvore():
             """
             SELECT c.id, c.nome, c.parent_id, c.ordem, c.nivel,
                    (SELECT COUNT(*)::int FROM tbl_produto p
-                    WHERE p.id_categoria = c.id AND p.id_tenant = %s AND p.ativo = TRUE)
+                    WHERE p.id_categoria = c.id AND p.id_tenant = %s AND p.publicado = TRUE)
             FROM tbl_categoria c
             WHERE c.id_tenant = %s AND c.id_segmento = %s AND c.ativo = TRUE
             ORDER BY c.ordem, c.nome

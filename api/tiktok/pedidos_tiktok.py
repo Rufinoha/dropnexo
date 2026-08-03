@@ -621,24 +621,41 @@ def baixar_etiqueta_tiktok(
     pasta_destino,
     *,
     id_usuario: int | None = None,
-) -> str | None:
-    """Baixa etiqueta de envio TikTok Shop (best-effort)."""
-    from api.tiktok.tiktok import api_request_bytes, tiktok_conectado
-    from core.pedidos.servico import obter_pedido
+) -> dict[str, Any]:
+    """Baixa etiqueta TikTok Shop e grava como anexo do pedido."""
     from pathlib import Path
 
-    ped = obter_pedido(cur, int(id_pedido), id_vendedor=id_vendedor)
-    if not ped or (ped.get("origem") or "") != "tiktok":
-        return None
-    if not tiktok_conectado(cur, int(id_vendedor)):
-        return None
+    from api.tiktok.tiktok import api_request_bytes, tiktok_conectado
+    from core.pedidos.servico import (
+        _enriquecer_pedido_expedicao,
+        listar_anexos_pedido,
+        obter_pedido,
+        registrar_anexo_pedido,
+    )
 
-    from core.pedidos.servico import _enriquecer_pedido_expedicao
+    ped = obter_pedido(cur, int(id_pedido), id_vendedor=int(id_vendedor))
+    if not ped:
+        raise ValueError("Pedido não encontrado.")
+    if (ped.get("origem") or "") != "tiktok":
+        raise ValueError("Pedido não é do TikTok Shop.")
+    if not tiktok_conectado(cur, int(id_vendedor)):
+        raise ValueError("TikTok Shop não conectado.")
 
     _enriquecer_pedido_expedicao(cur, int(id_pedido), ped)
     package_id = ped.get("id_tiktok_package")
     if not package_id:
-        return None
+        raise ValueError("Package TikTok não encontrado para este pedido.")
+
+    nome_sugerido = f"etiqueta_tiktok_{package_id}.pdf"
+    existentes = listar_anexos_pedido(cur, int(id_pedido), id_vendedor=int(id_vendedor))
+    for a in existentes:
+        if a.get("tipo") == "etiqueta" and (a.get("nome_original") or "") == nome_sugerido:
+            return {
+                "message": "Etiqueta TikTok já anexada.",
+                "anexo": a,
+                "id_tiktok_package": package_id,
+                "ja_existia": True,
+            }
 
     try:
         conteudo = api_request_bytes(
@@ -650,14 +667,146 @@ def baixar_etiqueta_tiktok(
         )
     except RuntimeError as e:
         _log.warning("Etiqueta TikTok pedido %s: %s", id_pedido, e)
-        return None
+        raise ValueError(str(e)[:300]) from e
 
     if not conteudo or len(conteudo) < 100:
-        return None
+        raise ValueError("Etiqueta TikTok indisponível no momento.")
 
-    dest = Path(pasta_destino)
-    dest.mkdir(parents=True, exist_ok=True)
-    nome = f"tiktok_etiqueta_pedido_{id_pedido}.pdf"
-    caminho = dest / nome
-    caminho.write_bytes(conteudo)
-    return str(caminho)
+    pasta = Path(pasta_destino)
+    pasta.mkdir(parents=True, exist_ok=True)
+    is_zip = conteudo[:2] == b"PK"
+    ext = ".zip" if is_zip else ".pdf"
+    nome_arquivo = f"etiqueta_tiktok_{package_id}{ext}"
+    destino = pasta / f"{id_pedido}_etiqueta_{int(datetime.now(timezone.utc).timestamp())}{ext}"
+    destino.write_bytes(conteudo)
+
+    caminho_db = f"upload/tenant{id_vendedor}/pedidos/{destino.name}"
+    anexo = registrar_anexo_pedido(
+        cur,
+        int(id_vendedor),
+        int(id_pedido),
+        "etiqueta",
+        nome_arquivo if is_zip else nome_sugerido,
+        caminho_db,
+        len(conteudo),
+        id_usuario=id_usuario,
+    )
+    return {
+        "message": "Etiqueta TikTok baixada.",
+        "anexo": anexo,
+        "id_tiktok_package": package_id,
+        "ja_existia": False,
+    }
+
+
+def baixar_nf_tiktok(
+    cur,
+    id_vendedor: int,
+    id_pedido: int,
+    pasta_destino,
+    *,
+    id_usuario: int | None = None,
+) -> dict[str, Any]:
+    """Tenta baixar documento fiscal TikTok (best-effort)."""
+    from pathlib import Path
+
+    from api.tiktok.tiktok import api_request_bytes, tiktok_conectado
+    from core.pedidos.servico import (
+        _enriquecer_pedido_expedicao,
+        listar_anexos_pedido,
+        obter_pedido,
+        registrar_anexo_pedido,
+    )
+
+    ped = obter_pedido(cur, int(id_pedido), id_vendedor=int(id_vendedor))
+    if not ped or (ped.get("origem") or "") != "tiktok":
+        raise ValueError("Pedido não é do TikTok Shop.")
+    if not tiktok_conectado(cur, int(id_vendedor)):
+        raise ValueError("TikTok Shop não conectado.")
+
+    _enriquecer_pedido_expedicao(cur, int(id_pedido), ped)
+    package_id = ped.get("id_tiktok_package")
+    if not package_id:
+        raise ValueError("Package TikTok não encontrado.")
+
+    nome_sugerido = f"nf_tiktok_{package_id}.pdf"
+    for a in listar_anexos_pedido(cur, int(id_pedido), id_vendedor=int(id_vendedor)):
+        if a.get("tipo") == "nf" and (a.get("nome_original") or "") == nome_sugerido:
+            return {"message": "NF TikTok já anexada.", "anexo": a, "ja_existia": True}
+
+    last_err = None
+    conteudo = None
+    for doc_type in ("INVOICE", "SHIPPING_LABEL"):  # INVOICE se existir; evita falso positivo de label
+        if doc_type == "SHIPPING_LABEL":
+            continue
+        try:
+            conteudo = api_request_bytes(
+                cur,
+                int(id_vendedor),
+                "GET",
+                "/fulfillment/202309/packages/documents",
+                params={"package_id": str(package_id), "document_type": doc_type},
+            )
+            if conteudo and len(conteudo) >= 100:
+                break
+        except RuntimeError as e:
+            last_err = e
+            conteudo = None
+
+    if not conteudo or len(conteudo) < 100:
+        raise ValueError(
+            str(last_err) if last_err else "Nota fiscal TikTok indisponível neste pedido."
+        )
+
+    pasta = Path(pasta_destino)
+    pasta.mkdir(parents=True, exist_ok=True)
+    destino = pasta / f"{id_pedido}_nf_{int(datetime.now(timezone.utc).timestamp())}.pdf"
+    destino.write_bytes(conteudo)
+    caminho_db = f"upload/tenant{id_vendedor}/pedidos/{destino.name}"
+    anexo = registrar_anexo_pedido(
+        cur,
+        int(id_vendedor),
+        int(id_pedido),
+        "nf",
+        nome_sugerido,
+        caminho_db,
+        len(conteudo),
+        id_usuario=id_usuario,
+    )
+    return {"message": "Nota fiscal TikTok baixada.", "anexo": anexo, "ja_existia": False}
+
+
+def puxar_documentos_integracao_tiktok(
+    cur,
+    id_vendedor: int,
+    id_pedido: int,
+    pasta_destino,
+    *,
+    id_usuario: int | None = None,
+) -> dict[str, Any]:
+    """Puxa etiqueta e, se existir, NF do TikTok Shop."""
+    out: dict[str, Any] = {"origem": "tiktok", "etiqueta": None, "fiscal": None, "avisos": []}
+    try:
+        out["etiqueta"] = baixar_etiqueta_tiktok(
+            cur, id_vendedor, id_pedido, pasta_destino, id_usuario=id_usuario
+        )
+    except ValueError as e:
+        out["avisos"].append(str(e))
+    try:
+        out["fiscal"] = baixar_nf_tiktok(
+            cur, id_vendedor, id_pedido, pasta_destino, id_usuario=id_usuario
+        )
+    except ValueError as e:
+        out["avisos"].append(str(e))
+
+    if not out["etiqueta"] and not out["fiscal"]:
+        raise ValueError(out["avisos"][0] if out["avisos"] else "Nada disponível na integração.")
+
+    msgs = []
+    if out["etiqueta"]:
+        msgs.append(out["etiqueta"].get("message") or "Etiqueta ok.")
+    if out["fiscal"]:
+        msgs.append(out["fiscal"].get("message") or "Documento fiscal ok.")
+    out["message"] = " ".join(msgs)
+    out["ok"] = True
+    return out
