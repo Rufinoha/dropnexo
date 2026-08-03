@@ -371,6 +371,8 @@ def pedido_anexo_arquivo():
 @exigir_modulo(MODULO_VENDEDOR)
 @exigir_permissao(codigo="vd_pedidos.editar")
 def pedidos_salvar():
+    import logging
+
     id_v = _id_vendedor()
     if not id_v:
         return jsonify(success=False, message="Sessão inválida."), 403
@@ -382,7 +384,18 @@ def pedidos_salvar():
         conn.commit()
         return jsonify(success=True, message="Rascunho salvo.", **res)
     except ValueError as e:
+        conn.rollback()
         return jsonify(success=False, message=str(e)), 400
+    except Exception as e:
+        conn.rollback()
+        logging.getLogger(__name__).exception("Erro ao salvar pedido vendedor=%s", id_v)
+        msg = str(e).strip() or "Erro interno ao salvar o pedido."
+        # Mensagem útil para diagnóstico (sem stack no cliente)
+        if "does not exist" in msg.lower() or "undefinedcolumn" in msg.lower():
+            msg = f"Erro de banco: {msg[:240]}"
+        elif len(msg) > 280:
+            msg = msg[:280] + "…"
+        return jsonify(success=False, message=msg), 500
     finally:
         conn.close()
 

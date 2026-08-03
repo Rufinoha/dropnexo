@@ -1863,7 +1863,11 @@
       return null;
     }
     if (!j.success) {
-      mostrarMsg(j.message || "Erro ao salvar.", true);
+      const msgErro = j.message || "Erro ao salvar.";
+      mostrarMsg(msgErro, true);
+      if (window.Swal) {
+        Swal.fire({ icon: "error", title: "Salvar pedido", text: msgErro, confirmButtonColor: "#021F81" });
+      }
       if (elBtnSalvar) elBtnSalvar.disabled = false;
       if (elBtnConfirmar) elBtnConfirmar.disabled = false;
       return null;

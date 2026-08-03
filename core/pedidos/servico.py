@@ -123,7 +123,8 @@ def _proximo_numero_pedido(cur, id_tenant: int) -> str:
     )
     row = cur.fetchone()
     if not row:
-        raise RuntimeError("Falha ao alocar sequência de pedido.")
+        # Fallback se a sequência não puder ser alocada (evita 500 opaco no salvar)
+        return _gerar_numero(cur, "PED", id_tenant, "tbl_pedido", "id_tenant_vendedor")
     return format_numero_pedido(id_tenant, int(row[0]))
 
 
@@ -249,7 +250,16 @@ def _buscar_item_vitrine(cur, id_vendedor: int, id_variante: int) -> dict | None
 
 
 def _taxa_pedido_fornecedor(cur, id_fornecedor: int) -> float:
-    req, _ = carregar_requisitos_raw(cur, id_fornecedor)
+    try:
+        cur.execute("SAVEPOINT sp_taxa_pedido")
+        req, _ = carregar_requisitos_raw(cur, id_fornecedor)
+        cur.execute("RELEASE SAVEPOINT sp_taxa_pedido")
+    except Exception:
+        try:
+            cur.execute("ROLLBACK TO SAVEPOINT sp_taxa_pedido")
+        except Exception:
+            pass
+        return 0.0
     if req.get("cobra_taxa_pedido") and _float(req.get("valor_taxa_pedido")) > 0:
         return _float(req["valor_taxa_pedido"])
     return 0.0
@@ -932,31 +942,63 @@ def salvar_rascunho(
             try:
                 from api.melhor_envio.melhor_envio import limpar_frete_pedido
 
+                cur.execute("SAVEPOINT sp_limpar_frete")
                 limpar_frete_pedido(cur, id_pedido)
+                cur.execute("RELEASE SAVEPOINT sp_limpar_frete")
             except Exception:
-                pass
+                try:
+                    cur.execute("ROLLBACK TO SAVEPOINT sp_limpar_frete")
+                except Exception:
+                    pass
         else:
             numero = _proximo_numero_pedido(cur, id_vendedor)
+            cols_status = [cv]
+            vals_status = [STATUS_RASCUNHO]
+            if pedido_tem_status_dual(cur):
+                cols_status.append("status_comprador")
+                vals_status.append(STATUS_COMPRADOR_PENDENTE)
+            # Schema legado: coluna `status` ainda NOT NULL em alguns bancos
+            cols_pedido = _pedido_colunas(cur)
+            if "status" in cols_pedido and cv != "status":
+                cols_status.append("status")
+                vals_status.append(STATUS_RASCUNHO)
+            cols_sql = ", ".join(
+                [
+                    "id_grupo",
+                    "numero",
+                    "id_tenant_vendedor",
+                    "id_tenant_fornecedor",
+                    *cols_status,
+                    "cliente_nome",
+                    "cliente_email",
+                    "cliente_telefone",
+                    "cliente_documento",
+                    "entrega_cep",
+                    "entrega_logradouro",
+                    "entrega_numero",
+                    "entrega_complemento",
+                    "entrega_bairro",
+                    "entrega_cidade",
+                    "entrega_uf",
+                    "subtotal_produtos",
+                    "valor_taxa_pedido",
+                    "valor_total",
+                    "observacoes",
+                ]
+            )
+            placeholders = ", ".join(["%s"] * (4 + len(vals_status) + 15))
             cur.execute(
-                """
-                INSERT INTO tbl_pedido (
-                    id_grupo, numero, id_tenant_vendedor, id_tenant_fornecedor,
-                    cliente_nome, cliente_email, cliente_telefone, cliente_documento,
-                    entrega_cep, entrega_logradouro, entrega_numero, entrega_complemento,
-                    entrega_bairro, entrega_cidade, entrega_uf,
-                    subtotal_produtos, valor_taxa_pedido, valor_total, observacoes
-                ) VALUES (
-                    %s, %s, %s, %s,
-                    %s, %s, %s, %s,
-                    %s, %s, %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s
-                ) RETURNING id
+                f"""
+                INSERT INTO tbl_pedido ({cols_sql})
+                VALUES ({placeholders})
+                RETURNING id
                 """,
                 (
                     id_grupo,
                     numero,
                     id_vendedor,
                     id_forn,
+                    *vals_status,
                     dados_cli["cliente_nome"],
                     dados_cli["cliente_email"],
                     dados_cli["cliente_telefone"],
