@@ -55,6 +55,12 @@
   let fretePorPedido = {};
   /** @type {Record<number, 'me'|'manual'>} */
   let freteModoPorPedido = {};
+  /** @type {Array<{id:string,nome:string,conectado:boolean}>} */
+  let freteIntegracoesDn = [];
+  /** @type {Record<number, string>} provider id selecionado no DropNexo */
+  let freteProviderPorPedido = {};
+  /** @type {Record<number, 'nf'|'declaracao'>} tipo fiscal no Manual/DropNexo */
+  let fiscalTipoPorPedido = {};
   let meFreteConectado = false;
   let freteDirty = false;
 
@@ -455,11 +461,101 @@
       const r = await fetch("/vendedor/pedidos/frete/melhor-envio/status", { credentials: "same-origin" });
       const j = await r.json();
       meFreteConectado = !!(j.success && j.conectado);
+      freteIntegracoesDn = [
+        {
+          id: "melhor_envio",
+          nome: "Melhor Envio",
+          conectado: meFreteConectado,
+        },
+        // Futuras integrações internas entram aqui (Correios, Jadlog API, etc.)
+      ];
       return j;
     } catch {
       meFreteConectado = false;
+      freteIntegracoesDn = [{ id: "melhor_envio", nome: "Melhor Envio", conectado: false }];
       return { conectado: false };
     }
+  }
+
+  function integracoesDropnexoConectadas() {
+    return (freteIntegracoesDn || []).filter((i) => i.conectado);
+  }
+
+  function providerDropnexoPedido(ped) {
+    const conectadas = integracoesDropnexoConectadas();
+    if (!conectadas.length) return "";
+    const atual = freteProviderPorPedido[ped.id];
+    if (atual && conectadas.some((i) => i.id === atual)) return atual;
+    // Se já cotou ME, assume Melhor Envio
+    if (ped.me_service_id || fretePorPedido[ped.id]?.opcoes?.length) {
+      freteProviderPorPedido[ped.id] = "melhor_envio";
+      return "melhor_envio";
+    }
+    freteProviderPorPedido[ped.id] = conectadas[0].id;
+    return conectadas[0].id;
+  }
+
+  function melhorPrecoOpcoes(opcoes) {
+    if (!opcoes?.length) return null;
+    let min = null;
+    for (const o of opcoes) {
+      const p = Number(o.preco);
+      if (!Number.isFinite(p)) continue;
+      if (min == null || p < min) min = p;
+    }
+    return min;
+  }
+
+  function inferirTipoFiscal(ped) {
+    if (fiscalTipoPorPedido[ped.id] === "nf" || fiscalTipoPorPedido[ped.id] === "declaracao") {
+      return fiscalTipoPorPedido[ped.id];
+    }
+    const tipos = new Set((ped.anexos || []).map((a) => a.tipo));
+    if (tipos.has("nf")) {
+      fiscalTipoPorPedido[ped.id] = "nf";
+      return "nf";
+    }
+    if (tipos.has("declaracao")) {
+      fiscalTipoPorPedido[ped.id] = "declaracao";
+      return "declaracao";
+    }
+    return "";
+  }
+
+  function renderEscolhaFiscal(ped, { obrigatorioEscolher = true } = {}) {
+    const tipo = inferirTipoFiscal(ped);
+    const dis = "";
+    return `
+      <div class="Pd_FreteFiscalEscolha">
+        <p class="Pd_Hint">Documento fiscal: escolha <strong>uma</strong> opção (NF ou declaração — nunca as duas).</p>
+        <div class="Pd_FreteFiscalTabs" role="tablist">
+          <button type="button" class="Pd_FreteFiscalBtn${tipo === "nf" ? " is-active" : ""}" data-fiscal-tipo="nf" data-ped="${ped.id}" ${dis}>Nota fiscal</button>
+          <button type="button" class="Pd_FreteFiscalBtn${tipo === "declaracao" ? " is-active" : ""}" data-fiscal-tipo="declaracao" data-ped="${ped.id}" ${dis}>Declaração de conteúdo</button>
+        </div>
+        ${
+          tipo === "nf"
+            ? renderUploadPdfFrete(ped, "nf", "Nota fiscal (PDF)")
+            : tipo === "declaracao"
+              ? renderUploadPdfFrete(ped, "declaracao", "Declaração de conteúdo (PDF)")
+              : obrigatorioEscolher
+                ? `<p class="Pd_Hint Pd_FreteFiscalAviso">Selecione Nota fiscal ou Declaração para anexar o PDF.</p>`
+                : ""
+        }
+      </div>`;
+  }
+
+  async function removerAnexosTipo(idPed, tipo) {
+    const ped = pedidosGrupo.find((p) => p.id === idPed);
+    if (!ped) return;
+    const lista = (ped.anexos || []).filter((a) => a.tipo === tipo);
+    for (const a of lista) {
+      try {
+        await fetch(`/vendedor/pedidos/anexos/${a.id}`, { method: "DELETE", credentials: "same-origin" });
+      } catch {
+        /* best-effort */
+      }
+    }
+    ped.anexos = (ped.anexos || []).filter((a) => a.tipo !== tipo);
   }
 
   function mostrarFreteAviso(msg, isErro) {
@@ -500,7 +596,7 @@
     });
   }
 
-  async function cotarFretePedido(idPed) {
+  async function cotarFretePedido(idPed, { rerender = true } = {}) {
     const btn = elFreteConteudo?.querySelector(`[data-cotar="${idPed}"]`);
     if (btn) btn.disabled = true;
     mostrarFreteAviso("");
@@ -513,13 +609,18 @@
       const j = await parseJsonResp(r);
       if (!j.success) throw new Error(j.message || "Erro ao cotar frete.");
       fretePorPedido[idPed] = { ...(fretePorPedido[idPed] || {}), opcoes: j.opcoes || [] };
+      freteProviderPorPedido[idPed] = freteProviderPorPedido[idPed] || "melhor_envio";
       if (j.aviso) mostrarFreteAviso(j.aviso, false);
-      const card = elFreteConteudo?.querySelector(`[data-frete-ped="${idPed}"]`);
-      const box = card?.querySelector(".Pd_FreteOpcoes");
-      const ped = pedidosGrupo.find((p) => p.id === idPed);
-      if (box && ped) {
-        box.innerHTML = renderFreteOpcoes(ped, j.opcoes);
-        bindFreteOpcoes();
+      if (rerender) {
+        await renderFretePainel();
+      } else {
+        const card = elFreteConteudo?.querySelector(`[data-frete-ped="${idPed}"]`);
+        const box = card?.querySelector(".Pd_FreteOpcoes");
+        const ped = pedidosGrupo.find((p) => p.id === idPed);
+        if (box && ped) {
+          box.innerHTML = renderFreteOpcoes(ped, j.opcoes);
+          bindFreteOpcoes();
+        }
       }
     } catch (e) {
       mostrarFreteAviso(e.message || "Erro ao cotar frete.", true);
@@ -553,10 +654,8 @@
         ped.valor_frete = fretePorPedido[idPed].valor;
         ped.me_service_id = serviceId;
       }
-      elFreteConteudo?.querySelectorAll(`[data-frete-ped="${idPed}"] .Pd_FreteOpcao`).forEach((lbl) => {
-        lbl.classList.toggle("is-selected", +lbl.querySelector("input")?.value === serviceId);
-      });
       atualizarResumo();
+      await renderFretePainel();
     } catch (e) {
       mostrarFreteAviso(e.message || "Erro ao salvar frete.", true);
     }
@@ -714,8 +813,7 @@
         <p class="Pd_Hint">Pedido da <strong>Amazon</strong>. A etiqueta fica no Seller Central — anexe em PDF abaixo (ou use o modo Manual).</p>
         ${renderFreteDocsChecklist(ped)}
         ${renderUploadPdfFrete(ped, "etiqueta", "Etiqueta de frete")}
-        ${renderUploadPdfFrete(ped, "nf", "Nota fiscal")}
-        ${renderUploadPdfFrete(ped, "declaracao", "Declaração de conteúdo")}
+        ${renderEscolhaFiscal(ped)}
       </div>`;
     }
     const hint = isTt
@@ -726,11 +824,8 @@
         <p class="Pd_Hint">${hint}</p>
         <button type="button" class="Cl_botaoFiltro" data-puxar-integracao="${ped.id}">Puxar da integração (${esc(canal)})</button>
         ${renderFreteDocsChecklist(ped)}
-        <div class="Pd_FreteDocsGrid">
-          ${renderUploadPdfFrete(ped, "etiqueta", "Etiqueta")}
-          ${renderUploadPdfFrete(ped, "nf", "Nota fiscal")}
-          ${renderUploadPdfFrete(ped, "declaracao", "Declaração (se não houver NF)")}
-        </div>
+        ${renderUploadPdfFrete(ped, "etiqueta", "Etiqueta (fallback PDF)")}
+        ${renderEscolhaFiscal(ped, { obrigatorioEscolher: false })}
       </div>`;
   }
 
@@ -774,13 +869,10 @@
     const valorRef = Number(ped.valor_frete || fretePorPedido[ped.id]?.valor || 0);
     return `
       <div class="Pd_FreteManual">
-        <p class="Pd_Hint">Anexe em PDF a <strong>etiqueta de frete</strong> e a <strong>nota fiscal</strong> ou <strong>declaração de conteúdo</strong>.</p>
+        <p class="Pd_Hint">Envio próprio: anexe a <strong>etiqueta</strong> e escolha <strong>NF ou declaração</strong> (PDF).</p>
         ${renderFreteDocsChecklist(ped)}
-        <div class="Pd_FreteDocsGrid">
-          ${renderUploadPdfFrete(ped, "etiqueta", "Etiqueta de frete")}
-          ${renderUploadPdfFrete(ped, "nf", "Nota fiscal")}
-          ${renderUploadPdfFrete(ped, "declaracao", "Declaração de conteúdo")}
-        </div>
+        ${renderUploadPdfFrete(ped, "etiqueta", "Etiqueta de frete")}
+        ${renderEscolhaFiscal(ped)}
         <div class="Pd_FreteManualCampos">
           <label class="Pd_FieldMini">
             <span>Valor do frete (referência)</span>
@@ -799,24 +891,63 @@
       </div>`;
   }
 
+  function renderCardsIntegracaoDropnexo(ped) {
+    const conectadas = integracoesDropnexoConectadas();
+    if (!conectadas.length) {
+      return `
+        <div class="Pd_FreteDnVazio">
+          <p class="Pd_Hint">Nenhuma integração de frete conectada.</p>
+          <p class="Pd_Hint">Conecte o <strong>Melhor Envio</strong> em <strong>Integrações → Frete</strong> para cotar e comprar etiquetas pelo DropNexo.</p>
+        </div>`;
+    }
+    const sel = providerDropnexoPedido(ped);
+    const cards = conectadas
+      .map((integ) => {
+        const ativo = sel === integ.id;
+        let simHtml = '<span class="Pd_FreteDnSim">Simulação sob demanda</span>';
+        if (integ.id === "melhor_envio") {
+          const min = melhorPrecoOpcoes(fretePorPedido[ped.id]?.opcoes);
+          const escolhido = fretePorPedido[ped.id]?.escolhido;
+          if (escolhido?.id && fretePorPedido[ped.id]?.valor != null) {
+            simHtml = `<span class="Pd_FreteDnSim is-ok">Selecionado: ${fmt(fretePorPedido[ped.id].valor)}</span>`;
+          } else if (min != null) {
+            simHtml = `<span class="Pd_FreteDnSim is-ok">A partir de ${fmt(min)}</span>`;
+          } else if (ativo) {
+            simHtml = '<span class="Pd_FreteDnSim">Cotando…</span>';
+          }
+        }
+        return `
+          <button type="button" class="Pd_FreteDnCard${ativo ? " is-active" : ""}" data-dn-provider="${esc(integ.id)}" data-ped="${ped.id}">
+            <strong>${esc(integ.nome)}</strong>
+            <small>Integração DropNexo</small>
+            ${simHtml}
+          </button>`;
+      })
+      .join("");
+    return `<div class="Pd_FreteDnCards">${cards}</div>`;
+  }
+
   function renderFreteDropnexo(ped, frete, escolhido, opcoesHtml) {
-    const integHtml = meFreteConectado
-      ? `
-      <div class="Pd_FreteMeHead">
-        <button type="button" class="Cl_botaoFiltro" data-cotar="${ped.id}" ${freteEditavelPedido(ped) ? "" : "disabled"}>Cotar frete</button>
-      </div>
-      <div class="Pd_FreteOpcoes">${opcoesHtml}</div>
-      ${etiquetaStatusHtml(ped)}`
-      : `<p class="Pd_Hint">Conecte o <strong>Melhor Envio</strong> em Integrações → Frete para cotar e comprar etiquetas pelo DropNexo.</p>`;
+    const conectadas = integracoesDropnexoConectadas();
+    const provider = providerDropnexoPedido(ped);
+    let corpoProvider = "";
+    if (conectadas.length && provider === "melhor_envio") {
+      corpoProvider = `
+        <div class="Pd_FreteMeHead">
+          <button type="button" class="Cl_botaoFiltro" data-cotar="${ped.id}" ${freteEditavelPedido(ped) ? "" : "disabled"}>Atualizar cotação</button>
+        </div>
+        <div class="Pd_FreteOpcoes">${opcoesHtml}</div>
+        ${etiquetaStatusHtml(ped)}`;
+    } else if (conectadas.length && provider) {
+      corpoProvider = `<p class="Pd_Hint">Integração <strong>${esc(provider)}</strong> em breve neste fluxo.</p>`;
+    }
     return `
       <div class="Pd_FreteDropnexo">
-        <p class="Pd_Hint">Integrações internas do DropNexo. Hoje: <strong>Melhor Envio</strong> — cote, escolha e a etiqueta é comprada após o pagamento.</p>
-        ${integHtml}
-        ${renderFreteDocsChecklist(ped)}
-        <div class="Pd_FreteDocsGrid">
-          ${renderUploadPdfFrete(ped, "nf", "Nota fiscal")}
-          ${renderUploadPdfFrete(ped, "declaracao", "Declaração de conteúdo")}
-        </div>
+        <p class="Pd_Hint">Escolha a integração para cotar e comprar o frete. A etiqueta é gerada após o pagamento.</p>
+        ${renderCardsIntegracaoDropnexo(ped)}
+        ${corpoProvider}
+        ${conectadas.length ? renderFreteDocsChecklist(ped) : ""}
+        ${conectadas.length ? renderEscolhaFiscal(ped) : ""}
       </div>`;
   }
 
@@ -835,6 +966,10 @@
     fd.append("arquivo", file);
     input.disabled = true;
     try {
+      // NF e declaração são exclusivos
+      if (tipo === "nf") await removerAnexosTipo(idPed, "declaracao");
+      if (tipo === "declaracao") await removerAnexosTipo(idPed, "nf");
+
       const r = await fetch(`/vendedor/pedidos/${idPed}/anexos`, {
         method: "POST",
         credentials: "same-origin",
@@ -855,6 +990,7 @@
         ped.anexos = ped.anexos || [];
         ped.anexos.push(j.anexo);
       }
+      if (tipo === "nf" || tipo === "declaracao") fiscalTipoPorPedido[idPed] = tipo;
       await renderFretePainel();
       atualizarNavFrete();
       if (window.Swal) {
@@ -982,8 +1118,14 @@
           await setFreteModo(idPed, modo);
           await renderFretePainel();
           const ped = pedidosGrupo.find((p) => p.id === idPed) || {};
-          if (modo === "dropnexo" && meFreteConectado && freteEditavelPedido(ped)) {
+          if (
+            modo === "dropnexo" &&
+            providerDropnexoPedido(ped) === "melhor_envio" &&
+            meFreteConectado &&
+            freteEditavelPedido(ped)
+          ) {
             await cotarFretePedido(idPed);
+            await renderFretePainel();
           }
           if (modo === "integracao" && origemTemIntegracaoFrete(ped) && (ped.origem || "") !== "amazon") {
             try {
@@ -998,6 +1140,43 @@
         } finally {
           btn.disabled = false;
         }
+      });
+    });
+
+    elFreteConteudo.querySelectorAll("[data-dn-provider]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const idPed = +btn.dataset.ped;
+        const provider = btn.dataset.dnProvider;
+        if (!idPed || !provider) return;
+        freteProviderPorPedido[idPed] = provider;
+        await renderFretePainel();
+        const ped = pedidosGrupo.find((p) => p.id === idPed) || {};
+        if (
+          provider === "melhor_envio" &&
+          meFreteConectado &&
+          freteEditavelPedido(ped) &&
+          !fretePorPedido[idPed]?.opcoes?.length
+        ) {
+          await cotarFretePedido(idPed);
+          await renderFretePainel();
+        }
+      });
+    });
+
+    elFreteConteudo.querySelectorAll("[data-fiscal-tipo]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const idPed = +btn.dataset.ped;
+        const tipo = btn.dataset.fiscalTipo;
+        if (!idPed || (tipo !== "nf" && tipo !== "declaracao")) return;
+        const ped = pedidosGrupo.find((p) => p.id === idPed);
+        const atual = inferirTipoFiscal(ped || {});
+        if (atual === tipo) return;
+        // Trocar tipo: remove o outro se existir
+        if (tipo === "nf") await removerAnexosTipo(idPed, "declaracao");
+        if (tipo === "declaracao") await removerAnexosTipo(idPed, "nf");
+        fiscalTipoPorPedido[idPed] = tipo;
+        await renderFretePainel();
+        atualizarNavFrete();
       });
     });
 
@@ -1070,9 +1249,14 @@
     await renderFretePainel();
     for (const ped of pedidosGrupo) {
       const modo = inferirModoFrete(ped);
-      if (modo === "dropnexo" && meFreteConectado && freteEditavelPedido(ped)) {
+      if (
+        modo === "dropnexo" &&
+        providerDropnexoPedido(ped) === "melhor_envio" &&
+        meFreteConectado &&
+        freteEditavelPedido(ped)
+      ) {
         if (!fretePorPedido[ped.id]?.opcoes?.length && !fretePorPedido[ped.id]?.escolhido) {
-          await cotarFretePedido(ped.id);
+          await cotarFretePedido(ped.id, { rerender: false });
         }
       }
       if (
