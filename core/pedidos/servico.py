@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import time
 from datetime import datetime
 from typing import Any
 
@@ -860,7 +861,7 @@ def salvar_rascunho(
             INSERT INTO tbl_pedido_grupo (id_tenant_vendedor, numero)
             VALUES (%s, %s) RETURNING id
             """,
-            (id_vendedor, f"__novo_{id_vendedor}_{datetime.now().timestamp_ns()}"),
+            (id_vendedor, f"__novo_{id_vendedor}_{time.time_ns()}"),
         )
         id_grupo = int(cur.fetchone()[0])
 
