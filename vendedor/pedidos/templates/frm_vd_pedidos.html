@@ -91,13 +91,6 @@
               <small id="pd_navFrete">Integração, DropNexo ou Manual</small>
             </span>
           </button>
-          <button type="button" class="Pd_WizNavItem" data-painel="anexos">
-            <span class="Pd_WizNavIco"><i data-lucide="paperclip"></i></span>
-            <span class="Pd_WizNavTxt">
-              <strong>Anexos</strong>
-              <small id="pd_navAnexos">NF, declaração e etiqueta</small>
-            </span>
-          </button>
           <button type="button" class="Pd_WizNavItem" data-painel="valores">
             <span class="Pd_WizNavIco"><i data-lucide="wallet"></i></span>
             <span class="Pd_WizNavTxt">
@@ -209,22 +202,6 @@
           </div>
         </section>
 
-        <section class="Pd_WizPane" data-painel="anexos" hidden>
-          <header class="Pd_WizPaneHead">
-            <span class="Pd_WizPaneIco"><i data-lucide="paperclip"></i></span>
-            <div>
-              <h4>Anexos</h4>
-              <p>Nota fiscal ou declaração, e etiqueta de envio (PDF).</p>
-            </div>
-          </header>
-          <div class="Pd_WizPaneBody">
-            <p id="pd_anexosAviso" class="Pd_Hint" hidden></p>
-            <div id="pd_anexosLista" class="Pd_AnexosLista">
-              <p class="Pd_Hint">Salve ou abra um pedido existente para anexar arquivos.</p>
-            </div>
-          </div>
-        </section>
-
         <section class="Pd_WizPane" data-painel="valores" hidden>
           <header class="Pd_WizPaneHead">
             <span class="Pd_WizPaneIco"><i data-lucide="wallet"></i></span>
@@ -276,6 +253,6 @@
 {% endblock %}
 {% block page_js %}
 <script defer src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
-<script defer src="{{ url_for('vd_pedidos.static', filename='script/Svd_pedidos.js') }}?v=26"></script>
+<script defer src="{{ url_for('vd_pedidos.static', filename='script/Svd_pedidos.js') }}?v=27"></script>
 <script id="pd_cfg" type="application/json">{{ {"mp_icone": url_for("mercadopago.static", filename="imge/icone_mercadopago.png")}|tojson }}</script>
 {% endblock %}

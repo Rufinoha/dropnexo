@@ -48,8 +48,7 @@
   let somenteLeitura = false;
   /** @type {Array<{id:number,numero:string,status:string,fornecedor_nome:string,anexos?:Array}>} */
   let pedidosGrupo = [];
-  let pedidoFocoAnexo = null;
-  let tipoAnexoFoco = null;
+  let pedidoFocoFrete = null;
   /** @type {Record<string, string>} */
   let meioPagamentoPorFornecedor = {};
   /** @type {Record<number, {opcoes?: Array, escolhido?: object, valor?: number, nome?: string}>} */
@@ -83,9 +82,7 @@
   const elNavCliente = document.getElementById("pd_navCliente");
   const elNavEndereco = document.getElementById("pd_navEndereco");
   const elNavValores = document.getElementById("pd_navValores");
-  const elNavAnexos = document.getElementById("pd_navAnexos");
-  const elAnexosLista = document.getElementById("pd_anexosLista");
-  const elAnexosAviso = document.getElementById("pd_anexosAviso");
+  const elNavFrete = document.getElementById("pd_navFrete");
   const elWizMain = document.querySelector(".Pd_WizMain");
   const elBtnSalvar = document.getElementById("pd_btnSalvar");
   const elBtnConfirmar = document.getElementById("pd_btnConfirmar");
@@ -254,7 +251,6 @@
     window.lucide?.createIcons?.();
     if (id === "frete") prepararFrete();
     if (id === "valores") renderPayIntegracoes();
-    if (id === "anexos") renderAnexos();
   }
 
   function aplicarEstadoWizard(grupo) {
@@ -321,13 +317,21 @@
     sincronizarFreteDoGrupo();
     renderItens();
     atualizarNavResumos();
-    atualizarNavAnexos();
+    atualizarNavFrete();
   }
 
-  function atualizarNavAnexos() {
-    if (!elNavAnexos) return;
-    const qtd = pedidosGrupo.reduce((s, p) => s + (p.anexos?.length || 0), 0);
-    elNavAnexos.textContent = qtd ? `${qtd} arquivo(s)` : "NF e etiqueta";
+  function atualizarNavFrete() {
+    if (!elNavFrete) return;
+    if (!pedidosGrupo.length) {
+      elNavFrete.textContent = "Integração, DropNexo ou Manual";
+      return;
+    }
+    const ok = pedidosGrupo.every((p) => freteDocsStatus(p).ok);
+    const qtd = pedidosGrupo.reduce(
+      (s, p) => s + (p.anexos || []).filter((a) => ["etiqueta", "nf", "declaracao"].includes(a.tipo)).length,
+      0
+    );
+    elNavFrete.textContent = ok ? "Documentos ok" : qtd ? `${qtd} arquivo(s) · incompleto` : "Integração, DropNexo ou Manual";
   }
 
   async function carregarGrupo(idG) {
@@ -345,12 +349,11 @@
   }
 
   async function abrirModalEdicao(opts = {}) {
-    const { idGrupo: gid, idPedido: idPed, painelInicial = "produto", idPedidoFoco = null, tipoAnexo = null } = opts;
+    const { idGrupo: gid, idPedido: idPed, painelInicial = "produto", idPedidoFoco = null } = opts;
     if (!gid && !idPed) return;
 
     mostrarMsg("");
-    pedidoFocoAnexo = idPedidoFoco || idPed || null;
-    tipoAnexoFoco = tipoAnexo;
+    pedidoFocoFrete = idPedidoFoco || idPed || null;
 
     let grupo;
     try {
@@ -379,168 +382,15 @@
     if (!comboProd) initComboProduto();
     limparComboProduto();
     el.modal.hidden = false;
-    irPainel(painelInicial);
+    const painel = painelInicial === "anexos" ? "frete" : painelInicial;
+    irPainel(painel);
 
-    if (painelInicial === "anexos" && pedidoFocoAnexo) {
+    if (painel === "frete" && pedidoFocoFrete) {
       requestAnimationFrame(() => {
-        document.getElementById(`pd_anexo_card_${pedidoFocoAnexo}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+        document
+          .querySelector(`[data-frete-ped="${pedidoFocoFrete}"]`)
+          ?.scrollIntoView({ behavior: "smooth", block: "start" });
       });
-    }
-  }
-
-  function renderBlocoAnexo(ped, tipo, rotulo) {
-    const lista = (ped.anexos || []).filter((a) => a.tipo === tipo);
-    const inpId = `pd_anexo_inp_${ped.id}_${tipo}`;
-    const st = stV(ped);
-    const docFrete = tipo === "nf" || tipo === "etiqueta" || tipo === "declaracao";
-    const podeEnviar =
-      st !== "cancelado" &&
-      st !== "entregue" &&
-      st !== "em_expedicao" &&
-      (docFrete
-        ? true
-        : !["pago"].includes(st) &&
-          ((ped.origem || "manual") === "manual" || ["importado", "aguardando_pagamento"].includes(st)));
-    const accept = docFrete ? ".pdf,application/pdf" : ".pdf,.xml,.png,.jpg,.jpeg,.webp";
-    const hint = docFrete ? "Somente PDF — máx. 5 MB" : "PDF, XML ou imagem — máx. 5 MB";
-    return `
-      <div class="Pd_AnexoBloco" id="pd_anexo_${ped.id}_${tipo}">
-        <h5>${esc(rotulo)}</h5>
-        <div class="Pd_AnexoUpload">
-          <input type="file" id="${inpId}" class="Pd_AnexoInput" hidden accept="${accept}" data-upload-anexo="${ped.id}" data-tipo="${tipo}" ${podeEnviar ? "" : "disabled"} />
-          ${podeEnviar ? `<label for="${inpId}" class="Cl_botaoFiltro Pd_AnexoBtn">Escolher arquivo</label>` : ""}
-          <span class="Pd_AnexoFileName" data-anexo-label="${ped.id}_${tipo}">Nenhum arquivo escolhido</span>
-          <span class="Pd_Hint">${hint}</span>
-        </div>
-        <ul class="Pd_AnexoItens">
-          ${lista.length
-            ? lista
-                .map(
-                  (a) => `
-            <li>
-              <a href="/vendedor/pedidos/anexos/arquivo?caminho=${encodeURIComponent(a.caminho)}" target="_blank" rel="noopener">${esc(a.nome_original)}</a>
-              <button type="button" class="Pd_BtnLink Pd_BtnLink--danger" data-del-anexo="${a.id}">Remover</button>
-            </li>`
-                )
-                .join("")
-            : '<li class="Pd_Hint">Nenhum arquivo.</li>'}
-        </ul>
-      </div>`;
-  }
-
-  function renderAnexos() {
-    if (!elAnexosLista) return;
-    if (!pedidosGrupo.length) {
-      elAnexosLista.innerHTML =
-        '<p class="Pd_Hint">Confirme o pedido ou abra um pedido existente para anexar NF e etiqueta.</p>';
-      if (elAnexosAviso) {
-        elAnexosAviso.hidden = false;
-        elAnexosAviso.textContent =
-          "Anexos ficam vinculados a cada pedido do fornecedor após o primeiro salvamento.";
-      }
-      return;
-    }
-    if (elAnexosAviso) elAnexosAviso.hidden = true;
-    elAnexosLista.innerHTML = pedidosGrupo
-      .map(
-        (p) => `
-      <article class="Pd_AnexoCard" id="pd_anexo_card_${p.id}">
-        <div class="Pd_AnexoCardHead">
-          <div>
-            <strong>${esc(p.numero)}</strong>
-            <br><small>${esc(p.fornecedor_nome || "")} · ${badge(stV(p))} · Comprador: ${badge(stC(p), "comprador")}</small>
-          </div>
-        </div>
-        ${renderBlocoAnexo(p, "nf", "Nota fiscal")}
-        ${renderBlocoAnexo(p, "declaracao", "Declaração de conteúdo")}
-        ${renderBlocoAnexo(p, "etiqueta", "Etiqueta de envio")}
-        ${origemTemIntegracaoFrete(p) && (p.origem || "") !== "amazon"
-          ? `<div class="Pd_AnexoMl" style="margin-top:0.75rem">
-              <button type="button" class="Cl_botaoFiltro" data-puxar-integracao="${p.id}">Puxar da integração</button>
-            </div>`
-          : ""}
-        ${(p.origem || "") === "amazon"
-          ? `<div class="Pd_AnexoMl" style="margin-top:0.75rem">
-              <small class="Mp_Hint">Pedido Amazon — etiqueta pelo Seller Central / envio Amazon.</small>
-            </div>`
-          : ""}
-      </article>`
-      )
-      .join("");
-
-    elAnexosLista.querySelectorAll("[data-upload-anexo]").forEach((inp) => {
-      inp.addEventListener("change", () => enviarAnexo(inp));
-    });
-    elAnexosLista.querySelectorAll("[data-del-anexo]").forEach((btn) => {
-      btn.addEventListener("click", () => excluirAnexo(+btn.dataset.delAnexo));
-    });
-    elAnexosLista.querySelectorAll("[data-puxar-integracao]").forEach((btn) => {
-      btn.addEventListener("click", async () => {
-        btn.disabled = true;
-        try {
-          const j = await puxarIntegracaoPedido(+btn.dataset.puxarIntegracao);
-          renderAnexos();
-          atualizarNavAnexos();
-          Swal.fire({
-            icon: "success",
-            title: "Integração",
-            text: j.message || "Documentos puxados.",
-            timer: 2000,
-            showConfirmButton: false,
-          });
-        } catch (e) {
-          Swal.fire({ icon: "error", title: "Integração", text: e.message, confirmButtonColor: "#021F81" });
-        } finally {
-          btn.disabled = false;
-        }
-      });
-    });
-
-    if (tipoAnexoFoco && pedidoFocoAnexo) {
-      document.getElementById(`pd_anexo_${pedidoFocoAnexo}_${tipoAnexoFoco}`)?.classList.add("is-focus");
-    }
-    window.lucide?.createIcons?.();
-  }
-
-  async function enviarAnexo(input) {
-    const idPed = +input.dataset.uploadAnexo;
-    const tipo = input.dataset.tipo;
-    const file = input.files?.[0];
-    if (!idPed || !tipo || !file) return;
-    const labelEl = document.querySelector(`[data-anexo-label="${idPed}_${tipo}"]`);
-    if (labelEl) labelEl.textContent = file.name;
-    const fd = new FormData();
-    fd.append("tipo", tipo);
-    fd.append("arquivo", file);
-    input.disabled = true;
-    try {
-      const r = await fetch(`/vendedor/pedidos/${idPed}/anexos`, {
-        method: "POST",
-        credentials: "same-origin",
-        body: fd,
-      });
-      const j = await parseJsonResp(r);
-      if (!j.success) throw new Error(j.message || "Erro ao enviar.");
-      const ped = pedidosGrupo.find((p) => p.id === idPed);
-      if (ped) {
-        ped.anexos = ped.anexos || [];
-        ped.anexos.push(j.anexo);
-      }
-      renderAnexos();
-      atualizarNavAnexos();
-      if (window.Swal) {
-        Swal.fire({ icon: "success", title: "Anexo", text: j.message, timer: 1800, showConfirmButton: false });
-      }
-    } catch (e) {
-      if (labelEl) labelEl.textContent = "Nenhum arquivo escolhido";
-      if (window.Swal) {
-        Swal.fire({ icon: "error", title: "Anexo", text: e.message, confirmButtonColor: "#021F81" });
-      } else {
-        mostrarMsg(e.message, true);
-      }
-    } finally {
-      input.value = "";
-      input.disabled = false;
     }
   }
 
@@ -556,9 +406,8 @@
       pedidosGrupo.forEach((p) => {
         p.anexos = (p.anexos || []).filter((a) => a.id !== idAnexo);
       });
-      renderAnexos();
-      atualizarNavAnexos();
-      if (painelAtivo === "frete") renderFretePainel();
+      atualizarNavFrete();
+      if (painelAtivo === "frete") await renderFretePainel();
     } catch (e) {
       if (window.Swal) {
         Swal.fire({ icon: "error", title: "Anexo", text: e.message, confirmButtonColor: "#021F81" });
@@ -1007,8 +856,7 @@
         ped.anexos.push(j.anexo);
       }
       await renderFretePainel();
-      if (painelAtivo === "anexos") renderAnexos();
-      atualizarNavAnexos();
+      atualizarNavFrete();
       if (window.Swal) {
         Swal.fire({ icon: "success", title: "Arquivo anexado", timer: 1600, showConfirmButton: false });
       }
@@ -1108,8 +956,7 @@
         try {
           const j = await puxarIntegracaoPedido(+btn.dataset.puxarIntegracao);
           await renderFretePainel();
-          if (painelAtivo === "anexos") renderAnexos();
-          atualizarNavAnexos();
+          atualizarNavFrete();
           Swal.fire({
             icon: "success",
             title: "Integração",
@@ -1191,8 +1038,8 @@
             const grupo = await carregarGrupo(idGrupo);
             pedidosGrupo = grupo.pedidos || [];
             sincronizarFreteDoGrupo();
+            atualizarNavFrete();
             await renderFretePainel();
-            if (painelAtivo === "anexos") renderAnexos();
           } else {
             await renderFretePainel();
           }
@@ -1739,8 +1586,7 @@
     pedidosGrupo = [];
     fretePorPedido = {};
     freteDirty = false;
-    pedidoFocoAnexo = null;
-    tipoAnexoFoco = null;
+    pedidoFocoFrete = null;
     meioPagamentoPorFornecedor = {};
     bloqueadoTotal = false;
     editavelCampos = true;
@@ -1877,9 +1723,9 @@
       const grupo = await carregarGrupo(idGrupo);
       pedidosGrupo = grupo.pedidos || [];
       sincronizarFreteDoGrupo();
-      atualizarNavAnexos();
+      atualizarNavFrete();
     } catch {
-      /* anexos opcionais */
+      /* frete/docs opcionais após salvar */
     }
     if (!confirmar) {
       mostrarMsg(j.message || "Rascunho salvo.");
@@ -1983,7 +1829,7 @@
   }
 
   async function enviarEmailTesteLayout() {
-    const idPed = (pedidoFocoAnexo || pedidosGrupo.find((p) => p.id)?.id) || null;
+    const idPed = (pedidoFocoFrete || pedidosGrupo.find((p) => p.id)?.id) || null;
     if (!idPed) {
       mostrarMsg("Abra um pedido salvo para testar o e-mail.", true);
       return;
@@ -2076,23 +1922,12 @@
       });
       return;
     }
-    if (acao === "nf") {
+    if (acao === "nf" || acao === "etiqueta") {
       abrirModalEdicao({
         idGrupo: idG || null,
         idPedido: idG ? null : idPed,
-        painelInicial: "anexos",
+        painelInicial: "frete",
         idPedidoFoco: idPed,
-        tipoAnexo: "nf",
-      });
-      return;
-    }
-    if (acao === "etiqueta") {
-      abrirModalEdicao({
-        idGrupo: idG || null,
-        idPedido: idG ? null : idPed,
-        painelInicial: "anexos",
-        idPedidoFoco: idPed,
-        tipoAnexo: "etiqueta",
       });
     }
   });
