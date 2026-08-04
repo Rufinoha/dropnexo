@@ -91,6 +91,40 @@
   padding: 0.5rem 0.65rem;
   font: inherit;
 }
+.CfgMd_EditorWrap {
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+}
+.CfgMd_EditorWrap .ql-toolbar.ql-snow {
+  border: none;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+.CfgMd_EditorWrap .ql-container.ql-snow {
+  border: none;
+  font-size: 0.95rem;
+  min-height: 220px;
+}
+.CfgMd_Quill .ql-editor {
+  min-height: 220px;
+  line-height: 1.5;
+}
+.CfgMd_Quill .ql-editor.ql-blank::before {
+  color: #94a3b8;
+  font-style: normal;
+}
+.CfgMd_Acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-top: 0.85rem;
+}
+.CfgMd_Acoes .Cl_botaoprimario,
+.CfgMd_Acoes .Cl_botaosecundario {
+  flex: 1 1 10rem;
+}
 .CfgMd_Resumo {
   display: grid;
   grid-template-columns: 1fr 1fr;

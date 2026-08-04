@@ -1384,6 +1384,19 @@ def manutencao_tenant_salvar():
 # --- mala direta (DEV) ---
 
 MALA_DIRETA_PREFIX = "/configuracoes/mala-direta"
+MALA_DIRETA_EMAIL_TESTE = "hazael@h74.com.br"
+
+
+def _normalizar_corpo_mala_direta(corpo_html: str) -> str:
+    """Mantém HTML do editor; texto puro vira <p> com <br>."""
+    corpo = (corpo_html or "").strip()
+    if not corpo:
+        return ""
+    if "<" not in corpo:
+        import html as _html
+
+        return "<p>" + _html.escape(corpo).replace("\n", "<br>") + "</p>"
+    return corpo
 
 
 def _email_destinatario_tenant(cur, id_tenant: int) -> tuple[str | None, str | None]:
@@ -1514,19 +1527,15 @@ def mala_direta_enviar():
 
     body = request.get_json(silent=True) or {}
     assunto = (body.get("assunto") or "").strip()
-    corpo_html = (body.get("corpo_html") or body.get("mensagem") or "").strip()
+    corpo_html = _normalizar_corpo_mala_direta(
+        body.get("corpo_html") or body.get("mensagem") or ""
+    )
     filtro = (body.get("filtro_tipo") or "ambos").strip().lower()
     ids_raw = body.get("ids_tenant") or []
     selecionar_todos = bool(body.get("selecionar_todos"))
 
     if not assunto or not corpo_html:
         return jsonify(success=False, message="Informe assunto e mensagem."), 400
-
-    # quebras de linha → <br> se for texto puro
-    if "<" not in corpo_html:
-        import html as _html
-
-        corpo_html = "<p>" + _html.escape(corpo_html).replace("\n", "<br>") + "</p>"
 
     conn = Var_ConectarBanco()
     try:
@@ -1587,6 +1596,38 @@ def mala_direta_enviar():
         message=f"Disparo concluído: {resumo.get('ok')} enviados, {resumo.get('falha')} falhas.",
         id_envio=id_envio,
         resumo=resumo,
+    )
+
+
+@config_bp.post(f"{MALA_DIRETA_PREFIX}/enviar-teste")
+@login_obrigatorio()
+def mala_direta_enviar_teste():
+    """Envia a mensagem atual só para o e-mail de validação do desenvolvedor."""
+    if (r := _exigir_dev()) is not None:
+        return r
+    from api.brevo.srotas_brevo import enviar_email
+
+    body = request.get_json(silent=True) or {}
+    assunto = (body.get("assunto") or "").strip()
+    corpo_html = _normalizar_corpo_mala_direta(
+        body.get("corpo_html") or body.get("mensagem") or ""
+    )
+    if not assunto or not corpo_html:
+        return jsonify(success=False, message="Informe assunto e mensagem."), 400
+
+    assunto_teste = assunto if assunto.upper().startswith("[TESTE]") else f"[TESTE] {assunto}"
+    ok, msg, _id = enviar_email(
+        [MALA_DIRETA_EMAIL_TESTE],
+        assunto_teste,
+        corpo_html,
+        tag="mala-teste",
+        criado_por=session.get("id_usuario"),
+    )
+    if not ok:
+        return jsonify(success=False, message=msg or "Falha ao enviar teste."), 500
+    return jsonify(
+        success=True,
+        message=f"E-mail teste enviado para {MALA_DIRETA_EMAIL_TESTE}.",
     )
 
 

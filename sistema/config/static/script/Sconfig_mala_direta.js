@@ -4,12 +4,61 @@
   const histBody = document.getElementById("cfg_md_hist_tbody");
   const contagem = document.getElementById("cfg_md_contagem");
   const chkTodos = document.getElementById("cfg_md_todos");
+  const hiddenCorpo = document.getElementById("cfg_md_corpo");
   let itens = [];
   let selecionados = new Set();
+  let quill = null;
 
   function toast(icon, title) {
     if (window.Swal) Swal.fire({ icon, title, timer: 2200, showConfirmButton: false });
     else alert(title);
+  }
+
+  function isEmptyHtml(html) {
+    const stripped = (html || "")
+      .replace(/<p><br><\/p>/gi, "")
+      .replace(/<p>\s*<\/p>/gi, "")
+      .replace(/&nbsp;/gi, " ")
+      .replace(/<br\s*\/?>/gi, "")
+      .replace(/<[^>]+>/g, "")
+      .trim();
+    return !stripped;
+  }
+
+  function normalizeQuillHtml(html) {
+    if (isEmptyHtml(html)) return "";
+    return (html || "").trim();
+  }
+
+  function getCorpoHtml() {
+    let html = "";
+    if (quill) html = normalizeQuillHtml(quill.root.innerHTML);
+    else html = (hiddenCorpo?.value || "").trim();
+    if (hiddenCorpo) hiddenCorpo.value = html;
+    return html;
+  }
+
+  function initEditor() {
+    const host = document.getElementById("cfg_md_editor");
+    if (!host || typeof Quill === "undefined") return;
+    quill = new Quill("#cfg_md_editor", {
+      theme: "snow",
+      placeholder: "Escreva a mensagem do e-mail…",
+      modules: {
+        toolbar: [
+          [{ header: [2, 3, false] }],
+          ["bold", "italic", "underline", "strike"],
+          [{ color: [] }, { background: [] }],
+          [{ align: [] }],
+          [{ list: "ordered" }, { list: "bullet" }],
+          ["blockquote", "link"],
+          ["clean"],
+        ],
+      },
+    });
+    quill.on("text-change", () => {
+      if (hiddenCorpo) hiddenCorpo.value = normalizeQuillHtml(quill.root.innerHTML);
+    });
   }
 
   async function api(url, opts) {
@@ -178,7 +227,7 @@
 
   document.getElementById("cfg_md_enviar")?.addEventListener("click", async () => {
     const assunto = document.getElementById("cfg_md_assunto").value.trim();
-    const corpo = document.getElementById("cfg_md_corpo").value.trim();
+    const corpo = getCorpoHtml();
     if (!assunto || !corpo) return toast("warning", "Preencha assunto e mensagem.");
     if (!selecionados.size && !chkTodos?.checked) return toast("warning", "Selecione ao menos um tenant.");
 
@@ -215,6 +264,34 @@
     }
   });
 
+  document.getElementById("cfg_md_enviar_teste")?.addEventListener("click", async () => {
+    const assunto = document.getElementById("cfg_md_assunto").value.trim();
+    const corpo = getCorpoHtml();
+    if (!assunto || !corpo) return toast("warning", "Preencha assunto e mensagem.");
+
+    const conf = window.Swal
+      ? await Swal.fire({
+          icon: "question",
+          title: "Enviar e-mail teste?",
+          html: "Será enviado <strong>somente</strong> para <code>hazael@h74.com.br</code>, com a mesma formatação do disparo.",
+          showCancelButton: true,
+          confirmButtonText: "Enviar teste",
+          cancelButtonText: "Cancelar",
+        })
+      : { isConfirmed: confirm("Enviar teste para hazael@h74.com.br?") };
+    if (!conf.isConfirmed) return;
+
+    try {
+      const j = await api(`${BASE}/enviar-teste`, {
+        method: "POST",
+        body: JSON.stringify({ assunto, corpo_html: corpo }),
+      });
+      toast("success", j.message || "Teste enviado");
+    } catch (e) {
+      toast("error", e.message);
+    }
+  });
+
   histBody?.addEventListener("click", (e) => {
     const tr = e.target.closest("tr[data-envio]");
     if (!tr) return;
@@ -237,5 +314,6 @@
     }
   });
 
+  initEditor();
   carregarTenants().catch((e) => toast("error", e.message));
 })();

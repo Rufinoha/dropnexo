@@ -3,7 +3,8 @@
 {% set nav_ativo = 'config' %}
 {% block topbar_title %}Mala direta{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_mala_direta.css') }}?v=1" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.snow.css" />
+<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_mala_direta.css') }}?v=2" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal CfgMd_Wrap">
@@ -77,12 +78,18 @@
           <span>Assunto</span>
           <input type="text" id="cfg_md_assunto" maxlength="200" placeholder="Assunto do e-mail" />
         </label>
-        <label class="CfgMd_Field">
+        <div class="CfgMd_Field">
           <span>Mensagem</span>
-          <textarea id="cfg_md_corpo" rows="12" placeholder="Texto ou HTML simples…"></textarea>
-        </label>
-        <p class="CfgMd_Hint">Destinatário: e-mail comercial do tenant; se vazio, e-mail do usuário dono.</p>
-        <button type="button" class="Cl_botaoprimario" id="cfg_md_enviar">Enviar mala direta</button>
+          <div class="CfgMd_EditorWrap">
+            <div id="cfg_md_editor" class="CfgMd_Quill"></div>
+          </div>
+          <input type="hidden" id="cfg_md_corpo" value="" />
+        </div>
+        <p class="CfgMd_Hint">A formatação (negrito, listas, links etc.) vai no HTML do e-mail. Destinatário: e-mail comercial do tenant; se vazio, e-mail do usuário dono.</p>
+        <div class="CfgMd_Acoes">
+          <button type="button" class="Cl_botaosecundario" id="cfg_md_enviar_teste" title="Envia só para hazael@h74.com.br">Enviar e-mail teste</button>
+          <button type="button" class="Cl_botaoprimario" id="cfg_md_enviar">Enviar mala direta</button>
+        </div>
       </section>
     </div>
   </section>
@@ -138,5 +145,6 @@
 </div>
 {% endblock %}
 {% block page_js %}
-<script src="{{ url_for('config.static', filename='script/Sconfig_mala_direta.js') }}?v=1"></script>
+<script src="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.js"></script>
+<script src="{{ url_for('config.static', filename='script/Sconfig_mala_direta.js') }}?v=2"></script>
 {% endblock %}
