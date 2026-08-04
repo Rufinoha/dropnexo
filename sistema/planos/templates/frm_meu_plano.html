@@ -6,7 +6,7 @@
 {% block head_extra %}
 <link rel="stylesheet" href="{{ url_for('planos.static', filename='style/Cmeu_plano.css') }}" />
 {% if pode_pagamento %}
-<link rel="stylesheet" href="{{ url_for('static', filename='style/Cefi_cartao.css') }}?v=6" />
+<link rel="stylesheet" href="{{ url_for('static', filename='style/Cefi_cartao.css') }}?v=8" />
 {% endif %}
 {% endblock %}
 
@@ -158,7 +158,7 @@
   "efiEnvironment": efi_environment or "sandbox",
   "urlFinanceiro": url_for("financeiro.pagina")
 }|tojson }}</script>
-<script defer src="{{ url_for('static', filename='script/Sefi_cartao.js') }}?v=7"></script>
+<script defer src="{{ url_for('static', filename='script/Sefi_cartao.js') }}?v=8"></script>
 <script defer src="{{ url_for('planos.static', filename='script/Smeu_plano.js') }}?v=6"></script>
 {% endif %}
 {% endblock %}

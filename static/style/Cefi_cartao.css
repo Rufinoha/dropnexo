@@ -40,9 +40,11 @@
 .DnPay_Panel {
   position: relative;
   width: min(920px, 100%);
+  height: min(92vh, 720px);
   max-height: min(92vh, 720px);
   display: grid;
   grid-template-columns: 0.92fr 1.2fr;
+  grid-template-rows: minmax(0, 1fr);
   background: #fff;
   border-radius: 22px;
   overflow: hidden;
@@ -88,7 +90,8 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  min-height: 100%;
+  min-height: 0;
+  height: 100%;
 }
 
 .DnPay_Aside::before {
@@ -192,7 +195,81 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
-  overflow: auto;
+  height: 100%;
+  overflow: hidden;
+}
+
+.DnPay_Body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable;
+  padding-right: 0.2rem;
+}
+
+.DnPay_Body::-webkit-scrollbar {
+  width: 8px;
+}
+
+.DnPay_Body::-webkit-scrollbar-thumb {
+  background: rgba(7, 20, 51, 0.28);
+  border-radius: 999px;
+}
+
+.DnPay_Body::-webkit-scrollbar-track {
+  background: rgba(7, 20, 51, 0.06);
+  border-radius: 999px;
+}
+
+.DnPay.is-cortesia .DnPay_Tabs {
+  display: none;
+}
+
+.DnPay.is-cortesia .DnPay_Pane:not([data-pane="cortesia"]) {
+  display: none !important;
+}
+
+.DnPay.is-cortesia .DnPay_Pane[data-pane="cortesia"] {
+  display: block;
+}
+
+.DnPay_Cortesia {
+  border: 1px solid rgba(22, 101, 52, 0.22);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(240, 253, 244, 0.55));
+  border-radius: 16px;
+  padding: 1.75rem 1.25rem;
+  text-align: center;
+}
+
+.DnPay_CortesiaMark {
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 1rem;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  background: rgba(22, 101, 52, 0.1);
+  color: #166534;
+  font-family: "Fraunces", Georgia, serif;
+  font-weight: 600;
+  font-size: 1.35rem;
+}
+
+.DnPay_Cortesia h4 {
+  margin: 0 0 0.4rem;
+  font-size: 1.15rem;
+  color: var(--dnp-ink);
+}
+
+.DnPay_Cortesia p {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--dnp-muted);
+  line-height: 1.5;
 }
 
 .DnPay_Periodo {
@@ -559,19 +636,23 @@
 }
 
 .DnPay_Error {
+  flex-shrink: 0;
   min-height: 1.2rem;
-  margin: 0.85rem 0 0.35rem;
+  margin: 0.65rem 0 0.25rem;
   font-size: 0.82rem;
   color: #b91c1c;
   text-align: center;
 }
 
 .DnPay_Actions {
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
   gap: 0.55rem;
-  margin-top: auto;
+  margin-top: 0;
   padding-top: 0.85rem;
+  border-top: 1px solid rgba(7, 20, 51, 0.08);
+  background: var(--dnp-paper);
 }
 
 .DnPay_Btn {
@@ -621,8 +702,10 @@
 
   .DnPay_Panel {
     width: 100%;
+    height: min(94vh, 100%);
     max-height: 94vh;
     grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
     border-radius: 22px 22px 0 0;
   }
 

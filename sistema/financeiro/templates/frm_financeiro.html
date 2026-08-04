@@ -4,7 +4,7 @@
 {% block head_extra %}
 <link rel="stylesheet" href="{{ url_for('financeiro.static', filename='style/Cfinanceiro.css') }}?v=1" />
 {% if not sem_acesso %}
-<link rel="stylesheet" href="{{ url_for('static', filename='style/Cefi_cartao.css') }}?v=6" />
+<link rel="stylesheet" href="{{ url_for('static', filename='style/Cefi_cartao.css') }}?v=8" />
 {% endif %}
 {% endblock %}
 {% block content %}
@@ -75,7 +75,7 @@
   "efiEnvironment": efi_environment or "sandbox",
   "ehDev": eh_dev
 }|tojson }}</script>
-<script defer src="{{ url_for('static', filename='script/Sefi_cartao.js') }}?v=7"></script>
+<script defer src="{{ url_for('static', filename='script/Sefi_cartao.js') }}?v=8"></script>
 <script defer src="{{ url_for('financeiro.static', filename='script/Sfinanceiro.js') }}?v=6"></script>
 {% endif %}
 {% endblock %}

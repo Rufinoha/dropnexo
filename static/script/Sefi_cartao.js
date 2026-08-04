@@ -143,6 +143,7 @@
       '<p class="DnPay_AsideFoot" id="dnpay_aside_break">—</p>' +
       "</aside>" +
       '<main class="DnPay_Main">' +
+      '<div class="DnPay_Body">' +
       '<div class="DnPay_Periodo" role="group" aria-label="Periodicidade">' +
       '<button type="button" class="DnPay_PeriodoBtn is-active" data-periodo="mensal">Mensal</button>' +
       '<button type="button" class="DnPay_PeriodoBtn" data-periodo="semestral">Semestral<small>−10%</small></button>' +
@@ -206,6 +207,13 @@
       "<h4>Quase lá</h4>" +
       "<p>PIX estará disponível em breve neste mesmo checkout.<br>Por agora, use cartão ou boleto.</p>" +
       "</div></section>" +
+      '<section class="DnPay_Pane" data-pane="cortesia">' +
+      '<div class="DnPay_Cortesia">' +
+      '<div class="DnPay_CortesiaMark" aria-hidden="true">0</div>' +
+      "<h4>Plano por cortesia</h4>" +
+      "<p>Cupom aplicado com 100% de desconto. Não há cobrança neste ciclo — confirme para ativar o plano.</p>" +
+      "</div></section>" +
+      "</div>" +
       '<p class="DnPay_Error" id="dnpay_error" aria-live="polite"></p>' +
       '<div class="DnPay_Actions">' +
       '<button type="button" class="DnPay_Btn DnPay_Btn--primary" id="dnpay_submit">Pagar com cartão</button>' +
@@ -428,6 +436,34 @@
           pix: "PIX em breve",
         };
 
+        function syncCortesiaUI() {
+          const isCortesia = state.valorFinal <= 0;
+          root.classList.toggle("is-cortesia", isCortesia);
+          if (isCortesia) {
+            labels.cartao = "Aceitar cortesia";
+            labels.boleto = "Aceitar cortesia";
+            labels.pix = "Aceitar cortesia";
+            submitBtn.textContent = "Aceitar cortesia";
+            submitBtn.disabled = false;
+            root.querySelectorAll(".DnPay_Pane").forEach(function (pane) {
+              pane.classList.toggle(
+                "is-active",
+                pane.getAttribute("data-pane") === "cortesia"
+              );
+            });
+            return;
+          }
+          labels.cartao = "Pagar com cartão";
+          labels.boleto = "Gerar boleto";
+          labels.pix = "PIX em breve";
+          root.querySelectorAll(".DnPay_Pane").forEach(function (pane) {
+            const name = pane.getAttribute("data-pane");
+            pane.classList.toggle("is-active", name === tab);
+          });
+          submitBtn.textContent = labels[tab] || "Continuar";
+          submitBtn.disabled = tab === "pix";
+        }
+
         function aplicarPreco(preco) {
           state.preco = preco;
           state.valorFinal = int(preco.valor_final_centavos);
@@ -441,9 +477,13 @@
               preco.meses_cobertos > 1 ? " / " + preco.meses_cobertos + " meses" : "/ mês";
           }
           if (elN) {
-            elN.textContent = preco.periodo_rotulo
-              ? "Ciclo: " + preco.periodo_rotulo
-              : "Escolha o ciclo e a forma de pagamento.";
+            if (state.valorFinal <= 0) {
+              elN.textContent = "Cupom de cortesia — sem cobrança neste ciclo.";
+            } else {
+              elN.textContent = preco.periodo_rotulo
+                ? "Ciclo: " + preco.periodo_rotulo
+                : "Escolha o ciclo e a forma de pagamento.";
+            }
           }
           if (elB) {
             const parts = [];
@@ -457,15 +497,7 @@
               ? "De " + (preco.valor_cheio_formatado || "") + " · " + parts.join(" · ")
               : "Pagamento processado com segurança pela Efí.";
           }
-          if (state.valorFinal <= 0) {
-            labels.cartao = "Ativar plano (cortesia)";
-            labels.boleto = "Ativar plano (cortesia)";
-            if (tab !== "pix") submitBtn.textContent = labels[tab];
-          } else {
-            labels.cartao = "Pagar com cartão";
-            labels.boleto = "Gerar boleto";
-            if (tab !== "pix") submitBtn.textContent = labels[tab];
-          }
+          syncCortesiaUI();
           if (typeof optsCard.refreshInstallments === "function") {
             optsCard.refreshInstallments();
           }
@@ -540,6 +572,7 @@
         }
 
         function setTab(next) {
+          if (state.valorFinal <= 0) return;
           tab = next;
           root.querySelectorAll(".DnPay_Tab").forEach(function (btn) {
             btn.classList.toggle("is-active", btn.getAttribute("data-tab") === next);
@@ -577,6 +610,11 @@
         root.querySelector("#dnpay_cupom_aplicar")?.addEventListener("click", function () {
           state.cupom = (root.querySelector("#dnpay_cupom")?.value || "").trim().toUpperCase();
           atualizarPreco();
+        });
+        root.querySelector("#dnpay_cupom")?.addEventListener("keydown", function (e) {
+          if (e.key !== "Enter") return;
+          e.preventDefault();
+          root.querySelector("#dnpay_cupom_aplicar")?.click();
         });
 
         atualizarPreco();
@@ -618,9 +656,14 @@
 
           submitBtn.addEventListener("click", function () {
             errEl.textContent = "";
+            // Cortesia 100%: ativa sem meio de pagamento
+            if (state.valorFinal <= 0) {
+              finish(payloadBase({ forma: "boleto" }));
+              return;
+            }
             if (tab === "pix") return;
-            // Boleto ou valor zerado (cortesia 100%): sem tokenizar cartão
-            if (tab === "boleto" || state.valorFinal <= 0) {
+            // Boleto: sem tokenizar cartão
+            if (tab === "boleto") {
               finish(payloadBase({ forma: "boleto" }));
               return;
             }
