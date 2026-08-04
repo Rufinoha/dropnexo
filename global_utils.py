@@ -110,8 +110,7 @@ def url_imagem_produto(imagem_url: str | None) -> str:
     if rel.lower().startswith("static/"):
         rel = rel[7:]
     if rel.lower().startswith("upload/tenant"):
-        if not is_modo_producao():
-            return url_for("static", filename=MARCA_ASSET_ICONE)
+        # Mesma rota autenticada em DEV e PROD (ACL valida vínculo/tenant).
         return url_for("bling.api_produto_imagem_arquivo", caminho=rel)
     return url_for("static", filename=rel)
 

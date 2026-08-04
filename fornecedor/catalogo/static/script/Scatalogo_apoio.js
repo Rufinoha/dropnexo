@@ -383,12 +383,8 @@
   }
 
   function syncModoImagemIntegrado() {
+    // Vendedor integrado personaliza a galeria da vitrine (sem alterar o fornecedor).
     if (!isVendedor) return;
-    const bloqueado = integrado;
-    if (el.btnImgLink) el.btnImgLink.disabled = bloqueado || !idProduto;
-    if (el.btnImgUpload) el.btnImgUpload.disabled = bloqueado || !idProduto;
-    if (el.img_link_url) el.img_link_url.readOnly = bloqueado;
-    if (el.arquivo_imagem) el.arquivo_imagem.disabled = bloqueado;
   }
 
   function indexarPresets(presets) {
@@ -506,8 +502,9 @@
   }
 
   function syncModoImagem() {
-    const locked = galeriaImagens.length > 0;
-    const tipo = tipoGaleria || (locked ? tipoDaImagem(galeriaImagens[0]) : null);
+    // Na vitrine do vendedor, URL e upload podem coexistir (imagens do FN + próprias).
+    const locked = !(isVendedor && integrado) && galeriaImagens.length > 0;
+    const tipo = tipoGaleria || (galeriaImagens.length ? tipoDaImagem(galeriaImagens[0]) : null);
     document.querySelectorAll('input[name="img_modo"]').forEach((r) => {
       const opt = r.closest(".Cat_ImgModoOpt");
       r.disabled = locked;
@@ -562,6 +559,9 @@
       bling_externa: "Link ext.",
       manual_url: "URL",
       manual_upload: "Upload",
+      fornecedor: "Fornecedor",
+      vendedor_upload: "Sua imagem",
+      vendedor_url: "Sua URL",
     };
     return map[origem] || "";
   }
@@ -1061,7 +1061,7 @@
     btn.type = "button";
     btn.id = "btnRestaurarVitrine";
     btn.className = "Cl_BtnExcluir Cat_BtnRestaurar";
-    btn.textContent = "Restaurar padrão";
+    btn.textContent = "Restaurar informações originais do fornecedor";
     btn.addEventListener("click", () => restaurarPadrao().catch((e) => Swal.fire("Erro", e.message, "error")));
     foot.insertBefore(btn, foot.firstChild);
   }
@@ -1069,8 +1069,8 @@
   async function restaurarPadrao() {
     if (!idProduto) return;
     const c = await Swal.fire({
-      title: "Restaurar padrão do fornecedor?",
-      text: "Nome, descrição, imagem e preço da vitrine voltam ao padrão.",
+      title: "Restaurar informações originais do fornecedor?",
+      text: "Nome, descrição, galeria de imagens e preço da vitrine voltam ao padrão do fornecedor.",
       icon: "question",
       showCancelButton: true,
       confirmButtonText: "Sim, restaurar",

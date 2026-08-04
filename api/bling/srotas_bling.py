@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import mimetypes
 import os
+import re
 from pathlib import Path
 
 from flask import Blueprint, abort, current_app, jsonify, redirect, render_template, request, send_file, session, url_for
@@ -1247,6 +1248,47 @@ def api_produto_imagem_publico():
     return send_file(arquivo, mimetype=mime or "application/octet-stream", max_age=3600)
 
 
+_RE_UPLOAD_TENANT_PRODUTO = re.compile(r"^upload/tenant(\d+)/produtos/", re.IGNORECASE)
+
+
+def _pode_ler_imagem_produto_upload(caminho: str, id_tenant_sessao: int | None) -> bool:
+    """Próprio tenant, vínculo ativo com o fornecedor dono, ou produto ainda na vitrine."""
+    if not id_tenant_sessao:
+        return False
+    m = _RE_UPLOAD_TENANT_PRODUTO.match(caminho)
+    if not m:
+        return False
+    id_dono = int(m.group(1))
+    id_sessao = int(id_tenant_sessao)
+    if id_dono == id_sessao:
+        return True
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT 1
+            WHERE EXISTS (
+                SELECT 1 FROM tbl_vinculo_vendedor_fornecedor
+                WHERE id_tenant_vendedor = %s
+                  AND id_tenant_fornecedor = %s
+                  AND status = 'ativo'
+            )
+            OR EXISTS (
+                SELECT 1
+                FROM tbl_produto_vendedor pv
+                JOIN tbl_produto p ON p.id = pv.id_produto
+                WHERE pv.id_tenant_vendedor = %s
+                  AND p.id_tenant = %s
+            )
+            """,
+            (id_sessao, id_dono, id_sessao, id_dono),
+        )
+        return cur.fetchone() is not None
+    finally:
+        conn.close()
+
+
 @bling_bp.get("/api/produto-imagem/arquivo")
 @login_obrigatorio()
 def api_produto_imagem_arquivo():
@@ -1257,8 +1299,7 @@ def api_produto_imagem_arquivo():
         return jsonify(success=False, message="Caminho não permitido."), 403
 
     id_tenant = session.get("id_tenant")
-    prefixo = f"upload/tenant{id_tenant}/produtos/"
-    if not caminho.lower().startswith(prefixo.lower()):
+    if not _pode_ler_imagem_produto_upload(caminho, id_tenant):
         return jsonify(success=False, message="Arquivo de outro tenant."), 403
 
     arquivo = _raiz_projeto() / caminho.replace("/", os.sep)

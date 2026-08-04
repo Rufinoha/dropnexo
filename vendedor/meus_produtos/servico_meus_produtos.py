@@ -5,8 +5,8 @@ from __future__ import annotations
 
 """Categoria do vendedor em produtos da vitrine (integrados e próprios)."""
 
-
-from global_utils import agora_utc
+from global_utils import agora_utc, url_imagem_produto
+from fornecedor.catalogo.catalogo import listar_imagens_galeria_pai
 
 
 def filtro_categoria_sem(id_categoria: str) -> bool:
@@ -1036,6 +1036,7 @@ def restaurar_vitrine_produto(cur, id_tenant_vendedor: int, id_produto: int) -> 
             (preco_venda, agora_utc(), pv_id),
         )
         n += 1
+    limpar_galeria_vitrine(cur, id_tenant_vendedor, id_produto)
     return n
 
 
@@ -1075,9 +1076,312 @@ def restaurar_vitrine_variante(cur, id_tenant_vendedor: int, id_variante: int) -
         """,
         (preco_venda, agora_utc(), row[0]),
     )
+    limpar_galeria_vitrine(cur, id_tenant_vendedor, int(row[1]))
     return True
 
 
+# ── galeria da vitrine (personalização do vendedor) ────
+
+MAX_IMAGENS_VITRINE = 10
+
+
+def garantir_tabela_produto_vendedor_imagem(cur) -> None:
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS tbl_produto_vendedor_imagem (
+            id SERIAL PRIMARY KEY,
+            id_tenant_vendedor INTEGER NOT NULL REFERENCES tbl_tenant(id) ON DELETE CASCADE,
+            id_produto INTEGER NOT NULL REFERENCES tbl_produto(id) ON DELETE CASCADE,
+            id_imagem_fornecedor INTEGER NULL REFERENCES tbl_produto_imagem(id) ON DELETE SET NULL,
+            caminho TEXT NOT NULL DEFAULT '',
+            ordem INTEGER NOT NULL DEFAULT 0,
+            principal BOOLEAN NOT NULL DEFAULT FALSE,
+            origem VARCHAR(40) NOT NULL DEFAULT 'vendedor_upload',
+            criado_em TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+        """
+    )
+    cur.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_pvi_vendedor_produto
+            ON tbl_produto_vendedor_imagem (id_tenant_vendedor, id_produto)
+        """
+    )
+    cur.execute(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_pvi_imagem_fornecedor
+            ON tbl_produto_vendedor_imagem (id_tenant_vendedor, id_produto, id_imagem_fornecedor)
+            WHERE id_imagem_fornecedor IS NOT NULL
+        """
+    )
+
+
+def galeria_vitrine_personalizada(cur, id_tenant_vendedor: int, id_produto: int) -> bool:
+    garantir_tabela_produto_vendedor_imagem(cur)
+    cur.execute(
+        """
+        SELECT 1 FROM tbl_produto_vendedor_imagem
+        WHERE id_tenant_vendedor = %s AND id_produto = %s
+        LIMIT 1
+        """,
+        (id_tenant_vendedor, id_produto),
+    )
+    return cur.fetchone() is not None
+
+
+def limpar_galeria_vitrine(cur, id_tenant_vendedor: int, id_produto: int) -> None:
+    garantir_tabela_produto_vendedor_imagem(cur)
+    cur.execute(
+        """
+        DELETE FROM tbl_produto_vendedor_imagem
+        WHERE id_tenant_vendedor = %s AND id_produto = %s
+        """,
+        (id_tenant_vendedor, id_produto),
+    )
+
+
+def _dict_imagem_vitrine(
+    *,
+    id_img,
+    caminho: str,
+    ordem: int,
+    principal: bool,
+    origem: str,
+    id_imagem_fornecedor=None,
+) -> dict:
+    cam = caminho or ""
+    return {
+        "id": id_img,
+        "caminho": cam,
+        "url": url_imagem_produto(cam) if cam and not cam.lower().startswith(("http://", "https://")) else cam,
+        "ordem": int(ordem or 0),
+        "principal": bool(principal),
+        "origem": origem or "fornecedor",
+        "fonte": "fornecedor" if (origem or "").startswith("fornecedor") else "vendedor",
+        "id_imagem_fornecedor": id_imagem_fornecedor,
+    }
+
+
+def listar_imagens_vitrine(cur, id_tenant_vendedor: int, id_produto: int) -> tuple[list[dict], bool]:
+    """Retorna (imagens, personalizada). Sem personalização = galeria do fornecedor."""
+    garantir_tabela_produto_vendedor_imagem(cur)
+    if galeria_vitrine_personalizada(cur, id_tenant_vendedor, id_produto):
+        cur.execute(
+            """
+            SELECT id, caminho, ordem, principal, origem, id_imagem_fornecedor
+            FROM tbl_produto_vendedor_imagem
+            WHERE id_tenant_vendedor = %s AND id_produto = %s
+            ORDER BY ordem ASC, id ASC
+            """,
+            (id_tenant_vendedor, id_produto),
+        )
+        imgs = [
+            _dict_imagem_vitrine(
+                id_img=int(r[0]),
+                caminho=r[1] or "",
+                ordem=int(r[2] or 0),
+                principal=bool(r[3]),
+                origem=r[4] or "vendedor_upload",
+                id_imagem_fornecedor=int(r[5]) if r[5] else None,
+            )
+            for r in cur.fetchall()
+        ]
+        return imgs, True
+
+    imgs = []
+    for g in listar_imagens_galeria_pai(cur, id_produto):
+        imgs.append(
+            _dict_imagem_vitrine(
+                id_img=g.get("id"),
+                caminho=g.get("caminho") or "",
+                ordem=int(g.get("ordem") or 0),
+                principal=bool(g.get("principal")),
+                origem="fornecedor",
+                id_imagem_fornecedor=g.get("id"),
+            )
+        )
+    if not imgs:
+        cur.execute("SELECT imagem_url FROM tbl_produto WHERE id = %s", (id_produto,))
+        row = cur.fetchone()
+        if row and row[0]:
+            imgs.append(
+                _dict_imagem_vitrine(
+                    id_img=None,
+                    caminho=row[0],
+                    ordem=0,
+                    principal=True,
+                    origem="fornecedor",
+                )
+            )
+    return imgs, False
+
+
+def materializar_galeria_vitrine(cur, id_tenant_vendedor: int, id_produto: int) -> None:
+    """Copia a galeria atual (fornecedor) para a tabela da vitrine, se ainda não personalizada."""
+    if galeria_vitrine_personalizada(cur, id_tenant_vendedor, id_produto):
+        return
+    imgs, _ = listar_imagens_vitrine(cur, id_tenant_vendedor, id_produto)
+    for img in imgs:
+        cam = (img.get("caminho") or "").strip()
+        if not cam:
+            continue
+        id_forn = img.get("id_imagem_fornecedor") or img.get("id")
+        cur.execute(
+            """
+            INSERT INTO tbl_produto_vendedor_imagem (
+                id_tenant_vendedor, id_produto, id_imagem_fornecedor,
+                caminho, ordem, principal, origem
+            ) VALUES (%s, %s, %s, %s, %s, %s, 'fornecedor')
+            """,
+            (
+                id_tenant_vendedor,
+                id_produto,
+                int(id_forn) if id_forn else None,
+                cam,
+                int(img.get("ordem") or 0),
+                bool(img.get("principal")),
+            ),
+        )
+
+
+def sincronizar_principal_vitrine(cur, id_tenant_vendedor: int, id_produto: int) -> str:
+    """Recalcula principal/ordem e espelha o caminho em imagem_url_vitrine."""
+    cur.execute(
+        """
+        SELECT id, caminho FROM tbl_produto_vendedor_imagem
+        WHERE id_tenant_vendedor = %s AND id_produto = %s
+        ORDER BY ordem ASC, id ASC
+        """,
+        (id_tenant_vendedor, id_produto),
+    )
+    rows = cur.fetchall()
+    principal_caminho = ""
+    for idx, (iid, cam) in enumerate(rows):
+        is_prin = idx == 0
+        if is_prin:
+            principal_caminho = (cam or "").strip()
+        cur.execute(
+            """
+            UPDATE tbl_produto_vendedor_imagem
+            SET ordem = %s, principal = %s
+            WHERE id = %s
+            """,
+            (idx, is_prin, iid),
+        )
+    cur.execute(
+        """
+        UPDATE tbl_produto_vendedor
+        SET imagem_url_vitrine = NULLIF(%s, ''),
+            atualizado_em = %s
+        WHERE id_tenant_vendedor = %s AND id_produto = %s
+        """,
+        (principal_caminho, agora_utc(), id_tenant_vendedor, id_produto),
+    )
+    return principal_caminho
+
+
+def contar_imagens_vitrine(cur, id_tenant_vendedor: int, id_produto: int) -> int:
+    imgs, _ = listar_imagens_vitrine(cur, id_tenant_vendedor, id_produto)
+    return len(imgs)
+
+
+def adicionar_imagem_vitrine(
+    cur,
+    id_tenant_vendedor: int,
+    id_produto: int,
+    *,
+    caminho: str,
+    origem: str,
+) -> dict:
+    materializar_galeria_vitrine(cur, id_tenant_vendedor, id_produto)
+    if contar_imagens_vitrine(cur, id_tenant_vendedor, id_produto) >= MAX_IMAGENS_VITRINE:
+        raise ValueError(f"Máximo de {MAX_IMAGENS_VITRINE} imagens por produto.")
+    cur.execute(
+        """
+        SELECT COALESCE(MAX(ordem), -1) + 1
+        FROM tbl_produto_vendedor_imagem
+        WHERE id_tenant_vendedor = %s AND id_produto = %s
+        """,
+        (id_tenant_vendedor, id_produto),
+    )
+    ordem = int(cur.fetchone()[0] or 0)
+    cur.execute(
+        """
+        INSERT INTO tbl_produto_vendedor_imagem (
+            id_tenant_vendedor, id_produto, caminho, ordem, principal, origem
+        ) VALUES (%s, %s, %s, %s, %s, %s)
+        RETURNING id, caminho, ordem, principal, origem, id_imagem_fornecedor
+        """,
+        (id_tenant_vendedor, id_produto, caminho, ordem, ordem == 0, origem),
+    )
+    r = cur.fetchone()
+    sincronizar_principal_vitrine(cur, id_tenant_vendedor, id_produto)
+    return _dict_imagem_vitrine(
+        id_img=int(r[0]),
+        caminho=r[1] or "",
+        ordem=int(r[2] or 0),
+        principal=bool(r[3]),
+        origem=r[4] or origem,
+        id_imagem_fornecedor=int(r[5]) if r[5] else None,
+    )
+
+
+def remover_imagem_vitrine(
+    cur,
+    id_tenant_vendedor: int,
+    id_produto: int,
+    *,
+    id_imagem: int | None = None,
+    limpar_principal: bool = False,
+) -> None:
+    materializar_galeria_vitrine(cur, id_tenant_vendedor, id_produto)
+    if id_imagem:
+        cur.execute(
+            """
+            DELETE FROM tbl_produto_vendedor_imagem
+            WHERE id_tenant_vendedor = %s AND id_produto = %s
+              AND (id = %s OR id_imagem_fornecedor = %s)
+            """,
+            (id_tenant_vendedor, id_produto, id_imagem, id_imagem),
+        )
+    elif limpar_principal:
+        cur.execute(
+            """
+            DELETE FROM tbl_produto_vendedor_imagem
+            WHERE id_tenant_vendedor = %s AND id_produto = %s AND principal = TRUE
+            """,
+            (id_tenant_vendedor, id_produto),
+        )
+    sincronizar_principal_vitrine(cur, id_tenant_vendedor, id_produto)
+
+
+def ordenar_imagens_vitrine(
+    cur,
+    id_tenant_vendedor: int,
+    id_produto: int,
+    ids: list[int],
+) -> None:
+    materializar_galeria_vitrine(cur, id_tenant_vendedor, id_produto)
+    ordem = 0
+    for raw in ids:
+        try:
+            iid = int(raw)
+        except (TypeError, ValueError):
+            continue
+        cur.execute(
+            """
+            UPDATE tbl_produto_vendedor_imagem
+            SET ordem = %s
+            WHERE id_tenant_vendedor = %s AND id_produto = %s
+              AND (id = %s OR id_imagem_fornecedor = %s)
+            """,
+            (ordem, id_tenant_vendedor, id_produto, iid, iid),
+        )
+        if cur.rowcount:
+            ordem += 1
+    sincronizar_principal_vitrine(cur, id_tenant_vendedor, id_produto)
+
+
 # ── exclusão vitrine / produto próprio ─────────────────
 
 def _limpar_referencias_variantes_vendedor(cur, id_vendedor: int, ids_variantes: list[int]) -> None:
@@ -1114,6 +1418,7 @@ def excluir_produto_meus_produtos(cur, id_tenant: int, pid: int) -> tuple[bool, 
             "DELETE FROM tbl_produto_favorito WHERE id_tenant = %s AND id_produto = %s",
             (id_tenant, pid),
         )
+        limpar_galeria_vitrine(cur, id_tenant, pid)
         cur.execute(
             "DELETE FROM tbl_produto_vendedor WHERE id_tenant_vendedor = %s AND id_produto = %s",
             (id_tenant, pid),
@@ -1161,98 +1466,7 @@ def excluir_produto_meus_produtos(cur, id_tenant: int, pid: int) -> tuple[bool, 
         "DELETE FROM tbl_produto_favorito WHERE id_tenant = %s AND id_produto = %s",
         (id_tenant, pid),
     )
-    cur.execute(
-        "DELETE FROM tbl_produto_vendedor WHERE id_tenant_vendedor = %s AND id_produto = %s",
-        (id_tenant, pid),
-    )
-    if cur.rowcount == 0:
-        return False, "Produto não encontrado na vitrine."
-    return True, "Produto removido da vitrine."
-
-
-# ── exclusão vitrine / produto próprio ─────────────────
-
-def _limpar_referencias_variantes_vendedor(cur, id_vendedor: int, ids_variantes: list[int]) -> None:
-    if not ids_variantes:
-        return
-    cur.execute(
-        """
-        DELETE FROM tbl_kit_vendedor_item i
-        USING tbl_kit_vendedor k
-        WHERE i.id_kit = k.id AND k.id_tenant = %s AND i.id_variante = ANY(%s)
-        """,
-        (id_vendedor, ids_variantes),
-    )
-    cur.execute(
-        "DELETE FROM tbl_produto_favorito WHERE id_tenant = %s AND id_variante = ANY(%s)",
-        (id_vendedor, ids_variantes),
-    )
-
-
-def excluir_produto_meus_produtos(cur, id_tenant: int, pid: int) -> tuple[bool, str]:
-    """Exclui produto próprio (com variações) ou remove integrado da vitrine."""
-    cur.execute("SELECT id_tenant FROM tbl_produto WHERE id = %s", (pid,))
-    row = cur.fetchone()
-    if not row:
-        return False, "Produto não encontrado."
-
-    id_owner = int(row[0])
-    cur.execute("SELECT id FROM tbl_produto_variante WHERE id_produto = %s", (pid,))
-    ids_variantes = [int(r[0]) for r in cur.fetchall()]
-
-    if id_owner == id_tenant:
-        _limpar_referencias_variantes_vendedor(cur, id_tenant, ids_variantes)
-        cur.execute(
-            "DELETE FROM tbl_produto_favorito WHERE id_tenant = %s AND id_produto = %s",
-            (id_tenant, pid),
-        )
-        cur.execute(
-            "DELETE FROM tbl_produto_vendedor WHERE id_tenant_vendedor = %s AND id_produto = %s",
-            (id_tenant, pid),
-        )
-        try:
-            cur.execute(
-                """
-                DELETE FROM tbl_integracao_map
-                WHERE id_tenant = %s AND entidade = 'produto' AND id_dropnexo = %s
-                """,
-                (id_tenant, pid),
-            )
-        except Exception:
-            pass
-        cur.execute(
-            "UPDATE tbl_produto SET id_variante_padrao = NULL WHERE id = %s AND id_tenant = %s",
-            (pid, id_tenant),
-        )
-        cur.execute("DELETE FROM tbl_produto WHERE id = %s AND id_tenant = %s", (pid, id_tenant))
-        if cur.rowcount == 0:
-            return False, "Produto não encontrado."
-        return True, "Produto excluído."
-
-    cur.execute(
-        """
-        SELECT 1 FROM tbl_produto_vendedor
-        WHERE id_tenant_vendedor = %s AND id_produto = %s
-        LIMIT 1
-        """,
-        (id_tenant, pid),
-    )
-    if not cur.fetchone():
-        return False, "Produto não encontrado na vitrine."
-
-    cur.execute(
-        """
-        SELECT id_variante FROM tbl_produto_vendedor
-        WHERE id_tenant_vendedor = %s AND id_produto = %s
-        """,
-        (id_tenant, pid),
-    )
-    ids_vitrine = [int(r[0]) for r in cur.fetchall()]
-    _limpar_referencias_variantes_vendedor(cur, id_tenant, ids_vitrine)
-    cur.execute(
-        "DELETE FROM tbl_produto_favorito WHERE id_tenant = %s AND id_produto = %s",
-        (id_tenant, pid),
-    )
+    limpar_galeria_vitrine(cur, id_tenant, pid)
     cur.execute(
         "DELETE FROM tbl_produto_vendedor WHERE id_tenant_vendedor = %s AND id_produto = %s",
         (id_tenant, pid),

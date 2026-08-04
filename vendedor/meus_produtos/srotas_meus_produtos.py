@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from decimal import Decimal
 from pathlib import Path
 
@@ -51,10 +52,14 @@ from vendedor.meus_produtos.servico_meus_produtos import montar_fornecedor_produ
 from vendedor.meus_produtos.servico_meus_produtos import buscar_produtos_proprios
 from vendedor.meus_produtos.servico_meus_produtos import (
     CAMPOS_READONLY_INTEGRADO,
+    adicionar_imagem_vitrine,
     avaliar_pausa_variante,
     estoque_efetivo,
     estoque_real_variante,
+    listar_imagens_vitrine,
+    ordenar_imagens_vitrine,
     produto_integrado,
+    remover_imagem_vitrine,
     restaurar_vitrine_produto,
     restaurar_vitrine_variante,
 )
@@ -1672,6 +1677,26 @@ def imagens_lista_vitrine():
         if not ctx:
             return jsonify(success=False, message="Produto não está na sua vitrine."), 404
 
+        if ctx["integrado"]:
+            imagens, personalizada = listar_imagens_vitrine(cur, id_tenant, id_produto)
+            modo = None
+            if imagens:
+                cam0 = (imagens[0].get("caminho") or "").strip().lower()
+                modo = (
+                    "link"
+                    if cam0.startswith(("http://", "https://"))
+                    else "upload"
+                )
+            return jsonify(
+                success=True,
+                imagens=imagens,
+                total=len(imagens),
+                somente_leitura=False,
+                personalizada=personalizada,
+                imagem_modo=modo,
+                regras_atributo=[],
+            )
+
         imagens = listar_imagens_galeria_pai(cur, id_produto)
         if not imagens:
             cur.execute("SELECT imagem_url FROM tbl_produto WHERE id = %s", (id_produto,))
@@ -1685,16 +1710,219 @@ def imagens_lista_vitrine():
                         "url": _imagem_url_resposta(cam),
                         "ordem": 0,
                         "principal": True,
+                        "origem": "manual_upload",
+                        "fonte": "vendedor",
                     }
                 )
         return jsonify(
             success=True,
             imagens=imagens,
             total=len(imagens),
-            somente_leitura=ctx["integrado"],
+            somente_leitura=False,
+            personalizada=False,
             imagem_modo=obter_imagem_modo(cur, id_produto),
             regras_atributo=listar_regras_atributo_imagem(cur, id_produto),
         )
+    finally:
+        conn.close()
+
+
+@vd_meus_produtos_bp.post("/meus-produtos/imagens/link")
+@login_obrigatorio()
+@exigir_permissao(codigo="produtos.editar")
+def imagens_link_vitrine():
+    if (resp := _exigir_edicao()) is not None:
+        return resp
+    id_tenant = _id_tenant_sessao()
+    body = request.get_json(silent=True) or {}
+    id_produto = int(body.get("id_produto") or 0)
+    url = (body.get("url") or "").strip()
+    if not id_tenant or not id_produto or not url:
+        return jsonify(success=False, message="Informe produto e URL."), 400
+    if not url.lower().startswith(("http://", "https://")):
+        return jsonify(success=False, message="URL inválida."), 400
+
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        ctx = _exigir_produto_vitrine(cur, id_tenant, id_produto)
+        if not ctx:
+            return jsonify(success=False, message="Produto não está na sua vitrine."), 404
+        if not ctx["integrado"]:
+            return jsonify(success=False, message="Use o cadastro próprio para imagens."), 400
+        img = adicionar_imagem_vitrine(
+            cur, id_tenant, id_produto, caminho=url, origem="vendedor_url"
+        )
+        conn.commit()
+        return jsonify(success=True, message="Imagem incluída na vitrine.", imagem=img)
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 400
+    finally:
+        conn.close()
+
+
+@vd_meus_produtos_bp.post("/meus-produtos/imagens/upload")
+@login_obrigatorio()
+@exigir_permissao(codigo="produtos.editar")
+def imagens_upload_vitrine():
+    if (resp := _exigir_edicao()) is not None:
+        return resp
+    id_tenant = _id_tenant_sessao()
+    id_produto = int(request.form.get("id_produto") or 0)
+    arquivo = request.files.get("arquivo")
+    if not id_tenant or not id_produto or not arquivo or not arquivo.filename:
+        return jsonify(success=False, message="Informe o produto e o arquivo."), 400
+
+    from fornecedor.catalogo.srotas_catalogo import (
+        MAX_BYTES_IMAGEM,
+        _extensao_imagem,
+        _pasta_imagens_tenant,
+    )
+
+    ext = _extensao_imagem(arquivo.filename)
+    if not ext:
+        return jsonify(success=False, message="Use PNG, JPG ou WEBP."), 400
+    stream = arquivo.stream
+    stream.seek(0, os.SEEK_END)
+    tamanho = stream.tell()
+    stream.seek(0)
+    if tamanho <= 0:
+        return jsonify(success=False, message="Arquivo vazio."), 400
+    if tamanho > MAX_BYTES_IMAGEM:
+        return jsonify(success=False, message="Imagem deve ter no máximo 2 MB."), 400
+    bruto = arquivo.read()
+    if not bruto:
+        return jsonify(success=False, message="Arquivo vazio."), 400
+    try:
+        from api.bling.imagens_export import validar_imagem_upload_bytes
+
+        valid = validar_imagem_upload_bytes(bruto)
+    except ValueError as e:
+        return jsonify(success=False, message=str(e)), 400
+    except Exception:
+        valid = {"jpg": None, "aviso": None}
+    gravar_jpg = valid.get("jpg") if isinstance(valid, dict) else None
+    if gravar_jpg:
+        ext = ".jpg"
+        tamanho = len(gravar_jpg)
+
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        ctx = _exigir_produto_vitrine(cur, id_tenant, id_produto)
+        if not ctx:
+            return jsonify(success=False, message="Produto não está na sua vitrine."), 404
+        if not ctx["integrado"]:
+            return jsonify(success=False, message="Use o cadastro próprio para imagens."), 400
+
+        # Placeholder id for filename; real id after insert
+        pasta = _pasta_imagens_tenant(int(id_tenant))
+        tmp_name = f"vitrine_{id_produto}_{os.urandom(4).hex()}{ext}"
+        destino = pasta / tmp_name
+        if gravar_jpg:
+            destino.write_bytes(gravar_jpg)
+        else:
+            destino.write_bytes(bruto)
+        caminho_db = f"imge/produtos/{id_tenant}/{tmp_name}"
+        img = adicionar_imagem_vitrine(
+            cur, id_tenant, id_produto, caminho=caminho_db, origem="vendedor_upload"
+        )
+        # Rename file to include row id when possible
+        try:
+            novo = pasta / f"vitrine_{id_produto}_{img['id']}{ext}"
+            if destino != novo:
+                destino.replace(novo)
+                caminho_db = f"imge/produtos/{id_tenant}/{novo.name}"
+                cur.execute(
+                    """
+                    UPDATE tbl_produto_vendedor_imagem SET caminho = %s WHERE id = %s
+                    """,
+                    (caminho_db, img["id"]),
+                )
+                img["caminho"] = caminho_db
+                img["url"] = _imagem_url_resposta(caminho_db)
+        except OSError:
+            pass
+        conn.commit()
+        msg = "Imagem enviada para a vitrine."
+        aviso = (valid or {}).get("aviso") if isinstance(valid, dict) else None
+        if aviso:
+            msg = f"{msg} Atenção: {aviso}"
+        return jsonify(success=True, message=msg, imagem=img, aviso=aviso)
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 400
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+@vd_meus_produtos_bp.post("/meus-produtos/imagens/remover")
+@login_obrigatorio()
+@exigir_permissao(codigo="produtos.editar")
+def imagens_remover_vitrine():
+    if (resp := _exigir_edicao()) is not None:
+        return resp
+    id_tenant = _id_tenant_sessao()
+    body = request.get_json(silent=True) or {}
+    id_produto = int(body.get("id_produto") or 0)
+    id_imagem = body.get("id_imagem")
+    try:
+        id_imagem_i = int(id_imagem) if id_imagem not in (None, "") else None
+    except (TypeError, ValueError):
+        id_imagem_i = None
+    limpar_principal = bool(body.get("limpar_principal"))
+    if not id_tenant or not id_produto:
+        return jsonify(success=False, message="Produto inválido."), 400
+
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        ctx = _exigir_produto_vitrine(cur, id_tenant, id_produto)
+        if not ctx:
+            return jsonify(success=False, message="Produto não está na sua vitrine."), 404
+        if not ctx["integrado"]:
+            return jsonify(success=False, message="Use o cadastro próprio para imagens."), 400
+        remover_imagem_vitrine(
+            cur,
+            id_tenant,
+            id_produto,
+            id_imagem=id_imagem_i,
+            limpar_principal=limpar_principal,
+        )
+        conn.commit()
+        return jsonify(success=True, message="Imagem removida da vitrine.")
+    finally:
+        conn.close()
+
+
+@vd_meus_produtos_bp.post("/meus-produtos/imagens/ordenar")
+@login_obrigatorio()
+@exigir_permissao(codigo="produtos.editar")
+def imagens_ordenar_vitrine():
+    if (resp := _exigir_edicao()) is not None:
+        return resp
+    id_tenant = _id_tenant_sessao()
+    body = request.get_json(silent=True) or {}
+    id_produto = int(body.get("id_produto") or 0)
+    ids = body.get("ids") or []
+    if not id_tenant or not id_produto or not isinstance(ids, list) or not ids:
+        return jsonify(success=False, message="Informe produto e ordem das imagens."), 400
+
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        ctx = _exigir_produto_vitrine(cur, id_tenant, id_produto)
+        if not ctx:
+            return jsonify(success=False, message="Produto não está na sua vitrine."), 404
+        if not ctx["integrado"]:
+            return jsonify(success=False, message="Use o cadastro próprio para imagens."), 400
+        ordenar_imagens_vitrine(cur, id_tenant, id_produto, ids)
+        conn.commit()
+        return jsonify(success=True, message="Ordem atualizada.")
     finally:
         conn.close()
 

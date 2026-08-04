@@ -12,6 +12,7 @@ from fornecedor.parametros.precificacao import (
 )
 from vendedor.precificacao.srotas_precificacao import precificar_na_integracao
 from global_utils import Var_ConectarBanco, exigir_modulo, exigir_permissao, login_obrigatorio, url_imagem_produto
+from fornecedor.catalogo.catalogo import listar_imagens_galeria_pai
 from sistema.plataforma.sessao import MODULO_VENDEDOR
 from vendedor.fornecedores.srotas_fornecedores import (
     _agrupar_atributos_resumo,
@@ -440,6 +441,18 @@ def produto_detalhe(id_produto: int):
                 }
             )
 
+        imagens = listar_imagens_galeria_pai(cur, id_produto)
+        if not imagens and row[4]:
+            imagens = [
+                {
+                    "id": None,
+                    "caminho": row[4],
+                    "url": url_imagem_produto(row[4]),
+                    "ordem": 0,
+                    "principal": True,
+                    "origem": "fornecedor",
+                }
+            ]
         base = {
             "id_produto": row[0],
             "nome": row[1],
@@ -447,6 +460,7 @@ def produto_detalhe(id_produto: int):
             "descricao_html": _sanitizar_descricao_html(row[2] or ""),
             "formato": row[3] or "S",
             "imagem_url": url_imagem_produto(row[4]),
+            "imagens": imagens,
             "id_fornecedor": row[6],
             "fornecedor_nome": row[7],
             "categoria": row[8] or "",
