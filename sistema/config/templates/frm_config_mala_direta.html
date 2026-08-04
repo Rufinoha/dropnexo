@@ -4,7 +4,7 @@
 {% block topbar_title %}Mala direta{% endblock %}
 {% block head_extra %}
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.snow.css" />
-<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_mala_direta.css') }}?v=5" />
+<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_mala_direta.css') }}?v=6" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal CfgMd_Wrap">
@@ -27,9 +27,6 @@
     <button type="button" class="CfgMd_Tab is-active" data-tab="novo">Novo disparo</button>
     <button type="button" class="CfgMd_Tab" data-tab="historico">Histórico / dashboard</button>
   </div>
-  <script id="cfg_md_cfg" type="application/json">{{ {
-    "rotaDisparoApoio": url_for("config.mala_direta_disparo_apoio_pagina")
-  }|tojson }}</script>
 
   <section class="CfgMd_Panel is-active" id="cfg_md_panel_novo">
     <div class="CfgMd_Grid">
@@ -99,36 +96,66 @@
   </section>
 
   <section class="CfgMd_Panel" id="cfg_md_panel_historico" hidden>
-    <section class="CfgMd_Card">
-      <div class="CfgMd_SelBar">
-        <h3 style="margin:0">Disparos</h3>
-        <button type="button" class="Cl_botaosecundario" id="cfg_md_refresh_hist">Atualizar</button>
-      </div>
-      <p class="CfgMd_Hint">Use <strong>Ver</strong> para abrir os destinatários do disparo.</p>
-      <div class="CfgMd_TabelaWrap">
-        <table class="Cl_TabelaPrincipal CfgMd_Tabela">
-          <thead>
-            <tr>
-              <th>Data</th>
-              <th>Assunto</th>
-              <th>Total</th>
-              <th>Entregues</th>
-              <th>Abertos</th>
-              <th>Bounce</th>
-              <th>Erros</th>
-              <th class="Cl_TableActions">Ações</th>
-            </tr>
-          </thead>
-          <tbody id="cfg_md_hist_tbody">
-            <tr><td colspan="8" class="CfgMd_Hint">Carregando…</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
+    <div class="CfgMd_Grid">
+      <section class="CfgMd_Card">
+        <div class="CfgMd_SelBar">
+          <h3 style="margin:0">Disparos</h3>
+          <button type="button" class="Cl_botaosecundario" id="cfg_md_refresh_hist">Atualizar</button>
+        </div>
+        <p class="CfgMd_Hint">Clique em uma linha para ver os destinatários e o último status.</p>
+        <div class="CfgMd_TabelaWrap">
+          <table class="Cl_TabelaPrincipal CfgMd_Tabela">
+            <thead>
+              <tr>
+                <th>Data</th>
+                <th>Assunto</th>
+                <th>Total</th>
+                <th>Entregues</th>
+                <th>Abertos</th>
+                <th>Bounce</th>
+                <th>Erros</th>
+              </tr>
+            </thead>
+            <tbody id="cfg_md_hist_tbody">
+              <tr><td colspan="7" class="CfgMd_Hint">Carregando…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+      <section class="CfgMd_Card" id="cfg_md_detalhe_card">
+        <h3 id="cfg_md_detalhe_titulo">Selecione um disparo</h3>
+        <p class="CfgMd_Hint" id="cfg_md_detalhe_vazio">Clique em uma linha para ver destinatários e status do Brevo.</p>
+        <div id="cfg_md_detalhe_corpo" hidden>
+          <dl class="CfgMd_Resumo" id="cfg_md_detalhe_meta"></dl>
+          <p class="CfgMd_Hint">Clique no <strong>status</strong> de um destinatário para ver a linha do tempo (enviado → entregue → aberto → clique…).</p>
+          <div class="CfgMd_TabelaWrap">
+            <table class="Cl_TabelaPrincipal CfgMd_Tabela">
+              <thead>
+                <tr>
+                  <th>Tenant</th>
+                  <th>E-mail</th>
+                  <th>Status</th>
+                  <th>Último evento</th>
+                </tr>
+              </thead>
+              <tbody id="cfg_md_detalhe_tbody"></tbody>
+            </table>
+          </div>
+          <div class="CfgMd_Timeline" id="cfg_md_timeline" hidden>
+            <div class="CfgMd_TimelineHead">
+              <h4 id="cfg_md_timeline_titulo">Linha do tempo</h4>
+              <button type="button" class="Cl_botaosecundario" id="cfg_md_timeline_fechar">Fechar</button>
+            </div>
+            <p class="CfgMd_Hint" id="cfg_md_timeline_meta"></p>
+            <ol class="CfgMd_TimelineList" id="cfg_md_timeline_list"></ol>
+          </div>
+        </div>
+      </section>
+    </div>
   </section>
 </div>
 {% endblock %}
 {% block page_js %}
 <script src="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.js"></script>
-<script src="{{ url_for('config.static', filename='script/Sconfig_mala_direta.js') }}?v=5"></script>
+<script src="{{ url_for('config.static', filename='script/Sconfig_mala_direta.js') }}?v=6"></script>
 {% endblock %}
