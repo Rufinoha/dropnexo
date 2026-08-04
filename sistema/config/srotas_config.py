@@ -1678,6 +1678,38 @@ def mala_direta_disparos():
         conn.close()
 
 
+@config_bp.get(f"{MALA_DIRETA_PREFIX}/disparo/apoio")
+@login_obrigatorio()
+def mala_direta_disparo_apoio_pagina():
+    """Apoio nível 1 — destinatários e último status do disparo."""
+    if not session.get("eh_desenvolvedor"):
+        return redirect(url_for("dashboard.index"))
+    try:
+        id_envio = int(request.args.get("id_envio") or 0)
+    except (TypeError, ValueError):
+        id_envio = 0
+    return render_template(
+        "frm_config_mala_direta_disparo_apoio.html",
+        id_envio=id_envio,
+    )
+
+
+@config_bp.get(f"{MALA_DIRETA_PREFIX}/destinatario/apoio")
+@login_obrigatorio()
+def mala_direta_destinatario_apoio_pagina():
+    """Apoio nível 2 — linha do tempo de eventos do destinatário."""
+    if not session.get("eh_desenvolvedor"):
+        return redirect(url_for("dashboard.index"))
+    try:
+        id_destinatario = int(request.args.get("id_destinatario") or 0)
+    except (TypeError, ValueError):
+        id_destinatario = 0
+    return render_template(
+        "frm_config_mala_direta_evento_apoio.html",
+        id_destinatario=id_destinatario,
+    )
+
+
 @config_bp.get(f"{MALA_DIRETA_PREFIX}/disparos/<int:id_envio>")
 @login_obrigatorio()
 def mala_direta_disparo_detalhe(id_envio: int):
