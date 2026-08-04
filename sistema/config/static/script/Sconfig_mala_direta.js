@@ -160,7 +160,7 @@
           <td>${d.bounces}</td>
           <td>${d.erros}</td>
           <td class="Cl_TableActions">
-            <button type="button" class="Cl_botaosecundario btnVerDisparo" data-envio="${d.id_envio}" title="Ver destinatários">Ver</button>
+            <button type="button" class="Cl_BtnAuxiliar btnVerDisparo" data-envio="${d.id_envio}" title="Ver destinatários">Ver</button>
           </td>
         </tr>`;
       })

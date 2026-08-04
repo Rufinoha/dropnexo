@@ -6,7 +6,7 @@
   {% include "partials/marca_favicon.html" %}
   <link rel="stylesheet" href="{{ url_for('static', filename='style/global_utils.css') }}" />
   <link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_crud.css') }}" />
-  <link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_mala_direta.css') }}?v=8" />
+  <link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_mala_direta.css') }}?v=9" />
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </head>
 <body class="CfgMd_ApoioBody">
@@ -14,21 +14,21 @@
     <header class="CfgMd_ApoioHead">
       <div>
         <h2 id="md_disp_titulo">Destinatários</h2>
-        <p class="CfgMd_Hint" id="md_disp_meta">Carregando…</p>
+        <p class="CfgMd_ApoioMeta" id="md_disp_meta">Carregando…</p>
       </div>
-      <button type="button" class="Cl_botaosecundario" id="md_disp_atualizar">Atualizar</button>
+      <button type="button" class="Cl_BtnAuxiliar" id="md_disp_atualizar">Atualizar</button>
     </header>
 
     <p class="CfgMd_Hint">Clique no <strong>status</strong> para abrir a linha do tempo (apoio nível 2).</p>
 
-    <div class="CfgMd_TabelaWrap">
-      <table class="Cl_TabelaPrincipal CfgMd_Tabela">
+    <div class="Cl_TabelaPrincipal">
+      <table>
         <thead>
           <tr>
-            <th>Tenant</th>
+            <th style="width:22%">Tenant</th>
             <th>E-mail</th>
-            <th>Status</th>
-            <th>Último evento</th>
+            <th style="width:11rem">Status</th>
+            <th style="width:11rem">Último evento</th>
           </tr>
         </thead>
         <tbody id="md_disp_tbody">
@@ -47,6 +47,6 @@
     "rotaEventoApoio": url_for("config.mala_direta_destinatario_apoio_pagina")
   }|tojson }}</script>
   <script src="{{ url_for('static', filename='script/global_utils.js') }}"></script>
-  <script src="{{ url_for('config.static', filename='script/Sconfig_mala_direta_disparo_apoio.js') }}?v=1"></script>
+  <script src="{{ url_for('config.static', filename='script/Sconfig_mala_direta_disparo_apoio.js') }}?v=2"></script>
 </body>
 </html>
