@@ -146,3 +146,69 @@
 .CfgMd_Status.is-ok { background: #dcfce7; color: #166534; }
 .CfgMd_Status.is-open { background: #dbeafe; color: #1d4ed8; }
 .CfgMd_Status.is-err { background: #fee2e2; color: #991b1b; }
+.CfgMd_Status.is-clickable {
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.CfgMd_Status.is-clickable:hover { filter: brightness(0.96); }
+.CfgMd_Timeline {
+  margin-top: 1rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+.CfgMd_TimelineHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+.CfgMd_TimelineHead h4 {
+  margin: 0;
+  font-size: 0.95rem;
+  color: #1c2e3b;
+}
+.CfgMd_TimelineList {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  border-left: 2px solid #cbd5e1;
+}
+.CfgMd_TimelineList li {
+  position: relative;
+  padding: 0 0 0.85rem 1rem;
+  margin-left: 0.35rem;
+}
+.CfgMd_TimelineList li::before {
+  content: "";
+  position: absolute;
+  left: -0.45rem;
+  top: 0.35rem;
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  background: #021F81;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px #cbd5e1;
+}
+.CfgMd_TimelineList .CfgMd_TlTipo {
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: #1c2e3b;
+}
+.CfgMd_TimelineList .CfgMd_TlData {
+  display: block;
+  font-size: 0.78rem;
+  color: #64748b;
+  margin-top: 0.1rem;
+}
+.CfgMd_TimelineList .CfgMd_TlMsg {
+  display: block;
+  font-size: 0.8rem;
+  color: #94a3b8;
+  margin-top: 0.15rem;
+}

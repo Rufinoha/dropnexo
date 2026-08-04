@@ -126,6 +126,73 @@
     return "";
   }
 
+  function rotuloEvento(tipo) {
+    const t = String(tipo || "").toLowerCase();
+    const map = {
+      request: "Enviado (aceito pelo Brevo)",
+      enviado: "Enviado",
+      delivered: "Entregue",
+      opened: "Aberto",
+      unique_opened: "Aberto (único)",
+      first_opening: "Primeira abertura",
+      click: "Clique em link",
+      soft_bounce: "Bounce suave",
+      hard_bounce: "Bounce duro",
+      bounce: "Bounce",
+      blocked: "Bloqueado",
+      spam: "Marcado como spam",
+      invalid: "E-mail inválido",
+      error: "Erro",
+      falha: "Falha",
+      deferred: "Adiado",
+      unsubscribed: "Descadastro",
+    };
+    return map[t] || tipo || "Evento";
+  }
+
+  function fecharTimeline() {
+    const box = document.getElementById("cfg_md_timeline");
+    if (box) box.hidden = true;
+  }
+
+  async function abrirTimeline(idDest) {
+    const box = document.getElementById("cfg_md_timeline");
+    const titulo = document.getElementById("cfg_md_timeline_titulo");
+    const meta = document.getElementById("cfg_md_timeline_meta");
+    const list = document.getElementById("cfg_md_timeline_list");
+    if (!box || !list) return;
+    box.hidden = false;
+    list.innerHTML = `<li class="CfgMd_Hint">Carregando…</li>`;
+    const j = await api(`${BASE}/destinatarios/${idDest}/eventos`);
+    const d = j.destinatario || {};
+    const eventos = j.eventos || [];
+    titulo.textContent = d.email || "Linha do tempo";
+    meta.textContent = [
+      d.nome_tenant ? `Tenant: ${d.nome_tenant}` : null,
+      d.assunto ? `Assunto: ${d.assunto}` : null,
+      d.status_atual ? `Status atual: ${rotuloEvento(d.status_atual)}` : null,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+    if (!eventos.length) {
+      list.innerHTML =
+        `<li class="CfgMd_Hint">Ainda sem eventos do webhook. Assim que o Brevo enviar delivered/opened/click, eles aparecem aqui.</li>`;
+      return;
+    }
+    list.innerHTML = eventos
+      .map((ev) => {
+        const dt = ev.data ? new Date(ev.data).toLocaleString("pt-BR") : "—";
+        const msg = ev.mensagem ? `<span class="CfgMd_TlMsg">${escapeHtml(ev.mensagem)}</span>` : "";
+        return `<li>
+          <span class="CfgMd_TlTipo">${escapeHtml(rotuloEvento(ev.tipo))}</span>
+          <span class="CfgMd_TlData">${escapeHtml(dt)}</span>
+          ${msg}
+        </li>`;
+      })
+      .join("");
+    box.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+
   async function carregarHistorico() {
     histBody.innerHTML = `<tr><td colspan="7" class="CfgMd_Hint">Carregando…</td></tr>`;
     const j = await api(`${BASE}/disparos`);
@@ -167,14 +234,16 @@
       <div><dt>Tag Brevo</dt><dd>${escapeHtml(d.tag)}</dd></div>
       <div><dt>Filtro</dt><dd>${escapeHtml(d.filtro_tipo || "—")}</dd></div>
       <div><dt>Total</dt><dd>${d.total}</dd></div>`;
+    fecharTimeline();
     tb.innerHTML = (d.destinatarios || [])
       .map((x) => {
         const ev = x.dt_ultimo_evento ? new Date(x.dt_ultimo_evento).toLocaleString("pt-BR") : "—";
         const cls = statusClass(x.status);
-        return `<tr>
+        const stLabel = rotuloEvento(x.status);
+        return `<tr data-dest="${x.id_destinatario}">
           <td>${escapeHtml(x.nome_tenant || (x.id_tenant ? `#${x.id_tenant}` : "—"))}</td>
           <td>${escapeHtml(x.email)}</td>
-          <td><span class="CfgMd_Status ${cls}">${escapeHtml(x.status)}</span></td>
+          <td><button type="button" class="CfgMd_Status is-clickable ${cls}" data-dest="${x.id_destinatario}" title="Ver linha do tempo">${escapeHtml(stLabel)}</button></td>
           <td>${escapeHtml(ev)}</td>
         </tr>`;
       })
@@ -299,6 +368,15 @@
     tr.classList.add("is-selected");
     abrirDetalhe(Number(tr.getAttribute("data-envio"))).catch((err) => toast("error", err.message));
   });
+
+  document.getElementById("cfg_md_detalhe_tbody")?.addEventListener("click", (e) => {
+    const btn = e.target.closest(".CfgMd_Status[data-dest]");
+    if (!btn) return;
+    e.stopPropagation();
+    abrirTimeline(Number(btn.getAttribute("data-dest"))).catch((err) => toast("error", err.message));
+  });
+
+  document.getElementById("cfg_md_timeline_fechar")?.addEventListener("click", fecharTimeline);
 
   document.getElementById("cfg_md_refresh_hist")?.addEventListener("click", () => {
     carregarHistorico().catch((e) => toast("error", e.message));

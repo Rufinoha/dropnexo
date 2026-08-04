@@ -4,7 +4,7 @@
 {% block topbar_title %}Mala direta{% endblock %}
 {% block head_extra %}
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.snow.css" />
-<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_mala_direta.css') }}?v=2" />
+<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_mala_direta.css') }}?v=4" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal CfgMd_Wrap">
@@ -85,9 +85,10 @@
           </div>
           <input type="hidden" id="cfg_md_corpo" value="" />
         </div>
-        <p class="CfgMd_Hint">A formatação (negrito, listas, links etc.) vai no HTML do e-mail. Destinatário: e-mail comercial do tenant; se vazio, e-mail do usuário dono.</p>
+        <p class="CfgMd_Hint">A formatação (negrito, listas, links etc.) vai no HTML do e-mail.</p>
+        <p class="CfgMd_Hint"><strong>E-mail teste</strong> → só para hazael@h74.com.br (não precisa selecionar tenant). <strong>Mala direta</strong> → e-mail comercial do tenant; se vazio, e-mail do dono.</p>
         <div class="CfgMd_Acoes">
-          <button type="button" class="Cl_botaosecundario" id="cfg_md_enviar_teste" title="Envia só para hazael@h74.com.br">Enviar e-mail teste</button>
+          <button type="button" class="Cl_botaosecundario" id="cfg_md_enviar_teste" title="Envia só para hazael@h74.com.br — sem selecionar tenant">Enviar e-mail teste</button>
           <button type="button" class="Cl_botaoprimario" id="cfg_md_enviar">Enviar mala direta</button>
         </div>
       </section>
@@ -125,6 +126,7 @@
         <p class="CfgMd_Hint" id="cfg_md_detalhe_vazio">Clique em uma linha para ver destinatários e status do Brevo.</p>
         <div id="cfg_md_detalhe_corpo" hidden>
           <dl class="CfgMd_Resumo" id="cfg_md_detalhe_meta"></dl>
+          <p class="CfgMd_Hint">Clique no <strong>status</strong> de um destinatário para ver a linha do tempo (enviado → entregue → aberto → clique…).</p>
           <div class="CfgMd_TabelaWrap">
             <table class="Cl_TabelaPrincipal CfgMd_Tabela">
               <thead>
@@ -138,6 +140,14 @@
               <tbody id="cfg_md_detalhe_tbody"></tbody>
             </table>
           </div>
+          <div class="CfgMd_Timeline" id="cfg_md_timeline" hidden>
+            <div class="CfgMd_TimelineHead">
+              <h4 id="cfg_md_timeline_titulo">Linha do tempo</h4>
+              <button type="button" class="Cl_botaosecundario" id="cfg_md_timeline_fechar">Fechar</button>
+            </div>
+            <p class="CfgMd_Hint" id="cfg_md_timeline_meta"></p>
+            <ol class="CfgMd_TimelineList" id="cfg_md_timeline_list"></ol>
+          </div>
         </div>
       </section>
     </div>
@@ -146,5 +156,5 @@
 {% endblock %}
 {% block page_js %}
 <script src="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.js"></script>
-<script src="{{ url_for('config.static', filename='script/Sconfig_mala_direta.js') }}?v=2"></script>
+<script src="{{ url_for('config.static', filename='script/Sconfig_mala_direta.js') }}?v=4"></script>
 {% endblock %}

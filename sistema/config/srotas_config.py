@@ -1738,6 +1738,66 @@ def mala_direta_disparo_detalhe(id_envio: int):
         conn.close()
 
 
+@config_bp.get(f"{MALA_DIRETA_PREFIX}/destinatarios/<int:id_destinatario>/eventos")
+@login_obrigatorio()
+def mala_direta_destinatario_eventos(id_destinatario: int):
+    """Timeline completa de eventos Brevo de um destinatário do disparo."""
+    if (r := _exigir_dev()) is not None:
+        return r
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT d.id_destinatario, d.email, d.status_atual, d.dt_ultimo_evento,
+                   d.nome_tenant, d.id_tenant, d.id_envio, e.assunto
+            FROM tbl_email_destinatario d
+            JOIN tbl_email_envio e ON e.id_envio = d.id_envio
+            WHERE d.id_destinatario = %s
+            """,
+            (id_destinatario,),
+        )
+        row = cur.fetchone()
+        if not row:
+            return jsonify(success=False, message="Destinatário não encontrado."), 404
+
+        cur.execute(
+            """
+            SELECT id_evento, tipo_evento, data_evento, mensagem_erro
+            FROM tbl_email_evento
+            WHERE id_destinatario = %s
+            ORDER BY data_evento ASC, id_evento ASC
+            """,
+            (id_destinatario,),
+        )
+        eventos = []
+        for ev in cur.fetchall():
+            eventos.append(
+                {
+                    "id_evento": int(ev[0]),
+                    "tipo": ev[1] or "",
+                    "data": ev[2].isoformat() if ev[2] else None,
+                    "mensagem": ev[3] or "",
+                }
+            )
+        return jsonify(
+            success=True,
+            destinatario={
+                "id_destinatario": int(row[0]),
+                "email": row[1] or "",
+                "status_atual": row[2] or "",
+                "dt_ultimo_evento": row[3].isoformat() if row[3] else None,
+                "nome_tenant": row[4] or "",
+                "id_tenant": int(row[5]) if row[5] else None,
+                "id_envio": int(row[6]),
+                "assunto": row[7] or "",
+            },
+            eventos=eventos,
+        )
+    finally:
+        conn.close()
+
+
 # --- Cupom de Desconto ---
 CUPOM_PREFIX = "/configuracoes/cupons-desconto"
 
