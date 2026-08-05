@@ -952,7 +952,11 @@ def rede():
         cur.execute(
             f"""
             SELECT t.id, COALESCE(t.nome_fantasia, t.nome), t.cidade, t.uf,
-                   t.telefone_comercial, t.email_comercial, COALESCE(t.site, ''),
+                   COALESCE(t.telefone_comercial, ''),
+                   COALESCE(t.email_comercial, ''),
+                   COALESCE(t.site, ''),
+                   COALESCE(t.celular_comercial, ''),
+                   COALESCE(t.pessoas_contato, ''),
                    v.id AS id_vinculo, COALESCE(v.status, 'nenhum'),
                    (SELECT COUNT(*)::int FROM tbl_produto p
                     WHERE p.id_tenant = t.id AND p.publicado = TRUE),
@@ -988,24 +992,25 @@ def rede():
             seg_rows = cur.fetchall()
             segmentos = [r[1] for r in seg_rows]
             ids_seg = [r[0] for r in seg_rows]
-            st = row[8] or "nenhum"
+            st = row[10] or "nenhum"
             pode_despausar = (
                 st == "pausado"
-                and (row[13] or "") == "vendedor"
-                and (row[14] is None or (uid is not None and int(row[14]) == int(uid)))
+                and (row[15] or "") == "vendedor"
+                and (row[16] is None or (uid is not None and int(row[16]) == int(uid)))
             )
-            telefone = row[4] or ""
-            email = row[5] or ""
+            telefone = (row[4] or "").strip()
+            email = (row[5] or "").strip()
             site = (row[6] or "").strip()
+            celular = (row[7] or "").strip()
+            pessoas_contato = (row[8] or "").strip()
             contato = None
-            # Contatos completos só para vínculo ativo (parceiro conectado).
+            # Contato da empresa (tbl_tenant) — nunca o usuário logado/dono pessoal.
             if st == "ativo":
-                resp = carregar_contato_responsavel_fornecedor(cur, tid) or {}
                 contato = {
-                    "responsavel": (resp.get("nome") or "").strip(),
-                    "email": (resp.get("email") or email or "").strip(),
-                    "whatsapp": (resp.get("whatsapp") or "").strip(),
-                    "telefone": (telefone or "").strip(),
+                    "responsavel": pessoas_contato,
+                    "email": email,
+                    "whatsapp": celular or telefone,
+                    "telefone": telefone,
                     "site": site,
                 }
             cards.append(
@@ -1020,12 +1025,12 @@ def rede():
                     "contato": contato,
                     "segmentos": segmentos,
                     "ids_segmentos": ids_seg,
-                    "qtd_produtos": int(row[9] or 0),
-                    "qtd_produtos_vitrine": int(row[10] or 0),
+                    "qtd_produtos": int(row[11] or 0),
+                    "qtd_produtos_vitrine": int(row[12] or 0),
                     "status_vinculo": st,
-                    "id_vinculo": row[7],
-                    "motivo_recusa": row[11] or "" if st == "recusado" else "",
-                    "motivo_status": row[12] or "",
+                    "id_vinculo": row[9],
+                    "motivo_recusa": row[13] or "" if st == "recusado" else "",
+                    "motivo_status": row[14] or "",
                     "pode_despausar": pode_despausar,
                 }
             )
