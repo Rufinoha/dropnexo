@@ -10,6 +10,8 @@
   if (!grid) return;
 
   const segmentosMarcados = new Set();
+  /** Contatos dos fornecedores conectados (id → contato). */
+  const contatosPorId = new Map();
 
   const statusLabel = {
     nenhum: { cls: "", txt: "Não conectado", badge: "Não conectado" },
@@ -31,6 +33,110 @@
       .replace(/&/g, "&amp;")
       .replace(/"/g, "&quot;")
       .replace(/</g, "&lt;");
+  }
+
+  function linkWhatsApp(raw) {
+    let d = String(raw || "").replace(/\D/g, "");
+    if (!d) return "";
+    if (!d.startsWith("55") || d.length <= 11) d = "55" + d.replace(/^55/, "");
+    return `https://wa.me/${d}`;
+  }
+
+  function siteHref(site) {
+    const s = String(site || "").trim();
+    if (!s) return "";
+    return /^https?:\/\//i.test(s) ? s : "https://" + s;
+  }
+
+  function fmtTel(raw) {
+    const d = String(raw || "").replace(/\D/g, "");
+    if (d.length === 11) return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
+    if (d.length === 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
+    return String(raw || "").trim() || "—";
+  }
+
+  function abrirContatoFornecedor(card) {
+    const id = Number(card.getAttribute("data-id"));
+    const nome = card.getAttribute("data-nome") || "Fornecedor";
+    const local = card.getAttribute("data-local") || "";
+    const c = contatosPorId.get(id) || {};
+    const email = (c.email || "").trim();
+    const wa = (c.whatsapp || "").trim();
+    const tel = (c.telefone || "").trim();
+    const site = (c.site || "").trim();
+    const resp = (c.responsavel || "").trim();
+    const waHref = wa ? linkWhatsApp(wa) : "";
+    const siteUrl = siteHref(site);
+
+    const chips = [];
+    if (email) {
+      chips.push(`<a class="FornContato_Chip" href="mailto:${esc(email)}">E-mail</a>`);
+    }
+    if (waHref) {
+      chips.push(
+        `<a class="FornContato_Chip is-wa" href="${esc(waHref)}" target="_blank" rel="noopener">WhatsApp</a>`
+      );
+    }
+    if (tel) {
+      const telDigits = tel.replace(/\D/g, "");
+      chips.push(
+        `<a class="FornContato_Chip" href="tel:+${telDigits.startsWith("55") ? telDigits : "55" + telDigits}">Telefone</a>`
+      );
+    }
+    if (siteUrl) {
+      chips.push(
+        `<a class="FornContato_Chip" href="${esc(siteUrl)}" target="_blank" rel="noopener">Site</a>`
+      );
+    }
+
+    const html = `
+      <div class="FornContato">
+        <p class="FornContato_Lead">Parceiro conectado — fale direto com o fornecedor.</p>
+        ${local ? `<p class="FornContato_Local">${esc(local)}</p>` : ""}
+        ${
+          chips.length
+            ? `<div class="FornContato_Quick">${chips.join("")}</div>`
+            : `<p class="FornContato_Vazio">Este fornecedor ainda não disponibilizou canais de contato.</p>`
+        }
+        <dl class="FornContato_Dl">
+          <div><dt>Responsável</dt><dd>${esc(resp || "—")}</dd></div>
+          <div><dt>E-mail</dt><dd>${
+            email ? `<a href="mailto:${esc(email)}">${esc(email)}</a>` : "—"
+          }</dd></div>
+          <div><dt>WhatsApp</dt><dd>${
+            waHref
+              ? `<a href="${esc(waHref)}" target="_blank" rel="noopener">${esc(fmtTel(wa))}</a>`
+              : "—"
+          }</dd></div>
+          <div><dt>Telefone</dt><dd>${esc(fmtTel(tel))}</dd></div>
+          <div><dt>Site</dt><dd>${
+            siteUrl
+              ? `<a href="${esc(siteUrl)}" target="_blank" rel="noopener">${esc(site)}</a>`
+              : "—"
+          }</dd></div>
+        </dl>
+      </div>`;
+
+    if (window.Swal) {
+      Swal.fire({
+        title: nome,
+        html,
+        width: 520,
+        confirmButtonText: "Fechar",
+        confirmButtonColor: "#021F81",
+        showDenyButton: true,
+        denyButtonText: "Ver catálogo",
+        denyButtonColor: "#64748b",
+      }).then((res) => {
+        if (res.isDenied) abrirLoja(String(id), nome);
+      });
+      return;
+    }
+    alert(
+      [nome, email && `E-mail: ${email}`, wa && `WhatsApp: ${wa}`, tel && `Telefone: ${tel}`, site && `Site: ${site}`]
+        .filter(Boolean)
+        .join("\n") || "Sem contatos disponíveis."
+    );
   }
 
   function buildUrl() {
@@ -95,6 +201,7 @@
       return;
     }
     if (msgVazio) msgVazio.hidden = true;
+    contatosPorId.clear();
     grid.innerHTML = lista
       .map((f) => {
         const st = statusLabel[f.status_vinculo] || statusLabel.nenhum;
@@ -115,10 +222,12 @@
         const qtdVitrine = Number(f.qtd_produtos_vitrine) || 0;
         const conectado = stVin === "ativo";
         const pausado = stVin === "pausado";
+        if (conectado && f.contato) contatosPorId.set(Number(f.id), f.contato);
         let acoesVinculo = "";
         if (conectado) {
           acoesVinculo =
-            '<button type="button" class="Forn_CardBtn Forn_CardBtn--primary" data-acao="pausar">Pausar</button>' +
+            '<button type="button" class="Forn_CardBtn Forn_CardBtn--primary" data-acao="contato">Contatar</button>' +
+            '<button type="button" class="Forn_CardBtn Forn_CardBtn--ghost" data-acao="pausar">Pausar</button>' +
             '<button type="button" class="Forn_CardBtn Forn_CardBtn--danger" data-acao="encerrar">Encerrar</button>';
         } else if (pausado) {
           if (f.pode_despausar) {
@@ -128,10 +237,13 @@
           acoesVinculo +=
             '<button type="button" class="Forn_CardBtn Forn_CardBtn--danger" data-acao="encerrar">Encerrar</button>';
         }
+        const aria = conectado
+          ? `Contatar ${esc(f.nome)}`
+          : `Abrir catálogo de ${esc(f.nome)}`;
         return `
         <article class="Forn_Card ${st.cls}" data-id="${f.id}" data-nome="${attrEsc(f.nome)}"
-          data-status="${stVin}" data-qtd-vitrine="${qtdVitrine}" tabindex="0" role="button"
-          aria-label="Abrir catálogo de ${esc(f.nome)}">
+          data-status="${stVin}" data-local="${attrEsc(local)}" data-qtd-vitrine="${qtdVitrine}"
+          tabindex="0" role="button" aria-label="${aria}">
           <div class="Forn_CardTop">
             <div class="Forn_CardBrand">
               <span class="Forn_CardAvatar" aria-hidden="true">${esc(iniciais || "?")}</span>
@@ -336,6 +448,8 @@
     const btnAcao = e.target.closest("[data-acao]");
     const card = e.target.closest(".Forn_Card");
     if (!card) return;
+    const st = card.getAttribute("data-status") || "nenhum";
+    const conectado = st === "ativo";
 
     if (btnAcao) {
       e.preventDefault();
@@ -346,6 +460,10 @@
       const nome = card.getAttribute("data-nome");
       if (acao === "vinculo") {
         solicitarVinculoCard(card);
+        return;
+      }
+      if (acao === "contato") {
+        abrirContatoFornecedor(card);
         return;
       }
       if (acao === "pausar" || acao === "despausar" || acao === "encerrar") {
@@ -360,18 +478,23 @@
 
     clearTimeout(clickTimer);
     clickTimer = setTimeout(() => {
-      const id = card.getAttribute("data-id");
-      const nome = card.getAttribute("data-nome");
-      if (id) abrirLoja(id, nome);
+      if (conectado) abrirContatoFornecedor(card);
+      else {
+        const id = card.getAttribute("data-id");
+        const nome = card.getAttribute("data-nome");
+        if (id) abrirLoja(id, nome);
+      }
     }, 260);
   });
 
   grid.addEventListener("dblclick", (e) => {
     const card = e.target.closest(".Forn_Card");
-    if (!card || e.target.closest("[data-acao='loja']")) return;
+    if (!card || e.target.closest("[data-acao]")) return;
     e.preventDefault();
     clearTimeout(clickTimer);
-    solicitarVinculoCard(card);
+    const st = card.getAttribute("data-status") || "nenhum";
+    if (st === "ativo") abrirContatoFornecedor(card);
+    else solicitarVinculoCard(card);
   });
 
   grid.addEventListener("keydown", (e) => {
@@ -379,6 +502,11 @@
     const card = e.target.closest(".Forn_Card");
     if (!card) return;
     e.preventDefault();
+    const st = card.getAttribute("data-status") || "nenhum";
+    if (st === "ativo") {
+      abrirContatoFornecedor(card);
+      return;
+    }
     const id = card.getAttribute("data-id");
     const nome = card.getAttribute("data-nome");
     if (id) abrirLoja(id, nome);

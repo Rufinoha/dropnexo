@@ -3,14 +3,14 @@
 {% set nav_ativo = 'fornecedores' %}
 {% block topbar_title %}Fornecedores{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('vd_fornecedores.static', filename='style/Cfornecedores.css') }}?v=6" />
+<link rel="stylesheet" href="{{ url_for('vd_fornecedores.static', filename='style/Cfornecedores.css') }}?v=7" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal Forn_Page">
   <div class="cl-page-title">
     <h2>Rede de fornecedores</h2>
     <p class="cl-page-desc">Conheça parceiros, visualize o catálogo e solicite vínculo para vender.</p>
-    <p class="Forn_DicaVinculo">Clique no card para ver o catálogo · use <strong>Solicitar vínculo</strong> quando quiser se associar ao fornecedor</p>
+    <p class="Forn_DicaVinculo">Sem vínculo: clique no card para ver o catálogo · <strong>Conectado</strong>: clique para contatar o fornecedor · use <strong>Solicitar vínculo</strong> para se associar</p>
   </div>
 
   <div class="filter-panel Forn_BuscaTopo">
@@ -47,5 +47,5 @@
 {% block page_js %}
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script src="{{ url_for('vd_fornecedores.static', filename='script/Svinculo_requisitos.js') }}?v=2"></script>
-<script src="{{ url_for('vd_fornecedores.static', filename='script/Sfornecedores.js') }}?v=10"></script>
+<script src="{{ url_for('vd_fornecedores.static', filename='script/Sfornecedores.js') }}?v=11"></script>
 {% endblock %}

@@ -952,7 +952,7 @@ def rede():
         cur.execute(
             f"""
             SELECT t.id, COALESCE(t.nome_fantasia, t.nome), t.cidade, t.uf,
-                   t.telefone_comercial, t.email_comercial,
+                   t.telefone_comercial, t.email_comercial, COALESCE(t.site, ''),
                    v.id AS id_vinculo, COALESCE(v.status, 'nenhum'),
                    (SELECT COUNT(*)::int FROM tbl_produto p
                     WHERE p.id_tenant = t.id AND p.publicado = TRUE),
@@ -988,28 +988,44 @@ def rede():
             seg_rows = cur.fetchall()
             segmentos = [r[1] for r in seg_rows]
             ids_seg = [r[0] for r in seg_rows]
-            st = row[7] or "nenhum"
+            st = row[8] or "nenhum"
             pode_despausar = (
                 st == "pausado"
-                and (row[12] or "") == "vendedor"
-                and (row[13] is None or (uid is not None and int(row[13]) == int(uid)))
+                and (row[13] or "") == "vendedor"
+                and (row[14] is None or (uid is not None and int(row[14]) == int(uid)))
             )
+            telefone = row[4] or ""
+            email = row[5] or ""
+            site = (row[6] or "").strip()
+            contato = None
+            # Contatos completos só para vínculo ativo (parceiro conectado).
+            if st == "ativo":
+                resp = carregar_contato_responsavel_fornecedor(cur, tid) or {}
+                contato = {
+                    "responsavel": (resp.get("nome") or "").strip(),
+                    "email": (resp.get("email") or email or "").strip(),
+                    "whatsapp": (resp.get("whatsapp") or "").strip(),
+                    "telefone": (telefone or "").strip(),
+                    "site": site,
+                }
             cards.append(
                 {
                     "id": tid,
                     "nome": row[1],
                     "cidade": row[2] or "",
                     "uf": row[3] or "",
-                    "telefone": row[4] or "",
-                    "email": row[5] or "",
+                    "telefone": telefone,
+                    "email": email,
+                    "site": site if st == "ativo" else "",
+                    "contato": contato,
                     "segmentos": segmentos,
                     "ids_segmentos": ids_seg,
-                    "qtd_produtos": int(row[8] or 0),
-                    "qtd_produtos_vitrine": int(row[9] or 0),
+                    "qtd_produtos": int(row[9] or 0),
+                    "qtd_produtos_vitrine": int(row[10] or 0),
                     "status_vinculo": st,
-                    "id_vinculo": row[6],
-                    "motivo_recusa": row[10] or "" if st == "recusado" else "",
-                    "motivo_status": row[11] or "",
+                    "id_vinculo": row[7],
+                    "motivo_recusa": row[11] or "" if st == "recusado" else "",
+                    "motivo_status": row[12] or "",
                     "pode_despausar": pode_despausar,
                 }
             )
