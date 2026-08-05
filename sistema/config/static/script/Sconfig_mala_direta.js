@@ -1,19 +1,24 @@
 (function () {
   const BASE = "/configuracoes/mala-direta";
-  const tbody = document.getElementById("cfg_md_tbody");
-  const histBody = document.getElementById("cfg_md_hist_tbody");
-  const contagem = document.getElementById("cfg_md_contagem");
-  const chkTodos = document.getElementById("cfg_md_todos");
-  const hiddenCorpo = document.getElementById("cfg_md_corpo");
   let cfg = {};
   try {
     cfg = JSON.parse(document.getElementById("cfg_md_cfg")?.textContent || "{}");
   } catch {
     cfg = {};
   }
+
+  const tbody = document.getElementById("cfg_md_tbody");
+  const histBody = document.getElementById("cfg_md_hist_tbody");
+  const contagem = document.getElementById("cfg_md_contagem");
+  const chkTodos = document.getElementById("cfg_md_todos");
+  const hiddenCorpo = document.getElementById("cfg_md_corpo");
   let itens = [];
   let selecionados = new Set();
   let quill = null;
+
+  function util() {
+    return window.Util || { gerarIconeTech: () => "…" };
+  }
 
   function toast(icon, title) {
     if (window.Swal) Swal.fire({ icon, title, timer: 2200, showConfirmButton: false });
@@ -82,6 +87,14 @@
     contagem.textContent = `${selecionados.size} selecionado(s)`;
   }
 
+  function escapeHtml(s) {
+    return String(s || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
   function renderLista() {
     if (!itens.length) {
       tbody.innerHTML = `<tr><td colspan="5" class="CfgMd_Hint">Nenhum tenant encontrado.</td></tr>`;
@@ -103,14 +116,6 @@
     atualizarContagem();
   }
 
-  function escapeHtml(s) {
-    return String(s || "")
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;");
-  }
-
   async function carregarTenants() {
     const q = document.getElementById("cfg_md_q").value.trim();
     const tipo = document.getElementById("cfg_md_filtro").value;
@@ -125,21 +130,22 @@
 
   function abrirDisparoApoio(idEnvio, assunto) {
     if (!window.GlobalUtils?.abrirJanelaApoioModal) {
-      toast("error", "GlobalUtils indisponível.");
+      toast("error", "Modal de apoio indisponível.");
       return;
     }
-    const base = cfg.rotaDisparoApoio || `${BASE}/disparo/apoio`;
+    const rota = cfg.rotaDisparoApoio || `${BASE}/disparo-apoio`;
     GlobalUtils.abrirJanelaApoioModal({
-      rota: `${base}?id_envio=${idEnvio}`,
-      titulo: assunto ? `Disparo: ${assunto}` : `Disparo #${idEnvio}`,
-      largura: 1100,
-      altura: 680,
-      nivel: 1,
+      rota,
       id: idEnvio,
+      titulo: assunto ? `Disparo — ${assunto}` : `Disparo #${idEnvio}`,
+      largura: 980,
+      altura: 720,
+      nivel: 1,
     });
   }
 
   async function carregarHistorico() {
+    const u = util();
     histBody.innerHTML = `<tr><td colspan="8" class="CfgMd_Hint">Carregando…</td></tr>`;
     const j = await api(`${BASE}/disparos`);
     const rows = j.itens || [];
@@ -150,8 +156,7 @@
     histBody.innerHTML = rows
       .map((d) => {
         const dt = d.dt_envio ? new Date(d.dt_envio).toLocaleString("pt-BR") : "—";
-        const assuntoAttr = encodeURIComponent(d.assunto || "");
-        return `<tr data-envio="${d.id_envio}" data-assunto="${assuntoAttr}">
+        return `<tr data-envio="${d.id_envio}">
           <td>${escapeHtml(dt)}</td>
           <td>${escapeHtml(d.assunto)}</td>
           <td>${d.total}</td>
@@ -160,11 +165,12 @@
           <td>${d.bounces}</td>
           <td>${d.erros}</td>
           <td class="Cl_TableActions">
-            <button type="button" class="Cl_BtnAuxiliar btnVerDisparo" data-envio="${d.id_envio}" title="Ver destinatários">Ver</button>
+            <button type="button" class="Cl_BtnAcao btnVerDisparo" data-envio="${d.id_envio}" data-assunto="${escapeHtml(d.assunto)}" title="Ver destinatários">${u.gerarIconeTech("visualizar")}</button>
           </td>
         </tr>`;
       })
       .join("");
+    u.gerarIconeTech?.refresh?.();
   }
 
   document.querySelectorAll(".CfgMd_Tab").forEach((btn) => {
@@ -280,19 +286,9 @@
 
   histBody?.addEventListener("click", (e) => {
     const btn = e.target.closest(".btnVerDisparo");
-    const tr = e.target.closest("tr[data-envio]");
-    if (!btn && !tr) return;
-    const id = Number((btn || tr).getAttribute("data-envio") || tr?.getAttribute("data-envio"));
-    if (!id) return;
-    histBody.querySelectorAll("tr").forEach((r) => r.classList.remove("is-selected"));
-    tr?.classList.add("is-selected");
-    let assunto = "";
-    try {
-      assunto = decodeURIComponent(tr?.getAttribute("data-assunto") || "");
-    } catch {
-      assunto = "";
-    }
-    abrirDisparoApoio(id, assunto);
+    if (!btn) return;
+    e.preventDefault();
+    abrirDisparoApoio(Number(btn.getAttribute("data-envio")), btn.getAttribute("data-assunto") || "");
   });
 
   document.getElementById("cfg_md_refresh_hist")?.addEventListener("click", () => {

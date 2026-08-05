@@ -81,6 +81,22 @@
     });
   }
 
+  function aplicarModo(modo) {
+    const isReset = modo === "redefinicao";
+    const h1 = document.querySelector(".ds-card h1");
+    if (h1) h1.textContent = isReset ? "Redefinir senha" : "Criar sua senha";
+    if (btnSubmit) {
+      btnSubmit.textContent = isReset ? "Salvar nova senha" : "Salvar e entrar";
+    }
+    const foot = document.querySelector(".ds-foot");
+    if (foot) {
+      foot.textContent = isReset
+        ? "O link de redefinição expira em algumas horas. Se precisar, solicite um novo em Esqueci minha senha."
+        : "O link de ativação expira em algumas horas. Se precisar, solicite um novo e-mail.";
+    }
+    return isReset;
+  }
+
   async function validarToken(token) {
     const r = await fetch(`${validarUrl}?token=${encodeURIComponent(token)}`, {
       headers: { Accept: "application/json" },
@@ -150,10 +166,16 @@
     try {
       const dados = await validarToken(token);
       if (fieldToken) fieldToken.value = token;
-      if (leadEl && dados.nome) {
-        leadEl.innerHTML =
-          `Olá, <strong>${String(dados.nome).replace(/</g, "&lt;")}</strong>. ` +
-          "Defina uma senha segura para ativar seu acesso.";
+      const isReset = aplicarModo(dados.modo || "ativacao");
+      if (leadEl) {
+        const nome = dados.nome
+          ? `<strong>${String(dados.nome).replace(/</g, "&lt;")}</strong>`
+          : "";
+        leadEl.innerHTML = isReset
+          ? (nome ? `Olá, ${nome}. ` : "") +
+            "Escolha uma nova senha segura para continuar acessando o DropNexo."
+          : (nome ? `Olá, ${nome}. ` : "") +
+            "Defina uma senha segura para ativar seu acesso.";
       }
       setStatus("", false);
       statusEl.hidden = true;

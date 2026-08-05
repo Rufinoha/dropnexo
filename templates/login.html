@@ -13,18 +13,40 @@
   <main class="auth-card-wrap">
     <div class="auth-card">
       <p class="auth-brand"><img src="{{ marca_logo_nome_url }}" alt="{{ MARCA_NOME }}" class="auth-brand-logo" /></p>
-      <h1>Entrar</h1>
-      <p class="muted">Painel do tenant — <a href="{{ url_for('public.home') }}">voltar ao site</a></p>
-      <form id="form-login" class="stack">
-        <label>E-mail
-          <input type="email" name="email" required autocomplete="username" />
-        </label>
-        <label>Senha
-          <input type="password" name="senha" required autocomplete="current-password" />
-        </label>
-        <p class="form-msg" id="msg-login" hidden></p>
-        <button type="submit" class="btn btn-primary btn-block">Entrar</button>
-      </form>
+
+      <div id="painel-login">
+        <h1>Entrar</h1>
+        <p class="muted">Painel do tenant — <a href="{{ url_for('public.home') }}">voltar ao site</a></p>
+        <form id="form-login" class="stack">
+          <label>E-mail
+            <input type="email" name="email" id="login-email" required autocomplete="username" />
+          </label>
+          <label>Senha
+            <input type="password" name="senha" required autocomplete="current-password" />
+          </label>
+          <p class="auth-forgot">
+            <a href="#esqueci" id="link-esqueci">Esqueci minha senha</a>
+          </p>
+          <p class="form-msg" id="msg-login" hidden></p>
+          <button type="submit" class="btn btn-primary btn-block">Entrar</button>
+        </form>
+      </div>
+
+      <div id="painel-esqueci" hidden>
+        <h1>Redefinir senha</h1>
+        <p class="muted">Informe o e-mail cadastrado. Enviaremos um link para criar uma nova senha.</p>
+        <form id="form-esqueci" class="stack">
+          <label>E-mail cadastrado
+            <input type="email" name="email" id="esqueci-email" required autocomplete="username" />
+          </label>
+          <p class="form-msg" id="msg-esqueci" hidden></p>
+          <button type="submit" class="btn btn-primary btn-block" id="btn-esqueci">
+            Redefinir senha
+          </button>
+          <button type="button" class="btn btn-secondary btn-block" id="link-voltar-login">Voltar ao login</button>
+        </form>
+      </div>
+
       <p class="small muted">
         Novo por aqui?
         <a href="{{ url_for('cadastro.pagina_cadastro', tipo='fornecedor') }}">Fornecedor</a>
@@ -34,36 +56,125 @@
     </div>
   </main>
   <script>
-    document.getElementById("form-login").addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const msg = document.getElementById("msg-login");
-      msg.hidden = true;
-      const fd = new FormData(e.target);
-      const body = { email: fd.get("email"), senha: fd.get("senha") };
-      const r = await fetch("{{ url_for('auth.api_login') }}", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Accept": "application/json" },
-        body: JSON.stringify(body),
+    (function () {
+      const painelLogin = document.getElementById("painel-login");
+      const painelEsqueci = document.getElementById("painel-esqueci");
+      const formLogin = document.getElementById("form-login");
+      const formEsqueci = document.getElementById("form-esqueci");
+      const msgLogin = document.getElementById("msg-login");
+      const msgEsqueci = document.getElementById("msg-esqueci");
+      const btnEsqueci = document.getElementById("btn-esqueci");
+      const urlCadFornecedor = "{{ url_for('cadastro.pagina_cadastro', tipo='fornecedor') }}";
+      const urlCadVendedor = "{{ url_for('cadastro.pagina_cadastro', tipo='vendedor') }}";
+
+      function mostrarMsg(el, texto, ok) {
+        if (!el) return;
+        el.textContent = texto || "";
+        el.hidden = !texto;
+        el.className = "form-msg " + (ok ? "is-ok" : "is-error");
+      }
+
+      function irEsqueci(ev) {
+        if (ev) ev.preventDefault();
+        const emailLogin = document.getElementById("login-email")?.value || "";
+        const emailEsqueci = document.getElementById("esqueci-email");
+        if (emailEsqueci && emailLogin) emailEsqueci.value = emailLogin.trim();
+        painelLogin.hidden = true;
+        painelEsqueci.hidden = false;
+        mostrarMsg(msgEsqueci, "", false);
+        emailEsqueci?.focus();
+      }
+
+      function irLogin(ev) {
+        if (ev) ev.preventDefault();
+        painelEsqueci.hidden = true;
+        painelLogin.hidden = false;
+        mostrarMsg(msgLogin, "", false);
+        document.getElementById("login-email")?.focus();
+      }
+
+      document.getElementById("link-esqueci")?.addEventListener("click", irEsqueci);
+      document.getElementById("link-voltar-login")?.addEventListener("click", irLogin);
+
+      if (window.location.hash === "#esqueci") irEsqueci();
+
+      formLogin.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        mostrarMsg(msgLogin, "", false);
+        const fd = new FormData(e.target);
+        const body = { email: fd.get("email"), senha: fd.get("senha") };
+        const r = await fetch("{{ url_for('auth.api_login') }}", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify(body),
+        });
+        let j;
+        try {
+          j = await r.json();
+        } catch {
+          mostrarMsg(
+            msgLogin,
+            r.status >= 500
+              ? "Servidor indisponível (erro " + r.status + "). Tente novamente ou contate o suporte."
+              : "Resposta inválida do servidor.",
+            false
+          );
+          return;
+        }
+        if (j.success) {
+          window.location.href = j.redirect;
+          return;
+        }
+        mostrarMsg(msgLogin, j.message || "Falha no login.", false);
       });
-      let j;
-      try {
-        j = await r.json();
-      } catch {
-        msg.textContent = r.status >= 500
-          ? "Servidor indisponível (erro " + r.status + "). Tente novamente ou contate o suporte."
-          : "Resposta inválida do servidor.";
-        msg.className = "form-msg is-error";
-        msg.hidden = false;
-        return;
-      }
-      if (j.success) {
-        window.location.href = j.redirect;
-        return;
-      }
-      msg.textContent = j.message || "Falha no login.";
-      msg.className = "form-msg is-error";
-      msg.hidden = false;
-    });
+
+      formEsqueci.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        mostrarMsg(msgEsqueci, "", false);
+        const email = (document.getElementById("esqueci-email")?.value || "").trim();
+        if (!email) {
+          mostrarMsg(msgEsqueci, "Informe o e-mail cadastrado.", false);
+          return;
+        }
+        if (btnEsqueci) btnEsqueci.disabled = true;
+        try {
+          const r = await fetch("{{ url_for('auth.api_solicitar_redefinicao') }}", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify({ email }),
+          });
+          let j;
+          try {
+            j = await r.json();
+          } catch {
+            mostrarMsg(msgEsqueci, "Resposta inválida do servidor.", false);
+            return;
+          }
+          if (j.success) {
+            mostrarMsg(msgEsqueci, j.message || "Enviamos o link para o seu e-mail.", true);
+            return;
+          }
+          let texto = j.message || "Não foi possível solicitar a redefinição.";
+          if (j.pode_cadastrar) {
+            texto +=
+              " Você pode se cadastrar como Fornecedor ou Vendedor pelos links abaixo.";
+            msgEsqueci.innerHTML =
+              String(texto).replace(/</g, "&lt;") +
+              ' <a href="' +
+              urlCadFornecedor +
+              '">Fornecedor</a> · <a href="' +
+              urlCadVendedor +
+              '">Vendedor</a>';
+            msgEsqueci.hidden = false;
+            msgEsqueci.className = "form-msg is-error";
+            return;
+          }
+          mostrarMsg(msgEsqueci, texto, false);
+        } finally {
+          if (btnEsqueci) btnEsqueci.disabled = false;
+        }
+      });
+    })();
   </script>
 </body>
 </html>

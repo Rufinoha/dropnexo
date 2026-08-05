@@ -186,10 +186,14 @@ def sitemap_xml():
 
 # --- srotas_auth ---
 import logging
+import os
+import secrets
+from datetime import datetime, timedelta
 
 import bcrypt
 from flask import Blueprint, jsonify, redirect, render_template, request, session, url_for
 
+from api.brevo.srotas_brevo import enviar_email
 from global_utils import (
     PERFIL_LABEL,
     Var_ConectarBanco,
@@ -198,6 +202,8 @@ from global_utils import (
     gerar_hmac_token,
     is_modo_producao,
     login_obrigatorio,
+    obter_base_url,
+    valida_email,
     validar_politica_senha,
 )
 
@@ -309,7 +315,8 @@ def api_login():
             id_vinculo,
         ) = row
 
-        if token_ativacao:
+        # Token sem senha = ativação pendente. Token com senha = redefinição em andamento (login ainda ok).
+        if token_ativacao and not senha_hash:
             return jsonify(
                 success=False,
                 message="Complete a ativação: use o link enviado por e-mail para criar sua senha.",
@@ -367,6 +374,154 @@ def api_login():
             pass
 
 
+def _email_links_auth() -> dict:
+    base = obter_base_url()
+    return {
+        "url_politica_privacidade": os.getenv("URL_POLITICA_PRIVACIDADE") or f"{base}/privacidade",
+        "url_politica_interna": os.getenv("URL_POLITICA_INTERNA") or f"{base}/politica-interna",
+        "url_dpo": os.getenv("URL_DPO") or f"{base}/dpo",
+    }
+
+
+def _enviar_email_redefinicao_senha(
+    *,
+    email: str,
+    nome_usuario: str,
+    token_bruto: str,
+    modo: str = "redefinicao",
+) -> tuple[bool, str]:
+    horas = int(os.getenv("TOKEN_ATIVACAO_HORAS", "48"))
+    link = f"{obter_base_url()}/definir-senha?token={token_bruto}"
+    if modo == "ativacao":
+        html = render_template(
+            "cadastro/emails/ativacao_conta.html",
+            titulo_email="Ativação de acesso • DropNexo",
+            nome_usuario=nome_usuario or "usuário",
+            nome_conta="",
+            link_ativacao=link,
+            horas_validade=horas,
+            ano=datetime.now().year,
+            **_email_links_auth(),
+        )
+        assunto = "Ativação de acesso • DropNexo"
+        tag = "dropnexo_cadastro"
+    else:
+        html = render_template(
+            "cadastro/emails/redefinir_senha.html",
+            titulo_email="Redefinição de senha • DropNexo",
+            nome_usuario=nome_usuario or "usuário",
+            link_redefinicao=link,
+            horas_validade=horas,
+            ano=datetime.now().year,
+            **_email_links_auth(),
+        )
+        assunto = "Redefinição de senha • DropNexo"
+        tag = "dropnexo_redefinir_senha"
+    ok, msg, _ = enviar_email([email], assunto, html, tag=tag)
+    return ok, msg
+
+
+@auth_bp.post("/api/auth/solicitar-redefinicao")
+def api_solicitar_redefinicao():
+    dados = request.get_json(silent=True) or {}
+    email = (dados.get("email") or "").strip().lower()
+    if not email or not valida_email(email):
+        return jsonify(success=False, message="Informe um e-mail válido."), 400
+
+    conn = None
+    cur = None
+    try:
+        conn = Var_ConectarBanco()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT id, nome, senha_hash, ativo
+            FROM tbl_usuario
+            WHERE lower(email) = %s
+            LIMIT 1
+            """,
+            (email,),
+        )
+        row = cur.fetchone()
+        if not row:
+            return jsonify(
+                success=False,
+                pode_cadastrar=True,
+                message="Este e-mail não está cadastrado na base do DropNexo.",
+            ), 404
+
+        id_u, nome, senha_hash, _ativo = row
+        raw = secrets.token_urlsafe(32)
+        token_hash = gerar_hmac_token(raw)
+        horas = int(os.getenv("TOKEN_ATIVACAO_HORAS", "48"))
+        expira = agora_utc() + timedelta(hours=horas)
+
+        if senha_hash:
+            # Redefinição: mantém senha atual até o usuário concluir o fluxo.
+            cur.execute(
+                """
+                UPDATE tbl_usuario
+                SET token_ativacao = %s, token_expira_em = %s
+                WHERE id = %s
+                """,
+                (token_hash, expira, id_u),
+            )
+        else:
+            # Conta ainda sem senha (ativação pendente): renova o token de ativação.
+            cur.execute(
+                """
+                UPDATE tbl_usuario
+                SET token_ativacao = %s, token_expira_em = %s, ativo = FALSE
+                WHERE id = %s
+                """,
+                (token_hash, expira, id_u),
+            )
+        conn.commit()
+
+        modo_email = "redefinicao" if senha_hash else "ativacao"
+        ok, msg = _enviar_email_redefinicao_senha(
+            email=email,
+            nome_usuario=nome or "",
+            token_bruto=raw,
+            modo=modo_email,
+        )
+        if not ok:
+            return jsonify(
+                success=False,
+                message=f"Não foi possível enviar o e-mail: {msg}",
+            ), 500
+
+        if senha_hash:
+            texto = "Enviamos um link para redefinir sua senha. Confira sua caixa de entrada."
+        else:
+            texto = (
+                "Sua conta ainda não tinha senha. Enviamos um link para você criá-la agora."
+            )
+        return jsonify(success=True, message=texto)
+    except Exception as e:
+        _log_auth.exception("api_solicitar_redefinicao falhou")
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        return jsonify(
+            success=False,
+            message="Erro interno ao solicitar redefinição." if is_modo_producao() else str(e),
+        ), 500
+    finally:
+        try:
+            if cur:
+                cur.close()
+        except Exception:
+            pass
+        try:
+            if conn:
+                conn.close()
+        except Exception:
+            pass
+
+
 @auth_bp.get("/api/auth/validar-token")
 def api_validar_token():
     raw = (request.args.get("token") or "").strip()
@@ -381,7 +536,7 @@ def api_validar_token():
         cur = conn.cursor()
         cur.execute(
             """
-            SELECT id, nome, email FROM tbl_usuario
+            SELECT id, nome, email, senha_hash FROM tbl_usuario
             WHERE token_ativacao = %s AND token_expira_em >= %s
             LIMIT 1
             """,
@@ -390,8 +545,14 @@ def api_validar_token():
         row = cur.fetchone()
         if not row:
             return jsonify(valido=False, message="Token inválido ou expirado."), 400
-        _id, nome, email = row
-        return jsonify(valido=True, nome=nome or "", email=email or "")
+        _id, nome, email, senha_hash = row
+        modo = "redefinicao" if senha_hash else "ativacao"
+        return jsonify(
+            valido=True,
+            nome=nome or "",
+            email=email or "",
+            modo=modo,
+        )
     finally:
         try:
             if cur:
