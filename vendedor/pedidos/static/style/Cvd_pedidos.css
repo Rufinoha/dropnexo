@@ -806,6 +806,19 @@
   color: #475569;
 }
 
+.Pd_PixDualCol canvas {
+  display: block;
+  width: 180px;
+  height: 180px;
+  max-width: 100%;
+  margin: 0.25rem auto 0;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 0.35rem;
+  box-sizing: content-box;
+}
+
 .Pd_PayCardLogo--txt {
   display: inline-flex;
   align-items: center;

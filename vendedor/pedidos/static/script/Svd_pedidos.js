@@ -1480,8 +1480,26 @@
       <p class="Pd_Hint">Pague o valor exato e anexe o comprovante abaixo. O fornecedor validará manualmente.</p>`;
 
     const canvas = document.getElementById(`pd_pixm_qr_${idPed}`);
-    if (canvas && window.QRCode) {
-      window.QRCode.toCanvas(canvas, dados.payload, { width: 180, margin: 1 }, () => {});
+    const colQr = canvas?.closest(".Pd_PixDualCol");
+    function falhaQr(msg) {
+      if (!colQr) return;
+      colQr.innerHTML =
+        `<strong>1 — QR Code</strong>` +
+        `<p class="Pd_Hint">${esc(msg || "Não foi possível gerar o QR. Use o copia e cola.")}</p>`;
+    }
+    if (!canvas) {
+      falhaQr("Área do QR indisponível.");
+    } else if (!window.QRCode?.toCanvas) {
+      falhaQr("Biblioteca de QR Code não carregou. Use o copia e cola.");
+    } else {
+      window.QRCode.toCanvas(
+        canvas,
+        dados.payload,
+        { width: 180, margin: 1, errorCorrectionLevel: "M" },
+        (err) => {
+          if (err) falhaQr("Falha ao desenhar o QR Code. Use o copia e cola.");
+        }
+      );
     }
 
     box.querySelector("[data-copiar-pixm]")?.addEventListener("click", () => {
