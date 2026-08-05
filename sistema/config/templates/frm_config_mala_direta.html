@@ -4,7 +4,7 @@
 {% block topbar_title %}Mala direta{% endblock %}
 {% block head_extra %}
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.snow.css" />
-<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_mala_direta.css') }}?v=9" />
+<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_mala_direta.css') }}?v=10" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal CfgMd_Wrap">
@@ -52,6 +52,24 @@
                 <option value="fornecedor">Só fornecedor (inclui híbrido)</option>
               </select>
             </div>
+            <div class="filter-group">
+              <label for="cfg_md_periodo">Cadastro</label>
+              <select id="cfg_md_periodo">
+                <option value="">Qualquer data</option>
+                <option value="hoje">Hoje</option>
+                <option value="7d">Últimos 7 dias</option>
+                <option value="30d">Últimos 30 dias</option>
+                <option value="custom">Intervalo…</option>
+              </select>
+            </div>
+            <div class="filter-group CfgMd_DataCustom" id="cfg_md_wrap_de" hidden>
+              <label for="cfg_md_de">De</label>
+              <input type="date" id="cfg_md_de" />
+            </div>
+            <div class="filter-group CfgMd_DataCustom" id="cfg_md_wrap_ate" hidden>
+              <label for="cfg_md_ate">Até</label>
+              <input type="date" id="cfg_md_ate" />
+            </div>
           </div>
           <div class="filter-panel-actions">
             <button type="button" class="Cl_botaoprimario" id="cfg_md_btnBuscar">Buscar</button>
@@ -69,11 +87,12 @@
                 <th style="width:4.5rem">ID</th>
                 <th>Nome</th>
                 <th style="width:7rem">Tipo</th>
+                <th style="width:8rem">Cadastro</th>
                 <th>E-mail</th>
               </tr>
             </thead>
             <tbody id="cfg_md_tbody">
-              <tr><td colspan="5" class="CfgMd_Hint">Carregando…</td></tr>
+              <tr><td colspan="6" class="CfgMd_Hint">Carregando…</td></tr>
             </tbody>
           </table>
         </div>
@@ -136,5 +155,5 @@
 {% endblock %}
 {% block page_js %}
 <script src="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.js"></script>
-<script src="{{ url_for('config.static', filename='script/Sconfig_mala_direta.js') }}?v=10"></script>
+<script src="{{ url_for('config.static', filename='script/Sconfig_mala_direta.js') }}?v=11"></script>
 {% endblock %}

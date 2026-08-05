@@ -1399,6 +1399,35 @@ def _normalizar_corpo_mala_direta(corpo_html: str) -> str:
     return corpo
 
 
+def _filtro_cadastro_tenant(args) -> tuple[list[str], list]:
+    """Filtro por data de cadastro do tenant (tbl_tenant.criado_em)."""
+    from datetime import date, timedelta
+
+    where: list[str] = []
+    params: list = []
+    periodo = (args.get("periodo") or "").strip().lower()
+    de = (args.get("de") or "").strip()
+    ate = (args.get("ate") or "").strip()
+    hoje = date.today()
+
+    if periodo == "hoje":
+        de = ate = hoje.isoformat()
+    elif periodo == "7d":
+        de = (hoje - timedelta(days=6)).isoformat()
+        ate = hoje.isoformat()
+    elif periodo == "30d":
+        de = (hoje - timedelta(days=29)).isoformat()
+        ate = hoje.isoformat()
+
+    if de:
+        where.append("t.criado_em::date >= %s::date")
+        params.append(de)
+    if ate:
+        where.append("t.criado_em::date <= %s::date")
+        params.append(ate)
+    return where, params
+
+
 def _email_destinatario_tenant(cur, id_tenant: int) -> tuple[str | None, str | None]:
     """Preferência: email_comercial do tenant → e-mail do dono ativo."""
     cur.execute(
@@ -1482,6 +1511,9 @@ def mala_direta_tenants():
         elif tipo in _TIPOS_NEGOCIO_OK:
             where.append("t.tipo_negocio = %s")
             params.append(tipo)
+        where_cad, params_cad = _filtro_cadastro_tenant(request.args)
+        where.extend(where_cad)
+        params.extend(params_cad)
         if q:
             where.append(
                 "(t.nome ILIKE %s OR t.slug ILIKE %s OR COALESCE(t.documento,'') ILIKE %s "
@@ -1491,10 +1523,10 @@ def mala_direta_tenants():
             params.extend([like, like, like, q])
         cur.execute(
             f"""
-            SELECT t.id, t.nome, t.slug, t.tipo_negocio, t.email_comercial
+            SELECT t.id, t.nome, t.slug, t.tipo_negocio, t.email_comercial, t.criado_em
             FROM tbl_tenant t
             WHERE {" AND ".join(where)}
-            ORDER BY t.nome ASC
+            ORDER BY t.criado_em DESC NULLS LAST, t.nome ASC
             LIMIT 500
             """,
             params,
@@ -1503,6 +1535,7 @@ def mala_direta_tenants():
         for row in cur.fetchall():
             tid = int(row[0])
             email, _ = _email_destinatario_tenant(cur, tid)
+            criado = row[5]
             itens.append(
                 {
                     "id": tid,
@@ -1511,6 +1544,7 @@ def mala_direta_tenants():
                     "tipo_negocio": (row[3] or "").lower(),
                     "email": email or "",
                     "sem_email": not bool(email),
+                    "criado_em": criado.isoformat() if criado else "",
                 }
             )
         return jsonify(success=True, itens=itens)

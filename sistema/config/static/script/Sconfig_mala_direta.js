@@ -95,9 +95,25 @@
       .replace(/"/g, "&quot;");
   }
 
+  function fmtDataCadastro(iso) {
+    if (!iso) return "—";
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "—";
+    return d.toLocaleDateString("pt-BR");
+  }
+
+  function syncPeriodoCustom() {
+    const periodo = document.getElementById("cfg_md_periodo")?.value || "";
+    const custom = periodo === "custom";
+    const wrapDe = document.getElementById("cfg_md_wrap_de");
+    const wrapAte = document.getElementById("cfg_md_wrap_ate");
+    if (wrapDe) wrapDe.hidden = !custom;
+    if (wrapAte) wrapAte.hidden = !custom;
+  }
+
   function renderLista() {
     if (!itens.length) {
-      tbody.innerHTML = `<tr><td colspan="5" class="CfgMd_Hint">Nenhum tenant encontrado.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="6" class="CfgMd_Hint">Nenhum tenant encontrado.</td></tr>`;
       return;
     }
     tbody.innerHTML = itens
@@ -109,6 +125,7 @@
           <td>${t.id}</td>
           <td>${escapeHtml(t.nome)}</td>
           <td>${escapeHtml(t.tipo_negocio)}</td>
+          <td>${escapeHtml(fmtDataCadastro(t.criado_em))}</td>
           <td>${t.sem_email ? "<em>sem e-mail</em>" : escapeHtml(t.email)}</td>
         </tr>`;
       })
@@ -119,12 +136,21 @@
   async function carregarTenants() {
     const q = document.getElementById("cfg_md_q").value.trim();
     const tipo = document.getElementById("cfg_md_filtro").value;
+    const periodo = document.getElementById("cfg_md_periodo")?.value || "";
     const qs = new URLSearchParams({ q, tipo });
-    tbody.innerHTML = `<tr><td colspan="5" class="CfgMd_Hint">Carregando…</td></tr>`;
+    if (periodo) qs.set("periodo", periodo);
+    if (periodo === "custom") {
+      const de = document.getElementById("cfg_md_de")?.value || "";
+      const ate = document.getElementById("cfg_md_ate")?.value || "";
+      if (de) qs.set("de", de);
+      if (ate) qs.set("ate", ate);
+    }
+    tbody.innerHTML = `<tr><td colspan="6" class="CfgMd_Hint">Carregando…</td></tr>`;
     const j = await api(`${BASE}/tenants?${qs}`);
     itens = j.itens || [];
     const idsValidos = new Set(itens.filter((t) => !t.sem_email).map((t) => t.id));
     selecionados = new Set([...selecionados].filter((id) => idsValidos.has(id)));
+    if (chkTodos) chkTodos.checked = false;
     renderLista();
   }
 
@@ -196,6 +222,20 @@
   });
   document.getElementById("cfg_md_filtro")?.addEventListener("change", () => {
     carregarTenants().catch((e) => toast("error", e.message));
+  });
+  document.getElementById("cfg_md_periodo")?.addEventListener("change", () => {
+    syncPeriodoCustom();
+    const periodo = document.getElementById("cfg_md_periodo")?.value || "";
+    if (periodo !== "custom") {
+      carregarTenants().catch((e) => toast("error", e.message));
+    }
+  });
+  ["cfg_md_de", "cfg_md_ate"].forEach((id) => {
+    document.getElementById(id)?.addEventListener("change", () => {
+      if ((document.getElementById("cfg_md_periodo")?.value || "") === "custom") {
+        carregarTenants().catch((e) => toast("error", e.message));
+      }
+    });
   });
 
   tbody?.addEventListener("change", (e) => {
@@ -306,5 +346,6 @@
   });
 
   initEditor();
+  syncPeriodoCustom();
   carregarTenants().catch((e) => toast("error", e.message));
 })();
