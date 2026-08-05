@@ -84,8 +84,8 @@
 }
 
 .VdParceiros_Card.is-pausado {
-  border-color: #f59e0b;
-  background: #fffbeb;
+  border-color: #fb7185;
+  background: #fff1f2;
 }
 
 .VdParceiros_Card.is-ativo {
@@ -134,8 +134,8 @@
 }
 
 .VdParceiros_Badge.is-pausado {
-  background: #fef3c7;
-  color: #92400e;
+  background: #ffe4e6;
+  color: #be123c;
 }
 
 .VdParceiros_Badge.is-ativo {
