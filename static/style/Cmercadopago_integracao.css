@@ -494,6 +494,16 @@
   padding: 0.85rem 1.15rem;
   border-top: 1px solid #e2e8f0;
 }
+.Mp_ModalFoot--cat {
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.Mp_ModalFootActions {
+  display: flex;
+  gap: 0.65rem;
+  margin-left: auto;
+}
 
 .Mp_Aviso {
   margin: 0.65rem 0 0;

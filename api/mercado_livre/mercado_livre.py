@@ -25,6 +25,7 @@ ML_TOKEN_URL = "https://api.mercadolibre.com/oauth/token"
 ML_API_BASE = "https://api.mercadolibre.com"
 ML_OAUTH_TIMEOUT = (5, 25)
 ML_API_TIMEOUT = (10, 60)
+ML_API_TIMEOUT_RAPIDO = (4, 12)
 
 _TABELA_OK: bool | None = None
 
@@ -277,6 +278,7 @@ def api_request(
     *,
     params: dict | None = None,
     json_body: dict | None = None,
+    timeout: tuple[float, float] | None = None,
 ) -> Any:
     token = obter_access_token_valido(cur, id_tenant)
     url = path if path.startswith("http") else f"{ML_API_BASE}{path}"
@@ -288,7 +290,7 @@ def api_request(
             headers=headers,
             params=params,
             json=json_body,
-            timeout=ML_API_TIMEOUT,
+            timeout=timeout or ML_API_TIMEOUT,
         )
     except requests.RequestException as e:
         raise RuntimeError(f"Falha na API Mercado Livre: {e}") from e
@@ -1504,6 +1506,7 @@ def _domain_discovery_categorias(
         "GET",
         f"/sites/{site_id}/domain_discovery/search",
         params={"q": termo[:120], "limit": max(1, min(int(limit), 8))},
+        timeout=ML_API_TIMEOUT_RAPIDO,
     )
     out: list[dict] = []
     for item in data or []:
@@ -1529,70 +1532,6 @@ def _domain_discovery_categorias(
     return out
 
 
-def _busca_site_categorias(
-    cur, id_tenant: int, site_id: str, termo: str, limit: int
-) -> list[dict]:
-    """Fallback: categorias reais usadas em resultados de busca do site."""
-    data = api_request(
-        cur,
-        id_tenant,
-        "GET",
-        f"/sites/{site_id}/search",
-        params={"q": termo[:120], "limit": max(1, min(int(limit), 8))},
-    )
-    if not isinstance(data, dict):
-        return []
-    out: list[dict] = []
-    vistos: set[str] = set()
-
-    for item in data.get("results") or []:
-        if not isinstance(item, dict):
-            continue
-        cat_id = str(item.get("category_id") or "").strip().upper()
-        if not cat_id or cat_id in vistos:
-            continue
-        vistos.add(cat_id)
-        nome = str(item.get("category_name") or "").strip()
-        if not nome:
-            try:
-                det = api_request(cur, id_tenant, "GET", f"/categories/{cat_id}")
-                nome = str((det or {}).get("name") or cat_id)
-            except RuntimeError:
-                nome = cat_id
-        out.append(
-            {
-                "category_id": cat_id,
-                "nome": nome or cat_id,
-                "fonte": "busca",
-                "score": 75 + _score_nome_categoria_ml(nome, termo) // 5,
-            }
-        )
-
-    for bloco in list(data.get("available_filters") or []) + list(data.get("filters") or []):
-        if not isinstance(bloco, dict) or bloco.get("id") != "category":
-            continue
-        for val in bloco.get("values") or []:
-            if not isinstance(val, dict):
-                continue
-            cat_id = str(val.get("id") or "").strip().upper()
-            if not cat_id or cat_id in vistos:
-                continue
-            vistos.add(cat_id)
-            nome = str(val.get("name") or cat_id).strip()
-            score = 55 + _score_nome_categoria_ml(nome, termo)
-            out.append(
-                {
-                    "category_id": cat_id,
-                    "nome": nome or cat_id,
-                    "fonte": "filtro",
-                    "score": min(score, 95),
-                }
-            )
-
-    out.sort(key=lambda x: (-int(x.get("score") or 0), x.get("nome") or ""))
-    return out[: max(1, min(int(limit), 12))]
-
-
 def buscar_categorias_ml(
     cur,
     id_tenant: int,
@@ -1600,8 +1539,9 @@ def buscar_categorias_ml(
     limit: int = 8,
     id_categoria: int | None = None,
 ) -> list[dict]:
-    """Sugere categorias ML: predictor → títulos de produtos → busca do site.
+    """Sugere categorias ML via predictor (rápido).
 
+    No máximo 2 chamadas ao ML: termo + 1 título de produto se o termo vier vazio.
     Levanta RuntimeError se a API ML falhar (token/rede/erro HTTP).
     """
     termo = (termo or "").strip()
@@ -1625,31 +1565,25 @@ def buscar_categorias_ml(
             candidatos.append(item)
 
     termos_busca: list[str] = [termo]
-    for tit in _titulos_amostra_categoria_vendedor(cur, id_tenant, id_categoria):
-        if tit and _norm_txt_ml(tit) not in {_norm_txt_ml(t) for t in termos_busca}:
-            termos_busca.append(tit)
+    # Nome genérico (1 palavra): tenta 1 título de produto da categoria.
+    if len(termo.split()) <= 1:
+        for tit in _titulos_amostra_categoria_vendedor(cur, id_tenant, id_categoria, limite=1):
+            if tit and _norm_txt_ml(tit) != _norm_txt_ml(termo):
+                termos_busca.append(tit)
+                break
 
     ultimo_erro: Exception | None = None
     predictor_ok = False
-    for t in termos_busca[:5]:
+    for t in termos_busca[:2]:
         try:
             _add(_domain_discovery_categorias(cur, id_tenant, site_id, t, lim))
             predictor_ok = True
         except RuntimeError as e:
             ultimo_erro = e
             _log.warning("domain_discovery ML falhou para %r: %s", t, e)
-        if len(candidatos) >= lim:
+        if candidatos:
             break
 
-    if len(candidatos) < lim:
-        try:
-            _add(_busca_site_categorias(cur, id_tenant, site_id, termo, lim))
-        except RuntimeError as e:
-            ultimo_erro = e
-            _log.warning("busca site ML falhou para %r: %s", termo, e)
-
-    # Só propaga erro se nenhuma fonte respondeu com sucesso (evita 403 do search
-    # mascarar um predictor que simplesmente não achou nada).
     if not candidatos and not predictor_ok and ultimo_erro:
         raise RuntimeError(str(ultimo_erro))
 
@@ -1668,6 +1602,45 @@ def buscar_categorias_ml(
         }
         for c in candidatos[:lim]
     ]
+
+
+def prefetch_sugestoes_categorias_ml(
+    cur, id_tenant: int, categorias: list[dict], *, limit: int = 6
+) -> list[dict]:
+    """Pré-carrega sugestões para várias categorias do vendedor (1 call ML cada)."""
+    out: list[dict] = []
+    for item in categorias or []:
+        try:
+            id_cat = int(item.get("id_categoria") or 0)
+        except (TypeError, ValueError):
+            continue
+        nome = (item.get("nome") or "").strip()
+        if not id_cat or len(nome) < 3:
+            continue
+        try:
+            itens = buscar_categorias_ml(
+                cur, id_tenant, nome, limit=limit, id_categoria=id_cat
+            )
+            out.append(
+                {
+                    "id_categoria": id_cat,
+                    "nome": nome,
+                    "itens": itens,
+                    "ok": True,
+                    "message": "" if itens else f"Nenhuma sugestão para «{nome}».",
+                }
+            )
+        except RuntimeError as e:
+            out.append(
+                {
+                    "id_categoria": id_cat,
+                    "nome": nome,
+                    "itens": [],
+                    "ok": False,
+                    "message": str(e)[:240],
+                }
+            )
+    return out
 
 
 def _resolver_categoria_ml(

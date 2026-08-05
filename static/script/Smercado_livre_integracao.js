@@ -29,6 +29,7 @@
     modalCat: document.getElementById("ml_modal_categorias"),
     tbodyCat: document.getElementById("ml_tbody_categorias"),
     btnModalCatSalvar: document.getElementById("ml_modal_cat_salvar"),
+    btnModalCatSugerirTodas: document.getElementById("ml_modal_cat_sugerir_todas"),
     btnModalCatFechar: document.getElementById("ml_modal_cat_fechar"),
     btnModalCatCancelar: document.getElementById("ml_modal_cat_cancelar"),
     avisoGratis: document.getElementById("ml_aviso_gratis"),
@@ -37,6 +38,10 @@
   let categoriasMap = [];
   let salvando = false;
   let cfgAtual = {};
+  /** Cache temporário das sugestões ML enquanto o modal está aberto. */
+  const sugestoesCache = new Map();
+  const sugestoesInflight = new Map();
+  let prefetchSeq = 0;
 
   function ativarAba(tab) {
     const id = tab in PANES ? tab : "pedidos";
@@ -317,6 +322,16 @@
     return itens;
   }
 
+  function limparCacheSugestoes() {
+    prefetchSeq += 1;
+    sugestoesCache.clear();
+    sugestoesInflight.clear();
+  }
+
+  function chaveCacheSugestao(idCategoria, termo) {
+    return `${idCategoria || 0}::${String(termo || "").trim().toLowerCase()}`;
+  }
+
   async function carregarMapeamentoCategorias() {
     const r = await fetch("/api/integracoes/mercado-livre/categorias-mapeamento", {
       credentials: "same-origin",
@@ -327,16 +342,130 @@
     renderTabelaCategorias();
   }
 
+  function atualizarProgressoPrefetch() {
+    if (!modalAberto()) return;
+    const total = categoriasMap.filter((c) => (c.nome || "").trim().length >= 3).length;
+    if (!total) return;
+    const idsProntos = new Set(
+      [...sugestoesCache.keys()].map((k) => String(k).split("::")[0]).filter((id) => id && id !== "0")
+    );
+    const n = idsProntos.size;
+    if (n < total) {
+      mostrarMsgModal(`Preparando sugestões ML… ${n}/${total}`, false);
+    } else {
+      mostrarMsgModal("Sugestões prontas — use «Sugerir não mapeadas» ou Sugerir na linha.", false);
+    }
+  }
+
+  function linhasSemMapeamento() {
+    const rows = [];
+    el.tbodyCat?.querySelectorAll("tr[data-cat-id]").forEach((tr) => {
+      const ml = tr.querySelector(".ml-inp-cat")?.value?.trim() || "";
+      if (ml) return;
+      const nome = tr.querySelector("td")?.textContent?.trim() || "";
+      if (nome.length < 3) return;
+      rows.push(tr);
+    });
+    return rows;
+  }
+
+  async function sugerirTodasNaoMapeadas() {
+    const pendentes = linhasSemMapeamento();
+    if (!pendentes.length) {
+      feedbackCat("Todas as linhas já têm categoria ML. Nada a sugerir.", false);
+      return;
+    }
+    const btn = el.btnModalCatSugerirTodas;
+    if (btn) {
+      btn.disabled = true;
+      btn.classList.add("is-loading");
+    }
+    let ok = 0;
+    let falhas = 0;
+    const nomesFalha = [];
+    try {
+      for (let i = 0; i < pendentes.length; i++) {
+        if (!modalAberto()) break;
+        const tr = pendentes[i];
+        const nome = tr.querySelector("td")?.textContent?.trim() || "";
+        const idCategoria = parseInt(tr.dataset.catId, 10) || null;
+        if (btn) btn.textContent = `Sugerindo… ${i + 1}/${pendentes.length}`;
+        feedbackCat(`Sugerindo «${nome}»… (${i + 1}/${pendentes.length})`, false);
+        try {
+          const j = await obterSugestoesCategoria(nome, idCategoria);
+          const picked = (j.itens || [])[0];
+          if (!picked) {
+            falhas += 1;
+            if (nomesFalha.length < 4) nomesFalha.push(nome);
+            continue;
+          }
+          aplicarSugestaoNaLinha(tr, picked, nome);
+          ok += 1;
+        } catch {
+          falhas += 1;
+          if (nomesFalha.length < 4) nomesFalha.push(nome);
+        }
+      }
+      let msg = `${ok} categoria(s) sugerida(s).`;
+      if (falhas) {
+        msg += ` ${falhas} sem sugestão`;
+        if (nomesFalha.length) msg += ` (${nomesFalha.join(", ")}${falhas > nomesFalha.length ? "…" : ""})`;
+        msg += ". Ajuste com Sugerir na linha.";
+      } else {
+        msg += " Revise e salve o mapeamento.";
+      }
+      feedbackCat(msg, falhas > 0 && ok === 0);
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.classList.remove("is-loading");
+        btn.textContent = "Sugerir não mapeadas";
+      }
+    }
+  }
+
+  async function aquecerCacheSugestoes() {
+    const seq = prefetchSeq;
+    const pendentes = (categoriasMap || []).filter((c) => (c.nome || "").trim().length >= 3);
+    if (!pendentes.length) return;
+    atualizarProgressoPrefetch();
+    for (const c of pendentes) {
+      if (seq !== prefetchSeq || !modalAberto()) return;
+      const termo = String(c.nome || "").trim();
+      const key = chaveCacheSugestao(c.id_categoria, termo);
+      if (sugestoesCache.has(key)) {
+        atualizarProgressoPrefetch();
+        continue;
+      }
+      try {
+        await obterSugestoesCategoria(termo, c.id_categoria, { forcarRede: false });
+      } catch {
+        /* aquecimento não bloqueia o modal */
+      }
+      if (seq !== prefetchSeq) return;
+      atualizarProgressoPrefetch();
+    }
+  }
+
   async function abrirModalCategorias() {
     if (!el.modalCat) return;
+    limparCacheSugestoes();
     el.modalCat.showModal();
     mostrarMsgModal("Carregando categorias…", false);
     try {
       await carregarMapeamentoCategorias();
-      mostrarMsgModal("", false);
+      mostrarMsgModal("Preparando sugestões ML…", false);
+      // Não espera: Sugerir já usa o cache conforme for preenchendo.
+      aquecerCacheSugestoes();
     } catch (e) {
       mostrarMsgModal(e.message, true);
     }
+  }
+
+  function fecharModalCategorias() {
+    limparCacheSugestoes();
+    mostrarMsgModal("", false);
+    el.modalCat?.close();
   }
 
   async function salvarMapeamentoCategorias() {
@@ -356,8 +485,7 @@
       });
       const j = await r.json();
       if (!r.ok || !j.success) throw new Error(j.message || "Falha ao salvar.");
-      el.modalCat?.close();
-      mostrarMsgModal("", false);
+      fecharModalCategorias();
       mostrarMsg(j.message || "Mapeamento salvo.", false);
     } catch (e) {
       feedbackCat(e.message, true);
@@ -366,15 +494,60 @@
     }
   }
 
-  async function apiBuscarCategoriasMl(termo, idCategoria) {
+  async function apiBuscarCategoriasMl(termo, idCategoria, signal) {
     const qs = new URLSearchParams({ q: termo });
     if (idCategoria) qs.set("id_categoria", String(idCategoria));
     const r = await fetch(`/api/integracoes/mercado-livre/categorias/buscar?${qs}`, {
       credentials: "same-origin",
+      signal,
     });
     const j = await r.json().catch(() => ({}));
     if (!r.ok || !j.success) throw new Error(j.message || "Falha na busca de categorias ML.");
     return j;
+  }
+
+  async function obterSugestoesCategoria(termo, idCategoria, opts = {}) {
+    const forcarRede = !!opts.forcarRede;
+    const key = chaveCacheSugestao(idCategoria, termo);
+    if (!forcarRede && sugestoesCache.has(key)) {
+      return sugestoesCache.get(key);
+    }
+    if (sugestoesInflight.has(key)) {
+      return sugestoesInflight.get(key);
+    }
+    const ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
+    const timer =
+      ctrl &&
+      setTimeout(() => {
+        try {
+          ctrl.abort();
+        } catch {
+          /* ignore */
+        }
+      }, 15000);
+    const prom = (async () => {
+      try {
+        const j = await apiBuscarCategoriasMl(termo, idCategoria, ctrl?.signal);
+        const payload = {
+          termo,
+          itens: j.itens || [],
+          message: j.message || "",
+          fromCache: false,
+        };
+        sugestoesCache.set(key, { ...payload, fromCache: true });
+        return payload;
+      } catch (e) {
+        if (e?.name === "AbortError") {
+          throw new Error("A busca demorou demais. Tente de novo ou edite o termo.");
+        }
+        throw e;
+      } finally {
+        if (timer) clearTimeout(timer);
+        sugestoesInflight.delete(key);
+      }
+    })();
+    sugestoesInflight.set(key, prom);
+    return prom;
   }
 
   function aplicarSugestaoNaLinha(tr, picked, nomeCategoria) {
@@ -448,7 +621,7 @@
         btn.textContent = "…";
       }
       try {
-        const j = await apiBuscarCategoriasMl(novo, idCategoria);
+        const j = await obterSugestoesCategoria(novo, idCategoria, { forcarRede: true });
         lista = j.itens || [];
         termoAtual = novo;
         const box = document.getElementById("swalMlResultados");
@@ -518,20 +691,27 @@
       return;
     }
     const btn = tr.querySelector(".ml-btn-sugerir");
+    const key = chaveCacheSugestao(idCategoria, nome);
+    const jaCache = sugestoesCache.has(key);
     if (btn) {
       btn.disabled = true;
       btn.classList.add("is-loading");
-      btn.textContent = "Buscando…";
+      btn.textContent = jaCache ? "Abrindo…" : "Buscando…";
     }
-    feedbackCat(`Buscando categoria ML para «${nome}»…`, false);
+    feedbackCat(
+      jaCache
+        ? `Sugestão pronta para «${nome}».`
+        : `Buscando categoria ML para «${nome}»…`,
+      false
+    );
     try {
-      const j = await apiBuscarCategoriasMl(nome, idCategoria);
+      const j = await obterSugestoesCategoria(nome, idCategoria);
       const lista = j.itens || [];
       let picked = null;
       if (lista.length === 1 && window.Swal) {
         const conf = await Swal.fire({
           icon: "success",
-          title: "Sugestão encontrada",
+          title: jaCache || j.fromCache ? "Sugestão (cache)" : "Sugestão encontrada",
           html: `<p><strong>${esc(lista[0].category_id)}</strong> — ${esc(lista[0].nome)}</p>
                  <p style="font-size:0.82rem;color:#64748b;margin-top:0.5rem">Fonte: ${esc(
                    rotuloFonte(lista[0].fonte)
@@ -566,12 +746,20 @@
   }
 
   el.btnMapearCategorias?.addEventListener("click", () => abrirModalCategorias());
+  el.btnModalCatSugerirTodas?.addEventListener("click", (ev) => {
+    ev.preventDefault();
+    sugerirTodasNaoMapeadas();
+  });
   el.btnModalCatSalvar?.addEventListener("click", (ev) => {
     ev.preventDefault();
     salvarMapeamentoCategorias();
   });
-  el.btnModalCatFechar?.addEventListener("click", () => el.modalCat?.close());
-  el.btnModalCatCancelar?.addEventListener("click", () => el.modalCat?.close());
+  el.btnModalCatFechar?.addEventListener("click", () => fecharModalCategorias());
+  el.btnModalCatCancelar?.addEventListener("click", () => fecharModalCategorias());
+  el.modalCat?.addEventListener("close", () => {
+    limparCacheSugestoes();
+    mostrarMsgModal("", false);
+  });
   el.tbodyCat?.addEventListener("click", (ev) => {
     const btn = ev.target.closest(".ml-btn-sugerir");
     if (!btn) return;

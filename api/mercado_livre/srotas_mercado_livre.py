@@ -15,6 +15,7 @@ from api.mercado_livre.mercado_livre import (
     listar_mapeamento_categorias_ml,
     ml_configurado,
     ml_conectado,
+    prefetch_sugestoes_categorias_ml,
     publicar_produtos_ml,
     redirect_uri_oauth,
     salvar_config_ml,
@@ -354,6 +355,35 @@ def categorias_buscar():
         return jsonify(success=False, message=str(e)[:300]), 400
     except Exception as e:
         _log.exception("Erro ao sugerir categorias ML")
+        return jsonify(success=False, message=str(e)[:300]), 400
+    finally:
+        conn.close()
+
+
+@ml_bp.post("/api/integracoes/mercado-livre/categorias/prefetch")
+@login_obrigatorio()
+def categorias_prefetch():
+    """Pré-carrega sugestões das categorias do modal (cache de sessão do browser)."""
+    if not _pode_integracoes():
+        return jsonify(success=False, message="Sem permissão."), 403
+    if garantir_modulo_sessao() != "vendedor" and not session.get("eh_desenvolvedor"):
+        return jsonify(success=False, message="Apenas vendedores."), 403
+    body = request.get_json(silent=True) or {}
+    cats = body.get("categorias") or []
+    if not isinstance(cats, list):
+        return jsonify(success=False, message="Lista de categorias inválida."), 400
+    # Evita flood: no máximo 20 por request.
+    cats = cats[:20]
+    id_tenant = session.get("id_tenant")
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        if not ml_conectado(cur, int(id_tenant)):
+            return jsonify(success=False, message="Mercado Livre não conectado."), 400
+        itens = prefetch_sugestoes_categorias_ml(cur, int(id_tenant), cats, limit=6)
+        return jsonify(success=True, itens=itens)
+    except Exception as e:
+        _log.exception("Erro no prefetch de categorias ML")
         return jsonify(success=False, message=str(e)[:300]), 400
     finally:
         conn.close()
