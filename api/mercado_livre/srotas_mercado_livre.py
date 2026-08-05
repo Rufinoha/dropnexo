@@ -317,14 +317,44 @@ def categorias_buscar():
     if garantir_modulo_sessao() != "vendedor" and not session.get("eh_desenvolvedor"):
         return jsonify(success=False, message="Apenas vendedores."), 403
     q = (request.args.get("q") or "").strip()
+    if len(q) < 3:
+        return jsonify(
+            success=False,
+            message="Digite ao menos 3 caracteres para sugerir (ex.: nome do produto ou categoria).",
+        ), 400
+    id_cat_raw = (request.args.get("id_categoria") or "").strip()
+    id_categoria = None
+    if id_cat_raw:
+        try:
+            id_categoria = int(id_cat_raw)
+        except (TypeError, ValueError):
+            id_categoria = None
     id_tenant = session.get("id_tenant")
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
         if not ml_conectado(cur, int(id_tenant)):
             return jsonify(success=False, message="Mercado Livre não conectado."), 400
-        itens = buscar_categorias_ml(cur, int(id_tenant), q)
-        return jsonify(success=True, itens=itens)
+        itens = buscar_categorias_ml(
+            cur, int(id_tenant), q, limit=8, id_categoria=id_categoria
+        )
+        if not itens:
+            return jsonify(
+                success=True,
+                itens=[],
+                termo=q,
+                message=(
+                    f"Nenhuma categoria ML encontrada para «{q}». "
+                    "Tente um termo mais parecido com título de produto "
+                    "(ex.: «batom matte», «base facial líquida»)."
+                ),
+            )
+        return jsonify(success=True, itens=itens, termo=q)
+    except RuntimeError as e:
+        return jsonify(success=False, message=str(e)[:300]), 400
+    except Exception as e:
+        _log.exception("Erro ao sugerir categorias ML")
+        return jsonify(success=False, message=str(e)[:300]), 400
     finally:
         conn.close()
 

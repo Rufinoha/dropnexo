@@ -6,6 +6,7 @@ import logging
 import os
 import re
 import secrets
+import unicodedata
 from datetime import datetime, timedelta, timezone
 from html import unescape
 from pathlib import Path
@@ -1449,42 +1450,224 @@ def salvar_mapeamento_categorias_ml(cur, id_tenant: int, itens: list[dict]) -> i
     return salvos
 
 
-def buscar_categorias_ml(cur, id_tenant: int, termo: str, limit: int = 10) -> list[dict]:
-    """Sugere categorias ML pelo título (domain_discovery)."""
-    termo = (termo or "").strip()
-    if len(termo) < 3:
+def _norm_txt_ml(texto: str) -> str:
+    s = unicodedata.normalize("NFKD", (texto or "").strip().lower())
+    s = "".join(c for c in s if not unicodedata.combining(c))
+    return re.sub(r"\s+", " ", s).strip()
+
+
+def _score_nome_categoria_ml(cat_nome: str, termo: str) -> int:
+    a, b = _norm_txt_ml(cat_nome), _norm_txt_ml(termo)
+    if not a or not b:
+        return 0
+    if a == b:
+        return 100
+    if b in a or a in b:
+        return 85
+    ta, tb = set(a.split()), set(b.split())
+    if not tb:
+        return 0
+    return int((len(ta & tb) / len(tb)) * 70)
+
+
+def _titulos_amostra_categoria_vendedor(
+    cur, id_tenant: int, id_categoria: int | None, limite: int = 4
+) -> list[str]:
+    if not id_categoria:
         return []
-    cfg = carregar_config_ml(cur, id_tenant)
-    if not cfg.get("conectado"):
-        return []
-    site_id = (cfg.get("ml_site_id") or "MLB").upper()
     try:
-        data = api_request(
-            cur,
-            id_tenant,
-            "GET",
-            f"/sites/{site_id}/domain_discovery/search",
-            params={"q": termo[:120], "limit": max(1, min(int(limit), 20))},
+        cur.execute(
+            """
+            SELECT DISTINCT COALESCE(NULLIF(TRIM(pv.nome_vitrine), ''), NULLIF(TRIM(p.nome), ''))
+            FROM tbl_produto_vendedor pv
+            INNER JOIN tbl_produto p ON p.id = pv.id_produto
+            WHERE pv.id_tenant_vendedor = %s
+              AND pv.id_categoria_vendedor = %s
+              AND COALESCE(NULLIF(TRIM(pv.nome_vitrine), ''), NULLIF(TRIM(p.nome), '')) IS NOT NULL
+            ORDER BY 1
+            LIMIT %s
+            """,
+            (int(id_tenant), int(id_categoria), max(1, min(int(limite), 8))),
         )
-    except RuntimeError:
+        return [str(r[0]).strip() for r in cur.fetchall() if r and r[0]]
+    except Exception:
+        _log.debug("Amostra de títulos por categoria ML indisponível", exc_info=True)
         return []
+
+
+def _domain_discovery_categorias(
+    cur, id_tenant: int, site_id: str, termo: str, limit: int
+) -> list[dict]:
+    data = api_request(
+        cur,
+        id_tenant,
+        "GET",
+        f"/sites/{site_id}/domain_discovery/search",
+        params={"q": termo[:120], "limit": max(1, min(int(limit), 8))},
+    )
     out: list[dict] = []
-    vistos: set[str] = set()
     for item in data or []:
         if not isinstance(item, dict):
             continue
         cat_id = str(item.get("category_id") or "").strip().upper()
-        if not cat_id or cat_id in vistos:
+        if not cat_id:
             continue
-        vistos.add(cat_id)
         nome = (
             item.get("category_name")
             or item.get("domain_name")
             or item.get("category_id")
             or ""
         )
-        out.append({"category_id": cat_id, "nome": str(nome).strip() or cat_id})
+        out.append(
+            {
+                "category_id": cat_id,
+                "nome": str(nome).strip() or cat_id,
+                "fonte": "predictor",
+                "score": 90,
+            }
+        )
     return out
+
+
+def _busca_site_categorias(
+    cur, id_tenant: int, site_id: str, termo: str, limit: int
+) -> list[dict]:
+    """Fallback: categorias reais usadas em resultados de busca do site."""
+    data = api_request(
+        cur,
+        id_tenant,
+        "GET",
+        f"/sites/{site_id}/search",
+        params={"q": termo[:120], "limit": max(1, min(int(limit), 8))},
+    )
+    if not isinstance(data, dict):
+        return []
+    out: list[dict] = []
+    vistos: set[str] = set()
+
+    for item in data.get("results") or []:
+        if not isinstance(item, dict):
+            continue
+        cat_id = str(item.get("category_id") or "").strip().upper()
+        if not cat_id or cat_id in vistos:
+            continue
+        vistos.add(cat_id)
+        nome = str(item.get("category_name") or "").strip()
+        if not nome:
+            try:
+                det = api_request(cur, id_tenant, "GET", f"/categories/{cat_id}")
+                nome = str((det or {}).get("name") or cat_id)
+            except RuntimeError:
+                nome = cat_id
+        out.append(
+            {
+                "category_id": cat_id,
+                "nome": nome or cat_id,
+                "fonte": "busca",
+                "score": 75 + _score_nome_categoria_ml(nome, termo) // 5,
+            }
+        )
+
+    for bloco in list(data.get("available_filters") or []) + list(data.get("filters") or []):
+        if not isinstance(bloco, dict) or bloco.get("id") != "category":
+            continue
+        for val in bloco.get("values") or []:
+            if not isinstance(val, dict):
+                continue
+            cat_id = str(val.get("id") or "").strip().upper()
+            if not cat_id or cat_id in vistos:
+                continue
+            vistos.add(cat_id)
+            nome = str(val.get("name") or cat_id).strip()
+            score = 55 + _score_nome_categoria_ml(nome, termo)
+            out.append(
+                {
+                    "category_id": cat_id,
+                    "nome": nome or cat_id,
+                    "fonte": "filtro",
+                    "score": min(score, 95),
+                }
+            )
+
+    out.sort(key=lambda x: (-int(x.get("score") or 0), x.get("nome") or ""))
+    return out[: max(1, min(int(limit), 12))]
+
+
+def buscar_categorias_ml(
+    cur,
+    id_tenant: int,
+    termo: str,
+    limit: int = 8,
+    id_categoria: int | None = None,
+) -> list[dict]:
+    """Sugere categorias ML: predictor → títulos de produtos → busca do site.
+
+    Levanta RuntimeError se a API ML falhar (token/rede/erro HTTP).
+    """
+    termo = (termo or "").strip()
+    if len(termo) < 3:
+        return []
+    cfg = carregar_config_ml(cur, id_tenant)
+    if not cfg.get("conectado"):
+        raise RuntimeError("Mercado Livre não conectado.")
+    site_id = (cfg.get("ml_site_id") or "MLB").upper()
+    lim = max(1, min(int(limit or 8), 8))
+
+    candidatos: list[dict] = []
+    vistos: set[str] = set()
+
+    def _add(itens: list[dict]) -> None:
+        for item in itens:
+            cat_id = str(item.get("category_id") or "").strip().upper()
+            if not cat_id or cat_id in vistos:
+                continue
+            vistos.add(cat_id)
+            candidatos.append(item)
+
+    termos_busca: list[str] = [termo]
+    for tit in _titulos_amostra_categoria_vendedor(cur, id_tenant, id_categoria):
+        if tit and _norm_txt_ml(tit) not in {_norm_txt_ml(t) for t in termos_busca}:
+            termos_busca.append(tit)
+
+    ultimo_erro: Exception | None = None
+    predictor_ok = False
+    for t in termos_busca[:5]:
+        try:
+            _add(_domain_discovery_categorias(cur, id_tenant, site_id, t, lim))
+            predictor_ok = True
+        except RuntimeError as e:
+            ultimo_erro = e
+            _log.warning("domain_discovery ML falhou para %r: %s", t, e)
+        if len(candidatos) >= lim:
+            break
+
+    if len(candidatos) < lim:
+        try:
+            _add(_busca_site_categorias(cur, id_tenant, site_id, termo, lim))
+        except RuntimeError as e:
+            ultimo_erro = e
+            _log.warning("busca site ML falhou para %r: %s", termo, e)
+
+    # Só propaga erro se nenhuma fonte respondeu com sucesso (evita 403 do search
+    # mascarar um predictor que simplesmente não achou nada).
+    if not candidatos and not predictor_ok and ultimo_erro:
+        raise RuntimeError(str(ultimo_erro))
+
+    for item in candidatos:
+        item["score"] = int(item.get("score") or 0) + _score_nome_categoria_ml(
+            str(item.get("nome") or ""), termo
+        )
+
+    candidatos.sort(key=lambda x: (-int(x.get("score") or 0), x.get("nome") or ""))
+    return [
+        {
+            "category_id": c["category_id"],
+            "nome": c["nome"],
+            "fonte": c.get("fonte") or "predictor",
+            "score": int(c.get("score") or 0),
+        }
+        for c in candidatos[:lim]
+    ]
 
 
 def _resolver_categoria_ml(

@@ -24,6 +24,7 @@
     garantiaTempo: document.getElementById("ml_garantia_tempo"),
     webhookUrl: document.getElementById("ml_webhook_url"),
     msg: document.getElementById("ml_msg"),
+    msgModal: document.getElementById("ml_msg_modal"),
     subtabs: document.getElementById("ml_subtabs"),
     modalCat: document.getElementById("ml_modal_categorias"),
     tbodyCat: document.getElementById("ml_tbody_categorias"),
@@ -88,6 +89,31 @@
     el.msg.textContent = t;
     el.msg.hidden = !t;
     el.msg.classList.toggle("is-erro", !!erro);
+  }
+
+  function modalAberto() {
+    return !!(el.modalCat && el.modalCat.open);
+  }
+
+  function mostrarMsgModal(t, erro) {
+    if (!el.msgModal) {
+      if (t) mostrarMsg(t, erro);
+      return;
+    }
+    el.msgModal.textContent = t || "";
+    el.msgModal.hidden = !t;
+    el.msgModal.classList.toggle("is-erro", !!erro);
+  }
+
+  function feedbackCat(t, erro) {
+    if (modalAberto()) mostrarMsgModal(t, erro);
+    else mostrarMsg(t, erro);
+  }
+
+  function rotuloFonte(fonte) {
+    if (fonte === "busca") return "Busca";
+    if (fonte === "filtro") return "Filtro";
+    return "Predictor";
   }
 
   function renderConta(cfg) {
@@ -303,13 +329,13 @@
 
   async function abrirModalCategorias() {
     if (!el.modalCat) return;
-    mostrarMsg("Carregando categorias…", false);
+    el.modalCat.showModal();
+    mostrarMsgModal("Carregando categorias…", false);
     try {
       await carregarMapeamentoCategorias();
-      mostrarMsg("", false);
-      el.modalCat.showModal();
+      mostrarMsgModal("", false);
     } catch (e) {
-      mostrarMsg(e.message, true);
+      mostrarMsgModal(e.message, true);
     }
   }
 
@@ -317,7 +343,7 @@
     if (!el.btnModalCatSalvar) return;
     const itens = coletarItensMapeamento();
     if (!itens.length) {
-      mostrarMsg("Informe ao menos uma categoria ML.", true);
+      feedbackCat("Informe ao menos uma categoria ML.", true);
       return;
     }
     el.btnModalCatSalvar.disabled = true;
@@ -330,61 +356,212 @@
       });
       const j = await r.json();
       if (!r.ok || !j.success) throw new Error(j.message || "Falha ao salvar.");
-      mostrarMsg(j.message || "Mapeamento salvo.", false);
       el.modalCat?.close();
+      mostrarMsgModal("", false);
+      mostrarMsg(j.message || "Mapeamento salvo.", false);
     } catch (e) {
-      mostrarMsg(e.message, true);
+      feedbackCat(e.message, true);
     } finally {
       el.btnModalCatSalvar.disabled = false;
     }
   }
 
+  async function apiBuscarCategoriasMl(termo, idCategoria) {
+    const qs = new URLSearchParams({ q: termo });
+    if (idCategoria) qs.set("id_categoria", String(idCategoria));
+    const r = await fetch(`/api/integracoes/mercado-livre/categorias/buscar?${qs}`, {
+      credentials: "same-origin",
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.success) throw new Error(j.message || "Falha na busca de categorias ML.");
+    return j;
+  }
+
+  function aplicarSugestaoNaLinha(tr, picked, nomeCategoria) {
+    const inpCat = tr.querySelector(".ml-inp-cat");
+    const inpFam = tr.querySelector(".ml-inp-fam");
+    if (inpCat) inpCat.value = picked.category_id;
+    if (inpFam && !inpFam.value.trim()) inpFam.value = (nomeCategoria || "").slice(0, 60);
+    tr.classList.remove("is-sugerido");
+    void tr.offsetWidth;
+    tr.classList.add("is-sugerido");
+    feedbackCat(`${picked.category_id} — ${picked.nome}`, false);
+  }
+
+  function htmlListaSugestoes(lista, selectedId) {
+    if (!lista.length) {
+      return `<div class="swal-ml-sugestao__vazio">Nenhum resultado ainda. Ajuste o termo e clique em <strong>Buscar de novo</strong>.</div>`;
+    }
+    return `<ul class="swal-ml-sugestao__lista" id="swalMlLista">${lista
+      .map((x, i) => {
+        const id = esc(x.category_id);
+        const checked = (selectedId ? x.category_id === selectedId : i === 0) ? " checked" : "";
+        const fonte = esc(x.fonte || "predictor");
+        return `<li>
+          <label class="swal-ml-sugestao__item">
+            <input type="radio" name="swalMlCatPick" value="${id}"${checked} />
+            <span>
+              <span class="swal-ml-sugestao__nome">${esc(x.nome)}</span>
+              <div class="swal-ml-sugestao__meta">${id}</div>
+            </span>
+            <span class="swal-ml-sugestao__badge is-${fonte}">${esc(rotuloFonte(x.fonte))}</span>
+          </label>
+        </li>`;
+      })
+      .join("")}</ul>`;
+  }
+
+  async function escolherSugestaoMl(nomeCategoria, idCategoria, listaInicial, termoInicial, msgVazia) {
+    if (!window.Swal) {
+      return listaInicial[0] || null;
+    }
+    let lista = Array.isArray(listaInicial) ? listaInicial.slice() : [];
+    let termoAtual = termoInicial || nomeCategoria;
+
+    const montarHtml = () =>
+      `<div class="swal-ml-sugestao">
+        <label class="swal-ml-sugestao__label" for="swalMlTermo">Termo de busca (pode editar)</label>
+        <div class="swal-ml-sugestao__row">
+          <input id="swalMlTermo" class="swal-ml-sugestao__input" value="${esc(termoAtual)}" maxlength="120" />
+          <button type="button" class="Cl_botaoFiltro" id="swalMlBuscar">Buscar</button>
+        </div>
+        <div id="swalMlResultados">${htmlListaSugestoes(lista)}</div>
+        ${
+          !lista.length && msgVazia
+            ? `<p class="swal-ml-sugestao__vazio" id="swalMlHint">${esc(msgVazia)}</p>`
+            : `<p class="swal-ml-sugestao__vazio" id="swalMlHint" hidden></p>`
+        }
+      </div>`;
+
+    async function refazerBusca() {
+      const input = document.getElementById("swalMlTermo");
+      const hint = document.getElementById("swalMlHint");
+      const btn = document.getElementById("swalMlBuscar");
+      const novo = (input?.value || "").trim();
+      if (novo.length < 3) {
+        Swal.showValidationMessage("Digite ao menos 3 caracteres.");
+        return;
+      }
+      Swal.resetValidationMessage();
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = "…";
+      }
+      try {
+        const j = await apiBuscarCategoriasMl(novo, idCategoria);
+        lista = j.itens || [];
+        termoAtual = novo;
+        const box = document.getElementById("swalMlResultados");
+        if (box) box.innerHTML = htmlListaSugestoes(lista);
+        if (hint) {
+          if (!lista.length) {
+            hint.hidden = false;
+            hint.textContent =
+              j.message || "Nenhuma categoria encontrada. Tente um termo mais específico.";
+          } else {
+            hint.hidden = true;
+            hint.textContent = "";
+          }
+        }
+      } catch (e) {
+        Swal.showValidationMessage(e.message || "Falha na busca.");
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = "Buscar";
+        }
+      }
+    }
+
+    const res = await Swal.fire({
+      title: `Sugerir para «${nomeCategoria}»`,
+      html: montarHtml(),
+      width: 560,
+      showCancelButton: true,
+      confirmButtonText: "Usar esta",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#021F81",
+      focusConfirm: false,
+      didOpen: () => {
+        const input = document.getElementById("swalMlTermo");
+        input?.focus();
+        input?.addEventListener("keydown", (ev) => {
+          if (ev.key === "Enter") {
+            ev.preventDefault();
+            refazerBusca();
+          }
+        });
+        document.getElementById("swalMlBuscar")?.addEventListener("click", (ev) => {
+          ev.preventDefault();
+          refazerBusca();
+        });
+      },
+      preConfirm: () => {
+        const picked = document.querySelector('input[name="swalMlCatPick"]:checked')?.value;
+        if (!picked) {
+          Swal.showValidationMessage("Selecione uma categoria ML na lista (ou busque com outro termo).");
+          return false;
+        }
+        return picked;
+      },
+    });
+
+    if (!res.isConfirmed || !res.value) return null;
+    return lista.find((x) => x.category_id === res.value) || { category_id: res.value, nome: res.value };
+  }
+
   async function sugerirCategoriaMl(tr) {
     const nome = tr.querySelector("td")?.textContent?.trim() || "";
+    const idCategoria = parseInt(tr.dataset.catId, 10) || null;
     if (nome.length < 3) {
-      mostrarMsg("Nome da categoria muito curto para sugerir.", true);
+      feedbackCat("Nome da categoria muito curto para sugerir.", true);
       return;
     }
     const btn = tr.querySelector(".ml-btn-sugerir");
-    if (btn) btn.disabled = true;
+    if (btn) {
+      btn.disabled = true;
+      btn.classList.add("is-loading");
+      btn.textContent = "Buscando…";
+    }
+    feedbackCat(`Buscando categoria ML para «${nome}»…`, false);
     try {
-      const r = await fetch(
-        `/api/integracoes/mercado-livre/categorias/buscar?q=${encodeURIComponent(nome)}`,
-        { credentials: "same-origin" }
-      );
-      const j = await r.json();
-      if (!r.ok || !j.success) throw new Error(j.message || "Falha na busca.");
+      const j = await apiBuscarCategoriasMl(nome, idCategoria);
       const lista = j.itens || [];
-      if (!lista.length) {
-        mostrarMsg(`Nenhuma categoria ML sugerida para «${nome}».`, true);
-        return;
-      }
-      let picked = lista.length === 1 ? lista[0] : null;
-      if (!picked && window.Swal) {
-        const opts = lista
-          .map((x) => `<option value="${esc(x.category_id)}">${esc(x.category_id)} — ${esc(x.nome)}</option>`)
-          .join("");
-        const res = await Swal.fire({
-          title: "Categoria Mercado Livre",
-          html: `<select id="swalMlCat" class="swal2-select" style="width:100%">${opts}</select>`,
+      let picked = null;
+      if (lista.length === 1 && window.Swal) {
+        const conf = await Swal.fire({
+          icon: "success",
+          title: "Sugestão encontrada",
+          html: `<p><strong>${esc(lista[0].category_id)}</strong> — ${esc(lista[0].nome)}</p>
+                 <p style="font-size:0.82rem;color:#64748b;margin-top:0.5rem">Fonte: ${esc(
+                   rotuloFonte(lista[0].fonte)
+                 )}</p>`,
           showCancelButton: true,
           confirmButtonText: "Usar",
-          preConfirm: () => document.getElementById("swalMlCat")?.value,
+          cancelButtonText: "Ver outras / editar termo",
+          confirmButtonColor: "#021F81",
         });
-        if (!res.isConfirmed || !res.value) return;
-        picked = lista.find((x) => x.category_id === res.value) || lista[0];
-      } else if (!picked) {
-        picked = lista[0];
+        if (conf.isConfirmed) picked = lista[0];
+        else if (conf.dismiss === Swal.DismissReason.cancel) {
+          picked = await escolherSugestaoMl(nome, idCategoria, lista, nome, j.message);
+        }
+      } else {
+        picked = await escolherSugestaoMl(nome, idCategoria, lista, nome, j.message);
       }
-      const inpCat = tr.querySelector(".ml-inp-cat");
-      const inpFam = tr.querySelector(".ml-inp-fam");
-      if (inpCat) inpCat.value = picked.category_id;
-      if (inpFam && !inpFam.value.trim()) inpFam.value = nome.slice(0, 60);
-      mostrarMsg(`Sugerido: ${picked.category_id}`, false);
+      if (!picked) {
+        if (!lista.length) feedbackCat(j.message || `Nenhuma categoria ML para «${nome}».`, true);
+        else feedbackCat("", false);
+        return;
+      }
+      aplicarSugestaoNaLinha(tr, picked, nome);
     } catch (e) {
-      mostrarMsg(e.message, true);
+      feedbackCat(e.message, true);
     } finally {
-      if (btn) btn.disabled = false;
+      if (btn) {
+        btn.disabled = false;
+        btn.classList.remove("is-loading");
+        btn.textContent = "Sugerir";
+      }
     }
   }
 

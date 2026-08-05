@@ -130,6 +130,114 @@
 
 .Mp_Msg { margin-top: 0.65rem; font-size: 0.88rem; color: #15803d; }
 .Mp_Msg.is-erro { color: #b91c1c; }
+.Mp_Msg--modal {
+  margin: 0.65rem 1.15rem 0;
+  padding: 0.55rem 0.75rem;
+  border-radius: 8px;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+}
+.Mp_Msg--modal.is-erro {
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+.Mp_CatMapTable tr.is-sugerido td:first-child {
+  position: relative;
+}
+.Mp_CatMapTable tr.is-sugerido {
+  animation: mpCatFlash 0.85s ease;
+}
+@keyframes mpCatFlash {
+  0% { background: #dbeafe; }
+  100% { background: transparent; }
+}
+.Mp_CatMapBtn.is-loading {
+  opacity: 0.7;
+  pointer-events: none;
+}
+.swal-ml-sugestao {
+  text-align: left;
+}
+.swal-ml-sugestao__label {
+  display: block;
+  font-size: 0.78rem;
+  color: #64748b;
+  margin-bottom: 0.35rem;
+}
+.swal-ml-sugestao__row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 0.85rem;
+}
+.swal-ml-sugestao__input {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 0.92rem;
+}
+.swal-ml-sugestao__lista {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  max-height: 280px;
+  overflow: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.swal-ml-sugestao__item {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 0.55rem;
+  align-items: start;
+  padding: 0.65rem 0.7rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.swal-ml-sugestao__item:hover,
+.swal-ml-sugestao__item:has(input:checked) {
+  border-color: #021f81;
+  background: #f8faff;
+}
+.swal-ml-sugestao__item input {
+  margin-top: 0.2rem;
+}
+.swal-ml-sugestao__nome {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: #0f172a;
+}
+.swal-ml-sugestao__meta {
+  font-size: 0.75rem;
+  color: #64748b;
+  margin-top: 0.15rem;
+}
+.swal-ml-sugestao__badge {
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 0.2rem 0.45rem;
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: #334155;
+  white-space: nowrap;
+}
+.swal-ml-sugestao__badge.is-predictor { background: #dbeafe; color: #1d4ed8; }
+.swal-ml-sugestao__badge.is-busca { background: #dcfce7; color: #15803d; }
+.swal-ml-sugestao__badge.is-filtro { background: #fef3c7; color: #b45309; }
+.swal-ml-sugestao__vazio {
+  font-size: 0.86rem;
+  color: #64748b;
+  line-height: 1.45;
+  padding: 0.5rem 0;
+}
 
 .Mp_Card--alert {
   border-color: #fcd34d;
