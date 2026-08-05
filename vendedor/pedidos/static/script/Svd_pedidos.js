@@ -3,7 +3,8 @@
     rascunho: "Rascunho",
     importado: "Importado",
     aguardando_pagamento: "Aguardando pagamento",
-    pago: "Pago",
+    aguardando_confirmacao: "Pago — aguardando confirmação",
+    pago: "Pagamento confirmado",
     cancelado: "Cancelado",
     em_expedicao: "Em expedição",
     entregue: "Entregue",
@@ -18,7 +19,7 @@
   const stV = (p) => (typeof p === "string" ? p : p?.status_vendedor || p?.status || "");
   const stC = (p) => (typeof p === "string" ? p : p?.status_comprador || "pendente");
   const freteEditavelPedido = (ped) =>
-    ["rascunho", "importado", "aguardando_pagamento"].includes(stV(ped));
+    ["rascunho", "importado", "aguardando_pagamento", "aguardando_confirmacao"].includes(stV(ped));
 
   const STATUS_LABEL = STATUS_LABEL_VENDEDOR;
 
@@ -263,7 +264,7 @@
     editavelCampos = grupo ? !!grupo.editavel : true;
     const bloqueadoIntegracao = pedidosGrupo.some((p) => (p.origem || "manual") !== "manual");
     const bloqueadoPago = pedidosGrupo.some((p) =>
-      ["pago", "em_expedicao", "entregue"].includes(stV(p))
+      ["pago", "aguardando_confirmacao", "em_expedicao", "entregue"].includes(stV(p))
     );
 
     bloqueadoTotal = false;
@@ -1377,20 +1378,22 @@
     const pref = meioPagamentoPorFornecedor[k] || "";
     const pedidoPago = ped && ["pago", "em_expedicao", "entregue"].includes(stV(ped));
     const aguardando = stV(ped) === "aguardando_pagamento";
+    const aguardandoConf =
+      stV(ped) === "aguardando_confirmacao" || ped?.status_pagamento === "comprovante_enviado";
     const importado = stV(ped) === "importado";
     const rascunho = stV(ped) === "rascunho";
-    const comprovanteEnviado = ped?.status_pagamento === "comprovante_enviado";
     const pixManualAtivo = ped?.meio_pagamento === "pix_manual" || ped?.pix_manual_payload;
 
     let statusHtml = "";
     if (pedidoPago) {
       const quando = ped.pago_em ? new Date(ped.pago_em).toLocaleString("pt-BR") : "";
       statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pago">${badge("pago")} Pagamento confirmado${quando ? ` · ${esc(quando)}` : ""}</div>`;
-    } else if (comprovanteEnviado && isPixManual) {
-      statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pendente">Comprovante enviado — aguardando validação do fornecedor</div>`;
+    } else if (aguardandoConf && isPixManual) {
+      statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pendente">${badge("aguardando_confirmacao")} Comprovante enviado — aguardando validação do fornecedor</div>`;
     } else if (importado) {
       statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pendente">${badge("importado")} Cliente já pagou no canal — prepare frete e pague o fornecedor · ${fmt(totalFornecedorPedido(ped))}</div>`;
     } else if (aguardando) {
+      statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pendente">${badge("aguardando_pagamento")} Total a pagar · ${fmt(totalFornecedorPedido(ped))}</div>`;
     } else if (rascunho) {
       statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pendente">${badge("rascunho")} Confirme o pedido para pagar</div>`;
     }
@@ -1423,7 +1426,7 @@
       }
     }
 
-    const podePagar = (aguardando || importado) && !pedidoPago && !comprovanteEnviado;
+    const podePagar = (aguardando || importado) && !pedidoPago && !aguardandoConf;
     const idPed = ped?.id || 0;
     const payRow = `
       <div class="Pd_PayRow">
@@ -1433,7 +1436,7 @@
 
     const pixBox = isPixManual && ped && (pixManualAtivo || podePagar)
       ? `<div class="Pd_PixInline" id="pd_pixm_${ped.id}" ${pixManualAtivo ? "" : "hidden"}></div>
-         ${pixManualAtivo && !pedidoPago && !comprovanteEnviado ? `
+         ${pixManualAtivo && !pedidoPago && !aguardandoConf ? `
          <div class="Pd_ComprovanteUpload">
            <label class="Pd_Hint">Após pagar, anexe o comprovante:</label>
            <input type="file" class="Pd_AnexoInput" accept=".pdf,.png,.jpg,.jpeg,.webp" data-upload-comprovante="${ped.id}" />
@@ -1525,9 +1528,18 @@
       const j = await parseJsonResp(r);
       if (!j.success) throw new Error(j.message || "Erro ao enviar comprovante.");
       const ped = pedidosGrupo.find((p) => p.id === idPed);
-      if (ped) ped.status_pagamento = "comprovante_enviado";
+      if (ped) {
+        ped.status_pagamento = "comprovante_enviado";
+        ped.status_vendedor = "aguardando_confirmacao";
+        ped.status = "aguardando_confirmacao";
+      }
       if (window.Swal) {
-        Swal.fire({ icon: "success", title: "Comprovante enviado", text: "Aguardando validação do fornecedor.", confirmButtonColor: "#021F81" });
+        Swal.fire({
+          icon: "success",
+          title: "Comprovante enviado",
+          text: "Status: Pago — aguardando confirmação do fornecedor.",
+          confirmButtonColor: "#021F81",
+        });
       }
       renderPayIntegracoes();
     } catch (e) {
@@ -1981,7 +1993,9 @@
   async function cancelarPedidoGrupo() {
     const cancelaveis = pedidosGrupo.filter(
       (p) =>
-        (stV(p) === "rascunho" || stV(p) === "aguardando_pagamento") &&
+        (stV(p) === "rascunho" ||
+          stV(p) === "aguardando_pagamento" ||
+          stV(p) === "aguardando_confirmacao") &&
         (p.origem || "manual") === "manual"
     );
     if (!cancelaveis.length) return;

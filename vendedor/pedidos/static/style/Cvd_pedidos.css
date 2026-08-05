@@ -56,6 +56,7 @@
 .Pd_Badge--rascunho { background: #f1f5f9; color: #475569; }
 .Pd_Badge--importado { background: #e0e7ff; color: #3730a3; }
 .Pd_Badge--aguardando_pagamento { background: #fef3c7; color: #92400e; }
+.Pd_Badge--aguardando_confirmacao { background: #ffedd5; color: #c2410c; }
 .Pd_Badge--pago { background: #d1fae5; color: #047857; }
 .Pd_Badge--cancelado { background: #fee2e2; color: #991b1b; }
 .Pd_Badge--em_expedicao { background: #dbeafe; color: #1d4ed8; }

@@ -3,7 +3,7 @@
 {% set nav_ativo = 'fn_pedidos' %}
 {% block topbar_title %}Pedidos recebidos{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('fn_pedidos.static', filename='style/Cfn_pedidos.css') }}?v=1" />
+<link rel="stylesheet" href="{{ url_for('fn_pedidos.static', filename='style/Cfn_pedidos.css') }}?v=2" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal PdFn_Page">
@@ -17,10 +17,9 @@
       <label for="pd_fn_status">Situação</label>
       <select id="pd_fn_status">
         <option value="">Todas</option>
-        <option value="aguardando_pagamento">Aguardando pagamento do vendedor</option>
-        <option value="pago">Pago</option>
-        <option value="em_expedicao">Em expedição</option>
-        <option value="entregue">Entregue</option>
+        <option value="aguardando_pagamento">Aguardando pagamento</option>
+        <option value="aguardando_confirmacao">Pago — aguardando confirmação</option>
+        <option value="pago">Pagamento confirmado</option>
         <option value="cancelado">Cancelado</option>
       </select>
     </div>
@@ -58,5 +57,6 @@
 </div>
 {% endblock %}
 {% block page_js %}
-<script src="{{ url_for('fn_pedidos.static', filename='script/Sfn_pedidos.js') }}?v=4"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="{{ url_for('fn_pedidos.static', filename='script/Sfn_pedidos.js') }}?v=5"></script>
 {% endblock %}

@@ -12,6 +12,7 @@ from global_utils import agora_utc
 STATUS_RASCUNHO = "rascunho"
 STATUS_IMPORTADO = "importado"
 STATUS_AGUARDANDO = "aguardando_pagamento"
+STATUS_AGUARDANDO_CONFIRMACAO = "aguardando_confirmacao"
 STATUS_PAGO = "pago"
 STATUS_EM_EXPEDICAO = "em_expedicao"
 STATUS_ENTREGUE = "entregue"
@@ -35,6 +36,7 @@ def _frete_editavel_status(st: str) -> bool:
 
 
 def _status_vendedor_pagavel(st: str) -> bool:
+    """Pode iniciar/continuar pagamento (ainda sem comprovante em validação)."""
     return st in (STATUS_IMPORTADO, STATUS_AGUARDANDO)
 
 
@@ -1181,7 +1183,7 @@ def cancelar_pedido(
     if st == STATUS_EM_EXPEDICAO and not forcar_canal:
         raise ValueError("Pedido em expedição não pode ser cancelado por aqui.")
 
-    if st in (STATUS_AGUARDANDO, STATUS_IMPORTADO, STATUS_PAGO):
+    if st in (STATUS_AGUARDANDO, STATUS_AGUARDANDO_CONFIRMACAO, STATUS_IMPORTADO, STATUS_PAGO):
         itens = [(i["id_variante"], i["quantidade"]) for i in ped["itens"]]
         try:
             liberar_itens_pedido(cur, itens)

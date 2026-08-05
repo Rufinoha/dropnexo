@@ -20,26 +20,34 @@ STATUS_LABEL = {
     "rascunho": "Rascunho",
     "importado": "Importado",
     "aguardando_pagamento": "Aguardando pagamento",
-    "pago": "Pago",
+    "aguardando_confirmacao": "Pago — aguardando confirmação",
+    "pago": "Pagamento confirmado",
     "cancelado": "Cancelado",
     "em_expedicao": "Em expedição",
     "entregue": "Entregue",
 }
 
-EVENTO_ASSUNTO = {
-    "confirmado": "Pedido confirmado • DropNexo",
-    "aguardando_pagamento": "Pedido aguardando pagamento • DropNexo",
-    "pago": "Pagamento confirmado • DropNexo",
-    "cancelado": "Pedido cancelado • DropNexo",
-    "expedido": "Pedido em expedição • DropNexo",
-    "em_expedicao": "Pedido em expedição • DropNexo",
-    "entregue": "Pedido entregue • DropNexo",
-    "teste": "Teste de layout — pedido • DropNexo",
+# Prefixo do assunto; o número do pedido é inserido em _assunto_com_numero().
+EVENTO_ASSUNTO_PREFIXO = {
+    "confirmado": "Pedido confirmado",
+    "aguardando_pagamento": "Pedido aguardando pagamento",
+    "aguardando_confirmacao": "Pedido aguardando confirmação",
+    "comprovante_enviado": "Comprovante PIX enviado",
+    "comprovante_rejeitado": "Comprovante PIX rejeitado",
+    "pago": "Pagamento confirmado",
+    "cancelado": "Pedido cancelado",
+    "expedido": "Pedido em expedição",
+    "em_expedicao": "Pedido em expedição",
+    "entregue": "Pedido entregue",
+    "teste": "Teste de layout — pedido",
 }
 
 EVENTO_MENSAGEM = {
     "confirmado": "Um pedido foi confirmado e está aguardando pagamento.",
     "aguardando_pagamento": "Há um pedido aguardando pagamento.",
+    "aguardando_confirmacao": "O vendedor enviou o comprovante e o pagamento aguarda sua confirmação.",
+    "comprovante_enviado": "O vendedor anexou o comprovante PIX. Valide o pagamento no painel.",
+    "comprovante_rejeitado": "O comprovante PIX foi rejeitado. Envie um novo comprovante.",
     "pago": "O pagamento de um pedido foi confirmado.",
     "cancelado": "Um pedido foi cancelado.",
     "expedido": "Um pedido entrou em expedição.",
@@ -47,6 +55,14 @@ EVENTO_MENSAGEM = {
     "entregue": "Um pedido foi marcado como entregue.",
     "teste": "Este é um e-mail de teste de layout (DEV). O conteúdo abaixo usa dados reais do pedido.",
 }
+
+
+def _assunto_com_numero(evento: str, numero: str) -> str:
+    prefixo = EVENTO_ASSUNTO_PREFIXO.get(evento) or "Atualização de pedido"
+    num = (numero or "").strip()
+    if num:
+        return f"{prefixo} {num} • DropNexo"
+    return f"{prefixo} • DropNexo"
 
 
 def _email_links_institucionais() -> dict:
@@ -203,7 +219,7 @@ def _contexto_email(
         nome_contraparte = ped.get("fornecedor_nome") or meta_c.get("nome") or ""
 
     return {
-        "titulo_email": EVENTO_ASSUNTO.get(evento) or "Atualização de pedido • DropNexo",
+        "titulo_email": _assunto_com_numero(evento, numero),
         "nome_destinatario": nome_destinatario or "",
         "mensagem_principal": EVENTO_MENSAGEM.get(evento) or "Há uma atualização em um pedido.",
         "numero_pedido": numero,
@@ -261,7 +277,8 @@ def _enviar_um(
         aviso_teste=aviso_teste,
     )
     html = _render_html(ctx)
-    assunto = EVENTO_ASSUNTO.get(evento) or "Atualização de pedido • DropNexo"
+    numero = (ped.get("numero") or str(ped.get("id") or "")).strip()
+    assunto = _assunto_com_numero(evento, numero)
     ok, msg, _ = enviar_email(
         [email],
         assunto,

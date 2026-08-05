@@ -1,10 +1,11 @@
 (function () {
   const LABEL = {
-    aguardando_pagamento: "Aguardando pagamento do vendedor",
-    pago: "Pago — pode expedir",
+    aguardando_pagamento: "Aguardando pagamento",
+    aguardando_confirmacao: "Pago — aguardando confirmação",
+    pago: "Pagamento confirmado",
+    cancelado: "Cancelado",
     em_expedicao: "Em expedição",
     entregue: "Entregue",
-    cancelado: "Cancelado",
   };
   const stV = (p) => p?.status_vendedor || p?.status || "";
   const tbody = document.getElementById("pd_fn_tbody");
@@ -16,7 +17,7 @@
   let pedidoAtual = null;
 
   const fmt = (v) => Number(v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-  const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+  const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
 
   function badge(st) {
     return `<span class="PdFn_Badge PdFn_Badge--${st}">${LABEL[st] || st}</span>`;
@@ -53,21 +54,29 @@
     if (!foot) return;
     foot.innerHTML = "";
     const comprovantes = (p.anexos || []).filter((a) => a.tipo === "comprovante_pix");
-    if (
-      stV(p) === "aguardando_pagamento" &&
-      p.meio_pagamento === "pix_manual" &&
-      (p.status_pagamento === "comprovante_enviado" || comprovantes.length)
-    ) {
+    const aguardaConf =
+      stV(p) === "aguardando_confirmacao" ||
+      (stV(p) === "aguardando_pagamento" &&
+        p.meio_pagamento === "pix_manual" &&
+        (p.status_pagamento === "comprovante_enviado" || comprovantes.length));
+
+    if (aguardaConf && p.meio_pagamento === "pix_manual") {
       const links = comprovantes
         .map(
           (a) =>
-            `<li><a href="/fornecedor/pedidos/anexos/arquivo?caminho=${encodeURIComponent(a.caminho)}" target="_blank">${a.nome_original}</a></li>`
+            `<li><a href="/fornecedor/pedidos/anexos/arquivo?caminho=${encodeURIComponent(a.caminho)}" target="_blank" rel="noopener">${esc(a.nome_original)}</a></li>`
         )
         .join("");
       foot.innerHTML = `
         <div class="PdFn_PayValid">
-          <p><strong>PIX manual</strong> — valide o comprovante:</p>
-          <ul>${links || "<li>Comprovante pendente de anexo</li>"}</ul>
+          <div class="PdFn_PayValidHead">
+            <span class="PdFn_PayValidMark" aria-hidden="true">PIX</span>
+            <div>
+              <strong>Validar pagamento</strong>
+              <p>O vendedor enviou o comprovante. Confirme só depois de verificar o crédito na sua conta.</p>
+            </div>
+          </div>
+          <ul class="PdFn_PayValidList">${links || "<li>Comprovante pendente de anexo</li>"}</ul>
           <div class="PdFn_PayValidBtns">
             <button type="button" class="Cl_botaoprimario" id="pd_fn_btn_conf_pix">Confirmar pagamento</button>
             <button type="button" class="Cl_BtnExcluir" id="pd_fn_btn_rej_pix">Rejeitar comprovante</button>
@@ -77,61 +86,36 @@
       document.getElementById("pd_fn_btn_rej_pix")?.addEventListener("click", () => rejeitarPix(p.id));
       return;
     }
+
     if (stV(p) === "pago") {
-      const tipos = new Set((p.anexos || []).map((a) => a.tipo));
-      const temEtq = tipos.has("etiqueta");
-      const temFiscal = tipos.has("nf") || tipos.has("declaracao");
-      const pronto = temEtq && temFiscal;
-      const falta = [];
-      if (!temEtq) falta.push("etiqueta de frete");
-      if (!temFiscal) falta.push("NF ou declaração");
       foot.innerHTML = `
-        <div class="PdFn_ExpForm">
-          ${pronto ? "" : `<p class="PdFn_Hint" style="color:#9a3412">Falta para expedir: ${falta.join(", ")}.</p>`}
-          <label>Transportadora <input type="text" id="pd_fn_transportadora" placeholder="Opcional" /></label>
-          <label>Código rastreio <input type="text" id="pd_fn_rastreio" placeholder="Opcional" /></label>
-          <button type="button" class="Cl_botaoprimario" id="pd_fn_btn_expedir" ${pronto ? "" : "disabled"}>Marcar em expedição</button>
+        <div class="PdFn_PayValid is-ok">
+          <strong>Pagamento confirmado</strong>
+          <p>Este pedido está liberado. Anexe etiqueta/NF pelo fluxo do vendedor quando necessário.</p>
         </div>`;
-      document.getElementById("pd_fn_btn_expedir")?.addEventListener("click", () => expedir(p.id));
-    } else if (stV(p) === "em_expedicao") {
-      foot.innerHTML = `<button type="button" class="Cl_botaoprimario" id="pd_fn_btn_entregue">Marcar entregue</button>`;
-      document.getElementById("pd_fn_btn_entregue")?.addEventListener("click", () => entregue(p.id));
-    }
-  }
-
-  async function expedir(id) {
-    const rastreio = document.getElementById("pd_fn_rastreio")?.value || "";
-    const transp = document.getElementById("pd_fn_transportadora")?.value || "";
-    const r = await fetch(`/fornecedor/pedidos/${id}/expedir`, {
-      method: "POST",
-      credentials: "same-origin",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ codigo_rastreio: rastreio, transportadora: transp }),
-    });
-    const j = await r.json();
-    if (window.Swal) await Swal.fire(j.success ? "Sucesso" : "Erro", j.message, j.success ? "success" : "error");
-    if (j.success) {
-      modal.hidden = true;
-      carregar();
-    }
-  }
-
-  async function entregue(id) {
-    const r = await fetch(`/fornecedor/pedidos/${id}/entregue`, {
-      method: "POST",
-      credentials: "same-origin",
-      headers: { "Content-Type": "application/json" },
-      body: "{}",
-    });
-    const j = await r.json();
-    if (window.Swal) await Swal.fire(j.success ? "Sucesso" : "Erro", j.message, j.success ? "success" : "error");
-    if (j.success) {
-      modal.hidden = true;
-      carregar();
+    } else if (stV(p) === "aguardando_pagamento") {
+      foot.innerHTML = `
+        <div class="PdFn_PayValid is-wait">
+          <strong>Aguardando pagamento</strong>
+          <p>O vendedor ainda não enviou o comprovante PIX.</p>
+        </div>`;
     }
   }
 
   async function confirmarPix(id) {
+    const conf = window.Swal
+      ? await Swal.fire({
+          icon: "question",
+          title: "Confirmar pagamento?",
+          html: "Só confirme se o PIX já caiu na sua conta. Isso libera o pedido como <strong>Pagamento confirmado</strong>.",
+          showCancelButton: true,
+          confirmButtonText: "Sim, confirmar",
+          cancelButtonText: "Cancelar",
+          confirmButtonColor: "#021F81",
+        })
+      : { isConfirmed: confirm("Confirmar pagamento?") };
+    if (!conf.isConfirmed) return;
+
     const r = await fetch(`/fornecedor/pedidos/${id}/pagamento/confirmar`, {
       method: "POST",
       credentials: "same-origin",
@@ -147,14 +131,63 @@
   }
 
   async function rejeitarPix(id) {
-    const motivo = prompt("Motivo da rejeição (opcional):") || "";
-    const r = await fetch(`/fornecedor/pedidos/${id}/pagamento/rejeitar`, {
+    let motivo = "";
+    if (window.Swal) {
+      const r = await Swal.fire({
+        title: "Rejeitar comprovante",
+        width: 520,
+        html: `
+          <div class="PdFn_RejeitaSwal">
+            <div class="PdFn_RejeitaSwal__info">
+              <p class="PdFn_RejeitaSwal__lead">O que acontece</p>
+              <ul>
+                <li>O pedido volta para <strong>Aguardando pagamento</strong>.</li>
+                <li>O vendedor recebe o motivo e pode enviar outro comprovante.</li>
+                <li>Nada é marcado como pago até você confirmar.</li>
+              </ul>
+            </div>
+            <label class="PdFn_RejeitaSwal__label" for="pd_fn_motivo_rej">Motivo da rejeição <span>*</span></label>
+            <textarea id="pd_fn_motivo_rej" class="PdFn_RejeitaSwal__textarea" rows="4" placeholder="Ex.: valor divergente, comprovante ilegível, PIX não identificado…"></textarea>
+          </div>`,
+        icon: "warning",
+        showCancelButton: true,
+        confirmButtonText: "Rejeitar comprovante",
+        cancelButtonText: "Voltar",
+        confirmButtonColor: "#b91c1c",
+        cancelButtonColor: "#94a3b8",
+        focusConfirm: false,
+        customClass: {
+          popup: "PdFn_RejeitaPopup",
+          title: "PdFn_RejeitaTitle",
+          htmlContainer: "PdFn_RejeitaHtml",
+          actions: "PdFn_RejeitaActions",
+        },
+        preConfirm: () => {
+          const txt = (document.getElementById("pd_fn_motivo_rej")?.value || "").trim();
+          if (txt.length < 5) {
+            Swal.showValidationMessage("Informe o motivo com pelo menos 5 caracteres.");
+            return false;
+          }
+          return txt;
+        },
+      });
+      if (!r.isConfirmed) return;
+      motivo = r.value;
+    } else {
+      motivo = (prompt("Motivo da rejeição (obrigatório):") || "").trim();
+      if (motivo.length < 5) {
+        alert("Informe o motivo com pelo menos 5 caracteres.");
+        return;
+      }
+    }
+
+    const resp = await fetch(`/fornecedor/pedidos/${id}/pagamento/rejeitar`, {
       method: "POST",
       credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ motivo }),
     });
-    const j = await r.json();
+    const j = await resp.json();
     if (window.Swal) await Swal.fire(j.success ? "Rejeitado" : "Erro", j.message, j.success ? "info" : "error");
     if (j.success) abrir(id);
   }

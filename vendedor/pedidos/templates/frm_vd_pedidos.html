@@ -3,7 +3,7 @@
 {% set nav_ativo = 'vd_pedidos' %}
 {% block topbar_title %}Pedidos{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('vd_pedidos.static', filename='style/Cvd_pedidos.css') }}?v=19" />
+<link rel="stylesheet" href="{{ url_for('vd_pedidos.static', filename='style/Cvd_pedidos.css') }}?v=20" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal Pd_Page">
@@ -23,7 +23,8 @@
         <option value="rascunho">Rascunho</option>
         <option value="importado">Importado (canal)</option>
         <option value="aguardando_pagamento">Aguardando pagamento</option>
-        <option value="pago">Pago</option>
+        <option value="aguardando_confirmacao">Pago — aguardando confirmação</option>
+        <option value="pago">Pagamento confirmado</option>
         <option value="cancelado">Cancelado</option>
       </select>
     </div>
@@ -253,6 +254,6 @@
 {% endblock %}
 {% block page_js %}
 <script defer src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
-<script defer src="{{ url_for('vd_pedidos.static', filename='script/Svd_pedidos.js') }}?v=29"></script>
+<script defer src="{{ url_for('vd_pedidos.static', filename='script/Svd_pedidos.js') }}?v=30"></script>
 <script id="pd_cfg" type="application/json">{{ {"mp_icone": url_for("mercadopago.static", filename="imge/icone_mercadopago.png")}|tojson }}</script>
 {% endblock %}

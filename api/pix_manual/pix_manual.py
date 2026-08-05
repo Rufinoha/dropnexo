@@ -176,11 +176,11 @@ def gerar_payload_pix(
 
 # ── pedido ────────────────────────────────────────────
 
-from global_utils import agora_utc
 from core.pedidos.servico import (
     STATUS_AGUARDANDO,
+    STATUS_AGUARDANDO_CONFIRMACAO,
     STATUS_IMPORTADO,
-    STATUS_PAGO,
+    _sql_set_status_vendedor,
     _status_vendedor_pagavel,
     marcar_pedido_pago,
     obter_pedido,
@@ -256,18 +256,32 @@ def marcar_comprovante_enviado(cur, id_pedido: int, *, id_vendedor: int | None =
         raise ValueError("Pedido não encontrado.")
     if ped.get("meio_pagamento") != "pix_manual":
         raise ValueError("Pedido não usa PIX manual.")
-    if not _status_vendedor_pagavel(status_vendedor_pedido(ped)):
+    st = status_vendedor_pedido(ped)
+    if st not in (STATUS_AGUARDANDO, STATUS_IMPORTADO, STATUS_AGUARDANDO_CONFIRMACAO):
         raise ValueError("Pedido não está aguardando pagamento.")
+
+    set_sv, dup = _sql_set_status_vendedor(cur)
+    params = [STATUS_AGUARDANDO_CONFIRMACAO]
+    if dup:
+        params.append(STATUS_AGUARDANDO_CONFIRMACAO)
+    params.extend([agora_utc(), id_pedido])
     cur.execute(
-        """
+        f"""
         UPDATE tbl_pedido SET
+            {set_sv},
             status_pagamento = 'comprovante_enviado',
             atualizado_em = %s
         WHERE id = %s
         """,
-        (agora_utc(), id_pedido),
+        params,
     )
     registrar_historico(cur, id_pedido, "comprovante", "Vendedor anexou comprovante PIX.", None)
+    try:
+        from core.pedidos.notificacoes import notificar_evento_pedido
+
+        notificar_evento_pedido(cur, id_pedido, "comprovante_enviado")
+    except Exception:
+        pass
 
 
 def confirmar_pix_manual(
@@ -282,10 +296,13 @@ def confirmar_pix_manual(
         raise ValueError("Pedido não encontrado.")
     if ped.get("meio_pagamento") != "pix_manual":
         raise ValueError("Este pedido não foi pago via PIX manual.")
-    if not _status_vendedor_pagavel(status_vendedor_pedido(ped)):
+    st = status_vendedor_pedido(ped)
+    if st not in (STATUS_AGUARDANDO_CONFIRMACAO, STATUS_AGUARDANDO, STATUS_IMPORTADO):
         raise ValueError("Pedido não está aguardando confirmação de pagamento.")
     if ped.get("status_pagamento") not in ("comprovante_enviado", "pendente"):
         raise ValueError("Situação de pagamento inválida para confirmação.")
+    if st != STATUS_AGUARDANDO_CONFIRMACAO and ped.get("status_pagamento") != "comprovante_enviado":
+        raise ValueError("Aguarde o vendedor anexar o comprovante antes de confirmar.")
 
     marcar_pedido_pago(cur, id_pedido, id_usuario=id_usuario)
     registrar_historico(
@@ -310,19 +327,41 @@ def rejeitar_comprovante_pix(
         raise ValueError("Pedido não encontrado.")
     if ped.get("meio_pagamento") != "pix_manual":
         raise ValueError("Este pedido não usa PIX manual.")
+    motivo_txt = (motivo or "").strip()
+    if len(motivo_txt) < 5:
+        raise ValueError("Informe o motivo da rejeição (mínimo 5 caracteres).")
+
+    st = status_vendedor_pedido(ped)
+    if st not in (STATUS_AGUARDANDO_CONFIRMACAO, STATUS_AGUARDANDO) and ped.get(
+        "status_pagamento"
+    ) != "comprovante_enviado":
+        raise ValueError("Não há comprovante pendente de validação.")
+
+    set_sv, dup = _sql_set_status_vendedor(cur)
+    params = [STATUS_AGUARDANDO]
+    if dup:
+        params.append(STATUS_AGUARDANDO)
+    params.extend([agora_utc(), id_pedido])
     cur.execute(
-        """
+        f"""
         UPDATE tbl_pedido SET
+            {set_sv},
             status_pagamento = 'pendente',
             atualizado_em = %s
         WHERE id = %s
         """,
-        (agora_utc(), id_pedido),
+        params,
     )
     registrar_historico(
         cur,
         id_pedido,
         "comprovante_rejeitado",
-        motivo or "Fornecedor rejeitou o comprovante. Envie novamente.",
+        f"Fornecedor rejeitou o comprovante: {motivo_txt}",
         id_usuario,
     )
+    try:
+        from core.pedidos.notificacoes import notificar_evento_pedido
+
+        notificar_evento_pedido(cur, id_pedido, "comprovante_rejeitado", criado_por=id_usuario)
+    except Exception:
+        pass
