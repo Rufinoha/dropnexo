@@ -298,6 +298,18 @@ def col_status_vendedor(cur) -> str:
     return "status_vendedor" if pedido_tem_status_dual(cur) else "status"
 
 
+def _sql_set_status_vendedor(cur, status_placeholder: str = "%s") -> tuple[str, bool]:
+    """
+    Fragmento SET do status do vendedor.
+    Em schema dual, mantém a coluna legada `status` sincronizada.
+    Retorna (sql_fragment, precisa_param_duplicado).
+    """
+    cv = col_status_vendedor(cur)
+    if "status" in _pedido_colunas(cur) and cv != "status":
+        return f"{cv} = {status_placeholder}, status = {status_placeholder}", True
+    return f"{cv} = {status_placeholder}", False
+
+
 def _normalizar_status_pedido(origem: str, sv: str, sc: str | None) -> tuple[str, str]:
     """Compatível com schema antigo (só status) e pedidos de canal já gravados."""
     origem_l = (origem or "manual").strip().lower()
@@ -1115,17 +1127,21 @@ def confirmar_pedido(
     reservar_itens_pedido(cur, itens_reserva)
 
     agora = agora_utc()
-    cv = col_status_vendedor(cur)
+    set_sv, dup = _sql_set_status_vendedor(cur)
+    params_upd: list[Any] = [STATUS_AGUARDANDO]
+    if dup:
+        params_upd.append(STATUS_AGUARDANDO)
+    params_upd.extend([agora, agora, id_pedido])
     cur.execute(
         f"""
         UPDATE tbl_pedido SET
-            {cv} = %s,
+            {set_sv},
             status_pagamento = 'pendente',
             confirmado_em = %s,
             atualizado_em = %s
         WHERE id = %s
         """,
-        (STATUS_AGUARDANDO, agora, agora, id_pedido),
+        params_upd,
     )
     registrar_historico(
         cur,
@@ -1184,22 +1200,26 @@ def cancelar_pedido(
             )
 
     agora = agora_utc()
-    cv = col_status_vendedor(cur)
     cols = _pedido_colunas(cur)
+    set_sv, dup = _sql_set_status_vendedor(cur)
     set_comprador = ""
     if "status_comprador" in cols:
         set_comprador = "status_comprador = 'cancelado',"
+    params_canc: list[Any] = [STATUS_CANCELADO]
+    if dup:
+        params_canc.append(STATUS_CANCELADO)
+    params_canc.extend([agora, agora, id_pedido])
     cur.execute(
         f"""
         UPDATE tbl_pedido SET
-            {cv} = %s,
+            {set_sv},
             {set_comprador}
             status_pagamento = 'cancelado',
             cancelado_em = %s,
             atualizado_em = %s
         WHERE id = %s
         """,
-        (STATUS_CANCELADO, agora, agora, id_pedido),
+        params_canc,
     )
     registrar_historico(cur, id_pedido, "cancelado", motivo or "Pedido cancelado.", id_usuario)
     try:
@@ -1406,10 +1426,15 @@ def marcar_pedido_pago(
         raise ValueError("Somente pedidos importados ou aguardando pagamento podem ser marcados como pagos.")
 
     agora = agora_utc()
+    set_sv, dup = _sql_set_status_vendedor(cur)
+    params_pago: list[Any] = [STATUS_PAGO]
+    if dup:
+        params_pago.append(STATUS_PAGO)
+    params_pago.extend([agora, mp_payment_id, mp_status, agora, id_pedido])
     cur.execute(
         f"""
         UPDATE tbl_pedido SET
-            {cv} = %s,
+            {set_sv},
             status_pagamento = 'pago',
             pago_em = %s,
             mp_payment_id = COALESCE(%s, mp_payment_id),
@@ -1417,7 +1442,7 @@ def marcar_pedido_pago(
             atualizado_em = %s
         WHERE id = %s
         """,
-        (STATUS_PAGO, agora, mp_payment_id, mp_status, agora, id_pedido),
+        params_pago,
     )
     registrar_historico(
         cur,

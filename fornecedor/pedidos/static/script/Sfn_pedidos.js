@@ -54,7 +54,7 @@
     foot.innerHTML = "";
     const comprovantes = (p.anexos || []).filter((a) => a.tipo === "comprovante_pix");
     if (
-      stV(p) === "aguardando_pagamento" && &&
+      stV(p) === "aguardando_pagamento" &&
       p.meio_pagamento === "pix_manual" &&
       (p.status_pagamento === "comprovante_enviado" || comprovantes.length)
     ) {
