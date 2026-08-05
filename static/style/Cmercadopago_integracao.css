@@ -472,13 +472,22 @@
   vertical-align: middle;
 }
 
-.Mp_CatMapTable input[type="text"] {
+.Mp_CatMapTable input[type="text"],
+.Mp_CatMapTable select {
   width: 100%;
   min-width: 0;
   padding: 0.35rem 0.5rem;
   border: 1px solid #cbd5e1;
   border-radius: 6px;
   font-size: 0.85rem;
+  background: #fff;
+}
+.Mp_CatMapTable .ml-cell-cat,
+.Mp_CatMapTable .ml-cell-fam {
+  min-width: 9.5rem;
+}
+.Mp_CatMapTable .ml-inp-cat.is-custom {
+  margin-top: 0.35rem;
 }
 
 .Mp_CatMapBtn {

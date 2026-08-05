@@ -291,6 +291,122 @@
       .replace(/"/g, "&quot;");
   }
 
+  function valorCategoriaMlLinha(tr) {
+    const sel = tr.querySelector(".ml-sel-cat");
+    const inp = tr.querySelector(".ml-inp-cat");
+    if (sel && sel.value && sel.value !== "__custom__") return sel.value.trim();
+    return (inp?.value || "").trim();
+  }
+
+  function setCategoriaMlLinha(tr, categoryId) {
+    const sel = tr.querySelector(".ml-sel-cat");
+    const inp = tr.querySelector(".ml-inp-cat");
+    const id = String(categoryId || "").trim().toUpperCase();
+    if (!sel) {
+      if (inp) inp.value = id;
+      return;
+    }
+    const temOpt = id && [...sel.options].some((o) => o.value === id);
+    if (id && temOpt) {
+      sel.value = id;
+      if (inp) {
+        inp.value = id;
+        inp.hidden = true;
+        inp.classList.remove("is-custom");
+      }
+    } else if (id) {
+      sel.value = "__custom__";
+      if (inp) {
+        inp.hidden = false;
+        inp.classList.add("is-custom");
+        inp.value = id;
+      }
+    } else {
+      sel.value = "";
+      if (inp) {
+        inp.value = "";
+        inp.hidden = true;
+        inp.classList.remove("is-custom");
+      }
+    }
+  }
+
+  function familiasUsadasNoModal() {
+    const set = new Set();
+    el.tbodyCat?.querySelectorAll(".ml-inp-fam").forEach((inp) => {
+      const v = (inp.value || "").trim();
+      if (v) set.add(v);
+    });
+    return [...set];
+  }
+
+  function opcoesFamiliaLinha(nomeCategoria, sugestoes) {
+    const opts = [];
+    const seen = new Set();
+    const add = (v) => {
+      const t = String(v || "").trim().slice(0, 60);
+      if (!t) return;
+      const key = t.toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key);
+      opts.push(t);
+    };
+    add(nomeCategoria);
+    (sugestoes || []).forEach((s) => add(s.nome));
+    familiasUsadasNoModal().forEach(add);
+    return opts;
+  }
+
+  function atualizarCombosLinha(tr, sugestoes) {
+    if (!tr) return;
+    const idCat = parseInt(tr.dataset.catId, 10) || 0;
+    const nome = tr.querySelector("td")?.textContent?.trim() || "";
+    const sel = tr.querySelector(".ml-sel-cat");
+    const inp = tr.querySelector(".ml-inp-cat");
+    const inpFam = tr.querySelector(".ml-inp-fam");
+    const dl = tr.querySelector(`#ml-dl-fam-${idCat}`) || tr.querySelector(".ml-dl-fam");
+    const atual = valorCategoriaMlLinha(tr);
+    const lista = Array.isArray(sugestoes) ? sugestoes : [];
+
+    if (sel) {
+      const opts = ['<option value="">Escolher categoria ML…</option>'];
+      lista.forEach((s) => {
+        const id = String(s.category_id || "").trim().toUpperCase();
+        if (!id) return;
+        opts.push(
+          `<option value="${esc(id)}">${esc(id)} — ${esc(s.nome || id)}</option>`
+        );
+      });
+      if (atual && !lista.some((s) => String(s.category_id).toUpperCase() === atual.toUpperCase())) {
+        opts.push(`<option value="${esc(atual)}">${esc(atual)} — (atual)</option>`);
+      }
+      opts.push('<option value="__custom__">Digitar outro ID…</option>');
+      sel.innerHTML = opts.join("");
+      setCategoriaMlLinha(tr, atual);
+    }
+
+    if (dl) {
+      const famOpts = opcoesFamiliaLinha(nome, lista);
+      dl.innerHTML = famOpts.map((f) => `<option value="${esc(f)}"></option>`).join("");
+    }
+    if (inpFam) inpFam.setAttribute("placeholder", "Escolha ou digite (máx. 60)");
+    if (inp && sel) {
+      const custom = sel.value === "__custom__";
+      inp.hidden = !custom;
+      inp.classList.toggle("is-custom", custom);
+    }
+  }
+
+  function atualizarCombosTodasLinhas() {
+    el.tbodyCat?.querySelectorAll("tr[data-cat-id]").forEach((tr) => {
+      const id = parseInt(tr.dataset.catId, 10);
+      const nome = tr.querySelector("td")?.textContent?.trim() || "";
+      const key = chaveCacheSugestao(id, nome);
+      const cached = sugestoesCache.get(key);
+      atualizarCombosLinha(tr, cached?.itens || []);
+    });
+  }
+
   function renderTabelaCategorias() {
     if (!el.tbodyCat) return;
     if (!categoriasMap.length) {
@@ -299,15 +415,33 @@
       return;
     }
     el.tbodyCat.innerHTML = categoriasMap
-      .map(
-        (c) => `<tr data-cat-id="${c.id_categoria}">
+      .map((c) => {
+        const id = c.id_categoria;
+        const ml = (c.ml_category_id || "").trim().toUpperCase();
+        const fam = c.family_name || "";
+        return `<tr data-cat-id="${id}">
           <td>${esc(c.nome)}</td>
-          <td><input type="text" class="ml-inp-cat" value="${esc(c.ml_category_id || "")}" placeholder="MLB1234" /></td>
-          <td><input type="text" class="ml-inp-fam" value="${esc(c.family_name || "")}" placeholder="Família (máx. 60)" maxlength="60" /></td>
+          <td class="ml-cell-cat">
+            <select class="ml-sel-cat" aria-label="Categoria Mercado Livre">
+              <option value="">Escolher categoria ML…</option>
+              ${
+                ml
+                  ? `<option value="${esc(ml)}" selected>${esc(ml)} — (salvo)</option>`
+                  : ""
+              }
+              <option value="__custom__">Digitar outro ID…</option>
+            </select>
+            <input type="text" class="ml-inp-cat" value="${esc(ml)}" placeholder="MLB1234" hidden />
+          </td>
+          <td class="ml-cell-fam">
+            <input type="text" class="ml-inp-fam" list="ml-dl-fam-${id}" value="${esc(fam)}" placeholder="Escolha ou digite (máx. 60)" maxlength="60" autocomplete="off" />
+            <datalist class="ml-dl-fam" id="ml-dl-fam-${id}"></datalist>
+          </td>
           <td><button type="button" class="Cl_botaoFiltro Mp_CatMapBtn ml-btn-sugerir">Sugerir</button></td>
-        </tr>`
-      )
+        </tr>`;
+      })
       .join("");
+    atualizarCombosTodasLinhas();
   }
 
   function coletarItensMapeamento() {
@@ -315,9 +449,11 @@
     el.tbodyCat?.querySelectorAll("tr[data-cat-id]").forEach((tr) => {
       const id = parseInt(tr.dataset.catId, 10);
       if (!id) return;
-      const ml = tr.querySelector(".ml-inp-cat")?.value?.trim() || "";
+      const ml = valorCategoriaMlLinha(tr);
       const fam = tr.querySelector(".ml-inp-fam")?.value?.trim() || "";
-      if (ml) itens.push({ id_categoria: id, ml_category_id: ml, family_name: fam });
+      if (ml && ml !== "__custom__") {
+        itens.push({ id_categoria: id, ml_category_id: ml, family_name: fam });
+      }
     });
     return itens;
   }
@@ -360,8 +496,7 @@
   function linhasSemMapeamento() {
     const rows = [];
     el.tbodyCat?.querySelectorAll("tr[data-cat-id]").forEach((tr) => {
-      const ml = tr.querySelector(".ml-inp-cat")?.value?.trim() || "";
-      if (ml) return;
+      if (valorCategoriaMlLinha(tr)) return;
       const nome = tr.querySelector("td")?.textContent?.trim() || "";
       if (nome.length < 3) return;
       rows.push(tr);
@@ -439,6 +574,9 @@
       }
       try {
         await obterSugestoesCategoria(termo, c.id_categoria, { forcarRede: false });
+        const tr = el.tbodyCat?.querySelector(`tr[data-cat-id="${c.id_categoria}"]`);
+        const cached = sugestoesCache.get(chaveCacheSugestao(c.id_categoria, termo));
+        if (tr) atualizarCombosLinha(tr, cached?.itens || []);
       } catch {
         /* aquecimento não bloqueia o modal */
       }
@@ -550,11 +688,20 @@
     return prom;
   }
 
-  function aplicarSugestaoNaLinha(tr, picked, nomeCategoria) {
-    const inpCat = tr.querySelector(".ml-inp-cat");
+  function aplicarSugestaoNaLinha(tr, picked, nomeCategoria, sugestoes) {
+    const id = parseInt(tr.dataset.catId, 10);
+    const nome = nomeCategoria || tr.querySelector("td")?.textContent?.trim() || "";
+    const key = chaveCacheSugestao(id, nome);
+    const lista =
+      sugestoes ||
+      sugestoesCache.get(key)?.itens ||
+      (picked ? [picked] : []);
     const inpFam = tr.querySelector(".ml-inp-fam");
-    if (inpCat) inpCat.value = picked.category_id;
-    if (inpFam && !inpFam.value.trim()) inpFam.value = (nomeCategoria || "").slice(0, 60);
+    if (inpFam && !inpFam.value.trim()) {
+      inpFam.value = (nome || picked.nome || "").slice(0, 60);
+    }
+    atualizarCombosLinha(tr, lista);
+    setCategoriaMlLinha(tr, picked.category_id);
     tr.classList.remove("is-sugerido");
     void tr.offsetWidth;
     tr.classList.add("is-sugerido");
@@ -765,6 +912,32 @@
     if (!btn) return;
     const tr = btn.closest("tr[data-cat-id]");
     if (tr) sugerirCategoriaMl(tr);
+  });
+  el.tbodyCat?.addEventListener("change", (ev) => {
+    const sel = ev.target.closest(".ml-sel-cat");
+    if (!sel) return;
+    const tr = sel.closest("tr[data-cat-id]");
+    if (!tr) return;
+    const inp = tr.querySelector(".ml-inp-cat");
+    const custom = sel.value === "__custom__";
+    if (inp) {
+      inp.hidden = !custom;
+      inp.classList.toggle("is-custom", custom);
+      if (!custom && sel.value) inp.value = sel.value;
+      if (custom) {
+        inp.focus();
+        if (!inp.value) inp.placeholder = "Ex.: MLB1246";
+      }
+    }
+    // Se trocou a categoria ML e a família ainda está vazia, sugere o nome da opção.
+    const inpFam = tr.querySelector(".ml-inp-fam");
+    if (inpFam && !inpFam.value.trim() && sel.value && !custom) {
+      const label = sel.selectedOptions?.[0]?.textContent || "";
+      const nomeMl = label.includes("—") ? label.split("—").slice(1).join("—").trim() : "";
+      if (nomeMl && nomeMl !== "(salvo)" && nomeMl !== "(atual)") {
+        inpFam.value = nomeMl.slice(0, 60);
+      }
+    }
   });
 
   el.btnSyncEstoque?.addEventListener("click", () =>

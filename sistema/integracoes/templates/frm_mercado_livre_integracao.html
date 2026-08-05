@@ -3,7 +3,7 @@
 {% block title %}Mercado Livre — Integrações — {{ MARCA_NOME }}{% endblock %}
 {% block topbar_title %}Mercado Livre{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('static', filename='style/Cmercadopago_integracao.css') }}?v=10" />
+<link rel="stylesheet" href="{{ url_for('static', filename='style/Cmercadopago_integracao.css') }}?v=11" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal Mp_Wrap">
@@ -214,7 +214,7 @@
           <h3 id="ml_modal_cat_titulo">Mapear categorias — Mercado Livre</h3>
           <button type="button" class="Mp_ModalClose" id="ml_modal_cat_fechar" aria-label="Fechar">&times;</button>
         </header>
-        <p class="Mp_Hint">Informe o ID da categoria no Mercado Livre (ex.: MLB1246) e a família do anúncio. Use <strong>Sugerir não mapeadas</strong> para preencher tudo de uma vez, ou <strong>Sugerir</strong> na linha para ajustar uma categoria.</p>
+        <p class="Mp_Hint">Use <strong>Sugerir não mapeadas</strong> para preencher o que falta. Se não gostar da sugestão, troque na lista de <strong>Categoria ML</strong> ou na <strong>Família</strong> (combobox com alternativas). Ainda dá para digitar um ID/família manualmente.</p>
         <p id="ml_msg_modal" class="Mp_Msg Mp_Msg--modal" hidden role="status"></p>
         <div class="Mp_CatMapWrap">
           <table class="Mp_CatMapTable" id="ml_tabela_categorias">
@@ -246,5 +246,5 @@
 </div>
 {% endblock %}
 {% block page_js %}
-<script src="{{ url_for('static', filename='script/Smercado_livre_integracao.js') }}?v=17"></script>
+<script src="{{ url_for('static', filename='script/Smercado_livre_integracao.js') }}?v=18"></script>
 {% endblock %}
