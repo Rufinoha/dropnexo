@@ -174,6 +174,21 @@
       .join("");
   }
 
+  function linkWhatsApp(raw) {
+    let d = String(raw || "").replace(/\D/g, "");
+    if (!d) return "";
+    if (!d.startsWith("55") || d.length <= 11) d = "55" + d.replace(/^55/, "");
+    return `https://wa.me/${d}`;
+  }
+
+  function htmlWhatsApp(raw) {
+    const txt = String(raw || "").trim();
+    if (!txt) return "—";
+    const href = linkWhatsApp(txt);
+    if (!href) return esc(txt);
+    return `<a href="${esc(href)}" target="_blank" rel="noopener">${esc(txt)}</a>`;
+  }
+
   function renderDetalhe(j) {
     const v = j.vendedor || {};
     const vin = j.vinculo || {};
@@ -197,7 +212,7 @@
           <dt>Responsável</dt><dd>${esc(v.contato_nome || "—")}</dd>
           <dt>E-mail</dt><dd>${v.email ? `<a href="mailto:${esc(v.email)}">${esc(v.email)}</a>` : "—"}</dd>
           <dt>Telefone</dt><dd>${esc(v.telefone || "—")}</dd>
-          <dt>WhatsApp</dt><dd>${esc(v.whatsapp || "—")}</dd>
+          <dt>WhatsApp</dt><dd>${htmlWhatsApp(v.whatsapp)}</dd>
           <dt>Site</dt><dd>${v.site ? `<a href="${esc(v.site)}" target="_blank" rel="noopener">${esc(v.site)}</a>` : "—"}</dd>
         </dl>
       </div>
