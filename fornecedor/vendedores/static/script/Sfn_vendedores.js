@@ -181,101 +181,245 @@
     return `https://wa.me/${d}`;
   }
 
-  function htmlWhatsApp(raw) {
-    const txt = String(raw || "").trim();
-    if (!txt) return "—";
-    const href = linkWhatsApp(txt);
-    if (!href) return esc(txt);
-    return `<a href="${esc(href)}" target="_blank" rel="noopener">${esc(txt)}</a>`;
+  function iniciais(nome) {
+    const p = String(nome || "")
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+    if (!p.length) return "?";
+    if (p.length === 1) return p[0].slice(0, 2).toUpperCase();
+    return (p[0][0] + p[p.length - 1][0]).toUpperCase();
+  }
+
+  function fmtTel(raw) {
+    const d = String(raw || "").replace(/\D/g, "");
+    if (d.length === 11) return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
+    if (d.length === 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
+    return String(raw || "").trim() || "—";
+  }
+
+  function fmtDataCurta(iso) {
+    if (!iso) return "—";
+    try {
+      return new Date(iso).toLocaleDateString("pt-BR", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      });
+    } catch {
+      return iso;
+    }
+  }
+
+  function siteHref(site) {
+    const s = String(site || "").trim();
+    if (!s) return "";
+    return /^https?:\/\//i.test(s) ? s : "https://" + s;
   }
 
   function renderDetalhe(j) {
     const v = j.vendedor || {};
     const vin = j.vinculo || {};
     vinculoAtual = vin;
-    if (modalTitulo) modalTitulo.textContent = v.nome || "Vendedor";
+    const st = statusMap[vin.status] || { cls: "", label: vin.status || "—" };
+    const nome = v.nome || "Vendedor";
+    const loc = [v.cidade, v.uf].filter(Boolean).join(" / ");
+    const waHref = v.whatsapp ? linkWhatsApp(v.whatsapp) : "";
+    const siteUrl = siteHref(v.site);
+
+    if (modalTitulo) {
+      modalTitulo.innerHTML =
+        `<span class="VdDet_HeadKicker">Solicitação de vínculo</span>` +
+        `<span class="VdDet_HeadNome">${esc(nome)}</span>`;
+    }
+
+    const chips = [];
+    if (v.email) {
+      chips.push(`<a class="VdDet_Chip" href="mailto:${esc(v.email)}">E-mail</a>`);
+    }
+    if (waHref) {
+      chips.push(
+        `<a class="VdDet_Chip is-wa" href="${esc(waHref)}" target="_blank" rel="noopener">WhatsApp</a>`
+      );
+    }
+    if (siteUrl) {
+      chips.push(
+        `<a class="VdDet_Chip" href="${esc(siteUrl)}" target="_blank" rel="noopener">Site</a>`
+      );
+    }
+
+    const stats = [
+      { label: "Na plataforma", value: v.tempo_plataforma || "—" },
+      { label: "Fornecedores", value: String(v.qtd_fornecedores_ativos ?? "0") },
+      { label: "Produtos", value: String(v.qtd_produtos_vitrine ?? "0") },
+    ];
+    if (v.tamanho_empresa) stats.push({ label: "Porte", value: v.tamanho_empresa });
+    if (v.faturamento_ultimo_ano) stats.push({ label: "Faturamento", value: v.faturamento_ultimo_ano });
 
     modalBody.innerHTML = `
-      <div class="VdParceiros_Secao">
-        <h4>Dados básicos</h4>
-        <dl class="VdParceiros_Dl">
-          <dt>Nome</dt><dd>${esc(v.nome)}</dd>
-          <dt>Razão social</dt><dd>${esc(v.razao_social || "—")}</dd>
-          <dt>CPF / CNPJ</dt><dd>${esc(v.documento || "—")}</dd>
-          <dt>Endereço</dt><dd>${esc(v.endereco || "—")}${v.cep ? " · CEP " + esc(v.cep) : ""}</dd>
-          <dt>Cidade</dt><dd>${esc([v.cidade, v.uf].filter(Boolean).join(" / ") || "—")}</dd>
-        </dl>
-      </div>
-      <div class="VdParceiros_Secao">
-        <h4>Contato</h4>
-        <dl class="VdParceiros_Dl">
-          <dt>Responsável</dt><dd>${esc(v.contato_nome || "—")}</dd>
-          <dt>E-mail</dt><dd>${v.email ? `<a href="mailto:${esc(v.email)}">${esc(v.email)}</a>` : "—"}</dd>
-          <dt>Telefone</dt><dd>${esc(v.telefone || "—")}</dd>
-          <dt>WhatsApp</dt><dd>${htmlWhatsApp(v.whatsapp)}</dd>
-          <dt>Site</dt><dd>${v.site ? `<a href="${esc(v.site)}" target="_blank" rel="noopener">${esc(v.site)}</a>` : "—"}</dd>
-        </dl>
-      </div>
-      ${
-        vin.motivo_status
-          ? `<div class="VdParceiros_Secao"><h4>Motivo da última ação</h4><p>${esc(vin.motivo_status)}</p></div>`
-          : ""
-      }
-      ${
-        vin.mensagem_solicitacao
-          ? `<div class="VdParceiros_Secao"><h4>Mensagem do vendedor</h4><p>${esc(vin.mensagem_solicitacao)}</p></div>`
-          : ""
-      }
-      ${
-        v.aceite_requisitos
-          ? `<div class="VdParceiros_Secao"><h4>Requisitos</h4><p style="font-size:0.9rem;color:#047857">Vendedor concordou com os requisitos comerciais na solicitação.</p></div>`
-          : ""
-      }`;
+      <div class="VdDet">
+        <section class="VdDet_Hero">
+          <div class="VdDet_Avatar" aria-hidden="true">${esc(iniciais(nome))}</div>
+          <div class="VdDet_HeroMain">
+            <div class="VdDet_HeroTop">
+              <span class="VdParceiros_Badge ${esc(st.cls)}">${esc(st.label)}</span>
+              <span class="VdDet_Meta">Solicitado em ${esc(fmtDataCurta(vin.solicitado_em))}</span>
+            </div>
+            <h4 class="VdDet_Nome">${esc(nome)}</h4>
+            <p class="VdDet_Loc">${esc(loc || "Localização não informada")}${
+              v.documento ? ` · <span class="VdDet_Doc">${esc(v.documento)}</span>` : ""
+            }</p>
+            ${chips.length ? `<div class="VdDet_Quick">${chips.join("")}</div>` : ""}
+          </div>
+        </section>
+
+        <section class="VdDet_Stats" aria-label="Indicadores">
+          ${stats
+            .map(
+              (s) =>
+                `<div class="VdDet_Stat"><span>${esc(s.label)}</span><strong>${esc(s.value)}</strong></div>`
+            )
+            .join("")}
+        </section>
+
+        <div class="VdDet_Grid">
+          <section class="VdDet_Card">
+            <h5>Empresa</h5>
+            <dl class="VdDet_Dl">
+              <div><dt>Razão social</dt><dd>${esc(v.razao_social || "—")}</dd></div>
+              <div><dt>CPF / CNPJ</dt><dd>${esc(v.documento || "—")}</dd></div>
+              <div><dt>Endereço</dt><dd>${esc(v.endereco || "—")}${
+                v.cep ? `<br><span class="VdDet_Muted">CEP ${esc(v.cep)}</span>` : ""
+              }</dd></div>
+              <div><dt>Cidade</dt><dd>${esc(loc || "—")}</dd></div>
+            </dl>
+          </section>
+          <section class="VdDet_Card">
+            <h5>Contato</h5>
+            <dl class="VdDet_Dl">
+              <div><dt>Responsável</dt><dd>${esc(v.contato_nome || "—")}</dd></div>
+              <div><dt>E-mail</dt><dd>${
+                v.email
+                  ? `<a href="mailto:${esc(v.email)}">${esc(v.email)}</a>`
+                  : "—"
+              }</dd></div>
+              <div><dt>Telefone</dt><dd>${esc(fmtTel(v.telefone))}</dd></div>
+              <div><dt>WhatsApp</dt><dd>${
+                waHref
+                  ? `<a class="VdDet_WaLink" href="${esc(waHref)}" target="_blank" rel="noopener">${esc(fmtTel(v.whatsapp))}</a>`
+                  : "—"
+              }</dd></div>
+            </dl>
+          </section>
+        </div>
+
+        ${
+          vin.mensagem_solicitacao
+            ? `<section class="VdDet_Note">
+                <h5>Mensagem do vendedor</h5>
+                <p>${esc(vin.mensagem_solicitacao)}</p>
+              </section>`
+            : ""
+        }
+        ${
+          vin.motivo_status
+            ? `<section class="VdDet_Note is-warn">
+                <h5>Motivo da última ação</h5>
+                <p>${esc(vin.motivo_status)}</p>
+              </section>`
+            : ""
+        }
+        ${
+          vin.mensagem_resposta
+            ? `<section class="VdDet_Note is-muted">
+                <h5>Resposta enviada</h5>
+                <p>${esc(vin.mensagem_resposta)}</p>
+              </section>`
+            : ""
+        }
+        ${
+          v.aceite_requisitos
+            ? `<section class="VdDet_Req is-ok">
+                <span class="VdDet_ReqMark" aria-hidden="true">✓</span>
+                <div>
+                  <strong>Requisitos aceitos</strong>
+                  <p>Vendedor concordou com os requisitos comerciais na solicitação.</p>
+                </div>
+              </section>`
+            : `<section class="VdDet_Req">
+                <span class="VdDet_ReqMark" aria-hidden="true">!</span>
+                <div>
+                  <strong>Requisitos</strong>
+                  <p>Sem registro de aceite nesta solicitação.</p>
+                </div>
+              </section>`
+        }
+      </div>`;
 
     if (modalFooter) {
       if (vin.status === "aguardando") {
         modalFooter.hidden = false;
         modalFooter.innerHTML = `
-          <button type="button" class="Cl_BtnSalvar" id="vd_btnAprovar">Aprovar vínculo</button>
-          <button type="button" class="Cl_BtnCancelar" id="vd_btnRecusar">Recusar</button>
+          <div class="VdDet_FootLead">
+            <strong>Decisão</strong>
+            <span>Aprovar libera o catálogo; recusar envia o motivo ao vendedor.</span>
+          </div>
+          <div class="VdDet_FootBtns">
+            <button type="button" class="Cl_BtnSalvar" id="vd_btnAprovar">Aprovar vínculo</button>
+            <button type="button" class="Cl_BtnCancelar" id="vd_btnRecusar">Recusar</button>
+          </div>
           <div class="VdParceiros_RecusaBox" id="vd_recusaBox" hidden>
             <label for="vd_motivoRecusa">Motivo da recusa (será enviado ao vendedor)</label>
             <textarea id="vd_motivoRecusa" placeholder="Explique o motivo para o vendedor…"></textarea>
-            <button type="button" class="Cl_BtnExcluir" id="vd_btnConfirmarRecusa" style="margin-top:8px">Confirmar recusa</button>
+            <button type="button" class="Cl_BtnExcluir" id="vd_btnConfirmarRecusa">Confirmar recusa</button>
           </div>`;
       } else if (vin.status === "ativo") {
         modalFooter.hidden = false;
         modalFooter.innerHTML = `
-          <button type="button" class="Cl_BtnCancelar" id="vd_btnPausar">Pausar vínculo</button>
-          <button type="button" class="Cl_BtnExcluir" id="vd_btnInativar">Encerrar vínculo</button>`;
+          <div class="VdDet_FootLead">
+            <strong>Vínculo ativo</strong>
+            <span>Pausar ou encerrar afeta a vitrine deste vendedor.</span>
+          </div>
+          <div class="VdDet_FootBtns">
+            <button type="button" class="Cl_BtnCancelar" id="vd_btnPausar">Pausar vínculo</button>
+            <button type="button" class="Cl_BtnExcluir" id="vd_btnInativar">Encerrar vínculo</button>
+          </div>`;
       } else if (vin.status === "pausado") {
         modalFooter.hidden = false;
         modalFooter.innerHTML = `
-          ${
-            vin.pode_despausar
-              ? '<button type="button" class="Cl_BtnSalvar" id="vd_btnDespausar">Despausar vínculo</button>'
-              : '<span class="Asf_Hint" style="align-self:center">Somente quem pausou pode despausar.</span>'
-          }
-          <button type="button" class="Cl_BtnExcluir" id="vd_btnInativar">Encerrar vínculo</button>`;
+          <div class="VdDet_FootLead">
+            <strong>Vínculo pausado</strong>
+            <span>${vin.pode_despausar ? "Você pode reativar ou encerrar." : "Somente quem pausou pode despausar."}</span>
+          </div>
+          <div class="VdDet_FootBtns">
+            ${
+              vin.pode_despausar
+                ? '<button type="button" class="Cl_BtnSalvar" id="vd_btnDespausar">Despausar vínculo</button>'
+                : ""
+            }
+            <button type="button" class="Cl_BtnExcluir" id="vd_btnInativar">Encerrar vínculo</button>
+          </div>`;
       } else {
         modalFooter.hidden = true;
         modalFooter.innerHTML = "";
-        if (vin.mensagem_resposta) {
-          modalBody.innerHTML += `<div class="VdParceiros_Secao"><h4>Resposta enviada</h4><p>${esc(vin.mensagem_resposta)}</p></div>`;
-        }
       }
     }
     abrir();
   }
 
   async function carregarDetalhe(id) {
-    modalBody.innerHTML = "<p>Carregando…</p>";
+    modalBody.innerHTML = '<div class="VdDet_Loading">Montando dossiê do vendedor…</div>';
     if (modalFooter) modalFooter.hidden = true;
+    if (modalTitulo) {
+      modalTitulo.innerHTML =
+        `<span class="VdDet_HeadKicker">Solicitação de vínculo</span>` +
+        `<span class="VdDet_HeadNome">Carregando…</span>`;
+    }
     abrir();
     const r = await fetch("/fornecedor/vendedores/detalhe/" + id, { credentials: "same-origin" });
     const j = await r.json();
     if (!j.success) {
-      modalBody.innerHTML = "<p>" + esc(j.message || "Erro") + "</p>";
+      modalBody.innerHTML = `<div class="VdDet_Loading is-err">${esc(j.message || "Erro")}</div>`;
       return;
     }
     renderDetalhe(j);

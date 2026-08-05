@@ -156,108 +156,455 @@
 .VdParceiros_Modal:not([hidden]) {
   position: fixed;
   inset: 0;
-  background: rgba(15, 23, 42, 0.45);
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
   z-index: 200;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 1rem;
+  animation: VdDetScrimIn 0.22s ease;
+}
+
+@keyframes VdDetScrimIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .VdParceiros_ModalInner {
-  background: #fff;
-  border-radius: 12px;
-  max-width: 720px;
+  background: #f6f7f9;
+  border-radius: 18px;
+  max-width: 860px;
   width: 100%;
-  max-height: 90vh;
-  overflow: auto;
+  max-height: min(92vh, 900px);
+  overflow: hidden;
   display: flex;
   flex-direction: column;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.35) inset,
+    0 28px 70px rgba(7, 20, 51, 0.28);
+  transform: translateY(10px) scale(0.985);
+  animation: VdDetPanelIn 0.32s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes VdDetPanelIn {
+  to { transform: translateY(0) scale(1); }
 }
 
 .VdParceiros_ModalHead {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  padding: 1rem 1.25rem;
-  border-bottom: 1px solid #e5e7eb;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1.1rem 1.35rem 1rem;
+  background:
+    linear-gradient(135deg, #021f81 0%, #0a2f9a 48%, #071433 100%);
+  color: #f8fafc;
+  border-bottom: 0;
 }
 
 .VdParceiros_ModalHead h3 {
   margin: 0;
-  font-size: 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 1rem;
+  font-weight: 600;
+  min-width: 0;
+}
+
+.VdDet_HeadKicker {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(212, 184, 122, 0.95);
+}
+
+.VdDet_HeadNome {
+  font-size: 1.2rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: min(58vw, 520px);
+}
+
+.VdParceiros_ModalHead .Cl_BtnLink {
+  color: rgba(248, 250, 252, 0.88);
+  text-decoration: none;
+  font-weight: 600;
+  padding: 0.35rem 0.55rem;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.VdParceiros_ModalHead .Cl_BtnLink:hover {
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
 }
 
 .VdParceiros_ModalBody {
-  padding: 1rem 1.25rem;
+  padding: 1.1rem 1.25rem 1.35rem;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  flex: 1 1 auto;
+  min-height: 0;
+  scrollbar-gutter: stable;
 }
 
-.VdParceiros_Secao {
-  margin-bottom: 1.25rem;
+.VdParceiros_ModalBody::-webkit-scrollbar { width: 8px; }
+.VdParceiros_ModalBody::-webkit-scrollbar-thumb {
+  background: rgba(7, 20, 51, 0.25);
+  border-radius: 999px;
+}
+.VdParceiros_ModalBody::-webkit-scrollbar-track {
+  background: rgba(7, 20, 51, 0.05);
+  border-radius: 999px;
 }
 
-.VdParceiros_Secao h4 {
-  margin: 0 0 0.5rem;
+.VdDet_Loading {
+  padding: 2.5rem 1rem;
+  text-align: center;
+  color: #64748b;
+  font-size: 0.95rem;
+}
+.VdDet_Loading.is-err { color: #b91c1c; }
+
+.VdDet {
+  display: flex;
+  flex-direction: column;
+  gap: 0.95rem;
+}
+
+.VdDet_Hero {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 1rem 1.1rem;
+  padding: 1.1rem 1.15rem;
+  border-radius: 16px;
+  background:
+    radial-gradient(900px 180px at 100% 0%, rgba(168, 132, 63, 0.12), transparent 55%),
+    linear-gradient(180deg, #fff 0%, #fbfaf7 100%);
+  border: 1px solid rgba(7, 20, 51, 0.08);
+  box-shadow: 0 10px 28px rgba(7, 20, 51, 0.05);
+}
+
+.VdDet_Avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 18px;
+  display: grid;
+  place-items: center;
+  font-size: 1.2rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: #fff;
+  background: linear-gradient(160deg, #0a2f9a, #021f81 70%);
+  box-shadow: 0 12px 24px rgba(2, 31, 129, 0.28);
+}
+
+.VdDet_HeroTop {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 0.7rem;
+  margin-bottom: 0.35rem;
+}
+
+.VdDet_Meta {
   font-size: 0.78rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
   color: #64748b;
 }
 
-.VdParceiros_Dl {
-  display: grid;
-  grid-template-columns: 140px 1fr;
-  gap: 0.35rem 1rem;
+.VdDet_Nome {
+  margin: 0 0 0.25rem;
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #071433;
+  line-height: 1.2;
+}
+
+.VdDet_Loc {
   margin: 0;
   font-size: 0.9rem;
+  color: #475569;
+  line-height: 1.4;
 }
 
-.VdParceiros_Dl dt {
-  color: #64748b;
+.VdDet_Doc {
+  color: #0f172a;
   font-weight: 600;
 }
 
-.VdParceiros_Dl dd {
-  margin: 0;
-  color: #0f172a;
-}
-
-.VdParceiros_Stats {
+.VdDet_Quick {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: 0.45rem;
+  margin-top: 0.85rem;
 }
 
-.VdParceiros_Stat {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 0.5rem 0.75rem;
+.VdDet_Chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.42rem 0.8rem;
+  border-radius: 999px;
+  border: 1px solid rgba(2, 31, 129, 0.14);
+  background: rgba(2, 31, 129, 0.05);
+  color: #021f81;
   font-size: 0.82rem;
+  font-weight: 700;
+  text-decoration: none;
+  transition: background 0.15s ease, transform 0.15s ease, border-color 0.15s ease;
+}
+
+.VdDet_Chip:hover {
+  background: rgba(2, 31, 129, 0.1);
+  border-color: rgba(2, 31, 129, 0.28);
+  transform: translateY(-1px);
+}
+
+.VdDet_Chip.is-wa {
+  background: rgba(5, 150, 105, 0.1);
+  border-color: rgba(5, 150, 105, 0.28);
+  color: #047857;
+}
+
+.VdDet_Chip.is-wa:hover {
+  background: rgba(5, 150, 105, 0.16);
+}
+
+.VdDet_Stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 0.55rem;
+}
+
+.VdDet_Stat {
+  background: #fff;
+  border: 1px solid rgba(7, 20, 51, 0.08);
+  border-radius: 14px;
+  padding: 0.7rem 0.8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.VdDet_Stat span {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+
+.VdDet_Stat strong {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.25;
+  word-break: break-word;
+}
+
+.VdDet_Grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.VdDet_Card {
+  background: #fff;
+  border: 1px solid rgba(7, 20, 51, 0.08);
+  border-radius: 16px;
+  padding: 1rem 1.05rem 0.95rem;
+}
+
+.VdDet_Card h5 {
+  margin: 0 0 0.75rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.VdDet_Dl {
+  display: grid;
+  gap: 0.7rem;
+  margin: 0;
+}
+
+.VdDet_Dl > div {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.VdDet_Dl dt {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+
+.VdDet_Dl dd {
+  margin: 0;
+  font-size: 0.92rem;
+  color: #0f172a;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.VdDet_Dl a {
+  color: #021f81;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.VdDet_Dl a:hover { text-decoration: underline; }
+
+.VdDet_WaLink {
+  color: #047857 !important;
+}
+
+.VdDet_Muted {
+  color: #64748b;
+  font-size: 0.84rem;
+}
+
+.VdDet_Note {
+  background: #fff;
+  border: 1px solid rgba(7, 20, 51, 0.08);
+  border-left: 4px solid #021f81;
+  border-radius: 14px;
+  padding: 0.9rem 1rem;
+}
+
+.VdDet_Note.is-warn { border-left-color: #d97706; }
+.VdDet_Note.is-muted { border-left-color: #94a3b8; }
+
+.VdDet_Note h5 {
+  margin: 0 0 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.VdDet_Note p {
+  margin: 0;
+  font-size: 0.92rem;
+  color: #1e293b;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.VdDet_Req {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+  padding: 0.9rem 1rem;
+  border-radius: 14px;
+  border: 1px dashed rgba(148, 163, 184, 0.7);
+  background: rgba(248, 250, 252, 0.9);
+}
+
+.VdDet_Req.is-ok {
+  border-style: solid;
+  border-color: rgba(5, 150, 105, 0.25);
+  background: linear-gradient(180deg, #ecfdf5, #f0fdf4);
+}
+
+.VdDet_ReqMark {
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  font-weight: 800;
+  background: #e2e8f0;
+  color: #475569;
+}
+
+.VdDet_Req.is-ok .VdDet_ReqMark {
+  background: #059669;
+  color: #fff;
+}
+
+.VdDet_Req strong {
+  display: block;
+  font-size: 0.92rem;
+  color: #0f172a;
+  margin-bottom: 0.15rem;
+}
+
+.VdDet_Req p {
+  margin: 0;
+  font-size: 0.86rem;
+  color: #475569;
+  line-height: 1.4;
 }
 
 .VdParceiros_ModalFoot {
-  padding: 1rem 1.25rem;
-  border-top: 1px solid #e5e7eb;
+  padding: 0.95rem 1.25rem 1.1rem;
+  border-top: 1px solid rgba(7, 20, 51, 0.08);
+  background: #fff;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem 1rem;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.VdDet_FootLead {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 12rem;
+  flex: 1 1 12rem;
+}
+
+.VdDet_FootLead strong {
+  font-size: 0.9rem;
+  color: #0f172a;
+}
+
+.VdDet_FootLead span {
+  font-size: 0.78rem;
+  color: #64748b;
+  line-height: 1.35;
+}
+
+.VdDet_FootBtns {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
-  align-items: flex-start;
 }
 
 .VdParceiros_RecusaBox {
   flex: 1 1 100%;
-  margin-top: 0.5rem;
+  margin-top: 0.15rem;
+  padding-top: 0.75rem;
+  border-top: 1px dashed #e2e8f0;
 }
 
 .VdParceiros_RecusaBox textarea {
   width: 100%;
   min-height: 72px;
-  padding: 0.5rem;
+  padding: 0.65rem 0.75rem;
   border: 1px solid #e2e8f0;
-  border-radius: 8px;
+  border-radius: 10px;
   font-family: inherit;
   font-size: 0.9rem;
+  box-sizing: border-box;
 }
 
 .VdParceiros_RecusaBox label {
@@ -266,6 +613,22 @@
   font-weight: 600;
   color: #475569;
   margin-bottom: 0.35rem;
+}
+
+.VdParceiros_RecusaBox .Cl_BtnExcluir {
+  margin-top: 0.55rem;
+}
+
+@media (max-width: 700px) {
+  .VdDet_Grid { grid-template-columns: 1fr; }
+  .VdDet_Hero { grid-template-columns: 1fr; }
+  .VdDet_Avatar { width: 56px; height: 56px; border-radius: 16px; }
+  .VdDet_HeadNome { max-width: 62vw; font-size: 1.05rem; }
+  .VdParceiros_ModalFoot { flex-direction: column; align-items: stretch; }
+  .VdDet_FootBtns { width: 100%; }
+  .VdDet_FootBtns .Cl_BtnSalvar,
+  .VdDet_FootBtns .Cl_BtnCancelar,
+  .VdDet_FootBtns .Cl_BtnExcluir { flex: 1; }
 }
 
 /* SweetAlert — pausar / encerrar vínculo */
