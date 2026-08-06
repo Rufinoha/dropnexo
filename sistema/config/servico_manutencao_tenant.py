@@ -45,7 +45,7 @@ def contagens_resumo_tenant(cur, id_tenant: int) -> dict:
              WHERE id_tenant_fornecedor = %s OR id_tenant_vendedor = %s),
           (SELECT COUNT(*)::int FROM tbl_pedido
              WHERE id_tenant_fornecedor = %s OR id_tenant_vendedor = %s),
-          (SELECT COUNT(*)::int FROM tbl_usuario WHERE id_tenant = %s)
+          (SELECT COUNT(*)::int FROM tbl_usuario_tenant WHERE id_tenant = %s)
         """,
         (id_tenant, id_tenant, id_tenant, id_tenant, id_tenant, id_tenant),
     )
