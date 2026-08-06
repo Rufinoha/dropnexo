@@ -143,7 +143,11 @@
             }
           </div>
           ${blocoProgresso(u)}
-          ${u?.mensagem ? `<p class="TsCfg_Msg">${esc(u.mensagem)}</p>` : ""}
+          ${
+            u?.mensagem && st !== "rodando"
+              ? `<p class="TsCfg_Msg">${esc(u.mensagem)}</p>`
+              : ""
+          }
           <div class="TsCfg_Acoes">
             <button type="button" class="Cl_botaoprimario" data-acao="executar"${btnExecDisabled}>${btnExecLabel}</button>
             <button type="button" class="Cl_botaoFiltro" data-acao="historico">Ver histórico / log</button>

@@ -837,10 +837,22 @@ def _erro_ml_para_usuario(texto: str) -> str:
             "Código GTIN/EAN obrigatório nesta categoria. "
             "Cadastre o código de barras no produto ou informe que ele não possui GTIN."
         )
-    if "family_name" in low and ("length" in low or "caracter" in low):
+    if "family_name" in low or "family name" in low:
+        if "length" in low or "caracter" in low:
+            return (
+                f"Nome da família muito longo (máx. {_ML_FAMILY_NAME_MAX} caracteres). "
+                "Encurte o nome do produto e tente de novo."
+            )
         return (
-            f"Nome da família muito longo (máx. {_ML_FAMILY_NAME_MAX} caracteres). "
-            "Encurte em Integrações → Mercado Livre → Mapear categorias."
+            "O Mercado Livre rejeitou o nome do anúncio (família/título). "
+            "Confira o nome do produto e se a categoria está mapeada."
+        )
+    if "properties [title]" in low or (
+        "title" in low and ("contain" in low or "required" in low or "missing" in low)
+    ):
+        return (
+            "O Mercado Livre exigiu o título do anúncio. "
+            "Tente exportar de novo; se persistir, reconecte a conta ML."
         )
     if "description.type.invalid" in low or (
         "description" in low and "plain text" in low
@@ -855,7 +867,12 @@ def _erro_ml_para_usuario(texto: str) -> str:
         return "Preço de venda inválido ou abaixo do mínimo permitido pelo Mercado Livre."
     if "categoria" in low or "category" in low:
         return "Categoria não configurada. Associe ao produto e mapeie em Integrações → Mercado Livre."
-    if "mapeie" in low or "mapear categorias" in low:
+    if (
+        "mapeie" in low
+        or "mapear categorias" in low
+        or "associe uma categoria" in low
+        or "ainda não está mapeada" in low
+    ):
         return t
     if "validation_error" in low:
         # remove ruído técnico
@@ -921,6 +938,12 @@ def _normalizar_titulo_ml(titulo: str, *, max_len: int = 60) -> str:
 def _seller_usa_user_products_ml(
     cur, id_tenant: int, ml_user_id: int, site_id: str = "MLB"
 ) -> bool:
+    """Só ativa User Products quando a conta ML realmente tem a tag.
+
+    Antes forçávamos UP em todo MLB; contas clássicas recebiam family_name
+    sem title e o ML respondia «title missing / family name invalid».
+    """
+    _ = site_id  # reservado para regras futuras por site
     if id_tenant in _SELLER_UP_CACHE:
         return _SELLER_UP_CACHE[id_tenant]
     usa_up = False
@@ -930,9 +953,6 @@ def _seller_usa_user_products_ml(
         usa_up = "user_product_seller" in tags
     except RuntimeError:
         pass
-    # Novos anúncios no Brasil já seguem User Products (family_name, sem title).
-    if not usa_up and (site_id or "MLB").upper() == "MLB":
-        usa_up = True
     _SELLER_UP_CACHE[id_tenant] = usa_up
     return usa_up
 
@@ -1358,15 +1378,21 @@ def _garantir_tabela_ml_categoria_map(cur) -> bool:
 
 
 def _family_name_ml(titulo: str, marca: str, override: str = "") -> str:
-    if (override or "").strip():
-        return _normalizar_titulo_ml(override, max_len=_ML_FAMILY_NAME_MAX)
+    """Monta family_name a partir do nome do produto (campo nome / vitrine).
+
+    Override do mapeamento só entra se for um texto útil (≥ 3 chars).
+    """
+    ov = (override or "").strip()
+    if len(ov) >= 3:
+        return _normalizar_titulo_ml(ov, max_len=_ML_FAMILY_NAME_MAX)
     marca = (marca or "").strip()
     titulo = _normalizar_titulo_ml(titulo or "", max_len=_ML_FAMILY_NAME_MAX)
     if marca and titulo and not titulo.lower().startswith(marca.lower()):
         fam = f"{marca} {titulo}"
     else:
         fam = titulo or marca or "Produto"
-    return _normalizar_titulo_ml(fam, max_len=_ML_FAMILY_NAME_MAX)
+    out = _normalizar_titulo_ml(fam, max_len=_ML_FAMILY_NAME_MAX)
+    return out if len(out) >= 3 else "Produto"
 
 
 def _mapa_categoria_ml(cur, id_tenant: int, id_categoria: int | None) -> tuple[str, str]:
@@ -2326,6 +2352,20 @@ def _criar_anuncio_ml(
     titulo = _normalizar_titulo_ml(titulo or "Produto", max_len=60)
     if preco <= 0:
         raise RuntimeError(f"Preço inválido para «{titulo}».")
+
+    # Bloqueia antes de chamar a API / montar fotos.
+    if not id_categoria_vendedor:
+        raise RuntimeError(
+            f"«{titulo}»: associe uma categoria DropNexo ao produto antes de exportar "
+            "ao Mercado Livre."
+        )
+    category_id, familia_map = _mapa_categoria_ml(cur, id_tenant, id_categoria_vendedor)
+    if not category_id:
+        raise RuntimeError(
+            f"«{titulo}»: a categoria DropNexo ainda não está mapeada para o Mercado Livre. "
+            "Vá em Integrações → Mercado Livre → Mapear categorias e salve o mapeamento."
+        )
+
     pictures = _coletar_pictures_ml(
         cur,
         id_tenant,
@@ -2337,18 +2377,6 @@ def _criar_anuncio_ml(
         raise RuntimeError(
             f"«{titulo}»: nenhuma foto disponível para o anúncio no ML "
             "(verifique a galeria do produto)."
-        )
-
-    category_id, familia_map = _mapa_categoria_ml(cur, id_tenant, id_categoria_vendedor)
-    if not category_id and id_categoria_vendedor:
-        raise RuntimeError(
-            f"«{titulo}»: mapeie a categoria em Integrações → Mercado Livre → Mapear categorias."
-        )
-    if not category_id:
-        category_id = _prever_categoria_ml(cur, id_tenant, site_id, titulo) or ""
-    if not category_id:
-        raise RuntimeError(
-            f"«{titulo}»: associe uma categoria ao produto e mapeie-a ao Mercado Livre."
         )
 
     cfg = cfg or {}
@@ -2375,8 +2403,9 @@ def _criar_anuncio_ml(
         attrs_variacao_dn=attrs_variacao_dn or {},
     )
 
-    # User Products: família estável = nome do pai (agrupa variações), não o título da variante.
+    # Nome do anúncio = nome do produto (pai agrupa variações no modo UP).
     familia_base = (nome_pai or titulo or "").strip()
+    titulo_anuncio = _normalizar_titulo_ml(familia_base or titulo, max_len=60)
     family_name = _family_name_ml(familia_base, marca, familia_map)
     usa_up = _seller_usa_user_products_ml(cur, id_tenant, ml_user_id, site_id)
 
@@ -2421,17 +2450,26 @@ def _criar_anuncio_ml(
     if video_id:
         payload["video_id"] = video_id
 
-    if usa_up and not variations:
-        # User Products: family_name obrigatório; title é gerado pelo ML.
-        # variations[] não é aceito neste modo — 1 item por variante + mesmos family_name.
+    def _aplicar_modo_up() -> None:
+        payload.pop("title", None)
+        payload.pop("channels", None)
+        payload.pop("seller_custom_field", None)
         payload["family_name"] = family_name
         payload["shipping"] = _montar_shipping_ml(frete_gratis)
-    else:
-        payload["title"] = _normalizar_titulo_ml(familia_base or titulo, max_len=60)
+
+    def _aplicar_modo_classic() -> None:
+        payload.pop("family_name", None)
+        payload["title"] = titulo_anuncio
         payload["channels"] = ["marketplace"]
         payload["shipping"] = _montar_shipping_ml(frete_gratis)
         if sku and not variations:
             payload["seller_custom_field"] = sku[:100]
+
+    if usa_up and not variations:
+        # User Products: family_name = nome do produto; title é gerado pelo ML.
+        _aplicar_modo_up()
+    else:
+        _aplicar_modo_classic()
     if attrs:
         payload["attributes"] = attrs
 
@@ -2450,6 +2488,27 @@ def _criar_anuncio_ml(
             payload.pop("sale_terms", None)
             retried = True
             _log.info("ML rejeitou sale_terms ao criar «%s» — republicando sem garantia.", titulo)
+        # Conta clássica vs UP: troca o modo uma vez se title/family_name falhar.
+        if not variations and (
+            "family name" in msg
+            or "family_name" in msg
+            or ("title" in msg and ("contain" in msg or "properties" in msg or "required" in msg))
+        ):
+            if payload.get("family_name"):
+                _log.info(
+                    "ML rejeitou family_name/title UP em «%s» — tentando modo clássico.",
+                    titulo,
+                )
+                _aplicar_modo_classic()
+            else:
+                _log.info(
+                    "ML rejeitou title clássico em «%s» — tentando User Products.",
+                    titulo,
+                )
+                _aplicar_modo_up()
+            retried = True
+            # Conta pode ter mudado de modo; limpa cache para a próxima.
+            _SELLER_UP_CACHE.pop(id_tenant, None)
         if not retried:
             raise
         resp = api_request(cur, id_tenant, "POST", "/items", json_body=payload)
@@ -2692,6 +2751,33 @@ def _criar_anuncios_ml_lote(cur, id_tenant: int, cfg: dict, linhas: list) -> dic
             id_cat = int(d["id_cat_vd"]) if d.get("id_cat_vd") else None
         except (TypeError, ValueError):
             id_cat = None
+        # Validação antecipada (mesma regra de _criar_anuncio_ml) para mensagem clara no lote.
+        try:
+            if not id_cat:
+                raise RuntimeError(
+                    f"«{nome}»: associe uma categoria DropNexo ao produto antes de exportar "
+                    "ao Mercado Livre."
+                )
+            cat_ml, _fam = _mapa_categoria_ml(cur, id_tenant, id_cat)
+            if not cat_ml:
+                raise RuntimeError(
+                    f"«{nome}»: a categoria DropNexo ainda não está mapeada para o Mercado Livre. "
+                    "Vá em Integrações → Mercado Livre → Mapear categorias e salve o mapeamento."
+                )
+        except RuntimeError as e:
+            msg_user = _erro_ml_para_usuario(str(e)[:400])
+            if msg_user not in erros:
+                erros.append(msg_user)
+            resultados.append(
+                {
+                    "id_produto": int(d["id_produto"]),
+                    "titulo": nome,
+                    "sku": d["sku"],
+                    "status": "erro",
+                    "mensagem": msg_user,
+                }
+            )
+            return
         try:
             ml_item_id = _criar_anuncio_ml(
                 cur,

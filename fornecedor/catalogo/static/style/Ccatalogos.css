@@ -512,6 +512,86 @@
   background: rgba(185, 28, 28, 0.08);
 }
 
+.Cat_BulkIntWrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.Cat_BulkIntWrap.is-open > .Cat_BulkBtn {
+  color: #021f81;
+  background: rgba(2, 31, 129, 0.08);
+}
+
+.Cat_BulkIntMenu {
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  right: 0;
+  z-index: 40;
+  min-width: 12.5rem;
+  padding: 0.35rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.Cat_BulkIntMenu[hidden] {
+  display: none;
+}
+
+.Cat_BulkIntItem {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  width: 100%;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  padding: 0.5rem 0.6rem;
+  text-align: left;
+  font-size: 0.84rem;
+  color: #0f172a;
+  cursor: pointer;
+}
+
+.Cat_BulkIntItem:hover,
+.Cat_BulkIntItem:focus-visible {
+  background: #f1f5f9;
+  outline: none;
+}
+
+.Cat_BulkIntItem img {
+  flex-shrink: 0;
+  object-fit: contain;
+}
+
+.Cat_BulkIntEmpty {
+  margin: 0;
+  padding: 0.45rem 0.55rem 0.15rem;
+  font-size: 0.8rem;
+  color: #64748b;
+  line-height: 1.35;
+}
+
+.Cat_BulkIntLink {
+  display: block;
+  margin: 0.15rem 0.35rem 0.35rem;
+  padding: 0.4rem 0.5rem;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #021f81;
+  text-decoration: none;
+}
+
+.Cat_BulkIntLink:hover {
+  background: rgba(2, 31, 129, 0.06);
+  text-decoration: underline;
+}
+
 .Cat_ColCategoria {
   min-width: 120px;
   max-width: 180px;

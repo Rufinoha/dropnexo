@@ -7,6 +7,14 @@
   const recolhidos = new Set();
   const selecionados = new Set();
   let categoriasCache = [];
+  /** Marketplaces conectados para exportação em lote (ml / tiktok / amazon). */
+  let integracoesExportCache = null;
+
+  const EXPORT_INTEGRACOES = {
+    mercado_livre: { acao: "ml", nome: "Mercado Livre" },
+    tiktok: { acao: "tiktok", nome: "TikTok Shop" },
+    amazon: { acao: "amazon", nome: "Amazon" },
+  };
 
   const el = {
     filtroBusca: document.getElementById("ob_filtroBusca"),
@@ -184,31 +192,139 @@
     return `<input type="checkbox" class="Cat_ChkSel Cat_ChkRow" data-produto="${l.id}" ${on ? "checked" : ""} aria-label="Selecionar produto" />`;
   }
 
+  function fecharMenuIntegracoes() {
+    const menu = el.bulkActions?.querySelector(".Cat_BulkIntMenu");
+    const wrap = el.bulkActions?.querySelector(".Cat_BulkIntWrap");
+    const btn = el.bulkActions?.querySelector('[data-bulk="integrar"]');
+    if (menu) menu.hidden = true;
+    wrap?.classList.remove("is-open");
+    btn?.setAttribute("aria-expanded", "false");
+  }
+
+  function aplicarIntegracoesFiltro(lista) {
+    integracoesExportCache = (lista || [])
+      .filter((o) => o && EXPORT_INTEGRACOES[o.valor])
+      .map((o) => ({
+        valor: o.valor,
+        nome: EXPORT_INTEGRACOES[o.valor].nome || o.nome,
+        acao: EXPORT_INTEGRACOES[o.valor].acao,
+        icone_url: o.icone_url || "",
+      }));
+  }
+
+  async function garantirIntegracoesExport() {
+    if (integracoesExportCache) return integracoesExportCache;
+    const r = await fetch(`${BASE}/combos`, { credentials: "same-origin" });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.success) throw new Error(j.message || "Falha ao carregar integrações.");
+    aplicarIntegracoesFiltro(j.integracoes_filtro || []);
+    if (!categoriasCache.length) categoriasCache = j.categorias || [];
+    return integracoesExportCache;
+  }
+
+  function renderMenuIntegracoes(itens) {
+    const menu = el.bulkActions?.querySelector(".Cat_BulkIntMenu");
+    if (!menu) return;
+    if (!itens.length) {
+      menu.innerHTML = `
+        <p class="Cat_BulkIntEmpty">Nenhuma integração conectada.</p>
+        <a class="Cat_BulkIntLink" href="/integracoes">Ir para Integrações</a>`;
+      return;
+    }
+    menu.innerHTML = itens
+      .map(
+        (it) => `
+        <button type="button" class="Cat_BulkIntItem" data-bulk="${escapeHtml(it.acao)}" role="menuitem">
+          ${
+            it.icone_url
+              ? `<img src="${escapeHtml(it.icone_url)}" alt="" width="18" height="18" loading="lazy" />`
+              : ""
+          }
+          <span>${escapeHtml(it.nome)}</span>
+        </button>`
+      )
+      .join("");
+  }
+
+  async function abrirMenuIntegracoes() {
+    const menu = el.bulkActions?.querySelector(".Cat_BulkIntMenu");
+    const wrap = el.bulkActions?.querySelector(".Cat_BulkIntWrap");
+    const btn = el.bulkActions?.querySelector('[data-bulk="integrar"]');
+    if (!menu || !wrap || !btn) return;
+    if (!menu.hidden) {
+      fecharMenuIntegracoes();
+      return;
+    }
+    try {
+      // Sempre recarrega: usuário pode ter conectado/desconectado em outra aba.
+      integracoesExportCache = null;
+      const itens = await garantirIntegracoesExport();
+      renderMenuIntegracoes(itens);
+    } catch (e) {
+      renderMenuIntegracoes([]);
+      menu.insertAdjacentHTML(
+        "beforeend",
+        `<p class="Cat_BulkIntEmpty">${escapeHtml(e.message || "Erro ao carregar.")}</p>`
+      );
+    }
+    menu.hidden = false;
+    wrap.classList.add("is-open");
+    btn.setAttribute("aria-expanded", "true");
+  }
+
   function initBulkActions() {
     if (!el.bulkActions || el.bulkActions.dataset.ready) return;
     el.bulkActions.dataset.ready = "1";
-    const acoes = [
-      { acao: "categoria", icon: "categorias", title: "Associar categoria" },
-      { acao: "ml", icon: "vincular_clientes", title: "Integrar Mercado Livre" },
-      { acao: "tiktok", icon: "vincular_clientes", title: "Integrar TikTok Shop" },
-      { acao: "amazon", icon: "vincular_clientes", title: "Integrar Amazon" },
-      { acao: "excluir", icon: "excluir", title: "Excluir selecionados", danger: true },
-    ];
-    acoes.forEach((a) => {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = `Cl_BtnAcao Cat_BulkBtn${a.danger ? " Cat_BulkBtn--danger" : ""}`;
-      btn.dataset.bulk = a.acao;
-      btn.title = a.title;
-      btn.setAttribute("aria-label", a.title);
-      window.Util?.gerarIconeTech?.({ dest: btn, nome: a.icon });
-      el.bulkActions.appendChild(btn);
-    });
+
+    const btnCat = document.createElement("button");
+    btnCat.type = "button";
+    btnCat.className = "Cl_BtnAcao Cat_BulkBtn";
+    btnCat.dataset.bulk = "categoria";
+    btnCat.title = "Associar categoria";
+    btnCat.setAttribute("aria-label", "Associar categoria");
+    window.Util?.gerarIconeTech?.({ dest: btnCat, nome: "categorias" });
+    el.bulkActions.appendChild(btnCat);
+
+    const wrapInt = document.createElement("div");
+    wrapInt.className = "Cat_BulkIntWrap";
+    const btnInt = document.createElement("button");
+    btnInt.type = "button";
+    btnInt.className = "Cl_BtnAcao Cat_BulkBtn";
+    btnInt.dataset.bulk = "integrar";
+    btnInt.title = "Integrar marketplaces";
+    btnInt.setAttribute("aria-label", "Integrar marketplaces");
+    btnInt.setAttribute("aria-haspopup", "menu");
+    btnInt.setAttribute("aria-expanded", "false");
+    window.Util?.gerarIconeTech?.({ dest: btnInt, nome: "vincular_clientes" });
+    const menuInt = document.createElement("div");
+    menuInt.className = "Cat_BulkIntMenu";
+    menuInt.setAttribute("role", "menu");
+    menuInt.hidden = true;
+    wrapInt.appendChild(btnInt);
+    wrapInt.appendChild(menuInt);
+    el.bulkActions.appendChild(wrapInt);
+
+    const btnExc = document.createElement("button");
+    btnExc.type = "button";
+    btnExc.className = "Cl_BtnAcao Cat_BulkBtn Cat_BulkBtn--danger";
+    btnExc.dataset.bulk = "excluir";
+    btnExc.title = "Excluir selecionados";
+    btnExc.setAttribute("aria-label", "Excluir selecionados");
+    window.Util?.gerarIconeTech?.({ dest: btnExc, nome: "excluir" });
+    el.bulkActions.appendChild(btnExc);
+
     el.bulkActions.addEventListener("click", async (ev) => {
+      const intBtn = ev.target.closest('[data-bulk="integrar"]');
+      if (intBtn && el.bulkActions.contains(intBtn)) {
+        ev.preventDefault();
+        await abrirMenuIntegracoes();
+        return;
+      }
       const b = ev.target.closest("[data-bulk]");
-      if (!b) return;
+      if (!b || !el.bulkActions.contains(b)) return;
       const ids = [...selecionados];
       if (!ids.length) return;
+      fecharMenuIntegracoes();
       try {
         if (b.dataset.bulk === "excluir") await excluirLote(ids);
         else if (b.dataset.bulk === "categoria") await associarCategoriaLote(ids);
@@ -218,6 +334,15 @@
       } catch (e) {
         await Swal.fire("Erro", e.message, "error");
       }
+    });
+
+    document.addEventListener("click", (ev) => {
+      if (!el.bulkActions?.querySelector(".Cat_BulkIntWrap.is-open")) return;
+      if (el.bulkActions.contains(ev.target)) return;
+      fecharMenuIntegracoes();
+    });
+    document.addEventListener("keydown", (ev) => {
+      if (ev.key === "Escape") fecharMenuIntegracoes();
     });
   }
 
@@ -881,6 +1006,7 @@
       });
       selInt.value = valInt;
     }
+    aplicarIntegracoesFiltro(j.integracoes_filtro || []);
   }
 
   function montarUrl() {
