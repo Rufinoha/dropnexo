@@ -46,24 +46,37 @@
     return a || "Manual";
   }
 
+  function execucaoTravada(u) {
+    if (!u || u.status !== "rodando") return false;
+    const hb = u.meta?.heartbeat_em;
+    if (hb) return (segundosDesde(hb) || 0) > 180;
+    const ini = segundosDesde(u.iniciado_em);
+    return ini == null || ini > 90;
+  }
+
   function blocoProgresso(u) {
     if (!u || u.status !== "rodando") return "";
     const meta = u.meta || {};
     const pct = Math.max(0, Math.min(100, Number(meta.pct) || 0));
     const hb = meta.heartbeat_em || null;
-    const idade = segundosDesde(hb);
+    const idadeHb = segundosDesde(hb);
+    const idadeIni = segundosDesde(u.iniciado_em);
+    const travada = execucaoTravada(u);
     let sinal = "Aguardando primeiro sinal…";
     let sinalCls = "";
-    if (idade != null) {
-      if (idade <= 15) {
-        sinal = `Sinal há ${idade}s`;
-      } else if (idade <= 60) {
-        sinal = `Sinal há ${idade}s`;
-        sinalCls = "is-warn";
-      } else {
-        sinal = `Sem atualização há ${idade}s — pode ter travado`;
-        sinalCls = "is-stuck";
-      }
+    if (travada) {
+      const idade = idadeHb != null ? idadeHb : idadeIni;
+      sinal =
+        idade != null
+          ? `Travada / sem sinal há ${idade}s — clique em Executar agora para reiniciar`
+          : "Travada / sem sinal — clique em Executar agora para reiniciar";
+      sinalCls = "is-stuck";
+    } else if (idadeHb != null) {
+      sinal = `Sinal há ${idadeHb}s`;
+      if (idadeHb > 60) sinalCls = "is-warn";
+    } else if (idadeIni != null && idadeIni > 20) {
+      sinal = `Ainda sem sinal (${idadeIni}s)…`;
+      sinalCls = "is-warn";
     }
     const detalhe = [
       meta.site_id ? `Site ${meta.site_id}` : "",
@@ -109,7 +122,9 @@
                 : st === "erro"
                   ? "Erro"
                   : st;
-        const btnExecDisabled = st === "rodando" ? " disabled" : "";
+        const travada = execucaoTravada(u);
+        const btnExecDisabled = st === "rodando" && !travada ? " disabled" : "";
+        const btnExecLabel = travada ? "Reiniciar agora" : "Executar agora";
         return `
         <article class="TsCfg_Card" data-codigo="${esc(t.codigo)}" data-id="${t.id}">
           <div class="TsCfg_CardTop">
@@ -120,7 +135,7 @@
           </div>
           <div class="TsCfg_Meta">
             <span class="TsCfg_Pill">${esc(labelAgendamento(t.agendamento))}</span>
-            <span class="TsCfg_Pill ${pillStatus(st)}">${esc(stLabel)}</span>
+            <span class="TsCfg_Pill ${pillStatus(st)}">${esc(travada ? "Travada" : stLabel)}</span>
             ${
               u?.iniciado_em
                 ? `<span class="TsCfg_Pill">Última: ${esc(fmtData(u.iniciado_em))}</span>`
@@ -130,7 +145,7 @@
           ${blocoProgresso(u)}
           ${u?.mensagem ? `<p class="TsCfg_Msg">${esc(u.mensagem)}</p>` : ""}
           <div class="TsCfg_Acoes">
-            <button type="button" class="Cl_botaoprimario" data-acao="executar"${btnExecDisabled}>Executar agora</button>
+            <button type="button" class="Cl_botaoprimario" data-acao="executar"${btnExecDisabled}>${btnExecLabel}</button>
             <button type="button" class="Cl_botaoFiltro" data-acao="historico">Ver histórico / log</button>
           </div>
         </article>`;

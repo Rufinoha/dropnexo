@@ -89,8 +89,78 @@ def garantir_tabelas_tarefas(cur) -> None:
     )
 
 
+def _parse_meta(meta) -> dict:
+    if isinstance(meta, str):
+        try:
+            meta = json.loads(meta)
+        except Exception:
+            return {}
+    return meta if isinstance(meta, dict) else {}
+
+
+def _idade_segundos(dt_val) -> float | None:
+    if dt_val is None:
+        return None
+    agora = agora_utc()
+    try:
+        if isinstance(dt_val, str):
+            dt_val = datetime.fromisoformat(dt_val.replace("Z", "+00:00"))
+        if getattr(dt_val, "tzinfo", None) is None:
+            dt_val = dt_val.replace(tzinfo=agora.tzinfo)
+        return max(0.0, (agora - dt_val).total_seconds())
+    except Exception:
+        return None
+
+
+def execucao_esta_orfaa(iniciado_em, meta) -> bool:
+    """Sem heartbeat recente = processo morreu (ex.: restart do app)."""
+    meta = _parse_meta(meta)
+    hb_age = _idade_segundos(meta.get("heartbeat_em"))
+    if hb_age is not None:
+        return hb_age > 180  # 3 min sem sinal
+    ini_age = _idade_segundos(iniciado_em)
+    # Sem nenhum heartbeat: 90s já basta (primeiro sinal sai em poucos segundos)
+    return ini_age is None or ini_age > 90
+
+
+def encerrar_execucoes_orfaas(cur) -> int:
+    """Marca execuções 'rodando' órfãs como erro. Retorna quantas encerrou."""
+    cur.execute(
+        """
+        SELECT id, iniciado_em, meta
+        FROM tbl_tarefa_secundaria_execucao
+        WHERE status = 'rodando'
+        """
+    )
+    rows = cur.fetchall() or []
+    n = 0
+    agora = agora_utc()
+    for id_exec, iniciado_em, meta in rows:
+        if not execucao_esta_orfaa(iniciado_em, meta):
+            continue
+        cur.execute(
+            """
+            UPDATE tbl_tarefa_secundaria_execucao
+            SET status = 'erro',
+                finalizado_em = %s,
+                mensagem = %s,
+                log_texto = COALESCE(log_texto, '') || %s
+            WHERE id = %s AND status = 'rodando'
+            """,
+            (
+                agora,
+                "Execução interrompida (sem sinal de progresso).",
+                "\n[sistema] Encerrada automaticamente por falta de heartbeat.",
+                int(id_exec),
+            ),
+        )
+        n += 1
+    return n
+
+
 def listar_tarefas_secundarias(cur) -> list[dict]:
     garantir_tabelas_tarefas(cur)
+    encerrar_execucoes_orfaas(cur)
     cur.execute(
         """
         SELECT t.id, t.codigo, t.nome, t.descricao, t.agendamento, t.ativo,
@@ -110,14 +180,7 @@ def listar_tarefas_secundarias(cur) -> list[dict]:
     )
     out = []
     for r in cur.fetchall():
-        meta = r[12] if len(r) > 12 else None
-        if isinstance(meta, str):
-            try:
-                meta = json.loads(meta)
-            except Exception:
-                meta = {}
-        if not isinstance(meta, dict):
-            meta = meta or {}
+        meta = _parse_meta(r[12] if len(r) > 12 else None)
         out.append(
             {
                 "id": int(r[0]),
@@ -722,31 +785,7 @@ def disparar_tarefa_async(codigo: str, *, disparado_por: str = "manual") -> dict
         rodando = cur.fetchone()
         if rodando:
             id_old, ini_old, meta_old = int(rodando[0]), rodando[1], rodando[2]
-            if isinstance(meta_old, str):
-                try:
-                    meta_old = json.loads(meta_old)
-                except Exception:
-                    meta_old = {}
-            if not isinstance(meta_old, dict):
-                meta_old = {}
-            agora = agora_utc()
-            hb_raw = meta_old.get("heartbeat_em")
-            orfao = False
-            if hb_raw:
-                try:
-                    hb_dt = datetime.fromisoformat(str(hb_raw).replace("Z", "+00:00"))
-                    if hb_dt.tzinfo is None:
-                        hb_dt = hb_dt.replace(tzinfo=agora.tzinfo)
-                    orfao = (agora - hb_dt).total_seconds() > 180
-                except Exception:
-                    orfao = True
-            elif ini_old is not None:
-                # Sem heartbeat: execução antiga/crash antes do progresso.
-                try:
-                    orfao = (agora - ini_old).total_seconds() > 600
-                except Exception:
-                    orfao = True
-            if not orfao:
+            if not execucao_esta_orfaa(ini_old, meta_old):
                 raise RuntimeError("Esta tarefa já está em execução.")
             cur.execute(
                 """
@@ -758,7 +797,7 @@ def disparar_tarefa_async(codigo: str, *, disparado_por: str = "manual") -> dict
                 WHERE id = %s AND status = 'rodando'
                 """,
                 (
-                    agora,
+                    agora_utc(),
                     "Execução interrompida (sem sinal de progresso).",
                     "\n[sistema] Marcada como órfã ao reiniciar a tarefa.",
                     id_old,
