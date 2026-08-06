@@ -1322,6 +1322,46 @@ def mercado_livre_publicar():
         conn.close()
 
 
+@vd_meus_produtos_bp.post("/meus-produtos/bling/publicar")
+@login_obrigatorio()
+@exigir_permissao(codigo="produtos.editar")
+def bling_publicar():
+    """Exporta/atualiza produtos selecionados + estoque no Bling (perfil vendedor)."""
+    if (resp := _exigir_edicao()) is not None:
+        return resp
+    id_tenant = _id_tenant_sessao()
+    body = request.get_json(silent=True) or {}
+    raw = body.get("ids") or []
+    ids: list[int] = []
+    for x in raw:
+        try:
+            ids.append(int(x))
+        except (TypeError, ValueError):
+            continue
+    ids = list(dict.fromkeys(ids))
+    if not ids:
+        return jsonify(success=False, message="Nenhum produto selecionado."), 400
+
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        from api.bling.produtos import exportar_produtos_vendedor
+
+        resultado = exportar_produtos_vendedor(
+            cur,
+            id_tenant,
+            id_usuario=session.get("id_usuario"),
+            ids_produto=ids,
+        )
+        conn.commit()
+        return jsonify(success=True, **resultado)
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)[:300]), 400
+    finally:
+        conn.close()
+
+
 @vd_meus_produtos_bp.post("/meus-produtos/tiktok/publicar")
 @login_obrigatorio()
 @exigir_permissao(codigo="produtos.editar")

@@ -7,7 +7,7 @@
 {% block topbar_title %}Catálogos{% endblock %}
 
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('fn_catalogo.static', filename='style/Ccatalogos.css') }}?v=14" />
+<link rel="stylesheet" href="{{ url_for('fn_catalogo.static', filename='style/Ccatalogos.css') }}?v=15" />
 <link rel="stylesheet" href="{{ url_for('fn_importacao.static', filename='style/Cimportacao.css') }}?v=9" />
 {% endblock %}
 
@@ -114,5 +114,5 @@
   window.CAT_BLING_CONECTADO = {{ 'true' if bling_conectado else 'false' }};
 </script>
 <script defer src="{{ url_for('fn_importacao.static', filename='script/Simportacao.js') }}?v=12"></script>
-<script defer src="{{ url_for('fn_catalogo.static', filename='script/Scatalogos.js') }}?v=12"></script>
+<script defer src="{{ url_for('fn_catalogo.static', filename='script/Scatalogos.js') }}?v=13"></script>
 {% endblock %}

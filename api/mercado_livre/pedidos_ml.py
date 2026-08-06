@@ -574,11 +574,25 @@ def _processar_webhook_shipment_ml(
         )
         return {"ok": True, "topic": "shipments", **res}
 
+    avancados = 0
     if order_id:
         from core.pedidos.servico import listar_pedidos_por_id_ml, salvar_id_ml_shipment
+        from core.pedidos.status_integracao import (
+            aplicar_status_avancado,
+            mapear_status_ml_para_dn,
+        )
 
+        novo = mapear_status_ml_para_dn(None, shipping_status=st)
         for pid in listar_pedidos_por_id_ml(cur, id_tenant, str(order_id)):
             salvar_id_ml_shipment(cur, int(pid), ship_id)
+            if novo and aplicar_status_avancado(
+                cur,
+                int(pid),
+                novo,
+                origem_evento="mercado_livre",
+                detalhe=f"Status sincronizado do envio ML ({st}).",
+            ):
+                avancados += 1
 
     return {
         "ok": True,
@@ -586,6 +600,7 @@ def _processar_webhook_shipment_ml(
         "id_ml_shipment": ship_id,
         "status": st,
         "order_id": order_id,
+        "status_avancados": avancados,
     }
 
 
@@ -930,9 +945,12 @@ def baixar_nf_ml(
                     # api_request_bytes aceita path absoluto ou relativo
                     parsed = urlparse(path)
                     req_path = path if parsed.scheme else path
-                    content = api_request_bytes(cur, int(id_vendedor), "GET", req_path)
-                    if content:
+                    raw = api_request_bytes(cur, int(id_vendedor), "GET", req_path)
+                    if raw and len(raw) >= 80 and raw[:4] == b"%PDF":
+                        content = raw
                         break
+                    if raw and (raw[:5].lstrip().startswith(b"<?xml") or raw[:1] == b"<"):
+                        last_err = ValueError("ML retornou XML; aguardando DANFE PDF.")
         except RuntimeError as e:
             last_err = e
 
@@ -954,11 +972,15 @@ def baixar_nf_ml(
 
         for path, params in candidatos:
             try:
-                content = api_request_bytes(
+                raw = api_request_bytes(
                     cur, int(id_vendedor), "GET", path, params=params
                 )
-                if content and len(content) >= 80:
+                if raw and len(raw) >= 80 and raw[:4] == b"%PDF":
+                    content = raw
                     break
+                if raw and (raw[:5].lstrip().startswith(b"<?xml") or raw[:1] == b"<"):
+                    last_err = ValueError("ML retornou XML; aguardando DANFE PDF.")
+                    content = None
             except RuntimeError as e:
                 last_err = e
                 content = None
@@ -967,16 +989,19 @@ def baixar_nf_ml(
         raise ValueError(
             str(last_err)
             if last_err
-            else "Nota fiscal / declaração ainda não disponível no Mercado Livre."
+            else "DANFE PDF ainda não disponível no Mercado Livre."
         )
 
     pasta = Path(pasta_destino)
     pasta.mkdir(parents=True, exist_ok=True)
     is_xml = content[:5].lstrip().startswith(b"<?xml") or content[:1] == b"<"
-    is_zip = content[:2] == b"PK"
-    ext = ".xml" if is_xml else (".zip" if is_zip else ".pdf")
-    nome_arquivo = f"{nome_base}{ext}"
-    destino = pasta / f"{id_pedido}_{tipo_anexo}_{int(datetime.now(timezone.utc).timestamp())}{ext}"
+    is_pdf = content[:4] == b"%PDF"
+    if is_xml or not is_pdf:
+        raise ValueError(
+            "DANFE PDF indisponível no Mercado Livre (XML/outros formatos são ignorados)."
+        )
+    nome_arquivo = f"{nome_base}.pdf"
+    destino = pasta / f"{id_pedido}_{tipo_anexo}_{int(datetime.now(timezone.utc).timestamp())}.pdf"
     destino.write_bytes(content)
     caminho_db = f"upload/tenant{id_vendedor}/pedidos/{destino.name}"
     anexo = registrar_anexo_pedido(
@@ -993,7 +1018,7 @@ def baixar_nf_ml(
         "message": (
             "Declaração ML baixada."
             if tipo_anexo == "declaracao"
-            else "Nota fiscal ML baixada."
+            else "DANFE ML baixada."
         ),
         "anexo": anexo,
         "tipo": tipo_anexo,

@@ -131,6 +131,13 @@ def _importar_um_pedido(
     )
     if novos:
         return novos, None, None
+    # Pedido já existe: tenta avançar status a partir da situação atual no Bling
+    try:
+        sincronizar_status_pedido_bling_inbound(
+            cur, id_tenant, id_bling, id_usuario=id_usuario
+        )
+    except Exception:
+        pass
     return [], "ja_importado_ou_sem_match", None
 
 
@@ -415,6 +422,38 @@ def _resolver_situacao_id(id_tenant: int, evento: str, opcoes: dict) -> int | No
     return None
 
 
+def _resolver_alvo_status_bling(cur, id_pedido: int) -> tuple[int, str, str] | None:
+    """Retorna (id_tenant_bling, id_bling_pedido, contexto) para PATCH de situação."""
+    cur.execute(
+        """
+        SELECT p.id, p.id_tenant_vendedor, p.id_tenant_fornecedor, p.origem, p.id_bling_pedido
+        FROM tbl_pedido p WHERE p.id = %s
+        """,
+        (id_pedido,),
+    )
+    row = cur.fetchone()
+    if not row:
+        return None
+    _, id_vendedor, id_fornecedor, origem, id_bling = row
+    if (origem or "") == "bling" and id_bling:
+        return int(id_vendedor), str(id_bling), "vendedor"
+
+    # Pedido exportado pelo fornecedor
+    cur.execute(
+        """
+        SELECT id_bling FROM tbl_integracao_map
+        WHERE id_tenant = %s AND provedor = 'bling' AND contexto = 'fornecedor'
+          AND entidade = 'pedido' AND id_dropnexo = %s
+        LIMIT 1
+        """,
+        (int(id_fornecedor), int(id_pedido)),
+    )
+    m = cur.fetchone()
+    if m and m[0]:
+        return int(id_fornecedor), str(m[0]), "fornecedor"
+    return None
+
+
 def exportar_status_pedido_bling(
     cur,
     id_pedido: int,
@@ -422,42 +461,41 @@ def exportar_status_pedido_bling(
     evento: str,
 ) -> bool:
     """
-    Atualiza situação no Bling para pedidos importados (origem bling).
+    Atualiza situação no Bling (pedido importado pelo vendedor ou exportado pelo fornecedor).
     Retorna True se enviou com sucesso.
     """
-    cur.execute(
-        """
-        SELECT p.id, p.id_tenant_vendedor, p.origem, p.id_bling_pedido
-        FROM tbl_pedido p WHERE p.id = %s
-        """,
-        (id_pedido,),
-    )
-    row = cur.fetchone()
-    if not row:
+    alvo = _resolver_alvo_status_bling(cur, id_pedido)
+    if not alvo:
         return False
-    _, id_vendedor, origem, id_bling = row
-    if (origem or "") != "bling" or not id_bling:
-        return False
-    id_vendedor = int(id_vendedor)
-    if not _bling_conectado(cur, id_vendedor):
+    id_tenant_bling, id_bling, contexto = alvo
+    if not _bling_conectado(cur, id_tenant_bling):
         return False
 
-    cfg = _carregar_config_vendedor(cur, id_vendedor)
-    opcoes = cfg.get("opcoes") or {}
-    if opcoes.get("pedidos_exportar_status") is False:
-        return False
-    modo = (cfg.get("pedidos_modo") or "importar").strip()
-    if modo not in ("exportar", "atualizar"):
-        return False
+    if contexto == "vendedor":
+        cfg = _carregar_config_vendedor(cur, id_tenant_bling)
+        opcoes = cfg.get("opcoes") or {}
+        if opcoes.get("pedidos_exportar_status") is False:
+            return False
+        modo = (cfg.get("pedidos_modo") or "importar").strip()
+        if modo not in ("exportar", "atualizar", "importar"):
+            return False
+    else:
+        cfg = _carregar_config_fornecedor(cur, id_tenant_bling)
+        opcoes = cfg.get("opcoes") or {}
+        if opcoes.get("pedidos_exportar_status") is False:
+            return False
+        modo = (cfg.get("pedidos_modo") or "exportar").strip()
+        if modo not in ("exportar", "atualizar"):
+            return False
 
-    id_situacao = _resolver_situacao_id(id_vendedor, evento, opcoes)
+    id_situacao = _resolver_situacao_id(id_tenant_bling, evento, opcoes)
     if not id_situacao:
         _log.info("Bling: situação não mapeada para evento %s (pedido %s)", evento, id_pedido)
         return False
 
     try:
         api_request(
-            id_vendedor,
+            id_tenant_bling,
             "PATCH",
             f"/pedidos/vendas/{id_bling}/situacoes/{id_situacao}",
         )
@@ -465,6 +503,52 @@ def exportar_status_pedido_bling(
     except Exception as e:
         _log.warning("Bling PATCH situação pedido %s: %s", id_bling, e)
         return False
+
+
+def sincronizar_status_pedido_bling_inbound(
+    cur,
+    id_tenant: int,
+    id_bling_pedido: str,
+    *,
+    id_usuario: int | None = None,
+) -> bool:
+    """Puxa situação do Bling e avança status no DropNexo se for mais avançado."""
+    from api.bling.campos import extrair_situacao_pedido
+    from core.pedidos.status_integracao import (
+        aplicar_status_avancado,
+        mapear_situacao_bling_para_dn,
+    )
+
+    id_bling = str(id_bling_pedido or "").strip()
+    if not id_bling:
+        return False
+    cur.execute(
+        """
+        SELECT id FROM tbl_pedido
+        WHERE id_tenant_vendedor = %s AND origem = 'bling' AND id_bling_pedido = %s
+        ORDER BY id DESC LIMIT 1
+        """,
+        (int(id_tenant), id_bling),
+    )
+    row = cur.fetchone()
+    if not row:
+        return False
+    try:
+        det = obter_pedido_bling(id_tenant, id_bling)
+    except Exception:
+        return False
+    nome, _ = extrair_situacao_pedido(det, id_tenant=id_tenant)
+    novo = mapear_situacao_bling_para_dn(nome)
+    if not novo:
+        return False
+    return aplicar_status_avancado(
+        cur,
+        int(row[0]),
+        novo,
+        id_usuario=id_usuario,
+        origem_evento="bling",
+        detalhe=f"Status sincronizado do Bling ({nome or novo}).",
+    )
 
 
 # ── export_pedidos ────────────────────────────────────
@@ -679,6 +763,7 @@ def exportar_pedido_fornecedor_bling(
     id_pedido: int,
     *,
     id_usuario: int | None = None,
+    forcar: bool = False,
 ) -> dict[str, Any]:
     if id_usuario is not None:
         pass
@@ -700,8 +785,17 @@ def exportar_pedido_fornecedor_bling(
     if opcoes.get("pedidos_exportar") is False:
         raise ValueError("Exportação de pedidos está desativada.")
 
-    if (ped.get("origem") or "") == "bling":
+    origem = (ped.get("origem") or "").strip().lower()
+    if origem == "bling":
         raise ValueError("Pedidos importados do Bling (vendedor) não são reexportados.")
+    if not forcar:
+        from core.pedidos.status_integracao import ORIGENS_MARKETPLACE
+
+        if origem in ORIGENS_MARKETPLACE:
+            raise ValueError(
+                "Pedidos de marketplace ficam só no DropNexo. "
+                "Use exportação manual com confirmação se quiser enviar ao Bling."
+            )
 
     if status_vendedor_pedido(ped) != STATUS_PAGO:
         raise ValueError("Somente pedidos pagos podem ser exportados ao Bling.")
@@ -830,6 +924,7 @@ def exportar_pedidos_pendentes_fornecedor(
         WHERE p.id_tenant_fornecedor = %s
           AND p.{cv} = %s
           AND COALESCE(p.origem, '') <> 'bling'
+          AND COALESCE(p.origem, '') NOT IN ('mercado_livre', 'tiktok', 'amazon')
           AND COALESCE(p.pago_em, p.confirmado_em, p.criado_em) >= %s
           AND NOT EXISTS (
               SELECT 1 FROM tbl_integracao_map m

@@ -164,7 +164,7 @@
 
   function origemTemIntegracaoFrete(ped) {
     const o = (ped.origem || "").toLowerCase();
-    return o === "mercado_livre" || o === "tiktok" || o === "amazon";
+    return o === "mercado_livre" || o === "tiktok" || o === "amazon" || o === "bling";
   }
 
   function normalizarModoFreteUi(modo) {
@@ -807,7 +807,14 @@
     const origem = (ped.origem || "").toLowerCase();
     const isTt = origem === "tiktok";
     const isAmz = origem === "amazon";
-    const canal = isAmz ? "Amazon" : isTt ? "TikTok Shop" : "Mercado Livre";
+    const isBling = origem === "bling";
+    const canal = isAmz
+      ? "Amazon"
+      : isTt
+        ? "TikTok Shop"
+        : isBling
+          ? "Bling"
+          : "Mercado Livre";
     if (isAmz) {
       return `
       <div class="Pd_FreteIntegracao">
@@ -817,9 +824,19 @@
         ${renderEscolhaFiscal(ped)}
       </div>`;
     }
+    if (isBling) {
+      return `
+      <div class="Pd_FreteIntegracao">
+        <p class="Pd_Hint">Pedido do <strong>Bling</strong>. Puxamos a DANFE em PDF (sem XML). A etiqueta de frete deve ser anexada manualmente.</p>
+        <button type="button" class="Cl_botaoFiltro" data-puxar-integracao="${ped.id}">Puxar DANFE (Bling)</button>
+        ${renderFreteDocsChecklist(ped)}
+        ${renderUploadPdfFrete(ped, "etiqueta", "Etiqueta de frete")}
+        ${renderEscolhaFiscal(ped, { obrigatorioEscolher: false })}
+      </div>`;
+    }
     const hint = isTt
-      ? "Pedido do TikTok Shop. Puxamos a etiqueta (e NF, se existir) da integração."
-      : "Pedido do Mercado Livre. Puxamos a etiqueta do Mercado Envios e a NF/declaração, se já tiver sido emitida.";
+      ? "Pedido do TikTok Shop. Puxamos a etiqueta (e DANFE PDF, se existir) da integração."
+      : "Pedido do Mercado Livre. Puxamos a etiqueta do Mercado Envios e a DANFE em PDF, se já tiver sido emitida.";
     return `
       <div class="Pd_FreteIntegracao">
         <p class="Pd_Hint">${hint}</p>
@@ -1064,9 +1081,11 @@
             ? " · Amazon"
             : origem === "tiktok"
               ? " · TikTok Shop"
-              : origem === "mercado_livre"
-                ? " · Mercado Livre"
-                : "";
+              : origem === "bling"
+                ? " · Bling"
+                : origem === "mercado_livre"
+                  ? " · Mercado Livre"
+                  : "";
         const corpo =
           modo === "integracao"
             ? renderFreteIntegracao(ped)

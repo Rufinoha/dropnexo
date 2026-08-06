@@ -11,6 +11,7 @@
   let integracoesExportCache = null;
 
   const EXPORT_INTEGRACOES = {
+    bling: { acao: "bling", nome: "Bling" },
     mercado_livre: { acao: "ml", nome: "Mercado Livre" },
     tiktok: { acao: "tiktok", nome: "TikTok Shop" },
     amazon: { acao: "amazon", nome: "Amazon" },
@@ -223,7 +224,8 @@
       fecharMenuIntegracoes();
       if (!ids.length) return;
       try {
-        if (b.dataset.bulk === "ml") await integrarMercadoLivreLote(ids);
+        if (b.dataset.bulk === "bling") await integrarBlingLote(ids);
+        else if (b.dataset.bulk === "ml") await integrarMercadoLivreLote(ids);
         else if (b.dataset.bulk === "tiktok") await integrarTiktokLote(ids);
         else if (b.dataset.bulk === "amazon") await integrarAmazonLote(ids);
       } catch (e) {
@@ -419,6 +421,91 @@
     );
   }
 
+  function montarHtmlAssociarCategoria(categorias, qtdProdutos) {
+    const n = Number(qtdProdutos) || 0;
+    const itens = (categorias || [])
+      .map(
+        (c, i) => `
+      <button type="button" class="CatAssoc__opt${i === 0 ? " is-selected" : ""}" data-id="${c.id}" role="option" aria-selected="${i === 0 ? "true" : "false"}">
+        <span class="CatAssoc__radio" aria-hidden="true"></span>
+        <span class="CatAssoc__name">${escapeHtml(c.nome)}</span>
+      </button>`
+      )
+      .join("");
+    return `
+      <div class="CatAssoc">
+        <div class="CatAssoc__head">
+          <div class="CatAssoc__icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M4 12h10"/><path d="M4 17h14"/><circle cx="18" cy="12" r="2"/></svg>
+          </div>
+          <div>
+            <h3 class="CatAssoc__title">Associar categoria</h3>
+            <p class="CatAssoc__sub">Aplicar em <strong>${n}</strong> produto${n === 1 ? "" : "s"} selecionado${n === 1 ? "" : "s"}.</p>
+          </div>
+        </div>
+        <div class="CatAssoc__searchWrap">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+          <input type="search" id="catAssocBusca" class="CatAssoc__search" placeholder="Buscar categoria…" autocomplete="off" />
+        </div>
+        <div class="CatAssoc__list${(categorias || []).length > 5 ? " is-scrollable" : ""}" id="catAssocLista" role="listbox">
+          ${itens || '<p class="CatAssoc__empty">Nenhuma categoria cadastrada.</p>'}
+        </div>
+        <input type="hidden" id="catAssocId" value="${categorias?.[0]?.id || ""}" />
+      </div>`;
+  }
+
+  function ligarPickerAssociarCategoria(popup) {
+    const lista = popup.querySelector("#catAssocLista");
+    const hidden = popup.querySelector("#catAssocId");
+    const busca = popup.querySelector("#catAssocBusca");
+    if (!lista || !hidden) return;
+
+    const marcar = (btn) => {
+      lista.querySelectorAll(".CatAssoc__opt").forEach((elOpt) => {
+        const on = elOpt === btn;
+        elOpt.classList.toggle("is-selected", on);
+        elOpt.setAttribute("aria-selected", on ? "true" : "false");
+      });
+      hidden.value = btn?.dataset?.id || "";
+    };
+
+    lista.addEventListener("click", (ev) => {
+      const btn = ev.target.closest(".CatAssoc__opt");
+      if (!btn || !lista.contains(btn)) return;
+      marcar(btn);
+    });
+
+    busca?.addEventListener("input", () => {
+      const q = (busca.value || "").trim().toLowerCase();
+      let visiveis = 0;
+      lista.querySelectorAll(".CatAssoc__opt").forEach((btn) => {
+        const nome = (btn.querySelector(".CatAssoc__name")?.textContent || "").toLowerCase();
+        const ok = !q || nome.includes(q);
+        btn.hidden = !ok;
+        if (ok) visiveis += 1;
+      });
+      let empty = lista.querySelector(".CatAssoc__empty");
+      if (!visiveis) {
+        if (!empty) {
+          empty = document.createElement("p");
+          empty.className = "CatAssoc__empty";
+          empty.textContent = "Nenhuma categoria encontrada.";
+          lista.appendChild(empty);
+        }
+        empty.hidden = false;
+      } else if (empty) {
+        empty.hidden = true;
+      }
+      const sel = lista.querySelector(".CatAssoc__opt.is-selected");
+      if (sel?.hidden) {
+        const primeiro = lista.querySelector(".CatAssoc__opt:not([hidden])");
+        if (primeiro) marcar(primeiro);
+      }
+    });
+
+    setTimeout(() => busca?.focus(), 40);
+  }
+
   async function associarCategoriaLote(ids) {
     if (!categoriasCache.length) {
       const r = await fetch(`${BASE}/combos`);
@@ -429,20 +516,25 @@
     if (!categoriasCache.length) {
       throw new Error("Cadastre categorias em Categorias antes de associar.");
     }
-    const opts = categoriasCache
-      .map((c) => `<option value="${c.id}">${escapeHtml(c.nome)}</option>`)
-      .join("");
-    const html = `<label style="display:block;text-align:left;font-size:13px;margin-bottom:6px;">Sua categoria</label>
-      <select id="swalCat" class="swal2-select" style="width:100%;max-width:100%;">${opts}</select>`;
     const res = await Swal.fire({
-      title: "Associar categoria",
-      html,
+      html: montarHtmlAssociarCategoria(categoriasCache, ids.length),
+      width: 420,
+      heightAuto: true,
       showCancelButton: true,
       confirmButtonText: "Associar",
       cancelButtonText: "Cancelar",
       focusConfirm: false,
+      buttonsStyling: false,
+      customClass: {
+        popup: "CatAssocSwal",
+        htmlContainer: "CatAssocSwal__html",
+        actions: "CatAssocSwal__actions",
+        confirmButton: "CatAssocSwal__confirm",
+        cancelButton: "CatAssocSwal__cancel",
+      },
+      didOpen: (popup) => ligarPickerAssociarCategoria(popup),
       preConfirm: () => {
-        const v = document.getElementById("swalCat")?.value;
+        const v = document.getElementById("catAssocId")?.value;
         if (!v) {
           Swal.showValidationMessage("Selecione uma categoria.");
           return false;
@@ -460,7 +552,13 @@
     if (!resp.ok || !jj.success) throw new Error(jj.message || "Erro.");
     selecionados.clear();
     syncBulkBar();
-    await Swal.fire("Sucesso", jj.message, "success");
+    await Swal.fire({
+      icon: "success",
+      title: "Categoria associada",
+      text: jj.message,
+      timer: 2200,
+      showConfirmButton: false,
+    });
     await carregar();
   }
 
@@ -610,6 +708,64 @@
       return { ...jj, success: false, message: msg, resultados };
     }
     return jj;
+  }
+
+  async function integrarBlingLote(ids) {
+    const c = await Swal.fire({
+      title: `Exportar ${ids.length} produto(s) ao Bling?`,
+      html: `<p style="text-align:left;font-size:13px;margin:0;">Cria ou atualiza o produto no Bling (dados completos) e sincroniza o estoque.</p>`,
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonText: "Exportar",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#021F81",
+    });
+    if (!c.isConfirmed) return;
+    Swal.fire({
+      title: "Exportando ao Bling…",
+      html: htmlProgressoMl(0, ids.length, 0, 0, 0, "Preparando"),
+      allowOutsideClick: false,
+      showConfirmButton: false,
+      didOpen: () => Swal.showLoading(),
+    });
+    const resp = await fetch(`${BASE}/bling/publicar`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids }),
+    });
+    const jj = await resp.json().catch(() => ({}));
+    if (!resp.ok || !jj.success) {
+      throw new Error(jj.message || "Falha ao exportar ao Bling.");
+    }
+    const resultados = jj.resultados || [];
+    let criados = Number(jj.exportados || 0);
+    let atualizados = Number(jj.atualizados || 0);
+    let erros = Number(jj.total_falhas || 0);
+    if (resultados.length) {
+      criados = resultados.filter((r) => r.status === "ok" && r.acao === "exportado").length || criados;
+      atualizados =
+        resultados.filter((r) => r.status === "ok" && r.acao === "atualizado").length || atualizados;
+      erros = resultados.filter((r) => r.status === "erro").length || erros;
+    }
+    abrirModalMlResultado({
+      ...jj,
+      message: jj.message || "Exportação Bling concluída.",
+      exportados: criados,
+      atualizados,
+      erros,
+      resultados: resultados.length
+        ? resultados
+        : ids.map((id) => ({
+            id_produto: id,
+            titulo: `Produto #${id}`,
+            status: erros ? "erro" : "ok",
+            acao: "atualizado",
+            mensagem: jj.message || "OK",
+          })),
+    });
+    selecionados.clear();
+    syncBulkBar();
+    await carregar();
   }
 
   async function integrarMercadoLivreLote(ids) {

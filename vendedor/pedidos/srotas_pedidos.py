@@ -666,6 +666,10 @@ def pedidos_frete_integracao_puxar(id_pedido: int):
             from api.mercado_livre.pedidos_ml import puxar_documentos_integracao_ml
 
             res = puxar_documentos_integracao_ml(cur, id_v, id_pedido, pasta, id_usuario=uid)
+        elif origem == "bling":
+            from api.bling.fiscal import puxar_documentos_integracao_bling
+
+            res = puxar_documentos_integracao_bling(cur, id_v, id_pedido, pasta, id_usuario=uid)
         elif origem == "tiktok":
             from api.tiktok.pedidos_tiktok import puxar_documentos_integracao_tiktok
 
@@ -676,7 +680,10 @@ def pedidos_frete_integracao_puxar(id_pedido: int):
                 message="Amazon: baixe a etiqueta no Seller Central e anexe em PDF no modo Manual, ou use o fallback de anexos abaixo.",
             ), 400
         else:
-            return jsonify(success=False, message="Pedido sem integração de marketplace."), 400
+            return jsonify(
+                success=False,
+                message="Pedido sem integração com documentos fiscais/etiqueta.",
+            ), 400
 
         anexos = listar_anexos_pedido(cur, id_pedido, id_vendedor=id_v)
         docs = pedido_docs_frete_ok(cur, id_pedido)

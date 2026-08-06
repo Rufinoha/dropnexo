@@ -639,6 +639,36 @@ def _resolver_variante_por_bling(
     return id_produto, int(vrow[0]) if vrow and vrow[0] else None
 
 
+def zerar_estoque_variante(cur, id_variante: int) -> int:
+    """Zera saldo em todos os depósitos da variante (produto inativo/excluído na origem)."""
+    cur.execute(
+        """
+        UPDATE tbl_produto_estoque_deposito
+        SET quantidade = 0, atualizado_em = %s
+        WHERE id_variante = %s AND COALESCE(quantidade, 0) <> 0
+        """,
+        (agora_utc(), int(id_variante)),
+    )
+    n = int(cur.rowcount or 0)
+    sincronizar_total_variante(cur, int(id_variante))
+    return n
+
+
+def zerar_estoque_produto(cur, id_tenant: int, id_produto: int) -> int:
+    cur.execute(
+        """
+        SELECT v.id FROM tbl_produto_variante v
+        JOIN tbl_produto p ON p.id = v.id_produto
+        WHERE p.id = %s AND p.id_tenant = %s
+        """,
+        (int(id_produto), int(id_tenant)),
+    )
+    total = 0
+    for (vid,) in cur.fetchall():
+        total += zerar_estoque_variante(cur, int(vid))
+    return total
+
+
 def importar_estoque_produto_bling(
     cur,
     id_tenant: int,

@@ -1225,6 +1225,12 @@ def cancelar_pedido(
     )
     registrar_historico(cur, id_pedido, "cancelado", motivo or "Pedido cancelado.", id_usuario)
     try:
+        from api.bling.pedidos import exportar_status_pedido_bling
+
+        exportar_status_pedido_bling(cur, id_pedido, evento="cancelado")
+    except Exception:
+        pass
+    try:
         from core.pedidos.notificacoes import notificar_evento_pedido
 
         notificar_evento_pedido(cur, id_pedido, "cancelado", criado_por=id_usuario)
@@ -1460,8 +1466,12 @@ def marcar_pedido_pago(
     except Exception:
         pass
     try:
-        from api.bling.pedidos import tentar_exportar_pedido_fornecedor_apos_pagamento
+        from api.bling.pedidos import (
+            exportar_status_pedido_bling,
+            tentar_exportar_pedido_fornecedor_apos_pagamento,
+        )
 
+        exportar_status_pedido_bling(cur, id_pedido, evento="pago")
         tentar_exportar_pedido_fornecedor_apos_pagamento(cur, id_pedido)
     except Exception:
         pass

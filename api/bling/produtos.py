@@ -697,6 +697,10 @@ def _salvar_produto(
         ),
     )
     aplicar_valor_drop_produto_e_variantes(cur, id_tenant, prod_id, publicar=False, forcar=True)
+    if not campos.get("ativo", True):
+        from api.bling.estoque import zerar_estoque_produto
+
+        zerar_estoque_produto(cur, id_tenant, int(prod_id))
     return int(prod_id)
 
 
@@ -1692,6 +1696,7 @@ def exportar_produtos_vendedor(
     id_tenant: int,
     *,
     id_usuario: int | None = None,
+    ids_produto: list[int] | None = None,
 ) -> dict[str, Any]:
     if id_usuario is not None:
         pass  # reservado para auditoria futura
@@ -1713,8 +1718,15 @@ def exportar_produtos_vendedor(
     if exportar_estoque and not id_dep_bling:
         raise ValueError("Nenhum depósito encontrado no Bling para sincronizar estoque.")
 
-    cur.execute(
-        """
+    ids_filtro: list[int] = []
+    for x in ids_produto or []:
+        try:
+            ids_filtro.append(int(x))
+        except (TypeError, ValueError):
+            continue
+    ids_filtro = list(dict.fromkeys(ids_filtro))
+
+    sql = """
         SELECT pv.id, v.id, TRIM(v.sku),
                COALESCE(NULLIF(TRIM(pv.nome_vitrine), ''), v.nome_exibicao, p.nome),
                pv.preco_venda, COALESCE(e.quantidade, 0),
@@ -1744,11 +1756,16 @@ def exportar_produtos_vendedor(
         LEFT JOIN tbl_produto_variante_estoque e ON e.id_variante = v.id
         WHERE pv.id_tenant_vendedor = %s AND pv.ativo = TRUE
           AND v.ativo = TRUE AND p.publicado = TRUE
-        ORDER BY p.nome, v.ordem, v.id
-        """,
-        (id_tenant,),
-    )
+    """
+    params: list = [id_tenant]
+    if ids_filtro:
+        sql += " AND p.id = ANY(%s)"
+        params.append(ids_filtro)
+    sql += " ORDER BY p.nome, v.ordem, v.id"
+    cur.execute(sql, params)
     linhas = cur.fetchall()
+    if ids_filtro and not linhas:
+        raise ValueError("Nenhum produto selecionado elegível para exportar ao Bling.")
 
     galeria_por_produto: dict[int, list[str]] = {}
     ids_produtos = sorted({int(r[16]) for r in linhas if r[16]})
@@ -1878,6 +1895,43 @@ def exportar_produtos_vendedor(
     )[:4000]
     _registrar_log(cur, id_tenant, "vendedor", status_log, resumo, detalhe_falhas)
 
+    resultados: list[dict[str, Any]] = []
+    for row in linhas:
+        sku = (row[2] or "").strip()
+        id_produto = int(row[16])
+        titulo = (row[3] or sku or f"Produto #{id_produto}")[:120]
+        falha = next((f for f in falhas if f.get("sku") == sku), None)
+        if not sku:
+            resultados.append(
+                {
+                    "id_produto": id_produto,
+                    "titulo": titulo,
+                    "status": "erro",
+                    "acao": "",
+                    "mensagem": "Sem SKU",
+                }
+            )
+        elif falha:
+            resultados.append(
+                {
+                    "id_produto": id_produto,
+                    "titulo": titulo,
+                    "status": "erro",
+                    "acao": "",
+                    "mensagem": falha.get("motivo") or "Falha",
+                }
+            )
+        else:
+            resultados.append(
+                {
+                    "id_produto": id_produto,
+                    "titulo": titulo,
+                    "status": "ok",
+                    "acao": "atualizado",
+                    "mensagem": "Exportado/atualizado no Bling.",
+                }
+            )
+
     return {
         "exportados": exportados,
         "atualizados": atualizados,
@@ -1888,5 +1942,6 @@ def exportar_produtos_vendedor(
         "sem_imagem_publica": sem_imagem_publica,
         "imagens_fracas": imagens_fracas,
         "imagens_falhas": imagens_falhas[:40],
+        "resultados": resultados,
         "message": resumo,
     }
