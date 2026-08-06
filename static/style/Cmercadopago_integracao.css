@@ -506,11 +506,6 @@
   font-style: italic;
 }
 
-.ml-lbl-cat.is-invalid {
-  color: #b45309;
-  font-style: normal;
-}
-
 .Mp_CatMapBtn {
   white-space: nowrap;
   font-size: 0.78rem;

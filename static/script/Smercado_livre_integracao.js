@@ -300,23 +300,12 @@
     const label = tr.querySelector(".ml-lbl-cat");
     const id = String(categoryId || "").trim().toUpperCase();
     const nome = String(categoryNome || "").trim();
-    if (hid) hid.value = id;
+    const ok = !!(id && nome);
+    if (hid) hid.value = ok ? id : "";
     if (label) {
-      if (id && nome) {
-        label.textContent = nome;
-        label.classList.remove("is-empty", "is-invalid");
-        label.title = id;
-      } else if (id && !nome) {
-        label.textContent = "Categoria sem nome no cache — escolha novamente";
-        label.classList.add("is-empty", "is-invalid");
-        label.title = "";
-        hid.value = "";
-      } else {
-        label.textContent = "Nenhuma categoria selecionada";
-        label.classList.add("is-empty");
-        label.classList.remove("is-invalid");
-        label.title = "";
-      }
+      label.textContent = ok ? nome : "Escolher categoria";
+      label.classList.toggle("is-empty", !ok);
+      label.title = ok ? id : "";
     }
   }
 
@@ -332,21 +321,16 @@
         const id = c.id_categoria;
         const mlId = (c.ml_category_id || "").trim().toUpperCase();
         const mlNome = (c.ml_category_nome || "").trim();
-        const label =
-          mlId && mlNome
-            ? esc(mlNome)
-            : mlId
-              ? "Categoria sem nome no cache — escolha novamente"
-              : "Nenhuma categoria selecionada";
-        const emptyCls = mlId && mlNome ? "" : " is-empty";
-        const invalidCls = mlId && !mlNome ? " is-invalid" : "";
-        const hidVal = mlId && mlNome ? mlId : "";
+        const temNome = !!(mlId && mlNome);
+        const label = temNome ? esc(mlNome) : "Escolher categoria";
+        const emptyCls = temNome ? "" : " is-empty";
+        const hidVal = temNome ? mlId : "";
         return `<tr data-cat-id="${id}">
           <td>${esc(c.nome)}</td>
           <td class="ml-cell-cat">
             <input type="hidden" class="ml-hid-cat" value="${esc(hidVal)}" />
             <div class="Mp_CatPick">
-              <span class="ml-lbl-cat${emptyCls}${invalidCls}" title="${esc(hidVal)}">${label}</span>
+              <span class="ml-lbl-cat${emptyCls}" title="${esc(hidVal)}">${label}</span>
               <button type="button" class="Cl_botaoFiltro Mp_CatMapBtn ml-btn-escolher">Escolher</button>
             </div>
           </td>
@@ -384,21 +368,6 @@
     if (!r.ok || !j.success) throw new Error(j.message || "Falha ao carregar categorias.");
     categoriasMap = j.itens || [];
     renderTabelaCategorias();
-  }
-
-  function atualizarProgressoPrefetch() {
-    if (!modalAberto()) return;
-    const total = categoriasMap.filter((c) => (c.nome || "").trim().length >= 3).length;
-    if (!total) return;
-    const idsProntos = new Set(
-      [...sugestoesCache.keys()].map((k) => String(k).split("::")[0]).filter((id) => id && id !== "0")
-    );
-    const n = idsProntos.size;
-    if (n < total) {
-      mostrarMsgModal(`Preparando sugestões… ${n}/${total}`, false);
-    } else {
-      mostrarMsgModal("Sugestões prontas — use «Sugerir não mapeadas».", false);
-    }
   }
 
   function linhasSemMapeamento() {
@@ -469,29 +438,6 @@
     }
   }
 
-  async function aquecerCacheSugestoes() {
-    const seq = prefetchSeq;
-    const pendentes = (categoriasMap || []).filter((c) => (c.nome || "").trim().length >= 3);
-    if (!pendentes.length) return;
-    atualizarProgressoPrefetch();
-    for (const c of pendentes) {
-      if (seq !== prefetchSeq || !modalAberto()) return;
-      const termo = String(c.nome || "").trim();
-      const key = chaveCacheSugestao(c.id_categoria, termo);
-      if (sugestoesCache.has(key)) {
-        atualizarProgressoPrefetch();
-        continue;
-      }
-      try {
-        await obterSugestoesCategoria(termo, c.id_categoria, { forcarRede: false });
-      } catch {
-        /* aquecimento não bloqueia */
-      }
-      if (seq !== prefetchSeq) return;
-      atualizarProgressoPrefetch();
-    }
-  }
-
   async function abrirModalCategorias() {
     if (!el.modalCat) return;
     limparCacheSugestoes();
@@ -499,8 +445,7 @@
     mostrarMsgModal("Carregando categorias…", false);
     try {
       await carregarMapeamentoCategorias();
-      mostrarMsgModal("Preparando sugestões…", false);
-      aquecerCacheSugestoes();
+      mostrarMsgModal("", false);
     } catch (e) {
       mostrarMsgModal(e.message, true);
     }
