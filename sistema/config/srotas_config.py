@@ -1145,6 +1145,14 @@ def manutencao_tenant_pagina():
     return render_template("frm_config_manutencao_tenant.html", nav_ativo="config")
 
 
+@config_bp.get(f"{MANUTENCAO_TENANT_PREFIX}/editar")
+@login_obrigatorio()
+def manutencao_tenant_editar():
+    if not session.get("eh_desenvolvedor"):
+        return redirect(url_for("dashboard.index"))
+    return render_template("frm_config_manutencao_tenant_apoio.html")
+
+
 @config_bp.get(f"{MANUTENCAO_TENANT_PREFIX}/dados")
 @login_obrigatorio()
 def manutencao_tenant_dados():
@@ -1152,6 +1160,7 @@ def manutencao_tenant_dados():
         return r
     q = (request.args.get("q") or "").strip()
     tipo = (request.args.get("tipo") or "").strip().lower()
+    ativo = (request.args.get("ativo") or "").strip().lower()
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
@@ -1167,6 +1176,10 @@ def manutencao_tenant_dados():
         if tipo in _TIPOS_NEGOCIO_OK:
             where.append("t.tipo_negocio = %s")
             params.append(tipo)
+        if ativo in ("1", "true", "sim"):
+            where.append("t.ativo = TRUE")
+        elif ativo in ("0", "false", "nao", "não"):
+            where.append("t.ativo = FALSE")
         cur.execute(
             f"""
             SELECT t.id, t.nome, t.slug, t.tipo_negocio, t.plano, t.ativo, t.documento,
@@ -1178,24 +1191,65 @@ def manutencao_tenant_dados():
             """,
             params,
         )
+        from sistema.config.servico_manutencao_tenant import slug_protegido
+
         itens = []
         for r in cur.fetchall():
+            slug = r[2] or ""
             itens.append(
                 {
                     "id": int(r[0]),
                     "nome": r[1] or "",
-                    "slug": r[2] or "",
+                    "slug": slug,
                     "tipo_negocio": (r[3] or "vendedor").lower(),
                     "plano": (r[4] or "starter").lower(),
                     "ativo": bool(r[5]),
                     "documento": r[6] or "",
                     "cidade": r[7] or "",
                     "uf": r[8] or "",
+                    "eh_tenant_sessao": int(session.get("id_tenant") or 0) == int(r[0]),
+                    "protegido": slug_protegido(slug),
                 }
             )
         return jsonify(success=True, itens=itens)
     finally:
         conn.close()
+
+
+def _tenant_payload(cur, id_tenant: int) -> dict | None:
+    cur.execute(
+        """
+        SELECT id, nome, slug, tipo_negocio, plano, ativo, documento,
+               tipo_pessoa, nome_completo, cidade, uf, email_comercial, telefone_comercial
+        FROM tbl_tenant WHERE id = %s
+        """,
+        (id_tenant,),
+    )
+    row = cur.fetchone()
+    if not row:
+        return None
+    contagens = _contagens_tenant(cur, id_tenant)
+    from sistema.config.servico_manutencao_tenant import slug_protegido
+
+    slug = (row[2] or "").strip().lower()
+    return {
+        "id": int(row[0]),
+        "nome": row[1] or "",
+        "slug": row[2] or "",
+        "tipo_negocio": (row[3] or "vendedor").lower(),
+        "plano": (row[4] or "starter").lower(),
+        "ativo": bool(row[5]),
+        "documento": row[6] or "",
+        "tipo_pessoa": row[7] or "",
+        "nome_completo": row[8] or "",
+        "cidade": row[9] or "",
+        "uf": row[10] or "",
+        "email_comercial": row[11] or "",
+        "telefone_comercial": row[12] or "",
+        "contagens": contagens,
+        "eh_tenant_sessao": int(session.get("id_tenant") or 0) == int(row[0]),
+        "protegido": slug_protegido(slug),
+    }
 
 
 @config_bp.get(f"{MANUTENCAO_TENANT_PREFIX}/<int:id_tenant>")
@@ -1206,38 +1260,97 @@ def manutencao_tenant_detalhe(id_tenant: int):
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
-        cur.execute(
-            """
-            SELECT id, nome, slug, tipo_negocio, plano, ativo, documento,
-                   tipo_pessoa, nome_completo, cidade, uf, email_comercial, telefone_comercial
-            FROM tbl_tenant WHERE id = %s
-            """,
-            (id_tenant,),
+        tenant = _tenant_payload(cur, id_tenant)
+        if not tenant:
+            return jsonify(success=False, message="Tenant não encontrado."), 404
+        return jsonify(success=True, tenant=tenant)
+    finally:
+        conn.close()
+
+
+@config_bp.post(f"{MANUTENCAO_TENANT_PREFIX}/apoio")
+@login_obrigatorio()
+def manutencao_tenant_apoio():
+    if (r := _exigir_dev()) is not None:
+        return r
+    body = request.get_json(silent=True) or {}
+    try:
+        id_tenant = int(body.get("id") or 0)
+    except (TypeError, ValueError):
+        return jsonify(success=False, message="Tenant inválido."), 400
+    if id_tenant <= 0:
+        return jsonify(success=False, message="Informe o tenant para editar."), 400
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        tenant = _tenant_payload(cur, id_tenant)
+        if not tenant:
+            return jsonify(success=False, message="Tenant não encontrado."), 404
+        return jsonify(success=True, tenant=tenant)
+    finally:
+        conn.close()
+
+
+@config_bp.post(f"{MANUTENCAO_TENANT_PREFIX}/excluir")
+@login_obrigatorio()
+def manutencao_tenant_excluir():
+    if (r := _exigir_dev()) is not None:
+        return r
+    from sistema.config.servico_manutencao_tenant import excluir_tenant_completo
+
+    body = request.get_json(silent=True) or {}
+    try:
+        id_tenant = int(body.get("id") or 0)
+    except (TypeError, ValueError):
+        return jsonify(success=False, message="Tenant inválido."), 400
+    confirm_slug = (body.get("confirm_slug") or "").strip().lower()
+    if id_tenant <= 0:
+        return jsonify(success=False, message="Tenant inválido."), 400
+    if int(session.get("id_tenant") or 0) == id_tenant:
+        return (
+            jsonify(
+                success=False,
+                message="Não é possível excluir o tenant da sessão atual. "
+                "Troque de tenant (DEV) e tente de novo.",
+            ),
+            400,
         )
+
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT slug FROM tbl_tenant WHERE id = %s", (id_tenant,))
         row = cur.fetchone()
         if not row:
             return jsonify(success=False, message="Tenant não encontrado."), 404
-        contagens = _contagens_tenant(cur, id_tenant)
+        slug = (row[0] or "").strip().lower()
+        if confirm_slug != slug:
+            return (
+                jsonify(
+                    success=False,
+                    message="Confirmação inválida. Digite o slug exatamente como cadastrado.",
+                ),
+                400,
+            )
+        resultado = excluir_tenant_completo(cur, id_tenant)
+        conn.commit()
+        _log.warning(
+            "DEV excluiu tenant #%s slug=%s linhas=%s user=%s",
+            id_tenant,
+            slug,
+            resultado.get("linhas_removidas"),
+            session.get("id_usuario"),
+        )
         return jsonify(
             success=True,
-            tenant={
-                "id": int(row[0]),
-                "nome": row[1] or "",
-                "slug": row[2] or "",
-                "tipo_negocio": (row[3] or "vendedor").lower(),
-                "plano": (row[4] or "starter").lower(),
-                "ativo": bool(row[5]),
-                "documento": row[6] or "",
-                "tipo_pessoa": row[7] or "",
-                "nome_completo": row[8] or "",
-                "cidade": row[9] or "",
-                "uf": row[10] or "",
-                "email_comercial": row[11] or "",
-                "telefone_comercial": row[12] or "",
-                "contagens": contagens,
-                "eh_tenant_sessao": int(session.get("id_tenant") or 0) == int(row[0]),
-            },
+            message=f"Tenant «{resultado.get('nome')}» excluído "
+            f"({resultado.get('linhas_removidas')} linha(s) removidas).",
+            resultado=resultado,
         )
+    except Exception as e:
+        conn.rollback()
+        _log.exception("Falha ao excluir tenant #%s", id_tenant)
+        return jsonify(success=False, message=str(e)[:400]), 400
     finally:
         conn.close()
 

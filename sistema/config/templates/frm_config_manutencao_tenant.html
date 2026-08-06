@@ -3,115 +3,70 @@
 {% set nav_ativo = 'config' %}
 {% block topbar_title %}Manutenção de tenant{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_manutencao_tenant.css') }}?v=1" />
+<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_crud.css') }}?v=3" />
+<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_manutencao_tenant.css') }}?v=3" />
 {% endblock %}
 {% block content %}
-<div class="Cl_ContainerApoio cl-page-principal CfgMt_Wrap">
-  <div class="cl-page-title">
+<div class="Cl_ConfigPage">
+  <div class="Cl_ConfigPageHeader">
     <h2>Manutenção de tenant</h2>
-    <p class="cl-page-desc">Corrija tipo de negócio, plano e dados básicos. Somente desenvolvedor.</p>
+    <a class="Cl_BtnLink" href="{{ url_for('config.configuracoes') }}">Voltar às Configurações</a>
   </div>
-  <p class="CfgMt_Aviso"><a class="Cl_BtnLink" href="{{ url_for('config.configuracoes') }}">← Voltar às Configurações</a></p>
+  <p class="Cl_ConfigSub">
+    Corrija tipo, plano e dados básicos, ou exclua tenants de teste (somente desenvolvedor).
+    A exclusão remove dados ligados ao tenant em cascata.
+  </p>
 
-  <div class="CfgMt_Grid">
-    <section class="CfgMt_ListaCard">
-      <div class="filter-panel">
-        <div class="filter-panel-fields">
-          <div class="filter-group" style="flex:1;min-width:12rem">
-            <label for="cfg_mt_q">Buscar</label>
-            <input type="search" id="cfg_mt_q" placeholder="ID, nome, slug ou documento" />
-          </div>
-          <div class="filter-group">
-            <label for="cfg_mt_filtro_tipo">Tipo</label>
-            <select id="cfg_mt_filtro_tipo">
-              <option value="">Todos</option>
-              <option value="vendedor">Vendedor</option>
-              <option value="fornecedor">Fornecedor</option>
-              <option value="hibrido">Híbrido</option>
-            </select>
-          </div>
-        </div>
-        <div class="filter-panel-actions">
-          <button type="button" class="Cl_BtnSalvar" id="cfg_mt_btnBuscar">Buscar</button>
-        </div>
+  <div class="filter-panel">
+    <div class="filter-panel-fields">
+      <div class="filter-group">
+        <label for="ob_filtroBusca">Busca</label>
+        <input type="search" id="ob_filtroBusca" placeholder="ID, nome, slug ou documento" />
       </div>
-      <div class="CfgMt_TabelaWrap">
-        <table class="Cl_TabelaPrincipal CfgMt_Tabela">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Nome</th>
-              <th>Tipo</th>
-              <th>Plano</th>
-              <th>Ativo</th>
-            </tr>
-          </thead>
-          <tbody id="cfg_mt_tbody">
-            <tr><td colspan="5" class="CfgMt_Hint">Carregando…</td></tr>
-          </tbody>
-        </table>
+      <div class="filter-group">
+        <label for="ob_filtroTipo">Tipo</label>
+        <select id="ob_filtroTipo">
+          <option value="">Todos</option>
+          <option value="vendedor">Vendedor</option>
+          <option value="fornecedor">Fornecedor</option>
+          <option value="hibrido">Híbrido</option>
+        </select>
       </div>
-    </section>
+      <div class="filter-group">
+        <label for="ob_filtroAtivo">Ativo</label>
+        <select id="ob_filtroAtivo">
+          <option value="">Todos</option>
+          <option value="1">Sim</option>
+          <option value="0">Não</option>
+        </select>
+      </div>
+    </div>
+    <div class="filter-panel-actions">
+      <button type="button" class="Cl_botaoFiltro" id="ob_btnFiltrar">Filtrar</button>
+      <button type="button" class="Cl_BtnCancelar" id="ob_btnLimpar">Limpar</button>
+    </div>
+  </div>
 
-    <section class="CfgMt_FormCard" id="cfg_mt_form_card">
-      <h3 id="cfg_mt_form_titulo">Selecione um tenant</h3>
-      <p class="CfgMt_Hint" id="cfg_mt_form_vazio">Clique em uma linha à esquerda para editar.</p>
-
-      <form id="cfg_mt_form" hidden>
-        <input type="hidden" id="cfg_mt_id" value="" />
-
-        <div class="CfgMt_Campos">
-          <label class="CfgMt_Field">
-            <span>Nome</span>
-            <input type="text" id="cfg_mt_nome" required maxlength="200" />
-          </label>
-          <label class="CfgMt_Field">
-            <span>Slug</span>
-            <input type="text" id="cfg_mt_slug" required maxlength="80" />
-          </label>
-          <label class="CfgMt_Field CfgMt_Field--destaque">
-            <span>Tipo de negócio</span>
-            <select id="cfg_mt_tipo" required>
-              <option value="vendedor">Vendedor</option>
-              <option value="fornecedor">Fornecedor</option>
-              <option value="hibrido">Híbrido (ambos)</option>
-            </select>
-          </label>
-          <label class="CfgMt_Field">
-            <span>Plano</span>
-            <select id="cfg_mt_plano">
-              <option value="starter">Explorar</option>
-              <option value="professional">Crescer / Conectar</option>
-              <option value="scale">Escalar / Expandir</option>
-              <option value="enterprise">Pro / Hub</option>
-            </select>
-          </label>
-          <label class="CfgMt_Field">
-            <span>Documento (CPF/CNPJ)</span>
-            <input type="text" id="cfg_mt_documento" maxlength="20" />
-          </label>
-          <label class="CfgMt_Switch">
-            <input type="checkbox" id="cfg_mt_ativo" />
-            <span>Tenant ativo</span>
-          </label>
-          <label class="CfgMt_Switch" id="cfg_mt_wrap_limpar_seg">
-            <input type="checkbox" id="cfg_mt_limpar_seg" />
-            <span>Ao virar vendedor, remover segmentos de fornecedor</span>
-          </label>
-        </div>
-
-        <div class="CfgMt_Counts" id="cfg_mt_counts" hidden></div>
-        <p class="CfgMt_Warn" id="cfg_mt_warn" hidden></p>
-
-        <div class="CfgMt_Acoes">
-          <button type="submit" class="Cl_BtnSalvar" id="cfg_mt_btnSalvar">Salvar alterações</button>
-        </div>
-        <p class="CfgMt_Hint" id="cfg_mt_msg" hidden></p>
-      </form>
-    </section>
+  <div class="Cl_TabelaPrincipal Cat_TabelaScroll" id="content-area-Principal">
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Nome</th>
+          <th>Slug</th>
+          <th>Tipo</th>
+          <th>Plano</th>
+          <th>Ativo</th>
+          <th class="Cl_TableActions">Ações</th>
+        </tr>
+      </thead>
+      <tbody id="ob_listaTenants">
+        <tr><td colspan="7">Carregando…</td></tr>
+      </tbody>
+    </table>
   </div>
 </div>
 {% endblock %}
 {% block page_js %}
-<script src="{{ url_for('config.static', filename='script/Sconfig_manutencao_tenant.js') }}?v=1"></script>
+<script src="{{ url_for('config.static', filename='script/Sconfig_manutencao_tenant.js') }}?v=3"></script>
 {% endblock %}

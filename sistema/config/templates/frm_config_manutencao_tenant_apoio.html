@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>Tenant — {{ MARCA_NOME }}</title>
+  {% include "partials/marca_favicon.html" %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='style/global_utils.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_crud.css') }}?v=3" />
+  <link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_manutencao_tenant.css') }}?v=3" />
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+</head>
+<body class="CfgApoio_Body">
+  <div class="Cl_Header Cl_ApoioHeader">
+    <div class="Cl_Logo">
+      <img src="{{ marca_logo_nome_url }}" alt="{{ MARCA_NOME }}" />
+    </div>
+    <div class="Cl_Titulo"><h1>Editar tenant</h1></div>
+  </div>
+
+  <input type="hidden" id="id" value="" />
+
+  <div class="Cl_ContainerApoio CfgApoio_Form">
+    <div class="CfgApoio_Grid CfgApoio_Grid--2">
+      <div class="Cl_FormCampo">
+        <label for="nome">Nome</label>
+        <input type="text" id="nome" maxlength="200" />
+      </div>
+      <div class="Cl_FormCampo">
+        <label for="slug">Slug</label>
+        <input type="text" id="slug" maxlength="80" />
+      </div>
+    </div>
+
+    <div class="CfgApoio_Grid CfgApoio_Grid--3">
+      <div class="Cl_FormCampo">
+        <label for="tipo_negocio">Tipo de negócio</label>
+        <select id="tipo_negocio">
+          <option value="vendedor">Vendedor</option>
+          <option value="fornecedor">Fornecedor</option>
+          <option value="hibrido">Híbrido (ambos)</option>
+        </select>
+      </div>
+      <div class="Cl_FormCampo">
+        <label for="plano">Plano</label>
+        <select id="plano">
+          <option value="starter">Explorar</option>
+          <option value="professional">Crescer / Conectar</option>
+          <option value="scale">Escalar / Expandir</option>
+          <option value="enterprise">Pro / Hub</option>
+        </select>
+      </div>
+      <div class="Cl_FormCampo">
+        <label for="documento">Documento (CPF/CNPJ)</label>
+        <input type="text" id="documento" maxlength="20" />
+      </div>
+    </div>
+
+    <div class="CfgApoio_Switches">
+      <label class="Cl_Switch">
+        <input type="checkbox" id="ativo" />
+        <span class="Cl_SwitchSlider"></span>
+        <span>Tenant ativo</span>
+      </label>
+      <label class="Cl_Switch" id="wrap_limpar_seg" hidden>
+        <input type="checkbox" id="limpar_segmentos" />
+        <span class="Cl_SwitchSlider"></span>
+        <span>Ao virar vendedor, remover segmentos de fornecedor</span>
+      </label>
+    </div>
+
+    <div class="CfgMt_Counts" id="counts" hidden></div>
+    <p class="CfgMt_Warn" id="warn" hidden></p>
+  </div>
+
+  <div class="Cl_BotoesApoio">
+    <button type="button" class="Cl_BtnSalvar" id="btnSalvar">Salvar</button>
+    <button type="button" class="Cl_BtnExcluir" id="btnExcluir">Excluir tenant</button>
+  </div>
+
+  <script src="{{ url_for('static', filename='script/global_utils.js') }}"></script>
+  <script src="{{ url_for('config.static', filename='script/Sconfig_manutencao_tenant_apoio.js') }}?v=1"></script>
+</body>
+</html>
