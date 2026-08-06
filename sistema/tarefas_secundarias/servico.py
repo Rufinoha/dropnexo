@@ -9,8 +9,6 @@ from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
-import requests
-
 from global_utils import Var_ConectarBanco, agora_utc
 
 _log = logging.getLogger(__name__)
@@ -20,6 +18,14 @@ ML_CAT_TIMEOUT = (5, 25)
 TZ_BR = ZoneInfo("America/Sao_Paulo")
 
 CODIGO_ML_CATEGORIAS = "ml_categorias_cache"
+
+
+class TarefaSecundariaErro(RuntimeError):
+    """Erro de tarefa com log detalhado para a UI."""
+
+    def __init__(self, mensagem: str, log_texto: str = ""):
+        super().__init__(mensagem)
+        self.log_texto = log_texto or mensagem
 
 
 def garantir_tabelas_tarefas(cur) -> None:
@@ -159,19 +165,16 @@ def _hoje_e_segunda() -> bool:
     return datetime.now(TZ_BR).weekday() == 0
 
 
-def _ml_get(path: str) -> Any:
-    url = path if path.startswith("http") else f"{ML_API_BASE}{path}"
-    r = requests.get(url, timeout=ML_CAT_TIMEOUT, headers={"Accept": "application/json"})
-    if r.status_code >= 400:
-        raise RuntimeError(f"ML {r.status_code}: {(r.text or '')[:200]}")
-    if not r.content:
-        return {}
-    return r.json()
+def _ml_get_autenticado(cur, id_tenant: int, path: str) -> Any:
+    """GET na API ML com token de uma conta conectada (categorias exigem Bearer)."""
+    from api.mercado_livre.mercado_livre import api_request
+
+    return api_request(cur, id_tenant, "GET", path, timeout=ML_CAT_TIMEOUT)
 
 
 def sites_ml_para_cache(cur) -> list[str]:
-    """Sites das contas conectadas. Usa SAVEPOINT para não abortar a transação se a query falhar."""
-    sites: set[str] = {"MLB"}
+    """Sites das contas conectadas. Sem conta, não inventa MLB anônimo (API retorna 403)."""
+    sites: set[str] = set()
     cur.execute("SAVEPOINT sp_sites_ml_cache")
     try:
         cur.execute(
@@ -185,18 +188,72 @@ def sites_ml_para_cache(cur) -> list[str]:
         for (sid,) in cur.fetchall():
             if sid:
                 sites.add(str(sid).upper())
+        # Contas conectadas sem site_id ainda: assume MLB
+        if not sites:
+            cur.execute(
+                """
+                SELECT 1 FROM tbl_integracao_mercado_livre
+                WHERE status = 'conectado'
+                LIMIT 1
+                """
+            )
+            if cur.fetchone():
+                sites.add("MLB")
         cur.execute("RELEASE SAVEPOINT sp_sites_ml_cache")
     except Exception:
         cur.execute("ROLLBACK TO SAVEPOINT sp_sites_ml_cache")
-        _log.warning("Falha ao listar sites ML conectados; usando MLB", exc_info=True)
+        _log.warning("Falha ao listar sites ML conectados", exc_info=True)
+        raise RuntimeError(
+            "Não foi possível listar contas Mercado Livre conectadas para o cache."
+        ) from None
+    if not sites:
+        raise RuntimeError(
+            "Nenhuma conta Mercado Livre conectada. Conecte uma conta e tente de novo."
+        )
     return sorted(sites)
 
 
-def _coletar_folhas_site(site_id: str, log: list[str]) -> tuple[list[tuple[str, str, str, str]], int]:
+def tenant_ml_para_site(cur, site_id: str) -> int:
+    """Tenant com ML conectado no site (ou qualquer conectado como fallback)."""
+    site_id = (site_id or "MLB").upper()
+    cur.execute(
+        """
+        SELECT id_tenant
+        FROM tbl_integracao_mercado_livre
+        WHERE status = 'conectado'
+          AND UPPER(NULLIF(TRIM(ml_site_id), '')) = %s
+        ORDER BY atualizado_em DESC NULLS LAST
+        LIMIT 1
+        """,
+        (site_id,),
+    )
+    row = cur.fetchone()
+    if row:
+        return int(row[0])
+    cur.execute(
+        """
+        SELECT id_tenant
+        FROM tbl_integracao_mercado_livre
+        WHERE status = 'conectado'
+        ORDER BY atualizado_em DESC NULLS LAST
+        LIMIT 1
+        """
+    )
+    row = cur.fetchone()
+    if not row:
+        raise RuntimeError(
+            f"Nenhuma conta Mercado Livre conectada para o site {site_id}."
+        )
+    return int(row[0])
+
+
+def _coletar_folhas_site(
+    cur, id_tenant: int, site_id: str, log: list[str]
+) -> tuple[list[tuple[str, str, str, str]], int]:
     """Percorre a árvore ML e retorna folhas (category_id, nome, path_nomes, path_ids)."""
     site_id = (site_id or "MLB").upper()
     ignoradas_sem_nome = 0
-    roots = _ml_get(f"/sites/{site_id}/categories")
+    roots = _ml_get_autenticado(cur, id_tenant, f"/sites/{site_id}/categories")
     if not isinstance(roots, list):
         raise RuntimeError("Resposta de categorias raiz inválida.")
 
@@ -222,7 +279,7 @@ def _coletar_folhas_site(site_id: str, log: list[str]) -> tuple[list[tuple[str, 
             continue
         visitados.add(cat_id)
         try:
-            det = _ml_get(f"/categories/{cat_id}")
+            det = _ml_get_autenticado(cur, id_tenant, f"/categories/{cat_id}")
         except Exception as e:
             log.append(f"ERRO categoria {cat_id}: {e}")
             time.sleep(0.05)
@@ -298,7 +355,9 @@ def sincronizar_cache_categorias_ml(
         site_id = (site_id or "MLB").upper()
         log.append(f"=== Site {site_id} ===")
         try:
-            folhas, ign = _coletar_folhas_site(site_id, log)
+            id_tenant = tenant_ml_para_site(cur, site_id)
+            log.append(f"Usando conta tenant #{id_tenant} (Bearer).")
+            folhas, ign = _coletar_folhas_site(cur, id_tenant, site_id, log)
             ignoradas_sem_nome += ign
         except Exception as e:
             erros_site += 1
@@ -317,19 +376,31 @@ def sincronizar_cache_categorias_ml(
         f"{erros_site} site(s) com erro"
     )
     log.append(msg)
+    log_texto = "\n".join(log)
+    if total_folhas <= 0:
+        raise TarefaSecundariaErro(
+            "Cache de categorias ML ficou vazio. "
+            "Confira se há conta conectada e se o app ML tem permissão de leitura. "
+            f"Detalhe: {msg}",
+            log_texto=log_texto,
+        )
     return {
         "folhas": total_folhas,
         "ignoradas_sem_nome": ignoradas_sem_nome,
         "erros_site": erros_site,
         "sites": sites,
         "mensagem": msg,
-        "log_texto": "\n".join(log),
+        "log_texto": log_texto,
     }
 
 
 def _marcar_execucao_erro(cur, id_exec: int, erro: BaseException, log_extra: str = "") -> None:
     msg = str(erro)[:500]
-    log = (log_extra or str(erro)).strip()
+    log = (
+        log_extra
+        or getattr(erro, "log_texto", None)
+        or str(erro)
+    ).strip()
     cur.execute(
         """
         UPDATE tbl_tarefa_secundaria_execucao
@@ -575,10 +646,12 @@ def disparar_tarefa_async(codigo: str, *, disparado_por: str = "manual") -> dict
             c2.commit()
         except Exception as e:
             tb = traceback.format_exc()
+            detalhe = (getattr(e, "log_texto", None) or "").strip()
+            log_extra = f"{detalhe}\n\n---\n{tb}".strip() if detalhe else tb
             c2.rollback()
             try:
                 cur2 = c2.cursor()
-                _marcar_execucao_erro(cur2, id_exec, e, log_extra=tb)
+                _marcar_execucao_erro(cur2, id_exec, e, log_extra=log_extra)
                 c2.commit()
             except Exception:
                 c2.rollback()
