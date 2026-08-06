@@ -1392,28 +1392,66 @@ def _mapa_categoria_ml(cur, id_tenant: int, id_categoria: int | None) -> tuple[s
 
 def listar_mapeamento_categorias_ml(cur, id_tenant: int) -> list[dict]:
     _garantir_tabela_ml_categoria_map(cur)
-    cur.execute(
-        """
-        SELECT c.id, c.nome,
-               COALESCE(m.ml_category_id, ''),
-               COALESCE(m.family_name, '')
-        FROM tbl_categoria c
-        LEFT JOIN tbl_integracao_ml_categoria_map m
-            ON m.id_categoria = c.id AND m.id_tenant = c.id_tenant
-        WHERE c.id_tenant = %s AND c.ativo = TRUE
-        ORDER BY c.nome
-        """,
-        (id_tenant,),
-    )
-    return [
-        {
-            "id_categoria": int(r[0]),
-            "nome": r[1],
-            "ml_category_id": r[2] or "",
-            "family_name": r[3] or "",
-        }
-        for r in cur.fetchall()
-    ]
+    cfg = carregar_config_ml(cur, id_tenant)
+    site_id = (cfg.get("ml_site_id") or "MLB").upper()
+    try:
+        from sistema.tarefas_secundarias.servico import garantir_tabelas_tarefas
+
+        garantir_tabelas_tarefas(cur)
+        cur.execute(
+            """
+            SELECT c.id, c.nome,
+                   COALESCE(m.ml_category_id, ''),
+                   COALESCE(m.family_name, ''),
+                   COALESCE(ch.nome, '')
+            FROM tbl_categoria c
+            LEFT JOIN tbl_integracao_ml_categoria_map m
+                ON m.id_categoria = c.id AND m.id_tenant = c.id_tenant
+            LEFT JOIN tbl_ml_categoria_cache ch
+                ON ch.site_id = %s
+               AND ch.category_id = UPPER(TRIM(COALESCE(m.ml_category_id, '')))
+            WHERE c.id_tenant = %s AND c.ativo = TRUE
+            ORDER BY c.nome
+            """,
+            (site_id, id_tenant),
+        )
+        return [
+            {
+                "id_categoria": int(r[0]),
+                "nome": r[1],
+                "ml_category_id": r[2] or "",
+                "family_name": r[3] or "",
+                "ml_category_nome": (r[4] or "").strip(),
+                "ml_site_id": site_id,
+            }
+            for r in cur.fetchall()
+        ]
+    except Exception:
+        _log.debug("Cache ML indisponível no mapeamento; fallback sem nome", exc_info=True)
+        cur.execute(
+            """
+            SELECT c.id, c.nome,
+                   COALESCE(m.ml_category_id, ''),
+                   COALESCE(m.family_name, '')
+            FROM tbl_categoria c
+            LEFT JOIN tbl_integracao_ml_categoria_map m
+                ON m.id_categoria = c.id AND m.id_tenant = c.id_tenant
+            WHERE c.id_tenant = %s AND c.ativo = TRUE
+            ORDER BY c.nome
+            """,
+            (id_tenant,),
+        )
+        return [
+            {
+                "id_categoria": int(r[0]),
+                "nome": r[1],
+                "ml_category_id": r[2] or "",
+                "family_name": r[3] or "",
+                "ml_category_nome": "",
+                "ml_site_id": site_id,
+            }
+            for r in cur.fetchall()
+        ]
 
 
 def salvar_mapeamento_categorias_ml(cur, id_tenant: int, itens: list[dict]) -> int:
@@ -1435,7 +1473,11 @@ def salvar_mapeamento_categorias_ml(cur, id_tenant: int, itens: list[dict]) -> i
         )
         if not cur.fetchone():
             continue
-        familia = (item.get("family_name") or "").strip()[:_ML_FAMILY_NAME_MAX] or None
+        # Família não é mais editada nesta tela; preserva valor já salvo se omitida.
+        if "family_name" in item:
+            familia = (item.get("family_name") or "").strip()[:_ML_FAMILY_NAME_MAX] or None
+        else:
+            familia = None
         cur.execute(
             """
             INSERT INTO tbl_integracao_ml_categoria_map (
@@ -1443,7 +1485,7 @@ def salvar_mapeamento_categorias_ml(cur, id_tenant: int, itens: list[dict]) -> i
             ) VALUES (%s, %s, %s, %s, %s)
             ON CONFLICT (id_tenant, id_categoria) DO UPDATE SET
                 ml_category_id = EXCLUDED.ml_category_id,
-                family_name = EXCLUDED.family_name,
+                family_name = COALESCE(EXCLUDED.family_name, tbl_integracao_ml_categoria_map.family_name),
                 atualizado_em = EXCLUDED.atualizado_em
             """,
             (id_tenant, id_cat, ml_cat, familia, agora),
@@ -1559,13 +1601,35 @@ def buscar_categorias_ml(
     def _add(itens: list[dict]) -> None:
         for item in itens:
             cat_id = str(item.get("category_id") or "").strip().upper()
-            if not cat_id or cat_id in vistos:
+            nome = str(item.get("nome") or "").strip()
+            if not cat_id or cat_id in vistos or not nome:
                 continue
             vistos.add(cat_id)
             candidatos.append(item)
 
+    # 1) Cache local (nome legível) — preferido para o usuário.
+    try:
+        from sistema.tarefas_secundarias.servico import (
+            buscar_categorias_cache,
+            nome_categoria_cache,
+        )
+
+        for h in buscar_categorias_cache(cur, site_id, termo, limit=lim):
+            _add(
+                [
+                    {
+                        "category_id": h["category_id"],
+                        "nome": h["nome"],
+                        "fonte": "cache",
+                        "score": 100 + _score_nome_categoria_ml(h["nome"], termo),
+                    }
+                ]
+            )
+    except Exception:
+        nome_categoria_cache = None  # type: ignore
+        _log.debug("Cache ML indisponível na sugestão", exc_info=True)
+
     termos_busca: list[str] = [termo]
-    # Nome genérico (1 palavra): tenta 1 título de produto da categoria.
     if len(termo.split()) <= 1:
         for tit in _titulos_amostra_categoria_vendedor(cur, id_tenant, id_categoria, limite=1):
             if tit and _norm_txt_ml(tit) != _norm_txt_ml(termo):
@@ -1574,15 +1638,35 @@ def buscar_categorias_ml(
 
     ultimo_erro: Exception | None = None
     predictor_ok = False
-    for t in termos_busca[:2]:
-        try:
-            _add(_domain_discovery_categorias(cur, id_tenant, site_id, t, lim))
-            predictor_ok = True
-        except RuntimeError as e:
-            ultimo_erro = e
-            _log.warning("domain_discovery ML falhou para %r: %s", t, e)
-        if candidatos:
-            break
+    if len(candidatos) < lim:
+        for t in termos_busca[:2]:
+            try:
+                pred = _domain_discovery_categorias(cur, id_tenant, site_id, t, lim)
+                for p in pred:
+                    cat_id = str(p.get("category_id") or "").strip().upper()
+                    nome = str(p.get("nome") or "").strip()
+                    if nome_categoria_cache and cat_id:
+                        nome_cache = nome_categoria_cache(cur, site_id, cat_id)
+                        if nome_cache:
+                            nome = nome_cache
+                    if not nome:
+                        continue
+                    _add(
+                        [
+                            {
+                                "category_id": cat_id,
+                                "nome": nome,
+                                "fonte": "predictor",
+                                "score": int(p.get("score") or 90),
+                            }
+                        ]
+                    )
+                predictor_ok = True
+            except RuntimeError as e:
+                ultimo_erro = e
+                _log.warning("domain_discovery ML falhou para %r: %s", t, e)
+            if len(candidatos) >= lim:
+                break
 
     if not candidatos and not predictor_ok and ultimo_erro:
         raise RuntimeError(str(ultimo_erro))
@@ -1601,6 +1685,7 @@ def buscar_categorias_ml(
             "score": int(c.get("score") or 0),
         }
         for c in candidatos[:lim]
+        if str(c.get("nome") or "").strip()
     ]
 
 

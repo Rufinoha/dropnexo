@@ -3,7 +3,7 @@
 {% block title %}Mercado Livre — Integrações — {{ MARCA_NOME }}{% endblock %}
 {% block topbar_title %}Mercado Livre{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('static', filename='style/Cmercadopago_integracao.css') }}?v=11" />
+<link rel="stylesheet" href="{{ url_for('static', filename='style/Cmercadopago_integracao.css') }}?v=13" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal Mp_Wrap">
@@ -180,7 +180,7 @@
       </div>
       <ol class="Mp_Hint Mp_ListaPassos" style="margin-top:1rem">
         <li>Associe cada produto a uma categoria sua em Meus produtos.</li>
-        <li>Em <strong>Mapear categorias</strong>, vincule cada categoria à categoria ML e defina a família do anúncio.</li>
+        <li>Em <strong>Mapear categorias</strong>, vincule cada categoria à categoria do Mercado Livre pelo nome.</li>
         <li>Selecione os produtos em Meus produtos e use o ícone de integração.</li>
       </ol>
     </div>
@@ -214,16 +214,14 @@
           <h3 id="ml_modal_cat_titulo">Mapear categorias — Mercado Livre</h3>
           <button type="button" class="Mp_ModalClose" id="ml_modal_cat_fechar" aria-label="Fechar">&times;</button>
         </header>
-        <p class="Mp_Hint">Use <strong>Sugerir não mapeadas</strong> para preencher o que falta. Se não gostar da sugestão, troque na lista de <strong>Categoria ML</strong> ou na <strong>Família</strong> (combobox com alternativas). Ainda dá para digitar um ID/família manualmente.</p>
+        <p class="Mp_Hint">Associe cada categoria do DropNexo a uma categoria do Mercado Livre (pelo <strong>nome</strong>). Use <strong>Sugerir não mapeadas</strong> ou clique em <strong>Escolher</strong> para buscar no catálogo.</p>
         <p id="ml_msg_modal" class="Mp_Msg Mp_Msg--modal" hidden role="status"></p>
         <div class="Mp_CatMapWrap">
           <table class="Mp_CatMapTable" id="ml_tabela_categorias">
             <thead>
               <tr>
                 <th>Sua categoria</th>
-                <th>Categoria ML</th>
-                <th>Família</th>
-                <th></th>
+                <th>Categoria Mercado Livre</th>
               </tr>
             </thead>
             <tbody id="ml_tbody_categorias"></tbody>
@@ -239,6 +237,24 @@
       </form>
     </dialog>
 
+    <dialog class="Mp_Modal Mp_Modal--picker" id="ml_modal_picker_cat" aria-labelledby="ml_picker_titulo">
+      <div class="Mp_ModalInner">
+        <header class="Mp_ModalHead">
+          <h3 id="ml_picker_titulo">Escolher categoria Mercado Livre</h3>
+          <button type="button" class="Mp_ModalClose" id="ml_picker_fechar" aria-label="Fechar">&times;</button>
+        </header>
+        <div class="Mp_PickerBody">
+          <label class="Mp_PickerLabel" for="ml_picker_busca">Buscar por nome</label>
+          <input type="search" id="ml_picker_busca" class="Mp_PickerBusca" placeholder="Ex.: batom, base facial, protetor labial…" autocomplete="off" />
+          <p id="ml_picker_hint" class="Mp_Hint" hidden></p>
+          <div id="ml_picker_lista" class="Mp_PickerLista" role="listbox"></div>
+        </div>
+        <footer class="Mp_ModalFoot">
+          <button type="button" class="Cl_BtnCancelar" id="ml_picker_cancelar">Cancelar</button>
+        </footer>
+      </div>
+    </dialog>
+
     <div class="Mp_Actions Mp_Actions--foot">
       <button type="button" class="Cl_BtnCancelar" id="ml_btn_desconectar">Desconectar</button>
     </div>
@@ -246,5 +262,5 @@
 </div>
 {% endblock %}
 {% block page_js %}
-<script src="{{ url_for('static', filename='script/Smercado_livre_integracao.js') }}?v=18"></script>
+<script src="{{ url_for('static', filename='script/Smercado_livre_integracao.js') }}?v=21"></script>
 {% endblock %}

@@ -33,6 +33,12 @@
     btnModalCatFechar: document.getElementById("ml_modal_cat_fechar"),
     btnModalCatCancelar: document.getElementById("ml_modal_cat_cancelar"),
     avisoGratis: document.getElementById("ml_aviso_gratis"),
+    pickerModal: document.getElementById("ml_modal_picker_cat"),
+    pickerBusca: document.getElementById("ml_picker_busca"),
+    pickerLista: document.getElementById("ml_picker_lista"),
+    pickerHint: document.getElementById("ml_picker_hint"),
+    btnPickerFechar: document.getElementById("ml_picker_fechar"),
+    btnPickerCancelar: document.getElementById("ml_picker_cancelar"),
   };
 
   let categoriasMap = [];
@@ -113,12 +119,6 @@
   function feedbackCat(t, erro) {
     if (modalAberto()) mostrarMsgModal(t, erro);
     else mostrarMsg(t, erro);
-  }
-
-  function rotuloFonte(fonte) {
-    if (fonte === "busca") return "Busca";
-    if (fonte === "filtro") return "Filtro";
-    return "Predictor";
   }
 
   function renderConta(cfg) {
@@ -292,156 +292,67 @@
   }
 
   function valorCategoriaMlLinha(tr) {
-    const sel = tr.querySelector(".ml-sel-cat");
-    const inp = tr.querySelector(".ml-inp-cat");
-    if (sel && sel.value && sel.value !== "__custom__") return sel.value.trim();
-    return (inp?.value || "").trim();
+    return (tr.querySelector(".ml-hid-cat")?.value || "").trim().toUpperCase();
   }
 
-  function setCategoriaMlLinha(tr, categoryId) {
-    const sel = tr.querySelector(".ml-sel-cat");
-    const inp = tr.querySelector(".ml-inp-cat");
+  function setCategoriaMlLinha(tr, categoryId, categoryNome) {
+    const hid = tr.querySelector(".ml-hid-cat");
+    const label = tr.querySelector(".ml-lbl-cat");
     const id = String(categoryId || "").trim().toUpperCase();
-    if (!sel) {
-      if (inp) inp.value = id;
-      return;
-    }
-    const temOpt = id && [...sel.options].some((o) => o.value === id);
-    if (id && temOpt) {
-      sel.value = id;
-      if (inp) {
-        inp.value = id;
-        inp.hidden = true;
-        inp.classList.remove("is-custom");
-      }
-    } else if (id) {
-      sel.value = "__custom__";
-      if (inp) {
-        inp.hidden = false;
-        inp.classList.add("is-custom");
-        inp.value = id;
-      }
-    } else {
-      sel.value = "";
-      if (inp) {
-        inp.value = "";
-        inp.hidden = true;
-        inp.classList.remove("is-custom");
+    const nome = String(categoryNome || "").trim();
+    if (hid) hid.value = id;
+    if (label) {
+      if (id && nome) {
+        label.textContent = nome;
+        label.classList.remove("is-empty", "is-invalid");
+        label.title = id;
+      } else if (id && !nome) {
+        label.textContent = "Categoria sem nome no cache — escolha novamente";
+        label.classList.add("is-empty", "is-invalid");
+        label.title = "";
+        hid.value = "";
+      } else {
+        label.textContent = "Nenhuma categoria selecionada";
+        label.classList.add("is-empty");
+        label.classList.remove("is-invalid");
+        label.title = "";
       }
     }
-  }
-
-  function familiasUsadasNoModal() {
-    const set = new Set();
-    el.tbodyCat?.querySelectorAll(".ml-inp-fam").forEach((inp) => {
-      const v = (inp.value || "").trim();
-      if (v) set.add(v);
-    });
-    return [...set];
-  }
-
-  function opcoesFamiliaLinha(nomeCategoria, sugestoes) {
-    const opts = [];
-    const seen = new Set();
-    const add = (v) => {
-      const t = String(v || "").trim().slice(0, 60);
-      if (!t) return;
-      const key = t.toLowerCase();
-      if (seen.has(key)) return;
-      seen.add(key);
-      opts.push(t);
-    };
-    add(nomeCategoria);
-    (sugestoes || []).forEach((s) => add(s.nome));
-    familiasUsadasNoModal().forEach(add);
-    return opts;
-  }
-
-  function atualizarCombosLinha(tr, sugestoes) {
-    if (!tr) return;
-    const idCat = parseInt(tr.dataset.catId, 10) || 0;
-    const nome = tr.querySelector("td")?.textContent?.trim() || "";
-    const sel = tr.querySelector(".ml-sel-cat");
-    const inp = tr.querySelector(".ml-inp-cat");
-    const inpFam = tr.querySelector(".ml-inp-fam");
-    const dl = tr.querySelector(`#ml-dl-fam-${idCat}`) || tr.querySelector(".ml-dl-fam");
-    const atual = valorCategoriaMlLinha(tr);
-    const lista = Array.isArray(sugestoes) ? sugestoes : [];
-
-    if (sel) {
-      const opts = ['<option value="">Escolher categoria ML…</option>'];
-      lista.forEach((s) => {
-        const id = String(s.category_id || "").trim().toUpperCase();
-        if (!id) return;
-        opts.push(
-          `<option value="${esc(id)}">${esc(id)} — ${esc(s.nome || id)}</option>`
-        );
-      });
-      if (atual && !lista.some((s) => String(s.category_id).toUpperCase() === atual.toUpperCase())) {
-        opts.push(`<option value="${esc(atual)}">${esc(atual)} — (atual)</option>`);
-      }
-      opts.push('<option value="__custom__">Digitar outro ID…</option>');
-      sel.innerHTML = opts.join("");
-      setCategoriaMlLinha(tr, atual);
-    }
-
-    if (dl) {
-      const famOpts = opcoesFamiliaLinha(nome, lista);
-      dl.innerHTML = famOpts.map((f) => `<option value="${esc(f)}"></option>`).join("");
-    }
-    if (inpFam) inpFam.setAttribute("placeholder", "Escolha ou digite (máx. 60)");
-    if (inp && sel) {
-      const custom = sel.value === "__custom__";
-      inp.hidden = !custom;
-      inp.classList.toggle("is-custom", custom);
-    }
-  }
-
-  function atualizarCombosTodasLinhas() {
-    el.tbodyCat?.querySelectorAll("tr[data-cat-id]").forEach((tr) => {
-      const id = parseInt(tr.dataset.catId, 10);
-      const nome = tr.querySelector("td")?.textContent?.trim() || "";
-      const key = chaveCacheSugestao(id, nome);
-      const cached = sugestoesCache.get(key);
-      atualizarCombosLinha(tr, cached?.itens || []);
-    });
   }
 
   function renderTabelaCategorias() {
     if (!el.tbodyCat) return;
     if (!categoriasMap.length) {
       el.tbodyCat.innerHTML =
-        '<tr><td colspan="4" class="Mp_Hint">Cadastre categorias em Categorias antes de mapear.</td></tr>';
+        '<tr><td colspan="2" class="Mp_Hint">Cadastre categorias em Categorias antes de mapear.</td></tr>';
       return;
     }
     el.tbodyCat.innerHTML = categoriasMap
       .map((c) => {
         const id = c.id_categoria;
-        const ml = (c.ml_category_id || "").trim().toUpperCase();
-        const fam = c.family_name || "";
+        const mlId = (c.ml_category_id || "").trim().toUpperCase();
+        const mlNome = (c.ml_category_nome || "").trim();
+        const label =
+          mlId && mlNome
+            ? esc(mlNome)
+            : mlId
+              ? "Categoria sem nome no cache — escolha novamente"
+              : "Nenhuma categoria selecionada";
+        const emptyCls = mlId && mlNome ? "" : " is-empty";
+        const invalidCls = mlId && !mlNome ? " is-invalid" : "";
+        const hidVal = mlId && mlNome ? mlId : "";
         return `<tr data-cat-id="${id}">
           <td>${esc(c.nome)}</td>
           <td class="ml-cell-cat">
-            <select class="ml-sel-cat" aria-label="Categoria Mercado Livre">
-              <option value="">Escolher categoria ML…</option>
-              ${
-                ml
-                  ? `<option value="${esc(ml)}" selected>${esc(ml)} — (salvo)</option>`
-                  : ""
-              }
-              <option value="__custom__">Digitar outro ID…</option>
-            </select>
-            <input type="text" class="ml-inp-cat" value="${esc(ml)}" placeholder="MLB1234" hidden />
+            <input type="hidden" class="ml-hid-cat" value="${esc(hidVal)}" />
+            <div class="Mp_CatPick">
+              <span class="ml-lbl-cat${emptyCls}${invalidCls}" title="${esc(hidVal)}">${label}</span>
+              <button type="button" class="Cl_botaoFiltro Mp_CatMapBtn ml-btn-escolher">Escolher</button>
+            </div>
           </td>
-          <td class="ml-cell-fam">
-            <input type="text" class="ml-inp-fam" list="ml-dl-fam-${id}" value="${esc(fam)}" placeholder="Escolha ou digite (máx. 60)" maxlength="60" autocomplete="off" />
-            <datalist class="ml-dl-fam" id="ml-dl-fam-${id}"></datalist>
-          </td>
-          <td><button type="button" class="Cl_botaoFiltro Mp_CatMapBtn ml-btn-sugerir">Sugerir</button></td>
         </tr>`;
       })
       .join("");
-    atualizarCombosTodasLinhas();
   }
 
   function coletarItensMapeamento() {
@@ -450,10 +361,7 @@
       const id = parseInt(tr.dataset.catId, 10);
       if (!id) return;
       const ml = valorCategoriaMlLinha(tr);
-      const fam = tr.querySelector(".ml-inp-fam")?.value?.trim() || "";
-      if (ml && ml !== "__custom__") {
-        itens.push({ id_categoria: id, ml_category_id: ml, family_name: fam });
-      }
+      if (ml) itens.push({ id_categoria: id, ml_category_id: ml });
     });
     return itens;
   }
@@ -487,9 +395,9 @@
     );
     const n = idsProntos.size;
     if (n < total) {
-      mostrarMsgModal(`Preparando sugestões ML… ${n}/${total}`, false);
+      mostrarMsgModal(`Preparando sugestões… ${n}/${total}`, false);
     } else {
-      mostrarMsgModal("Sugestões prontas — use «Sugerir não mapeadas» ou Sugerir na linha.", false);
+      mostrarMsgModal("Sugestões prontas — use «Sugerir não mapeadas».", false);
     }
   }
 
@@ -528,13 +436,13 @@
         feedbackCat(`Sugerindo «${nome}»… (${i + 1}/${pendentes.length})`, false);
         try {
           const j = await obterSugestoesCategoria(nome, idCategoria);
-          const picked = (j.itens || [])[0];
+          const picked = (j.itens || []).find((x) => x.nome && x.category_id);
           if (!picked) {
             falhas += 1;
             if (nomesFalha.length < 4) nomesFalha.push(nome);
             continue;
           }
-          aplicarSugestaoNaLinha(tr, picked, nome);
+          aplicarSugestaoNaLinha(tr, picked);
           ok += 1;
         } catch {
           falhas += 1;
@@ -544,8 +452,10 @@
       let msg = `${ok} categoria(s) sugerida(s).`;
       if (falhas) {
         msg += ` ${falhas} sem sugestão`;
-        if (nomesFalha.length) msg += ` (${nomesFalha.join(", ")}${falhas > nomesFalha.length ? "…" : ""})`;
-        msg += ". Ajuste com Sugerir na linha.";
+        if (nomesFalha.length) {
+          msg += ` (${nomesFalha.join(", ")}${falhas > nomesFalha.length ? "…" : ""})`;
+        }
+        msg += ". Use Escolher para buscar pelo nome.";
       } else {
         msg += " Revise e salve o mapeamento.";
       }
@@ -574,11 +484,8 @@
       }
       try {
         await obterSugestoesCategoria(termo, c.id_categoria, { forcarRede: false });
-        const tr = el.tbodyCat?.querySelector(`tr[data-cat-id="${c.id_categoria}"]`);
-        const cached = sugestoesCache.get(chaveCacheSugestao(c.id_categoria, termo));
-        if (tr) atualizarCombosLinha(tr, cached?.itens || []);
       } catch {
-        /* aquecimento não bloqueia o modal */
+        /* aquecimento não bloqueia */
       }
       if (seq !== prefetchSeq) return;
       atualizarProgressoPrefetch();
@@ -592,8 +499,7 @@
     mostrarMsgModal("Carregando categorias…", false);
     try {
       await carregarMapeamentoCategorias();
-      mostrarMsgModal("Preparando sugestões ML…", false);
-      // Não espera: Sugerir já usa o cache conforme for preenchendo.
+      mostrarMsgModal("Preparando sugestões…", false);
       aquecerCacheSugestoes();
     } catch (e) {
       mostrarMsgModal(e.message, true);
@@ -610,7 +516,7 @@
     if (!el.btnModalCatSalvar) return;
     const itens = coletarItensMapeamento();
     if (!itens.length) {
-      feedbackCat("Informe ao menos uma categoria ML.", true);
+      feedbackCat("Escolha ao menos uma categoria Mercado Livre.", true);
       return;
     }
     el.btnModalCatSalvar.disabled = true;
@@ -668,7 +574,7 @@
         const j = await apiBuscarCategoriasMl(termo, idCategoria, ctrl?.signal);
         const payload = {
           termo,
-          itens: j.itens || [],
+          itens: (j.itens || []).filter((x) => x.nome && x.category_id),
           message: j.message || "",
           fromCache: false,
         };
@@ -676,7 +582,7 @@
         return payload;
       } catch (e) {
         if (e?.name === "AbortError") {
-          throw new Error("A busca demorou demais. Tente de novo ou edite o termo.");
+          throw new Error("A busca demorou demais. Tente de novo.");
         }
         throw e;
       } finally {
@@ -688,208 +594,64 @@
     return prom;
   }
 
-  function aplicarSugestaoNaLinha(tr, picked, nomeCategoria, sugestoes) {
-    const id = parseInt(tr.dataset.catId, 10);
-    const nome = nomeCategoria || tr.querySelector("td")?.textContent?.trim() || "";
-    const key = chaveCacheSugestao(id, nome);
-    const lista =
-      sugestoes ||
-      sugestoesCache.get(key)?.itens ||
-      (picked ? [picked] : []);
-    const inpFam = tr.querySelector(".ml-inp-fam");
-    if (inpFam && !inpFam.value.trim()) {
-      inpFam.value = (nome || picked.nome || "").slice(0, 60);
-    }
-    atualizarCombosLinha(tr, lista);
-    setCategoriaMlLinha(tr, picked.category_id);
+  function aplicarSugestaoNaLinha(tr, picked) {
+    if (!picked?.category_id || !picked?.nome) return;
+    setCategoriaMlLinha(tr, picked.category_id, picked.nome);
     tr.classList.remove("is-sugerido");
     void tr.offsetWidth;
     tr.classList.add("is-sugerido");
-    feedbackCat(`${picked.category_id} — ${picked.nome}`, false);
+    feedbackCat(picked.nome, false);
   }
 
-  function htmlListaSugestoes(lista, selectedId) {
-    if (!lista.length) {
-      return `<div class="swal-ml-sugestao__vazio">Nenhum resultado ainda. Ajuste o termo e clique em <strong>Buscar de novo</strong>.</div>`;
-    }
-    return `<ul class="swal-ml-sugestao__lista" id="swalMlLista">${lista
-      .map((x, i) => {
-        const id = esc(x.category_id);
-        const checked = (selectedId ? x.category_id === selectedId : i === 0) ? " checked" : "";
-        const fonte = esc(x.fonte || "predictor");
-        return `<li>
-          <label class="swal-ml-sugestao__item">
-            <input type="radio" name="swalMlCatPick" value="${id}"${checked} />
-            <span>
-              <span class="swal-ml-sugestao__nome">${esc(x.nome)}</span>
-              <div class="swal-ml-sugestao__meta">${id}</div>
-            </span>
-            <span class="swal-ml-sugestao__badge is-${fonte}">${esc(rotuloFonte(x.fonte))}</span>
-          </label>
-        </li>`;
-      })
-      .join("")}</ul>`;
+  let pickerTr = null;
+  let pickerTimer = null;
+
+  function fecharPickerCat() {
+    pickerTr = null;
+    el.pickerModal?.close();
   }
 
-  async function escolherSugestaoMl(nomeCategoria, idCategoria, listaInicial, termoInicial, msgVazia) {
-    if (!window.Swal) {
-      return listaInicial[0] || null;
+  function renderPickerLista(itens, message) {
+    if (!el.pickerLista) return;
+    if (el.pickerHint) {
+      el.pickerHint.hidden = !message;
+      el.pickerHint.textContent = message || "";
     }
-    let lista = Array.isArray(listaInicial) ? listaInicial.slice() : [];
-    let termoAtual = termoInicial || nomeCategoria;
-
-    const montarHtml = () =>
-      `<div class="swal-ml-sugestao">
-        <label class="swal-ml-sugestao__label" for="swalMlTermo">Termo de busca (pode editar)</label>
-        <div class="swal-ml-sugestao__row">
-          <input id="swalMlTermo" class="swal-ml-sugestao__input" value="${esc(termoAtual)}" maxlength="120" />
-          <button type="button" class="Cl_botaoFiltro" id="swalMlBuscar">Buscar</button>
-        </div>
-        <div id="swalMlResultados">${htmlListaSugestoes(lista)}</div>
-        ${
-          !lista.length && msgVazia
-            ? `<p class="swal-ml-sugestao__vazio" id="swalMlHint">${esc(msgVazia)}</p>`
-            : `<p class="swal-ml-sugestao__vazio" id="swalMlHint" hidden></p>`
-        }
-      </div>`;
-
-    async function refazerBusca() {
-      const input = document.getElementById("swalMlTermo");
-      const hint = document.getElementById("swalMlHint");
-      const btn = document.getElementById("swalMlBuscar");
-      const novo = (input?.value || "").trim();
-      if (novo.length < 3) {
-        Swal.showValidationMessage("Digite ao menos 3 caracteres.");
-        return;
-      }
-      Swal.resetValidationMessage();
-      if (btn) {
-        btn.disabled = true;
-        btn.textContent = "…";
-      }
-      try {
-        const j = await obterSugestoesCategoria(novo, idCategoria, { forcarRede: true });
-        lista = j.itens || [];
-        termoAtual = novo;
-        const box = document.getElementById("swalMlResultados");
-        if (box) box.innerHTML = htmlListaSugestoes(lista);
-        if (hint) {
-          if (!lista.length) {
-            hint.hidden = false;
-            hint.textContent =
-              j.message || "Nenhuma categoria encontrada. Tente um termo mais específico.";
-          } else {
-            hint.hidden = true;
-            hint.textContent = "";
-          }
-        }
-      } catch (e) {
-        Swal.showValidationMessage(e.message || "Falha na busca.");
-      } finally {
-        if (btn) {
-          btn.disabled = false;
-          btn.textContent = "Buscar";
-        }
-      }
-    }
-
-    const res = await Swal.fire({
-      title: `Sugerir para «${nomeCategoria}»`,
-      html: montarHtml(),
-      width: 560,
-      showCancelButton: true,
-      confirmButtonText: "Usar esta",
-      cancelButtonText: "Cancelar",
-      confirmButtonColor: "#021F81",
-      focusConfirm: false,
-      didOpen: () => {
-        const input = document.getElementById("swalMlTermo");
-        input?.focus();
-        input?.addEventListener("keydown", (ev) => {
-          if (ev.key === "Enter") {
-            ev.preventDefault();
-            refazerBusca();
-          }
-        });
-        document.getElementById("swalMlBuscar")?.addEventListener("click", (ev) => {
-          ev.preventDefault();
-          refazerBusca();
-        });
-      },
-      preConfirm: () => {
-        const picked = document.querySelector('input[name="swalMlCatPick"]:checked')?.value;
-        if (!picked) {
-          Swal.showValidationMessage("Selecione uma categoria ML na lista (ou busque com outro termo).");
-          return false;
-        }
-        return picked;
-      },
-    });
-
-    if (!res.isConfirmed || !res.value) return null;
-    return lista.find((x) => x.category_id === res.value) || { category_id: res.value, nome: res.value };
-  }
-
-  async function sugerirCategoriaMl(tr) {
-    const nome = tr.querySelector("td")?.textContent?.trim() || "";
-    const idCategoria = parseInt(tr.dataset.catId, 10) || null;
-    if (nome.length < 3) {
-      feedbackCat("Nome da categoria muito curto para sugerir.", true);
+    if (!itens.length) {
+      el.pickerLista.innerHTML =
+        '<p class="Mp_Hint">Nenhum resultado. Ajuste a busca ou rode o cache em Tarefas secundárias.</p>';
       return;
     }
-    const btn = tr.querySelector(".ml-btn-sugerir");
-    const key = chaveCacheSugestao(idCategoria, nome);
-    const jaCache = sugestoesCache.has(key);
-    if (btn) {
-      btn.disabled = true;
-      btn.classList.add("is-loading");
-      btn.textContent = jaCache ? "Abrindo…" : "Buscando…";
-    }
-    feedbackCat(
-      jaCache
-        ? `Sugestão pronta para «${nome}».`
-        : `Buscando categoria ML para «${nome}»…`,
-      false
-    );
-    try {
-      const j = await obterSugestoesCategoria(nome, idCategoria);
-      const lista = j.itens || [];
-      let picked = null;
-      if (lista.length === 1 && window.Swal) {
-        const conf = await Swal.fire({
-          icon: "success",
-          title: jaCache || j.fromCache ? "Sugestão (cache)" : "Sugestão encontrada",
-          html: `<p><strong>${esc(lista[0].category_id)}</strong> — ${esc(lista[0].nome)}</p>
-                 <p style="font-size:0.82rem;color:#64748b;margin-top:0.5rem">Fonte: ${esc(
-                   rotuloFonte(lista[0].fonte)
-                 )}</p>`,
-          showCancelButton: true,
-          confirmButtonText: "Usar",
-          cancelButtonText: "Ver outras / editar termo",
-          confirmButtonColor: "#021F81",
-        });
-        if (conf.isConfirmed) picked = lista[0];
-        else if (conf.dismiss === Swal.DismissReason.cancel) {
-          picked = await escolherSugestaoMl(nome, idCategoria, lista, nome, j.message);
-        }
-      } else {
-        picked = await escolherSugestaoMl(nome, idCategoria, lista, nome, j.message);
-      }
-      if (!picked) {
-        if (!lista.length) feedbackCat(j.message || `Nenhuma categoria ML para «${nome}».`, true);
-        else feedbackCat("", false);
-        return;
-      }
-      aplicarSugestaoNaLinha(tr, picked, nome);
-    } catch (e) {
-      feedbackCat(e.message, true);
-    } finally {
-      if (btn) {
-        btn.disabled = false;
-        btn.classList.remove("is-loading");
-        btn.textContent = "Sugerir";
-      }
-    }
+    el.pickerLista.innerHTML = itens
+      .map(
+        (x) => `<button type="button" class="Mp_PickerItem" role="option"
+          data-id="${esc(x.category_id)}" data-nome="${esc(x.nome)}">
+          <strong>${esc(x.nome)}</strong>
+          ${x.path_nomes ? `<span>${esc(x.path_nomes)}</span>` : ""}
+        </button>`
+      )
+      .join("");
+  }
+
+  async function buscarPicker(termo) {
+    const qs = new URLSearchParams();
+    if (termo) qs.set("q", termo);
+    const r = await fetch(`/api/integracoes/mercado-livre/categorias/cache/buscar?${qs}`, {
+      credentials: "same-origin",
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.success) throw new Error(j.message || "Falha na busca.");
+    renderPickerLista(j.itens || [], j.message || "");
+  }
+
+  function abrirPickerCat(tr) {
+    pickerTr = tr;
+    if (!el.pickerModal) return;
+    if (el.pickerBusca) el.pickerBusca.value = "";
+    renderPickerLista([], "Digite para filtrar ou aguarde a lista…");
+    el.pickerModal.showModal();
+    buscarPicker("").catch((e) => renderPickerLista([], e.message));
+    setTimeout(() => el.pickerBusca?.focus(), 50);
   }
 
   el.btnMapearCategorias?.addEventListener("click", () => abrirModalCategorias());
@@ -908,36 +670,32 @@
     mostrarMsgModal("", false);
   });
   el.tbodyCat?.addEventListener("click", (ev) => {
-    const btn = ev.target.closest(".ml-btn-sugerir");
+    const btn = ev.target.closest(".ml-btn-escolher");
     if (!btn) return;
     const tr = btn.closest("tr[data-cat-id]");
-    if (tr) sugerirCategoriaMl(tr);
+    if (tr) abrirPickerCat(tr);
   });
-  el.tbodyCat?.addEventListener("change", (ev) => {
-    const sel = ev.target.closest(".ml-sel-cat");
-    if (!sel) return;
-    const tr = sel.closest("tr[data-cat-id]");
-    if (!tr) return;
-    const inp = tr.querySelector(".ml-inp-cat");
-    const custom = sel.value === "__custom__";
-    if (inp) {
-      inp.hidden = !custom;
-      inp.classList.toggle("is-custom", custom);
-      if (!custom && sel.value) inp.value = sel.value;
-      if (custom) {
-        inp.focus();
-        if (!inp.value) inp.placeholder = "Ex.: MLB1246";
-      }
+  el.btnPickerFechar?.addEventListener("click", () => fecharPickerCat());
+  el.btnPickerCancelar?.addEventListener("click", () => fecharPickerCat());
+  el.pickerModal?.addEventListener("close", () => {
+    pickerTr = null;
+    if (pickerTimer) {
+      clearTimeout(pickerTimer);
+      pickerTimer = null;
     }
-    // Se trocou a categoria ML e a família ainda está vazia, sugere o nome da opção.
-    const inpFam = tr.querySelector(".ml-inp-fam");
-    if (inpFam && !inpFam.value.trim() && sel.value && !custom) {
-      const label = sel.selectedOptions?.[0]?.textContent || "";
-      const nomeMl = label.includes("—") ? label.split("—").slice(1).join("—").trim() : "";
-      if (nomeMl && nomeMl !== "(salvo)" && nomeMl !== "(atual)") {
-        inpFam.value = nomeMl.slice(0, 60);
-      }
-    }
+  });
+  el.pickerBusca?.addEventListener("input", () => {
+    if (pickerTimer) clearTimeout(pickerTimer);
+    pickerTimer = setTimeout(() => {
+      const termo = (el.pickerBusca?.value || "").trim();
+      buscarPicker(termo).catch((e) => renderPickerLista([], e.message));
+    }, 280);
+  });
+  el.pickerLista?.addEventListener("click", (ev) => {
+    const item = ev.target.closest(".Mp_PickerItem");
+    if (!item || !pickerTr) return;
+    setCategoriaMlLinha(pickerTr, item.dataset.id || "", item.dataset.nome || "");
+    fecharPickerCat();
   });
 
   el.btnSyncEstoque?.addEventListener("click", () =>

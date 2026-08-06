@@ -1,0 +1,42 @@
+{% extends "frm_base.html" %}
+{% block title %}Tarefas secundárias — {{ MARCA_NOME }}{% endblock %}
+{% set nav_ativo = 'config' %}
+{% block topbar_title %}Tarefas secundárias{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_tarefas_secundarias.css') }}?v=1" />
+{% endblock %}
+{% block content %}
+<div class="Cl_ContainerApoio cl-page-principal TsCfg_Wrap">
+  <div class="cl-page-title">
+    <h2>Tarefas secundárias</h2>
+    <p class="cl-page-desc">
+      Jobs agendados da plataforma (cache, limpezas, sincronizações auxiliares).
+      Acompanhe a última execução e o log.
+    </p>
+  </div>
+
+  <p class="CfgCup_Aviso">
+    <a class="Cl_BtnLink" href="{{ url_for('config.configuracoes') }}">← Voltar às Configurações</a>
+  </p>
+
+  <div id="ts_lista" class="TsCfg_Lista" aria-live="polite">
+    <p class="TsCfg_Hint">Carregando…</p>
+  </div>
+
+  <dialog class="TsCfg_Modal" id="ts_modal_log" aria-labelledby="ts_modal_titulo">
+    <div class="TsCfg_ModalInner">
+      <header class="TsCfg_ModalHead">
+        <h3 id="ts_modal_titulo">Log da execução</h3>
+        <button type="button" class="TsCfg_ModalClose" id="ts_modal_fechar" aria-label="Fechar">&times;</button>
+      </header>
+      <pre class="TsCfg_Log" id="ts_log_texto"></pre>
+      <footer class="TsCfg_ModalFoot">
+        <button type="button" class="Cl_BtnCancelar" id="ts_modal_ok">Fechar</button>
+      </footer>
+    </div>
+  </dialog>
+</div>
+{% endblock %}
+{% block page_js %}
+<script src="{{ url_for('config.static', filename='script/Sconfig_tarefas_secundarias.js') }}?v=1"></script>
+{% endblock %}

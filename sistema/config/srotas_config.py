@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+import os
 from pathlib import Path
 
 from flask import Blueprint, jsonify, redirect, render_template, request, session, url_for
@@ -10,6 +12,8 @@ from global_utils import (
     login_obrigatorio,
     usuario_tem_permissao,
 )
+
+_log = logging.getLogger(__name__)
 from sistema.integracoes.srotas_integracoes import url_icone_integracao
 from sistema.plataforma.sessao import (
     carregar_usuario_apoio,
@@ -2183,6 +2187,95 @@ def hubsupport_testar():
 
 
 # --- gestao fornecedores ---
+
+
+# ─── Tarefas secundárias ─────────────────────────────────────────────
+
+@config_bp.get("/configuracoes/tarefas-secundarias")
+@login_obrigatorio()
+def tarefas_secundarias_pagina():
+    if not session.get("eh_desenvolvedor"):
+        return redirect(url_for("dashboard.index"))
+    return render_template("frm_config_tarefas_secundarias.html", nav_ativo="config")
+
+
+@config_bp.get("/configuracoes/tarefas-secundarias/dados")
+@login_obrigatorio()
+def tarefas_secundarias_dados():
+    if not session.get("eh_desenvolvedor"):
+        return jsonify(success=False, message="Sem permissão."), 403
+    from sistema.tarefas_secundarias.servico import listar_tarefas_secundarias
+
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        itens = listar_tarefas_secundarias(cur)
+        conn.commit()
+        return jsonify(success=True, itens=itens)
+    except Exception as e:
+        conn.rollback()
+        _log.exception("Erro ao listar tarefas secundárias")
+        return jsonify(success=False, message=str(e)[:300]), 400
+    finally:
+        conn.close()
+
+
+@config_bp.get("/configuracoes/tarefas-secundarias/<int:id_tarefa>/execucoes")
+@login_obrigatorio()
+def tarefas_secundarias_execucoes(id_tarefa: int):
+    if not session.get("eh_desenvolvedor"):
+        return jsonify(success=False, message="Sem permissão."), 403
+    from sistema.tarefas_secundarias.servico import listar_execucoes_tarefa
+
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        itens = listar_execucoes_tarefa(cur, id_tarefa, limit=25)
+        return jsonify(success=True, itens=itens)
+    except Exception as e:
+        return jsonify(success=False, message=str(e)[:300]), 400
+    finally:
+        conn.close()
+
+
+@config_bp.post("/configuracoes/tarefas-secundarias/<codigo>/executar")
+@login_obrigatorio()
+def tarefas_secundarias_executar(codigo: str):
+    if not session.get("eh_desenvolvedor"):
+        return jsonify(success=False, message="Sem permissão."), 403
+    from sistema.tarefas_secundarias.servico import disparar_tarefa_async
+
+    try:
+        res = disparar_tarefa_async(codigo, disparado_por="manual")
+        return jsonify(success=True, **res)
+    except Exception as e:
+        return jsonify(success=False, message=str(e)[:300]), 400
+
+
+@config_bp.post("/api/tarefas-secundarias/job")
+def tarefas_secundarias_job_cron():
+    """Cron: atualiza tarefas agendadas (ex.: cache ML às segundas)."""
+    secret = (os.getenv("CRON_SECRET") or os.getenv("EFI_WEBHOOK_SECRET") or "").strip()
+    token = (request.headers.get("X-Cron-Token") or request.args.get("token") or "").strip()
+    if not secret or token != secret:
+        return jsonify(success=False, message="Não autorizado."), 401
+    from sistema.tarefas_secundarias.servico import CODIGO_ML_CATEGORIAS, executar_tarefa
+
+    force = str(request.args.get("force") or "").lower() in ("1", "true", "sim")
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        res = executar_tarefa(
+            cur, CODIGO_ML_CATEGORIAS, disparado_por="cron", forcar=force
+        )
+        conn.commit()
+        return jsonify(success=True, **res)
+    except Exception as e:
+        conn.rollback()
+        _log.exception("Job tarefas secundárias falhou")
+        return jsonify(success=False, message=str(e)[:300]), 400
+    finally:
+        conn.close()
 
 
 def init_app(app):

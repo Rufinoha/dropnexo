@@ -482,18 +482,108 @@
   font-size: 0.85rem;
   background: #fff;
 }
-.Mp_CatMapTable .ml-cell-cat,
-.Mp_CatMapTable .ml-cell-fam {
-  min-width: 9.5rem;
+.Mp_CatMapTable .ml-cell-cat {
+  min-width: 14rem;
 }
-.Mp_CatMapTable .ml-inp-cat.is-custom {
-  margin-top: 0.35rem;
+
+.Mp_CatPick {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-width: 0;
+}
+
+.ml-lbl-cat {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.85rem;
+  color: #0f172a;
+  line-height: 1.35;
+}
+
+.ml-lbl-cat.is-empty {
+  color: #94a3b8;
+  font-style: italic;
+}
+
+.ml-lbl-cat.is-invalid {
+  color: #b45309;
+  font-style: normal;
 }
 
 .Mp_CatMapBtn {
   white-space: nowrap;
   font-size: 0.78rem;
   padding: 0.3rem 0.55rem;
+  flex-shrink: 0;
+}
+
+.Mp_Modal--picker {
+  max-width: min(560px, 96vw);
+}
+
+.Mp_PickerBody {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding: 0.85rem 1.15rem;
+  min-height: 0;
+}
+
+.Mp_PickerLabel {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #334155;
+}
+
+.Mp_PickerBusca {
+  width: 100%;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+
+.Mp_PickerLista {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-height: min(50vh, 360px);
+  overflow: auto;
+  padding: 0.15rem 0;
+}
+
+.Mp_PickerItem {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  width: 100%;
+  text-align: left;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fff;
+  padding: 0.55rem 0.7rem;
+  cursor: pointer;
+  color: inherit;
+}
+
+.Mp_PickerItem:hover,
+.Mp_PickerItem:focus-visible {
+  border-color: #93c5fd;
+  background: #f8fafc;
+  outline: none;
+}
+
+.Mp_PickerItem strong {
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.Mp_PickerItem span {
+  font-size: 0.75rem;
+  color: #64748b;
+  line-height: 1.35;
 }
 
 .Mp_ModalFoot {

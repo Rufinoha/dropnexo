@@ -55,6 +55,39 @@
     return String(raw || "").trim() || "—";
   }
 
+  function iniciaisNome(nome) {
+    const p = String(nome || "")
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+    if (!p.length) return "?";
+    if (p.length === 1) return p[0].slice(0, 2).toUpperCase();
+    return (p[0][0] + p[p.length - 1][0]).toUpperCase();
+  }
+
+  function svgIcon(tipo) {
+    const common = 'xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"';
+    if (tipo === "mail") {
+      return `<svg ${common}><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>`;
+    }
+    if (tipo === "wa") {
+      return `<svg ${common}><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>`;
+    }
+    if (tipo === "phone") {
+      return `<svg ${common}><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.12.9.36 1.77.7 2.61a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.84.34 1.71.58 2.61.7A2 2 0 0 1 22 16.92z"/></svg>`;
+    }
+    if (tipo === "globe") {
+      return `<svg ${common}><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>`;
+    }
+    if (tipo === "user") {
+      return `<svg ${common}><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`;
+    }
+    if (tipo === "pin") {
+      return `<svg ${common}><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg>`;
+    }
+    return "";
+  }
+
   function abrirContatoFornecedor(card) {
     const id = Number(card.getAttribute("data-id"));
     const nome = card.getAttribute("data-nome") || "Fornecedor";
@@ -67,66 +100,171 @@
     const resp = (c.responsavel || "").trim();
     const waHref = wa ? linkWhatsApp(wa) : "";
     const siteUrl = siteHref(site);
+    const telDigits = tel.replace(/\D/g, "");
+    const telHref = telDigits
+      ? `tel:+${telDigits.startsWith("55") ? telDigits : "55" + telDigits}`
+      : "";
 
-    const chips = [];
+    const acoes = [];
     if (email) {
-      chips.push(`<a class="FornContato_Chip" href="mailto:${esc(email)}">E-mail</a>`);
+      acoes.push(`
+        <a class="FornContato_Acao is-mail" href="mailto:${esc(email)}">
+          <span class="FornContato_AcaoIcon">${svgIcon("mail")}</span>
+          <span class="FornContato_AcaoTxt">
+            <strong>Enviar e-mail</strong>
+            <small>${esc(email)}</small>
+          </span>
+        </a>`);
     }
     if (waHref) {
-      chips.push(
-        `<a class="FornContato_Chip is-wa" href="${esc(waHref)}" target="_blank" rel="noopener">WhatsApp</a>`
-      );
+      acoes.push(`
+        <a class="FornContato_Acao is-wa" href="${esc(waHref)}" target="_blank" rel="noopener">
+          <span class="FornContato_AcaoIcon">${svgIcon("wa")}</span>
+          <span class="FornContato_AcaoTxt">
+            <strong>WhatsApp</strong>
+            <small>${esc(fmtTel(wa))}</small>
+          </span>
+        </a>`);
     }
-    if (tel) {
-      const telDigits = tel.replace(/\D/g, "");
-      chips.push(
-        `<a class="FornContato_Chip" href="tel:+${telDigits.startsWith("55") ? telDigits : "55" + telDigits}">Telefone</a>`
-      );
+    if (telHref) {
+      acoes.push(`
+        <a class="FornContato_Acao is-tel" href="${esc(telHref)}">
+          <span class="FornContato_AcaoIcon">${svgIcon("phone")}</span>
+          <span class="FornContato_AcaoTxt">
+            <strong>Ligar</strong>
+            <small>${esc(fmtTel(tel))}</small>
+          </span>
+        </a>`);
     }
     if (siteUrl) {
-      chips.push(
-        `<a class="FornContato_Chip" href="${esc(siteUrl)}" target="_blank" rel="noopener">Site</a>`
-      );
+      acoes.push(`
+        <a class="FornContato_Acao is-site" href="${esc(siteUrl)}" target="_blank" rel="noopener">
+          <span class="FornContato_AcaoIcon">${svgIcon("globe")}</span>
+          <span class="FornContato_AcaoTxt">
+            <strong>Abrir site</strong>
+            <small>${esc(site)}</small>
+          </span>
+        </a>`);
     }
+
+    const linhas = [
+      {
+        icon: "user",
+        label: "Responsável",
+        value: resp ? esc(resp) : '<span class="FornContato_Empty">Não informado</span>',
+      },
+      {
+        icon: "mail",
+        label: "E-mail",
+        value: email
+          ? `<a href="mailto:${esc(email)}">${esc(email)}</a>
+             <button type="button" class="FornContato_Copy" data-copy="${attrEsc(email)}" title="Copiar">Copiar</button>`
+          : '<span class="FornContato_Empty">Não informado</span>',
+      },
+      {
+        icon: "wa",
+        label: "WhatsApp",
+        value: waHref
+          ? `<a class="is-wa" href="${esc(waHref)}" target="_blank" rel="noopener">${esc(fmtTel(wa))}</a>`
+          : '<span class="FornContato_Empty">Não informado</span>',
+      },
+      {
+        icon: "phone",
+        label: "Telefone",
+        value: tel
+          ? telHref
+            ? `<a href="${esc(telHref)}">${esc(fmtTel(tel))}</a>`
+            : esc(fmtTel(tel))
+          : '<span class="FornContato_Empty">Não informado</span>',
+      },
+      {
+        icon: "globe",
+        label: "Site",
+        value: siteUrl
+          ? `<a href="${esc(siteUrl)}" target="_blank" rel="noopener">${esc(site)}</a>`
+          : '<span class="FornContato_Empty">Não informado</span>',
+      },
+    ];
 
     const html = `
       <div class="FornContato">
-        <p class="FornContato_Lead">Parceiro conectado — fale direto com o fornecedor.</p>
-        ${local ? `<p class="FornContato_Local">${esc(local)}</p>` : ""}
+        <header class="FornContato_Hero">
+          <div class="FornContato_Avatar" aria-hidden="true">${esc(iniciaisNome(nome))}</div>
+          <div class="FornContato_HeroMain">
+            <div class="FornContato_HeroTop">
+              <span class="FornContato_Badge">Conectado</span>
+              ${
+                local
+                  ? `<span class="FornContato_Pin">${svgIcon("pin")}<span>${esc(local)}</span></span>`
+                  : ""
+              }
+            </div>
+            <h3 class="FornContato_Nome">${esc(nome)}</h3>
+            <p class="FornContato_Lead">Canal direto com o dono da conta — fale com quem decide.</p>
+          </div>
+        </header>
+
         ${
-          chips.length
-            ? `<div class="FornContato_Quick">${chips.join("")}</div>`
+          acoes.length
+            ? `<section class="FornContato_Acoes" aria-label="Ações rápidas">${acoes.join("")}</section>`
             : `<p class="FornContato_Vazio">Este fornecedor ainda não disponibilizou canais de contato.</p>`
         }
-        <dl class="FornContato_Dl">
-          <div><dt>Responsável</dt><dd>${esc(resp || "—")}</dd></div>
-          <div><dt>E-mail</dt><dd>${
-            email ? `<a href="mailto:${esc(email)}">${esc(email)}</a>` : "—"
-          }</dd></div>
-          <div><dt>WhatsApp</dt><dd>${
-            waHref
-              ? `<a href="${esc(waHref)}" target="_blank" rel="noopener">${esc(fmtTel(wa))}</a>`
-              : "—"
-          }</dd></div>
-          <div><dt>Telefone</dt><dd>${esc(fmtTel(tel))}</dd></div>
-          <div><dt>Site</dt><dd>${
-            siteUrl
-              ? `<a href="${esc(siteUrl)}" target="_blank" rel="noopener">${esc(site)}</a>`
-              : "—"
-          }</dd></div>
-        </dl>
+
+        <section class="FornContato_Painel">
+          <h4>Dados do dono</h4>
+          <ul class="FornContato_Lista">
+            ${linhas
+              .map(
+                (l) => `<li class="FornContato_Item">
+                  <span class="FornContato_ItemIcon">${svgIcon(l.icon)}</span>
+                  <div class="FornContato_ItemBody">
+                    <span class="FornContato_ItemLabel">${esc(l.label)}</span>
+                    <div class="FornContato_ItemValue">${l.value}</div>
+                  </div>
+                </li>`
+              )
+              .join("")}
+          </ul>
+        </section>
       </div>`;
 
     if (window.Swal) {
       Swal.fire({
-        title: nome,
         html,
-        width: 520,
+        width: 560,
+        showConfirmButton: true,
         confirmButtonText: "Fechar",
-        confirmButtonColor: "#021F81",
         showDenyButton: true,
         denyButtonText: "Ver catálogo",
-        denyButtonColor: "#64748b",
+        customClass: {
+          popup: "FornContatoSwal",
+          htmlContainer: "FornContatoSwal__html",
+          actions: "FornContatoSwal__actions",
+          confirmButton: "FornContatoSwal__confirm",
+          denyButton: "FornContatoSwal__deny",
+        },
+        buttonsStyling: false,
+        didOpen: (popup) => {
+          popup.querySelectorAll("[data-copy]").forEach((btn) => {
+            btn.addEventListener("click", async (ev) => {
+              ev.preventDefault();
+              const txt = btn.getAttribute("data-copy") || "";
+              if (!txt || !navigator.clipboard?.writeText) return;
+              try {
+                await navigator.clipboard.writeText(txt);
+                const prev = btn.textContent;
+                btn.textContent = "Copiado!";
+                btn.classList.add("is-ok");
+                setTimeout(() => {
+                  btn.textContent = prev || "Copiar";
+                  btn.classList.remove("is-ok");
+                }, 1200);
+              } catch {
+                /* ignore */
+              }
+            });
+          });
+        },
       }).then((res) => {
         if (res.isDenied) abrirLoja(String(id), nome);
       });

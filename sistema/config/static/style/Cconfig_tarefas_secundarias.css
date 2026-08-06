@@ -1,0 +1,125 @@
+.TsCfg_Wrap { max-width: 980px; }
+
+.TsCfg_Lista {
+  display: grid;
+  gap: 0.85rem;
+  margin-top: 0.5rem;
+}
+
+.TsCfg_Hint {
+  color: #64748b;
+  font-size: 0.9rem;
+}
+
+.TsCfg_Card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 1.1rem 1.2rem;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.04);
+}
+
+.TsCfg_CardTop {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+}
+
+.TsCfg_CardTop h3 {
+  margin: 0 0 0.35rem;
+  font-size: 1.05rem;
+  color: #0f172a;
+}
+
+.TsCfg_CardTop p {
+  margin: 0;
+  font-size: 0.88rem;
+  color: #64748b;
+  line-height: 1.45;
+  max-width: 52ch;
+}
+
+.TsCfg_Meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.85rem;
+}
+
+.TsCfg_Pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.65rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.TsCfg_Pill.is-ok { background: #dcfce7; color: #15803d; }
+.TsCfg_Pill.is-err { background: #fee2e2; color: #b91c1c; }
+.TsCfg_Pill.is-run { background: #dbeafe; color: #1d4ed8; }
+.TsCfg_Pill.is-skip { background: #fef3c7; color: #b45309; }
+
+.TsCfg_Acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.95rem;
+}
+
+.TsCfg_Msg {
+  margin: 0.65rem 0 0;
+  font-size: 0.86rem;
+  color: #334155;
+}
+
+.TsCfg_Modal {
+  border: none;
+  border-radius: 14px;
+  padding: 0;
+  max-width: min(720px, 96vw);
+  width: 100%;
+  box-shadow: 0 22px 50px rgba(15, 23, 42, 0.2);
+}
+.TsCfg_Modal::backdrop { background: rgba(15, 23, 42, 0.45); }
+.TsCfg_ModalInner { display: flex; flex-direction: column; max-height: 80vh; }
+.TsCfg_ModalHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.95rem 1.1rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+.TsCfg_ModalHead h3 { margin: 0; font-size: 1rem; }
+.TsCfg_ModalClose {
+  border: none;
+  background: transparent;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: #64748b;
+}
+.TsCfg_Log {
+  margin: 0;
+  padding: 1rem 1.1rem;
+  overflow: auto;
+  flex: 1;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  background: #0f172a;
+  color: #e2e8f0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.TsCfg_ModalFoot {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0.75rem 1.1rem;
+  border-top: 1px solid #e2e8f0;
+}

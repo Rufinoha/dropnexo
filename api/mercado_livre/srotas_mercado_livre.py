@@ -310,6 +310,44 @@ def categorias_mapeamento_salvar():
         conn.close()
 
 
+@ml_bp.get("/api/integracoes/mercado-livre/categorias/cache/buscar")
+@login_obrigatorio()
+def categorias_cache_buscar():
+    """Busca categorias publicáveis no cache local (por nome)."""
+    if not _pode_integracoes():
+        return jsonify(success=False, message="Sem permissão."), 403
+    if garantir_modulo_sessao() != "vendedor" and not session.get("eh_desenvolvedor"):
+        return jsonify(success=False, message="Apenas vendedores."), 403
+    q = (request.args.get("q") or "").strip()
+    id_tenant = session.get("id_tenant")
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        if not ml_conectado(cur, int(id_tenant)):
+            return jsonify(success=False, message="Mercado Livre não conectado."), 400
+        cfg = carregar_config_ml(cur, int(id_tenant))
+        site_id = (cfg.get("ml_site_id") or "MLB").upper()
+        from sistema.tarefas_secundarias.servico import buscar_categorias_cache, garantir_tabelas_tarefas
+
+        garantir_tabelas_tarefas(cur)
+        itens = buscar_categorias_cache(cur, site_id, q, limit=40)
+        return jsonify(
+            success=True,
+            itens=itens,
+            site_id=site_id,
+            message=(
+                ""
+                if itens
+                else "Nenhuma categoria no cache. Peça ao administrador para rodar a tarefa «Cache de categorias Mercado Livre»."
+            ),
+        )
+    except Exception as e:
+        _log.exception("Erro ao buscar cache de categorias ML")
+        return jsonify(success=False, message=str(e)[:300]), 400
+    finally:
+        conn.close()
+
+
 @ml_bp.get("/api/integracoes/mercado-livre/categorias/buscar")
 @login_obrigatorio()
 def categorias_buscar():

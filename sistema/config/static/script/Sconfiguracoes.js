@@ -34,6 +34,12 @@
       iconeTech: "life-buoy",
     },
     {
+      titulo: "Tarefas secundárias",
+      texto: "Jobs agendados da plataforma (ex.: cache semanal de categorias do Mercado Livre) com status e log.",
+      rota: "/configuracoes/tarefas-secundarias",
+      iconeTech: "checklist",
+    },
+    {
       titulo: "Fornecedores na plataforma",
       texto: "Cadastro PJ, ativação e depósitos dos tenants fornecedor (somente desenvolvedor).",
       rota: "/configuracoes/fornecedores-plataforma",
