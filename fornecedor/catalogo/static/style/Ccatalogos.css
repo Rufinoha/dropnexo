@@ -1,5 +1,7 @@
 .Cat_ColExpand {
   width: 2.25rem;
+  min-width: 2.25rem;
+  max-width: 2.25rem;
   padding: 0 !important;
   text-align: center;
   vertical-align: middle;
@@ -451,6 +453,8 @@
 
 .Cat_ColSel {
   width: 2.25rem;
+  min-width: 2.25rem;
+  max-width: 2.25rem;
   padding: 0 0.35rem !important;
   text-align: center;
   vertical-align: middle;
@@ -465,14 +469,14 @@
 }
 
 .Cat_BulkHeadRow th {
-  padding: 0.35rem 0.5rem 0.25rem;
+  padding: 0.2rem 0.5rem 0.35rem;
   border-bottom: none;
   background: transparent;
 }
 
 .Cat_BulkHeadCell {
   text-align: right;
-  vertical-align: bottom;
+  vertical-align: middle;
 }
 
 .Cat_BulkActions {
@@ -523,23 +527,28 @@
 }
 
 .Cat_BulkIntMenu {
-  position: absolute;
-  top: calc(100% + 0.35rem);
-  right: 0;
-  z-index: 40;
   min-width: 12.5rem;
   padding: 0.35rem;
   border: 1px solid #e2e8f0;
   border-radius: 10px;
   background: #fff;
-  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.16);
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
 }
 
+.Cat_BulkIntMenu--portal {
+  position: fixed;
+  z-index: 10050;
+}
+
 .Cat_BulkIntMenu[hidden] {
-  display: none;
+  display: none !important;
+}
+
+.Cl_TabelaPrincipal th.Cat_BulkHeadCell {
+  overflow: visible;
 }
 
 .Cat_BulkIntItem {

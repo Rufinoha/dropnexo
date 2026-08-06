@@ -7,7 +7,7 @@
 {% block topbar_title %}Meus produtos{% endblock %}
 
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('fn_catalogo.static', filename='style/Ccatalogos.css') }}?v=11" />
+<link rel="stylesheet" href="{{ url_for('fn_catalogo.static', filename='style/Ccatalogos.css') }}?v=13" />
 <link rel="stylesheet" href="{{ url_for('vd_meus_produtos.static', filename='style/Cmeus_produtos_ml.css') }}?v=3" />
 {% endblock %}
 
@@ -81,12 +81,6 @@
   <div class="Cl_TabelaPrincipal" id="content-area-Principal">
     <table>
       <thead>
-        <tr class="Cat_BulkHeadRow" id="ob_bulkRow" hidden>
-          <th colspan="8"></th>
-          <th colspan="3" class="Cat_BulkHeadCell">
-            <div class="Cat_BulkActions" id="ob_bulkActions" aria-label="Ações em lote"></div>
-          </th>
-        </tr>
         <tr>
           <th class="Cat_ColSel">
             <input type="checkbox" id="ob_chkTodos" class="Cat_ChkSel" aria-label="Selecionar todos os produtos da página" title="Selecionar todos" />
@@ -105,6 +99,12 @@
           <th>Estoque</th>
           <th class="Cat_ColIntegracoes">Integrações</th>
           <th class="col-acoes Cl_TableActions">Ações</th>
+        </tr>
+        {# Depois do cabeçalho: com table-layout:fixed a 1ª linha define as colunas #}
+        <tr class="Cat_BulkHeadRow" id="ob_bulkRow" hidden>
+          <th colspan="11" class="Cat_BulkHeadCell">
+            <div class="Cat_BulkActions" id="ob_bulkActions" aria-label="Ações em lote"></div>
+          </th>
         </tr>
       </thead>
       <tbody id="ob_listaProdutos">
@@ -147,5 +147,5 @@
 {% endblock %}
 
 {% block page_js %}
-<script defer src="{{ url_for('vd_meus_produtos.static', filename='script/Svd_meus_produtos_lista.js') }}?v=11"></script>
+<script defer src="{{ url_for('vd_meus_produtos.static', filename='script/Svd_meus_produtos_lista.js') }}?v=12"></script>
 {% endblock %}

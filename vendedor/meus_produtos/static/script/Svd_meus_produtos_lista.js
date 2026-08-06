@@ -192,13 +192,69 @@
     return `<input type="checkbox" class="Cat_ChkSel Cat_ChkRow" data-produto="${l.id}" ${on ? "checked" : ""} aria-label="Selecionar produto" />`;
   }
 
+  let menuIntegracoesEl = null;
+  let menuIntegracoesAberto = false;
+
+  function garantirMenuIntegracoesEl() {
+    if (menuIntegracoesEl && document.body.contains(menuIntegracoesEl)) {
+      return menuIntegracoesEl;
+    }
+    // Fora da tabela: th/td usam overflow:hidden e cortam o dropdown.
+    menuIntegracoesEl = document.createElement("div");
+    menuIntegracoesEl.className = "Cat_BulkIntMenu Cat_BulkIntMenu--portal";
+    menuIntegracoesEl.setAttribute("role", "menu");
+    menuIntegracoesEl.hidden = true;
+    document.body.appendChild(menuIntegracoesEl);
+    menuIntegracoesEl.addEventListener("click", async (ev) => {
+      const b = ev.target.closest("[data-bulk]");
+      if (!b || !menuIntegracoesEl.contains(b)) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      const ids = [...selecionados];
+      fecharMenuIntegracoes();
+      if (!ids.length) return;
+      try {
+        if (b.dataset.bulk === "ml") await integrarMercadoLivreLote(ids);
+        else if (b.dataset.bulk === "tiktok") await integrarTiktokLote(ids);
+        else if (b.dataset.bulk === "amazon") await integrarAmazonLote(ids);
+      } catch (e) {
+        await Swal.fire("Erro", e.message, "error");
+      }
+    });
+    return menuIntegracoesEl;
+  }
+
+  function posicionarMenuIntegracoes(btn) {
+    const menu = garantirMenuIntegracoesEl();
+    if (!btn) return;
+    const r = btn.getBoundingClientRect();
+    const largura = Math.max(200, menu.offsetWidth || 200);
+    let left = r.right - largura;
+    if (left < 8) left = 8;
+    if (left + largura > window.innerWidth - 8) {
+      left = Math.max(8, window.innerWidth - largura - 8);
+    }
+    let top = r.bottom + 6;
+    menu.style.left = `${left}px`;
+    menu.style.top = `${top}px`;
+    // Se não couber abaixo, abre para cima.
+    requestAnimationFrame(() => {
+      const mr = menu.getBoundingClientRect();
+      if (mr.bottom > window.innerHeight - 8) {
+        top = Math.max(8, r.top - mr.height - 6);
+        menu.style.top = `${top}px`;
+      }
+    });
+  }
+
   function fecharMenuIntegracoes() {
-    const menu = el.bulkActions?.querySelector(".Cat_BulkIntMenu");
+    const menu = menuIntegracoesEl;
     const wrap = el.bulkActions?.querySelector(".Cat_BulkIntWrap");
     const btn = el.bulkActions?.querySelector('[data-bulk="integrar"]');
     if (menu) menu.hidden = true;
     wrap?.classList.remove("is-open");
     btn?.setAttribute("aria-expanded", "false");
+    menuIntegracoesAberto = false;
   }
 
   function aplicarIntegracoesFiltro(lista) {
@@ -223,8 +279,7 @@
   }
 
   function renderMenuIntegracoes(itens) {
-    const menu = el.bulkActions?.querySelector(".Cat_BulkIntMenu");
-    if (!menu) return;
+    const menu = garantirMenuIntegracoesEl();
     if (!itens.length) {
       menu.innerHTML = `
         <p class="Cat_BulkIntEmpty">Nenhuma integração conectada.</p>
@@ -246,17 +301,15 @@
       .join("");
   }
 
-  async function abrirMenuIntegracoes() {
-    const menu = el.bulkActions?.querySelector(".Cat_BulkIntMenu");
+  async function abrirMenuIntegracoes(btn) {
     const wrap = el.bulkActions?.querySelector(".Cat_BulkIntWrap");
-    const btn = el.bulkActions?.querySelector('[data-bulk="integrar"]');
-    if (!menu || !wrap || !btn) return;
-    if (!menu.hidden) {
+    if (!btn || !wrap) return;
+    if (menuIntegracoesAberto) {
       fecharMenuIntegracoes();
       return;
     }
+    const menu = garantirMenuIntegracoesEl();
     try {
-      // Sempre recarrega: usuário pode ter conectado/desconectado em outra aba.
       integracoesExportCache = null;
       const itens = await garantirIntegracoesExport();
       renderMenuIntegracoes(itens);
@@ -270,6 +323,8 @@
     menu.hidden = false;
     wrap.classList.add("is-open");
     btn.setAttribute("aria-expanded", "true");
+    menuIntegracoesAberto = true;
+    posicionarMenuIntegracoes(btn);
   }
 
   function initBulkActions() {
@@ -296,12 +351,7 @@
     btnInt.setAttribute("aria-haspopup", "menu");
     btnInt.setAttribute("aria-expanded", "false");
     window.Util?.gerarIconeTech?.({ dest: btnInt, nome: "vincular_clientes" });
-    const menuInt = document.createElement("div");
-    menuInt.className = "Cat_BulkIntMenu";
-    menuInt.setAttribute("role", "menu");
-    menuInt.hidden = true;
     wrapInt.appendChild(btnInt);
-    wrapInt.appendChild(menuInt);
     el.bulkActions.appendChild(wrapInt);
 
     const btnExc = document.createElement("button");
@@ -317,7 +367,8 @@
       const intBtn = ev.target.closest('[data-bulk="integrar"]');
       if (intBtn && el.bulkActions.contains(intBtn)) {
         ev.preventDefault();
-        await abrirMenuIntegracoes();
+        ev.stopPropagation();
+        await abrirMenuIntegracoes(intBtn);
         return;
       }
       const b = ev.target.closest("[data-bulk]");
@@ -328,22 +379,35 @@
       try {
         if (b.dataset.bulk === "excluir") await excluirLote(ids);
         else if (b.dataset.bulk === "categoria") await associarCategoriaLote(ids);
-        else if (b.dataset.bulk === "ml") await integrarMercadoLivreLote(ids);
-        else if (b.dataset.bulk === "tiktok") await integrarTiktokLote(ids);
-        else if (b.dataset.bulk === "amazon") await integrarAmazonLote(ids);
       } catch (e) {
         await Swal.fire("Erro", e.message, "error");
       }
     });
 
-    document.addEventListener("click", (ev) => {
-      if (!el.bulkActions?.querySelector(".Cat_BulkIntWrap.is-open")) return;
-      if (el.bulkActions.contains(ev.target)) return;
-      fecharMenuIntegracoes();
-    });
+    document.addEventListener(
+      "pointerdown",
+      (ev) => {
+        if (!menuIntegracoesAberto) return;
+        const t = ev.target;
+        if (menuIntegracoesEl?.contains(t)) return;
+        if (el.bulkActions?.querySelector(".Cat_BulkIntWrap")?.contains(t)) return;
+        fecharMenuIntegracoes();
+      },
+      true
+    );
     document.addEventListener("keydown", (ev) => {
       if (ev.key === "Escape") fecharMenuIntegracoes();
     });
+    window.addEventListener("resize", () => {
+      if (menuIntegracoesAberto) fecharMenuIntegracoes();
+    });
+    window.addEventListener(
+      "scroll",
+      () => {
+        if (menuIntegracoesAberto) fecharMenuIntegracoes();
+      },
+      true
+    );
   }
 
   async function associarCategoriaLote(ids) {
