@@ -2266,7 +2266,11 @@ def tarefas_secundarias_job_cron():
     try:
         cur = conn.cursor()
         res = executar_tarefa(
-            cur, CODIGO_ML_CATEGORIAS, disparado_por="cron", forcar=force
+            cur,
+            CODIGO_ML_CATEGORIAS,
+            disparado_por="cron",
+            forcar=force,
+            conn=conn,
         )
         conn.commit()
         return jsonify(success=True, **res)

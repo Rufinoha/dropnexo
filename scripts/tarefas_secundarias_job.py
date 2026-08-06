@@ -45,7 +45,11 @@ def main() -> int:
         cur = conn.cursor()
         garantir_tabelas_tarefas(cur)
         res = executar_tarefa(
-            cur, args.codigo, disparado_por="cron", forcar=bool(args.force)
+            cur,
+            args.codigo,
+            disparado_por="cron",
+            forcar=bool(args.force),
+            conn=conn,
         )
         conn.commit()
         print(json.dumps(res, ensure_ascii=False, indent=2, default=str))

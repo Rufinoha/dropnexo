@@ -170,28 +170,125 @@ def _ml_get(path: str) -> Any:
 
 
 def sites_ml_para_cache(cur) -> list[str]:
+    """Sites das contas conectadas. Usa SAVEPOINT para não abortar a transação se a query falhar."""
     sites: set[str] = {"MLB"}
+    cur.execute("SAVEPOINT sp_sites_ml_cache")
     try:
         cur.execute(
             """
             SELECT DISTINCT UPPER(NULLIF(TRIM(ml_site_id), ''))
             FROM tbl_integracao_mercado_livre
-            WHERE COALESCE(conectado, FALSE) = TRUE
+            WHERE status = 'conectado'
               AND NULLIF(TRIM(ml_site_id), '') IS NOT NULL
             """
         )
         for (sid,) in cur.fetchall():
             if sid:
                 sites.add(str(sid).upper())
+        cur.execute("RELEASE SAVEPOINT sp_sites_ml_cache")
     except Exception:
-        _log.debug("Falha ao listar sites ML conectados", exc_info=True)
+        cur.execute("ROLLBACK TO SAVEPOINT sp_sites_ml_cache")
+        _log.warning("Falha ao listar sites ML conectados; usando MLB", exc_info=True)
     return sorted(sites)
 
 
-def sincronizar_cache_categorias_ml(cur, *, sites: list[str] | None = None) -> dict:
-    """Baixa categorias folha (publicáveis) e grava no cache. Retorna resumo + log."""
+def _coletar_folhas_site(site_id: str, log: list[str]) -> tuple[list[tuple[str, str, str, str]], int]:
+    """Percorre a árvore ML e retorna folhas (category_id, nome, path_nomes, path_ids)."""
+    site_id = (site_id or "MLB").upper()
+    ignoradas_sem_nome = 0
+    roots = _ml_get(f"/sites/{site_id}/categories")
+    if not isinstance(roots, list):
+        raise RuntimeError("Resposta de categorias raiz inválida.")
+
+    folhas: list[tuple[str, str, str, str]] = []
+    fila: list[tuple[str, list[str], list[str]]] = []
+    for root in roots:
+        if not isinstance(root, dict):
+            continue
+        rid = str(root.get("id") or "").strip().upper()
+        rnome = str(root.get("name") or "").strip()
+        if not rid:
+            continue
+        if not rnome:
+            ignoradas_sem_nome += 1
+            log.append(f"IGNORADO sem nome (raiz): {rid}")
+            continue
+        fila.append((rid, [rnome], [rid]))
+
+    visitados: set[str] = set()
+    while fila:
+        cat_id, path_nomes, path_ids = fila.pop()
+        if cat_id in visitados:
+            continue
+        visitados.add(cat_id)
+        try:
+            det = _ml_get(f"/categories/{cat_id}")
+        except Exception as e:
+            log.append(f"ERRO categoria {cat_id}: {e}")
+            time.sleep(0.05)
+            continue
+        if not isinstance(det, dict):
+            continue
+        nome = str(det.get("name") or "").strip()
+        if not nome:
+            ignoradas_sem_nome += 1
+            log.append(f"IGNORADO sem nome: {cat_id} (path={' > '.join(path_nomes)})")
+            continue
+        children = det.get("children_categories") or []
+        if not children:
+            folhas.append((cat_id, nome, " > ".join(path_nomes), " / ".join(path_ids)))
+        else:
+            for ch in children:
+                if not isinstance(ch, dict):
+                    continue
+                cid = str(ch.get("id") or "").strip().upper()
+                cnome = str(ch.get("name") or "").strip()
+                if not cid:
+                    continue
+                if not cnome:
+                    ignoradas_sem_nome += 1
+                    log.append(f"IGNORADO sem nome (filho): {cid}")
+                    continue
+                fila.append((cid, path_nomes + [cnome], path_ids + [cid]))
+        time.sleep(0.03)
+    return folhas, ignoradas_sem_nome
+
+
+def _gravar_folhas_cache(
+    cur, site_id: str, folhas: list[tuple[str, str, str, str]]
+) -> None:
+    site_id = (site_id or "MLB").upper()
+    cur.execute("DELETE FROM tbl_ml_categoria_cache WHERE site_id = %s", (site_id,))
+    agora = agora_utc()
+    for cat_id, nome, path_n, path_i in folhas:
+        cur.execute(
+            """
+            INSERT INTO tbl_ml_categoria_cache (
+                site_id, category_id, nome, path_nomes, path_ids, atualizado_em
+            ) VALUES (%s, %s, %s, %s, %s, %s)
+            ON CONFLICT (site_id, category_id) DO UPDATE SET
+                nome = EXCLUDED.nome,
+                path_nomes = EXCLUDED.path_nomes,
+                path_ids = EXCLUDED.path_ids,
+                atualizado_em = EXCLUDED.atualizado_em
+            """,
+            (site_id, cat_id, nome[:255], path_n, path_i, agora),
+        )
+
+
+def sincronizar_cache_categorias_ml(
+    cur, *, sites: list[str] | None = None, conn=None
+) -> dict:
+    """Baixa categorias folha (publicáveis) e grava no cache. Retorna resumo + log.
+
+    Se `conn` for passado, faz commit após preparar tabelas (libera a transação
+    durante o download HTTP) e após gravar cada site.
+    """
     garantir_tabelas_tarefas(cur)
     sites = sites or sites_ml_para_cache(cur)
+    if conn is not None:
+        conn.commit()
+
     log: list[str] = []
     total_folhas = 0
     ignoradas_sem_nome = 0
@@ -201,89 +298,16 @@ def sincronizar_cache_categorias_ml(cur, *, sites: list[str] | None = None) -> d
         site_id = (site_id or "MLB").upper()
         log.append(f"=== Site {site_id} ===")
         try:
-            roots = _ml_get(f"/sites/{site_id}/categories")
-            if not isinstance(roots, list):
-                raise RuntimeError("Resposta de categorias raiz inválida.")
+            folhas, ign = _coletar_folhas_site(site_id, log)
+            ignoradas_sem_nome += ign
         except Exception as e:
             erros_site += 1
             log.append(f"ERRO ao listar raízes {site_id}: {e}")
             continue
 
-        folhas: list[tuple[str, str, str, str]] = []
-        fila: list[tuple[str, list[str], list[str]]] = []
-        for root in roots:
-            if not isinstance(root, dict):
-                continue
-            rid = str(root.get("id") or "").strip().upper()
-            rnome = str(root.get("name") or "").strip()
-            if not rid:
-                continue
-            if not rnome:
-                ignoradas_sem_nome += 1
-                log.append(f"IGNORADO sem nome (raiz): {rid}")
-                continue
-            fila.append((rid, [rnome], [rid]))
-
-        visitados: set[str] = set()
-        while fila:
-            cat_id, path_nomes, path_ids = fila.pop()
-            if cat_id in visitados:
-                continue
-            visitados.add(cat_id)
-            try:
-                det = _ml_get(f"/categories/{cat_id}")
-            except Exception as e:
-                log.append(f"ERRO categoria {cat_id}: {e}")
-                time.sleep(0.05)
-                continue
-            if not isinstance(det, dict):
-                continue
-            nome = str(det.get("name") or "").strip()
-            if not nome:
-                ignoradas_sem_nome += 1
-                log.append(f"IGNORADO sem nome: {cat_id} (path={' > '.join(path_nomes)})")
-                continue
-            children = det.get("children_categories") or []
-            if not children:
-                folhas.append(
-                    (
-                        cat_id,
-                        nome,
-                        " > ".join(path_nomes),
-                        " / ".join(path_ids),
-                    )
-                )
-            else:
-                for ch in children:
-                    if not isinstance(ch, dict):
-                        continue
-                    cid = str(ch.get("id") or "").strip().upper()
-                    cnome = str(ch.get("name") or "").strip()
-                    if not cid:
-                        continue
-                    if not cnome:
-                        ignoradas_sem_nome += 1
-                        log.append(f"IGNORADO sem nome (filho): {cid}")
-                        continue
-                    fila.append((cid, path_nomes + [cnome], path_ids + [cid]))
-            time.sleep(0.03)
-
-        cur.execute("DELETE FROM tbl_ml_categoria_cache WHERE site_id = %s", (site_id,))
-        agora = agora_utc()
-        for cat_id, nome, path_n, path_i in folhas:
-            cur.execute(
-                """
-                INSERT INTO tbl_ml_categoria_cache (
-                    site_id, category_id, nome, path_nomes, path_ids, atualizado_em
-                ) VALUES (%s, %s, %s, %s, %s, %s)
-                ON CONFLICT (site_id, category_id) DO UPDATE SET
-                    nome = EXCLUDED.nome,
-                    path_nomes = EXCLUDED.path_nomes,
-                    path_ids = EXCLUDED.path_ids,
-                    atualizado_em = EXCLUDED.atualizado_em
-                """,
-                (site_id, cat_id, nome[:255], path_n, path_i, agora),
-            )
+        _gravar_folhas_cache(cur, site_id, folhas)
+        if conn is not None:
+            conn.commit()
         total_folhas += len(folhas)
         log.append(f"OK {site_id}: {len(folhas)} categorias publicáveis em cache.")
 
@@ -303,12 +327,26 @@ def sincronizar_cache_categorias_ml(cur, *, sites: list[str] | None = None) -> d
     }
 
 
+def _marcar_execucao_erro(cur, id_exec: int, erro: BaseException, log_extra: str = "") -> None:
+    msg = str(erro)[:500]
+    log = (log_extra or str(erro)).strip()
+    cur.execute(
+        """
+        UPDATE tbl_tarefa_secundaria_execucao
+        SET status = %s, finalizado_em = %s, mensagem = %s, log_texto = %s
+        WHERE id = %s
+        """,
+        ("erro", agora_utc(), msg, log[:20000], id_exec),
+    )
+
+
 def executar_tarefa(
     cur,
     codigo: str,
     *,
     disparado_por: str = "cron",
     forcar: bool = False,
+    conn=None,
 ) -> dict:
     garantir_tabelas_tarefas(cur)
     cur.execute(
@@ -343,10 +381,12 @@ def executar_tarefa(
         (id_tarefa, disparado_por, agora_utc()),
     )
     id_exec = int(cur.fetchone()[0])
+    if conn is not None:
+        conn.commit()
 
     try:
         if codigo_db == CODIGO_ML_CATEGORIAS:
-            res = sincronizar_cache_categorias_ml(cur)
+            res = sincronizar_cache_categorias_ml(cur, conn=conn)
         else:
             raise RuntimeError(f"Executor não implementado para «{codigo_db}».")
         cur.execute(
@@ -379,14 +419,15 @@ def executar_tarefa(
         )
         return {"skipped": False, "codigo": codigo_db, "id_execucao": id_exec, **res}
     except Exception as e:
-        cur.execute(
-            """
-            UPDATE tbl_tarefa_secundaria_execucao
-            SET status = %s, finalizado_em = %s, mensagem = %s, log_texto = %s
-            WHERE id = %s
-            """,
-            ("erro", agora_utc(), str(e)[:500], str(e), id_exec),
-        )
+        if conn is not None:
+            conn.rollback()
+        try:
+            _marcar_execucao_erro(cur, id_exec, e)
+            if conn is not None:
+                conn.commit()
+        except Exception:
+            if conn is not None:
+                conn.rollback()
         raise
 
 
@@ -494,11 +535,13 @@ def disparar_tarefa_async(codigo: str, *, disparado_por: str = "manual") -> dict
         conn.close()
 
     def _worker() -> None:
+        import traceback
+
         c2 = Var_ConectarBanco()
         try:
             cur2 = c2.cursor()
             if codigo == CODIGO_ML_CATEGORIAS:
-                res = sincronizar_cache_categorias_ml(cur2)
+                res = sincronizar_cache_categorias_ml(cur2, conn=c2)
             else:
                 raise RuntimeError(f"Executor não implementado para «{codigo}».")
             cur2.execute(
@@ -531,17 +574,11 @@ def disparar_tarefa_async(codigo: str, *, disparado_por: str = "manual") -> dict
             )
             c2.commit()
         except Exception as e:
+            tb = traceback.format_exc()
             c2.rollback()
             try:
                 cur2 = c2.cursor()
-                cur2.execute(
-                    """
-                    UPDATE tbl_tarefa_secundaria_execucao
-                    SET status = %s, finalizado_em = %s, mensagem = %s, log_texto = %s
-                    WHERE id = %s
-                    """,
-                    ("erro", agora_utc(), str(e)[:500], str(e), id_exec),
-                )
+                _marcar_execucao_erro(cur2, id_exec, e, log_extra=tb)
                 c2.commit()
             except Exception:
                 c2.rollback()
