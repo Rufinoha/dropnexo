@@ -95,10 +95,10 @@ def listar_tarefas_secundarias(cur) -> list[dict]:
         """
         SELECT t.id, t.codigo, t.nome, t.descricao, t.agendamento, t.ativo,
                e.id, e.status, e.disparado_por, e.iniciado_em, e.finalizado_em,
-               e.mensagem
+               e.mensagem, e.meta
         FROM tbl_tarefa_secundaria t
         LEFT JOIN LATERAL (
-            SELECT id, status, disparado_por, iniciado_em, finalizado_em, mensagem
+            SELECT id, status, disparado_por, iniciado_em, finalizado_em, mensagem, meta
             FROM tbl_tarefa_secundaria_execucao
             WHERE id_tarefa = t.id
             ORDER BY iniciado_em DESC
@@ -110,6 +110,14 @@ def listar_tarefas_secundarias(cur) -> list[dict]:
     )
     out = []
     for r in cur.fetchall():
+        meta = r[12] if len(r) > 12 else None
+        if isinstance(meta, str):
+            try:
+                meta = json.loads(meta)
+            except Exception:
+                meta = {}
+        if not isinstance(meta, dict):
+            meta = meta or {}
         out.append(
             {
                 "id": int(r[0]),
@@ -128,11 +136,37 @@ def listar_tarefas_secundarias(cur) -> list[dict]:
                         "iniciado_em": r[9].isoformat() if r[9] else None,
                         "finalizado_em": r[10].isoformat() if r[10] else None,
                         "mensagem": r[11] or "",
+                        "meta": meta,
                     }
                 ),
             }
         )
     return out
+
+
+def _atualizar_progresso_exec(
+    cur,
+    conn,
+    id_exec: int | None,
+    mensagem: str,
+    meta: dict | None = None,
+) -> None:
+    """Heartbeat da execução em andamento (visível no card / polling)."""
+    if not id_exec:
+        return
+    payload = dict(meta or {})
+    payload["heartbeat_em"] = agora_utc().isoformat()
+    cur.execute(
+        """
+        UPDATE tbl_tarefa_secundaria_execucao
+        SET mensagem = %s,
+            meta = COALESCE(meta, '{}'::jsonb) || %s::jsonb
+        WHERE id = %s AND status = 'rodando'
+        """,
+        (mensagem[:500], json.dumps(payload, ensure_ascii=False), int(id_exec)),
+    )
+    if conn is not None:
+        conn.commit()
 
 
 def listar_execucoes_tarefa(cur, id_tarefa: int, limit: int = 20) -> list[dict]:
@@ -248,17 +282,21 @@ def tenant_ml_para_site(cur, site_id: str) -> int:
 
 
 def _coletar_folhas_site(
-    cur, id_tenant: int, site_id: str, log: list[str]
+    cur,
+    id_tenant: int,
+    site_id: str,
+    log: list[str],
+    *,
+    on_progress=None,
 ) -> tuple[list[tuple[str, str, str, str]], int]:
-    """Percorre a árvore ML e retorna folhas (category_id, nome, path_nomes, path_ids)."""
+    """Percorre a árvore ML por raiz (para progresso) e retorna folhas publicáveis."""
     site_id = (site_id or "MLB").upper()
     ignoradas_sem_nome = 0
     roots = _ml_get_autenticado(cur, id_tenant, f"/sites/{site_id}/categories")
     if not isinstance(roots, list):
         raise RuntimeError("Resposta de categorias raiz inválida.")
 
-    folhas: list[tuple[str, str, str, str]] = []
-    fila: list[tuple[str, list[str], list[str]]] = []
+    raizes: list[tuple[str, str]] = []
     for root in roots:
         if not isinstance(root, dict):
             continue
@@ -270,44 +308,85 @@ def _coletar_folhas_site(
             ignoradas_sem_nome += 1
             log.append(f"IGNORADO sem nome (raiz): {rid}")
             continue
-        fila.append((rid, [rnome], [rid]))
+        raizes.append((rid, rnome))
 
+    folhas: list[tuple[str, str, str, str]] = []
     visitados: set[str] = set()
-    while fila:
-        cat_id, path_nomes, path_ids = fila.pop()
-        if cat_id in visitados:
-            continue
-        visitados.add(cat_id)
-        try:
-            det = _ml_get_autenticado(cur, id_tenant, f"/categories/{cat_id}")
-        except Exception as e:
-            log.append(f"ERRO categoria {cat_id}: {e}")
-            time.sleep(0.05)
-            continue
-        if not isinstance(det, dict):
-            continue
-        nome = str(det.get("name") or "").strip()
-        if not nome:
-            ignoradas_sem_nome += 1
-            log.append(f"IGNORADO sem nome: {cat_id} (path={' > '.join(path_nomes)})")
-            continue
-        children = det.get("children_categories") or []
-        if not children:
-            folhas.append((cat_id, nome, " > ".join(path_nomes), " / ".join(path_ids)))
-        else:
-            for ch in children:
-                if not isinstance(ch, dict):
-                    continue
-                cid = str(ch.get("id") or "").strip().upper()
-                cnome = str(ch.get("name") or "").strip()
-                if not cid:
-                    continue
-                if not cnome:
-                    ignoradas_sem_nome += 1
-                    log.append(f"IGNORADO sem nome (filho): {cid}")
-                    continue
-                fila.append((cid, path_nomes + [cnome], path_ids + [cid]))
-        time.sleep(0.03)
+    nos_visitados = 0
+    ultimo_hb = 0.0
+    raizes_total = max(len(raizes), 1)
+
+    def _emit(raiz_idx: int, raiz_nome: str, forcar: bool = False) -> None:
+        nonlocal ultimo_hb
+        agora = time.monotonic()
+        if not forcar and (agora - ultimo_hb) < 2.5:
+            return
+        ultimo_hb = agora
+        if not on_progress:
+            return
+        pct = min(99.0, ((raiz_idx - 1) / raizes_total) * 100)
+        on_progress(
+            {
+                "fase": "baixando",
+                "site_id": site_id,
+                "raiz_idx": raiz_idx,
+                "raizes_total": raizes_total,
+                "raiz_nome": raiz_nome,
+                "nos_visitados": nos_visitados,
+                "folhas": len(folhas),
+                "pct": round(pct, 1),
+            },
+            (
+                f"{site_id}: raiz {raiz_idx}/{raizes_total} «{raiz_nome}» · "
+                f"{nos_visitados} nós · {len(folhas)} folhas"
+            ),
+        )
+
+    for raiz_idx, (rid, rnome) in enumerate(raizes, start=1):
+        log.append(f"Raiz {raiz_idx}/{raizes_total}: {rnome} ({rid})")
+        _emit(raiz_idx, rnome, forcar=True)
+        fila: list[tuple[str, list[str], list[str]]] = [(rid, [rnome], [rid])]
+        while fila:
+            cat_id, path_nomes, path_ids = fila.pop()
+            if cat_id in visitados:
+                continue
+            visitados.add(cat_id)
+            nos_visitados += 1
+            try:
+                det = _ml_get_autenticado(cur, id_tenant, f"/categories/{cat_id}")
+            except Exception as e:
+                log.append(f"ERRO categoria {cat_id}: {e}")
+                time.sleep(0.05)
+                _emit(raiz_idx, rnome)
+                continue
+            if not isinstance(det, dict):
+                continue
+            nome = str(det.get("name") or "").strip()
+            if not nome:
+                ignoradas_sem_nome += 1
+                log.append(f"IGNORADO sem nome: {cat_id} (path={' > '.join(path_nomes)})")
+                continue
+            children = det.get("children_categories") or []
+            if not children:
+                folhas.append((cat_id, nome, " > ".join(path_nomes), " / ".join(path_ids)))
+            else:
+                for ch in children:
+                    if not isinstance(ch, dict):
+                        continue
+                    cid = str(ch.get("id") or "").strip().upper()
+                    cnome = str(ch.get("name") or "").strip()
+                    if not cid:
+                        continue
+                    if not cnome:
+                        ignoradas_sem_nome += 1
+                        log.append(f"IGNORADO sem nome (filho): {cid}")
+                        continue
+                    fila.append((cid, path_nomes + [cnome], path_ids + [cid]))
+            time.sleep(0.03)
+            if nos_visitados % 15 == 0:
+                _emit(raiz_idx, rnome)
+        _emit(raiz_idx, rnome, forcar=True)
+
     return folhas, ignoradas_sem_nome
 
 
@@ -334,12 +413,13 @@ def _gravar_folhas_cache(
 
 
 def sincronizar_cache_categorias_ml(
-    cur, *, sites: list[str] | None = None, conn=None
+    cur, *, sites: list[str] | None = None, conn=None, id_exec: int | None = None
 ) -> dict:
     """Baixa categorias folha (publicáveis) e grava no cache. Retorna resumo + log.
 
     Se `conn` for passado, faz commit após preparar tabelas (libera a transação
-    durante o download HTTP) e após gravar cada site.
+    durante o download HTTP) e após gravar cada site. Com `id_exec`, atualiza
+    heartbeat/progresso na execução.
     """
     garantir_tabelas_tarefas(cur)
     sites = sites or sites_ml_para_cache(cur)
@@ -350,20 +430,64 @@ def sincronizar_cache_categorias_ml(
     total_folhas = 0
     ignoradas_sem_nome = 0
     erros_site = 0
+    sites_total = max(len(sites), 1)
 
-    for site_id in sites:
+    def progresso(meta_local: dict, mensagem: str, site_idx: int = 1) -> None:
+        meta = {
+            **meta_local,
+            "site_idx": site_idx,
+            "sites_total": sites_total,
+        }
+        # Combina progresso entre sites + raízes
+        raiz_idx = int(meta.get("raiz_idx") or 0)
+        raizes_total = max(int(meta.get("raizes_total") or 1), 1)
+        base = (site_idx - 1) / sites_total
+        fatia = (max(raiz_idx - 1, 0) / raizes_total) / sites_total
+        if meta.get("fase") == "gravando":
+            pct = min(99.5, (site_idx / sites_total) * 100 - 0.5)
+        else:
+            pct = min(99.0, (base + fatia) * 100)
+        meta["pct"] = round(pct, 1)
+        _atualizar_progresso_exec(cur, conn, id_exec, mensagem, meta)
+
+    _atualizar_progresso_exec(
+        cur,
+        conn,
+        id_exec,
+        "Iniciando sincronização do cache…",
+        {"fase": "inicio", "pct": 0, "sites_total": sites_total},
+    )
+
+    for site_i, site_id in enumerate(sites, start=1):
         site_id = (site_id or "MLB").upper()
         log.append(f"=== Site {site_id} ===")
         try:
             id_tenant = tenant_ml_para_site(cur, site_id)
             log.append(f"Usando conta tenant #{id_tenant} (Bearer).")
-            folhas, ign = _coletar_folhas_site(cur, id_tenant, site_id, log)
+
+            def _on_prog(meta_local, mensagem, _site_i=site_i):
+                progresso(meta_local, mensagem, site_idx=_site_i)
+
+            folhas, ign = _coletar_folhas_site(
+                cur, id_tenant, site_id, log, on_progress=_on_prog
+            )
             ignoradas_sem_nome += ign
         except Exception as e:
             erros_site += 1
             log.append(f"ERRO ao listar raízes {site_id}: {e}")
             continue
 
+        progresso(
+            {
+                "fase": "gravando",
+                "site_id": site_id,
+                "folhas": len(folhas),
+                "raizes_total": 1,
+                "raiz_idx": 1,
+            },
+            f"{site_id}: gravando {len(folhas)} categorias no banco…",
+            site_idx=site_i,
+        )
         _gravar_folhas_cache(cur, site_id, folhas)
         if conn is not None:
             conn.commit()
@@ -384,6 +508,13 @@ def sincronizar_cache_categorias_ml(
             f"Detalhe: {msg}",
             log_texto=log_texto,
         )
+    _atualizar_progresso_exec(
+        cur,
+        conn,
+        id_exec,
+        msg,
+        {"fase": "ok", "pct": 100, "folhas": total_folhas},
+    )
     return {
         "folhas": total_folhas,
         "ignoradas_sem_nome": ignoradas_sem_nome,
@@ -457,7 +588,7 @@ def executar_tarefa(
 
     try:
         if codigo_db == CODIGO_ML_CATEGORIAS:
-            res = sincronizar_cache_categorias_ml(cur, conn=conn)
+            res = sincronizar_cache_categorias_ml(cur, conn=conn, id_exec=id_exec)
         else:
             raise RuntimeError(f"Executor não implementado para «{codigo_db}».")
         cur.execute(
@@ -580,14 +711,59 @@ def disparar_tarefa_async(codigo: str, *, disparado_por: str = "manual") -> dict
         id_tarefa = int(row[0])
         cur.execute(
             """
-            SELECT 1 FROM tbl_tarefa_secundaria_execucao
+            SELECT id, iniciado_em, meta
+            FROM tbl_tarefa_secundaria_execucao
             WHERE id_tarefa = %s AND status = 'rodando'
+            ORDER BY iniciado_em DESC
             LIMIT 1
             """,
             (id_tarefa,),
         )
-        if cur.fetchone():
-            raise RuntimeError("Esta tarefa já está em execução.")
+        rodando = cur.fetchone()
+        if rodando:
+            id_old, ini_old, meta_old = int(rodando[0]), rodando[1], rodando[2]
+            if isinstance(meta_old, str):
+                try:
+                    meta_old = json.loads(meta_old)
+                except Exception:
+                    meta_old = {}
+            if not isinstance(meta_old, dict):
+                meta_old = {}
+            agora = agora_utc()
+            hb_raw = meta_old.get("heartbeat_em")
+            orfao = False
+            if hb_raw:
+                try:
+                    hb_dt = datetime.fromisoformat(str(hb_raw).replace("Z", "+00:00"))
+                    if hb_dt.tzinfo is None:
+                        hb_dt = hb_dt.replace(tzinfo=agora.tzinfo)
+                    orfao = (agora - hb_dt).total_seconds() > 180
+                except Exception:
+                    orfao = True
+            elif ini_old is not None:
+                # Sem heartbeat: execução antiga/crash antes do progresso.
+                try:
+                    orfao = (agora - ini_old).total_seconds() > 600
+                except Exception:
+                    orfao = True
+            if not orfao:
+                raise RuntimeError("Esta tarefa já está em execução.")
+            cur.execute(
+                """
+                UPDATE tbl_tarefa_secundaria_execucao
+                SET status = 'erro',
+                    finalizado_em = %s,
+                    mensagem = %s,
+                    log_texto = COALESCE(log_texto, '') || %s
+                WHERE id = %s AND status = 'rodando'
+                """,
+                (
+                    agora,
+                    "Execução interrompida (sem sinal de progresso).",
+                    "\n[sistema] Marcada como órfã ao reiniciar a tarefa.",
+                    id_old,
+                ),
+            )
         cur.execute(
             """
             INSERT INTO tbl_tarefa_secundaria_execucao (
@@ -612,7 +788,7 @@ def disparar_tarefa_async(codigo: str, *, disparado_por: str = "manual") -> dict
         try:
             cur2 = c2.cursor()
             if codigo == CODIGO_ML_CATEGORIAS:
-                res = sincronizar_cache_categorias_ml(cur2, conn=c2)
+                res = sincronizar_cache_categorias_ml(cur2, conn=c2, id_exec=id_exec)
             else:
                 raise RuntimeError(f"Executor não implementado para «{codigo}».")
             cur2.execute(

@@ -26,6 +26,13 @@
     }
   }
 
+  function segundosDesde(iso) {
+    if (!iso) return null;
+    const t = Date.parse(iso);
+    if (Number.isNaN(t)) return null;
+    return Math.max(0, Math.round((Date.now() - t) / 1000));
+  }
+
   function pillStatus(st) {
     if (st === "sucesso") return "is-ok";
     if (st === "erro") return "is-err";
@@ -37,6 +44,50 @@
     if (a === "segunda") return "Toda segunda-feira";
     if (a === "diario") return "Diário";
     return a || "Manual";
+  }
+
+  function blocoProgresso(u) {
+    if (!u || u.status !== "rodando") return "";
+    const meta = u.meta || {};
+    const pct = Math.max(0, Math.min(100, Number(meta.pct) || 0));
+    const hb = meta.heartbeat_em || null;
+    const idade = segundosDesde(hb);
+    let sinal = "Aguardando primeiro sinal…";
+    let sinalCls = "";
+    if (idade != null) {
+      if (idade <= 15) {
+        sinal = `Sinal há ${idade}s`;
+      } else if (idade <= 60) {
+        sinal = `Sinal há ${idade}s`;
+        sinalCls = "is-warn";
+      } else {
+        sinal = `Sem atualização há ${idade}s — pode ter travado`;
+        sinalCls = "is-stuck";
+      }
+    }
+    const detalhe = [
+      meta.site_id ? `Site ${meta.site_id}` : "",
+      meta.raiz_idx && meta.raizes_total
+        ? `raiz ${meta.raiz_idx}/${meta.raizes_total}`
+        : "",
+      meta.raiz_nome ? `«${meta.raiz_nome}»` : "",
+      meta.nos_visitados != null ? `${meta.nos_visitados} nós` : "",
+      meta.folhas != null ? `${meta.folhas} folhas` : "",
+    ]
+      .filter(Boolean)
+      .join(" · ");
+
+    return `
+      <div class="TsCfg_Progress">
+        <div class="TsCfg_ProgressTop">
+          <strong>${pct.toFixed(0)}%</strong>
+          <span class="TsCfg_Heartbeat ${sinalCls}">${esc(sinal)}</span>
+        </div>
+        <div class="TsCfg_ProgressBar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct.toFixed(0)}">
+          <span style="width:${pct}%"></span>
+        </div>
+        ${detalhe ? `<p class="TsCfg_ProgressDetail">${esc(detalhe)}</p>` : ""}
+      </div>`;
   }
 
   function render(itens) {
@@ -58,6 +109,7 @@
                 : st === "erro"
                   ? "Erro"
                   : st;
+        const btnExecDisabled = st === "rodando" ? " disabled" : "";
         return `
         <article class="TsCfg_Card" data-codigo="${esc(t.codigo)}" data-id="${t.id}">
           <div class="TsCfg_CardTop">
@@ -75,9 +127,10 @@
                 : ""
             }
           </div>
+          ${blocoProgresso(u)}
           ${u?.mensagem ? `<p class="TsCfg_Msg">${esc(u.mensagem)}</p>` : ""}
           <div class="TsCfg_Acoes">
-            <button type="button" class="Cl_botaoprimario" data-acao="executar">Executar agora</button>
+            <button type="button" class="Cl_botaoprimario" data-acao="executar"${btnExecDisabled}>Executar agora</button>
             <button type="button" class="Cl_botaoFiltro" data-acao="historico">Ver histórico / log</button>
           </div>
         </article>`;
@@ -95,7 +148,7 @@
     render(j.itens || []);
     const rodando = (j.itens || []).some((t) => t.ultima_execucao?.status === "rodando");
     if (rodando) {
-      if (!pollTimer) pollTimer = setInterval(carregar, 4000);
+      if (!pollTimer) pollTimer = setInterval(carregar, 2000);
     } else if (pollTimer) {
       clearInterval(pollTimer);
       pollTimer = null;
@@ -115,7 +168,7 @@
         Swal.fire({
           icon: "info",
           title: "Tarefa iniciada",
-          text: j.mensagem || "Rodando em segundo plano.",
+          text: j.mensagem || "Rodando em segundo plano. Acompanhe o progresso no card.",
           confirmButtonColor: "#021F81",
         });
       }
