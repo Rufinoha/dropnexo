@@ -18,6 +18,14 @@ ML_CAT_TIMEOUT = (5, 25)
 TZ_BR = ZoneInfo("America/Sao_Paulo")
 
 CODIGO_ML_CATEGORIAS = "ml_categorias_cache"
+CODIGO_TIKTOK_CATEGORIAS = "tiktok_categorias_cache"
+CODIGO_AMAZON_PRODUCT_TYPES = "amazon_product_types_cache"
+
+CODIGOS_CACHE_CATEGORIAS = (
+    CODIGO_ML_CATEGORIAS,
+    CODIGO_TIKTOK_CATEGORIAS,
+    CODIGO_AMAZON_PRODUCT_TYPES,
+)
 
 
 class TarefaSecundariaErro(RuntimeError):
@@ -75,18 +83,64 @@ def garantir_tabelas_tarefas(cur) -> None:
     )
     cur.execute(
         """
-        INSERT INTO tbl_tarefa_secundaria (codigo, nome, descricao, agendamento, ativo)
-        VALUES (
-            %s,
-            'Cache de categorias Mercado Livre',
-            'Baixa categorias publicáveis (folha) por site das contas conectadas e atualiza o cache usado no mapeamento.',
-            'segunda',
-            TRUE
+        CREATE TABLE IF NOT EXISTS tbl_tiktok_categoria_cache (
+            id SERIAL PRIMARY KEY,
+            region VARCHAR(16) NOT NULL DEFAULT 'BR',
+            category_id VARCHAR(64) NOT NULL,
+            nome VARCHAR(255) NOT NULL,
+            path_nomes TEXT NOT NULL DEFAULT '',
+            path_ids TEXT NOT NULL DEFAULT '',
+            atualizado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            UNIQUE (region, category_id)
         )
-        ON CONFLICT (codigo) DO NOTHING
-        """,
-        (CODIGO_ML_CATEGORIAS,),
+        """
     )
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS tbl_amazon_product_type_cache (
+            id SERIAL PRIMARY KEY,
+            marketplace_id VARCHAR(32) NOT NULL,
+            product_type VARCHAR(128) NOT NULL,
+            display_name VARCHAR(255) NOT NULL DEFAULT '',
+            atualizado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            UNIQUE (marketplace_id, product_type)
+        )
+        """
+    )
+    seeds = [
+        (
+            CODIGO_ML_CATEGORIAS,
+            "Cache de categorias Mercado Livre",
+            "Baixa categorias publicáveis (folha) por site das contas conectadas e atualiza o cache usado no mapeamento.",
+            "segunda",
+        ),
+        (
+            CODIGO_TIKTOK_CATEGORIAS,
+            "Cache de categorias TikTok Shop",
+            "Baixa categorias folha (publicáveis) das contas TikTok conectadas e atualiza o cache do mapeamento.",
+            "domingo",
+        ),
+        (
+            CODIGO_AMAZON_PRODUCT_TYPES,
+            "Cache de Product Types Amazon",
+            "Baixa Product Types das contas Amazon conectadas e atualiza o cache usado no mapeamento de categorias.",
+            "domingo",
+        ),
+    ]
+    for codigo, nome, desc, agenda in seeds:
+        cur.execute(
+            """
+            INSERT INTO tbl_tarefa_secundaria (codigo, nome, descricao, agendamento, ativo)
+            VALUES (%s, %s, %s, %s, TRUE)
+            ON CONFLICT (codigo) DO UPDATE SET
+                nome = EXCLUDED.nome,
+                descricao = EXCLUDED.descricao,
+                agendamento = EXCLUDED.agendamento,
+                ativo = TRUE,
+                atualizado_em = NOW()
+            """,
+            (codigo, nome, desc, agenda),
+        )
 
 
 def _parse_meta(meta) -> dict:
@@ -260,6 +314,49 @@ def listar_execucoes_tarefa(cur, id_tarefa: int, limit: int = 20) -> list[dict]:
 
 def _hoje_e_segunda() -> bool:
     return datetime.now(TZ_BR).weekday() == 0
+
+
+def _hoje_e_domingo() -> bool:
+    return datetime.now(TZ_BR).weekday() == 6
+
+
+def _agendamento_permite_hoje(agendamento: str, *, forcar: bool = False) -> bool:
+    if forcar:
+        return True
+    a = (agendamento or "manual").strip().lower()
+    if a in ("", "manual"):
+        return False
+    if a == "diario":
+        return True
+    if a == "segunda":
+        return _hoje_e_segunda()
+    if a == "domingo":
+        return _hoje_e_domingo()
+    return False
+
+
+def _rodar_sync_por_codigo(cur, codigo: str, *, conn=None, id_exec: int | None = None) -> dict:
+    if codigo == CODIGO_ML_CATEGORIAS:
+        return sincronizar_cache_categorias_ml(cur, conn=conn, id_exec=id_exec)
+    if codigo == CODIGO_TIKTOK_CATEGORIAS:
+        from sistema.tarefas_secundarias.cache_tiktok import sincronizar_cache_categorias_tiktok
+
+        return sincronizar_cache_categorias_tiktok(
+            cur,
+            conn=conn,
+            id_exec=id_exec,
+            atualizar_progresso=_atualizar_progresso_exec,
+        )
+    if codigo == CODIGO_AMAZON_PRODUCT_TYPES:
+        from sistema.tarefas_secundarias.cache_amazon import sincronizar_cache_product_types_amazon
+
+        return sincronizar_cache_product_types_amazon(
+            cur,
+            conn=conn,
+            id_exec=id_exec,
+            atualizar_progresso=_atualizar_progresso_exec,
+        )
+    raise RuntimeError(f"Executor não implementado para «{codigo}».")
 
 
 def _ml_get_autenticado(cur, id_tenant: int, path: str) -> Any:
@@ -629,11 +726,16 @@ def executar_tarefa(
     if not ativo:
         raise RuntimeError("Tarefa inativa.")
 
-    if not forcar and agendamento == "segunda" and not _hoje_e_segunda():
+    if not _agendamento_permite_hoje(agendamento, forcar=forcar):
+        label = {
+            "segunda": "segunda-feira",
+            "domingo": "domingo",
+            "diario": "diariamente",
+        }.get((agendamento or "").lower(), agendamento or "manual")
         return {
             "skipped": True,
             "codigo": codigo_db,
-            "mensagem": "Agendada para segunda-feira — execução ignorada hoje.",
+            "mensagem": f"Agendada para {label} — execução ignorada hoje.",
         }
 
     cur.execute(
@@ -650,10 +752,7 @@ def executar_tarefa(
         conn.commit()
 
     try:
-        if codigo_db == CODIGO_ML_CATEGORIAS:
-            res = sincronizar_cache_categorias_ml(cur, conn=conn, id_exec=id_exec)
-        else:
-            raise RuntimeError(f"Executor não implementado para «{codigo_db}».")
+        res = _rodar_sync_por_codigo(cur, codigo_db, conn=conn, id_exec=id_exec)
         cur.execute(
             """
             UPDATE tbl_tarefa_secundaria_execucao
@@ -694,6 +793,48 @@ def executar_tarefa(
             if conn is not None:
                 conn.rollback()
         raise
+
+
+def executar_tarefas_agendadas(
+    cur, *, disparado_por: str = "cron", forcar: bool = False, conn=None
+) -> dict:
+    """Roda todas as tarefas ativas cujo agendamento permite hoje (ou todas se forcar)."""
+    garantir_tabelas_tarefas(cur)
+    cur.execute(
+        """
+        SELECT codigo FROM tbl_tarefa_secundaria
+        WHERE ativo = TRUE
+        ORDER BY codigo
+        """
+    )
+    codigos = [str(r[0]) for r in cur.fetchall() if r and r[0]]
+    resultados: list[dict] = []
+    for codigo in codigos:
+        try:
+            res = executar_tarefa(
+                cur,
+                codigo,
+                disparado_por=disparado_por,
+                forcar=forcar,
+                conn=conn,
+            )
+            resultados.append(res)
+            if conn is not None:
+                conn.commit()
+        except Exception as e:
+            if conn is not None:
+                conn.rollback()
+            resultados.append(
+                {"skipped": False, "codigo": codigo, "erro": str(e)[:300]}
+            )
+            _log.exception("Tarefa %s falhou no job", codigo)
+    ok = sum(1 for r in resultados if not r.get("skipped") and not r.get("erro"))
+    skip = sum(1 for r in resultados if r.get("skipped"))
+    err = sum(1 for r in resultados if r.get("erro"))
+    return {
+        "message": f"{ok} executada(s) · {skip} ignorada(s) · {err} erro(s).",
+        "resultados": resultados,
+    }
 
 
 def buscar_categorias_cache(
@@ -826,10 +967,7 @@ def disparar_tarefa_async(codigo: str, *, disparado_por: str = "manual") -> dict
         c2 = Var_ConectarBanco()
         try:
             cur2 = c2.cursor()
-            if codigo == CODIGO_ML_CATEGORIAS:
-                res = sincronizar_cache_categorias_ml(cur2, conn=c2, id_exec=id_exec)
-            else:
-                raise RuntimeError(f"Executor não implementado para «{codigo}».")
+            res = _rodar_sync_por_codigo(cur2, codigo, conn=c2, id_exec=id_exec)
             cur2.execute(
                 """
                 UPDATE tbl_tarefa_secundaria_execucao

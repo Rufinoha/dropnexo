@@ -702,25 +702,64 @@ def _mapa_categoria_tiktok(cur, id_tenant: int, id_categoria: int | None) -> str
 
 def listar_mapeamento_categorias_tiktok(cur, id_tenant: int) -> list[dict]:
     _garantir_tabela_tiktok_categoria_map(cur)
-    cur.execute(
-        """
-        SELECT c.id, c.nome, COALESCE(m.tiktok_category_id, '')
-        FROM tbl_categoria c
-        LEFT JOIN tbl_integracao_tiktok_categoria_map m
-            ON m.id_categoria = c.id AND m.id_tenant = c.id_tenant
-        WHERE c.id_tenant = %s AND c.ativo = TRUE
-        ORDER BY c.nome
-        """,
-        (id_tenant,),
-    )
-    return [
-        {
-            "id_categoria": int(r[0]),
-            "nome": r[1],
-            "tiktok_category_id": r[2] or "",
-        }
-        for r in cur.fetchall()
-    ]
+    region = "BR"
+    try:
+        from sistema.tarefas_secundarias.cache_tiktok import (
+            garantir_tabela_tiktok_categoria_cache,
+            region_tiktok_para_cache,
+        )
+
+        garantir_tabela_tiktok_categoria_cache(cur)
+        region = region_tiktok_para_cache(cur, id_tenant)
+        cur.execute(
+            """
+            SELECT c.id, c.nome,
+                   COALESCE(m.tiktok_category_id, ''),
+                   COALESCE(ch.nome, '')
+            FROM tbl_categoria c
+            LEFT JOIN tbl_integracao_tiktok_categoria_map m
+                ON m.id_categoria = c.id AND m.id_tenant = c.id_tenant
+            LEFT JOIN tbl_tiktok_categoria_cache ch
+                ON ch.region = %s
+               AND ch.category_id = TRIM(COALESCE(m.tiktok_category_id, ''))
+            WHERE c.id_tenant = %s AND c.ativo = TRUE
+            ORDER BY c.nome
+            """,
+            (region, id_tenant),
+        )
+        return [
+            {
+                "id_categoria": int(r[0]),
+                "nome": r[1],
+                "tiktok_category_id": r[2] or "",
+                "tiktok_category_nome": (r[3] or "").strip(),
+                "region": region,
+            }
+            for r in cur.fetchall()
+        ]
+    except Exception:
+        _log.debug("Cache TikTok indisponível no mapeamento; fallback sem nome", exc_info=True)
+        cur.execute(
+            """
+            SELECT c.id, c.nome, COALESCE(m.tiktok_category_id, '')
+            FROM tbl_categoria c
+            LEFT JOIN tbl_integracao_tiktok_categoria_map m
+                ON m.id_categoria = c.id AND m.id_tenant = c.id_tenant
+            WHERE c.id_tenant = %s AND c.ativo = TRUE
+            ORDER BY c.nome
+            """,
+            (id_tenant,),
+        )
+        return [
+            {
+                "id_categoria": int(r[0]),
+                "nome": r[1],
+                "tiktok_category_id": r[2] or "",
+                "tiktok_category_nome": "",
+                "region": region,
+            }
+            for r in cur.fetchall()
+        ]
 
 
 def salvar_mapeamento_categorias_tiktok(cur, id_tenant: int, itens: list[dict]) -> int:
@@ -1003,243 +1042,43 @@ def _atualizar_estoque_map_tiktok(
         quantidade_esperada=max(0, int(quantidade)),
         origem="dropnexo_export",
     )
-    body: dict[str, Any] = {
-        "product_id": product_id,
-        "skus": [
-            {
-                "id": sku_id or product_id,
-                "available_stock": max(0, int(quantidade)),
-            }
-        ],
+    warehouse_id = ""
+    try:
+        from api.tiktok.produtos import obter_warehouse_id
+
+        warehouse_id = obter_warehouse_id(cur, id_tenant)
+    except Exception:
+        warehouse_id = ""
+
+    sku_body: dict[str, Any] = {
+        "id": sku_id or product_id,
+        "available_stock": max(0, int(quantidade)),
     }
+    if warehouse_id:
+        sku_body["inventory"] = [
+            {"warehouse_id": warehouse_id, "quantity": max(0, int(quantidade))}
+        ]
     if preco is not None and float(preco) > 0:
-        body["skus"][0]["original_price"] = str(round(float(preco), 2))
-    api_request(cur, id_tenant, "POST", "/product/202309/inventory/update", json_body=body)
+        sku_body["original_price"] = str(round(float(preco), 2))
+    body: dict[str, Any] = {"product_id": product_id, "skus": [sku_body]}
+    # path oficial e fallback legado
+    try:
+        api_request(
+            cur,
+            id_tenant,
+            "POST",
+            f"/product/202309/products/{product_id}/inventory/update",
+            json_body={"skus": [sku_body]},
+        )
+    except RuntimeError:
+        api_request(cur, id_tenant, "POST", "/product/202309/inventory/update", json_body=body)
 
 
 def publicar_produtos_tiktok(cur, id_tenant: int, ids_produtos: list[int]) -> dict:
-    ids = []
-    for x in ids_produtos:
-        try:
-            pid = int(x)
-            if pid > 0:
-                ids.append(pid)
-        except (TypeError, ValueError):
-            continue
-    ids = list(dict.fromkeys(ids))
-    if not ids:
-        raise RuntimeError("Selecione ao menos um produto.")
+    """Exporta/atualiza produtos no TikTok Shop com payload completo (imagens, peso, variações)."""
+    from api.tiktok.produtos import publicar_produtos_tiktok_completo
 
-    cfg = carregar_config_tiktok(cur, id_tenant)
-    if not cfg.get("conectado"):
-        raise RuntimeError("Conecte o TikTok Shop em Integrações.")
-    if not cfg.get("produtos_exportar_auto"):
-        raise RuntimeError(
-            "Ative a exportação de produtos em Integrações → TikTok Shop → Produtos."
-        )
-
-    modo = cfg.get("produtos_modo") or "vincular_sku"
-    sql, extra = _sql_produtos_vitrine_tiktok(ids)
-    cur.execute(sql, [id_tenant, *extra])
-    linhas = cur.fetchall()
-    if not linhas:
-        raise RuntimeError("Nenhuma variação ativa encontrada nos produtos selecionados.")
-
-    exportados = 0
-    atualizados = 0
-    vinculados = 0
-    nao_encontrados = 0
-    sem_sku = 0
-    erros: list[str] = []
-    resultados: list[dict] = []
-    processados = 0
-
-    for row in linhas:
-        if processados >= _TIKTOK_MAX_CRIAR_POR_SYNC:
-            break
-        (
-            _pv_id,
-            id_variante,
-            id_produto,
-            sku,
-            titulo,
-            preco,
-            descricao,
-            imagem,
-            estoque,
-            _condicao,
-            _marca,
-            _gtin,
-            id_cat_vd,
-        ) = row
-        processados += 1
-        sku_limpo = (sku or "").strip()
-        nome = (titulo or sku_limpo or "Produto")[:80]
-        map_id = _item_ja_vinculado_tiktok(cur, id_tenant, int(id_variante))
-
-        if modo == "criar_anuncio" and not map_id:
-            if not sku_limpo:
-                sem_sku += 1
-                resultados.append(
-                    {
-                        "id_produto": int(id_produto),
-                        "titulo": nome,
-                        "sku": sku_limpo,
-                        "status": "erro",
-                        "mensagem": "Produto sem SKU para publicar no TikTok Shop.",
-                    }
-                )
-                continue
-            try:
-                product_id, sku_id = _criar_produto_tiktok(
-                    cur,
-                    id_tenant,
-                    id_variante=int(id_variante),
-                    id_produto=int(id_produto),
-                    sku=sku_limpo,
-                    titulo=titulo or "",
-                    preco=float(preco or 0),
-                    descricao=descricao or "",
-                    imagem=imagem or "",
-                    estoque=int(estoque or 0),
-                    id_categoria_vendedor=int(id_cat_vd) if id_cat_vd else None,
-                )
-                exportados += 1
-                resultados.append(
-                    {
-                        "id_produto": int(id_produto),
-                        "titulo": nome,
-                        "sku": sku_limpo,
-                        "status": "ok",
-                        "acao": "criado",
-                        "mensagem": "Produto publicado no TikTok Shop.",
-                        "product_id": product_id,
-                        "sku_id": sku_id,
-                    }
-                )
-            except RuntimeError as e:
-                msg = str(e)[:300]
-                if msg not in erros:
-                    erros.append(msg)
-                resultados.append(
-                    {
-                        "id_produto": int(id_produto),
-                        "titulo": nome,
-                        "sku": sku_limpo,
-                        "status": "erro",
-                        "mensagem": msg,
-                    }
-                )
-            continue
-
-        if not map_id:
-            if not sku_limpo:
-                sem_sku += 1
-                resultados.append(
-                    {
-                        "id_produto": int(id_produto),
-                        "titulo": nome,
-                        "sku": sku_limpo,
-                        "status": "erro",
-                        "mensagem": "Produto sem SKU para vincular ao TikTok Shop.",
-                    }
-                )
-                continue
-            found = _buscar_produto_tiktok_por_sku(cur, id_tenant, sku_limpo)
-            if not found:
-                nao_encontrados += 1
-                resultados.append(
-                    {
-                        "id_produto": int(id_produto),
-                        "titulo": nome,
-                        "sku": sku_limpo,
-                        "status": "erro",
-                        "mensagem": "Nenhum produto encontrado no TikTok Shop com este SKU.",
-                    }
-                )
-                continue
-            product_id, sku_id = found
-            _salvar_map_produto_tiktok(
-                cur,
-                id_tenant,
-                int(id_variante),
-                int(id_produto),
-                sku_limpo,
-                product_id,
-                sku_id,
-            )
-            map_id = f"{product_id}:{sku_id}" if sku_id else product_id
-            vinculados += 1
-
-        try:
-            _atualizar_estoque_map_tiktok(
-                cur,
-                id_tenant,
-                map_id,
-                quantidade=int(estoque or 0),
-                preco=float(preco or 0) if preco else None,
-            )
-            atualizados += 1
-            resultados.append(
-                {
-                    "id_produto": int(id_produto),
-                    "titulo": nome,
-                    "sku": sku_limpo,
-                    "status": "ok",
-                    "acao": "atualizado",
-                    "mensagem": "Estoque/preço atualizado no TikTok Shop.",
-                    "map_id": map_id,
-                }
-            )
-        except RuntimeError as e:
-            msg = str(e)[:300]
-            if msg not in erros:
-                erros.append(msg)
-            resultados.append(
-                {
-                    "id_produto": int(id_produto),
-                    "titulo": nome,
-                    "sku": sku_limpo,
-                    "status": "erro",
-                    "mensagem": msg,
-                }
-            )
-
-    total = len(linhas)
-    partes: list[str] = []
-    if exportados:
-        partes.append(f"{exportados} produto(s) criado(s)")
-    if vinculados:
-        partes.append(f"{vinculados} vinculado(s)")
-    if atualizados:
-        partes.append(f"{atualizados} atualizado(s)")
-    if erros:
-        partes.append(f"{len(erros)} com erro")
-    msg = " · ".join(partes) + " no TikTok Shop." if partes else "Nenhum produto processado."
-    if total > _TIKTOK_MAX_CRIAR_POR_SYNC and processados >= _TIKTOK_MAX_CRIAR_POR_SYNC:
-        msg += (
-            f" Limite de {_TIKTOK_MAX_CRIAR_POR_SYNC} por sincronização — "
-            "execute novamente para continuar."
-        )
-    if nao_encontrados:
-        msg += f" {nao_encontrados} sem SKU correspondente no TikTok Shop."
-    if sem_sku:
-        msg += f" {sem_sku} sem SKU."
-
-    out = {
-        "message": msg,
-        "total_produtos": total,
-        "modo": modo,
-        "exportados": exportados,
-        "atualizados": atualizados,
-        "vinculados": vinculados,
-        "nao_encontrados": nao_encontrados,
-        "erros": len([r for r in resultados if r.get("status") == "erro"]),
-        "resultados": resultados,
-    }
-    if erros:
-        out["detalhes_erros"] = erros[:8]
-    return out
+    return publicar_produtos_tiktok_completo(cur, id_tenant, ids_produtos)
 
 
 def sincronizar_estoque_tiktok(cur, id_tenant: int) -> dict:

@@ -99,6 +99,63 @@ def mapear_status_ml_para_dn(status_ml: str | None, *, shipping_status: str | No
     return None
 
 
+def mapear_status_tiktok_para_dn(status_tt: str | None) -> str | None:
+    """Converte status de pedido TikTok Shop → status_vendedor DropNexo."""
+    s = (status_tt or "").strip().lower().replace(" ", "_")
+    if not s:
+        return None
+    if s in (
+        "cancelled",
+        "canceled",
+        "cancel",
+        "closed",
+        "refunded",
+        "returned",
+        "partially_refunded",
+    ):
+        return STATUS_CANCELADO
+    if s in ("delivered", "completed", "complete"):
+        return STATUS_ENTREGUE
+    if s in (
+        "in_transit",
+        "awaiting_collection",
+        "shipped",
+        "partially_shipping",
+        "partially_shipped",
+    ):
+        return STATUS_EM_EXPEDICAO
+    if s in (
+        "awaiting_shipment",
+        "paid",
+        "processing",
+        "ready_to_ship",
+        "on_hold",  # já pago, aguardando liberação
+    ):
+        return STATUS_PAGO
+    if s in ("unpaid", "awaiting_payment", "pending"):
+        return STATUS_AGUARDANDO
+    return None
+
+
+def mapear_status_amazon_para_dn(status_amz: str | None) -> str | None:
+    """Converte OrderStatus Amazon SP-API → status_vendedor DropNexo.
+
+    Nota: Amazon não tem 'Delivered' em OrderStatus (só Unshipped/Shipped/Canceled…).
+    """
+    s = (status_amz or "").strip().lower().replace(" ", "").replace("_", "")
+    if not s:
+        return None
+    if s in ("canceled", "cancelled"):
+        return STATUS_CANCELADO
+    if s in ("shipped", "partiallyshipped"):
+        return STATUS_EM_EXPEDICAO
+    if s in ("unshipped", "invoiceunconfirmed"):
+        return STATUS_PAGO
+    if s in ("pending",):
+        return STATUS_AGUARDANDO
+    return None
+
+
 def aplicar_status_avancado(
     cur,
     id_pedido: int,

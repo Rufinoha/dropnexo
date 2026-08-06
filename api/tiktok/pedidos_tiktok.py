@@ -230,9 +230,114 @@ def sincronizar_cancelamento_pedido_tiktok(
     }
 
 
+def sincronizar_status_pedido_tiktok_inbound(
+    cur,
+    id_tenant: int,
+    id_tiktok_pedido: str,
+    *,
+    status_tt: str | None = None,
+    package_id: str | None = None,
+    id_usuario: int | None = None,
+) -> dict[str, Any]:
+    """Avança status no DropNexo a partir do status TikTok (nunca regride)."""
+    from core.pedidos.servico import listar_pedidos_por_id_tiktok, salvar_id_tiktok_package
+    from core.pedidos.status_integracao import (
+        STATUS_CANCELADO,
+        aplicar_status_avancado,
+        mapear_status_tiktok_para_dn,
+    )
+
+    id_tt = str(id_tiktok_pedido or "").strip()
+    if not id_tt:
+        return {"ok": False, "avancados": 0, "motivo": "id_invalido"}
+
+    ids = listar_pedidos_por_id_tiktok(cur, int(id_tenant), id_tt)
+    if not ids:
+        return {
+            "ok": True,
+            "avancados": 0,
+            "motivo": "pedido_local_nao_encontrado",
+            "id_tiktok_pedido": id_tt,
+        }
+
+    # Se só veio o id, busca status atual na API
+    st = (status_tt or "").strip().lower()
+    pkg = (package_id or "").strip() or None
+    if not st:
+        try:
+            from api.tiktok.tiktok import api_request
+
+            data = api_request(
+                cur,
+                int(id_tenant),
+                "GET",
+                "/order/202309/orders",
+                params={"ids": id_tt},
+            )
+            pedidos = []
+            if isinstance(data, dict):
+                pedidos = data.get("orders") or data.get("order_list") or []
+            elif isinstance(data, list):
+                pedidos = data
+            pedido = pedidos[0] if pedidos else None
+            if isinstance(pedido, dict):
+                st = str(pedido.get("status") or pedido.get("order_status") or "").lower()
+                if not pkg:
+                    dados = parse_pedido_tiktok(pedido)
+                    pkg = (dados.get("package_id") or "").strip() or None
+        except Exception as e:
+            _log.debug("TikTok status inbound API %s: %s", id_tt, e)
+
+    novo = mapear_status_tiktok_para_dn(st)
+    if not novo:
+        # ainda pode gravar package_id
+        if pkg:
+            for pid in ids:
+                salvar_id_tiktok_package(cur, int(pid), pkg)
+        return {
+            "ok": True,
+            "avancados": 0,
+            "motivo": "status_nao_mapeado",
+            "status_tiktok": st,
+            "id_tiktok_pedido": id_tt,
+        }
+
+    if novo == STATUS_CANCELADO:
+        return sincronizar_cancelamento_pedido_tiktok(
+            cur,
+            int(id_tenant),
+            id_tt,
+            motivo=f"Status TikTok Shop: {st or 'cancelado'}.",
+        )
+
+    avancados: list[int] = []
+    for pid in ids:
+        if pkg:
+            salvar_id_tiktok_package(cur, int(pid), pkg)
+        if aplicar_status_avancado(
+            cur,
+            int(pid),
+            novo,
+            id_usuario=id_usuario,
+            origem_evento="tiktok",
+            detalhe=f"Status sincronizado do TikTok Shop ({st or novo}).",
+        ):
+            avancados.append(int(pid))
+
+    return {
+        "ok": True,
+        "avancados": len(avancados),
+        "ids_pedido": avancados,
+        "status_tiktok": st,
+        "status_dropnexo": novo,
+        "id_tiktok_pedido": id_tt,
+        "motivo": "status_avancado" if avancados else "sem_mudanca",
+    }
+
+
 def _importar_um_pedido_tiktok(cur, id_tenant: int, id_tiktok_pedido: str) -> dict[str, Any]:
     from api.tiktok.tiktok import api_request
-    from core.pedidos.servico import importar_pedido_tiktok, listar_pedidos_por_id_tiktok, salvar_id_tiktok_package
+    from core.pedidos.servico import importar_pedido_tiktok, salvar_id_tiktok_package
 
     id_tt = str(id_tiktok_pedido or "").strip()
     if not id_tt:
@@ -267,14 +372,19 @@ def _importar_um_pedido_tiktok(cur, id_tenant: int, id_tiktok_pedido: str) -> di
     if _pedido_tiktok_ja_processado(cur, id_tenant, id_tt):
         dados_parse = parse_pedido_tiktok(pedido)
         pkg = dados_parse.get("package_id")
-        if pkg:
-            for pid in listar_pedidos_por_id_tiktok(cur, int(id_tenant), id_tt):
-                salvar_id_tiktok_package(cur, int(pid), pkg)
+        sync = sincronizar_status_pedido_tiktok_inbound(
+            cur,
+            id_tenant,
+            id_tt,
+            status_tt=status,
+            package_id=pkg,
+        )
         return {
             "importado": False,
             "motivo": "ja_importado",
             "id_tiktok_pedido": id_tt,
             "id_tiktok_package": pkg,
+            "status_sync": sync,
         }
 
     if status and status not in _STATUS_PAGO:
@@ -498,6 +608,9 @@ def processar_webhook_tiktok(cur, payload: dict) -> dict[str, Any]:
     ).strip()
 
     status = str(data.get("order_status") or data.get("status") or "").lower()
+    package_id = str(
+        data.get("package_id") or data.get("packageId") or ""
+    ).strip() or None
 
     if any(x in tipo_l for x in ("cancel", "return", "refund", "reverse")):
         if order_id:
@@ -510,14 +623,27 @@ def processar_webhook_tiktok(cur, payload: dict) -> dict[str, Any]:
             return {"ok": True, "id_tenant": id_tenant, **res}
         return {"ok": True, "ignorado": True, "motivo": "cancel_sem_order_id"}
 
-    if status in _STATUS_CANCELADO and order_id:
+    if not order_id:
+        return {"ok": True, "ignorado": True, "motivo": "sem_order_id", "type": tipo}
+
+    # Pedido já existe → avança status (pago / expedição / entregue / cancelado)
+    from core.pedidos.servico import listar_pedidos_por_id_tiktok
+
+    if listar_pedidos_por_id_tiktok(cur, int(id_tenant), order_id):
+        sync = sincronizar_status_pedido_tiktok_inbound(
+            cur,
+            int(id_tenant),
+            order_id,
+            status_tt=status or None,
+            package_id=package_id,
+        )
+        return {"ok": True, "id_tenant": id_tenant, "type": tipo, "status_sync": sync}
+
+    if status in _STATUS_CANCELADO:
         res = sincronizar_cancelamento_pedido_tiktok(
             cur, int(id_tenant), order_id, motivo="Pedido cancelado no TikTok Shop."
         )
         return {"ok": True, "id_tenant": id_tenant, **res}
-
-    if not order_id:
-        return {"ok": True, "ignorado": True, "motivo": "sem_order_id", "type": tipo}
 
     if not cfg.get("pedidos_importar_auto"):
         return {"ok": True, "ignorado": True, "motivo": "importacao_auto_desligada"}

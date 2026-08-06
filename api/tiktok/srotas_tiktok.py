@@ -286,6 +286,46 @@ def categorias_mapeamento_salvar():
         conn.close()
 
 
+@tiktok_bp.get("/api/integracoes/tiktok/categorias/cache/buscar")
+@login_obrigatorio()
+def categorias_cache_buscar():
+    """Busca categorias publicáveis no cache local (por nome)."""
+    if not _pode_integracoes():
+        return jsonify(success=False, message="Sem permissão."), 403
+    if garantir_modulo_sessao() != "vendedor" and not session.get("eh_desenvolvedor"):
+        return jsonify(success=False, message="Apenas vendedores."), 403
+    q = (request.args.get("q") or "").strip()
+    id_tenant = session.get("id_tenant")
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        if not tiktok_conectado(cur, int(id_tenant)):
+            return jsonify(success=False, message="TikTok Shop não conectado."), 400
+        from sistema.tarefas_secundarias.cache_tiktok import (
+            buscar_categorias_cache_tiktok,
+            garantir_tabela_tiktok_categoria_cache,
+            region_tiktok_para_cache,
+        )
+
+        garantir_tabela_tiktok_categoria_cache(cur)
+        region = region_tiktok_para_cache(cur, int(id_tenant))
+        itens = buscar_categorias_cache_tiktok(cur, region, q, limit=40)
+        return jsonify(
+            success=True,
+            itens=itens,
+            region=region,
+            message=(
+                ""
+                if itens
+                else "Cache vazio. Rode «Cache de categorias TikTok Shop» em Configurações → Tarefas secundárias."
+            ),
+        )
+    except Exception as e:
+        return jsonify(success=False, message=str(e)[:300]), 400
+    finally:
+        conn.close()
+
+
 @tiktok_bp.post("/api/integracoes/tiktok/produtos/publicar")
 @login_obrigatorio()
 def produtos_publicar():

@@ -3,7 +3,7 @@
 {% block title %}TikTok Shop — Integrações — {{ MARCA_NOME }}{% endblock %}
 {% block topbar_title %}TikTok Shop{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('static', filename='style/Cmercadopago_integracao.css') }}?v=8" />
+<link rel="stylesheet" href="{{ url_for('static', filename='style/Cmercadopago_integracao.css') }}?v=14" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal Mp_Wrap">
@@ -144,26 +144,52 @@
   <p id="tt_msg" class="Mp_Hint" hidden></p>
 </div>
 
-<dialog id="tt_modal_categorias" class="Mp_Modal">
-  <div class="Mp_ModalHead">
-    <h3>Mapear categorias</h3>
-    <button type="button" class="Mp_ModalClose" id="tt_modal_cat_fechar" aria-label="Fechar">×</button>
-  </div>
-  <div class="Mp_ModalBody">
-    <p class="Mp_Hint">Informe o ID da categoria TikTok Shop para cada categoria DropNexo.</p>
-    <table class="Mp_Table">
-      <thead>
-        <tr><th>Categoria DropNexo</th><th>ID categoria TikTok</th><th>Nome (opcional)</th></tr>
-      </thead>
-      <tbody id="tt_tbody_categorias"></tbody>
-    </table>
-  </div>
-  <div class="Mp_ModalFoot">
-    <button type="button" class="Cl_botaoFiltro" id="tt_modal_cat_cancelar">Cancelar</button>
-    <button type="button" class="Cl_botaoprimario" id="tt_modal_cat_salvar">Salvar</button>
+<dialog class="Mp_Modal" id="tt_modal_categorias" aria-labelledby="tt_modal_cat_titulo">
+  <form method="dialog" class="Mp_ModalInner" id="tt_form_categorias">
+    <header class="Mp_ModalHead">
+      <h3 id="tt_modal_cat_titulo">Mapear categorias — TikTok Shop</h3>
+      <button type="button" class="Mp_ModalClose" id="tt_modal_cat_fechar" aria-label="Fechar">&times;</button>
+    </header>
+    <p class="Mp_Hint">Associe cada categoria do DropNexo a uma categoria TikTok Shop. Clique em <strong>Escolher</strong> para buscar no cache (atualizado em Tarefas secundárias).</p>
+    <p id="tt_msg_modal" class="Mp_Msg Mp_Msg--modal" hidden role="status"></p>
+    <div class="Mp_CatMapWrap">
+      <table class="Mp_CatMapTable" id="tt_tabela_categorias">
+        <thead>
+          <tr>
+            <th>Sua categoria</th>
+            <th>Categoria TikTok Shop</th>
+          </tr>
+        </thead>
+        <tbody id="tt_tbody_categorias"></tbody>
+      </table>
+    </div>
+    <footer class="Mp_ModalFoot Mp_ModalFoot--cat">
+      <div class="Mp_ModalFootActions">
+        <button type="button" class="Cl_BtnCancelar" id="tt_modal_cat_cancelar">Cancelar</button>
+        <button type="button" class="Cl_botaoprimario" id="tt_modal_cat_salvar">Salvar mapeamento</button>
+      </div>
+    </footer>
+  </form>
+</dialog>
+
+<dialog class="Mp_Modal Mp_Modal--picker" id="tt_modal_picker_cat" aria-labelledby="tt_picker_titulo">
+  <div class="Mp_ModalInner">
+    <header class="Mp_ModalHead">
+      <h3 id="tt_picker_titulo">Escolher categoria TikTok Shop</h3>
+      <button type="button" class="Mp_ModalClose" id="tt_picker_fechar" aria-label="Fechar">&times;</button>
+    </header>
+    <div class="Mp_PickerBody">
+      <label class="Mp_PickerLabel" for="tt_picker_busca">Buscar por nome</label>
+      <input type="search" id="tt_picker_busca" class="Mp_PickerBusca" placeholder="Ex.: beleza, eletrônicos, casa…" autocomplete="off" />
+      <p id="tt_picker_hint" class="Mp_Hint" hidden></p>
+      <div id="tt_picker_lista" class="Mp_PickerLista" role="listbox"></div>
+    </div>
+    <footer class="Mp_ModalFoot">
+      <button type="button" class="Cl_BtnCancelar" id="tt_picker_cancelar">Cancelar</button>
+    </footer>
   </div>
 </dialog>
 {% endblock %}
 {% block page_js %}
-<script src="{{ url_for('static', filename='script/Stiktok_integracao.js') }}?v=1"></script>
+<script src="{{ url_for('static', filename='script/Stiktok_integracao.js') }}?v=2"></script>
 {% endblock %}

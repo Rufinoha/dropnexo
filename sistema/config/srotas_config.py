@@ -2367,24 +2367,36 @@ def tarefas_secundarias_executar(codigo: str):
 
 @config_bp.post("/api/tarefas-secundarias/job")
 def tarefas_secundarias_job_cron():
-    """Cron: atualiza tarefas agendadas (ex.: cache ML às segundas)."""
+    """Cron: atualiza tarefas agendadas (ML segunda; TikTok/Amazon domingo 02:00)."""
     secret = (os.getenv("CRON_SECRET") or os.getenv("EFI_WEBHOOK_SECRET") or "").strip()
     token = (request.headers.get("X-Cron-Token") or request.args.get("token") or "").strip()
     if not secret or token != secret:
         return jsonify(success=False, message="Não autorizado."), 401
-    from sistema.tarefas_secundarias.servico import CODIGO_ML_CATEGORIAS, executar_tarefa
+    from sistema.tarefas_secundarias.servico import (
+        executar_tarefa,
+        executar_tarefas_agendadas,
+    )
 
     force = str(request.args.get("force") or "").lower() in ("1", "true", "sim")
+    codigo = (request.args.get("codigo") or "").strip()
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
-        res = executar_tarefa(
-            cur,
-            CODIGO_ML_CATEGORIAS,
-            disparado_por="cron",
-            forcar=force,
-            conn=conn,
-        )
+        if codigo:
+            res = executar_tarefa(
+                cur,
+                codigo,
+                disparado_por="cron",
+                forcar=force,
+                conn=conn,
+            )
+        else:
+            res = executar_tarefas_agendadas(
+                cur,
+                disparado_por="cron",
+                forcar=force,
+                conn=conn,
+            )
         conn.commit()
         return jsonify(success=True, **res)
     except Exception as e:

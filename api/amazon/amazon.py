@@ -616,25 +616,62 @@ def _mapa_product_type_amazon(cur, id_tenant: int, id_categoria: int | None) -> 
 
 def listar_mapeamento_categorias_amazon(cur, id_tenant: int) -> list[dict]:
     _garantir_tabela_amazon_categoria_map(cur)
-    cur.execute(
-        """
-        SELECT c.id, c.nome, COALESCE(m.amazon_product_type, '')
-        FROM tbl_categoria c
-        LEFT JOIN tbl_integracao_amazon_categoria_map m
-            ON m.id_categoria = c.id AND m.id_tenant = c.id_tenant
-        WHERE c.id_tenant = %s AND c.ativo = TRUE
-        ORDER BY c.nome
-        """,
-        (id_tenant,),
-    )
-    return [
-        {
-            "id_categoria": int(r[0]),
-            "nome": r[1],
-            "amazon_product_type": r[2] or "",
-        }
-        for r in cur.fetchall()
-    ]
+    mp = _marketplace_id(cur, id_tenant)
+    try:
+        from sistema.tarefas_secundarias.cache_amazon import (
+            garantir_tabela_amazon_product_type_cache,
+        )
+
+        garantir_tabela_amazon_product_type_cache(cur)
+        cur.execute(
+            """
+            SELECT c.id, c.nome,
+                   COALESCE(m.amazon_product_type, ''),
+                   COALESCE(NULLIF(TRIM(ch.display_name), ''), ch.product_type, '')
+            FROM tbl_categoria c
+            LEFT JOIN tbl_integracao_amazon_categoria_map m
+                ON m.id_categoria = c.id AND m.id_tenant = c.id_tenant
+            LEFT JOIN tbl_amazon_product_type_cache ch
+                ON ch.marketplace_id = %s
+               AND UPPER(ch.product_type) = UPPER(TRIM(COALESCE(m.amazon_product_type, '')))
+            WHERE c.id_tenant = %s AND c.ativo = TRUE
+            ORDER BY c.nome
+            """,
+            (mp, id_tenant),
+        )
+        return [
+            {
+                "id_categoria": int(r[0]),
+                "nome": r[1],
+                "amazon_product_type": r[2] or "",
+                "amazon_product_type_nome": (r[3] or "").strip(),
+                "marketplace_id": mp,
+            }
+            for r in cur.fetchall()
+        ]
+    except Exception:
+        _log.debug("Cache Amazon indisponível no mapeamento; fallback sem nome", exc_info=True)
+        cur.execute(
+            """
+            SELECT c.id, c.nome, COALESCE(m.amazon_product_type, '')
+            FROM tbl_categoria c
+            LEFT JOIN tbl_integracao_amazon_categoria_map m
+                ON m.id_categoria = c.id AND m.id_tenant = c.id_tenant
+            WHERE c.id_tenant = %s AND c.ativo = TRUE
+            ORDER BY c.nome
+            """,
+            (id_tenant,),
+        )
+        return [
+            {
+                "id_categoria": int(r[0]),
+                "nome": r[1],
+                "amazon_product_type": r[2] or "",
+                "amazon_product_type_nome": "",
+                "marketplace_id": mp,
+            }
+            for r in cur.fetchall()
+        ]
 
 
 def salvar_mapeamento_categorias_amazon(cur, id_tenant: int, itens: list[dict]) -> int:
@@ -794,6 +831,7 @@ def _salvar_map_produto_amazon(
     sku: str,
     *,
     asin: str = "",
+    product_type: str = "",
 ) -> None:
     id_bling = f"{asin}:{sku}" if asin and sku else str(sku)
     cur.execute(
@@ -809,6 +847,7 @@ def _salvar_map_produto_amazon(
             "id_produto": id_produto,
             "seller_sku": sku,
             "asin": asin or None,
+            "product_type": product_type or None,
         },
         ensure_ascii=False,
     )
@@ -922,10 +961,9 @@ def _criar_listing_amazon(
             }
         ],
     }
-    extras = links[1:6]
-    if extras:
-        attributes["other_product_image_locator"] = [
-            {"media_location": u, "marketplace_id": mp} for u in extras
+    for i, u in enumerate(links[1:9], start=1):
+        attributes[f"other_product_image_locator_{i}"] = [
+            {"media_location": u, "marketplace_id": mp}
         ]
     if gtin:
         attributes["externally_assigned_product_identifier"] = [
@@ -974,7 +1012,13 @@ def _criar_listing_amazon(
             asin = str(summaries[0].get("asin") or "").strip()
 
     _salvar_map_produto_amazon(
-        cur, id_tenant, id_variante, id_produto, sku, asin=asin
+        cur,
+        id_tenant,
+        id_variante,
+        id_produto,
+        sku,
+        asin=asin,
+        product_type=product_type,
     )
     return sku, asin
 
@@ -1068,229 +1112,10 @@ def _atualizar_estoque_map_amazon(
 
 
 def publicar_produtos_amazon(cur, id_tenant: int, ids_produtos: list[int]) -> dict:
-    ids = []
-    for x in ids_produtos:
-        try:
-            pid = int(x)
-            if pid > 0:
-                ids.append(pid)
-        except (TypeError, ValueError):
-            continue
-    ids = list(dict.fromkeys(ids))
-    if not ids:
-        raise RuntimeError("Selecione ao menos um produto.")
+    """Exporta/atualiza listings na Amazon com payload completo (imagens, peso, dims, GTIN)."""
+    from api.amazon.produtos import publicar_produtos_amazon_completo
 
-    cfg = carregar_config_amazon(cur, id_tenant)
-    if not cfg.get("conectado"):
-        raise RuntimeError("Conecte a Amazon em Integrações.")
-    if not cfg.get("produtos_exportar_auto"):
-        raise RuntimeError(
-            "Ative a exportação de produtos em Integrações → Amazon → Produtos."
-        )
-
-    modo = cfg.get("produtos_modo") or "vincular_sku"
-    sql, extra = _sql_produtos_vitrine_amazon(ids)
-    cur.execute(sql, [id_tenant, *extra])
-    linhas = cur.fetchall()
-    if not linhas:
-        raise RuntimeError("Nenhuma variação ativa encontrada nos produtos selecionados.")
-
-    exportados = 0
-    atualizados = 0
-    vinculados = 0
-    nao_encontrados = 0
-    sem_sku = 0
-    erros: list[str] = []
-    resultados: list[dict] = []
-    processados = 0
-
-    for row in linhas:
-        if processados >= _AMAZON_MAX_CRIAR_POR_SYNC:
-            break
-        (
-            _pv_id,
-            id_variante,
-            id_produto,
-            sku,
-            titulo,
-            preco,
-            descricao,
-            imagem,
-            estoque,
-            _condicao,
-            marca,
-            gtin,
-            id_cat_vd,
-        ) = row
-        processados += 1
-        sku_limpo = (sku or "").strip()
-        nome = (titulo or sku_limpo or "Produto")[:80]
-        map_id = _item_ja_vinculado_amazon(cur, id_tenant, int(id_variante))
-
-        if modo == "criar_anuncio" and not map_id:
-            if not sku_limpo:
-                sem_sku += 1
-                resultados.append(
-                    {
-                        "id_produto": int(id_produto),
-                        "titulo": nome,
-                        "sku": sku_limpo,
-                        "status": "erro",
-                        "mensagem": "Produto sem SKU para publicar na Amazon.",
-                    }
-                )
-                continue
-            try:
-                seller_sku, asin = _criar_listing_amazon(
-                    cur,
-                    id_tenant,
-                    id_variante=int(id_variante),
-                    id_produto=int(id_produto),
-                    sku=sku_limpo,
-                    titulo=titulo or "",
-                    preco=float(preco or 0),
-                    descricao=descricao or "",
-                    imagem=imagem or "",
-                    estoque=int(estoque or 0),
-                    marca=marca or "",
-                    gtin=gtin or "",
-                    id_categoria_vendedor=int(id_cat_vd) if id_cat_vd else None,
-                )
-                exportados += 1
-                resultados.append(
-                    {
-                        "id_produto": int(id_produto),
-                        "titulo": nome,
-                        "sku": sku_limpo,
-                        "status": "ok",
-                        "acao": "criado",
-                        "mensagem": "Produto publicado na Amazon.",
-                        "seller_sku": seller_sku,
-                        "asin": asin,
-                    }
-                )
-            except RuntimeError as e:
-                msg = str(e)[:300]
-                if msg not in erros:
-                    erros.append(msg)
-                resultados.append(
-                    {
-                        "id_produto": int(id_produto),
-                        "titulo": nome,
-                        "sku": sku_limpo,
-                        "status": "erro",
-                        "mensagem": msg,
-                    }
-                )
-            continue
-
-        if not map_id:
-            if not sku_limpo:
-                sem_sku += 1
-                resultados.append(
-                    {
-                        "id_produto": int(id_produto),
-                        "titulo": nome,
-                        "sku": sku_limpo,
-                        "status": "erro",
-                        "mensagem": "Produto sem SKU para vincular à Amazon.",
-                    }
-                )
-                continue
-            found = _buscar_listing_amazon_por_sku(cur, id_tenant, sku_limpo)
-            if not found:
-                nao_encontrados += 1
-                resultados.append(
-                    {
-                        "id_produto": int(id_produto),
-                        "titulo": nome,
-                        "sku": sku_limpo,
-                        "status": "erro",
-                        "mensagem": "Nenhum listing encontrado na Amazon com este SKU.",
-                    }
-                )
-                continue
-            seller_sku, asin = found
-            _salvar_map_produto_amazon(
-                cur,
-                id_tenant,
-                int(id_variante),
-                int(id_produto),
-                seller_sku,
-                asin=asin,
-            )
-            map_id = f"{asin}:{seller_sku}" if asin else seller_sku
-            vinculados += 1
-
-        try:
-            _atualizar_estoque_map_amazon(
-                cur,
-                id_tenant,
-                map_id,
-                quantidade=int(estoque or 0),
-                preco=float(preco or 0) if preco else None,
-            )
-            atualizados += 1
-            resultados.append(
-                {
-                    "id_produto": int(id_produto),
-                    "titulo": nome,
-                    "sku": sku_limpo,
-                    "status": "ok",
-                    "acao": "atualizado",
-                    "mensagem": "Estoque/preço atualizado na Amazon.",
-                    "map_id": map_id,
-                }
-            )
-        except RuntimeError as e:
-            msg = str(e)[:300]
-            if msg not in erros:
-                erros.append(msg)
-            resultados.append(
-                {
-                    "id_produto": int(id_produto),
-                    "titulo": nome,
-                    "sku": sku_limpo,
-                    "status": "erro",
-                    "mensagem": msg,
-                }
-            )
-
-    total = len(linhas)
-    partes: list[str] = []
-    if exportados:
-        partes.append(f"{exportados} produto(s) criado(s)")
-    if vinculados:
-        partes.append(f"{vinculados} vinculado(s)")
-    if atualizados:
-        partes.append(f"{atualizados} atualizado(s)")
-    if erros:
-        partes.append(f"{len(erros)} com erro")
-    msg = " · ".join(partes) + " na Amazon." if partes else "Nenhum produto processado."
-    if total > _AMAZON_MAX_CRIAR_POR_SYNC and processados >= _AMAZON_MAX_CRIAR_POR_SYNC:
-        msg += (
-            f" Limite de {_AMAZON_MAX_CRIAR_POR_SYNC} por sincronização — "
-            "execute novamente para continuar."
-        )
-    if nao_encontrados:
-        msg += f" {nao_encontrados} sem SKU correspondente na Amazon."
-    if sem_sku:
-        msg += f" {sem_sku} sem SKU."
-
-    out = {
-        "message": msg,
-        "total_produtos": total,
-        "modo": modo,
-        "exportados": exportados,
-        "atualizados": atualizados,
-        "vinculados": vinculados,
-        "nao_encontrados": nao_encontrados,
-        "erros": len([r for r in resultados if r.get("status") == "erro"]),
-        "resultados": resultados,
-    }
-    if erros:
-        out["detalhes_erros"] = erros[:8]
-    return out
+    return publicar_produtos_amazon_completo(cur, id_tenant, ids_produtos)
 
 
 def sincronizar_estoque_amazon(cur, id_tenant: int) -> dict:

@@ -232,6 +232,92 @@ def sincronizar_cancelamento_pedido_amazon(
     }
 
 
+def sincronizar_status_pedido_amazon_inbound(
+    cur,
+    id_tenant: int,
+    id_amazon_pedido: str,
+    *,
+    status_amz: str | None = None,
+    id_usuario: int | None = None,
+) -> dict[str, Any]:
+    """Avança status no DropNexo a partir do OrderStatus Amazon (nunca regride)."""
+    from core.pedidos.servico import listar_pedidos_por_id_amazon
+    from core.pedidos.status_integracao import (
+        STATUS_CANCELADO,
+        aplicar_status_avancado,
+        mapear_status_amazon_para_dn,
+    )
+
+    id_amz = str(id_amazon_pedido or "").strip()
+    if not id_amz:
+        return {"ok": False, "avancados": 0, "motivo": "id_invalido"}
+
+    ids = listar_pedidos_por_id_amazon(cur, int(id_tenant), id_amz)
+    if not ids:
+        return {
+            "ok": True,
+            "avancados": 0,
+            "motivo": "pedido_local_nao_encontrado",
+            "id_amazon_pedido": id_amz,
+        }
+
+    st = (status_amz or "").strip()
+    if not st:
+        try:
+            from api.amazon.amazon import api_request
+
+            data = api_request(
+                cur,
+                int(id_tenant),
+                "GET",
+                f"/orders/v0/orders/{id_amz}",
+            )
+            payload = data.get("payload") if isinstance(data, dict) else None
+            order = payload if isinstance(payload, dict) else (data if isinstance(data, dict) else {})
+            st = str(order.get("OrderStatus") or "").strip()
+        except Exception as e:
+            _log.debug("Amazon status inbound API %s: %s", id_amz, e)
+
+    novo = mapear_status_amazon_para_dn(st)
+    if not novo:
+        return {
+            "ok": True,
+            "avancados": 0,
+            "motivo": "status_nao_mapeado",
+            "status_amazon": st,
+            "id_amazon_pedido": id_amz,
+        }
+
+    if novo == STATUS_CANCELADO:
+        return sincronizar_cancelamento_pedido_amazon(
+            cur,
+            int(id_tenant),
+            id_amz,
+            motivo=f"Status Amazon: {st or 'Canceled'}.",
+        )
+
+    avancados: list[int] = []
+    for pid in ids:
+        if aplicar_status_avancado(
+            cur,
+            int(pid),
+            novo,
+            id_usuario=id_usuario,
+            origem_evento="amazon",
+            detalhe=f"Status sincronizado da Amazon ({st or novo}).",
+        ):
+            avancados.append(int(pid))
+
+    return {
+        "ok": True,
+        "avancados": len(avancados),
+        "ids_pedido": avancados,
+        "status_amazon": st,
+        "status_dn": novo,
+        "id_amazon_pedido": id_amz,
+    }
+
+
 def _buscar_itens_pedido(cur, id_tenant: int, order_id: str) -> list[dict]:
     from api.amazon.amazon import api_request
 
@@ -270,10 +356,17 @@ def _importar_um_pedido_amazon(cur, id_tenant: int, order: dict) -> dict[str, An
         )
 
     if _pedido_amazon_ja_processado(cur, id_tenant, id_amz):
+        sync = sincronizar_status_pedido_amazon_inbound(
+            cur, id_tenant, id_amz, status_amz=status or None
+        )
         return {
             "importado": False,
             "motivo": "ja_importado",
             "id_amazon_pedido": id_amz,
+            "status_sync": sync,
+            "avancados": int(sync.get("avancados") or 0),
+            "cancelado": bool(sync.get("cancelado")),
+            "ids_pedido": sync.get("ids_pedido") or [],
         }
 
     if status and status.replace(" ", "") not in _STATUS_IMPORTAVEIS:
@@ -297,7 +390,15 @@ def _importar_um_pedido_amazon(cur, id_tenant: int, order: dict) -> dict[str, An
         return {"importado": False, "motivo": "erro_criar", "mensagem": str(e)[:250]}
 
     if not ids:
-        return {"importado": False, "motivo": "ja_importado"}
+        sync = sincronizar_status_pedido_amazon_inbound(
+            cur, id_tenant, id_amz, status_amz=status or None
+        )
+        return {
+            "importado": False,
+            "motivo": "ja_importado",
+            "status_sync": sync,
+            "avancados": int(sync.get("avancados") or 0),
+        }
 
     cur.execute(
         """
@@ -325,6 +426,11 @@ def _importar_um_pedido_amazon(cur, id_tenant: int, order: dict) -> dict[str, An
         ),
     )
 
+    # Alinha status inicial com a Amazon (ex.: já Shipped → em_expedicao)
+    sincronizar_status_pedido_amazon_inbound(
+        cur, id_tenant, id_amz, status_amz=status or None
+    )
+
     return {
         "importado": True,
         "id_amazon_pedido": id_amz,
@@ -342,33 +448,50 @@ def importar_pedidos_amazon(cur, id_tenant: int, *, dias: int = 7) -> dict:
         raise RuntimeError("Amazon não conectada.")
 
     desde = datetime.now(timezone.utc) - timedelta(days=max(1, min(dias, 60)))
-    created_after = desde.strftime("%Y-%m-%dT%H:%M:%SZ")
+    last_updated_after = desde.strftime("%Y-%m-%dT%H:%M:%SZ")
     mp = cfg.get("marketplace_id") or marketplace_id_padrao()
 
+    pedidos: list[dict] = []
+    next_token: str | None = None
     try:
-        data = api_request(
-            cur,
-            id_tenant,
-            "GET",
-            "/orders/v0/orders",
-            params={
+        for _ in range(10):  # até 10 páginas
+            params: dict[str, Any] = {
                 "MarketplaceIds": mp,
-                "CreatedAfter": created_after,
-                "OrderStatuses": "Unshipped,PartiallyShipped,Shipped",
-            },
-        )
+                "LastUpdatedAfter": last_updated_after,
+                "OrderStatuses": (
+                    "Pending,Unshipped,PartiallyShipped,Shipped,Canceled,InvoiceUnconfirmed"
+                ),
+            }
+            if next_token:
+                params = {"NextToken": next_token}
+            data = api_request(
+                cur,
+                id_tenant,
+                "GET",
+                "/orders/v0/orders",
+                params=params,
+            )
+            payload = data.get("payload") if isinstance(data, dict) else None
+            chunk = []
+            token = None
+            if isinstance(payload, dict):
+                chunk = payload.get("Orders") or []
+                token = payload.get("NextToken")
+            elif isinstance(data, dict):
+                chunk = data.get("Orders") or []
+                token = data.get("NextToken")
+            for ped in chunk:
+                if isinstance(ped, dict):
+                    pedidos.append(ped)
+            next_token = str(token).strip() if token else None
+            if not next_token:
+                break
     except RuntimeError as e:
         raise RuntimeError(f"Não foi possível buscar pedidos na Amazon: {e}") from e
 
-    payload = data.get("payload") if isinstance(data, dict) else None
-    pedidos = []
-    if isinstance(payload, dict):
-        pedidos = payload.get("Orders") or []
-    elif isinstance(data, dict):
-        pedidos = data.get("Orders") or []
-
     importados = 0
     cancelados = 0
+    avancados = 0
     ignorados = 0
     erros: list[str] = []
     ids_pedidos: list[int] = []
@@ -386,7 +509,12 @@ def importar_pedidos_amazon(cur, id_tenant: int, *, dias: int = 7) -> dict:
                 cancelados += 1
                 ids_pedidos.extend(int(x) for x in (res.get("ids_pedido") or []))
             else:
-                ignorados += 1
+                n_adv = int(res.get("avancados") or 0)
+                if n_adv:
+                    avancados += n_adv
+                    ids_pedidos.extend(int(x) for x in (res.get("ids_pedido") or []))
+                else:
+                    ignorados += 1
                 if res.get("motivo") == "erro_criar" and res.get("mensagem"):
                     erros.append(f"#{id_amz}: {res['mensagem']}")
         except Exception as e:
@@ -406,6 +534,7 @@ def importar_pedidos_amazon(cur, id_tenant: int, *, dias: int = 7) -> dict:
     msg = (
         f"{importados} pedido(s) da Amazon criado(s) em Pedidos. "
         f"{cancelados} cancelamento(s) sincronizado(s). "
+        f"{avancados} status avançado(s). "
         f"{ignorados} ignorado(s)."
     )
     if erros:
@@ -416,6 +545,7 @@ def importar_pedidos_amazon(cur, id_tenant: int, *, dias: int = 7) -> dict:
         "total_encontrados": len(pedidos),
         "importados": importados,
         "cancelados": cancelados,
+        "avancados": avancados,
         "ignorados": ignorados,
         "ids_pedido": ids_pedidos[:20],
         "detalhes_erros": erros[:5],

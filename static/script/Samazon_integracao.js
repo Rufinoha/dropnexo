@@ -26,12 +26,39 @@
     btnModalCatSalvar: document.getElementById("amz_modal_cat_salvar"),
     btnModalCatFechar: document.getElementById("amz_modal_cat_fechar"),
     btnModalCatCancelar: document.getElementById("amz_modal_cat_cancelar"),
-    ptBusca: document.getElementById("amz_pt_busca"),
-    btnBuscarPt: document.getElementById("amz_btn_buscar_pt"),
-    ptSugestoes: document.getElementById("amz_pt_sugestoes"),
+    msgModal: document.getElementById("amz_msg_modal"),
+    pickerModal: document.getElementById("amz_modal_picker_cat"),
+    pickerBusca: document.getElementById("amz_picker_busca"),
+    pickerLista: document.getElementById("amz_picker_lista"),
+    pickerHint: document.getElementById("amz_picker_hint"),
+    btnPickerFechar: document.getElementById("amz_picker_fechar"),
+    btnPickerCancelar: document.getElementById("amz_picker_cancelar"),
   };
 
+  let categoriasMap = [];
   let salvando = false;
+  let pickerTr = null;
+  let pickerTimer = null;
+
+  function esc(s) {
+    return String(s ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function feedbackCat(msg, isErr) {
+    if (!el.msgModal) return;
+    if (!msg) {
+      el.msgModal.hidden = true;
+      el.msgModal.textContent = "";
+      return;
+    }
+    el.msgModal.hidden = false;
+    el.msgModal.textContent = msg;
+    el.msgModal.classList.toggle("is-erro", !!isErr);
+  }
 
   function ativarAba(tab) {
     const id = tab in PANES ? tab : "pedidos";
@@ -231,6 +258,53 @@
     mostrarMsg("Desconectado.", false);
   });
 
+  function setProductTypeLinha(tr, productType, displayName) {
+    const hid = tr.querySelector(".amz-hid-pt");
+    const label = tr.querySelector(".amz-lbl-pt");
+    const id = String(productType || "").trim();
+    const nome = String(displayName || productType || "").trim();
+    const ok = !!id;
+    if (hid) hid.value = ok ? id : "";
+    if (label) {
+      label.textContent = ok ? nome : "Escolher Product Type";
+      label.classList.toggle("is-empty", !ok);
+      label.title = ok ? id : "";
+    }
+  }
+
+  function valorProductTypeLinha(tr) {
+    return (tr.querySelector(".amz-hid-pt")?.value || "").trim();
+  }
+
+  function renderTabelaCategorias() {
+    if (!el.tbodyCat) return;
+    if (!categoriasMap.length) {
+      el.tbodyCat.innerHTML =
+        '<tr><td colspan="2" class="Mp_Hint">Cadastre categorias em Categorias antes de mapear.</td></tr>';
+      return;
+    }
+    el.tbodyCat.innerHTML = categoriasMap
+      .map((c) => {
+        const id = c.id_categoria;
+        const pt = (c.amazon_product_type || "").trim();
+        const ptNome = (c.amazon_product_type_nome || pt || "").trim();
+        const ok = !!pt;
+        const label = ok ? esc(ptNome) : "Escolher Product Type";
+        const emptyCls = ok ? "" : " is-empty";
+        return `<tr data-cat-id="${id}">
+          <td>${esc(c.nome)}</td>
+          <td class="amz-cell-pt">
+            <input type="hidden" class="amz-hid-pt" value="${esc(pt)}" />
+            <div class="Mp_CatPick">
+              <span class="amz-lbl-pt${emptyCls}" title="${esc(pt)}">${label}</span>
+              <button type="button" class="Cl_botaoFiltro Mp_CatMapBtn amz-btn-escolher">Escolher</button>
+            </div>
+          </td>
+        </tr>`;
+      })
+      .join("");
+  }
+
   async function abrirModalCategorias() {
     const r = await fetch("/api/integracoes/amazon/categorias-mapeamento", { credentials: "same-origin" });
     const j = await r.json();
@@ -238,54 +312,62 @@
       await Swal.fire({ icon: "error", title: "Erro", text: j.message || "Falha.", confirmButtonColor: "#021F81" });
       return;
     }
-    const categoriasMap = j.itens || j.categorias || [];
-    if (!el.tbodyCat) return;
-    el.tbodyCat.innerHTML =
-      categoriasMap
-        .map(
-          (c) => `
-      <tr data-id-cat="${c.id_categoria || c.id}">
-        <td>${(c.nome || c.categoria_nome || "").replace(/</g, "&lt;")}</td>
-        <td><input type="text" class="Mp_Input" data-amz-pt value="${(c.amazon_product_type || "").replace(/"/g, "")}" placeholder="ex.: SHIRT" /></td>
-      </tr>`
-        )
-        .join("") || '<tr><td colspan="2" class="Mp_Hint">Nenhuma categoria encontrada.</td></tr>';
-    if (el.ptSugestoes) el.ptSugestoes.hidden = true;
+    categoriasMap = j.itens || j.categorias || [];
+    feedbackCat("", false);
+    renderTabelaCategorias();
     el.modalCat?.showModal?.();
   }
 
-  async function buscarProductTypes() {
-    const q = (el.ptBusca?.value || "").trim();
-    if (!q) {
-      mostrarMsg("Digite um termo para buscar product types.", true);
+  function fecharPickerCat() {
+    pickerTr = null;
+    el.pickerModal?.close();
+  }
+
+  function renderPickerLista(itens, message) {
+    if (!el.pickerLista) return;
+    if (el.pickerHint) {
+      el.pickerHint.hidden = !message;
+      el.pickerHint.textContent = message || "";
+    }
+    if (!itens.length) {
+      el.pickerLista.innerHTML =
+        '<p class="Mp_Hint">Nenhum resultado. Ajuste a busca ou rode o cache em Tarefas secundárias.</p>';
       return;
     }
-    const r = await fetch(
-      `/api/integracoes/amazon/product-types/buscar?q=${encodeURIComponent(q)}`,
-      { credentials: "same-origin" }
-    );
+    el.pickerLista.innerHTML = itens
+      .map(
+        (x) => {
+          const code = x.product_type || x.category_id || "";
+          const nome = x.nome || x.display_name || code;
+          return `<button type="button" class="Mp_PickerItem" role="option"
+          data-id="${esc(code)}" data-nome="${esc(nome)}">
+          <strong>${esc(nome)}</strong>
+          ${code && code !== nome ? `<span>${esc(code)}</span>` : ""}
+        </button>`;
+        }
+      )
+      .join("");
+  }
+
+  async function buscarPicker(termo) {
+    const qs = new URLSearchParams();
+    if (termo) qs.set("q", termo);
+    const r = await fetch(`/api/integracoes/amazon/categorias/cache/buscar?${qs}`, {
+      credentials: "same-origin",
+    });
     const j = await r.json().catch(() => ({}));
-    if (!r.ok || !j.success) {
-      await Swal.fire({ icon: "error", title: "Erro", text: j.message || "Falha na busca.", confirmButtonColor: "#021F81" });
-      return;
-    }
-    const lista = j.itens || j.product_types || [];
-    if (!el.ptSugestoes) return;
-    if (!lista.length) {
-      el.ptSugestoes.hidden = false;
-      el.ptSugestoes.textContent = "Nenhum product type encontrado.";
-      return;
-    }
-    el.ptSugestoes.hidden = false;
-    el.ptSugestoes.innerHTML =
-      "Sugestões (clique para usar): " +
-      lista
-        .slice(0, 12)
-        .map((pt) => {
-          const nome = typeof pt === "string" ? pt : pt.name || pt.productType || pt.product_type || "";
-          return `<button type="button" class="Cl_botaoFiltro" data-amz-sugerir="${String(nome).replace(/"/g, "")}" style="margin:2px">${String(nome).replace(/</g, "&lt;")}</button>`;
-        })
-        .join(" ");
+    if (!r.ok || !j.success) throw new Error(j.message || "Falha na busca.");
+    renderPickerLista(j.itens || [], j.message || "");
+  }
+
+  function abrirPickerCat(tr) {
+    pickerTr = tr;
+    if (!el.pickerModal) return;
+    if (el.pickerBusca) el.pickerBusca.value = "";
+    renderPickerLista([], "Digite para filtrar ou aguarde a lista…");
+    el.pickerModal.showModal();
+    buscarPicker("").catch((e) => renderPickerLista([], e.message));
+    setTimeout(() => el.pickerBusca?.focus(), 50);
   }
 
   el.btnMapearCategorias?.addEventListener("click", () =>
@@ -293,21 +375,46 @@
   );
   el.btnModalCatFechar?.addEventListener("click", () => el.modalCat?.close?.());
   el.btnModalCatCancelar?.addEventListener("click", () => el.modalCat?.close?.());
-  el.btnBuscarPt?.addEventListener("click", () => buscarProductTypes().catch((e) => Swal.fire("Erro", e.message, "error")));
-  el.ptSugestoes?.addEventListener("click", (ev) => {
-    const b = ev.target.closest("[data-amz-sugerir]");
-    if (!b) return;
-    const val = b.dataset.amzSugerir || "";
-    const input = el.tbodyCat?.querySelector("tr input[data-amz-pt]:not([value]), tr input[data-amz-pt]");
-    const firstEmpty = [...(el.tbodyCat?.querySelectorAll("input[data-amz-pt]") || [])].find((i) => !i.value.trim());
-    (firstEmpty || input).value = val;
+  el.tbodyCat?.addEventListener("click", (ev) => {
+    const btn = ev.target.closest(".amz-btn-escolher");
+    if (!btn) return;
+    const tr = btn.closest("tr[data-cat-id]");
+    if (tr) abrirPickerCat(tr);
+  });
+  el.btnPickerFechar?.addEventListener("click", () => fecharPickerCat());
+  el.btnPickerCancelar?.addEventListener("click", () => fecharPickerCat());
+  el.pickerModal?.addEventListener("close", () => {
+    pickerTr = null;
+    if (pickerTimer) {
+      clearTimeout(pickerTimer);
+      pickerTimer = null;
+    }
+  });
+  el.pickerBusca?.addEventListener("input", () => {
+    if (pickerTimer) clearTimeout(pickerTimer);
+    pickerTimer = setTimeout(() => {
+      const termo = (el.pickerBusca?.value || "").trim();
+      buscarPicker(termo).catch((e) => renderPickerLista([], e.message));
+    }, 280);
+  });
+  el.pickerLista?.addEventListener("click", (ev) => {
+    const item = ev.target.closest(".Mp_PickerItem");
+    if (!item || !pickerTr) return;
+    setProductTypeLinha(pickerTr, item.dataset.id || "", item.dataset.nome || "");
+    fecharPickerCat();
   });
 
   el.btnModalCatSalvar?.addEventListener("click", async () => {
-    const itens = [...(el.tbodyCat?.querySelectorAll("tr[data-id-cat]") || [])].map((tr) => ({
-      id_categoria: +tr.dataset.idCat,
-      amazon_product_type: tr.querySelector("[data-amz-pt]")?.value?.trim() || "",
-    }));
+    const itens = [];
+    el.tbodyCat?.querySelectorAll("tr[data-cat-id]").forEach((tr) => {
+      const id = parseInt(tr.dataset.catId, 10);
+      const pt = valorProductTypeLinha(tr);
+      if (id && pt) itens.push({ id_categoria: id, amazon_product_type: pt });
+    });
+    if (!itens.length) {
+      feedbackCat("Escolha ao menos um Product Type Amazon.", true);
+      return;
+    }
     const r = await fetch("/api/integracoes/amazon/categorias-mapeamento/salvar", {
       method: "POST",
       credentials: "same-origin",
@@ -316,7 +423,7 @@
     });
     const j = await r.json().catch(() => ({}));
     if (!r.ok || !j.success) {
-      await Swal.fire({ icon: "error", title: "Erro", text: j.message || "Falha.", confirmButtonColor: "#021F81" });
+      feedbackCat(j.message || "Falha.", true);
       return;
     }
     el.modalCat?.close?.();

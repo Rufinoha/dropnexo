@@ -42,6 +42,7 @@
 
   function labelAgendamento(a) {
     if (a === "segunda") return "Toda segunda-feira";
+    if (a === "domingo") return "Todo domingo às 02:00";
     if (a === "diario") return "Diário";
     return a || "Manual";
   }

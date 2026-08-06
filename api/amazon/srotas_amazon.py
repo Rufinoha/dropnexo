@@ -312,6 +312,46 @@ def product_types_buscar():
         conn.close()
 
 
+@amazon_bp.get("/api/integracoes/amazon/categorias/cache/buscar")
+@login_obrigatorio()
+def categorias_cache_buscar():
+    """Busca Product Types no cache local (por nome/código)."""
+    if not _pode_integracoes():
+        return jsonify(success=False, message="Sem permissão."), 403
+    if garantir_modulo_sessao() != "vendedor" and not session.get("eh_desenvolvedor"):
+        return jsonify(success=False, message="Apenas vendedores."), 403
+    q = (request.args.get("q") or "").strip()
+    id_tenant = session.get("id_tenant")
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        if not amazon_conectado(cur, int(id_tenant)):
+            return jsonify(success=False, message="Amazon não conectada."), 400
+        cfg = carregar_config_amazon(cur, int(id_tenant))
+        mp = cfg.get("marketplace_id") or ""
+        from sistema.tarefas_secundarias.cache_amazon import (
+            buscar_product_types_cache_amazon,
+            garantir_tabela_amazon_product_type_cache,
+        )
+
+        garantir_tabela_amazon_product_type_cache(cur)
+        itens = buscar_product_types_cache_amazon(cur, mp, q, limit=40)
+        return jsonify(
+            success=True,
+            itens=itens,
+            marketplace_id=mp,
+            message=(
+                ""
+                if itens
+                else "Cache vazio. Rode «Cache de Product Types Amazon» em Configurações → Tarefas secundárias."
+            ),
+        )
+    except Exception as e:
+        return jsonify(success=False, message=str(e)[:300]), 400
+    finally:
+        conn.close()
+
+
 @amazon_bp.post("/api/integracoes/amazon/produtos/publicar")
 @login_obrigatorio()
 def produtos_publicar():
