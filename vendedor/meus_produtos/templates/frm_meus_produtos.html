@@ -7,7 +7,7 @@
 {% block topbar_title %}Meus produtos{% endblock %}
 
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('fn_catalogo.static', filename='style/Ccatalogos.css') }}?v=13" />
+<link rel="stylesheet" href="{{ url_for('fn_catalogo.static', filename='style/Ccatalogos.css') }}?v=14" />
 <link rel="stylesheet" href="{{ url_for('vd_meus_produtos.static', filename='style/Cmeus_produtos_ml.css') }}?v=3" />
 {% endblock %}
 
@@ -78,7 +78,7 @@
     </div>
   </div>
 
-  <div class="Cl_TabelaPrincipal" id="content-area-Principal">
+  <div class="Cl_TabelaPrincipal Cat_TabelaScroll" id="content-area-Principal">
     <table>
       <thead>
         <tr>
@@ -147,5 +147,5 @@
 {% endblock %}
 
 {% block page_js %}
-<script defer src="{{ url_for('vd_meus_produtos.static', filename='script/Svd_meus_produtos_lista.js') }}?v=12"></script>
+<script defer src="{{ url_for('vd_meus_produtos.static', filename='script/Svd_meus_produtos_lista.js') }}?v=13"></script>
 {% endblock %}

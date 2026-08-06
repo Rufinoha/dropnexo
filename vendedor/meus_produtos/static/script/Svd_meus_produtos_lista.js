@@ -173,10 +173,19 @@
     return linhasVisiveis().filter((l) => l.tipo === "pai").map((l) => l.id);
   }
 
+  function syncTheadStickyOffset() {
+    const wrap = document.getElementById("content-area-Principal");
+    const first = wrap?.querySelector("thead tr:first-child");
+    if (!wrap || !first) return;
+    const h = Math.ceil(first.getBoundingClientRect().height) || 42;
+    wrap.style.setProperty("--cat-thead-h", `${h}px`);
+  }
+
   function syncBulkBar() {
     const n = selecionados.size;
     if (el.bulkRow) el.bulkRow.hidden = n === 0;
     if (n > 0) window.Util?.gerarIconeTech?.refresh?.();
+    syncTheadStickyOffset();
     if (!el.chkTodos) return;
     const visiveis = idsPaisVisiveis();
     const marcados = visiveis.filter((id) => selecionados.has(id)).length;
@@ -1465,6 +1474,8 @@
   });
 
   initBulkActions();
+  syncTheadStickyOffset();
+  window.addEventListener("resize", syncTheadStickyOffset);
   carregarCategoriasFiltro()
     .then(() => carregar())
     .catch((e) => Swal.fire("Erro", e.message, "error"));

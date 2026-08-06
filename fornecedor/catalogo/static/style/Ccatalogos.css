@@ -479,6 +479,35 @@
   vertical-align: middle;
 }
 
+/* Cabeçalho fixo: só o corpo da lista rola */
+.Cl_TabelaPrincipal.Cat_TabelaScroll {
+  max-height: min(70vh, calc(100dvh - 16rem));
+  overflow: auto;
+  --cat-thead-h: 2.6rem;
+}
+
+.Cl_TabelaPrincipal.Cat_TabelaScroll thead th {
+  position: sticky;
+  z-index: 4;
+  background: #eef3f6;
+}
+
+.Cl_TabelaPrincipal.Cat_TabelaScroll thead tr:first-child th {
+  top: 0;
+  box-shadow: inset 0 -2px 0 rgba(200, 162, 94, 0.55);
+}
+
+.Cl_TabelaPrincipal.Cat_TabelaScroll thead tr.Cat_BulkHeadRow th {
+  top: var(--cat-thead-h);
+  z-index: 3;
+  background: #f8fafc;
+  box-shadow: 0 1px 0 #e2e8f0;
+}
+
+.Cl_TabelaPrincipal.Cat_TabelaScroll th.Cat_BulkHeadCell {
+  overflow: visible;
+}
+
 .Cat_BulkActions {
   display: inline-flex;
   align-items: center;
