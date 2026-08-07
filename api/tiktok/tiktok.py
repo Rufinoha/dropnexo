@@ -220,6 +220,42 @@ def _expires_em(expires_in: int | None) -> datetime | None:
     return datetime.now(timezone.utc) + timedelta(seconds=int(expires_in))
 
 
+def _garantir_tabela_tiktok(cur) -> bool:
+    """Cria tbl_integracao_tiktok se ausente (SQL 106 / legado 078)."""
+    global _TABELA_OK
+    if _TABELA_OK is True:
+        return True
+    try:
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS tbl_integracao_tiktok (
+                id_tenant INTEGER PRIMARY KEY REFERENCES tbl_tenant(id) ON DELETE CASCADE,
+                status VARCHAR(32) NOT NULL DEFAULT 'desconectado',
+                access_token_enc TEXT,
+                refresh_token_enc TEXT,
+                token_expires_em TIMESTAMPTZ,
+                shop_id VARCHAR(64),
+                shop_cipher VARCHAR(255),
+                shop_info JSONB NOT NULL DEFAULT '{}',
+                pedidos_importar_auto BOOLEAN NOT NULL DEFAULT FALSE,
+                produtos_exportar_auto BOOLEAN NOT NULL DEFAULT FALSE,
+                produtos_modo VARCHAR(32) NOT NULL DEFAULT 'vincular_sku',
+                estoque_sync_ativo BOOLEAN NOT NULL DEFAULT FALSE,
+                ultima_sync_pedidos TIMESTAMPTZ,
+                conectado_em TIMESTAMPTZ,
+                ultimo_erro TEXT,
+                atualizado_em TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+            """
+        )
+        _TABELA_OK = True
+        return True
+    except Exception:
+        _log.warning("Falha ao criar tbl_integracao_tiktok", exc_info=True)
+        _TABELA_OK = None
+        return False
+
+
 def _tem_tabela_tiktok(cur) -> bool:
     global _TABELA_OK
     if _TABELA_OK is True:
@@ -229,12 +265,13 @@ def _tem_tabela_tiktok(cur) -> bool:
     ok = bool(row and row[0])
     if ok:
         _TABELA_OK = True
-    return ok
+        return True
+    return _garantir_tabela_tiktok(cur)
 
 
 def salvar_tokens(cur, id_tenant: int, tokens: dict[str, Any]) -> None:
     if not _tem_tabela_tiktok(cur):
-        raise RuntimeError("Tabela tbl_integracao_tiktok não existe. Aplique o SQL 078.")
+        raise RuntimeError("Tabela tbl_integracao_tiktok não existe. Aplique o SQL 106.")
     access = tokens.get("access_token") or ""
     refresh = tokens.get("refresh_token") or ""
     expires = _expires_em(tokens.get("expires_in"))
@@ -624,7 +661,7 @@ def salvar_config_tiktok(
     estoque_sync_ativo: bool | None = None,
 ) -> None:
     if not _tem_tabela_tiktok(cur):
-        raise RuntimeError("Tabela tbl_integracao_tiktok não existe. Aplique o SQL 078.")
+        raise RuntimeError("Tabela tbl_integracao_tiktok não existe. Aplique o SQL 106.")
     updates: dict[str, Any] = {}
     if pedidos_importar_auto is not None:
         updates["pedidos_importar_auto"] = bool(pedidos_importar_auto)

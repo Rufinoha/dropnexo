@@ -30,6 +30,12 @@ def garantir_tabela_tiktok_categoria_cache(cur) -> None:
 
 
 def tenant_tiktok_conectado(cur) -> int:
+    from api.tiktok.tiktok import _tem_tabela_tiktok
+
+    if not _tem_tabela_tiktok(cur):
+        raise RuntimeError(
+            "Tabela TikTok ausente no banco. Aplique o SQL 106 e conecte uma conta."
+        )
     cur.execute(
         """
         SELECT id_tenant

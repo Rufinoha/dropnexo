@@ -2192,6 +2192,47 @@ def cupons_desconto_excluir():
         conn.close()
 
 
+@config_bp.get(f"{CUPOM_PREFIX}/usos")
+@login_obrigatorio()
+def cupons_desconto_usos():
+    """Lista tenants que utilizaram o cupom."""
+    if (r := _exigir_dev()) is not None:
+        return r
+    try:
+        id_cupom = int(request.args.get("id") or 0)
+    except (TypeError, ValueError):
+        id_cupom = 0
+    if id_cupom <= 0:
+        return jsonify(success=False, message="Cupom inválido."), 400
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        from sistema.financeiro.cupom import listar_usos_cupom, obter_cupom_por_id
+
+        cupom = obter_cupom_por_id(cur, id_cupom)
+        if not cupom:
+            return jsonify(success=False, message="Cupom não encontrado."), 404
+        usos = listar_usos_cupom(cur, id_cupom)
+        tenants_unicos = sorted(
+            {
+                int(u["id_tenant"])
+                for u in usos
+                if u.get("id_tenant")
+            }
+        )
+        return jsonify(
+            success=True,
+            cupom={"id": cupom.get("id"), "codigo": cupom.get("codigo")},
+            usos=usos,
+            total_usos=len(usos),
+            total_tenants=len(tenants_unicos),
+        )
+    except Exception as e:
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
 # --- Assinaturas e faturamento (painel SaaS) ---
 ASSINATURAS_PREFIX = "/configuracoes/assinaturas-faturamento"
 

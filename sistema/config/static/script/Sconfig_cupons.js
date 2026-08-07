@@ -74,6 +74,81 @@
     await carregar();
   }
 
+  function fmtMoneyCentavos(cents) {
+    return "R$ " + (Number(cents || 0) / 100).toLocaleString("pt-BR", {
+      minimumFractionDigits: 2,
+    });
+  }
+
+  function fmtDataUso(iso) {
+    if (!iso) return "—";
+    try {
+      return new Date(iso).toLocaleString("pt-BR");
+    } catch {
+      return iso;
+    }
+  }
+
+  async function verUsos(id, codigo) {
+    if (!cfg.apiUsos) throw new Error("API de usos indisponível.");
+    const r = await fetch(cfg.apiUsos + "?id=" + encodeURIComponent(id), {
+      headers: { Accept: "application/json" },
+    });
+    const j = await r.json();
+    if (!r.ok || !j.success) throw new Error(j.message || "Erro ao listar usos.");
+    const usos = j.usos || [];
+    const titulo = "Usos — " + (j.cupom?.codigo || codigo || "#" + id);
+    if (!usos.length) {
+      await Swal.fire({
+        title: titulo,
+        text: "Nenhum tenant utilizou este cupom ainda.",
+        icon: "info",
+      });
+      return;
+    }
+    const rows = usos
+      .map(function (u) {
+        const tipo = u.tipo_negocio === "fornecedor" ? "Fornecedor" : "Vendedor";
+        return (
+          "<tr>" +
+          "<td><strong>" +
+          esc(u.tenant_nome) +
+          "</strong><br><small>" +
+          esc(u.tenant_slug || ("#" + u.id_tenant)) +
+          "</small></td>" +
+          "<td>" +
+          esc(tipo) +
+          "</td>" +
+          "<td>" +
+          esc(fmtMoneyCentavos(u.desconto_centavos)) +
+          "</td>" +
+          "<td>" +
+          esc(fmtDataUso(u.usado_em)) +
+          "</td>" +
+          "</tr>"
+        );
+      })
+      .join("");
+    const html =
+      '<p style="margin:0 0 .75rem;font-size:.9rem;color:#555">' +
+      esc(j.total_usos) +
+      " uso(s) · " +
+      esc(j.total_tenants) +
+      " tenant(s)</p>" +
+      '<div style="max-height:360px;overflow:auto;text-align:left">' +
+      '<table class="Cl_TabelaPrincipal" style="width:100%;font-size:.9rem">' +
+      "<thead><tr><th>Tenant</th><th>Tipo</th><th>Desconto</th><th>Quando</th></tr></thead>" +
+      "<tbody>" +
+      rows +
+      "</tbody></table></div>";
+    await Swal.fire({
+      title: titulo,
+      html: html,
+      width: 720,
+      confirmButtonText: "Fechar",
+    });
+  }
+
   async function carregar() {
     const tbody = document.getElementById("cfg_cup_tbody");
     if (!tbody || !cfg.apiDados) return;
@@ -101,6 +176,13 @@
           }
           const acoes =
             '<td class="Cl_TableActions">' +
+            '<button type="button" class="Cl_BtnAcao btnUsos" data-id="' +
+            c.id +
+            '" data-codigo="' +
+            esc(c.codigo) +
+            '" title="Ver tenants que usaram">' +
+            u.gerarIconeTech("visualizar") +
+            "</button>" +
             '<button type="button" class="Cl_BtnAcao btnEditar" data-id="' +
             c.id +
             '" title="Editar">' +
@@ -157,6 +239,12 @@
       if (!btn) return;
       const id = +btn.getAttribute("data-id");
       if (!id) return;
+      if (btn.classList.contains("btnUsos")) {
+        verUsos(id, btn.getAttribute("data-codigo") || "").catch(function (e) {
+          Swal.fire("Erro", e.message, "error");
+        });
+        return;
+      }
       if (btn.classList.contains("btnEditar")) {
         abrirApoio(id);
         return;

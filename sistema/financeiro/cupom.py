@@ -668,6 +668,73 @@ def registrar_uso_cupom(
     )
 
 
+def listar_usos_cupom(cur, id_cupom: int) -> list[dict[str, Any]]:
+    """Tenants que utilizaram o cupom (cada uso = uma linha)."""
+    cur.execute("SELECT to_regclass(%s)", ("tbl_cupom_uso",))
+    row = cur.fetchone()
+    if not row or not row[0]:
+        return []
+
+    col_data = None
+    try:
+        cur.execute(
+            """
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_schema IN (current_schema(), 'public')
+              AND table_name = 'tbl_cupom_uso'
+              AND column_name IN ('criado_em', 'usado_em', 'dt_uso')
+            ORDER BY CASE column_name
+                WHEN 'criado_em' THEN 1
+                WHEN 'usado_em' THEN 2
+                ELSE 3 END
+            LIMIT 1
+            """
+        )
+        rcol = cur.fetchone()
+        if rcol and rcol[0]:
+            col_data = str(rcol[0])
+    except Exception:
+        _rollback_cur(cur)
+        col_data = None
+
+    select_dt = f"u.{col_data}" if col_data else "NULL::timestamptz"
+    cur.execute(
+        f"""
+        SELECT u.id_tenant,
+               COALESCE(NULLIF(TRIM(t.nome), ''), t.slug, 'Tenant #' || u.id_tenant::text),
+               COALESCE(NULLIF(TRIM(t.slug), ''), ''),
+               COALESCE(NULLIF(TRIM(t.tipo_negocio), ''), 'vendedor'),
+               COALESCE(u.desconto_centavos, 0),
+               u.id_fatura,
+               COALESCE(u.codigo, ''),
+               {select_dt}
+        FROM tbl_cupom_uso u
+        LEFT JOIN tbl_tenant t ON t.id = u.id_tenant
+        WHERE u.id_cupom = %s
+        ORDER BY {select_dt if col_data else 'u.id_tenant'} DESC NULLS LAST,
+                 u.id_tenant
+        """,
+        (int(id_cupom),),
+    )
+    out: list[dict[str, Any]] = []
+    for r in cur.fetchall():
+        dt = r[7]
+        out.append(
+            {
+                "id_tenant": int(r[0]) if r[0] else None,
+                "tenant_nome": (r[1] or "").strip(),
+                "tenant_slug": (r[2] or "").strip(),
+                "tipo_negocio": (r[3] or "vendedor").strip(),
+                "desconto_centavos": int(r[4] or 0),
+                "id_fatura": int(r[5]) if r[5] else None,
+                "codigo": (r[6] or "").strip(),
+                "usado_em": dt.isoformat() if dt else None,
+            }
+        )
+    return out
+
+
 def periodos_opcoes() -> list[dict]:
     return [
         {

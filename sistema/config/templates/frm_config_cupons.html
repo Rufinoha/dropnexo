@@ -49,8 +49,9 @@
 <script id="cfg_cup_cfg" type="application/json">{{ {
   "apiDados": url_for("config.cupons_desconto_dados"),
   "apiExcluir": url_for("config.cupons_desconto_excluir"),
+  "apiUsos": url_for("config.cupons_desconto_usos"),
   "rotaIncluir": url_for("config.cupons_desconto_incluir"),
   "rotaEditar": url_for("config.cupons_desconto_editar")
 }|tojson }}</script>
-<script defer src="{{ url_for('config.static', filename='script/Sconfig_cupons.js') }}?v=5"></script>
+<script defer src="{{ url_for('config.static', filename='script/Sconfig_cupons.js') }}?v=6"></script>
 {% endblock %}
