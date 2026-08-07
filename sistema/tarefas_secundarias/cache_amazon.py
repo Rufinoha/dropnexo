@@ -27,22 +27,17 @@ def garantir_tabela_amazon_product_type_cache(cur) -> None:
     )
 
 
-def tenant_amazon_conectado(cur) -> int:
-    cur.execute(
-        """
-        SELECT id_tenant
-        FROM tbl_integracao_amazon
-        WHERE status = 'conectado'
-        ORDER BY atualizado_em DESC NULLS LAST
-        LIMIT 1
-        """
+def tenant_amazon_conectado(cur, id_tenant: int | None = None) -> int:
+    from sistema.tarefas_secundarias.doador import obter_ou_promover_doador
+
+    if id_tenant:
+        return int(id_tenant)
+    tid = obter_ou_promover_doador(cur, CODIGO_AMAZON_PRODUCT_TYPES)
+    if tid:
+        return int(tid)
+    raise RuntimeError(
+        "Nenhuma conta Amazon conectada. O cache será preenchido quando o 1º vendedor conectar."
     )
-    row = cur.fetchone()
-    if not row:
-        raise RuntimeError(
-            "Nenhuma conta Amazon conectada. Conecte uma conta e tente de novo."
-        )
-    return int(row[0])
 
 
 def marketplace_amazon_para_cache(cur, id_tenant: int) -> str:
@@ -99,12 +94,13 @@ def _buscar_tipos(
 def sincronizar_cache_product_types_amazon(
     cur,
     *,
+    id_tenant: int | None = None,
     conn=None,
     id_exec: int | None = None,
     atualizar_progresso=None,
 ) -> dict:
     garantir_tabela_amazon_product_type_cache(cur)
-    id_tenant = tenant_amazon_conectado(cur)
+    id_tenant = tenant_amazon_conectado(cur, id_tenant=id_tenant)
     mp = marketplace_amazon_para_cache(cur, id_tenant)
     if conn is not None:
         conn.commit()

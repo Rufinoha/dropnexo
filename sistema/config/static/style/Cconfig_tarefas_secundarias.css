@@ -79,6 +79,61 @@
   color: #334155;
 }
 
+.TsCfg_Doador {
+  margin: 0.75rem 0 0;
+  font-size: 0.86rem;
+  color: #334155;
+  line-height: 1.4;
+}
+
+.TsCfg_Doador.is-empty { color: #94a3b8; }
+.TsCfg_Doador.is-ok strong { color: #15803d; }
+.TsCfg_Doador.is-warn strong { color: #b45309; }
+
+.TsCfg_DoadorMeta {
+  display: inline-block;
+  margin-left: 0.35rem;
+  color: #64748b;
+  font-size: 0.8rem;
+}
+
+.TsCfg_Agenda {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.65rem 0.85rem;
+  margin-top: 0.85rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: 10px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+
+.TsCfg_Agenda label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.28rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.TsCfg_Agenda select,
+.TsCfg_Agenda input[type="time"] {
+  min-width: 9.5rem;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: normal;
+  color: #0f172a;
+  background: #fff;
+}
+
 .TsCfg_Progress {
   margin-top: 0.85rem;
   padding: 0.7rem 0.8rem;

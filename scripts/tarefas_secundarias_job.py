@@ -1,17 +1,17 @@
 #!/usr/bin/env python
-"""Job de tarefas secundárias (cache de categorias ML/TikTok/Amazon).
+"""Job de tarefas secundárias (cache de categorias ML/TikTok/Amazon/Bling).
 
-Uso (cron):
-  # Ideal: domingo 02:00 America/Sao_Paulo (TikTok + Amazon)
-  # Ideal: segunda 03:00 America/Sao_Paulo (Mercado Livre)
-  # Ou chamar diariamente — cada tarefa só roda no dia do agendamento.
+Agenda: dia + hora (America/Sao_Paulo), janela de 60 minutos.
+Defaults: domingo ML 02:00 · TikTok 03:00 · Amazon 04:00 · Bling 05:00
+(editáveis em Configurações → Tarefas secundárias).
+
+Cron recomendado (a cada hora):
+  5 * * * * cd /path/app && python scripts/tarefas_secundarias_job.py
+
+Uso:
   python scripts/tarefas_secundarias_job.py
-
-Forçar todas (ignora dia da semana):
   python scripts/tarefas_secundarias_job.py --force
-
-Uma tarefa específica:
-  python scripts/tarefas_secundarias_job.py --codigo tiktok_categorias_cache --force
+  python scripts/tarefas_secundarias_job.py --codigo bling_categorias_cache --force
 
 HTTP:
   POST /api/tarefas-secundarias/job
@@ -42,11 +42,15 @@ from sistema.tarefas_secundarias.servico import (  # noqa: E402
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--force", action="store_true", help="Executa mesmo fora do dia agendado")
+    ap.add_argument(
+        "--force",
+        action="store_true",
+        help="Executa mesmo fora do dia/hora agendados",
+    )
     ap.add_argument(
         "--codigo",
         default="",
-        help="Código da tarefa (vazio = todas as agendadas para hoje)",
+        help="Código da tarefa (vazio = todas as agendadas para agora)",
     )
     args = ap.parse_args()
 

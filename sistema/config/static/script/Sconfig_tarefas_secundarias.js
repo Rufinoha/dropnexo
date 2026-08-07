@@ -9,6 +9,18 @@
   const BASE = "/configuracoes/tarefas-secundarias";
   let pollTimer = null;
 
+  const DIAS = [
+    ["domingo", "Domingo"],
+    ["segunda", "Segunda"],
+    ["terca", "Terça"],
+    ["quarta", "Quarta"],
+    ["quinta", "Quinta"],
+    ["sexta", "Sexta"],
+    ["sabado", "Sábado"],
+    ["diario", "Diário"],
+    ["manual", "Somente manual"],
+  ];
+
   function esc(s) {
     return String(s ?? "")
       .replace(/&/g, "&amp;")
@@ -40,11 +52,15 @@
     return "is-skip";
   }
 
-  function labelAgendamento(a) {
-    if (a === "segunda") return "Toda segunda-feira";
-    if (a === "domingo") return "Todo domingo às 02:00";
-    if (a === "diario") return "Diário";
-    return a || "Manual";
+  function labelDia(a) {
+    const hit = DIAS.find((d) => d[0] === a);
+    return hit ? hit[1] : a || "Manual";
+  }
+
+  function labelAgendamento(a, hora) {
+    if (a === "manual") return "Somente manual";
+    if (a === "diario") return `Diário às ${hora || "—"}`;
+    return `${labelDia(a)} às ${hora || "—"}`;
   }
 
   function execucaoTravada(u) {
@@ -104,9 +120,30 @@
       </div>`;
   }
 
+  function blocoDoador(d) {
+    if (!d) {
+      return `<p class="TsCfg_Doador is-empty">Doador: nenhum — aguardando 1ª conexão</p>`;
+    }
+    const cls = d.valido ? "is-ok" : "is-warn";
+    const status = d.valido ? "conectado" : "inválido / desconectado";
+    return `
+      <p class="TsCfg_Doador ${cls}">
+        Doador: <strong>${esc(d.nome)}</strong>
+        <span class="TsCfg_DoadorMeta">#${esc(d.id_tenant)} · ${esc(status)}</span>
+      </p>`;
+  }
+
+  function optionsDia(sel) {
+    return DIAS.map(
+      ([v, l]) =>
+        `<option value="${esc(v)}"${v === sel ? " selected" : ""}>${esc(l)}</option>`
+    ).join("");
+  }
+
   function render(itens) {
     if (!itens.length) {
-      lista.innerHTML = '<p class="TsCfg_Hint">Nenhuma tarefa cadastrada. Aplique o SQL 104.</p>';
+      lista.innerHTML =
+        '<p class="TsCfg_Hint">Nenhuma tarefa cadastrada. Aplique o SQL 107.</p>';
       return;
     }
     lista.innerHTML = itens
@@ -126,6 +163,7 @@
         const travada = execucaoTravada(u);
         const btnExecDisabled = st === "rodando" && !travada ? " disabled" : "";
         const btnExecLabel = travada ? "Reiniciar agora" : "Executar agora";
+        const hora = t.hora_local || "02:00";
         return `
         <article class="TsCfg_Card" data-codigo="${esc(t.codigo)}" data-id="${t.id}">
           <div class="TsCfg_CardTop">
@@ -134,8 +172,9 @@
               <p>${esc(t.descricao || "")}</p>
             </div>
           </div>
+          ${blocoDoador(t.doador)}
           <div class="TsCfg_Meta">
-            <span class="TsCfg_Pill">${esc(labelAgendamento(t.agendamento))}</span>
+            <span class="TsCfg_Pill">${esc(labelAgendamento(t.agendamento, hora))}</span>
             <span class="TsCfg_Pill ${pillStatus(st)}">${esc(travada ? "Travada" : stLabel)}</span>
             ${
               u?.iniciado_em
@@ -143,6 +182,17 @@
                 : ""
             }
           </div>
+          <form class="TsCfg_Agenda" data-acao-form="agenda">
+            <label>
+              <span>Dia</span>
+              <select name="agendamento">${optionsDia(t.agendamento || "domingo")}</select>
+            </label>
+            <label>
+              <span>Hora (Brasília)</span>
+              <input type="time" name="hora_local" value="${esc(hora)}" required />
+            </label>
+            <button type="submit" class="Cl_botaoFiltro">Salvar agenda</button>
+          </form>
           ${blocoProgresso(u)}
           ${
             u?.mensagem && st !== "rodando"
@@ -201,6 +251,41 @@
     }
   }
 
+  async function salvarAgenda(codigo, form, btn) {
+    if (btn) btn.disabled = true;
+    try {
+      const fd = new FormData(form);
+      const body = {
+        agendamento: String(fd.get("agendamento") || "").trim(),
+        hora_local: String(fd.get("hora_local") || "").trim(),
+      };
+      const r = await fetch(`${BASE}/${encodeURIComponent(codigo)}/agenda`, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const j = await r.json();
+      if (!j.success) throw new Error(j.message || "Falha ao salvar agenda.");
+      if (window.Swal) {
+        Swal.fire({
+          icon: "success",
+          title: "Agenda salva",
+          text: `${labelAgendamento(j.item?.agendamento, j.item?.hora_local)}`,
+          confirmButtonColor: "#021F81",
+          timer: 1800,
+          showConfirmButton: false,
+        });
+      }
+      await carregar();
+    } catch (e) {
+      if (window.Swal) Swal.fire("Erro", e.message, "error");
+      else alert(e.message);
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
   async function abrirHistorico(idTarefa) {
     const r = await fetch(`${BASE}/${idTarefa}/execucoes`, { credentials: "same-origin" });
     const j = await r.json();
@@ -231,6 +316,15 @@
     const acao = btn.getAttribute("data-acao");
     if (acao === "executar") executar(card.getAttribute("data-codigo"), btn);
     if (acao === "historico") abrirHistorico(card.getAttribute("data-id"));
+  });
+
+  lista.addEventListener("submit", (ev) => {
+    const form = ev.target.closest('form[data-acao-form="agenda"]');
+    const card = ev.target.closest(".TsCfg_Card");
+    if (!form || !card) return;
+    ev.preventDefault();
+    const btn = form.querySelector('button[type="submit"]');
+    salvarAgenda(card.getAttribute("data-codigo"), form, btn);
   });
 
   btnFechar?.addEventListener("click", () => modal?.close());

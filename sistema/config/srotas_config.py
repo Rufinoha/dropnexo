@@ -2406,9 +2406,34 @@ def tarefas_secundarias_executar(codigo: str):
         return jsonify(success=False, message=str(e)[:300]), 400
 
 
+@config_bp.post("/configuracoes/tarefas-secundarias/<codigo>/agenda")
+@login_obrigatorio()
+def tarefas_secundarias_salvar_agenda(codigo: str):
+    if not session.get("eh_desenvolvedor"):
+        return jsonify(success=False, message="Sem permissão."), 403
+    from sistema.tarefas_secundarias.servico import salvar_agenda_tarefa
+
+    body = request.get_json(silent=True) or {}
+    agendamento = (body.get("agendamento") or request.form.get("agendamento") or "").strip()
+    hora_local = (body.get("hora_local") or request.form.get("hora_local") or "").strip()
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        item = salvar_agenda_tarefa(
+            cur, codigo, agendamento=agendamento, hora_local=hora_local
+        )
+        conn.commit()
+        return jsonify(success=True, item=item)
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)[:300]), 400
+    finally:
+        conn.close()
+
+
 @config_bp.post("/api/tarefas-secundarias/job")
 def tarefas_secundarias_job_cron():
-    """Cron: atualiza tarefas agendadas (ML segunda; TikTok/Amazon domingo 02:00)."""
+    """Cron horário: cada tarefa roda no dia+hora configurados (janela de 60 min, America/Sao_Paulo)."""
     secret = (os.getenv("CRON_SECRET") or os.getenv("EFI_WEBHOOK_SECRET") or "").strip()
     token = (request.headers.get("X-Cron-Token") or request.args.get("token") or "").strip()
     if not secret or token != secret:

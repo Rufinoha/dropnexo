@@ -121,6 +121,12 @@ def oauth_callback():
             conn.commit()
         finally:
             conn.close()
+        try:
+            from sistema.tarefas_secundarias.doador import ao_conectar_integracao
+
+            ao_conectar_integracao("amazon", int(id_tenant))
+        except Exception:
+            _log.warning("Hook doador Amazon após OAuth falhou", exc_info=True)
         session.pop("amazon_oauth_state", None)
         session.pop("amazon_oauth_tenant", None)
         return redirect(url_for("integracoes.pagina", conectado_amazon="1"))
@@ -142,6 +148,12 @@ def desconectar():
         cur = conn.cursor()
         desconectar_amazon(cur, int(id_tenant))
         conn.commit()
+        try:
+            from sistema.tarefas_secundarias.doador import ao_desconectar_integracao
+
+            ao_desconectar_integracao("amazon", int(id_tenant))
+        except Exception:
+            _log.warning("Hook doador Amazon após desconectar falhou", exc_info=True)
         return jsonify(success=True, message="Amazon desconectada.")
     finally:
         conn.close()

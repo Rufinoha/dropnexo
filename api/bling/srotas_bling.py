@@ -2,12 +2,15 @@
 from __future__ import annotations
 
 import json
+import logging
 import mimetypes
 import os
 import re
 from pathlib import Path
 
 from flask import Blueprint, abort, current_app, jsonify, redirect, render_template, request, send_file, session, url_for
+
+_log = logging.getLogger(__name__)
 
 from api.bling.cliente import (
     bling_configurado,
@@ -332,6 +335,12 @@ def oauth_callback():
             conn.commit()
         finally:
             conn.close()
+        try:
+            from sistema.tarefas_secundarias.doador import ao_conectar_integracao
+
+            ao_conectar_integracao("bling", int(id_tenant))
+        except Exception:
+            _log.warning("Hook doador Bling após OAuth falhou", exc_info=True)
         session.pop("bling_oauth_state", None)
         session.pop("bling_oauth_contexto", None)
         return redirect(url_for("integracoes.pagina", conectado="bling"))
@@ -406,6 +415,12 @@ def desconectar():
             (ultimo_erro, agora_utc(), id_tenant),
         )
         conn.commit()
+        try:
+            from sistema.tarefas_secundarias.doador import ao_desconectar_integracao
+
+            ao_desconectar_integracao("bling", int(id_tenant))
+        except Exception:
+            _log.warning("Hook doador Bling após desconectar falhou", exc_info=True)
 
         return jsonify(
             success=True,
@@ -769,6 +784,43 @@ def api_categorias_bling():
         return jsonify(success=True, categorias=categorias)
     except Exception as e:
         return jsonify(success=False, message=str(e)), 500
+
+
+@bling_bp.get("/api/integracoes/bling/categorias/cache/buscar")
+@login_obrigatorio()
+def api_categorias_bling_cache_buscar():
+    """Busca categorias no cache local doado (paridade ML/TikTok/Amazon)."""
+    if not _pode_bling_sync():
+        return jsonify(success=False, message="Sem permissão."), 403
+    q = (request.args.get("q") or "").strip()
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        from sistema.tarefas_secundarias.cache_bling import (
+            buscar_categorias_cache_bling,
+            garantir_tabela_bling_categoria_cache,
+        )
+        from sistema.tarefas_secundarias.servico import garantir_tabelas_tarefas
+
+        garantir_tabelas_tarefas(cur)
+        garantir_tabela_bling_categoria_cache(cur)
+        itens = buscar_categorias_cache_bling(cur, q, limit=40)
+        conn.commit()
+        return jsonify(
+            success=True,
+            itens=itens,
+            message=(
+                ""
+                if itens
+                else "Cache vazio. Conecte um Bling (doador) ou rode «Cache de categorias Bling» em Tarefas secundárias."
+            ),
+        )
+    except Exception as e:
+        conn.rollback()
+        _log.exception("Erro ao buscar cache de categorias Bling")
+        return jsonify(success=False, message=str(e)[:300]), 400
+    finally:
+        conn.close()
 
 
 @bling_bp.get("/api/integracoes/bling/categorias/mapeamento")

@@ -117,6 +117,12 @@ def oauth_callback():
             conn.commit()
         finally:
             conn.close()
+        try:
+            from sistema.tarefas_secundarias.doador import ao_conectar_integracao
+
+            ao_conectar_integracao("tiktok", int(id_tenant))
+        except Exception:
+            _log.warning("Hook doador TikTok após OAuth falhou", exc_info=True)
         session.pop("tiktok_oauth_state", None)
         session.pop("tiktok_oauth_tenant", None)
         return redirect(url_for("integracoes.pagina", conectado_tiktok="1"))
@@ -138,6 +144,12 @@ def desconectar():
         cur = conn.cursor()
         desconectar_tiktok(cur, int(id_tenant))
         conn.commit()
+        try:
+            from sistema.tarefas_secundarias.doador import ao_desconectar_integracao
+
+            ao_desconectar_integracao("tiktok", int(id_tenant))
+        except Exception:
+            _log.warning("Hook doador TikTok após desconectar falhou", exc_info=True)
         return jsonify(success=True, message="TikTok Shop desconectado.")
     finally:
         conn.close()

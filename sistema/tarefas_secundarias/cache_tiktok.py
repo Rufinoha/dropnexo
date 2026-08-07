@@ -29,28 +29,22 @@ def garantir_tabela_tiktok_categoria_cache(cur) -> None:
     )
 
 
-def tenant_tiktok_conectado(cur) -> int:
+def tenant_tiktok_conectado(cur, id_tenant: int | None = None) -> int:
     from api.tiktok.tiktok import _tem_tabela_tiktok
+    from sistema.tarefas_secundarias.doador import obter_ou_promover_doador
 
     if not _tem_tabela_tiktok(cur):
         raise RuntimeError(
             "Tabela TikTok ausente no banco. Aplique o SQL 106 e conecte uma conta."
         )
-    cur.execute(
-        """
-        SELECT id_tenant
-        FROM tbl_integracao_tiktok
-        WHERE status = 'conectado'
-        ORDER BY atualizado_em DESC NULLS LAST
-        LIMIT 1
-        """
+    if id_tenant:
+        return int(id_tenant)
+    tid = obter_ou_promover_doador(cur, CODIGO_TIKTOK_CATEGORIAS)
+    if tid:
+        return int(tid)
+    raise RuntimeError(
+        "Nenhuma conta TikTok Shop conectada. O cache será preenchido quando o 1º vendedor conectar."
     )
-    row = cur.fetchone()
-    if not row:
-        raise RuntimeError(
-            "Nenhuma conta TikTok Shop conectada. Conecte uma conta e tente de novo."
-        )
-    return int(row[0])
 
 
 def region_tiktok_para_cache(cur, id_tenant: int) -> str:
@@ -230,6 +224,7 @@ def _gravar_folhas(cur, region: str, folhas: list[tuple[str, str, str, str]]) ->
 def sincronizar_cache_categorias_tiktok(
     cur,
     *,
+    id_tenant: int | None = None,
     conn=None,
     id_exec: int | None = None,
     atualizar_progresso=None,
@@ -237,7 +232,7 @@ def sincronizar_cache_categorias_tiktok(
     from api.tiktok.tiktok import api_request
 
     garantir_tabela_tiktok_categoria_cache(cur)
-    id_tenant = tenant_tiktok_conectado(cur)
+    id_tenant = tenant_tiktok_conectado(cur, id_tenant=id_tenant)
     region = region_tiktok_para_cache(cur, id_tenant)
     if conn is not None:
         conn.commit()

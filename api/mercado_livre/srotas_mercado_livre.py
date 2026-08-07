@@ -127,6 +127,12 @@ def oauth_callback():
             conn.commit()
         finally:
             conn.close()
+        try:
+            from sistema.tarefas_secundarias.doador import ao_conectar_integracao
+
+            ao_conectar_integracao("mercado_livre", int(id_tenant))
+        except Exception:
+            _log.warning("Hook doador ML após OAuth falhou", exc_info=True)
         session.pop("ml_oauth_state", None)
         session.pop("ml_oauth_tenant", None)
         return redirect(url_for("integracoes.pagina_mercado_livre", conectado="1"))
@@ -148,6 +154,12 @@ def desconectar():
         cur = conn.cursor()
         desconectar_ml(cur, int(id_tenant))
         conn.commit()
+        try:
+            from sistema.tarefas_secundarias.doador import ao_desconectar_integracao
+
+            ao_desconectar_integracao("mercado_livre", int(id_tenant))
+        except Exception:
+            _log.warning("Hook doador ML após desconectar falhou", exc_info=True)
         return jsonify(success=True, message="Mercado Livre desconectado.")
     finally:
         conn.close()

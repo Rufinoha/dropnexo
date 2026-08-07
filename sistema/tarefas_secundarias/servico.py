@@ -20,12 +20,22 @@ TZ_BR = ZoneInfo("America/Sao_Paulo")
 CODIGO_ML_CATEGORIAS = "ml_categorias_cache"
 CODIGO_TIKTOK_CATEGORIAS = "tiktok_categorias_cache"
 CODIGO_AMAZON_PRODUCT_TYPES = "amazon_product_types_cache"
+CODIGO_BLING_CATEGORIAS = "bling_categorias_cache"
 
 CODIGOS_CACHE_CATEGORIAS = (
     CODIGO_ML_CATEGORIAS,
     CODIGO_TIKTOK_CATEGORIAS,
     CODIGO_AMAZON_PRODUCT_TYPES,
+    CODIGO_BLING_CATEGORIAS,
 )
+
+# Defaults: (agendamento, hora_local HH:MM America/Sao_Paulo)
+_DEFAULTS_AGENDA: dict[str, tuple[str, str]] = {
+    CODIGO_ML_CATEGORIAS: ("domingo", "02:00"),
+    CODIGO_TIKTOK_CATEGORIAS: ("domingo", "03:00"),
+    CODIGO_AMAZON_PRODUCT_TYPES: ("domingo", "04:00"),
+    CODIGO_BLING_CATEGORIAS: ("domingo", "05:00"),
+}
 
 
 class TarefaSecundariaErro(RuntimeError):
@@ -107,40 +117,145 @@ def garantir_tabelas_tarefas(cur) -> None:
         )
         """
     )
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS tbl_bling_categoria_cache (
+            id SERIAL PRIMARY KEY,
+            category_id VARCHAR(64) NOT NULL,
+            nome VARCHAR(255) NOT NULL,
+            path_nomes TEXT NOT NULL DEFAULT '',
+            parent_id VARCHAR(64) NOT NULL DEFAULT '',
+            is_leaf BOOLEAN NOT NULL DEFAULT TRUE,
+            atualizado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            UNIQUE (category_id)
+        )
+        """
+    )
+    # Colunas do plano 3 (idempotente)
+    cur.execute(
+        """
+        ALTER TABLE tbl_tarefa_secundaria
+            ADD COLUMN IF NOT EXISTS hora_local VARCHAR(5) NOT NULL DEFAULT '02:00'
+        """
+    )
+    cur.execute(
+        """
+        ALTER TABLE tbl_tarefa_secundaria
+            ADD COLUMN IF NOT EXISTS id_tenant_doador INTEGER
+                REFERENCES tbl_tenant(id) ON DELETE SET NULL
+        """
+    )
     seeds = [
         (
             CODIGO_ML_CATEGORIAS,
             "Cache de categorias Mercado Livre",
-            "Baixa categorias publicáveis (folha) por site das contas conectadas e atualiza o cache usado no mapeamento.",
-            "segunda",
+            "Baixa categorias publicáveis (folha) usando a conta doadora e atualiza o cache do mapeamento.",
         ),
         (
             CODIGO_TIKTOK_CATEGORIAS,
             "Cache de categorias TikTok Shop",
-            "Baixa categorias folha (publicáveis) das contas TikTok conectadas e atualiza o cache do mapeamento.",
-            "domingo",
+            "Baixa categorias folha usando a conta doadora e atualiza o cache do mapeamento.",
         ),
         (
             CODIGO_AMAZON_PRODUCT_TYPES,
             "Cache de Product Types Amazon",
-            "Baixa Product Types das contas Amazon conectadas e atualiza o cache usado no mapeamento de categorias.",
-            "domingo",
+            "Baixa Product Types usando a conta doadora e atualiza o cache do mapeamento.",
+        ),
+        (
+            CODIGO_BLING_CATEGORIAS,
+            "Cache de categorias Bling",
+            "Baixa a árvore de categorias usando a conta doadora e atualiza o cache do mapeamento.",
         ),
     ]
-    for codigo, nome, desc, agenda in seeds:
+    for codigo, nome, desc in seeds:
+        agenda, hora = _DEFAULTS_AGENDA.get(codigo, ("domingo", "02:00"))
         cur.execute(
             """
-            INSERT INTO tbl_tarefa_secundaria (codigo, nome, descricao, agendamento, ativo)
-            VALUES (%s, %s, %s, %s, TRUE)
+            INSERT INTO tbl_tarefa_secundaria (
+                codigo, nome, descricao, agendamento, hora_local, ativo
+            ) VALUES (%s, %s, %s, %s, %s, TRUE)
             ON CONFLICT (codigo) DO UPDATE SET
                 nome = EXCLUDED.nome,
                 descricao = EXCLUDED.descricao,
-                agendamento = EXCLUDED.agendamento,
                 ativo = TRUE,
                 atualizado_em = NOW()
             """,
-            (codigo, nome, desc, agenda),
+            (codigo, nome, desc, agenda, hora),
         )
+    # Migra ML antiga (segunda → domingo 02:00) só se ainda estiver no default antigo
+    cur.execute(
+        """
+        UPDATE tbl_tarefa_secundaria
+        SET agendamento = 'domingo',
+            hora_local = '02:00',
+            atualizado_em = NOW()
+        WHERE codigo = %s AND agendamento = 'segunda'
+        """,
+        (CODIGO_ML_CATEGORIAS,),
+    )
+    # Preenche hora_local vazia com default do código
+    for codigo, (_ag, hora) in _DEFAULTS_AGENDA.items():
+        cur.execute(
+            """
+            UPDATE tbl_tarefa_secundaria
+            SET hora_local = %s, atualizado_em = NOW()
+            WHERE codigo = %s
+              AND (hora_local IS NULL OR TRIM(hora_local) = '')
+            """,
+            (hora, codigo),
+        )
+    # Migra default antigo compartilhado (domingo 02:00) → horários distintos
+    cur.execute(
+        """
+        UPDATE tbl_tarefa_secundaria
+        SET hora_local = '03:00', atualizado_em = NOW()
+        WHERE codigo = %s
+          AND agendamento = 'domingo'
+          AND TRIM(hora_local) = '02:00'
+        """,
+        (CODIGO_TIKTOK_CATEGORIAS,),
+    )
+    cur.execute(
+        """
+        UPDATE tbl_tarefa_secundaria
+        SET hora_local = '04:00', atualizado_em = NOW()
+        WHERE codigo = %s
+          AND agendamento = 'domingo'
+          AND TRIM(hora_local) = '02:00'
+        """,
+        (CODIGO_AMAZON_PRODUCT_TYPES,),
+    )
+    _bootstrap_doadores_existentes(cur)
+
+
+def _garantir_tabelas_integracao_cache(cur) -> None:
+    """Garante tabelas de integração usadas pelo doador (TikTok/Amazon podem não existir ainda)."""
+    try:
+        from api.tiktok.tiktok import _garantir_tabela_tiktok
+
+        _garantir_tabela_tiktok(cur)
+    except Exception:
+        _log.debug("garantir tabela tiktok ignorado", exc_info=True)
+    try:
+        from api.amazon.amazon import _garantir_tabela_amazon
+
+        _garantir_tabela_amazon(cur)
+    except Exception:
+        _log.debug("garantir tabela amazon ignorado", exc_info=True)
+
+
+def _bootstrap_doadores_existentes(cur) -> None:
+    """Se a tarefa não tem doador, promove o 1º tenant já conectado (ex.: sua conta ML)."""
+    from sistema.tarefas_secundarias.doador import obter_id_doador, obter_ou_promover_doador
+
+    _garantir_tabelas_integracao_cache(cur)
+    for codigo in CODIGOS_CACHE_CATEGORIAS:
+        try:
+            if obter_id_doador(cur, codigo):
+                continue
+            obter_ou_promover_doador(cur, codigo)
+        except Exception:
+            _log.debug("Bootstrap doador %s ignorado", codigo, exc_info=True)
 
 
 def _parse_meta(meta) -> dict:
@@ -213,11 +328,15 @@ def encerrar_execucoes_orfaas(cur) -> int:
 
 
 def listar_tarefas_secundarias(cur) -> list[dict]:
+    from sistema.tarefas_secundarias.doador import info_doador
+
     garantir_tabelas_tarefas(cur)
     encerrar_execucoes_orfaas(cur)
     cur.execute(
         """
         SELECT t.id, t.codigo, t.nome, t.descricao, t.agendamento, t.ativo,
+               COALESCE(NULLIF(TRIM(t.hora_local), ''), '02:00'),
+               t.id_tenant_doador,
                e.id, e.status, e.disparado_por, e.iniciado_em, e.finalizado_em,
                e.mensagem, e.meta
         FROM tbl_tarefa_secundaria t
@@ -229,36 +348,77 @@ def listar_tarefas_secundarias(cur) -> list[dict]:
             LIMIT 1
         ) e ON TRUE
         WHERE t.ativo = TRUE
-        ORDER BY t.nome
+        ORDER BY t.hora_local NULLS LAST, t.nome
         """
     )
     out = []
     for r in cur.fetchall():
-        meta = _parse_meta(r[12] if len(r) > 12 else None)
+        meta = _parse_meta(r[14] if len(r) > 14 else None)
+        codigo = r[1]
         out.append(
             {
                 "id": int(r[0]),
-                "codigo": r[1],
+                "codigo": codigo,
                 "nome": r[2],
                 "descricao": r[3] or "",
                 "agendamento": r[4] or "manual",
+                "hora_local": r[6] or "02:00",
                 "ativo": bool(r[5]),
+                "doador": info_doador(cur, codigo),
                 "ultima_execucao": (
                     None
-                    if not r[6]
+                    if not r[8]
                     else {
-                        "id": int(r[6]),
-                        "status": r[7],
-                        "disparado_por": r[8],
-                        "iniciado_em": r[9].isoformat() if r[9] else None,
-                        "finalizado_em": r[10].isoformat() if r[10] else None,
-                        "mensagem": r[11] or "",
+                        "id": int(r[8]),
+                        "status": r[9],
+                        "disparado_por": r[10],
+                        "iniciado_em": r[11].isoformat() if r[11] else None,
+                        "finalizado_em": r[12].isoformat() if r[12] else None,
+                        "mensagem": r[13] or "",
                         "meta": meta,
                     }
                 ),
             }
         )
     return out
+
+
+def salvar_agenda_tarefa(
+    cur, codigo: str, *, agendamento: str, hora_local: str
+) -> dict:
+    garantir_tabelas_tarefas(cur)
+    a = (agendamento or "").strip().lower()
+    if a not in ("domingo", "segunda", "terca", "quarta", "quinta", "sexta", "sabado", "diario", "manual"):
+        raise ValueError("Agendamento inválido.")
+    h = (hora_local or "").strip()
+    if len(h) == 4 and h[1] == ":":
+        h = "0" + h
+    try:
+        hh, mm = h.split(":")
+        hi, mi = int(hh), int(mm)
+        if not (0 <= hi <= 23 and 0 <= mi <= 59):
+            raise ValueError
+        h = f"{hi:02d}:{mi:02d}"
+    except Exception as e:
+        raise ValueError("Horário inválido. Use HH:MM.") from e
+    cur.execute(
+        """
+        UPDATE tbl_tarefa_secundaria
+        SET agendamento = %s, hora_local = %s, atualizado_em = NOW()
+        WHERE codigo = %s
+        RETURNING id, codigo, agendamento, hora_local
+        """,
+        (a, h, codigo),
+    )
+    row = cur.fetchone()
+    if not row:
+        raise RuntimeError(f"Tarefa «{codigo}» não encontrada.")
+    return {
+        "id": int(row[0]),
+        "codigo": row[1],
+        "agendamento": row[2],
+        "hora_local": row[3],
+    }
 
 
 def _atualizar_progresso_exec(
@@ -312,37 +472,63 @@ def listar_execucoes_tarefa(cur, id_tarefa: int, limit: int = 20) -> list[dict]:
     ]
 
 
-def _hoje_e_segunda() -> bool:
-    return datetime.now(TZ_BR).weekday() == 0
+_WEEKDAY_NOME = {
+    0: "segunda",
+    1: "terca",
+    2: "quarta",
+    3: "quinta",
+    4: "sexta",
+    5: "sabado",
+    6: "domingo",
+}
 
 
-def _hoje_e_domingo() -> bool:
-    return datetime.now(TZ_BR).weekday() == 6
-
-
-def _agendamento_permite_hoje(agendamento: str, *, forcar: bool = False) -> bool:
+def _agendamento_permite_agora(
+    agendamento: str,
+    hora_local: str | None,
+    *,
+    forcar: bool = False,
+) -> bool:
+    """Dia + hora (America/Sao_Paulo). Cron deve rodar ao menos 1x/hora."""
     if forcar:
         return True
     a = (agendamento or "manual").strip().lower()
     if a in ("", "manual"):
         return False
-    if a == "diario":
-        return True
-    if a == "segunda":
-        return _hoje_e_segunda()
-    if a == "domingo":
-        return _hoje_e_domingo()
-    return False
+    agora = datetime.now(TZ_BR)
+    if a != "diario":
+        if _WEEKDAY_NOME.get(agora.weekday()) != a:
+            return False
+    h = (hora_local or "02:00").strip()
+    try:
+        hh, mm = h.split(":")
+        alvo_min = int(hh) * 60 + int(mm)
+    except Exception:
+        alvo_min = 2 * 60
+    agora_min = agora.hour * 60 + agora.minute
+    # Janela de 60 min a partir do horário configurado
+    return alvo_min <= agora_min < alvo_min + 60
 
 
 def _rodar_sync_por_codigo(cur, codigo: str, *, conn=None, id_exec: int | None = None) -> dict:
+    from sistema.tarefas_secundarias.doador import obter_ou_promover_doador
+
+    id_doador = obter_ou_promover_doador(cur, codigo)
+    if not id_doador and codigo in CODIGOS_CACHE_CATEGORIAS:
+        raise RuntimeError(
+            "Nenhuma conta conectada para doar credenciais. "
+            "O cache será preenchido quando o 1º vendedor conectar a integração."
+        )
     if codigo == CODIGO_ML_CATEGORIAS:
-        return sincronizar_cache_categorias_ml(cur, conn=conn, id_exec=id_exec)
+        return sincronizar_cache_categorias_ml(
+            cur, conn=conn, id_exec=id_exec, id_tenant_doador=id_doador
+        )
     if codigo == CODIGO_TIKTOK_CATEGORIAS:
         from sistema.tarefas_secundarias.cache_tiktok import sincronizar_cache_categorias_tiktok
 
         return sincronizar_cache_categorias_tiktok(
             cur,
+            id_tenant=id_doador,
             conn=conn,
             id_exec=id_exec,
             atualizar_progresso=_atualizar_progresso_exec,
@@ -352,6 +538,17 @@ def _rodar_sync_por_codigo(cur, codigo: str, *, conn=None, id_exec: int | None =
 
         return sincronizar_cache_product_types_amazon(
             cur,
+            id_tenant=id_doador,
+            conn=conn,
+            id_exec=id_exec,
+            atualizar_progresso=_atualizar_progresso_exec,
+        )
+    if codigo == CODIGO_BLING_CATEGORIAS:
+        from sistema.tarefas_secundarias.cache_bling import sincronizar_cache_categorias_bling
+
+        return sincronizar_cache_categorias_bling(
+            cur,
+            id_tenant=id_doador,
             conn=conn,
             id_exec=id_exec,
             atualizar_progresso=_atualizar_progresso_exec,
@@ -573,20 +770,42 @@ def _gravar_folhas_cache(
 
 
 def sincronizar_cache_categorias_ml(
-    cur, *, sites: list[str] | None = None, conn=None, id_exec: int | None = None
+    cur,
+    *,
+    sites: list[str] | None = None,
+    conn=None,
+    id_exec: int | None = None,
+    id_tenant_doador: int | None = None,
 ) -> dict:
     """Baixa categorias folha (publicáveis) e grava no cache. Retorna resumo + log.
 
-    Se `conn` for passado, faz commit após preparar tabelas (libera a transação
-    durante o download HTTP) e após gravar cada site. Com `id_exec`, atualiza
-    heartbeat/progresso na execução.
+    Usa o tenant doador quando informado; senão qualquer conta conectada.
     """
+    from sistema.tarefas_secundarias.doador import obter_ou_promover_doador
+
     garantir_tabelas_tarefas(cur)
-    sites = sites or sites_ml_para_cache(cur)
+    id_doador = id_tenant_doador or obter_ou_promover_doador(cur, CODIGO_ML_CATEGORIAS)
+    if not id_doador:
+        raise RuntimeError(
+            "Nenhuma conta Mercado Livre conectada. O cache será preenchido quando o 1º vendedor conectar."
+        )
+    if sites is None:
+        cur.execute(
+            """
+            SELECT UPPER(NULLIF(TRIM(ml_site_id), ''))
+            FROM tbl_integracao_mercado_livre
+            WHERE id_tenant = %s AND status = 'conectado'
+            LIMIT 1
+            """,
+            (int(id_doador),),
+        )
+        row = cur.fetchone()
+        site = (row[0] if row and row[0] else "MLB") or "MLB"
+        sites = [str(site).upper()]
     if conn is not None:
         conn.commit()
 
-    log: list[str] = []
+    log: list[str] = [f"Doador tenant #{id_doador}"]
     total_folhas = 0
     ignoradas_sem_nome = 0
     erros_site = 0
@@ -622,8 +841,8 @@ def sincronizar_cache_categorias_ml(
         site_id = (site_id or "MLB").upper()
         log.append(f"=== Site {site_id} ===")
         try:
-            id_tenant = tenant_ml_para_site(cur, site_id)
-            log.append(f"Usando conta tenant #{id_tenant} (Bearer).")
+            id_tenant = int(id_doador)
+            log.append(f"Usando conta doadora tenant #{id_tenant} (Bearer).")
 
             def _on_prog(meta_local, mensagem, _site_i=site_i):
                 progresso(meta_local, mensagem, site_idx=_site_i)
@@ -713,7 +932,8 @@ def executar_tarefa(
     garantir_tabelas_tarefas(cur)
     cur.execute(
         """
-        SELECT id, codigo, agendamento, ativo
+        SELECT id, codigo, agendamento, ativo,
+               COALESCE(NULLIF(TRIM(hora_local), ''), '02:00')
         FROM tbl_tarefa_secundaria
         WHERE codigo = %s
         """,
@@ -722,20 +942,29 @@ def executar_tarefa(
     row = cur.fetchone()
     if not row:
         raise RuntimeError(f"Tarefa «{codigo}» não cadastrada.")
-    id_tarefa, codigo_db, agendamento, ativo = int(row[0]), row[1], row[2] or "manual", bool(row[3])
+    id_tarefa = int(row[0])
+    codigo_db = row[1]
+    agendamento = row[2] or "manual"
+    ativo = bool(row[3])
+    hora_local = row[4] or "02:00"
     if not ativo:
         raise RuntimeError("Tarefa inativa.")
 
-    if not _agendamento_permite_hoje(agendamento, forcar=forcar):
+    if not _agendamento_permite_agora(agendamento, hora_local, forcar=forcar):
         label = {
             "segunda": "segunda-feira",
+            "terca": "terça-feira",
+            "quarta": "quarta-feira",
+            "quinta": "quinta-feira",
+            "sexta": "sexta-feira",
+            "sabado": "sábado",
             "domingo": "domingo",
             "diario": "diariamente",
         }.get((agendamento or "").lower(), agendamento or "manual")
         return {
             "skipped": True,
             "codigo": codigo_db,
-            "mensagem": f"Agendada para {label} — execução ignorada hoje.",
+            "mensagem": f"Agendada para {label} às {hora_local} — execução ignorada agora.",
         }
 
     cur.execute(
