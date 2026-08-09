@@ -46,8 +46,41 @@ class TarefaSecundariaErro(RuntimeError):
         self.log_texto = log_texto or mensagem
 
 
-def garantir_tabelas_tarefas(cur) -> None:
+def _coluna_existe(cur, tabela: str, coluna: str) -> bool:
     cur.execute(
+        """
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = %s
+          AND column_name = %s
+        LIMIT 1
+        """,
+        (tabela, coluna),
+    )
+    return bool(cur.fetchone())
+
+
+def _ddl_seguro(cur, sql: str, *, sp: str) -> bool:
+    """Executa DDL em savepoint. Falha de permissão/owner não aborta a transação."""
+    cur.execute(f"SAVEPOINT {sp}")
+    try:
+        cur.execute(sql)
+        cur.execute(f"RELEASE SAVEPOINT {sp}")
+        return True
+    except Exception as e:
+        cur.execute(f"ROLLBACK TO SAVEPOINT {sp}")
+        msg = str(e).lower()
+        if "must be owner" in msg or "permission denied" in msg or "insufficient_privilege" in msg:
+            _log.warning("DDL ignorado (%s): %s", sp, e)
+            return False
+        _log.warning("DDL falhou (%s): %s", sp, e)
+        return False
+
+
+def garantir_tabelas_tarefas(cur) -> None:
+    _ddl_seguro(
+        cur,
         """
         CREATE TABLE IF NOT EXISTS tbl_tarefa_secundaria (
             id SERIAL PRIMARY KEY,
@@ -60,9 +93,11 @@ def garantir_tabelas_tarefas(cur) -> None:
             criado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             atualizado_em TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )
-        """
+        """,
+        sp="sp_ts_tarefa",
     )
-    cur.execute(
+    _ddl_seguro(
+        cur,
         """
         CREATE TABLE IF NOT EXISTS tbl_tarefa_secundaria_execucao (
             id SERIAL PRIMARY KEY,
@@ -75,76 +110,104 @@ def garantir_tabelas_tarefas(cur) -> None:
             log_texto TEXT,
             meta JSONB NOT NULL DEFAULT '{}'
         )
-        """
+        """,
+        sp="sp_ts_exec",
     )
-    cur.execute(
-        """
-        CREATE TABLE IF NOT EXISTS tbl_ml_categoria_cache (
-            id SERIAL PRIMARY KEY,
-            site_id VARCHAR(8) NOT NULL,
-            category_id VARCHAR(32) NOT NULL,
-            nome VARCHAR(255) NOT NULL,
-            path_nomes TEXT NOT NULL DEFAULT '',
-            path_ids TEXT NOT NULL DEFAULT '',
-            atualizado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-            UNIQUE (site_id, category_id)
+    for sp, sql in (
+        (
+            "sp_ts_ml_cache",
+            """
+            CREATE TABLE IF NOT EXISTS tbl_ml_categoria_cache (
+                id SERIAL PRIMARY KEY,
+                site_id VARCHAR(8) NOT NULL,
+                category_id VARCHAR(32) NOT NULL,
+                nome VARCHAR(255) NOT NULL,
+                path_nomes TEXT NOT NULL DEFAULT '',
+                path_ids TEXT NOT NULL DEFAULT '',
+                atualizado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                UNIQUE (site_id, category_id)
+            )
+            """,
+        ),
+        (
+            "sp_ts_tt_cache",
+            """
+            CREATE TABLE IF NOT EXISTS tbl_tiktok_categoria_cache (
+                id SERIAL PRIMARY KEY,
+                region VARCHAR(16) NOT NULL DEFAULT 'BR',
+                category_id VARCHAR(64) NOT NULL,
+                nome VARCHAR(255) NOT NULL,
+                path_nomes TEXT NOT NULL DEFAULT '',
+                path_ids TEXT NOT NULL DEFAULT '',
+                atualizado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                UNIQUE (region, category_id)
+            )
+            """,
+        ),
+        (
+            "sp_ts_amz_cache",
+            """
+            CREATE TABLE IF NOT EXISTS tbl_amazon_product_type_cache (
+                id SERIAL PRIMARY KEY,
+                marketplace_id VARCHAR(32) NOT NULL,
+                product_type VARCHAR(128) NOT NULL,
+                display_name VARCHAR(255) NOT NULL DEFAULT '',
+                atualizado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                UNIQUE (marketplace_id, product_type)
+            )
+            """,
+        ),
+        (
+            "sp_ts_bling_cache",
+            """
+            CREATE TABLE IF NOT EXISTS tbl_bling_categoria_cache (
+                id SERIAL PRIMARY KEY,
+                category_id VARCHAR(64) NOT NULL,
+                nome VARCHAR(255) NOT NULL,
+                path_nomes TEXT NOT NULL DEFAULT '',
+                parent_id VARCHAR(64) NOT NULL DEFAULT '',
+                is_leaf BOOLEAN NOT NULL DEFAULT TRUE,
+                atualizado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                UNIQUE (category_id)
+            )
+            """,
+        ),
+    ):
+        _ddl_seguro(cur, sql, sp=sp)
+
+    # Colunas do plano 3 — só ALTER se faltar (evita "must be owner" no request)
+    tem_hora = _coluna_existe(cur, "tbl_tarefa_secundaria", "hora_local")
+    tem_doador = _coluna_existe(cur, "tbl_tarefa_secundaria", "id_tenant_doador")
+    if not tem_hora:
+        tem_hora = _ddl_seguro(
+            cur,
+            """
+            ALTER TABLE tbl_tarefa_secundaria
+                ADD COLUMN hora_local VARCHAR(5) NOT NULL DEFAULT '02:00'
+            """,
+            sp="sp_ts_hora",
         )
-        """
-    )
-    cur.execute(
-        """
-        CREATE TABLE IF NOT EXISTS tbl_tiktok_categoria_cache (
-            id SERIAL PRIMARY KEY,
-            region VARCHAR(16) NOT NULL DEFAULT 'BR',
-            category_id VARCHAR(64) NOT NULL,
-            nome VARCHAR(255) NOT NULL,
-            path_nomes TEXT NOT NULL DEFAULT '',
-            path_ids TEXT NOT NULL DEFAULT '',
-            atualizado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-            UNIQUE (region, category_id)
+    if not tem_doador:
+        tem_doador = _ddl_seguro(
+            cur,
+            """
+            ALTER TABLE tbl_tarefa_secundaria
+                ADD COLUMN id_tenant_doador INTEGER
+                    REFERENCES tbl_tenant(id) ON DELETE SET NULL
+            """,
+            sp="sp_ts_doador",
         )
-        """
-    )
-    cur.execute(
-        """
-        CREATE TABLE IF NOT EXISTS tbl_amazon_product_type_cache (
-            id SERIAL PRIMARY KEY,
-            marketplace_id VARCHAR(32) NOT NULL,
-            product_type VARCHAR(128) NOT NULL,
-            display_name VARCHAR(255) NOT NULL DEFAULT '',
-            atualizado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-            UNIQUE (marketplace_id, product_type)
-        )
-        """
-    )
-    cur.execute(
-        """
-        CREATE TABLE IF NOT EXISTS tbl_bling_categoria_cache (
-            id SERIAL PRIMARY KEY,
-            category_id VARCHAR(64) NOT NULL,
-            nome VARCHAR(255) NOT NULL,
-            path_nomes TEXT NOT NULL DEFAULT '',
-            parent_id VARCHAR(64) NOT NULL DEFAULT '',
-            is_leaf BOOLEAN NOT NULL DEFAULT TRUE,
-            atualizado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-            UNIQUE (category_id)
-        )
-        """
-    )
-    # Colunas do plano 3 (idempotente)
-    cur.execute(
-        """
-        ALTER TABLE tbl_tarefa_secundaria
-            ADD COLUMN IF NOT EXISTS hora_local VARCHAR(5) NOT NULL DEFAULT '02:00'
-        """
-    )
-    cur.execute(
-        """
-        ALTER TABLE tbl_tarefa_secundaria
-            ADD COLUMN IF NOT EXISTS id_tenant_doador INTEGER
-                REFERENCES tbl_tenant(id) ON DELETE SET NULL
-        """
-    )
+        if tem_doador:
+            _ddl_seguro(
+                cur,
+                """
+                CREATE INDEX IF NOT EXISTS idx_tarefa_sec_doador
+                    ON tbl_tarefa_secundaria (id_tenant_doador)
+                    WHERE id_tenant_doador IS NOT NULL
+                """,
+                sp="sp_ts_idx_doador",
+            )
+
     seeds = [
         (
             CODIGO_ML_CATEGORIAS,
@@ -169,63 +232,84 @@ def garantir_tabelas_tarefas(cur) -> None:
     ]
     for codigo, nome, desc in seeds:
         agenda, hora = _DEFAULTS_AGENDA.get(codigo, ("domingo", "02:00"))
-        cur.execute(
-            """
-            INSERT INTO tbl_tarefa_secundaria (
-                codigo, nome, descricao, agendamento, hora_local, ativo
-            ) VALUES (%s, %s, %s, %s, %s, TRUE)
-            ON CONFLICT (codigo) DO UPDATE SET
-                nome = EXCLUDED.nome,
-                descricao = EXCLUDED.descricao,
-                ativo = TRUE,
-                atualizado_em = NOW()
-            """,
-            (codigo, nome, desc, agenda, hora),
-        )
-    # Migra ML antiga (segunda → domingo 02:00) só se ainda estiver no default antigo
-    cur.execute(
-        """
-        UPDATE tbl_tarefa_secundaria
-        SET agendamento = 'domingo',
-            hora_local = '02:00',
-            atualizado_em = NOW()
-        WHERE codigo = %s AND agendamento = 'segunda'
-        """,
-        (CODIGO_ML_CATEGORIAS,),
-    )
-    # Preenche hora_local vazia com default do código
-    for codigo, (_ag, hora) in _DEFAULTS_AGENDA.items():
+        if tem_hora:
+            cur.execute(
+                """
+                INSERT INTO tbl_tarefa_secundaria (
+                    codigo, nome, descricao, agendamento, hora_local, ativo
+                ) VALUES (%s, %s, %s, %s, %s, TRUE)
+                ON CONFLICT (codigo) DO UPDATE SET
+                    nome = EXCLUDED.nome,
+                    descricao = EXCLUDED.descricao,
+                    ativo = TRUE,
+                    atualizado_em = NOW()
+                """,
+                (codigo, nome, desc, agenda, hora),
+            )
+        else:
+            cur.execute(
+                """
+                INSERT INTO tbl_tarefa_secundaria (
+                    codigo, nome, descricao, agendamento, ativo
+                ) VALUES (%s, %s, %s, %s, TRUE)
+                ON CONFLICT (codigo) DO UPDATE SET
+                    nome = EXCLUDED.nome,
+                    descricao = EXCLUDED.descricao,
+                    ativo = TRUE,
+                    atualizado_em = NOW()
+                """,
+                (codigo, nome, desc, agenda),
+            )
+
+    if tem_hora:
         cur.execute(
             """
             UPDATE tbl_tarefa_secundaria
-            SET hora_local = %s, atualizado_em = NOW()
-            WHERE codigo = %s
-              AND (hora_local IS NULL OR TRIM(hora_local) = '')
+            SET agendamento = 'domingo',
+                hora_local = '02:00',
+                atualizado_em = NOW()
+            WHERE codigo = %s AND agendamento = 'segunda'
             """,
-            (hora, codigo),
+            (CODIGO_ML_CATEGORIAS,),
         )
-    # Migra default antigo compartilhado (domingo 02:00) → horários distintos
-    cur.execute(
-        """
-        UPDATE tbl_tarefa_secundaria
-        SET hora_local = '03:00', atualizado_em = NOW()
-        WHERE codigo = %s
-          AND agendamento = 'domingo'
-          AND TRIM(hora_local) = '02:00'
-        """,
-        (CODIGO_TIKTOK_CATEGORIAS,),
-    )
-    cur.execute(
-        """
-        UPDATE tbl_tarefa_secundaria
-        SET hora_local = '04:00', atualizado_em = NOW()
-        WHERE codigo = %s
-          AND agendamento = 'domingo'
-          AND TRIM(hora_local) = '02:00'
-        """,
-        (CODIGO_AMAZON_PRODUCT_TYPES,),
-    )
-    _bootstrap_doadores_existentes(cur)
+        for codigo, (_ag, hora) in _DEFAULTS_AGENDA.items():
+            cur.execute(
+                """
+                UPDATE tbl_tarefa_secundaria
+                SET hora_local = %s, atualizado_em = NOW()
+                WHERE codigo = %s
+                  AND (hora_local IS NULL OR TRIM(hora_local) = '')
+                """,
+                (hora, codigo),
+            )
+        cur.execute(
+            """
+            UPDATE tbl_tarefa_secundaria
+            SET hora_local = '03:00', atualizado_em = NOW()
+            WHERE codigo = %s
+              AND agendamento = 'domingo'
+              AND TRIM(hora_local) = '02:00'
+            """,
+            (CODIGO_TIKTOK_CATEGORIAS,),
+        )
+        cur.execute(
+            """
+            UPDATE tbl_tarefa_secundaria
+            SET hora_local = '04:00', atualizado_em = NOW()
+            WHERE codigo = %s
+              AND agendamento = 'domingo'
+              AND TRIM(hora_local) = '02:00'
+            """,
+            (CODIGO_AMAZON_PRODUCT_TYPES,),
+        )
+
+    if tem_doador:
+        _bootstrap_doadores_existentes(cur)
+    if not tem_hora or not tem_doador:
+        _log.warning(
+            "Colunas hora_local/id_tenant_doador ausentes em tbl_tarefa_secundaria. "
+            "Aplique __doc/sql/107_tarefas_doador_agenda.sql como dono da tabela."
+        )
 
 
 def _garantir_tabelas_integracao_cache(cur) -> None:
@@ -332,11 +416,18 @@ def listar_tarefas_secundarias(cur) -> list[dict]:
 
     garantir_tabelas_tarefas(cur)
     encerrar_execucoes_orfaas(cur)
+    tem_hora = _coluna_existe(cur, "tbl_tarefa_secundaria", "hora_local")
+    tem_doador = _coluna_existe(cur, "tbl_tarefa_secundaria", "id_tenant_doador")
+    hora_sql = (
+        "COALESCE(NULLIF(TRIM(t.hora_local), ''), '02:00')"
+        if tem_hora
+        else "'02:00'"
+    )
+    order_sql = "t.hora_local NULLS LAST, t.nome" if tem_hora else "t.nome"
     cur.execute(
-        """
+        f"""
         SELECT t.id, t.codigo, t.nome, t.descricao, t.agendamento, t.ativo,
-               COALESCE(NULLIF(TRIM(t.hora_local), ''), '02:00'),
-               t.id_tenant_doador,
+               {hora_sql},
                e.id, e.status, e.disparado_por, e.iniciado_em, e.finalizado_em,
                e.mensagem, e.meta
         FROM tbl_tarefa_secundaria t
@@ -348,13 +439,19 @@ def listar_tarefas_secundarias(cur) -> list[dict]:
             LIMIT 1
         ) e ON TRUE
         WHERE t.ativo = TRUE
-        ORDER BY t.hora_local NULLS LAST, t.nome
+        ORDER BY {order_sql}
         """
     )
     out = []
     for r in cur.fetchall():
-        meta = _parse_meta(r[14] if len(r) > 14 else None)
+        meta = _parse_meta(r[13] if len(r) > 13 else None)
         codigo = r[1]
+        doador = None
+        if tem_doador:
+            try:
+                doador = info_doador(cur, codigo)
+            except Exception:
+                doador = None
         out.append(
             {
                 "id": int(r[0]),
@@ -364,17 +461,17 @@ def listar_tarefas_secundarias(cur) -> list[dict]:
                 "agendamento": r[4] or "manual",
                 "hora_local": r[6] or "02:00",
                 "ativo": bool(r[5]),
-                "doador": info_doador(cur, codigo),
+                "doador": doador,
                 "ultima_execucao": (
                     None
-                    if not r[8]
+                    if not r[7]
                     else {
-                        "id": int(r[8]),
-                        "status": r[9],
-                        "disparado_por": r[10],
-                        "iniciado_em": r[11].isoformat() if r[11] else None,
-                        "finalizado_em": r[12].isoformat() if r[12] else None,
-                        "mensagem": r[13] or "",
+                        "id": int(r[7]),
+                        "status": r[8],
+                        "disparado_por": r[9],
+                        "iniciado_em": r[10].isoformat() if r[10] else None,
+                        "finalizado_em": r[11].isoformat() if r[11] else None,
+                        "mensagem": r[12] or "",
                         "meta": meta,
                     }
                 ),
@@ -387,6 +484,11 @@ def salvar_agenda_tarefa(
     cur, codigo: str, *, agendamento: str, hora_local: str
 ) -> dict:
     garantir_tabelas_tarefas(cur)
+    if not _coluna_existe(cur, "tbl_tarefa_secundaria", "hora_local"):
+        raise RuntimeError(
+            "Coluna hora_local ausente. Aplique o SQL 107 como dono da tabela "
+            "(postgres / role que criou tbl_tarefa_secundaria)."
+        )
     a = (agendamento or "").strip().lower()
     if a not in ("domingo", "segunda", "terca", "quarta", "quinta", "sexta", "sabado", "diario", "manual"):
         raise ValueError("Agendamento inválido.")
@@ -930,10 +1032,15 @@ def executar_tarefa(
     conn=None,
 ) -> dict:
     garantir_tabelas_tarefas(cur)
+    tem_hora = _coluna_existe(cur, "tbl_tarefa_secundaria", "hora_local")
+    hora_sel = (
+        "COALESCE(NULLIF(TRIM(hora_local), ''), '02:00')"
+        if tem_hora
+        else "'02:00'"
+    )
     cur.execute(
-        """
-        SELECT id, codigo, agendamento, ativo,
-               COALESCE(NULLIF(TRIM(hora_local), ''), '02:00')
+        f"""
+        SELECT id, codigo, agendamento, ativo, {hora_sel}
         FROM tbl_tarefa_secundaria
         WHERE codigo = %s
         """,

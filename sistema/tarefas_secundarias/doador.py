@@ -54,7 +54,23 @@ def listar_tenants_conectados(cur, codigo: str) -> list[int]:
     return [int(r[0]) for r in cur.fetchall() if r and r[0]]
 
 
+def _tem_coluna_doador(cur) -> bool:
+    cur.execute(
+        """
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'tbl_tarefa_secundaria'
+          AND column_name = 'id_tenant_doador'
+        LIMIT 1
+        """
+    )
+    return bool(cur.fetchone())
+
+
 def obter_id_doador(cur, codigo: str) -> int | None:
+    if not _tem_coluna_doador(cur):
+        return None
     cur.execute(
         """
         SELECT id_tenant_doador FROM tbl_tarefa_secundaria
@@ -70,6 +86,10 @@ def obter_id_doador(cur, codigo: str) -> int | None:
 
 
 def definir_doador(cur, codigo: str, id_tenant: int | None) -> None:
+    if not _tem_coluna_doador(cur):
+        raise RuntimeError(
+            "Coluna id_tenant_doador ausente. Aplique o SQL 107 como dono da tabela."
+        )
     cur.execute(
         """
         UPDATE tbl_tarefa_secundaria
