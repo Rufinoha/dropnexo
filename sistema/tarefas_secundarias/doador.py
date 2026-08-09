@@ -11,7 +11,6 @@ _MAPA_TAREFA: dict[str, tuple[str, str]] = {
     "ml_categorias_cache": ("mercado_livre", "tbl_integracao_mercado_livre"),
     "tiktok_categorias_cache": ("tiktok", "tbl_integracao_tiktok"),
     "amazon_product_types_cache": ("amazon", "tbl_integracao_amazon"),
-    "bling_categorias_cache": ("bling", "tbl_integracao_bling"),
 }
 
 _PROVEDOR_PARA_CODIGO = {v[0]: k for k, v in _MAPA_TAREFA.items()}

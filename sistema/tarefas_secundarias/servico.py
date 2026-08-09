@@ -20,13 +20,11 @@ TZ_BR = ZoneInfo("America/Sao_Paulo")
 CODIGO_ML_CATEGORIAS = "ml_categorias_cache"
 CODIGO_TIKTOK_CATEGORIAS = "tiktok_categorias_cache"
 CODIGO_AMAZON_PRODUCT_TYPES = "amazon_product_types_cache"
-CODIGO_BLING_CATEGORIAS = "bling_categorias_cache"
 
 CODIGOS_CACHE_CATEGORIAS = (
     CODIGO_ML_CATEGORIAS,
     CODIGO_TIKTOK_CATEGORIAS,
     CODIGO_AMAZON_PRODUCT_TYPES,
-    CODIGO_BLING_CATEGORIAS,
 )
 
 # Defaults: (agendamento, hora_local HH:MM America/Sao_Paulo)
@@ -34,7 +32,6 @@ _DEFAULTS_AGENDA: dict[str, tuple[str, str]] = {
     CODIGO_ML_CATEGORIAS: ("domingo", "02:00"),
     CODIGO_TIKTOK_CATEGORIAS: ("domingo", "03:00"),
     CODIGO_AMAZON_PRODUCT_TYPES: ("domingo", "04:00"),
-    CODIGO_BLING_CATEGORIAS: ("domingo", "05:00"),
 }
 
 
@@ -157,21 +154,6 @@ def garantir_tabelas_tarefas(cur) -> None:
             )
             """,
         ),
-        (
-            "sp_ts_bling_cache",
-            """
-            CREATE TABLE IF NOT EXISTS tbl_bling_categoria_cache (
-                id SERIAL PRIMARY KEY,
-                category_id VARCHAR(64) NOT NULL,
-                nome VARCHAR(255) NOT NULL,
-                path_nomes TEXT NOT NULL DEFAULT '',
-                parent_id VARCHAR(64) NOT NULL DEFAULT '',
-                is_leaf BOOLEAN NOT NULL DEFAULT TRUE,
-                atualizado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                UNIQUE (category_id)
-            )
-            """,
-        ),
     ):
         _ddl_seguro(cur, sql, sp=sp)
 
@@ -224,12 +206,15 @@ def garantir_tabelas_tarefas(cur) -> None:
             "Cache de Product Types Amazon",
             "Baixa Product Types usando a conta doadora e atualiza o cache do mapeamento.",
         ),
-        (
-            CODIGO_BLING_CATEGORIAS,
-            "Cache de categorias Bling",
-            "Baixa a árvore de categorias usando a conta doadora e atualiza o cache do mapeamento.",
-        ),
     ]
+    # Bling: categorias são da conta do usuário — sem cache/doador compartilhado
+    cur.execute(
+        """
+        DELETE FROM tbl_tarefa_secundaria
+        WHERE codigo = 'bling_categorias_cache'
+        """
+    )
+    _ddl_seguro(cur, "DROP TABLE IF EXISTS tbl_bling_categoria_cache", sp="sp_ts_drop_bling_cache")
     for codigo, nome, desc in seeds:
         agenda, hora = _DEFAULTS_AGENDA.get(codigo, ("domingo", "02:00"))
         if tem_hora:
@@ -639,16 +624,6 @@ def _rodar_sync_por_codigo(cur, codigo: str, *, conn=None, id_exec: int | None =
         from sistema.tarefas_secundarias.cache_amazon import sincronizar_cache_product_types_amazon
 
         return sincronizar_cache_product_types_amazon(
-            cur,
-            id_tenant=id_doador,
-            conn=conn,
-            id_exec=id_exec,
-            atualizar_progresso=_atualizar_progresso_exec,
-        )
-    if codigo == CODIGO_BLING_CATEGORIAS:
-        from sistema.tarefas_secundarias.cache_bling import sincronizar_cache_categorias_bling
-
-        return sincronizar_cache_categorias_bling(
             cur,
             id_tenant=id_doador,
             conn=conn,
