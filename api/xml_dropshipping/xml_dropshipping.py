@@ -21,7 +21,8 @@ TIMEOUT_FEED = (10, 90)
 ORIGEM_DEFAULTS = {
     "origem_nome": "Revenda de Calçados",
     "origem_documento": "",
-    "origem_cep": "17013-000",
+    # CEP no banco (tbl_tenant / depósito) é VARCHAR(8) — só dígitos
+    "origem_cep": "17013000",
     "origem_logradouro": "Bauru",
     "origem_numero": "S/N",
     "origem_complemento": "",
@@ -30,6 +31,25 @@ ORIGEM_DEFAULTS = {
     "origem_uf": "SP",
     "origem_telefone": "(14) 3624-1097",
 }
+
+
+def _so_digitos(val: Any) -> str:
+    return re.sub(r"\D", "", str(val or ""))
+
+
+def _cfg_origem(dados: dict | None) -> dict:
+    """Mescla defaults; strings vazias do front não apagam o padrão. CEP = 8 dígitos."""
+    out = dict(ORIGEM_DEFAULTS)
+    for k, v in (dados or {}).items():
+        if not str(k).startswith("origem_"):
+            continue
+        s = ("" if v is None else str(v)).strip()
+        if s:
+            out[k] = s
+    out["origem_cep"] = _so_digitos(out.get("origem_cep"))[:8]
+    out["origem_documento"] = _so_digitos(out.get("origem_documento"))[:20]
+    out["origem_uf"] = (out.get("origem_uf") or "SP").strip().upper()[:2]
+    return out
 
 
 def garantir_tabelas_xml_dropshipping(cur) -> None:
@@ -325,7 +345,7 @@ def _garantir_acervo(cur, id_tenant_vd: int, cfg: dict) -> int:
                     nome,
                     nome,
                     slug,
-                    (cfg.get("origem_cep") or "")[:12],
+                    _so_digitos(cfg.get("origem_cep"))[:8],
                     (cfg.get("origem_logradouro") or "")[:160],
                     (cfg.get("origem_numero") or "")[:30],
                     (cfg.get("origem_complemento") or "")[:80],
@@ -380,7 +400,7 @@ def _garantir_acervo(cur, id_tenant_vd: int, cfg: dict) -> int:
     campos_dep = (
         id_acervo,
         "Revenda de Calçados",
-        (cfg.get("origem_cep") or "")[:12],
+        _so_digitos(cfg.get("origem_cep"))[:8],
         (cfg.get("origem_logradouro") or "")[:160],
         (cfg.get("origem_numero") or "S/N")[:30],
         (cfg.get("origem_complemento") or "")[:80],
@@ -388,7 +408,7 @@ def _garantir_acervo(cur, id_tenant_vd: int, cfg: dict) -> int:
         (cfg.get("origem_cidade") or "Bauru")[:80],
         (cfg.get("origem_uf") or "SP")[:2],
         (cfg.get("origem_nome") or "Revenda de Calçados")[:160],
-        (cfg.get("origem_documento") or "")[:20],
+        _so_digitos(cfg.get("origem_documento"))[:20],
         agora,
     )
     if dep:
@@ -452,7 +472,7 @@ def salvar_conexao(cur, id_tenant: int, dados: dict) -> dict:
     if not produtos:
         raise RuntimeError("Feed OK, mas sem produtos. Verifique a conta dropshipping.")
 
-    cfg = {**ORIGEM_DEFAULTS, **(dados or {})}
+    cfg = _cfg_origem(dados)
     agora = agora_utc()
     cur.execute(
         """
@@ -492,7 +512,7 @@ def salvar_conexao(cur, id_tenant: int, dados: dict) -> dict:
             token,
             (cfg.get("origem_nome") or ORIGEM_DEFAULTS["origem_nome"])[:160],
             (cfg.get("origem_documento") or "")[:20],
-            (cfg.get("origem_cep") or "")[:12],
+            (cfg.get("origem_cep") or "")[:8],
             (cfg.get("origem_logradouro") or "")[:160],
             (cfg.get("origem_numero") or "")[:30],
             (cfg.get("origem_complemento") or "")[:80],

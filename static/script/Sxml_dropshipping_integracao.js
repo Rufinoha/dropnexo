@@ -16,6 +16,95 @@
     el.style.color = ok ? "#15803d" : "#b91c1c";
   }
 
+  function makeProgress(prefix) {
+    const root = document.getElementById(`xml_progress_${prefix}`);
+    const fill = document.getElementById(`xml_progress_${prefix}_fill`);
+    const label = document.getElementById(`xml_progress_${prefix}_label`);
+    const stepsEl = document.getElementById(`xml_progress_${prefix}_steps`);
+    let timer = null;
+    let step = 0;
+    const labels = {
+      conectar: [
+        "Baixando o XML da Revenda de Calçados…",
+        "Salvando conexão e depósito…",
+        "Importando produtos no Catálogo…",
+        "Quase lá — finalizando…",
+      ],
+      sync: [
+        "Baixando o feed…",
+        "Atualizando estoque e preços…",
+        "Zerando produtos ausentes…",
+        "Finalizando sincronização…",
+      ],
+    };
+
+    function paint(active, doneAll, erro) {
+      if (!stepsEl) return;
+      stepsEl.querySelectorAll("li").forEach((li) => {
+        const n = Number(li.getAttribute("data-step"));
+        li.classList.toggle("is-done", doneAll || n < active);
+        li.classList.toggle("is-active", !doneAll && !erro && n === active);
+        li.classList.toggle("is-error", !!erro && n === active);
+      });
+    }
+
+    return {
+      start() {
+        if (!root) return;
+        root.hidden = false;
+        step = 0;
+        if (fill) {
+          fill.style.width = "12%";
+          fill.classList.add("is-pulse");
+        }
+        if (label) label.textContent = (labels[prefix] || [])[0] || "Processando…";
+        paint(0, false, false);
+        clearInterval(timer);
+        timer = setInterval(() => {
+          if (step < 3) step += 1;
+          const pct = [12, 38, 62, 82][step] || 82;
+          if (fill) fill.style.width = `${pct}%`;
+          if (label) label.textContent = (labels[prefix] || [])[step] || "Processando…";
+          paint(step, false, false);
+        }, 4500);
+      },
+      done(ok, finalText) {
+        clearInterval(timer);
+        timer = null;
+        if (!root) return;
+        if (fill) {
+          fill.classList.remove("is-pulse");
+          fill.style.width = ok ? "100%" : `${[12, 38, 62, 82][step] || 40}%`;
+        }
+        if (label) {
+          label.textContent = finalText || (ok ? "Concluído." : "Falhou.");
+          label.style.color = ok ? "#15803d" : "#b91c1c";
+        }
+        paint(step, !!ok, !ok);
+        if (ok) {
+          setTimeout(() => {
+            root.hidden = true;
+            if (label) label.style.color = "";
+            if (fill) fill.style.width = "8%";
+          }, 1600);
+        }
+      },
+      hide() {
+        clearInterval(timer);
+        timer = null;
+        if (root) root.hidden = true;
+        if (label) label.style.color = "";
+        if (fill) {
+          fill.classList.remove("is-pulse");
+          fill.style.width = "8%";
+        }
+      },
+    };
+  }
+
+  const progConectar = makeProgress("conectar");
+  const progSync = makeProgress("sync");
+
   function setConectado(on) {
     if (badge) {
       badge.textContent = on ? "Conectado" : "Desconectado";
@@ -150,13 +239,16 @@
 
   document.getElementById("xml_btn_conectar")?.addEventListener("click", async () => {
     const btn = document.getElementById("xml_btn_conectar");
+    const url = (document.getElementById("xml_url")?.value || "").trim();
+    if (!url) {
+      showMsg(msgGuia, "Cole a URL XML da Revenda de Calçados.", false);
+      return;
+    }
     if (btn) btn.disabled = true;
-    showMsg(msgGuia, "Conectando e importando o feed… isso pode levar alguns minutos.", true);
+    showMsg(msgGuia, "", true);
+    progConectar.start();
     try {
-      const body = {
-        url_xml: document.getElementById("xml_url")?.value || "",
-        ...readOrigem(),
-      };
+      const body = { url_xml: url, ...readOrigem() };
       const r = await fetch(`${BASE}/conectar`, {
         method: "POST",
         credentials: "same-origin",
@@ -165,17 +257,19 @@
       });
       const j = await r.json();
       if (!j.success) throw new Error(j.message || "Falha ao conectar.");
+      progConectar.done(true, "Conectado — produtos no Catálogo.");
       showMsg(msgGuia, j.message || "Conectado.", true);
       if (window.Swal) {
         Swal.fire({
           icon: "success",
-          title: "Feed conectado",
+          title: "Revenda de Calçados conectada",
           text: j.message || "Produtos no Catálogo. Ative os que quiser.",
           confirmButtonColor: "#021F81",
         });
       }
       await status();
     } catch (e) {
+      progConectar.done(false, "Não foi possível conectar.");
       showMsg(msgGuia, e.message, false);
     } finally {
       if (btn) btn.disabled = false;
@@ -185,7 +279,8 @@
   document.getElementById("xml_btn_sync")?.addEventListener("click", async () => {
     const btn = document.getElementById("xml_btn_sync");
     if (btn) btn.disabled = true;
-    showMsg(msgEl, "Atualizando estoque e catálogo…", true);
+    showMsg(msgEl, "", true);
+    progSync.start();
     try {
       const r = await fetch(`${BASE}/sincronizar`, {
         method: "POST",
@@ -193,9 +288,11 @@
       });
       const j = await r.json();
       if (!j.success) throw new Error(j.message || "Falha no sync.");
+      progSync.done(true, "Estoque atualizado.");
       showMsg(msgEl, j.mensagem || "Estoque atualizado.", true);
       await status();
     } catch (e) {
+      progSync.done(false, "Falha na sincronização.");
       showMsg(msgEl, e.message, false);
     } finally {
       if (btn) btn.disabled = false;
@@ -203,13 +300,16 @@
   });
 
   document.getElementById("xml_btn_desconectar")?.addEventListener("click", async () => {
-    if (!confirm("Desconectar o feed XML? O acervo deixa de aparecer no Catálogo.")) return;
+    if (!confirm("Desconectar o feed da Revenda de Calçados? O acervo deixa de aparecer no Catálogo."))
+      return;
     const r = await fetch(`${BASE}/desconectar`, { method: "POST", credentials: "same-origin" });
     const j = await r.json();
     if (!j.success) {
       alert(j.message || "Falha ao desconectar.");
       return;
     }
+    progConectar.hide();
+    progSync.hide();
     await status();
   });
 

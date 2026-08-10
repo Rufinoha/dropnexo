@@ -138,9 +138,14 @@ def api_salvar_origem():
         cur = conn.cursor()
         if not xml_conectado(cur, int(id_tenant)):
             return jsonify(success=False, message="Conecte o feed antes."), 400
-        from api.xml_dropshipping.xml_dropshipping import _garantir_acervo, carregar_config
+        from api.xml_dropshipping.xml_dropshipping import (
+            _cfg_origem,
+            _garantir_acervo,
+            carregar_config,
+        )
         from global_utils import agora_utc
 
+        cfg = _cfg_origem(body)
         cur.execute(
             """
             UPDATE tbl_integracao_xml_dropshipping SET
@@ -151,22 +156,22 @@ def api_salvar_origem():
             WHERE id_tenant = %s
             """,
             (
-                (body.get("origem_nome") or ORIGEM_DEFAULTS["origem_nome"])[:160],
-                (body.get("origem_documento") or "")[:20],
-                (body.get("origem_cep") or "")[:12],
-                (body.get("origem_logradouro") or "")[:160],
-                (body.get("origem_numero") or "")[:30],
-                (body.get("origem_complemento") or "")[:80],
-                (body.get("origem_bairro") or "")[:80],
-                (body.get("origem_cidade") or "Bauru")[:80],
-                (body.get("origem_uf") or "SP")[:2],
-                (body.get("origem_telefone") or ORIGEM_DEFAULTS["origem_telefone"])[:40],
+                (cfg.get("origem_nome") or ORIGEM_DEFAULTS["origem_nome"])[:160],
+                (cfg.get("origem_documento") or "")[:20],
+                (cfg.get("origem_cep") or "")[:8],
+                (cfg.get("origem_logradouro") or "")[:160],
+                (cfg.get("origem_numero") or "")[:30],
+                (cfg.get("origem_complemento") or "")[:80],
+                (cfg.get("origem_bairro") or "")[:80],
+                (cfg.get("origem_cidade") or "Bauru")[:80],
+                (cfg.get("origem_uf") or "SP")[:2],
+                (cfg.get("origem_telefone") or ORIGEM_DEFAULTS["origem_telefone"])[:40],
                 agora_utc(),
                 int(id_tenant),
             ),
         )
-        cfg = carregar_config(cur, int(id_tenant))
-        _garantir_acervo(cur, int(id_tenant), cfg)
+        cfg_db = carregar_config(cur, int(id_tenant))
+        _garantir_acervo(cur, int(id_tenant), cfg_db)
         conn.commit()
         return jsonify(success=True, message="Endereço de origem salvo.")
     except Exception as e:

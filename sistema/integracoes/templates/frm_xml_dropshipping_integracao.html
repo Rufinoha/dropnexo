@@ -3,7 +3,7 @@
 {% block title %}Revenda de Calçados — Integrações — {{ MARCA_NOME }}{% endblock %}
 {% block topbar_title %}Revenda de Calçados{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('static', filename='style/Cmercadopago_integracao.css') }}?v=4" />
+<link rel="stylesheet" href="{{ url_for('static', filename='style/Cmercadopago_integracao.css') }}?v=5" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal Mp_Wrap">
@@ -13,7 +13,7 @@
         <i data-lucide="arrow-left"></i> Integrações
       </a>
       <div class="Mp_TitleRow">
-        <div class="Mp_Logo" aria-hidden="true" style="background:#0f766e;color:#fff;display:flex;align-items:center;justify-content:center;border-radius:12px;width:48px;height:48px;font-weight:800;font-size:0.72rem;text-align:center;line-height:1.15;padding:0.2rem">XML</div>
+        <div class="Mp_Logo" aria-hidden="true" style="background:#0f766e;color:#fff;display:flex;align-items:center;justify-content:center;border-radius:12px;width:48px;height:48px;font-weight:800;font-size:0.72rem;text-align:center;line-height:1.15;padding:0.2rem">RC</div>
         <div>
           <h2>Revenda de Calçados</h2>
           <p class="cl-page-desc">
@@ -60,6 +60,16 @@
     <div class="Mp_Actions" style="margin-top:1rem">
       <button type="button" class="Cl_botaoprimario" id="xml_btn_conectar">Conectar com este link</button>
     </div>
+    <div id="xml_progress_conectar" class="XmlProg" hidden aria-live="polite">
+      <div class="XmlProg__bar"><span class="XmlProg__fill" id="xml_progress_conectar_fill"></span></div>
+      <p class="XmlProg__label" id="xml_progress_conectar_label">Preparando…</p>
+      <ol class="XmlProg__steps" id="xml_progress_conectar_steps">
+        <li data-step="0">Validar URL e baixar o XML</li>
+        <li data-step="1">Salvar conexão e depósito</li>
+        <li data-step="2">Importar produtos no Catálogo</li>
+        <li data-step="3">Finalizar</li>
+      </ol>
+    </div>
     <p id="xml_msg_guia" class="Mp_Msg" hidden></p>
   </section>
 
@@ -75,6 +85,16 @@
       <button type="button" class="Cl_botaoprimario" id="xml_btn_sync">Sincronizar estoque agora</button>
       <a href="{{ url_for('vd_catalogo.pagina') }}" class="Cl_botaoFiltro">Ir ao Catálogo</a>
       <button type="button" class="Cl_BtnCancelar" id="xml_btn_desconectar">Desconectar</button>
+    </div>
+    <div id="xml_progress_sync" class="XmlProg" hidden aria-live="polite">
+      <div class="XmlProg__bar"><span class="XmlProg__fill" id="xml_progress_sync_fill"></span></div>
+      <p class="XmlProg__label" id="xml_progress_sync_label">Sincronizando…</p>
+      <ol class="XmlProg__steps" id="xml_progress_sync_steps">
+        <li data-step="0">Baixar feed da Revenda de Calçados</li>
+        <li data-step="1">Atualizar estoque e preços</li>
+        <li data-step="2">Ajustar produtos ausentes</li>
+        <li data-step="3">Concluir</li>
+      </ol>
     </div>
     <p id="xml_msg" class="Mp_Msg" hidden></p>
 
@@ -106,5 +126,5 @@
 </div>
 {% endblock %}
 {% block page_js %}
-<script src="{{ url_for('static', filename='script/Sxml_dropshipping_integracao.js') }}?v=2"></script>
+<script src="{{ url_for('static', filename='script/Sxml_dropshipping_integracao.js') }}?v=3"></script>
 {% endblock %}
