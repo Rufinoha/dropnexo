@@ -87,7 +87,7 @@ def api_conectar():
         return jsonify(
             success=True,
             message=(
-                f"Conectado. Cole a URL com token na tela (ex.: …/xmldrop?token=…). "
+                f"Conectado à Revenda de Calçados. "
                 f"Feed com {res.get('produtos_no_feed')} produto(s). {sync.get('mensagem')}"
             ),
             **res,

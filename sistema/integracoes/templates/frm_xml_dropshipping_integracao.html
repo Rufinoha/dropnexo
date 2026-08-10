@@ -1,7 +1,7 @@
 {% set nav_ativo = nav_codigo %}
 {% extends "frm_base.html" %}
-{% block title %}XML Dropshipping — Integrações — {{ MARCA_NOME }}{% endblock %}
-{% block topbar_title %}XML Dropshipping{% endblock %}
+{% block title %}Revenda de Calçados — Integrações — {{ MARCA_NOME }}{% endblock %}
+{% block topbar_title %}Revenda de Calçados{% endblock %}
 {% block head_extra %}
 <link rel="stylesheet" href="{{ url_for('static', filename='style/Cmercadopago_integracao.css') }}?v=4" />
 {% endblock %}
@@ -13,13 +13,13 @@
         <i data-lucide="arrow-left"></i> Integrações
       </a>
       <div class="Mp_TitleRow">
-        <div class="Mp_Logo" aria-hidden="true" style="background:#0f766e;color:#fff;display:flex;align-items:center;justify-content:center;border-radius:12px;width:48px;height:48px;font-weight:800;">XML</div>
+        <div class="Mp_Logo" aria-hidden="true" style="background:#0f766e;color:#fff;display:flex;align-items:center;justify-content:center;border-radius:12px;width:48px;height:48px;font-weight:800;font-size:0.72rem;text-align:center;line-height:1.15;padding:0.2rem">XML</div>
         <div>
-          <h2>XML Dropshipping</h2>
+          <h2>Revenda de Calçados</h2>
           <p class="cl-page-desc">
-            Conecte o feed XML da sua conta no site do fornecedor (modelo
-            <strong>Revenda de Calçados</strong>). Os produtos entram no Catálogo;
-            você ativa só o que quiser — ativados vão para Meus produtos.
+            Integração oficial com o feed XML da
+            <a href="https://www.revendadecalcados.com.br/" target="_blank" rel="noopener noreferrer">Revenda de Calçados</a>.
+            Os produtos entram no Catálogo; você ativa só o que quiser — ativados vão para Meus produtos.
           </p>
         </div>
       </div>
@@ -30,19 +30,33 @@
   </div>
 
   <section class="Mp_Card Mp_Card--info" id="xml_sec_guia" {% if xml_conectado %}hidden{% endif %}>
-    <h3>Conectar feed</h3>
+    <h3>Conectar feed da Revenda de Calçados</h3>
     <p class="Mp_Hint">
-      Cadastre-se no site do fornecedor, ative a modalidade Dropshipping e copie a
-      <strong>URL XML</strong> (ou só o token) da sua conta. O link é exclusivo — não compartilhe.
+      Ainda não tem conta? Cadastre-se no site deles, ative o Dropshipping e copie a
+      <strong>URL XML</strong> exclusiva da sua conta.
     </p>
-    <label class="Mp_Hint" style="display:block;margin-top:0.75rem">URL do XML (com token)</label>
-    <input type="url" id="xml_url" class="Cl_Input" placeholder="https://www.revendadecalcados.com.br/xmldrop?token=SEU_TOKEN" style="width:100%;max-width:40rem" />
-    <p class="Mp_Hint" style="margin-top:0.35rem">
-      Exemplo: <code>https://www.revendadecalcados.com.br/xmldrop?token=…</code>
-      — use o link exclusivo da sua conta no site do fornecedor. Não é OAuth / Bling.
+    <p class="Mp_Hint" style="margin-top:0.5rem">
+      <a href="https://www.revendadecalcados.com.br/" target="_blank" rel="noopener noreferrer">
+        Abrir site da Revenda de Calçados →
+      </a>
+      ·
+      <a href="https://www.revendadecalcados.com.br/cadastro-revenda-de-calcados-feminino.php" target="_blank" rel="noopener noreferrer">
+        Cadastre-se
+      </a>
     </p>
-    <label class="Mp_Hint" style="display:block;margin-top:0.65rem">Token (só se a URL não tiver <code>token=</code>)</label>
-    <input type="text" id="xml_token" class="Cl_Input" placeholder="cole só o token, se preferir" style="width:100%;max-width:40rem" />
+    <label class="Mp_Hint" style="display:block;margin-top:1rem">
+      URL do XML — Revenda de Calçados
+    </label>
+    <input
+      type="url"
+      id="xml_url"
+      class="Cl_Input"
+      placeholder="https://www.revendadecalcados.com.br/xmldrop?token=SEU_TOKEN"
+      style="width:100%;max-width:42rem"
+    />
+    <p class="Mp_Hint" style="margin-top:0.4rem">
+      Cole o link completo que aparece na área do revendedor (já inclui o token).
+    </p>
     <div class="Mp_Actions" style="margin-top:1rem">
       <button type="button" class="Cl_botaoprimario" id="xml_btn_conectar">Conectar com este link</button>
     </div>
@@ -52,7 +66,7 @@
   <section class="Mp_Card" id="xml_painel" {% if not xml_conectado %}hidden{% endif %}>
     <h3>Catálogo e estoque</h3>
     <p class="Mp_Hint">
-      O sync diário <strong>atualiza estoque e preços</strong> do acervo a partir do XML.
+      O sync diário <strong>atualiza estoque e preços</strong> do acervo a partir do XML da Revenda de Calçados.
       Produtos que sumirem do feed ficam com estoque <strong>0</strong>.
       Resultado também aparece em <strong>Configurações → Tarefas secundárias</strong>.
     </p>
@@ -83,7 +97,7 @@
     </div>
 
     <h3 style="margin-top:1.5rem">Mapeamento de categorias</h3>
-    <p class="Mp_Hint">Relacione as categorias do feed às suas categorias DropNexo (mesmo padrão das outras integrações).</p>
+    <p class="Mp_Hint">Relacione as categorias do feed da Revenda de Calçados às suas categorias DropNexo.</p>
     <div id="xml_cat_lista" class="Mp_Hint">Carregando…</div>
     <div class="Mp_Actions" style="margin-top:0.75rem">
       <button type="button" class="Cl_botaoFiltro" id="xml_btn_salvar_cats">Salvar mapeamentos</button>
@@ -92,5 +106,5 @@
 </div>
 {% endblock %}
 {% block page_js %}
-<script src="{{ url_for('static', filename='script/Sxml_dropshipping_integracao.js') }}?v=1"></script>
+<script src="{{ url_for('static', filename='script/Sxml_dropshipping_integracao.js') }}?v=2"></script>
 {% endblock %}

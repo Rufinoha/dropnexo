@@ -155,7 +155,6 @@
     try {
       const body = {
         url_xml: document.getElementById("xml_url")?.value || "",
-        token: document.getElementById("xml_token")?.value || "",
         ...readOrigem(),
       };
       const r = await fetch(`${BASE}/conectar`, {

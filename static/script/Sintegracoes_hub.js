@@ -155,10 +155,17 @@
     const oauth = (st.oauth_url || "").trim();
     const usaOauth = !!oauth;
     const hrefPrimary = usaOauth ? oauth : cfgUrl;
-    const labelPrimary = usaOauth ? "Conectar conta" : "Configurar feed";
+    const isXmlRc = item.slug === "xml-dropshipping";
+    const labelPrimary = usaOauth
+      ? "Conectar conta"
+      : isXmlRc
+        ? "Configurar Revenda de Calçados"
+        : "Configurar";
     const hint = usaOauth
       ? "Redirecionamento seguro para autorizar o acesso."
-      : "Na próxima tela você cola a URL XML com o token da sua conta.";
+      : isXmlRc
+        ? "Na próxima tela você cola a URL XML do site da Revenda de Calçados."
+        : "Abra a tela de configuração desta integração.";
     return `
       <div class="FnInt_ConnectDialog__bar" aria-hidden="true"></div>
       <button type="button" class="FnInt_ConnectDialog__close" data-action="fechar-modal" aria-label="Fechar">

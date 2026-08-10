@@ -102,10 +102,10 @@ CATEGORIAS_INTEGRACOES = [
             },
             {
                 "slug": "xml-dropshipping",
-                "nome": "XML Dropshipping",
-                "descricao": "Feed XML de dropshipping (modelo Revenda de Calçados) → Catálogo → ativar.",
+                "nome": "Revenda de Calçados",
+                "descricao": "Feed XML oficial da Revenda de Calçados → Catálogo → ativar.",
                 "cor": "#0F766E",
-                "iniciais": "XML",
+                "iniciais": "RC",
                 "modulos": _MOD_VENDEDOR,
             },
             {"slug": "mercado-livre", "nome": "Mercado Livre", "descricao": "Pedidos e anúncios do Mercado Livre.", "cor": "#FFE600", "iniciais": "ML", "modulos": _MOD_VENDEDOR},

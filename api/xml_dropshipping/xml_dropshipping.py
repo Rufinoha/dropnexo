@@ -302,7 +302,7 @@ def _garantir_acervo(cur, id_tenant_vd: int, cfg: dict) -> int:
             id_acervo = None
 
     slug = f"xmlfd{int(id_tenant_vd)}"
-    nome = "XML Dropshipping · Revenda de Calçados"
+    nome = "Revenda de Calçados"
     if not id_acervo:
         cur.execute("SELECT id FROM tbl_tenant WHERE slug = %s", (slug,))
         ex = cur.fetchone()
@@ -316,7 +316,7 @@ def _garantir_acervo(cur, id_tenant_vd: int, cfg: dict) -> int:
                     tipo_pessoa, tipo_negocio, documento, nome_completo, nome, slug,
                     plano, ativo, cep, logradouro, numero, complemento, bairro, cidade, uf
                 ) VALUES (
-                    'PJ', 'fornecedor', %s, %s, %s, %s, 'starter', TRUE,
+                    'J', 'fornecedor', %s, %s, %s, %s, 'starter', TRUE,
                     %s, %s, %s, %s, %s, %s, %s
                 ) RETURNING id
                 """,
@@ -441,7 +441,10 @@ def salvar_conexao(cur, id_tenant: int, dados: dict) -> dict:
     token = (dados.get("token") or "").strip() or extrair_token_da_url(url_xml)
     url_final = montar_url_xml(url_xml, token)
     if not url_final:
-        raise ValueError("Informe a URL do XML ou o token da sua conta no site.")
+        raise ValueError(
+            "Informe a URL XML completa da Revenda de Calçados "
+            "(ex.: https://www.revendadecalcados.com.br/xmldrop?token=...)."
+        )
 
     # Testa o feed antes de conectar
     raw = baixar_xml(url_final)
