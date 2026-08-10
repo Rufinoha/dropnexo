@@ -20,6 +20,7 @@ TZ_BR = ZoneInfo("America/Sao_Paulo")
 CODIGO_ML_CATEGORIAS = "ml_categorias_cache"
 CODIGO_TIKTOK_CATEGORIAS = "tiktok_categorias_cache"
 CODIGO_AMAZON_PRODUCT_TYPES = "amazon_product_types_cache"
+CODIGO_XML_DROPSHIPPING_SYNC = "xml_dropshipping_sync"
 
 CODIGOS_CACHE_CATEGORIAS = (
     CODIGO_ML_CATEGORIAS,
@@ -32,6 +33,7 @@ _DEFAULTS_AGENDA: dict[str, tuple[str, str]] = {
     CODIGO_ML_CATEGORIAS: ("domingo", "02:00"),
     CODIGO_TIKTOK_CATEGORIAS: ("domingo", "03:00"),
     CODIGO_AMAZON_PRODUCT_TYPES: ("domingo", "04:00"),
+    CODIGO_XML_DROPSHIPPING_SYNC: ("diario", "06:00"),
 }
 
 
@@ -205,6 +207,13 @@ def garantir_tabelas_tarefas(cur) -> None:
             CODIGO_AMAZON_PRODUCT_TYPES,
             "Cache de Product Types Amazon",
             "Baixa Product Types usando a conta doadora e atualiza o cache do mapeamento.",
+        ),
+        (
+            CODIGO_XML_DROPSHIPPING_SYNC,
+            "Sync estoque XML Dropshipping",
+            "Atualiza estoque, preços e catálogo do feed XML (modelo Revenda de Calçados) "
+            "de cada vendedor conectado. Produtos ausentes no feed ficam com estoque 0. "
+            "Também atualiza o cache de categorias do feed para mapeamento.",
         ),
     ]
     # Bling: categorias são da conta do usuário — sem cache/doador compartilhado
@@ -630,7 +639,77 @@ def _rodar_sync_por_codigo(cur, codigo: str, *, conn=None, id_exec: int | None =
             id_exec=id_exec,
             atualizar_progresso=_atualizar_progresso_exec,
         )
+    if codigo == CODIGO_XML_DROPSHIPPING_SYNC:
+        return _sincronizar_xml_dropshipping_todos(
+            cur, conn=conn, id_exec=id_exec
+        )
     raise RuntimeError(f"Executor não implementado para «{codigo}».")
+
+
+def _sincronizar_xml_dropshipping_todos(cur, *, conn=None, id_exec=None) -> dict:
+    """Roda sync de estoque/catálogo para todos os vendedores com XML conectado."""
+    from api.xml_dropshipping.xml_dropshipping import (
+        listar_tenants_conectados_sync,
+        sincronizar_feed_tenant,
+    )
+
+    tenants = listar_tenants_conectados_sync(cur)
+    if not tenants:
+        msg = "Nenhum vendedor com XML Dropshipping conectado — nada a sincronizar."
+        _atualizar_progresso_exec(cur, conn, id_exec, msg, {"fase": "ok", "pct": 100})
+        return {
+            "mensagem": msg,
+            "log_texto": msg,
+            "tenants": 0,
+            "ok": 0,
+            "erro": 0,
+        }
+
+    logs: list[str] = []
+    ok = erro = 0
+    total = len(tenants)
+    for i, tid in enumerate(tenants, start=1):
+        pct = round((i - 1) / max(total, 1) * 100, 1)
+        _atualizar_progresso_exec(
+            cur,
+            conn,
+            id_exec,
+            f"Atualizando estoque XML · tenant #{tid} ({i}/{total})…",
+            {"fase": "sync", "pct": pct, "id_tenant": tid},
+        )
+        try:
+            if conn is not None:
+                conn.commit()
+            res = sincronizar_feed_tenant(cur, tid, conn=conn)
+            ok += 1
+            logs.append(f"OK tenant #{tid}: {res.get('mensagem')}")
+        except Exception as e:
+            erro += 1
+            logs.append(f"ERRO tenant #{tid}: {e}")
+            _log.warning("XML Dropshipping sync tenant %s: %s", tid, e)
+            if conn is not None:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+
+    msg = (
+        f"Sync XML Dropshipping (estoque): {ok} ok · {erro} erro(s) · "
+        f"{total} conta(s)."
+    )
+    logs.append(msg)
+    _atualizar_progresso_exec(
+        cur, conn, id_exec, msg, {"fase": "ok", "pct": 100, "ok": ok, "erro": erro}
+    )
+    if erro and not ok:
+        raise TarefaSecundariaErro(msg, log_texto="\n".join(logs))
+    return {
+        "mensagem": msg,
+        "log_texto": "\n".join(logs),
+        "tenants": total,
+        "ok": ok,
+        "erro": erro,
+    }
 
 
 def _ml_get_autenticado(cur, id_tenant: int, path: str) -> Any:

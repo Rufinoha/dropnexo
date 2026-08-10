@@ -100,6 +100,14 @@ CATEGORIAS_INTEGRACOES = [
                 "modulos": _MOD_VENDEDOR,
                 "papel": "pedidos",
             },
+            {
+                "slug": "xml-dropshipping",
+                "nome": "XML Dropshipping",
+                "descricao": "Feed XML de dropshipping (modelo Revenda de Calçados) → Catálogo → ativar.",
+                "cor": "#0F766E",
+                "iniciais": "XML",
+                "modulos": _MOD_VENDEDOR,
+            },
             {"slug": "mercado-livre", "nome": "Mercado Livre", "descricao": "Pedidos e anúncios do Mercado Livre.", "cor": "#FFE600", "iniciais": "ML", "modulos": _MOD_VENDEDOR},
             {"slug": "tiktok", "nome": "TikTok Shop", "descricao": "Pedidos, produtos e estoque do TikTok Shop.", "cor": "#000000", "iniciais": "TT", "modulos": _MOD_VENDEDOR},
             {"slug": "amazon", "nome": "Amazon", "descricao": "Pedidos, produtos e estoque da Amazon.", "cor": "#FF9900", "iniciais": "AZ", "modulos": _MOD_VENDEDOR},
@@ -547,6 +555,36 @@ def pagina_amazon():
     )
 
 
+@integracoes_bp.get("/integracoes/xml-dropshipping")
+@login_obrigatorio()
+def pagina_xml_dropshipping():
+    if not _pode_ver_integracoes():
+        return redirect(url_for("dashboard.index"))
+    if (r := _exigir_plano_integracao()) is not None:
+        return r
+    if (r := _exigir_modulo(MODULO_VENDEDOR)) is not None:
+        return r
+    from api.xml_dropshipping.xml_dropshipping import xml_conectado
+
+    id_tenant = session.get("id_tenant")
+    conectado = False
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        if id_tenant:
+            try:
+                conectado = xml_conectado(cur, int(id_tenant))
+            except Exception:
+                conectado = False
+    finally:
+        conn.close()
+    return render_template(
+        "frm_xml_dropshipping_integracao.html",
+        nav_codigo="integracoes",
+        xml_conectado=conectado,
+    )
+
+
 @integracoes_bp.get("/api/integracoes/hub/status")
 @login_obrigatorio()
 def hub_status():
@@ -599,6 +637,7 @@ def hub_status():
         ml_ok = False
         tt_ok = False
         amz_ok = False
+        xml_ok = False
         conn = Var_ConectarBanco()
         try:
             cur = conn.cursor()
@@ -607,6 +646,7 @@ def hub_status():
                 from api.mercado_livre.mercado_livre import ml_conectado
                 from api.tiktok.tiktok import tiktok_conectado
                 from api.amazon.amazon import amazon_conectado
+                from api.xml_dropshipping.xml_dropshipping import xml_conectado
 
                 try:
                     me_ok = me_conectado(cur, int(id_tenant))
@@ -624,12 +664,21 @@ def hub_status():
                     amz_ok = amazon_conectado(cur, int(id_tenant))
                 except Exception:
                     amz_ok = False
+                try:
+                    xml_ok = xml_conectado(cur, int(id_tenant))
+                except Exception:
+                    xml_ok = False
         finally:
             conn.close()
         integracoes["bling"] = {
             "conectado": bling_conectado,
             "config_url": url_for("integracoes.pagina_bling", papel="pedidos"),
             "oauth_url": url_for("bling.oauth_iniciar"),
+        }
+        integracoes["xml-dropshipping"] = {
+            "conectado": xml_ok,
+            "config_url": url_for("integracoes.pagina_xml_dropshipping"),
+            "oauth_url": "",
         }
         integracoes["melhor-envio"] = {
             "conectado": me_ok,

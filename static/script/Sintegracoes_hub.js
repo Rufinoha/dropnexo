@@ -74,6 +74,9 @@
     if (item.slug === "mercado-livre") return st.config_url || "/integracoes/mercado-livre";
     if (item.slug === "tiktok") return st.config_url || "/integracoes/tiktok";
     if (item.slug === "amazon") return st.config_url || "/integracoes/amazon";
+    if (item.slug === "xml-dropshipping") {
+      return st.config_url || "/integracoes/xml-dropshipping";
+    }
     return st.config_url || `/integracoes/${item.slug}`;
   }
 
@@ -85,6 +88,7 @@
     "mercado-livre",
     "tiktok",
     "amazon",
+    "xml-dropshipping",
   ]);
 
   function seloEmBreveHtml() {

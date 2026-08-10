@@ -14,6 +14,7 @@ from api.melhor_envio.srotas_melhor_envio import init_app as api_melhor_envio_in
 from api.mercado_livre.srotas_mercado_livre import init_app as api_mercado_livre_init
 from api.tiktok.srotas_tiktok import init_app as api_tiktok_init
 from api.amazon.srotas_amazon import init_app as api_amazon_init
+from api.xml_dropshipping.srotas_xml_dropshipping import init_app as api_xml_dropshipping_init
 from api.brevo.srotas_brevo import init_app as api_brevo_init
 from api.efi.srotas_efi import init_app as api_efi_init
 from api.whatsapp.srotas_whatsapp import init_app as api_whatsapp_init
@@ -63,6 +64,7 @@ api_melhor_envio_init(app)
 api_mercado_livre_init(app)
 api_tiktok_init(app)
 api_amazon_init(app)
+api_xml_dropshipping_init(app)
 registrar_modulos(app)
 registrar_templates_modulos(app)
 

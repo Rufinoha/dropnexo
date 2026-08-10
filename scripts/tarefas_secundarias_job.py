@@ -1,10 +1,9 @@
 #!/usr/bin/env python
-"""Job de tarefas secundárias (cache de categorias ML/TikTok/Amazon).
+"""Job de tarefas secundárias (cache ML/TikTok/Amazon + sync XML Dropshipping).
 
 Agenda: dia + hora (America/Sao_Paulo), janela de 60 minutos.
-Defaults: domingo ML 02:00 · TikTok 03:00 · Amazon 04:00
+Defaults: domingo ML 02:00 · TikTok 03:00 · Amazon 04:00 · XML sync diário 06:00
 (editáveis em Configurações → Tarefas secundárias).
-Bling não entra aqui: categorias são da conta do usuário.
 
 Cron recomendado (a cada hora):
   5 * * * * cd /path/app && python scripts/tarefas_secundarias_job.py

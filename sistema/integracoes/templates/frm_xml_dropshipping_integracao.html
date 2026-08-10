@@ -1,0 +1,92 @@
+{% set nav_ativo = nav_codigo %}
+{% extends "frm_base.html" %}
+{% block title %}XML Dropshipping — Integrações — {{ MARCA_NOME }}{% endblock %}
+{% block topbar_title %}XML Dropshipping{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('static', filename='style/Cmercadopago_integracao.css') }}?v=4" />
+{% endblock %}
+{% block content %}
+<div class="Cl_ContainerApoio cl-page-principal Mp_Wrap">
+  <div class="cl-page-title Mp_PageHead">
+    <div class="Mp_PageHeadMain">
+      <a href="{{ url_for('integracoes.pagina') }}" class="Mp_BackLink">
+        <i data-lucide="arrow-left"></i> Integrações
+      </a>
+      <div class="Mp_TitleRow">
+        <div class="Mp_Logo" aria-hidden="true" style="background:#0f766e;color:#fff;display:flex;align-items:center;justify-content:center;border-radius:12px;width:48px;height:48px;font-weight:800;">XML</div>
+        <div>
+          <h2>XML Dropshipping</h2>
+          <p class="cl-page-desc">
+            Conecte o feed XML da sua conta no site do fornecedor (modelo
+            <strong>Revenda de Calçados</strong>). Os produtos entram no Catálogo;
+            você ativa só o que quiser — ativados vão para Meus produtos.
+          </p>
+        </div>
+      </div>
+    </div>
+    <div class="Mp_ConnBadge {{ 'is-on' if xml_conectado else 'is-off' }}" id="xml_status_badge">
+      {{ 'Conectado' if xml_conectado else 'Desconectado' }}
+    </div>
+  </div>
+
+  <section class="Mp_Card Mp_Card--info" id="xml_sec_guia" {% if xml_conectado %}hidden{% endif %}>
+    <h3>Conectar feed</h3>
+    <p class="Mp_Hint">
+      Cadastre-se no site do fornecedor, ative a modalidade Dropshipping e copie a
+      <strong>URL XML</strong> (ou só o token) da sua conta. O link é exclusivo — não compartilhe.
+    </p>
+    <label class="Mp_Hint" style="display:block;margin-top:0.75rem">URL do XML</label>
+    <input type="url" id="xml_url" class="Cl_Input" placeholder="https://www.revendadecalcados.com.br/xmldrop?token=..." style="width:100%;max-width:40rem" />
+    <label class="Mp_Hint" style="display:block;margin-top:0.65rem">Token (opcional se já estiver na URL)</label>
+    <input type="text" id="xml_token" class="Cl_Input" placeholder="token da sua conta" style="width:100%;max-width:40rem" />
+    <div class="Mp_Actions" style="margin-top:1rem">
+      <button type="button" class="Cl_botaoprimario" id="xml_btn_conectar">Conectar e importar</button>
+    </div>
+    <p id="xml_msg_guia" class="Mp_Msg" hidden></p>
+  </section>
+
+  <section class="Mp_Card" id="xml_painel" {% if not xml_conectado %}hidden{% endif %}>
+    <h3>Catálogo e estoque</h3>
+    <p class="Mp_Hint">
+      O sync diário <strong>atualiza estoque e preços</strong> do acervo a partir do XML.
+      Produtos que sumirem do feed ficam com estoque <strong>0</strong>.
+      Resultado também aparece em <strong>Configurações → Tarefas secundárias</strong>.
+    </p>
+    <p id="xml_ultima_sync" class="Mp_ContaResumo"></p>
+    <div class="Mp_Actions">
+      <button type="button" class="Cl_botaoprimario" id="xml_btn_sync">Sincronizar estoque agora</button>
+      <a href="{{ url_for('vd_catalogo.pagina') }}" class="Cl_botaoFiltro">Ir ao Catálogo</a>
+      <button type="button" class="Cl_BtnCancelar" id="xml_btn_desconectar">Desconectar</button>
+    </div>
+    <p id="xml_msg" class="Mp_Msg" hidden></p>
+
+    <h3 style="margin-top:1.5rem">Endereço de origem (Revenda de Calçados)</h3>
+    <p class="Mp_Hint">Usado no depósito do acervo / expedição. Ajuste se necessário.</p>
+    <div class="Mp_GridForm" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(12rem,1fr));gap:0.65rem;margin-top:0.75rem">
+      <label>Nome<input class="Cl_Input" id="xml_origem_nome" /></label>
+      <label>Documento<input class="Cl_Input" id="xml_origem_documento" /></label>
+      <label>Telefone<input class="Cl_Input" id="xml_origem_telefone" /></label>
+      <label>CEP<input class="Cl_Input" id="xml_origem_cep" /></label>
+      <label style="grid-column:span 2">Logradouro<input class="Cl_Input" id="xml_origem_logradouro" /></label>
+      <label>Número<input class="Cl_Input" id="xml_origem_numero" /></label>
+      <label>Complemento<input class="Cl_Input" id="xml_origem_complemento" /></label>
+      <label>Bairro<input class="Cl_Input" id="xml_origem_bairro" /></label>
+      <label>Cidade<input class="Cl_Input" id="xml_origem_cidade" /></label>
+      <label>UF<input class="Cl_Input" id="xml_origem_uf" maxlength="2" /></label>
+    </div>
+    <div class="Mp_Actions" style="margin-top:0.85rem">
+      <button type="button" class="Cl_botaoFiltro" id="xml_btn_salvar_origem">Salvar endereço</button>
+    </div>
+
+    <h3 style="margin-top:1.5rem">Mapeamento de categorias</h3>
+    <p class="Mp_Hint">Relacione as categorias do feed às suas categorias DropNexo (mesmo padrão das outras integrações).</p>
+    <div id="xml_cat_lista" class="Mp_Hint">Carregando…</div>
+    <div class="Mp_Actions" style="margin-top:0.75rem">
+      <button type="button" class="Cl_botaoFiltro" id="xml_btn_salvar_cats">Salvar mapeamentos</button>
+    </div>
+  </section>
+</div>
+{% endblock %}
+{% block page_js %}
+<script src="{{ url_for('static', filename='script/Sxml_dropshipping_integracao.js') }}?v=1"></script>
+{% endblock %}
