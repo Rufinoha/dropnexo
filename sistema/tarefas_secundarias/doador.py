@@ -11,6 +11,8 @@ _MAPA_TAREFA: dict[str, tuple[str, str]] = {
     "ml_categorias_cache": ("mercado_livre", "tbl_integracao_mercado_livre"),
     "tiktok_categorias_cache": ("tiktok", "tbl_integracao_tiktok"),
     "amazon_product_types_cache": ("amazon", "tbl_integracao_amazon"),
+    # 1º vendedor que conectar o feed XML vira doador do cache de categorias
+    "xml_dropshipping_categorias_cache": ("xml_dropshipping", "tbl_integracao_xml_dropshipping"),
 }
 
 _PROVEDOR_PARA_CODIGO = {v[0]: k for k, v in _MAPA_TAREFA.items()}

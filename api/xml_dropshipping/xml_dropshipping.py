@@ -62,18 +62,34 @@ def garantir_tabelas_xml_dropshipping(cur) -> None:
         )
         """
     )
-    cur.execute(
-        """
-        CREATE TABLE IF NOT EXISTS tbl_xml_dropshipping_categoria_cache (
-            id SERIAL PRIMARY KEY,
-            id_tenant INTEGER NOT NULL REFERENCES tbl_tenant(id) ON DELETE CASCADE,
-            category_key VARCHAR(160) NOT NULL,
-            nome VARCHAR(255) NOT NULL,
-            atualizado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-            UNIQUE (id_tenant, category_key)
+    # Cache GLOBAL de categorias do feed (preenchido pelo tenant doador)
+    cur.execute("SAVEPOINT sp_xml_cat_cache")
+    try:
+        cur.execute(
+            """
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'tbl_xml_dropshipping_categoria_cache'
+              AND column_name = 'id_tenant'
+            LIMIT 1
+            """
         )
-        """
-    )
+        if cur.fetchone():
+            cur.execute("DROP TABLE IF EXISTS tbl_xml_dropshipping_categoria_cache")
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS tbl_xml_dropshipping_categoria_cache (
+                id SERIAL PRIMARY KEY,
+                category_key VARCHAR(160) NOT NULL UNIQUE,
+                nome VARCHAR(255) NOT NULL,
+                atualizado_em TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+            """
+        )
+        cur.execute("RELEASE SAVEPOINT sp_xml_cat_cache")
+    except Exception:
+        cur.execute("ROLLBACK TO SAVEPOINT sp_xml_cat_cache")
+        _log.warning("garantir cache categorias XML falhou", exc_info=True)
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS tbl_integracao_xml_categoria_map (
@@ -570,7 +586,8 @@ def _mapa_categorias(cur, id_tenant: int) -> dict[str, int | None]:
     return {str(r[0]): (int(r[1]) if r[1] else None) for r in cur.fetchall()}
 
 
-def _upsert_cache_categorias(cur, id_tenant: int, nomes: set[str]) -> int:
+def _upsert_cache_categorias(cur, nomes: set[str]) -> int:
+    """Grava categorias do feed no cache compartilhado (doador)."""
     agora = agora_utc()
     n = 0
     for nome in sorted(nomes):
@@ -580,12 +597,12 @@ def _upsert_cache_categorias(cur, id_tenant: int, nomes: set[str]) -> int:
         cur.execute(
             """
             INSERT INTO tbl_xml_dropshipping_categoria_cache (
-                id_tenant, category_key, nome, atualizado_em
-            ) VALUES (%s, %s, %s, %s)
-            ON CONFLICT (id_tenant, category_key) DO UPDATE SET
+                category_key, nome, atualizado_em
+            ) VALUES (%s, %s, %s)
+            ON CONFLICT (category_key) DO UPDATE SET
                 nome = EXCLUDED.nome, atualizado_em = EXCLUDED.atualizado_em
             """,
-            (int(id_tenant), key, nome[:255], agora),
+            (key, nome[:255], agora),
         )
         n += 1
     return n
@@ -828,7 +845,23 @@ def sincronizar_feed_tenant(
     mapa = _mapa_categorias(cur, id_tenant)
 
     cats = {p["categoria"] for p in produtos if p.get("categoria")}
-    n_cats = _upsert_cache_categorias(cur, id_tenant, cats)
+    # Cache global de categorias: só o doador (1º que conectou) atualiza
+    n_cats = 0
+    try:
+        from sistema.tarefas_secundarias.doador import obter_id_doador, obter_ou_promover_doador
+
+        codigo_cat = "xml_dropshipping_categorias_cache"
+        doador = obter_id_doador(cur, codigo_cat) or obter_ou_promover_doador(cur, codigo_cat)
+        if doador and int(doador) == int(id_tenant):
+            n_cats = _upsert_cache_categorias(cur, cats)
+        elif not doador and cats:
+            # Sem doador ainda — este tenant assume e grava
+            from sistema.tarefas_secundarias.doador import definir_doador
+
+            definir_doador(cur, codigo_cat, int(id_tenant))
+            n_cats = _upsert_cache_categorias(cur, cats)
+    except Exception as e:
+        _log.warning("Cache categorias XML ignorado: %s", e)
 
     skus_vivos: set[str] = set()
     criados = atualizados = variantes = 0
@@ -935,7 +968,7 @@ def listar_tenants_conectados_sync(cur) -> list[int]:
     return [int(r[0]) for r in cur.fetchall()]
 
 
-def buscar_categorias_cache(cur, id_tenant: int, termo: str = "", limit: int = 40) -> list[dict]:
+def buscar_categorias_cache(cur, id_tenant: int | None = None, termo: str = "", limit: int = 40) -> list[dict]:
     garantir_tabelas_xml_dropshipping(cur)
     lim = max(1, min(int(limit or 40), 80))
     t = (termo or "").strip()
@@ -943,19 +976,19 @@ def buscar_categorias_cache(cur, id_tenant: int, termo: str = "", limit: int = 4
         cur.execute(
             """
             SELECT category_key, nome FROM tbl_xml_dropshipping_categoria_cache
-            WHERE id_tenant = %s ORDER BY nome LIMIT %s
+            ORDER BY nome LIMIT %s
             """,
-            (int(id_tenant), lim),
+            (lim,),
         )
     else:
         like = f"%{t}%"
         cur.execute(
             """
             SELECT category_key, nome FROM tbl_xml_dropshipping_categoria_cache
-            WHERE id_tenant = %s AND (nome ILIKE %s OR category_key ILIKE %s)
+            WHERE nome ILIKE %s OR category_key ILIKE %s
             ORDER BY nome LIMIT %s
             """,
-            (int(id_tenant), like, like, lim),
+            (like, like, lim),
         )
     return [{"category_id": r[0], "nome": r[1], "path_nomes": r[1]} for r in cur.fetchall()]
 
@@ -967,9 +1000,8 @@ def listar_mapeamento_categorias(cur, id_tenant: int) -> list[dict]:
         SELECT c.category_key, c.nome, m.id_categoria, cat.nome
         FROM tbl_xml_dropshipping_categoria_cache c
         LEFT JOIN tbl_integracao_xml_categoria_map m
-          ON m.id_tenant = c.id_tenant AND m.category_key = c.category_key
+          ON m.id_tenant = %s AND m.category_key = c.category_key
         LEFT JOIN tbl_categoria cat ON cat.id = m.id_categoria
-        WHERE c.id_tenant = %s
         ORDER BY c.nome
         """,
         (int(id_tenant),),

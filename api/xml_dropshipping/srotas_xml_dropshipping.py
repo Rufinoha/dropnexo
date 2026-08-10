@@ -73,14 +73,22 @@ def api_conectar():
     try:
         cur = conn.cursor()
         res = salvar_conexao(cur, int(id_tenant), body)
-        # Primeira sync em background leve (síncrona na v1 — feed ~1MB)
+        conn.commit()
+        # 1º a conectar vira doador do cache de categorias (padrão ML)
+        try:
+            from sistema.tarefas_secundarias.doador import ao_conectar_integracao
+
+            ao_conectar_integracao("xml_dropshipping", int(id_tenant), disparar_sync=False)
+        except Exception:
+            _log.warning("Hook doador XML após conectar falhou", exc_info=True)
+        # Primeira sync (feed ~1MB) — atualiza estoque/catálogo do acervo
         sync = sincronizar_feed_tenant(cur, int(id_tenant), conn=conn)
         conn.commit()
         return jsonify(
             success=True,
             message=(
-                f"Conectado. Feed com {res.get('produtos_no_feed')} produto(s). "
-                f"{sync.get('mensagem')}"
+                f"Conectado. Cole a URL com token na tela (ex.: …/xmldrop?token=…). "
+                f"Feed com {res.get('produtos_no_feed')} produto(s). {sync.get('mensagem')}"
             ),
             **res,
             sync=sync,
@@ -104,6 +112,12 @@ def api_desconectar():
         cur = conn.cursor()
         desconectar(cur, int(id_tenant))
         conn.commit()
+        try:
+            from sistema.tarefas_secundarias.doador import ao_desconectar_integracao
+
+            ao_desconectar_integracao("xml_dropshipping", int(id_tenant))
+        except Exception:
+            _log.warning("Hook doador XML após desconectar falhou", exc_info=True)
         return jsonify(success=True, message="XML Dropshipping desconectado.")
     except Exception as e:
         conn.rollback()

@@ -21,11 +21,13 @@ CODIGO_ML_CATEGORIAS = "ml_categorias_cache"
 CODIGO_TIKTOK_CATEGORIAS = "tiktok_categorias_cache"
 CODIGO_AMAZON_PRODUCT_TYPES = "amazon_product_types_cache"
 CODIGO_XML_DROPSHIPPING_SYNC = "xml_dropshipping_sync"
+CODIGO_XML_CATEGORIAS = "xml_dropshipping_categorias_cache"
 
 CODIGOS_CACHE_CATEGORIAS = (
     CODIGO_ML_CATEGORIAS,
     CODIGO_TIKTOK_CATEGORIAS,
     CODIGO_AMAZON_PRODUCT_TYPES,
+    CODIGO_XML_CATEGORIAS,
 )
 
 # Defaults: (agendamento, hora_local HH:MM America/Sao_Paulo)
@@ -33,6 +35,7 @@ _DEFAULTS_AGENDA: dict[str, tuple[str, str]] = {
     CODIGO_ML_CATEGORIAS: ("domingo", "02:00"),
     CODIGO_TIKTOK_CATEGORIAS: ("domingo", "03:00"),
     CODIGO_AMAZON_PRODUCT_TYPES: ("domingo", "04:00"),
+    CODIGO_XML_CATEGORIAS: ("domingo", "05:00"),
     CODIGO_XML_DROPSHIPPING_SYNC: ("diario", "06:00"),
 }
 
@@ -209,11 +212,16 @@ def garantir_tabelas_tarefas(cur) -> None:
             "Baixa Product Types usando a conta doadora e atualiza o cache do mapeamento.",
         ),
         (
+            CODIGO_XML_CATEGORIAS,
+            "Cache de categorias XML Dropshipping",
+            "Baixa as categorias do feed XML usando a conta doadora (1º vendedor que conectou) "
+            "e atualiza o cache compartilhado para mapeamento.",
+        ),
+        (
             CODIGO_XML_DROPSHIPPING_SYNC,
             "Sync estoque XML Dropshipping",
             "Atualiza estoque, preços e catálogo do feed XML (modelo Revenda de Calçados) "
-            "de cada vendedor conectado. Produtos ausentes no feed ficam com estoque 0. "
-            "Também atualiza o cache de categorias do feed para mapeamento.",
+            "de cada vendedor conectado. Produtos ausentes no feed ficam com estoque 0.",
         ),
     ]
     # Bling: categorias são da conta do usuário — sem cache/doador compartilhado
@@ -639,11 +647,54 @@ def _rodar_sync_por_codigo(cur, codigo: str, *, conn=None, id_exec: int | None =
             id_exec=id_exec,
             atualizar_progresso=_atualizar_progresso_exec,
         )
+    if codigo == CODIGO_XML_CATEGORIAS:
+        return _sincronizar_cache_categorias_xml(
+            cur, conn=conn, id_exec=id_exec, id_tenant_doador=id_doador
+        )
     if codigo == CODIGO_XML_DROPSHIPPING_SYNC:
         return _sincronizar_xml_dropshipping_todos(
             cur, conn=conn, id_exec=id_exec
         )
     raise RuntimeError(f"Executor não implementado para «{codigo}».")
+
+
+def _sincronizar_cache_categorias_xml(
+    cur, *, conn=None, id_exec=None, id_tenant_doador: int | None = None
+) -> dict:
+    """Usa o feed do doador para atualizar o cache global de categorias XML."""
+    from api.xml_dropshipping.xml_dropshipping import (
+        _upsert_cache_categorias,
+        baixar_xml,
+        carregar_config,
+        montar_url_xml,
+        parse_produtos_xml,
+    )
+    from sistema.tarefas_secundarias.doador import obter_ou_promover_doador
+
+    tid = id_tenant_doador or obter_ou_promover_doador(cur, CODIGO_XML_CATEGORIAS)
+    if not tid:
+        raise RuntimeError(
+            "Nenhuma conta XML Dropshipping conectada. "
+            "O cache de categorias será preenchido quando o 1º vendedor colar o link/token."
+        )
+    cfg = carregar_config(cur, int(tid))
+    url = montar_url_xml(cfg.get("url_xml") or "", cfg.get("token") or "")
+    if not url:
+        raise RuntimeError("Doador sem URL/token de feed.")
+    _atualizar_progresso_exec(
+        cur, conn, id_exec, f"Baixando feed do doador #{tid}…", {"fase": "inicio", "pct": 10}
+    )
+    raw = baixar_xml(url)
+    produtos, _msg = parse_produtos_xml(raw)
+    cats = {p["categoria"] for p in produtos if p.get("categoria")}
+    n = _upsert_cache_categorias(cur, cats)
+    msg = f"{n} categoria(s) XML em cache (doador tenant #{tid})."
+    _atualizar_progresso_exec(
+        cur, conn, id_exec, msg, {"fase": "ok", "pct": 100, "categorias": n}
+    )
+    if conn is not None:
+        conn.commit()
+    return {"mensagem": msg, "log_texto": msg, "categorias": n, "id_tenant_doador": tid}
 
 
 def _sincronizar_xml_dropshipping_todos(cur, *, conn=None, id_exec=None) -> dict:

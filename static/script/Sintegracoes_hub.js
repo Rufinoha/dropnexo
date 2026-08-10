@@ -150,7 +150,15 @@
   function dialogHtml(item) {
     const st = statusIntegracao(item.slug);
     const cor = item.cor || "#28A745";
-    const oauth = st.oauth_url || "/api/integracoes/bling/oauth/iniciar";
+    const cfgUrl = configUrlIntegracao(item);
+    // Só OAuth se houver URL explícita — NÃO cair no Bling quando oauth_url=""
+    const oauth = (st.oauth_url || "").trim();
+    const usaOauth = !!oauth;
+    const hrefPrimary = usaOauth ? oauth : cfgUrl;
+    const labelPrimary = usaOauth ? "Conectar conta" : "Configurar feed";
+    const hint = usaOauth
+      ? "Redirecionamento seguro para autorizar o acesso."
+      : "Na próxima tela você cola a URL XML com o token da sua conta.";
     return `
       <div class="FnInt_ConnectDialog__bar" aria-hidden="true"></div>
       <button type="button" class="FnInt_ConnectDialog__close" data-action="fechar-modal" aria-label="Fechar">
@@ -168,18 +176,15 @@
         <h2 class="FnInt_ConnectDialog__title" id="fn_int_dialog_title">Conectar ${item.nome}</h2>
         <p class="FnInt_ConnectDialog__desc">${item.descricao || "Sincronize dados entre plataformas."}</p>
         <div class="FnInt_ConnectDialog__actions">
-          <a href="${oauth}" class="FnInt_ConnectDialog__btnPrimary">
+          <a href="${hrefPrimary}" class="FnInt_ConnectDialog__btnPrimary">
             <i data-lucide="link-2"></i>
-            <span>Conectar conta</span>
+            <span>${labelPrimary}</span>
           </a>
           <button type="button" class="FnInt_ConnectDialog__btnGhost" data-action="fechar-modal">Agora não</button>
         </div>
         <p class="FnInt_ConnectDialog__hint">
           <i data-lucide="shield-check"></i>
-          Redirecionamento seguro para autorizar o acesso.
-        </p>
-        <p class="FnInt_ConnectDialog__manual">
-          <a href="/ajuda/bling" target="_blank" rel="noopener noreferrer">Como conectar? Ver manual passo a passo</a>
+          ${hint}
         </p>
       </div>`;
   }
@@ -335,8 +340,10 @@
       slug === "melhor-envio" ||
       slug === "mercado-livre" ||
       slug === "tiktok" ||
-      slug === "amazon"
+      slug === "amazon" ||
+      slug === "xml-dropshipping"
     ) {
+      // XML Dropshipping: sem OAuth — abre tela para colar URL/token do feed
       window.location.href = configUrlIntegracao(item);
       return;
     }

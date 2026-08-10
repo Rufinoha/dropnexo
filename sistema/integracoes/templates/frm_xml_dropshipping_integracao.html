@@ -35,12 +35,16 @@
       Cadastre-se no site do fornecedor, ative a modalidade Dropshipping e copie a
       <strong>URL XML</strong> (ou só o token) da sua conta. O link é exclusivo — não compartilhe.
     </p>
-    <label class="Mp_Hint" style="display:block;margin-top:0.75rem">URL do XML</label>
-    <input type="url" id="xml_url" class="Cl_Input" placeholder="https://www.revendadecalcados.com.br/xmldrop?token=..." style="width:100%;max-width:40rem" />
-    <label class="Mp_Hint" style="display:block;margin-top:0.65rem">Token (opcional se já estiver na URL)</label>
-    <input type="text" id="xml_token" class="Cl_Input" placeholder="token da sua conta" style="width:100%;max-width:40rem" />
+    <label class="Mp_Hint" style="display:block;margin-top:0.75rem">URL do XML (com token)</label>
+    <input type="url" id="xml_url" class="Cl_Input" placeholder="https://www.revendadecalcados.com.br/xmldrop?token=SEU_TOKEN" style="width:100%;max-width:40rem" />
+    <p class="Mp_Hint" style="margin-top:0.35rem">
+      Exemplo: <code>https://www.revendadecalcados.com.br/xmldrop?token=…</code>
+      — use o link exclusivo da sua conta no site do fornecedor. Não é OAuth / Bling.
+    </p>
+    <label class="Mp_Hint" style="display:block;margin-top:0.65rem">Token (só se a URL não tiver <code>token=</code>)</label>
+    <input type="text" id="xml_token" class="Cl_Input" placeholder="cole só o token, se preferir" style="width:100%;max-width:40rem" />
     <div class="Mp_Actions" style="margin-top:1rem">
-      <button type="button" class="Cl_botaoprimario" id="xml_btn_conectar">Conectar e importar</button>
+      <button type="button" class="Cl_botaoprimario" id="xml_btn_conectar">Conectar com este link</button>
     </div>
     <p id="xml_msg_guia" class="Mp_Msg" hidden></p>
   </section>
