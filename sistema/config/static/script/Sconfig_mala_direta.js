@@ -408,10 +408,19 @@
       }
       syncDraftInputs();
     });
+    // Impede que cliques internos (incl. dias que re-renderizam o grid) borbulhem
+    // até o document e disparem o "clique fora".
+    document.getElementById("cfg_md_periodo_root")?.addEventListener("click", (e) => {
+      e.stopPropagation();
+    });
     document.addEventListener("click", (e) => {
       if (!periodoState.open) return;
       const root = document.getElementById("cfg_md_periodo_root");
-      if (root && !root.contains(e.target)) closePeriodo();
+      if (!root) return;
+      // Após re-render do calendário, e.target pode estar desconectado do DOM
+      // e root.contains(e.target) vira false — não fechar nesses casos.
+      if (e.target && !e.target.isConnected) return;
+      if (!root.contains(e.target)) closePeriodo();
     });
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape" && periodoState.open) closePeriodo();
