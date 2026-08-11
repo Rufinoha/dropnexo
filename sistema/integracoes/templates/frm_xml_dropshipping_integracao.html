@@ -3,7 +3,7 @@
 {% block title %}Revenda de Calçados — Integrações — {{ MARCA_NOME }}{% endblock %}
 {% block topbar_title %}Revenda de Calçados{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('static', filename='style/Cmercadopago_integracao.css') }}?v=5" />
+<link rel="stylesheet" href="{{ url_for('static', filename='style/Cmercadopago_integracao.css') }}?v=6" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal Mp_Wrap">
@@ -73,58 +73,87 @@
     <p id="xml_msg_guia" class="Mp_Msg" hidden></p>
   </section>
 
-  <section class="Mp_Card" id="xml_painel" {% if not xml_conectado %}hidden{% endif %}>
-    <h3>Catálogo e estoque</h3>
-    <p class="Mp_Hint">
-      O sync diário <strong>atualiza estoque e preços</strong> do acervo a partir do XML da Revenda de Calçados.
-      Produtos que sumirem do feed ficam com estoque <strong>0</strong>.
-      Resultado também aparece em <strong>Configurações → Tarefas secundárias</strong>.
-    </p>
-    <p id="xml_ultima_sync" class="Mp_ContaResumo"></p>
-    <div class="Mp_Actions">
-      <button type="button" class="Cl_botaoprimario" id="xml_btn_sync">Sincronizar estoque agora</button>
-      <a href="{{ url_for('vd_catalogo.pagina') }}" class="Cl_botaoFiltro">Ir ao Catálogo</a>
-      <button type="button" class="Cl_BtnCancelar" id="xml_btn_desconectar">Desconectar</button>
-    </div>
-    <div id="xml_progress_sync" class="XmlProg" hidden aria-live="polite">
-      <div class="XmlProg__bar"><span class="XmlProg__fill" id="xml_progress_sync_fill"></span></div>
-      <p class="XmlProg__label" id="xml_progress_sync_label">Sincronizando…</p>
-      <ol class="XmlProg__steps" id="xml_progress_sync_steps">
-        <li data-step="0">Baixar feed da Revenda de Calçados</li>
-        <li data-step="1">Atualizar estoque e preços</li>
-        <li data-step="2">Ajustar produtos ausentes</li>
-        <li data-step="3">Concluir</li>
-      </ol>
-    </div>
-    <p id="xml_msg" class="Mp_Msg" hidden></p>
+  <div id="xml_painel" {% if not xml_conectado %}hidden{% endif %}>
+    <nav class="XmlTabs" role="tablist" aria-label="Configuração Revenda de Calçados">
+      <button type="button" class="XmlTabs__btn is-active" role="tab" aria-selected="true" data-tab="integracao">Integração</button>
+      <button type="button" class="XmlTabs__btn" role="tab" aria-selected="false" data-tab="deposito">Depósito</button>
+      <button type="button" class="XmlTabs__btn" role="tab" aria-selected="false" data-tab="categorias">Categorias</button>
+      <button type="button" class="XmlTabs__btn" role="tab" aria-selected="false" data-tab="estoque">Estoque</button>
+    </nav>
 
-    <h3 style="margin-top:1.5rem">Endereço de origem (Revenda de Calçados)</h3>
-    <p class="Mp_Hint">Usado no depósito do acervo / expedição. Ajuste se necessário.</p>
-    <div class="Mp_GridForm" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(12rem,1fr));gap:0.65rem;margin-top:0.75rem">
-      <label>Nome<input class="Cl_Input" id="xml_origem_nome" /></label>
-      <label>Documento<input class="Cl_Input" id="xml_origem_documento" /></label>
-      <label>Telefone<input class="Cl_Input" id="xml_origem_telefone" /></label>
-      <label>CEP<input class="Cl_Input" id="xml_origem_cep" /></label>
-      <label style="grid-column:span 2">Logradouro<input class="Cl_Input" id="xml_origem_logradouro" /></label>
-      <label>Número<input class="Cl_Input" id="xml_origem_numero" /></label>
-      <label>Complemento<input class="Cl_Input" id="xml_origem_complemento" /></label>
-      <label>Bairro<input class="Cl_Input" id="xml_origem_bairro" /></label>
-      <label>Cidade<input class="Cl_Input" id="xml_origem_cidade" /></label>
-      <label>UF<input class="Cl_Input" id="xml_origem_uf" maxlength="2" /></label>
-    </div>
-    <div class="Mp_Actions" style="margin-top:0.85rem">
-      <button type="button" class="Cl_botaoFiltro" id="xml_btn_salvar_origem">Salvar endereço</button>
-    </div>
+    <section class="Mp_Card XmlTabPanel is-active" data-panel="integracao" role="tabpanel">
+      <h3>Conexão</h3>
+      <p class="Mp_Hint">
+        Conta vinculada ao feed XML da Revenda de Calçados.
+        Categorias e estoque ficam nas outras abas.
+      </p>
+      <p id="xml_url_resumo" class="Mp_ContaResumo"></p>
+      <div class="Mp_Actions" style="margin-top:0.85rem">
+        <a href="{{ url_for('vd_catalogo.pagina') }}" class="Cl_botaoFiltro">Ir ao Catálogo</a>
+        <a href="https://www.revendadecalcados.com.br/" target="_blank" rel="noopener noreferrer" class="Cl_botaoFiltro">Abrir site do fornecedor</a>
+        <button type="button" class="Cl_BtnCancelar" id="xml_btn_desconectar">Desconectar</button>
+      </div>
+      <p id="xml_msg" class="Mp_Msg" hidden></p>
+    </section>
 
-    <h3 style="margin-top:1.5rem">Mapeamento de categorias</h3>
-    <p class="Mp_Hint">Relacione as categorias do feed da Revenda de Calçados às suas categorias DropNexo.</p>
-    <div id="xml_cat_lista" class="Mp_Hint">Carregando…</div>
-    <div class="Mp_Actions" style="margin-top:0.75rem">
-      <button type="button" class="Cl_botaoFiltro" id="xml_btn_salvar_cats">Salvar mapeamentos</button>
-    </div>
-  </section>
+    <section class="Mp_Card XmlTabPanel" data-panel="deposito" role="tabpanel" hidden>
+      <h3>Depósito / endereço de origem</h3>
+      <p class="Mp_Hint">Usado no depósito do acervo e na expedição. Ajuste se necessário.</p>
+      <div class="Mp_GridForm" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(12rem,1fr));gap:0.65rem;margin-top:0.75rem">
+        <label>Nome<input class="Cl_Input" id="xml_origem_nome" /></label>
+        <label>Documento<input class="Cl_Input" id="xml_origem_documento" /></label>
+        <label>Telefone<input class="Cl_Input" id="xml_origem_telefone" /></label>
+        <label>CEP<input class="Cl_Input" id="xml_origem_cep" /></label>
+        <label style="grid-column:span 2">Logradouro<input class="Cl_Input" id="xml_origem_logradouro" /></label>
+        <label>Número<input class="Cl_Input" id="xml_origem_numero" /></label>
+        <label>Complemento<input class="Cl_Input" id="xml_origem_complemento" /></label>
+        <label>Bairro<input class="Cl_Input" id="xml_origem_bairro" /></label>
+        <label>Cidade<input class="Cl_Input" id="xml_origem_cidade" /></label>
+        <label>UF<input class="Cl_Input" id="xml_origem_uf" maxlength="2" /></label>
+      </div>
+      <div class="Mp_Actions" style="margin-top:0.85rem">
+        <button type="button" class="Cl_botaoFiltro" id="xml_btn_salvar_origem">Salvar endereço</button>
+      </div>
+    </section>
+
+    <section class="Mp_Card XmlTabPanel" data-panel="categorias" role="tabpanel" hidden>
+      <h3>Mapeamento de categorias</h3>
+      <p class="Mp_Hint">
+        Relacione as categorias do feed da Revenda de Calçados às suas categorias DropNexo.
+        Elas são atualizadas automaticamente quando o estoque sincroniza.
+      </p>
+      <div id="xml_cat_lista" class="Mp_Hint">Carregando…</div>
+      <div class="Mp_Actions" style="margin-top:0.75rem">
+        <button type="button" class="Cl_botaoFiltro" id="xml_btn_salvar_cats">Salvar mapeamentos</button>
+      </div>
+    </section>
+
+    <section class="Mp_Card XmlTabPanel" data-panel="estoque" role="tabpanel" hidden>
+      <h3>Estoque</h3>
+      <p class="Mp_Hint">
+        Sync automático nos horários <strong>07:00, 10:00, 13:00, 16:00 e 19:00</strong> (Brasília),
+        para todos os vendedores conectados. Produtos que sumirem do feed ficam com estoque <strong>0</strong>.
+      </p>
+      <p id="xml_ultima_sync" class="Mp_ContaResumo"></p>
+      <div id="xml_slots_status" class="XmlSlots" aria-live="polite"></div>
+      <div class="Mp_Actions" style="margin-top:0.85rem">
+        <button type="button" class="Cl_botaoprimario" id="xml_btn_sync">Sincronizar estoque agora</button>
+      </div>
+      <div id="xml_progress_sync" class="XmlProg" hidden aria-live="polite">
+        <div class="XmlProg__bar"><span class="XmlProg__fill" id="xml_progress_sync_fill"></span></div>
+        <p class="XmlProg__label" id="xml_progress_sync_label">Sincronizando…</p>
+        <ol class="XmlProg__steps" id="xml_progress_sync_steps">
+          <li data-step="0">Baixar feed da Revenda de Calçados</li>
+          <li data-step="1">Atualizar estoque e preços</li>
+          <li data-step="2">Ajustar produtos ausentes</li>
+          <li data-step="3">Concluir</li>
+        </ol>
+      </div>
+      <p id="xml_msg_estoque" class="Mp_Msg" hidden></p>
+    </section>
+  </div>
 </div>
 {% endblock %}
 {% block page_js %}
-<script src="{{ url_for('static', filename='script/Sxml_dropshipping_integracao.js') }}?v=3"></script>
+<script src="{{ url_for('static', filename='script/Sxml_dropshipping_integracao.js') }}?v=4"></script>
 {% endblock %}

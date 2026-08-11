@@ -15,8 +15,75 @@
   background: #fff;
   border: 1px solid #e2e8f0;
   border-radius: 14px;
-  padding: 1.1rem 1.2rem;
+  padding: 0;
   box-shadow: 0 8px 22px rgba(15, 23, 42, 0.04);
+  overflow: hidden;
+}
+
+.TsCfg_CardSummary {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  width: 100%;
+  padding: 1rem 1.15rem;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.TsCfg_CardSummary:hover { background: #f8fafc; }
+.TsCfg_CardSummaryMain { flex: 1; min-width: 0; }
+.TsCfg_CardSummary h3 {
+  margin: 0 0 0.45rem;
+  font-size: 1.02rem;
+  color: #0f172a;
+}
+.TsCfg_Chevron {
+  flex: 0 0 auto;
+  width: 0.55rem;
+  height: 0.55rem;
+  margin-top: 0.45rem;
+  border-right: 2px solid #94a3b8;
+  border-bottom: 2px solid #94a3b8;
+  transform: rotate(45deg);
+  transition: transform 0.18s ease;
+}
+.TsCfg_Card.is-open .TsCfg_Chevron {
+  transform: rotate(225deg);
+  margin-top: 0.65rem;
+}
+.TsCfg_CardDetail {
+  display: none;
+  padding: 0 1.15rem 1.1rem;
+  border-top: 1px solid #e2e8f0;
+}
+.TsCfg_Card.is-open .TsCfg_CardDetail { display: block; }
+.TsCfg_Desc {
+  margin: 0.85rem 0 0;
+  font-size: 0.88rem;
+  color: #64748b;
+  line-height: 1.45;
+}
+.TsCfg_Slots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.55rem;
+}
+.TsCfg_AgendaWide { flex: 1 1 18rem; }
+.TsCfg_AgendaWide input[type="text"] {
+  min-width: 16rem;
+  width: 100%;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: normal;
+  color: #0f172a;
+  background: #fff;
 }
 
 .TsCfg_CardTop {
@@ -47,6 +114,7 @@
   gap: 0.45rem;
   margin-top: 0.85rem;
 }
+.TsCfg_CardSummary .TsCfg_Meta { margin-top: 0; }
 
 .TsCfg_Pill {
   display: inline-flex;

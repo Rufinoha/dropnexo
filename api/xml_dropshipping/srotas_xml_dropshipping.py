@@ -55,7 +55,19 @@ def api_status():
     try:
         cur = conn.cursor()
         cfg = carregar_config(cur, int(id_tenant))
-        return jsonify(success=True, **cfg, defaults=ORIGEM_DEFAULTS)
+        agenda = {}
+        try:
+            from sistema.tarefas_secundarias.servico import agenda_xml_dropshipping_sync
+
+            agenda = agenda_xml_dropshipping_sync(cur)
+        except Exception:
+            _log.debug("agenda xml sync ignorada no status", exc_info=True)
+        return jsonify(
+            success=True,
+            **cfg,
+            defaults=ORIGEM_DEFAULTS,
+            agenda_sync=agenda,
+        )
     finally:
         conn.close()
 
@@ -74,13 +86,6 @@ def api_conectar():
         cur = conn.cursor()
         res = salvar_conexao(cur, int(id_tenant), body)
         conn.commit()
-        # 1º a conectar vira doador do cache de categorias (padrão ML)
-        try:
-            from sistema.tarefas_secundarias.doador import ao_conectar_integracao
-
-            ao_conectar_integracao("xml_dropshipping", int(id_tenant), disparar_sync=False)
-        except Exception:
-            _log.warning("Hook doador XML após conectar falhou", exc_info=True)
         # Primeira sync (feed ~1MB) — atualiza estoque/catálogo do acervo
         sync = sincronizar_feed_tenant(cur, int(id_tenant), conn=conn)
         conn.commit()
@@ -112,13 +117,7 @@ def api_desconectar():
         cur = conn.cursor()
         desconectar(cur, int(id_tenant))
         conn.commit()
-        try:
-            from sistema.tarefas_secundarias.doador import ao_desconectar_integracao
-
-            ao_desconectar_integracao("xml_dropshipping", int(id_tenant))
-        except Exception:
-            _log.warning("Hook doador XML após desconectar falhou", exc_info=True)
-        return jsonify(success=True, message="XML Dropshipping desconectado.")
+        return jsonify(success=True, message="Revenda de Calçados desconectada.")
     except Exception as e:
         conn.rollback()
         return jsonify(success=False, message=str(e)[:300]), 400

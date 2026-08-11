@@ -8,6 +8,7 @@
 
   const BASE = "/configuracoes/tarefas-secundarias";
   let pollTimer = null;
+  const openIds = new Set();
 
   const DIAS = [
     ["domingo", "Domingo"],
@@ -57,9 +58,14 @@
     return hit ? hit[1] : a || "Manual";
   }
 
-  function labelAgendamento(a, hora) {
+  function labelAgendamento(a, hora, horas) {
     if (a === "manual") return "Somente manual";
-    if (a === "diario") return `Diário às ${hora || "—"}`;
+    const hs = Array.isArray(horas) && horas.length > 1 ? horas : null;
+    if (a === "diario") {
+      if (hs) return `Diário · ${hs.join(" · ")}`;
+      return `Diário às ${hora || "—"}`;
+    }
+    if (hs) return `${labelDia(a)} · ${hs.join(" · ")}`;
     return `${labelDia(a)} às ${hora || "—"}`;
   }
 
@@ -96,6 +102,7 @@
       sinalCls = "is-warn";
     }
     const detalhe = [
+      meta.hora_slot ? `slot ${meta.hora_slot}` : "",
       meta.site_id ? `Site ${meta.site_id}` : "",
       meta.raiz_idx && meta.raizes_total
         ? `raiz ${meta.raiz_idx}/${meta.raizes_total}`
@@ -103,6 +110,7 @@
       meta.raiz_nome ? `«${meta.raiz_nome}»` : "",
       meta.nos_visitados != null ? `${meta.nos_visitados} nós` : "",
       meta.folhas != null ? `${meta.folhas} folhas` : "",
+      meta.tenants != null ? `${meta.ok || 0}/${meta.tenants} tenants` : "",
     ]
       .filter(Boolean)
       .join(" · ");
@@ -131,6 +139,29 @@
         Doador: <strong>${esc(d.nome)}</strong>
         <span class="TsCfg_DoadorMeta">#${esc(d.id_tenant)} · ${esc(status)}</span>
       </p>`;
+  }
+
+  function blocoSlots(slots) {
+    if (!Array.isArray(slots) || slots.length < 2) return "";
+    return `
+      <div class="TsCfg_Slots">
+        ${slots
+          .map((s) => {
+            const st = s.status || "nunca";
+            const lab =
+              st === "sucesso"
+                ? "OK"
+                : st === "erro"
+                  ? "Erro"
+                  : st === "rodando"
+                    ? "Rodando"
+                    : "Pendente";
+            return `<span class="TsCfg_Pill ${pillStatus(st)}" title="${esc(
+              s.mensagem || fmtData(s.iniciado_em)
+            )}">${esc(s.hora)} · ${esc(lab)}</span>`;
+          })
+          .join("")}
+      </div>`;
   }
 
   function optionsDia(sel) {
@@ -163,45 +194,72 @@
         const travada = execucaoTravada(u);
         const btnExecDisabled = st === "rodando" && !travada ? " disabled" : "";
         const btnExecLabel = travada ? "Reiniciar agora" : "Executar agora";
-        const hora = t.hora_local || "02:00";
+        const horas = t.horas_local || (t.hora_local ? [t.hora_local] : ["02:00"]);
+        const hora = horas[0] || "02:00";
+        const multi = horas.length > 1;
+        const isOpen =
+          openIds.has(String(t.id)) || st === "rodando" || travada;
+        if (isOpen) openIds.add(String(t.id));
+        const temDoador = !!t.doador || t.codigo?.includes("categorias") || t.codigo?.includes("product_types");
         return `
-        <article class="TsCfg_Card" data-codigo="${esc(t.codigo)}" data-id="${t.id}">
-          <div class="TsCfg_CardTop">
-            <div>
+        <article class="TsCfg_Card${isOpen ? " is-open" : ""}" data-codigo="${esc(
+          t.codigo
+        )}" data-id="${t.id}">
+          <button type="button" class="TsCfg_CardSummary" data-acao="toggle" aria-expanded="${
+            isOpen ? "true" : "false"
+          }">
+            <div class="TsCfg_CardSummaryMain">
               <h3>${esc(t.nome)}</h3>
-              <p>${esc(t.descricao || "")}</p>
+              <div class="TsCfg_Meta">
+                <span class="TsCfg_Pill">${esc(
+                  labelAgendamento(t.agendamento, hora, horas)
+                )}</span>
+                <span class="TsCfg_Pill ${pillStatus(st)}">${esc(
+                  travada ? "Travada" : stLabel
+                )}</span>
+              </div>
+              ${blocoSlots(t.slots)}
             </div>
-          </div>
-          ${blocoDoador(t.doador)}
-          <div class="TsCfg_Meta">
-            <span class="TsCfg_Pill">${esc(labelAgendamento(t.agendamento, hora))}</span>
-            <span class="TsCfg_Pill ${pillStatus(st)}">${esc(travada ? "Travada" : stLabel)}</span>
+            <span class="TsCfg_Chevron" aria-hidden="true"></span>
+          </button>
+          <div class="TsCfg_CardDetail">
+            <p class="TsCfg_Desc">${esc(t.descricao || "")}</p>
+            ${temDoador ? blocoDoador(t.doador) : ""}
             ${
               u?.iniciado_em
-                ? `<span class="TsCfg_Pill">Última: ${esc(fmtData(u.iniciado_em))}</span>`
+                ? `<p class="TsCfg_Msg">Última execução: ${esc(fmtData(u.iniciado_em))}</p>`
                 : ""
             }
-          </div>
-          <form class="TsCfg_Agenda" data-acao-form="agenda">
-            <label>
-              <span>Dia</span>
-              <select name="agendamento">${optionsDia(t.agendamento || "domingo")}</select>
-            </label>
-            <label>
-              <span>Hora (Brasília)</span>
-              <input type="time" name="hora_local" value="${esc(hora)}" required />
-            </label>
-            <button type="submit" class="Cl_botaoFiltro">Salvar agenda</button>
-          </form>
-          ${blocoProgresso(u)}
-          ${
-            u?.mensagem && st !== "rodando"
-              ? `<p class="TsCfg_Msg">${esc(u.mensagem)}</p>`
-              : ""
-          }
-          <div class="TsCfg_Acoes">
-            <button type="button" class="Cl_botaoprimario" data-acao="executar"${btnExecDisabled}>${btnExecLabel}</button>
-            <button type="button" class="Cl_botaoFiltro" data-acao="historico">Ver histórico / log</button>
+            <form class="TsCfg_Agenda" data-acao-form="agenda">
+              <label>
+                <span>Dia</span>
+                <select name="agendamento">${optionsDia(t.agendamento || "domingo")}</select>
+              </label>
+              ${
+                multi
+                  ? `<label class="TsCfg_AgendaWide">
+                      <span>Horários (Brasília, separados por vírgula)</span>
+                      <input type="text" name="horas_local" value="${esc(
+                        horas.join(", ")
+                      )}" placeholder="07:00, 10:00, 13:00" required />
+                    </label>`
+                  : `<label>
+                      <span>Hora (Brasília)</span>
+                      <input type="time" name="hora_local" value="${esc(hora)}" required />
+                    </label>`
+              }
+              <button type="submit" class="Cl_botaoFiltro">Salvar agenda</button>
+            </form>
+            ${blocoProgresso(u)}
+            ${
+              u?.mensagem && st !== "rodando"
+                ? `<p class="TsCfg_Msg">${esc(u.mensagem)}</p>`
+                : ""
+            }
+            <div class="TsCfg_Acoes">
+              <button type="button" class="Cl_botaoprimario" data-acao="executar"${btnExecDisabled}>${btnExecLabel}</button>
+              <button type="button" class="Cl_botaoFiltro" data-acao="historico">Ver histórico / log</button>
+            </div>
           </div>
         </article>`;
       })
@@ -257,8 +315,10 @@
       const fd = new FormData(form);
       const body = {
         agendamento: String(fd.get("agendamento") || "").trim(),
-        hora_local: String(fd.get("hora_local") || "").trim(),
       };
+      const horasTxt = String(fd.get("horas_local") || "").trim();
+      if (horasTxt) body.horas_local = horasTxt;
+      else body.hora_local = String(fd.get("hora_local") || "").trim();
       const r = await fetch(`${BASE}/${encodeURIComponent(codigo)}/agenda`, {
         method: "POST",
         credentials: "same-origin",
@@ -271,7 +331,11 @@
         Swal.fire({
           icon: "success",
           title: "Agenda salva",
-          text: `${labelAgendamento(j.item?.agendamento, j.item?.hora_local)}`,
+          text: `${labelAgendamento(
+            j.item?.agendamento,
+            j.item?.hora_local,
+            j.item?.horas_local
+          )}`,
           confirmButtonColor: "#021F81",
           timer: 1800,
           showConfirmButton: false,
@@ -297,13 +361,15 @@
     if (!itens.length) {
       if (logEl) logEl.textContent = "Nenhuma execução registrada ainda.";
     } else {
-      const blocks = itens.map(
-        (e) =>
-          `[#${e.id}] ${e.status} · ${e.disparado_por} · ${fmtData(e.iniciado_em)}\n` +
+      const blocks = itens.map((e) => {
+        const slot = e.hora_slot ? ` · slot ${e.hora_slot}` : "";
+        return (
+          `[#${e.id}] ${e.status} · ${e.disparado_por}${slot} · ${fmtData(e.iniciado_em)}\n` +
           `${e.mensagem || ""}\n` +
           `${"─".repeat(40)}\n` +
           `${e.log_texto || "(sem log)"}\n`
-      );
+        );
+      });
       if (logEl) logEl.textContent = blocks.join("\n");
     }
     modal?.showModal();
@@ -314,8 +380,16 @@
     const card = ev.target.closest(".TsCfg_Card");
     if (!btn || !card) return;
     const acao = btn.getAttribute("data-acao");
+    const id = card.getAttribute("data-id");
+    if (acao === "toggle") {
+      const open = card.classList.toggle("is-open");
+      btn.setAttribute("aria-expanded", open ? "true" : "false");
+      if (open) openIds.add(id);
+      else openIds.delete(id);
+      return;
+    }
     if (acao === "executar") executar(card.getAttribute("data-codigo"), btn);
-    if (acao === "historico") abrirHistorico(card.getAttribute("data-id"));
+    if (acao === "historico") abrirHistorico(id);
   });
 
   lista.addEventListener("submit", (ev) => {

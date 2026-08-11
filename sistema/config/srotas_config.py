@@ -1517,31 +1517,36 @@ def _normalizar_corpo_mala_direta(corpo_html: str) -> str:
 
 
 def _filtro_cadastro_tenant(args) -> tuple[list[str], list]:
-    """Filtro por data de cadastro do tenant (tbl_tenant.criado_em)."""
-    from datetime import date, timedelta
+    """Filtro por data de cadastro do tenant (tbl_tenant.criado_em).
+
+    Aceita `de`/`ate` em ISO (YYYY-MM-DD). Sem datas = todos.
+    """
+    from datetime import date as date_cls
 
     where: list[str] = []
     params: list = []
-    periodo = (args.get("periodo") or "").strip().lower()
-    de = (args.get("de") or "").strip()
-    ate = (args.get("ate") or "").strip()
-    hoje = date.today()
+    de = (args.get("de") or "").strip()[:10]
+    ate = (args.get("ate") or "").strip()[:10]
 
-    if periodo == "hoje":
-        de = ate = hoje.isoformat()
-    elif periodo == "7d":
-        de = (hoje - timedelta(days=6)).isoformat()
-        ate = hoje.isoformat()
-    elif periodo == "30d":
-        de = (hoje - timedelta(days=29)).isoformat()
-        ate = hoje.isoformat()
+    def _ok(s: str) -> str | None:
+        if not s or len(s) != 10:
+            return None
+        try:
+            date_cls.fromisoformat(s)
+            return s
+        except ValueError:
+            return None
 
-    if de:
+    de_ok = _ok(de)
+    ate_ok = _ok(ate)
+    if de_ok and ate_ok and de_ok > ate_ok:
+        de_ok, ate_ok = ate_ok, de_ok
+    if de_ok:
         where.append("t.criado_em::date >= %s::date")
-        params.append(de)
-    if ate:
+        params.append(de_ok)
+    if ate_ok:
         where.append("t.criado_em::date <= %s::date")
-        params.append(ate)
+        params.append(ate_ok)
     return where, params
 
 
@@ -2416,11 +2421,24 @@ def tarefas_secundarias_salvar_agenda(codigo: str):
     body = request.get_json(silent=True) or {}
     agendamento = (body.get("agendamento") or request.form.get("agendamento") or "").strip()
     hora_local = (body.get("hora_local") or request.form.get("hora_local") or "").strip()
+    horas_raw = body.get("horas_local")
+    if horas_raw is None and body.get("horas"):
+        horas_raw = body.get("horas")
+    if isinstance(horas_raw, str):
+        horas_local = [p.strip() for p in horas_raw.replace(";", ",").split(",") if p.strip()]
+    elif isinstance(horas_raw, (list, tuple)):
+        horas_local = list(horas_raw)
+    else:
+        horas_local = None
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
         item = salvar_agenda_tarefa(
-            cur, codigo, agendamento=agendamento, hora_local=hora_local
+            cur,
+            codigo,
+            agendamento=agendamento,
+            hora_local=hora_local or None,
+            horas_local=horas_local,
         )
         conn.commit()
         return jsonify(success=True, item=item)

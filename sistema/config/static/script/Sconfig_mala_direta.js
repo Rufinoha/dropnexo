@@ -16,6 +16,16 @@
   let selecionados = new Set();
   let quill = null;
 
+  /* Período de cadastro — padrão em branco (todos) */
+  const periodoState = {
+    de: null, // Date local ou null
+    ate: null,
+    draftDe: null,
+    draftAte: null,
+    viewYm: null, // Date no 1º dia do mês esquerdo
+    open: false,
+  };
+
   function util() {
     return window.Util || { gerarIconeTech: () => "…" };
   }
@@ -102,13 +112,310 @@
     return d.toLocaleDateString("pt-BR");
   }
 
-  function syncPeriodoCustom() {
-    const periodo = document.getElementById("cfg_md_periodo")?.value || "";
-    const custom = periodo === "custom";
-    const wrapDe = document.getElementById("cfg_md_wrap_de");
-    const wrapAte = document.getElementById("cfg_md_wrap_ate");
-    if (wrapDe) wrapDe.hidden = !custom;
-    if (wrapAte) wrapAte.hidden = !custom;
+  function startOfDay(d) {
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  }
+
+  function toISODate(d) {
+    if (!d) return "";
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }
+
+  function fromISODate(s) {
+    if (!s || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+    const [y, m, d] = s.split("-").map(Number);
+    const dt = new Date(y, m - 1, d);
+    return Number.isNaN(dt.getTime()) ? null : startOfDay(dt);
+  }
+
+  function fmtBR(d) {
+    if (!d) return "";
+    return d.toLocaleDateString("pt-BR");
+  }
+
+  function parseBR(s) {
+    const m = String(s || "")
+      .trim()
+      .match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (!m) return null;
+    const d = Number(m[1]);
+    const mo = Number(m[2]);
+    const y = Number(m[3]);
+    const dt = new Date(y, mo - 1, d);
+    if (dt.getFullYear() !== y || dt.getMonth() !== mo - 1 || dt.getDate() !== d) return null;
+    return startOfDay(dt);
+  }
+
+  function sameDay(a, b) {
+    return a && b && a.getTime() === b.getTime();
+  }
+
+  function between(d, a, b) {
+    if (!d || !a || !b) return false;
+    const lo = a.getTime() <= b.getTime() ? a : b;
+    const hi = a.getTime() <= b.getTime() ? b : a;
+    return d.getTime() > lo.getTime() && d.getTime() < hi.getTime();
+  }
+
+  function syncHidden() {
+    const deEl = document.getElementById("cfg_md_de");
+    const ateEl = document.getElementById("cfg_md_ate");
+    if (deEl) deEl.value = toISODate(periodoState.de);
+    if (ateEl) ateEl.value = toISODate(periodoState.ate);
+  }
+
+  function syncLabel() {
+    const label = document.getElementById("cfg_md_periodo_label");
+    const btn = document.getElementById("cfg_md_periodo_btn");
+    if (!label) return;
+    if (!periodoState.de && !periodoState.ate) {
+      label.textContent = "Todo o período";
+      btn?.classList.add("is-empty");
+      return;
+    }
+    btn?.classList.remove("is-empty");
+    if (periodoState.de && periodoState.ate && sameDay(periodoState.de, periodoState.ate)) {
+      label.textContent = fmtBR(periodoState.de);
+      return;
+    }
+    label.textContent = `${fmtBR(periodoState.de) || "…"} - ${fmtBR(periodoState.ate) || "…"}`;
+  }
+
+  function syncDraftInputs() {
+    const deTxt = document.getElementById("cfg_md_de_txt");
+    const ateTxt = document.getElementById("cfg_md_ate_txt");
+    if (deTxt) deTxt.value = fmtBR(periodoState.draftDe);
+    if (ateTxt) ateTxt.value = fmtBR(periodoState.draftAte);
+  }
+
+  function monthLabel(ym) {
+    return ym.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+  }
+
+  function renderMonth(ym, side) {
+    const y = ym.getFullYear();
+    const m = ym.getMonth();
+    const first = new Date(y, m, 1);
+    // Segunda = 0 no grid (Se Te Qu Qu Se Sá Do)
+    let startDow = first.getDay() - 1;
+    if (startDow < 0) startDow = 6;
+    const daysInMonth = new Date(y, m + 1, 0).getDate();
+    const cells = [];
+    for (let i = 0; i < startDow; i++) cells.push(null);
+    for (let d = 1; d <= daysInMonth; d++) cells.push(new Date(y, m, d));
+    while (cells.length % 7 !== 0) cells.push(null);
+
+    const navLeft =
+      side === "left"
+        ? `<button type="button" class="CfgMd_CalNav" data-cal-nav="-1" aria-label="Mês anterior">‹</button>`
+        : `<span style="width:1.7rem"></span>`;
+    const navRight =
+      side === "right"
+        ? `<button type="button" class="CfgMd_CalNav" data-cal-nav="1" aria-label="Próximo mês">›</button>`
+        : `<span style="width:1.7rem"></span>`;
+
+    const dow = ["Se", "Te", "Qu", "Qu", "Se", "Sá", "Do"]
+      .map((x) => `<span>${x}</span>`)
+      .join("");
+
+    const grid = cells
+      .map((d) => {
+        if (!d) return `<button type="button" class="CfgMd_CalDay" disabled></button>`;
+        const iso = toISODate(d);
+        const isStart = sameDay(d, periodoState.draftDe);
+        const isEnd = sameDay(d, periodoState.draftAte);
+        const inRange = between(d, periodoState.draftDe, periodoState.draftAte);
+        const cls = [
+          "CfgMd_CalDay",
+          isStart ? "is-start" : "",
+          isEnd ? "is-end" : "",
+          inRange ? "is-inrange" : "",
+        ]
+          .filter(Boolean)
+          .join(" ");
+        return `<button type="button" class="${cls}" data-day="${iso}">${d.getDate()}</button>`;
+      })
+      .join("");
+
+    return `
+      <div class="CfgMd_CalMonth" data-side="${side}">
+        <div class="CfgMd_CalHead">${navLeft}<strong>${escapeHtml(monthLabel(ym))}</strong>${navRight}</div>
+        <div class="CfgMd_CalDow">${dow}</div>
+        <div class="CfgMd_CalGrid">${grid}</div>
+      </div>`;
+  }
+
+  function renderCalendars() {
+    const host = document.getElementById("cfg_md_calendars");
+    if (!host || !periodoState.viewYm) return;
+    const left = periodoState.viewYm;
+    const right = new Date(left.getFullYear(), left.getMonth() + 1, 1);
+    host.innerHTML = renderMonth(left, "left") + renderMonth(right, "right");
+  }
+
+  function applyPreset(key) {
+    const hoje = startOfDay(new Date());
+    let de = null;
+    let ate = null;
+    if (key === "hoje") {
+      de = ate = hoje;
+    } else if (key === "ontem") {
+      de = ate = startOfDay(new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() - 1));
+    } else if (key === "7d") {
+      de = startOfDay(new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() - 6));
+      ate = hoje;
+    } else if (key === "30d") {
+      de = startOfDay(new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() - 29));
+      ate = hoje;
+    } else if (key === "mes") {
+      de = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+      ate = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
+    } else if (key === "mes_ate_hoje") {
+      de = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+      ate = hoje;
+    } else if (key === "mes_passado") {
+      de = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
+      ate = new Date(hoje.getFullYear(), hoje.getMonth(), 0);
+    } else if (key === "3m") {
+      de = startOfDay(new Date(hoje.getFullYear(), hoje.getMonth() - 2, 1));
+      ate = hoje;
+    } else if (key === "ano") {
+      de = new Date(hoje.getFullYear(), 0, 1);
+      ate = hoje;
+    }
+    periodoState.draftDe = de;
+    periodoState.draftAte = ate;
+    if (de) periodoState.viewYm = new Date(de.getFullYear(), de.getMonth(), 1);
+    syncDraftInputs();
+    renderCalendars();
+  }
+
+  function pickDay(iso) {
+    const d = fromISODate(iso);
+    if (!d) return;
+    if (!periodoState.draftDe || (periodoState.draftDe && periodoState.draftAte)) {
+      periodoState.draftDe = d;
+      periodoState.draftAte = null;
+    } else if (d.getTime() < periodoState.draftDe.getTime()) {
+      periodoState.draftAte = periodoState.draftDe;
+      periodoState.draftDe = d;
+    } else {
+      periodoState.draftAte = d;
+    }
+    syncDraftInputs();
+    renderCalendars();
+  }
+
+  function openPeriodo() {
+    const pop = document.getElementById("cfg_md_periodo_pop");
+    const btn = document.getElementById("cfg_md_periodo_btn");
+    if (!pop) return;
+    periodoState.draftDe = periodoState.de;
+    periodoState.draftAte = periodoState.ate;
+    const base = periodoState.draftDe || startOfDay(new Date());
+    periodoState.viewYm = new Date(base.getFullYear(), base.getMonth(), 1);
+    syncDraftInputs();
+    renderCalendars();
+    pop.hidden = false;
+    periodoState.open = true;
+    btn?.classList.add("is-open");
+    btn?.setAttribute("aria-expanded", "true");
+    window.lucide?.createIcons?.();
+  }
+
+  function closePeriodo() {
+    const pop = document.getElementById("cfg_md_periodo_pop");
+    const btn = document.getElementById("cfg_md_periodo_btn");
+    if (pop) pop.hidden = true;
+    periodoState.open = false;
+    btn?.classList.remove("is-open");
+    btn?.setAttribute("aria-expanded", "false");
+  }
+
+  function confirmarPeriodo() {
+    let de = periodoState.draftDe;
+    let ate = periodoState.draftAte || periodoState.draftDe;
+    if (de && ate && de.getTime() > ate.getTime()) {
+      const t = de;
+      de = ate;
+      ate = t;
+    }
+    periodoState.de = de;
+    periodoState.ate = ate;
+    syncHidden();
+    syncLabel();
+    closePeriodo();
+    carregarTenants().catch((e) => toast("error", e.message));
+  }
+
+  function limparPeriodo() {
+    periodoState.de = null;
+    periodoState.ate = null;
+    periodoState.draftDe = null;
+    periodoState.draftAte = null;
+    syncHidden();
+    syncLabel();
+    syncDraftInputs();
+    renderCalendars();
+    closePeriodo();
+    carregarTenants().catch((e) => toast("error", e.message));
+  }
+
+  function initPeriodo() {
+    syncHidden();
+    syncLabel();
+    document.getElementById("cfg_md_periodo_btn")?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (periodoState.open) closePeriodo();
+      else openPeriodo();
+    });
+    document.getElementById("cfg_md_periodo_ok")?.addEventListener("click", confirmarPeriodo);
+    document.getElementById("cfg_md_periodo_limpar")?.addEventListener("click", limparPeriodo);
+    document.getElementById("cfg_md_presets")?.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-preset]");
+      if (!btn) return;
+      applyPreset(btn.getAttribute("data-preset"));
+    });
+    document.getElementById("cfg_md_calendars")?.addEventListener("click", (e) => {
+      const nav = e.target.closest("[data-cal-nav]");
+      if (nav) {
+        const delta = Number(nav.getAttribute("data-cal-nav") || 0);
+        const cur = periodoState.viewYm || startOfDay(new Date());
+        periodoState.viewYm = new Date(cur.getFullYear(), cur.getMonth() + delta, 1);
+        renderCalendars();
+        return;
+      }
+      const day = e.target.closest("[data-day]");
+      if (day) pickDay(day.getAttribute("data-day"));
+    });
+    document.getElementById("cfg_md_de_txt")?.addEventListener("change", () => {
+      const d = parseBR(document.getElementById("cfg_md_de_txt").value);
+      if (d) {
+        periodoState.draftDe = d;
+        periodoState.viewYm = new Date(d.getFullYear(), d.getMonth(), 1);
+        renderCalendars();
+      }
+      syncDraftInputs();
+    });
+    document.getElementById("cfg_md_ate_txt")?.addEventListener("change", () => {
+      const d = parseBR(document.getElementById("cfg_md_ate_txt").value);
+      if (d) {
+        periodoState.draftAte = d;
+        renderCalendars();
+      }
+      syncDraftInputs();
+    });
+    document.addEventListener("click", (e) => {
+      if (!periodoState.open) return;
+      const root = document.getElementById("cfg_md_periodo_root");
+      if (root && !root.contains(e.target)) closePeriodo();
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && periodoState.open) closePeriodo();
+    });
   }
 
   function renderLista() {
@@ -136,15 +443,11 @@
   async function carregarTenants() {
     const q = document.getElementById("cfg_md_q").value.trim();
     const tipo = document.getElementById("cfg_md_filtro").value;
-    const periodo = document.getElementById("cfg_md_periodo")?.value || "";
     const qs = new URLSearchParams({ q, tipo });
-    if (periodo) qs.set("periodo", periodo);
-    if (periodo === "custom") {
-      const de = document.getElementById("cfg_md_de")?.value || "";
-      const ate = document.getElementById("cfg_md_ate")?.value || "";
-      if (de) qs.set("de", de);
-      if (ate) qs.set("ate", ate);
-    }
+    const de = document.getElementById("cfg_md_de")?.value || "";
+    const ate = document.getElementById("cfg_md_ate")?.value || "";
+    if (de) qs.set("de", de);
+    if (ate) qs.set("ate", ate);
     tbody.innerHTML = `<tr><td colspan="6" class="CfgMd_Hint">Carregando…</td></tr>`;
     const j = await api(`${BASE}/tenants?${qs}`);
     itens = j.itens || [];
@@ -159,11 +462,19 @@
       toast("error", "Modal de apoio indisponível.");
       return;
     }
-    const rota = cfg.rotaDisparoApoio || `${BASE}/disparo-apoio`;
+    const id = Number(idEnvio) || 0;
+    if (!id) {
+      toast("error", "Disparo inválido.");
+      return;
+    }
+    // id_envio precisa ir na query: o apoio lê do servidor (não do postMessage).
+    const base = cfg.rotaDisparoApoio || `${BASE}/disparo/apoio`;
+    const sep = base.includes("?") ? "&" : "?";
+    const rota = `${base}${sep}id_envio=${id}`;
     GlobalUtils.abrirJanelaApoioModal({
       rota,
-      id: idEnvio,
-      titulo: assunto ? `Disparo — ${assunto}` : `Disparo #${idEnvio}`,
+      id,
+      titulo: assunto ? `Disparo — ${assunto}` : `Disparo #${id}`,
       largura: 980,
       altura: 720,
       nivel: 1,
@@ -222,20 +533,6 @@
   });
   document.getElementById("cfg_md_filtro")?.addEventListener("change", () => {
     carregarTenants().catch((e) => toast("error", e.message));
-  });
-  document.getElementById("cfg_md_periodo")?.addEventListener("change", () => {
-    syncPeriodoCustom();
-    const periodo = document.getElementById("cfg_md_periodo")?.value || "";
-    if (periodo !== "custom") {
-      carregarTenants().catch((e) => toast("error", e.message));
-    }
-  });
-  ["cfg_md_de", "cfg_md_ate"].forEach((id) => {
-    document.getElementById(id)?.addEventListener("change", () => {
-      if ((document.getElementById("cfg_md_periodo")?.value || "") === "custom") {
-        carregarTenants().catch((e) => toast("error", e.message));
-      }
-    });
   });
 
   tbody?.addEventListener("change", (e) => {
@@ -346,6 +643,7 @@
   });
 
   initEditor();
-  syncPeriodoCustom();
+  initPeriodo();
   carregarTenants().catch((e) => toast("error", e.message));
+  window.lucide?.createIcons?.();
 })();

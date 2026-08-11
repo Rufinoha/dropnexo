@@ -868,20 +868,10 @@ def sincronizar_feed_tenant(
     mapa = _mapa_categorias(cur, id_tenant)
 
     cats = {p["categoria"] for p in produtos if p.get("categoria")}
-    # Cache global de categorias: só o doador (1º que conectou) atualiza
+    # Cache global de categorias (poucas na Revenda) — atualiza no sync/connect
     n_cats = 0
     try:
-        from sistema.tarefas_secundarias.doador import obter_id_doador, obter_ou_promover_doador
-
-        codigo_cat = "xml_dropshipping_categorias_cache"
-        doador = obter_id_doador(cur, codigo_cat) or obter_ou_promover_doador(cur, codigo_cat)
-        if doador and int(doador) == int(id_tenant):
-            n_cats = _upsert_cache_categorias(cur, cats)
-        elif not doador and cats:
-            # Sem doador ainda — este tenant assume e grava
-            from sistema.tarefas_secundarias.doador import definir_doador
-
-            definir_doador(cur, codigo_cat, int(id_tenant))
+        if cats:
             n_cats = _upsert_cache_categorias(cur, cats)
     except Exception as e:
         _log.warning("Cache categorias XML ignorado: %s", e)

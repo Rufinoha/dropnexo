@@ -4,7 +4,7 @@
 {% block topbar_title %}Mala direta{% endblock %}
 {% block head_extra %}
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.snow.css" />
-<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_mala_direta.css') }}?v=10" />
+<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_mala_direta.css') }}?v=11" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal CfgMd_Wrap">
@@ -52,23 +52,44 @@
                 <option value="fornecedor">Só fornecedor (inclui híbrido)</option>
               </select>
             </div>
-            <div class="filter-group">
-              <label for="cfg_md_periodo">Cadastro</label>
-              <select id="cfg_md_periodo">
-                <option value="">Qualquer data</option>
-                <option value="hoje">Hoje</option>
-                <option value="7d">Últimos 7 dias</option>
-                <option value="30d">Últimos 30 dias</option>
-                <option value="custom">Intervalo…</option>
-              </select>
-            </div>
-            <div class="filter-group CfgMd_DataCustom" id="cfg_md_wrap_de" hidden>
-              <label for="cfg_md_de">De</label>
-              <input type="date" id="cfg_md_de" />
-            </div>
-            <div class="filter-group CfgMd_DataCustom" id="cfg_md_wrap_ate" hidden>
-              <label for="cfg_md_ate">Até</label>
-              <input type="date" id="cfg_md_ate" />
+            <div class="filter-group CfgMd_PeriodoWrap">
+              <label for="cfg_md_periodo_btn">Cadastro</label>
+              <div class="CfgMd_Periodo" id="cfg_md_periodo_root">
+                <button type="button" class="CfgMd_PeriodoBtn" id="cfg_md_periodo_btn" aria-haspopup="dialog" aria-expanded="false">
+                  <span id="cfg_md_periodo_label">Todo o período</span>
+                  <i data-lucide="calendar-range" aria-hidden="true"></i>
+                </button>
+                <input type="hidden" id="cfg_md_de" value="" />
+                <input type="hidden" id="cfg_md_ate" value="" />
+                <div class="CfgMd_PeriodoPop" id="cfg_md_periodo_pop" hidden role="dialog" aria-label="Selecionar período de cadastro">
+                  <div class="CfgMd_PeriodoPopTop">
+                    <strong>Período de cadastro</strong>
+                    <div class="CfgMd_PeriodoInputs">
+                      <input type="text" id="cfg_md_de_txt" class="CfgMd_PeriodoDate" placeholder="dd/mm/aaaa" maxlength="10" autocomplete="off" />
+                      <span>—</span>
+                      <input type="text" id="cfg_md_ate_txt" class="CfgMd_PeriodoDate" placeholder="dd/mm/aaaa" maxlength="10" autocomplete="off" />
+                    </div>
+                  </div>
+                  <div class="CfgMd_PeriodoBody">
+                    <div class="CfgMd_Calendars" id="cfg_md_calendars"></div>
+                    <aside class="CfgMd_Presets" id="cfg_md_presets">
+                      <button type="button" data-preset="hoje">Hoje</button>
+                      <button type="button" data-preset="ontem">Ontem</button>
+                      <button type="button" data-preset="7d">Últimos 7 dias</button>
+                      <button type="button" data-preset="30d">Últimos 30 dias</button>
+                      <button type="button" data-preset="mes">Este mês</button>
+                      <button type="button" data-preset="mes_ate_hoje">Mês atual (até hoje)</button>
+                      <button type="button" data-preset="mes_passado">Mês passado</button>
+                      <button type="button" data-preset="3m">Últimos 3 meses</button>
+                      <button type="button" data-preset="ano">Este ano</button>
+                    </aside>
+                  </div>
+                  <div class="CfgMd_PeriodoFoot">
+                    <button type="button" class="Cl_BtnCancelar" id="cfg_md_periodo_limpar">Limpar</button>
+                    <button type="button" class="Cl_botaoprimario" id="cfg_md_periodo_ok">Confirmar</button>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
           <div class="filter-panel-actions">
@@ -155,5 +176,5 @@
 {% endblock %}
 {% block page_js %}
 <script src="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.js"></script>
-<script src="{{ url_for('config.static', filename='script/Sconfig_mala_direta.js') }}?v=11"></script>
+<script src="{{ url_for('config.static', filename='script/Sconfig_mala_direta.js') }}?v=13"></script>
 {% endblock %}

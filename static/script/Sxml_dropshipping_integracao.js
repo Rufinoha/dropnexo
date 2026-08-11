@@ -5,7 +5,10 @@
   const painel = document.getElementById("xml_painel");
   const msgEl = document.getElementById("xml_msg");
   const msgGuia = document.getElementById("xml_msg_guia");
+  const msgEstoque = document.getElementById("xml_msg_estoque");
   const ultimaEl = document.getElementById("xml_ultima_sync");
+  const slotsEl = document.getElementById("xml_slots_status");
+  const urlResumo = document.getElementById("xml_url_resumo");
   const catLista = document.getElementById("xml_cat_lista");
   let catsDrop = [];
 
@@ -57,7 +60,10 @@
           fill.style.width = "12%";
           fill.classList.add("is-pulse");
         }
-        if (label) label.textContent = (labels[prefix] || [])[0] || "Processando…";
+        if (label) {
+          label.style.color = "";
+          label.textContent = (labels[prefix] || [])[0] || "Processando…";
+        }
         paint(0, false, false);
         clearInterval(timer);
         timer = setInterval(() => {
@@ -115,6 +121,24 @@
     if (painel) painel.hidden = !on;
   }
 
+  function ativarAba(nome) {
+    document.querySelectorAll(".XmlTabs__btn").forEach((btn) => {
+      const on = btn.getAttribute("data-tab") === nome;
+      btn.classList.toggle("is-active", on);
+      btn.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    document.querySelectorAll(".XmlTabPanel").forEach((panel) => {
+      const on = panel.getAttribute("data-panel") === nome;
+      panel.classList.toggle("is-active", on);
+      panel.hidden = !on;
+    });
+    if (nome === "categorias") carregarMapCats();
+  }
+
+  document.querySelectorAll(".XmlTabs__btn").forEach((btn) => {
+    btn.addEventListener("click", () => ativarAba(btn.getAttribute("data-tab")));
+  });
+
   function fillOrigem(cfg) {
     const map = [
       ["xml_origem_nome", "origem_nome"],
@@ -147,6 +171,42 @@
       origem_cidade: document.getElementById("xml_origem_cidade")?.value || "",
       origem_uf: document.getElementById("xml_origem_uf")?.value || "",
     };
+  }
+
+  function pillSlot(st) {
+    if (st === "sucesso") return "is-ok";
+    if (st === "erro") return "is-err";
+    if (st === "rodando") return "is-run";
+    return "is-skip";
+  }
+
+  function labelSlot(st) {
+    if (st === "sucesso") return "OK";
+    if (st === "erro") return "Erro";
+    if (st === "rodando") return "Rodando";
+    return "Pendente";
+  }
+
+  function renderSlots(slots) {
+    if (!slotsEl) return;
+    const list = Array.isArray(slots) && slots.length
+      ? slots
+      : ["07:00", "10:00", "13:00", "16:00", "19:00"].map((h) => ({
+          hora: h,
+          status: "nunca",
+        }));
+    slotsEl.innerHTML = `
+      <p class="Mp_Hint" style="margin:0 0 0.45rem">Status dos horários (hoje / última execução do slot)</p>
+      <div class="XmlSlots__row">
+        ${list
+          .map(
+            (s) =>
+              `<span class="XmlSlots__pill ${pillSlot(s.status)}" title="${escapeHtml(
+                s.mensagem || ""
+              )}">${escapeHtml(s.hora)} · ${escapeHtml(labelSlot(s.status))}</span>`
+          )
+          .join("")}
+      </div>`;
   }
 
   async function carregarCatsDrop() {
@@ -195,7 +255,7 @@
     const itens = j.itens || [];
     if (!itens.length) {
       catLista.innerHTML =
-        '<p class="Mp_Hint">Nenhuma categoria no cache ainda. Rode «Sincronizar estoque agora».</p>';
+        '<p class="Mp_Hint">Nenhuma categoria ainda. Rode «Sincronizar estoque agora» na aba Estoque.</p>';
       return;
     }
     catLista.innerHTML = `
@@ -226,15 +286,21 @@
     if (j.url_xml) {
       const u = document.getElementById("xml_url");
       if (u && !u.value) u.value = j.url_xml;
+      if (urlResumo) urlResumo.textContent = `URL: ${j.url_xml}`;
     }
     if (ultimaEl) {
       ultimaEl.textContent = j.ultima_sync
-        ? `Última sync: ${new Date(j.ultima_sync).toLocaleString("pt-BR")}${
+        ? `Última sync desta conta: ${new Date(j.ultima_sync).toLocaleString("pt-BR")}${
             j.ultimo_erro ? " · erro: " + j.ultimo_erro : ""
           }`
-        : "Ainda não sincronizou.";
+        : "Ainda não sincronizou nesta conta.";
     }
-    if (j.conectado) await carregarMapCats();
+    if (j.conectado) {
+      const slots = j.agenda_sync?.slots || [];
+      renderSlots(slots);
+      const abaAtiva = document.querySelector(".XmlTabs__btn.is-active")?.getAttribute("data-tab");
+      if (abaAtiva === "categorias") await carregarMapCats();
+    }
   }
 
   document.getElementById("xml_btn_conectar")?.addEventListener("click", async () => {
@@ -268,6 +334,7 @@
         });
       }
       await status();
+      ativarAba("estoque");
     } catch (e) {
       progConectar.done(false, "Não foi possível conectar.");
       showMsg(msgGuia, e.message, false);
@@ -279,7 +346,7 @@
   document.getElementById("xml_btn_sync")?.addEventListener("click", async () => {
     const btn = document.getElementById("xml_btn_sync");
     if (btn) btn.disabled = true;
-    showMsg(msgEl, "", true);
+    showMsg(msgEstoque, "", true);
     progSync.start();
     try {
       const r = await fetch(`${BASE}/sincronizar`, {
@@ -289,11 +356,11 @@
       const j = await r.json();
       if (!j.success) throw new Error(j.message || "Falha no sync.");
       progSync.done(true, "Estoque atualizado.");
-      showMsg(msgEl, j.mensagem || "Estoque atualizado.", true);
+      showMsg(msgEstoque, j.mensagem || "Estoque atualizado.", true);
       await status();
     } catch (e) {
       progSync.done(false, "Falha na sincronização.");
-      showMsg(msgEl, e.message, false);
+      showMsg(msgEstoque, e.message, false);
     } finally {
       if (btn) btn.disabled = false;
     }
@@ -322,6 +389,7 @@
     });
     const j = await r.json();
     showMsg(msgEl, j.message || (j.success ? "Salvo." : "Erro"), !!j.success);
+    if (j.success) ativarAba("integracao");
   });
 
   document.getElementById("xml_btn_salvar_cats")?.addEventListener("click", async () => {

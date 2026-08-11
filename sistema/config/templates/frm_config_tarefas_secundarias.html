@@ -3,16 +3,16 @@
 {% set nav_ativo = 'config' %}
 {% block topbar_title %}Tarefas secundárias{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_tarefas_secundarias.css') }}?v=6" />
+<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_tarefas_secundarias.css') }}?v=7" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal TsCfg_Wrap">
   <div class="cl-page-title">
     <h2>Tarefas secundárias</h2>
     <p class="cl-page-desc">
+      Clique no card para ver detalhes, agenda e histórico.
       Cache de categorias (ML, TikTok, Amazon) usa a conta doadora.
-      Sync diário do XML Dropshipping atualiza estoque/catálogo de cada vendedor conectado.
-      Agenda em horário de Brasília — o cron precisa rodar ao menos 1× por hora.
+      Estoque da Revenda de Calçados roda em vários horários do dia (Brasília) — o cron precisa rodar ao menos 1× por hora.
     </p>
   </div>
 
@@ -39,5 +39,5 @@
 </div>
 {% endblock %}
 {% block page_js %}
-<script src="{{ url_for('config.static', filename='script/Sconfig_tarefas_secundarias.js') }}?v=5"></script>
+<script src="{{ url_for('config.static', filename='script/Sconfig_tarefas_secundarias.js') }}?v=6"></script>
 {% endblock %}

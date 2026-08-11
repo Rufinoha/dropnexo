@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 from html import unescape
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
 import requests
 
@@ -1206,6 +1206,14 @@ def _atualizar_anuncio_completo_ml(
     garantia_tempo: str = "",
     video_youtube: str = "",
     cfg: dict | None = None,
+    ncm: str = "",
+    cest: str = "",
+    origem_fiscal: str = "",
+    producao: str = "",
+    unidade: str = "UN",
+    preco_custo: float | None = None,
+    peso_liquido_kg: float | None = None,
+    peso_bruto_kg: float | None = None,
 ) -> None:
     """Atualiza anúncio já vinculado: preço, estoque, fotos, descrição, attrs, garantia e vídeo."""
     from api.mercado_livre.eco_estoque import registrar_eco_ml_pendente
@@ -1319,6 +1327,32 @@ def _atualizar_anuncio_completo_ml(
     _salvar_map_produto_ml(
         cur, id_tenant, int(id_variante), int(id_produto), sku or "", ml_item_id
     )
+
+    if _ncm_ml(ncm) and (sku or "").strip():
+        try:
+            _enviar_dados_fiscais_ml(
+                cur,
+                id_tenant,
+                sku=sku or "",
+                titulo=titulo or sku or "",
+                ml_item_id=ml_item_id,
+                ncm=ncm,
+                cest=cest,
+                origem_fiscal=origem_fiscal,
+                producao=producao,
+                gtin=gtin or "",
+                unidade=unidade or "UN",
+                custo=preco_custo,
+                peso_liquido_kg=peso_liquido_kg or peso_kg,
+                peso_bruto_kg=peso_bruto_kg or peso_kg,
+            )
+        except RuntimeError as e:
+            _log.warning("Dados fiscais ML não enviados para %s: %s", ml_item_id, e)
+            raise RuntimeError(
+                f"Anúncio atualizado, mas dados fiscais (NCM/CEST/origem) falharam: "
+                f"{_erro_ml_para_usuario(str(e)[:300])}. "
+                "Confira a aba Tributação e sincronize novamente."
+            ) from e
 
 
 def _item_ja_vinculado_ml(cur, id_tenant: int, id_variante: int) -> str | None:
@@ -2171,6 +2205,162 @@ def _montar_sale_terms_ml(
     return out
 
 
+def _so_digitos_fiscal(val: Any) -> str:
+    return re.sub(r"\D", "", str(val or ""))
+
+
+def _ncm_ml(val: Any) -> str:
+    d = _so_digitos_fiscal(val)
+    return d[:8] if len(d) >= 8 else d
+
+
+def _cest_ml(val: Any) -> str:
+    return _so_digitos_fiscal(val)[:7]
+
+
+def _origem_detail_ml(val: Any) -> str:
+    d = _so_digitos_fiscal(val)
+    if d and d[0] in "012345678":
+        return d[0]
+    return "0"
+
+
+def _origin_type_ml(origem_fiscal: Any, producao: Any) -> str:
+    """manufacturer | reseller | imported — API fiscal MLB."""
+    od = _origem_detail_ml(origem_fiscal)
+    if od in ("1", "2", "6"):
+        return "imported"
+    prod = unicodedata.normalize("NFKD", str(producao or ""))
+    prod = "".join(c for c in prod if not unicodedata.combining(c)).lower()
+    if "propria" in prod or "fabric" in prod:
+        return "manufacturer"
+    return "reseller"
+
+
+def _enviar_dados_fiscais_ml(
+    cur,
+    id_tenant: int,
+    *,
+    sku: str,
+    titulo: str,
+    ml_item_id: str,
+    ncm: str = "",
+    cest: str = "",
+    origem_fiscal: str = "",
+    producao: str = "",
+    gtin: str = "",
+    unidade: str = "UN",
+    custo: float | None = None,
+    peso_liquido_kg: float | None = None,
+    peso_bruto_kg: float | None = None,
+    variation_id: str | None = None,
+) -> dict[str, Any]:
+    """Envia NCM/CEST/origem ao Faturador ML e vincula ao anúncio.
+
+    Docs: https://developers.mercadolivre.com.br/pt_br/envio-dos-dados-fiscais
+    """
+    sku = (sku or "").strip()
+    ml_item_id = (ml_item_id or "").strip()
+    ncm = _ncm_ml(ncm)
+    if not sku:
+        raise RuntimeError("SKU obrigatório para enviar dados fiscais ao Mercado Livre.")
+    if not ncm:
+        raise RuntimeError(
+            "NCM obrigatório para o Faturador do Mercado Livre emitir NF-e. "
+            "Preencha a aba Tributação do produto."
+        )
+    if not ml_item_id:
+        raise RuntimeError("Anúncio ML não informado para vincular dados fiscais.")
+
+    cest = _cest_ml(cest)
+    origin_detail = _origem_detail_ml(origem_fiscal)
+    origin_type = _origin_type_ml(origem_fiscal, producao)
+    ean = _so_digitos_fiscal(gtin)
+    un = (unidade or "UN").strip().upper()[:10] or "UN"
+    tax: dict[str, Any] = {
+        "ncm": ncm,
+        "origin_type": origin_type,
+        "origin_detail": origin_detail,
+    }
+    if cest:
+        tax["cest"] = cest
+    if ean:
+        tax["ean"] = ean
+    if peso_liquido_kg and float(peso_liquido_kg) > 0:
+        tax["net_weight"] = round(float(peso_liquido_kg), 3)
+    if peso_bruto_kg and float(peso_bruto_kg) > 0:
+        tax["gross_weight"] = round(float(peso_bruto_kg), 3)
+
+    body: dict[str, Any] = {
+        "sku": sku,
+        "title": (titulo or sku)[:120],
+        "type": "single",
+        "measurement_unit": un,
+        "tax_information": tax,
+    }
+    if custo is not None and float(custo) > 0:
+        body["cost"] = round(float(custo), 2)
+
+    sku_path = quote(sku, safe="")
+    try:
+        api_request(cur, id_tenant, "POST", "/items/fiscal_information", json_body=body)
+    except RuntimeError as e:
+        msg = str(e).lower()
+        # Já existe → atualiza
+        if "already" in msg or "exist" in msg or "10083" in msg or "duplic" in msg:
+            api_request(
+                cur,
+                id_tenant,
+                "PUT",
+                f"/items/fiscal_information/{sku_path}",
+                json_body=body,
+            )
+        elif "csosn" in msg:
+            # Simples Nacional exige CSOSN — tenta com 102 (tributada sem crédito)
+            tax["csosn"] = "102"
+            body["tax_information"] = tax
+            try:
+                api_request(cur, id_tenant, "POST", "/items/fiscal_information", json_body=body)
+            except RuntimeError:
+                api_request(
+                    cur,
+                    id_tenant,
+                    "PUT",
+                    f"/items/fiscal_information/{sku_path}",
+                    json_body=body,
+                )
+        else:
+            # Outro erro no POST: tenta PUT (sku já cadastrado)
+            try:
+                api_request(
+                    cur,
+                    id_tenant,
+                    "PUT",
+                    f"/items/fiscal_information/{sku_path}",
+                    json_body=body,
+                )
+            except RuntimeError:
+                raise e from None
+
+    link = {
+        "sku": sku,
+        "item_id": ml_item_id,
+        "variation_id": (variation_id or "") if variation_id is not None else "",
+    }
+    api_request(
+        cur, id_tenant, "POST", "/items/fiscal_information/items", json_body=link
+    )
+    return {
+        "ok": True,
+        "sku": sku,
+        "ml_item_id": ml_item_id,
+        "ncm": ncm,
+        "cest": cest,
+        "origin_type": origin_type,
+        "origin_detail": origin_detail,
+    }
+
+
 def _montar_atributos_obrigatorios_ml(
     cat_attrs: list[dict],
     *,
@@ -2348,6 +2538,14 @@ def _criar_anuncio_ml(
     garantia_tempo: str = "",
     video_youtube: str = "",
     variations: list[dict] | None = None,
+    ncm: str = "",
+    cest: str = "",
+    origem_fiscal: str = "",
+    producao: str = "",
+    unidade: str = "UN",
+    preco_custo: float | None = None,
+    peso_liquido_kg: float | None = None,
+    peso_bruto_kg: float | None = None,
 ) -> str:
     titulo = _normalizar_titulo_ml(titulo or "Produto", max_len=60)
     if preco <= 0:
@@ -2535,6 +2733,37 @@ def _criar_anuncio_ml(
                 "Use o mesmo botão novamente para reenviar a descrição."
             ) from e
 
+    if _ncm_ml(ncm) and (sku or "").strip():
+        try:
+            _enviar_dados_fiscais_ml(
+                cur,
+                id_tenant,
+                sku=sku or "",
+                titulo=titulo or sku or "",
+                ml_item_id=item_id,
+                ncm=ncm,
+                cest=cest,
+                origem_fiscal=origem_fiscal,
+                producao=producao,
+                gtin=gtin or "",
+                unidade=unidade or "UN",
+                custo=preco_custo,
+                peso_liquido_kg=peso_liquido_kg or peso_kg,
+                peso_bruto_kg=peso_bruto_kg or peso_kg,
+            )
+        except RuntimeError as e:
+            _log.warning("Dados fiscais ML não enviados para %s: %s", item_id, e)
+            raise RuntimeError(
+                f"«{titulo}»: anúncio criado ({item_id}), mas dados fiscais falharam: "
+                f"{_erro_ml_para_usuario(str(e)[:300])}. "
+                "Preencha NCM/CEST/origem na aba Tributação e sincronize de novo."
+            ) from e
+    elif not _ncm_ml(ncm):
+        _log.warning(
+            "ML item %s criado sem NCM — Faturador não emitirá NF-e até preencher Tributação.",
+            item_id,
+        )
+
     return item_id
 
 
@@ -2569,7 +2798,15 @@ def _sql_produtos_vitrine_ml(ids_produtos: list[int] | None = None) -> tuple[str
                v.atributos AS atributos_variante,
                COALESCE(NULLIF(TRIM(p.garantia_tipo), ''), '') AS garantia_tipo,
                COALESCE(NULLIF(TRIM(p.garantia_tempo), ''), '') AS garantia_tempo,
-               COALESCE(NULLIF(TRIM(p.video_youtube), ''), '') AS video_youtube
+               COALESCE(NULLIF(TRIM(p.video_youtube), ''), '') AS video_youtube,
+               COALESCE(NULLIF(TRIM(v.ncm), ''), NULLIF(TRIM(p.ncm), ''), '') AS ncm,
+               COALESCE(NULLIF(TRIM(p.cest), ''), '') AS cest,
+               COALESCE(NULLIF(TRIM(p.origem_fiscal), ''), '') AS origem_fiscal,
+               COALESCE(NULLIF(TRIM(p.producao), ''), '') AS producao,
+               COALESCE(NULLIF(TRIM(p.unidade), ''), 'UN') AS unidade,
+               COALESCE(v.preco_custo, p.preco_custo) AS preco_custo,
+               COALESCE(v.peso_liquido_kg, p.peso_liquido_kg) AS peso_liquido_kg,
+               COALESCE(v.peso_bruto_kg, p.peso_bruto_kg) AS peso_bruto_kg
         FROM tbl_produto_vendedor pv
         JOIN tbl_produto_variante v ON v.id = pv.id_variante
         JOIN tbl_produto p ON p.id = pv.id_produto
@@ -2620,6 +2857,27 @@ def _desempacotar_linha_vitrine_ml(row) -> dict[str, Any]:
         "garantia_tipo": (_at(19) or "") if n > 19 else "",
         "garantia_tempo": (_at(20) or "") if n > 20 else "",
         "video_youtube": (_at(21) or "") if n > 21 else "",
+        "ncm": (_at(22) or "") if n > 22 else "",
+        "cest": (_at(23) or "") if n > 23 else "",
+        "origem_fiscal": (_at(24) or "") if n > 24 else "",
+        "producao": (_at(25) or "") if n > 25 else "",
+        "unidade": (_at(26) or "UN") if n > 26 else "UN",
+        "preco_custo": _float_ou_none(_at(27)) if n > 27 else None,
+        "peso_liquido_kg": _float_ou_none(_at(28)) if n > 28 else None,
+        "peso_bruto_kg": _float_ou_none(_at(29)) if n > 29 else None,
+    }
+
+
+def _kwargs_fiscais_ml(d: dict) -> dict[str, Any]:
+    return {
+        "ncm": d.get("ncm") or "",
+        "cest": d.get("cest") or "",
+        "origem_fiscal": d.get("origem_fiscal") or "",
+        "producao": d.get("producao") or "",
+        "unidade": d.get("unidade") or "UN",
+        "preco_custo": d.get("preco_custo"),
+        "peso_liquido_kg": d.get("peso_liquido_kg"),
+        "peso_bruto_kg": d.get("peso_bruto_kg"),
     }
 
 
@@ -2711,6 +2969,7 @@ def _criar_anuncios_ml_lote(cur, id_tenant: int, cfg: dict, linhas: list) -> dic
                 garantia_tempo=d.get("garantia_tempo") or "",
                 video_youtube=d.get("video_youtube") or "",
                 cfg=cfg,
+                **_kwargs_fiscais_ml(d),
             )
             atualizados += 1
             resultados.append(
@@ -2722,7 +2981,7 @@ def _criar_anuncios_ml_lote(cur, id_tenant: int, cfg: dict, linhas: list) -> dic
                     "acao": "atualizado",
                     "mensagem": (
                         "Anúncio atualizado no Mercado Livre "
-                        "(fotos, preço, estoque, variação, garantia e descrição)."
+                        "(fotos, preço, estoque, variação, garantia, descrição e tributação)."
                     ),
                     "ml_item_id": ml_item_id,
                 }
@@ -2807,6 +3066,7 @@ def _criar_anuncios_ml_lote(cur, id_tenant: int, cfg: dict, linhas: list) -> dic
                 garantia_tempo=d.get("garantia_tempo") or "",
                 video_youtube=d.get("video_youtube") or "",
                 variations=variations,
+                **_kwargs_fiscais_ml(d),
             )
             exportados += 1
             estado = _estado_anuncio_ml(cur, id_tenant, ml_item_id)
@@ -3074,6 +3334,7 @@ def exportar_produtos_ml(cur, id_tenant: int) -> dict:
                 garantia_tempo=d.get("garantia_tempo") or "",
                 video_youtube=d.get("video_youtube") or "",
                 cfg=cfg,
+                **_kwargs_fiscais_ml(d),
             )
             atualizados += 1
             vinculados += 1
@@ -3217,6 +3478,7 @@ def publicar_produtos_ml(cur, id_tenant: int, ids_produtos: list[int]) -> dict:
                 garantia_tempo=d.get("garantia_tempo") or "",
                 video_youtube=d.get("video_youtube") or "",
                 cfg=cfg,
+                **_kwargs_fiscais_ml(d),
             )
             atualizados += 1
             vinculados += 1

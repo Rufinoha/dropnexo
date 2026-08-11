@@ -21,22 +21,22 @@ CODIGO_ML_CATEGORIAS = "ml_categorias_cache"
 CODIGO_TIKTOK_CATEGORIAS = "tiktok_categorias_cache"
 CODIGO_AMAZON_PRODUCT_TYPES = "amazon_product_types_cache"
 CODIGO_XML_DROPSHIPPING_SYNC = "xml_dropshipping_sync"
-CODIGO_XML_CATEGORIAS = "xml_dropshipping_categorias_cache"
 
 CODIGOS_CACHE_CATEGORIAS = (
     CODIGO_ML_CATEGORIAS,
     CODIGO_TIKTOK_CATEGORIAS,
     CODIGO_AMAZON_PRODUCT_TYPES,
-    CODIGO_XML_CATEGORIAS,
 )
+
+# Sync Revenda de Calçados — vários horários/dia (Brasília)
+HORAS_XML_SYNC_DEFAULT = ("07:00", "10:00", "13:00", "16:00", "19:00")
 
 # Defaults: (agendamento, hora_local HH:MM America/Sao_Paulo)
 _DEFAULTS_AGENDA: dict[str, tuple[str, str]] = {
     CODIGO_ML_CATEGORIAS: ("domingo", "02:00"),
     CODIGO_TIKTOK_CATEGORIAS: ("domingo", "03:00"),
     CODIGO_AMAZON_PRODUCT_TYPES: ("domingo", "04:00"),
-    CODIGO_XML_CATEGORIAS: ("domingo", "05:00"),
-    CODIGO_XML_DROPSHIPPING_SYNC: ("diario", "06:00"),
+    CODIGO_XML_DROPSHIPPING_SYNC: ("diario", HORAS_XML_SYNC_DEFAULT[0]),
 }
 
 
@@ -212,23 +212,18 @@ def garantir_tabelas_tarefas(cur) -> None:
             "Baixa Product Types usando a conta doadora e atualiza o cache do mapeamento.",
         ),
         (
-            CODIGO_XML_CATEGORIAS,
-            "Cache de categorias XML Dropshipping",
-            "Baixa as categorias do feed XML usando a conta doadora (1º vendedor que conectou) "
-            "e atualiza o cache compartilhado para mapeamento.",
-        ),
-        (
             CODIGO_XML_DROPSHIPPING_SYNC,
-            "Sync estoque XML Dropshipping",
-            "Atualiza estoque, preços e catálogo do feed XML (modelo Revenda de Calçados) "
-            "de cada vendedor conectado. Produtos ausentes no feed ficam com estoque 0.",
+            "Sync estoque Revenda de Calçados",
+            "Atualiza estoque e preços do feed XML da Revenda de Calçados "
+            "para cada vendedor conectado (horários 07:00, 10:00, 13:00, 16:00 e 19:00). "
+            "Produtos ausentes no feed ficam com estoque 0. Categorias mapeiam na tela da integração.",
         ),
     ]
-    # Bling: categorias são da conta do usuário — sem cache/doador compartilhado
+    # Removidos: Bling cache + categorias XML (mapeamento fica na integração)
     cur.execute(
         """
         DELETE FROM tbl_tarefa_secundaria
-        WHERE codigo = 'bling_categorias_cache'
+        WHERE codigo IN ('bling_categorias_cache', 'xml_dropshipping_categorias_cache')
         """
     )
     _ddl_seguro(cur, "DROP TABLE IF EXISTS tbl_bling_categoria_cache", sp="sp_ts_drop_bling_cache")
@@ -304,6 +299,27 @@ def garantir_tabelas_tarefas(cur) -> None:
             """,
             (CODIGO_AMAZON_PRODUCT_TYPES,),
         )
+        # Revenda: agenda multi-horário padrão (só se ainda não configurado)
+        cur.execute(
+            """
+            UPDATE tbl_tarefa_secundaria
+            SET agendamento = 'diario',
+                hora_local = %s,
+                meta = COALESCE(meta, '{}'::jsonb) || %s::jsonb,
+                atualizado_em = NOW()
+            WHERE codigo = %s
+              AND (
+                    meta->'horas_local' IS NULL
+                 OR jsonb_typeof(meta->'horas_local') <> 'array'
+                 OR jsonb_array_length(meta->'horas_local') = 0
+              )
+            """,
+            (
+                HORAS_XML_SYNC_DEFAULT[0],
+                json.dumps({"horas_local": list(HORAS_XML_SYNC_DEFAULT)}, ensure_ascii=False),
+                CODIGO_XML_DROPSHIPPING_SYNC,
+            ),
+        )
 
     if tem_doador:
         _bootstrap_doadores_existentes(cur)
@@ -351,6 +367,101 @@ def _parse_meta(meta) -> dict:
         except Exception:
             return {}
     return meta if isinstance(meta, dict) else {}
+
+
+def _norm_hora_local(hora_local: str | None) -> str:
+    h = (hora_local or "").strip()
+    if len(h) == 4 and h[1] == ":":
+        h = "0" + h
+    try:
+        hh, mm = h.split(":")
+        hi, mi = int(hh), int(mm)
+        if not (0 <= hi <= 23 and 0 <= mi <= 59):
+            raise ValueError
+        return f"{hi:02d}:{mi:02d}"
+    except Exception as e:
+        raise ValueError("Horário inválido. Use HH:MM.") from e
+
+
+def _horas_da_tarefa(meta, hora_local: str | None) -> list[str]:
+    """Lista de HH:MM; prefer meta.horas_local, senão hora_local única."""
+    m = _parse_meta(meta)
+    raw = m.get("horas_local") or m.get("horas")
+    out: list[str] = []
+    if isinstance(raw, (list, tuple)):
+        for x in raw:
+            try:
+                out.append(_norm_hora_local(str(x)))
+            except ValueError:
+                continue
+    if out:
+        # dedupe preservando ordem
+        seen: set[str] = set()
+        uniq: list[str] = []
+        for h in out:
+            if h not in seen:
+                seen.add(h)
+                uniq.append(h)
+        return uniq
+    try:
+        return [_norm_hora_local(hora_local or "07:00")]
+    except ValueError:
+        return ["07:00"]
+
+
+def _status_slots_tarefa(cur, id_tarefa: int, horas: list[str]) -> list[dict]:
+    slots: list[dict] = []
+    for h in horas:
+        cur.execute(
+            """
+            SELECT status, iniciado_em, finalizado_em, mensagem
+            FROM tbl_tarefa_secundaria_execucao
+            WHERE id_tarefa = %s
+              AND COALESCE(meta->>'hora_slot', '') = %s
+            ORDER BY iniciado_em DESC
+            LIMIT 1
+            """,
+            (int(id_tarefa), h),
+        )
+        row = cur.fetchone()
+        if not row:
+            slots.append(
+                {
+                    "hora": h,
+                    "status": "nunca",
+                    "iniciado_em": None,
+                    "finalizado_em": None,
+                    "mensagem": "",
+                }
+            )
+            continue
+        slots.append(
+            {
+                "hora": h,
+                "status": row[0] or "nunca",
+                "iniciado_em": row[1].isoformat() if row[1] else None,
+                "finalizado_em": row[2].isoformat() if row[2] else None,
+                "mensagem": row[3] or "",
+            }
+        )
+    return slots
+
+
+def _ja_rodou_slot_hoje(cur, id_tarefa: int, hora_slot: str) -> bool:
+    cur.execute(
+        """
+        SELECT 1
+        FROM tbl_tarefa_secundaria_execucao
+        WHERE id_tarefa = %s
+          AND status IN ('sucesso', 'rodando')
+          AND COALESCE(meta->>'hora_slot', '') = %s
+          AND (iniciado_em AT TIME ZONE 'America/Sao_Paulo')::date
+              = (NOW() AT TIME ZONE 'America/Sao_Paulo')::date
+        LIMIT 1
+        """,
+        (int(id_tarefa), hora_slot),
+    )
+    return bool(cur.fetchone())
 
 
 def _idade_segundos(dt_val) -> float | None:
@@ -413,6 +524,49 @@ def encerrar_execucoes_orfaas(cur) -> int:
     return n
 
 
+def agenda_xml_dropshipping_sync(cur) -> dict:
+    """Horários + status por slot da tarefa de estoque Revenda (para UI da integração)."""
+    garantir_tabelas_tarefas(cur)
+    tem_hora = _coluna_existe(cur, "tbl_tarefa_secundaria", "hora_local")
+    hora_sql = (
+        "COALESCE(NULLIF(TRIM(hora_local), ''), '07:00')" if tem_hora else "'07:00'"
+    )
+    cur.execute(
+        f"""
+        SELECT id, agendamento, {hora_sql}, meta
+        FROM tbl_tarefa_secundaria
+        WHERE codigo = %s AND ativo = TRUE
+        LIMIT 1
+        """,
+        (CODIGO_XML_DROPSHIPPING_SYNC,),
+    )
+    row = cur.fetchone()
+    if not row:
+        horas = list(HORAS_XML_SYNC_DEFAULT)
+        return {
+            "agendamento": "diario",
+            "hora_local": horas[0],
+            "horas_local": horas,
+            "slots": [
+                {
+                    "hora": h,
+                    "status": "nunca",
+                    "iniciado_em": None,
+                    "finalizado_em": None,
+                    "mensagem": "",
+                }
+                for h in horas
+            ],
+        }
+    horas = _horas_da_tarefa(row[3], row[2])
+    return {
+        "agendamento": row[1] or "diario",
+        "hora_local": row[2] or horas[0],
+        "horas_local": horas,
+        "slots": _status_slots_tarefa(cur, int(row[0]), horas),
+    }
+
+
 def listar_tarefas_secundarias(cur) -> list[dict]:
     from sistema.tarefas_secundarias.doador import info_doador
 
@@ -429,7 +583,7 @@ def listar_tarefas_secundarias(cur) -> list[dict]:
     cur.execute(
         f"""
         SELECT t.id, t.codigo, t.nome, t.descricao, t.agendamento, t.ativo,
-               {hora_sql},
+               {hora_sql}, t.meta,
                e.id, e.status, e.disparado_por, e.iniciado_em, e.finalizado_em,
                e.mensagem, e.meta
         FROM tbl_tarefa_secundaria t
@@ -446,14 +600,18 @@ def listar_tarefas_secundarias(cur) -> list[dict]:
     )
     out = []
     for r in cur.fetchall():
-        meta = _parse_meta(r[13] if len(r) > 13 else None)
+        meta_tarefa = _parse_meta(r[7] if len(r) > 7 else None)
+        meta_exec = _parse_meta(r[14] if len(r) > 14 else None)
         codigo = r[1]
+        hora_local = r[6] or "02:00"
+        horas = _horas_da_tarefa(meta_tarefa, hora_local)
         doador = None
-        if tem_doador:
+        if tem_doador and codigo in CODIGOS_CACHE_CATEGORIAS:
             try:
                 doador = info_doador(cur, codigo)
             except Exception:
                 doador = None
+        slots = _status_slots_tarefa(cur, int(r[0]), horas) if len(horas) > 1 else []
         out.append(
             {
                 "id": int(r[0]),
@@ -461,20 +619,22 @@ def listar_tarefas_secundarias(cur) -> list[dict]:
                 "nome": r[2],
                 "descricao": r[3] or "",
                 "agendamento": r[4] or "manual",
-                "hora_local": r[6] or "02:00",
+                "hora_local": hora_local,
+                "horas_local": horas,
+                "slots": slots,
                 "ativo": bool(r[5]),
                 "doador": doador,
                 "ultima_execucao": (
                     None
-                    if not r[7]
+                    if not r[8]
                     else {
-                        "id": int(r[7]),
-                        "status": r[8],
-                        "disparado_por": r[9],
-                        "iniciado_em": r[10].isoformat() if r[10] else None,
-                        "finalizado_em": r[11].isoformat() if r[11] else None,
-                        "mensagem": r[12] or "",
-                        "meta": meta,
+                        "id": int(r[8]),
+                        "status": r[9],
+                        "disparado_por": r[10],
+                        "iniciado_em": r[11].isoformat() if r[11] else None,
+                        "finalizado_em": r[12].isoformat() if r[12] else None,
+                        "mensagem": r[13] or "",
+                        "meta": meta_exec,
                     }
                 ),
             }
@@ -483,7 +643,12 @@ def listar_tarefas_secundarias(cur) -> list[dict]:
 
 
 def salvar_agenda_tarefa(
-    cur, codigo: str, *, agendamento: str, hora_local: str
+    cur,
+    codigo: str,
+    *,
+    agendamento: str,
+    hora_local: str | None = None,
+    horas_local: list[str] | None = None,
 ) -> dict:
     garantir_tabelas_tarefas(cur)
     if not _coluna_existe(cur, "tbl_tarefa_secundaria", "hora_local"):
@@ -494,25 +659,48 @@ def salvar_agenda_tarefa(
     a = (agendamento or "").strip().lower()
     if a not in ("domingo", "segunda", "terca", "quarta", "quinta", "sexta", "sabado", "diario", "manual"):
         raise ValueError("Agendamento inválido.")
-    h = (hora_local or "").strip()
-    if len(h) == 4 and h[1] == ":":
-        h = "0" + h
-    try:
-        hh, mm = h.split(":")
-        hi, mi = int(hh), int(mm)
-        if not (0 <= hi <= 23 and 0 <= mi <= 59):
-            raise ValueError
-        h = f"{hi:02d}:{mi:02d}"
-    except Exception as e:
-        raise ValueError("Horário inválido. Use HH:MM.") from e
+
+    horas: list[str] = []
+    if horas_local is not None:
+        raw_list = horas_local if isinstance(horas_local, (list, tuple)) else [horas_local]
+        for x in raw_list:
+            if x is None or str(x).strip() == "":
+                continue
+            # aceita "07:00,10:00" num item
+            parts = str(x).replace(";", ",").split(",")
+            for p in parts:
+                p = p.strip()
+                if p:
+                    horas.append(_norm_hora_local(p))
+    elif hora_local:
+        horas = [_norm_hora_local(hora_local)]
+    if not horas:
+        raise ValueError("Informe ao menos um horário (HH:MM).")
+    seen: set[str] = set()
+    horas_uniq: list[str] = []
+    for h in horas:
+        if h not in seen:
+            seen.add(h)
+            horas_uniq.append(h)
+    horas = horas_uniq
+    h_primary = horas[0]
+
     cur.execute(
         """
         UPDATE tbl_tarefa_secundaria
-        SET agendamento = %s, hora_local = %s, atualizado_em = NOW()
+        SET agendamento = %s,
+            hora_local = %s,
+            meta = COALESCE(meta, '{}'::jsonb) || %s::jsonb,
+            atualizado_em = NOW()
         WHERE codigo = %s
-        RETURNING id, codigo, agendamento, hora_local
+        RETURNING id, codigo, agendamento, hora_local, meta
         """,
-        (a, h, codigo),
+        (
+            a,
+            h_primary,
+            json.dumps({"horas_local": horas}, ensure_ascii=False),
+            codigo,
+        ),
     )
     row = cur.fetchone()
     if not row:
@@ -522,6 +710,7 @@ def salvar_agenda_tarefa(
         "codigo": row[1],
         "agendamento": row[2],
         "hora_local": row[3],
+        "horas_local": _horas_da_tarefa(row[4], row[3]),
     }
 
 
@@ -554,7 +743,7 @@ def listar_execucoes_tarefa(cur, id_tarefa: int, limit: int = 20) -> list[dict]:
     garantir_tabelas_tarefas(cur)
     cur.execute(
         """
-        SELECT id, status, disparado_por, iniciado_em, finalizado_em, mensagem, log_texto
+        SELECT id, status, disparado_por, iniciado_em, finalizado_em, mensagem, log_texto, meta
         FROM tbl_tarefa_secundaria_execucao
         WHERE id_tarefa = %s
         ORDER BY iniciado_em DESC
@@ -562,18 +751,24 @@ def listar_execucoes_tarefa(cur, id_tarefa: int, limit: int = 20) -> list[dict]:
         """,
         (int(id_tarefa), max(1, min(int(limit), 50))),
     )
-    return [
-        {
-            "id": int(r[0]),
-            "status": r[1],
-            "disparado_por": r[2],
-            "iniciado_em": r[3].isoformat() if r[3] else None,
-            "finalizado_em": r[4].isoformat() if r[4] else None,
-            "mensagem": r[5] or "",
-            "log_texto": r[6] or "",
-        }
-        for r in cur.fetchall()
-    ]
+    out = []
+    for r in cur.fetchall():
+        meta = _parse_meta(r[7] if len(r) > 7 else None)
+        slot = meta.get("hora_slot") or ""
+        out.append(
+            {
+                "id": int(r[0]),
+                "status": r[1],
+                "disparado_por": r[2],
+                "iniciado_em": r[3].isoformat() if r[3] else None,
+                "finalizado_em": r[4].isoformat() if r[4] else None,
+                "mensagem": r[5] or "",
+                "log_texto": r[6] or "",
+                "hora_slot": slot,
+                "meta": meta,
+            }
+        )
+    return out
 
 
 _WEEKDAY_NOME = {
@@ -587,31 +782,48 @@ _WEEKDAY_NOME = {
 }
 
 
+def _slot_agendado_agora(
+    agendamento: str,
+    horas: list[str] | str | None,
+    *,
+    forcar: bool = False,
+) -> str | None:
+    """Retorna o HH:MM do slot atual (janela 60 min) ou 'manual' se forçar."""
+    if forcar:
+        return "manual"
+    a = (agendamento or "manual").strip().lower()
+    if a in ("", "manual"):
+        return None
+    agora = datetime.now(TZ_BR)
+    if a != "diario":
+        if _WEEKDAY_NOME.get(agora.weekday()) != a:
+            return None
+    if isinstance(horas, str) or horas is None:
+        lista = _horas_da_tarefa({}, horas)
+    else:
+        lista = list(horas) or ["07:00"]
+    agora_min = agora.hour * 60 + agora.minute
+    for h in lista:
+        try:
+            hh, mm = _norm_hora_local(h).split(":")
+            alvo_min = int(hh) * 60 + int(mm)
+        except Exception:
+            continue
+        if alvo_min <= agora_min < alvo_min + 60:
+            return _norm_hora_local(h)
+    return None
+
+
 def _agendamento_permite_agora(
     agendamento: str,
     hora_local: str | None,
     *,
     forcar: bool = False,
+    horas: list[str] | None = None,
 ) -> bool:
-    """Dia + hora (America/Sao_Paulo). Cron deve rodar ao menos 1x/hora."""
-    if forcar:
-        return True
-    a = (agendamento or "manual").strip().lower()
-    if a in ("", "manual"):
-        return False
-    agora = datetime.now(TZ_BR)
-    if a != "diario":
-        if _WEEKDAY_NOME.get(agora.weekday()) != a:
-            return False
-    h = (hora_local or "02:00").strip()
-    try:
-        hh, mm = h.split(":")
-        alvo_min = int(hh) * 60 + int(mm)
-    except Exception:
-        alvo_min = 2 * 60
-    agora_min = agora.hour * 60 + agora.minute
-    # Janela de 60 min a partir do horário configurado
-    return alvo_min <= agora_min < alvo_min + 60
+    """Compat: True se algum slot estiver na janela (ou forcar)."""
+    lista = horas if horas is not None else _horas_da_tarefa({}, hora_local)
+    return _slot_agendado_agora(agendamento, lista, forcar=forcar) is not None
 
 
 def _rodar_sync_por_codigo(cur, codigo: str, *, conn=None, id_exec: int | None = None) -> dict:
@@ -647,54 +859,11 @@ def _rodar_sync_por_codigo(cur, codigo: str, *, conn=None, id_exec: int | None =
             id_exec=id_exec,
             atualizar_progresso=_atualizar_progresso_exec,
         )
-    if codigo == CODIGO_XML_CATEGORIAS:
-        return _sincronizar_cache_categorias_xml(
-            cur, conn=conn, id_exec=id_exec, id_tenant_doador=id_doador
-        )
     if codigo == CODIGO_XML_DROPSHIPPING_SYNC:
         return _sincronizar_xml_dropshipping_todos(
             cur, conn=conn, id_exec=id_exec
         )
     raise RuntimeError(f"Executor não implementado para «{codigo}».")
-
-
-def _sincronizar_cache_categorias_xml(
-    cur, *, conn=None, id_exec=None, id_tenant_doador: int | None = None
-) -> dict:
-    """Usa o feed do doador para atualizar o cache global de categorias XML."""
-    from api.xml_dropshipping.xml_dropshipping import (
-        _upsert_cache_categorias,
-        baixar_xml,
-        carregar_config,
-        montar_url_xml,
-        parse_produtos_xml,
-    )
-    from sistema.tarefas_secundarias.doador import obter_ou_promover_doador
-
-    tid = id_tenant_doador or obter_ou_promover_doador(cur, CODIGO_XML_CATEGORIAS)
-    if not tid:
-        raise RuntimeError(
-            "Nenhuma conta XML Dropshipping conectada. "
-            "O cache de categorias será preenchido quando o 1º vendedor colar o link/token."
-        )
-    cfg = carregar_config(cur, int(tid))
-    url = montar_url_xml(cfg.get("url_xml") or "", cfg.get("token") or "")
-    if not url:
-        raise RuntimeError("Doador sem URL/token de feed.")
-    _atualizar_progresso_exec(
-        cur, conn, id_exec, f"Baixando feed do doador #{tid}…", {"fase": "inicio", "pct": 10}
-    )
-    raw = baixar_xml(url)
-    produtos, _msg = parse_produtos_xml(raw)
-    cats = {p["categoria"] for p in produtos if p.get("categoria")}
-    n = _upsert_cache_categorias(cur, cats)
-    msg = f"{n} categoria(s) XML em cache (doador tenant #{tid})."
-    _atualizar_progresso_exec(
-        cur, conn, id_exec, msg, {"fase": "ok", "pct": 100, "categorias": n}
-    )
-    if conn is not None:
-        conn.commit()
-    return {"mensagem": msg, "log_texto": msg, "categorias": n, "id_tenant_doador": tid}
 
 
 def _sincronizar_xml_dropshipping_todos(cur, *, conn=None, id_exec=None) -> dict:
@@ -1145,7 +1314,7 @@ def executar_tarefa(
     )
     cur.execute(
         f"""
-        SELECT id, codigo, agendamento, ativo, {hora_sel}
+        SELECT id, codigo, agendamento, ativo, {hora_sel}, meta
         FROM tbl_tarefa_secundaria
         WHERE codigo = %s
         """,
@@ -1159,10 +1328,13 @@ def executar_tarefa(
     agendamento = row[2] or "manual"
     ativo = bool(row[3])
     hora_local = row[4] or "02:00"
+    meta_tarefa = _parse_meta(row[5] if len(row) > 5 else None)
+    horas = _horas_da_tarefa(meta_tarefa, hora_local)
     if not ativo:
         raise RuntimeError("Tarefa inativa.")
 
-    if not _agendamento_permite_agora(agendamento, hora_local, forcar=forcar):
+    hora_slot = _slot_agendado_agora(agendamento, horas, forcar=forcar)
+    if not hora_slot:
         label = {
             "segunda": "segunda-feira",
             "terca": "terça-feira",
@@ -1173,20 +1345,34 @@ def executar_tarefa(
             "domingo": "domingo",
             "diario": "diariamente",
         }.get((agendamento or "").lower(), agendamento or "manual")
+        horas_txt = ", ".join(horas)
         return {
             "skipped": True,
             "codigo": codigo_db,
-            "mensagem": f"Agendada para {label} às {hora_local} — execução ignorada agora.",
+            "mensagem": f"Agendada para {label} às {horas_txt} — execução ignorada agora.",
+        }
+
+    if not forcar and hora_slot != "manual" and _ja_rodou_slot_hoje(cur, id_tarefa, hora_slot):
+        return {
+            "skipped": True,
+            "codigo": codigo_db,
+            "mensagem": f"Slot {hora_slot} já executado hoje — ignorado.",
+            "hora_slot": hora_slot,
         }
 
     cur.execute(
         """
         INSERT INTO tbl_tarefa_secundaria_execucao (
-            id_tarefa, status, disparado_por, iniciado_em
-        ) VALUES (%s, 'rodando', %s, %s)
+            id_tarefa, status, disparado_por, iniciado_em, meta
+        ) VALUES (%s, 'rodando', %s, %s, %s::jsonb)
         RETURNING id
         """,
-        (id_tarefa, disparado_por, agora_utc()),
+        (
+            id_tarefa,
+            disparado_por,
+            agora_utc(),
+            json.dumps({"hora_slot": hora_slot}, ensure_ascii=False),
+        ),
     )
     id_exec = int(cur.fetchone()[0])
     if conn is not None:
@@ -1194,11 +1380,21 @@ def executar_tarefa(
 
     try:
         res = _rodar_sync_por_codigo(cur, codigo_db, conn=conn, id_exec=id_exec)
+        meta_ok = {
+            "hora_slot": hora_slot,
+            "folhas": res.get("folhas"),
+            "ignoradas_sem_nome": res.get("ignoradas_sem_nome"),
+            "erros_site": res.get("erros_site"),
+            "sites": res.get("sites"),
+            "tenants": res.get("tenants"),
+            "ok": res.get("ok"),
+            "erro": res.get("erro"),
+        }
         cur.execute(
             """
             UPDATE tbl_tarefa_secundaria_execucao
             SET status = %s, finalizado_em = %s, mensagem = %s, log_texto = %s,
-                meta = %s::jsonb
+                meta = COALESCE(meta, '{}'::jsonb) || %s::jsonb
             WHERE id = %s
             """,
             (
@@ -1206,15 +1402,7 @@ def executar_tarefa(
                 agora_utc(),
                 res.get("mensagem") or "OK",
                 res.get("log_texto") or "",
-                json.dumps(
-                    {
-                        "folhas": res.get("folhas"),
-                        "ignoradas_sem_nome": res.get("ignoradas_sem_nome"),
-                        "erros_site": res.get("erros_site"),
-                        "sites": res.get("sites"),
-                    },
-                    ensure_ascii=False,
-                ),
+                json.dumps(meta_ok, ensure_ascii=False),
                 id_exec,
             ),
         )
@@ -1222,12 +1410,27 @@ def executar_tarefa(
             "UPDATE tbl_tarefa_secundaria SET atualizado_em = %s WHERE id = %s",
             (agora_utc(), id_tarefa),
         )
-        return {"skipped": False, "codigo": codigo_db, "id_execucao": id_exec, **res}
+        return {
+            "skipped": False,
+            "codigo": codigo_db,
+            "id_execucao": id_exec,
+            "hora_slot": hora_slot,
+            **res,
+        }
     except Exception as e:
         if conn is not None:
             conn.rollback()
         try:
             _marcar_execucao_erro(cur, id_exec, e)
+            # preserva hora_slot no meta de erro
+            cur.execute(
+                """
+                UPDATE tbl_tarefa_secundaria_execucao
+                SET meta = COALESCE(meta, '{}'::jsonb) || %s::jsonb
+                WHERE id = %s
+                """,
+                (json.dumps({"hora_slot": hora_slot}, ensure_ascii=False), id_exec),
+            )
             if conn is not None:
                 conn.commit()
         except Exception:
