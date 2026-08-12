@@ -12,10 +12,15 @@
   const papel = String(cfg.papel || "vendedor").toLowerCase();
   const isFornecedor = papel === "fornecedor";
 
+  const banner = document.getElementById("dn_lanc_banner");
   const elCount = document.getElementById("dn_lanc_count");
-  const elCountVal = document.getElementById("dn_lanc_count_val");
-  const elMarquee = document.querySelector("#dn_lanc_banner .DnLanc_Marquee");
+  const elMarquee = document.getElementById("dn_lanc_marquee");
   const elLive = document.getElementById("dn_lanc_live");
+  const elBadge = document.getElementById("dn_lanc_badge");
+  const elD = document.getElementById("dn_u_d");
+  const elH = document.getElementById("dn_u_h");
+  const elM = document.getElementById("dn_u_m");
+  const elS = document.getElementById("dn_u_s");
   const dialog = document.getElementById("dn_lanc_dialog");
   const body = document.getElementById("dn_lanc_dialog_body");
   const btn = document.getElementById("dn_lanc_saiba");
@@ -24,29 +29,30 @@
     return String(n).padStart(2, "0");
   }
 
-  function formatRestante(ms) {
-    const totalSec = Math.max(0, Math.floor(ms / 1000));
+  function setLive(on) {
+    banner?.classList.toggle("is-live", on);
+    if (elBadge) elBadge.textContent = on ? "Estamos no ar" : "Agora é oficial";
+    if (elCount) elCount.hidden = on;
+    if (elMarquee) elMarquee.hidden = on;
+    if (elLive) elLive.hidden = !on;
+  }
+
+  function tick() {
+    const diff = target.getTime() - Date.now();
+    if (diff <= 0) {
+      setLive(true);
+      return false;
+    }
+    setLive(false);
+    const totalSec = Math.floor(diff / 1000);
     const dias = Math.floor(totalSec / 86400);
     const horas = Math.floor((totalSec % 86400) / 3600);
     const min = Math.floor((totalSec % 3600) / 60);
     const seg = totalSec % 60;
-    if (dias > 0) return `${dias}d ${pad(horas)}:${pad(min)}:${pad(seg)}`;
-    return `${pad(horas)}:${pad(min)}:${pad(seg)}`;
-  }
-
-  function tick() {
-    const agora = Date.now();
-    const diff = target.getTime() - agora;
-    if (diff <= 0) {
-      if (elCount) elCount.hidden = true;
-      if (elMarquee) elMarquee.hidden = true;
-      if (elLive) elLive.hidden = false;
-      return false;
-    }
-    if (elLive) elLive.hidden = true;
-    if (elMarquee) elMarquee.hidden = false;
-    if (elCount) elCount.hidden = false;
-    if (elCountVal) elCountVal.textContent = formatRestante(diff);
+    if (elD) elD.textContent = String(dias);
+    if (elH) elH.textContent = pad(horas);
+    if (elM) elM.textContent = pad(min);
+    if (elS) elS.textContent = pad(seg);
     return true;
   }
 
@@ -98,7 +104,6 @@
   }
 
   btn?.addEventListener("click", abrirSaibaMais);
-
   dialog?.addEventListener("click", (e) => {
     if (e.target === dialog) dialog.close();
   });

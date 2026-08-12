@@ -3,21 +3,33 @@
 {% set _papel = 'fornecedor' if _raw_papel == 'fornecedor' else 'vendedor' %}
 
 <div class="DnLanc" id="dn_lanc_banner" role="region" aria-label="Lançamento oficial DropNexo">
+  <div class="DnLanc_Glow" aria-hidden="true"></div>
   <div class="DnLanc_Inner">
-    <div class="DnLanc_Marquee" aria-hidden="true">
-      <div class="DnLanc_Track" id="dn_lanc_track">
-        <span class="DnLanc_Phrase"><strong>Agora é oficial.</strong> Lançamento DropNexo em 21 de setembro, às 7h. A plataforma já está no ar — estamos abrindo com quem quer crescer de verdade.</span>
-        <span class="DnLanc_Phrase"><strong>Agora é oficial.</strong> Lançamento DropNexo em 21 de setembro, às 7h. A plataforma já está no ar — estamos abrindo com quem quer crescer de verdade.</span>
+    <span class="DnLanc_Badge" id="dn_lanc_badge">Agora é oficial</span>
+
+    <div class="DnLanc_Marquee" id="dn_lanc_marquee" aria-hidden="true">
+      <div class="DnLanc_Track">
+        <span class="DnLanc_Phrase">Lançamento DropNexo · 21 de setembro, às 7h · A plataforma já está no ar — estamos abrindo com quem quer crescer de verdade</span>
+        <span class="DnLanc_Dot" aria-hidden="true">◆</span>
+        <span class="DnLanc_Phrase">Lançamento DropNexo · 21 de setembro, às 7h · A plataforma já está no ar — estamos abrindo com quem quer crescer de verdade</span>
+        <span class="DnLanc_Dot" aria-hidden="true">◆</span>
       </div>
     </div>
+
     <div class="DnLanc_Live" id="dn_lanc_live" hidden>
       <strong>Estamos no ar.</strong>
       <span>Lançamento oficial DropNexo — bem-vindo.</span>
     </div>
+
     <div class="DnLanc_Aside">
       <div class="DnLanc_Count" id="dn_lanc_count" aria-live="polite">
         <span class="DnLanc_CountLabel">Faltam</span>
-        <span class="DnLanc_CountValue" id="dn_lanc_count_val">—</span>
+        <div class="DnLanc_Units" id="dn_lanc_units">
+          <div class="DnLanc_Unit"><b id="dn_u_d">—</b><small>dias</small></div>
+          <div class="DnLanc_Unit"><b id="dn_u_h">—</b><small>hrs</small></div>
+          <div class="DnLanc_Unit"><b id="dn_u_m">—</b><small>min</small></div>
+          <div class="DnLanc_Unit"><b id="dn_u_s">—</b><small>seg</small></div>
+        </div>
       </div>
       <button type="button" class="DnLanc_Btn" id="dn_lanc_saiba">Saiba mais</button>
     </div>
