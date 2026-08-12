@@ -1,0 +1,50 @@
+{# Tarja global — lançamento oficial DropNexo (todas as páginas logadas) #}
+{% set _raw_papel = (modulo_ativo or session.get('tenant_tipo_negocio') or 'vendedor')|lower %}
+{% set _papel = 'fornecedor' if _raw_papel == 'fornecedor' else 'vendedor' %}
+
+<div class="DnLanc" id="dn_lanc_banner" role="region" aria-label="Lançamento oficial DropNexo">
+  <div class="DnLanc_Inner">
+    <div class="DnLanc_Marquee" aria-hidden="true">
+      <div class="DnLanc_Track" id="dn_lanc_track">
+        <span class="DnLanc_Phrase"><strong>Agora é oficial.</strong> Lançamento DropNexo em 21 de setembro, às 7h. A plataforma já está no ar — estamos abrindo com quem quer crescer de verdade.</span>
+        <span class="DnLanc_Phrase"><strong>Agora é oficial.</strong> Lançamento DropNexo em 21 de setembro, às 7h. A plataforma já está no ar — estamos abrindo com quem quer crescer de verdade.</span>
+      </div>
+    </div>
+    <div class="DnLanc_Live" id="dn_lanc_live" hidden>
+      <strong>Estamos no ar.</strong>
+      <span>Lançamento oficial DropNexo — bem-vindo.</span>
+    </div>
+    <div class="DnLanc_Aside">
+      <div class="DnLanc_Count" id="dn_lanc_count" aria-live="polite">
+        <span class="DnLanc_CountLabel">Faltam</span>
+        <span class="DnLanc_CountValue" id="dn_lanc_count_val">—</span>
+      </div>
+      <button type="button" class="DnLanc_Btn" id="dn_lanc_saiba">Saiba mais</button>
+    </div>
+  </div>
+</div>
+
+<dialog class="DnLanc_Dialog" id="dn_lanc_dialog" aria-labelledby="dn_lanc_dialog_title">
+  <form method="dialog" class="DnLanc_DialogCard">
+    <header class="DnLanc_DialogHead">
+      <h2 id="dn_lanc_dialog_title">Agora é oficial</h2>
+      <button type="submit" class="DnLanc_DialogClose" aria-label="Fechar" value="close">×</button>
+    </header>
+    <div class="DnLanc_DialogBody" id="dn_lanc_dialog_body"></div>
+    <footer class="DnLanc_DialogFoot">
+      <button type="submit" class="Cl_botaoprimario" value="close">Fechar</button>
+    </footer>
+  </form>
+</dialog>
+
+<script type="application/json" id="dn_lanc_cfg">
+{
+  "targetIso": "2026-09-21T07:00:00-03:00",
+  "papel": {{ _papel|tojson }},
+  "cupomVendedor": "VENDEDOR30",
+  "cupomFornecedor": "FORNFUND",
+  "whatsapp": "5511974834614",
+  "whatsappLabel": "(11) 97483-4614",
+  "email": "hazael@h74.com.br"
+}
+</script>

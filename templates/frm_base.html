@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='style/app_shell.css') }}?v=3" />
   {% if session.get('id_usuario') %}
   <link rel="stylesheet" href="{{ url_for('static', filename='style/Cnovidades.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style/Clancamento.css') }}?v=1" />
   {% endif %}
   {% block head_extra %}{% endblock %}
   <script defer src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
@@ -195,6 +196,10 @@
         </div>
       </header>
 
+      {% if session.get('id_usuario') %}
+      {% include "partials/lancamento_banner.html" %}
+      {% endif %}
+
       <main class="fg-content">
         {% if session.get('id_usuario') and financeiro_alerta %}
         <div
@@ -247,6 +252,7 @@
   {% block page_js %}{% endblock %}
   {% if session.get('id_usuario') %}
   <script defer src="{{ url_for('static', filename='script/Cnovidades.js') }}"></script>
+  <script defer src="{{ url_for('static', filename='script/Slancamento.js') }}?v=1"></script>
   {% endif %}
 </body>
 </html>
