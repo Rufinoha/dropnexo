@@ -337,6 +337,77 @@
     return Number(n || 0);
   }
 
+  function anexoHref(a) {
+    return `/fornecedor/pedidos/anexos/arquivo?caminho=${encodeURIComponent(a.caminho)}`;
+  }
+
+  function docCard({ tipo, titulo, sub, anexo, highlight, emptyHint }) {
+    const mark =
+      tipo === "etiqueta" ? "ETQ" : tipo === "comprovante_pix" ? "PIX" : tipo === "declaracao" ? "DEC" : "NF";
+    if (!anexo) {
+      return `
+        <div class="PdFn_DocCard PdFn_DocCard--empty">
+          <span class="PdFn_DocMark PdFn_DocMark--muted" aria-hidden="true">${mark}</span>
+          <div class="PdFn_DocBody">
+            <strong>${esc(titulo)}</strong>
+            <p>${esc(emptyHint || "Ainda não anexado")}</p>
+          </div>
+        </div>`;
+    }
+    const cls = highlight ? "PdFn_DocCard PdFn_DocCard--pix" : "PdFn_DocCard";
+    return `
+      <a class="${cls}" href="${anexoHref(anexo)}" target="_blank" rel="noopener">
+        <span class="PdFn_DocMark${highlight ? " PdFn_DocMark--pix" : ""}" aria-hidden="true">${mark}</span>
+        <div class="PdFn_DocBody">
+          <strong>${esc(titulo)}</strong>
+          <p>${esc(sub || anexo.nome_original || "Abrir arquivo")}</p>
+          ${highlight ? `<span class="PdFn_DocTag">Comprovante · validar</span>` : `<span class="PdFn_DocLink">Abrir PDF →</span>`}
+        </div>
+      </a>`;
+  }
+
+  function docsCardsHtml(p) {
+    const anexos = p.anexos || [];
+    const etq = anexos.find((a) => a.tipo === "etiqueta") || null;
+    const fiscal =
+      anexos.find((a) => a.tipo === "nf") ||
+      anexos.find((a) => a.tipo === "declaracao") ||
+      null;
+    const comprovante = anexos.find((a) => a.tipo === "comprovante_pix") || null;
+    const fiscalTitulo = fiscal?.tipo === "declaracao" ? "Declaração" : "Nota fiscal";
+
+    const cards = [
+      docCard({
+        tipo: "etiqueta",
+        titulo: "Etiqueta",
+        sub: etq?.nome_original,
+        anexo: etq,
+        emptyHint: "Aguardando etiqueta de frete",
+      }),
+      docCard({
+        tipo: fiscal?.tipo || "nf",
+        titulo: fiscalTitulo,
+        sub: fiscal?.nome_original,
+        anexo: fiscal,
+        emptyHint: "Aguardando NF ou declaração",
+      }),
+    ];
+
+    if (comprovante) {
+      cards.push(
+        docCard({
+          tipo: "comprovante_pix",
+          titulo: "Comprovante PIX",
+          sub: comprovante.nome_original,
+          anexo: comprovante,
+          highlight: true,
+        })
+      );
+    }
+
+    return `<div class="PdFn_DocGrid">${cards.join("")}</div>`;
+  }
+
   async function abrir(id) {
     const r = await fetch(`/fornecedor/pedidos/${id}`, { credentials: "same-origin" });
     const j = await r.json();
@@ -349,18 +420,6 @@
       kicker.textContent = orig ? `Pedido · ${orig}` : "Pedido";
     }
 
-    const docs = (p.anexos || []).filter((a) =>
-      ["etiqueta", "nf", "declaracao"].includes(a.tipo)
-    );
-    const docsHtml = docs.length
-      ? `<ul class="PdFn_Docs">${docs
-          .map(
-            (a) =>
-              `<li><a href="/fornecedor/pedidos/anexos/arquivo?caminho=${encodeURIComponent(a.caminho)}" target="_blank" rel="noopener">${esc(a.tipo)} — ${esc(a.nome_original)}</a></li>`
-          )
-          .join("")}</ul>`
-      : `<p class="PdFn_Hint">Sem etiqueta / NF / declaração anexadas.</p>`;
-
     const end = [
       p.entrega_logradouro,
       p.entrega_numero,
@@ -370,6 +429,8 @@
     ]
       .filter(Boolean)
       .join(", ");
+
+    const temComprovante = (p.anexos || []).some((a) => a.tipo === "comprovante_pix");
 
     body.innerHTML = `
       <div class="PdFn_Grid">
@@ -397,8 +458,8 @@
           <div class="PdFn_Itens">${(p.itens || []).map(itemLinha).join("") || '<p class="PdFn_Hint">Sem itens.</p>'}</div>
         </div>
         <div class="PdFn_Panel PdFn_Panel--wide">
-          <p class="PdFn_PanelTitle">Documentos de frete</p>
-          ${docsHtml}
+          <p class="PdFn_PanelTitle">Anexos${temComprovante ? " · frete + comprovante" : " · frete"}</p>
+          ${docsCardsHtml(p)}
         </div>
       </div>`;
     renderAcoes(p);

@@ -523,12 +523,115 @@
   font-variant-numeric: tabular-nums;
 }
 
-.PdFn_Docs {
-  margin: 0;
-  padding-left: 1.1rem;
-  font-size: 0.88rem;
+.PdFn_DocGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.65rem;
 }
-.PdFn_Docs a { color: var(--pdfn-navy); font-weight: 650; }
+
+.PdFn_DocCard {
+  display: flex;
+  gap: 0.7rem;
+  align-items: flex-start;
+  padding: 0.8rem 0.85rem;
+  border-radius: 14px;
+  border: 1px solid var(--pdfn-line);
+  background: #fafbfc;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+  min-height: 92px;
+}
+
+a.PdFn_DocCard:hover {
+  border-color: rgba(2, 31, 129, 0.28);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
+  transform: translateY(-1px);
+}
+
+.PdFn_DocCard--empty {
+  border-style: dashed;
+  background: #f8fafc;
+  opacity: 0.92;
+}
+
+.PdFn_DocCard--pix {
+  border-color: rgba(15, 118, 110, 0.45);
+  background: linear-gradient(145deg, #ecfdf5 0%, #fff 55%);
+  box-shadow: 0 0 0 1px rgba(15, 118, 110, 0.08), 0 10px 24px rgba(15, 118, 110, 0.08);
+}
+
+a.PdFn_DocCard--pix:hover {
+  border-color: rgba(15, 118, 110, 0.65);
+  box-shadow: 0 0 0 1px rgba(15, 118, 110, 0.12), 0 12px 28px rgba(15, 118, 110, 0.12);
+}
+
+.PdFn_DocMark {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  background: var(--pdfn-navy);
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.PdFn_DocMark--muted {
+  background: #e2e8f0;
+  color: #64748b;
+}
+
+.PdFn_DocMark--pix {
+  background: #0f766e;
+}
+
+.PdFn_DocBody {
+  min-width: 0;
+  flex: 1;
+}
+
+.PdFn_DocBody strong {
+  display: block;
+  font-size: 0.88rem;
+  color: var(--pdfn-ink);
+  margin-bottom: 0.15rem;
+}
+
+.PdFn_DocBody p {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--pdfn-muted);
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.PdFn_DocLink {
+  display: inline-block;
+  margin-top: 0.4rem;
+  font-size: 0.74rem;
+  font-weight: 750;
+  color: var(--pdfn-navy);
+}
+
+.PdFn_DocTag {
+  display: inline-block;
+  margin-top: 0.4rem;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: #0f766e;
+  background: rgba(15, 118, 110, 0.1);
+  border-radius: 999px;
+  padding: 0.18rem 0.5rem;
+}
+
 .PdFn_Hint { margin: 0; color: var(--pdfn-muted); font-size: 0.86rem; }
 
 .PdFn_PayValid {
