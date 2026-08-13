@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from flask import Blueprint, jsonify, render_template, request, send_file, session
+from flask import Blueprint, jsonify, redirect, render_template, request, send_file, session, url_for
 
 from global_utils import Var_ConectarBanco, exigir_modulo, exigir_permissao, login_obrigatorio
 from core.pedidos.servico import (
@@ -94,6 +94,10 @@ def pedido_entregue(id_pedido: int):
 @exigir_modulo(MODULO_FORNECEDOR)
 @exigir_permissao(codigo="fn_pedidos.ver")
 def pedidos():
+    from sistema.plataforma.sessao import MODULO_VENDEDOR, garantir_modulo_sessao
+
+    if garantir_modulo_sessao() == MODULO_VENDEDOR:
+        return redirect(url_for("vd_pedidos.pedidos"))
     return render_template("frm_fn_pedidos.html", nav_ativo="fn_pedidos")
 
 

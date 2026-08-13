@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 import time
 
-from flask import Blueprint, jsonify, render_template, request, send_file, session, url_for
+from flask import Blueprint, jsonify, redirect, render_template, request, send_file, session, url_for
 
 from core.pedidos.servico import listar_meios_fornecedor
 from api.pix_manual.pix_manual import (
@@ -80,6 +80,11 @@ def _id_usuario() -> int | None:
 @exigir_modulo(MODULO_VENDEDOR)
 @exigir_permissao(codigo="vd_pedidos.ver")
 def pedidos():
+    # DEV pode burlar exigir_modulo: se o módulo ativo é fornecedor, manda pra lista certa
+    from sistema.plataforma.sessao import MODULO_FORNECEDOR, garantir_modulo_sessao
+
+    if garantir_modulo_sessao() == MODULO_FORNECEDOR:
+        return redirect(url_for("fn_pedidos.pedidos"))
     return render_template("frm_vd_pedidos.html", nav_ativo="vd_pedidos")
 
 

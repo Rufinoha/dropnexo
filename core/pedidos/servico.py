@@ -629,6 +629,32 @@ def listar_itens_pedido(cur, id_pedido: int) -> list[dict]:
     ]
 
 
+def enriquecer_itens_pedido_imagens(cur, itens: list[dict]) -> list[dict]:
+    """Anexa imagem_url resolvida do catálogo em cada item do pedido."""
+    if not itens:
+        return itens
+    try:
+        from fornecedor.catalogo.catalogo import resolver_caminho_variante, url_exibicao
+    except Exception:
+        for it in itens:
+            it.setdefault("imagem_url", "")
+        return itens
+    for it in itens:
+        caminho = None
+        try:
+            vid = it.get("id_variante")
+            if vid:
+                caminho = resolver_caminho_variante(cur, id_variante=int(vid))
+            elif it.get("id_produto"):
+                caminho = resolver_caminho_variante(
+                    cur, id_produto=int(it["id_produto"]), herda_pai=True
+                )
+        except Exception:
+            caminho = None
+        it["imagem_url"] = url_exibicao(caminho) if caminho else ""
+    return itens
+
+
 def obter_pedido(cur, id_pedido: int, *, id_vendedor: int | None = None, id_fornecedor: int | None = None) -> dict | None:
     where = ["p.id = %s"]
     params: list[Any] = [id_pedido]
@@ -656,6 +682,8 @@ def obter_pedido(cur, id_pedido: int, *, id_vendedor: int | None = None, id_forn
         return None
     ped = _pedido_dict(row[:29], fornecedor_nome=row[29], vendedor_nome=row[30])
     ped["itens"] = listar_itens_pedido(cur, id_pedido)
+    if id_fornecedor:
+        enriquecer_itens_pedido_imagens(cur, ped["itens"])
     _enriquecer_pedido_expedicao(cur, id_pedido, ped)
     return ped
 
@@ -735,6 +763,18 @@ def listar_pedidos_fornecedor(cur, id_fornecedor: int, status: str | None = None
         if status_vendedor_pedido(ped) == STATUS_IMPORTADO:
             ped["status_vendedor"] = STATUS_AGUARDANDO
             ped["status"] = STATUS_AGUARDANDO
+        itens = enriquecer_itens_pedido_imagens(cur, listar_itens_pedido(cur, int(ped["id"])))
+        ped["itens"] = itens
+        ped["qtd_itens"] = sum(int(i.get("quantidade") or 0) for i in itens)
+        ped["itens_preview"] = [
+            {
+                "nome_produto": i.get("nome_produto") or "",
+                "sku": i.get("sku") or "",
+                "quantidade": int(i.get("quantidade") or 0),
+                "imagem_url": i.get("imagem_url") or "",
+            }
+            for i in itens[:4]
+        ]
     return out
 
 
