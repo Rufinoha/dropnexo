@@ -428,6 +428,16 @@
   padding: 1rem 1.35rem 1.2rem;
   border-top: 1px solid var(--pdfn-line);
   background: #fff;
+  flex-shrink: 0;
+}
+.PdFn_Foot:empty {
+  display: none;
+}
+.PdFn_PayValidHint {
+  margin: 0.35rem 0 0.65rem;
+  font-size: 0.84rem;
+  color: #b45309;
+  line-height: 1.4;
 }
 
 .PdFn_Grid {

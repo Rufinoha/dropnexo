@@ -601,6 +601,30 @@ def _enriquecer_pedido_expedicao(cur, id_pedido: int, ped: dict) -> None:
     if "id_amazon_pedido" in cols:
         ped["id_amazon_pedido"] = ex[idx]
 
+    # Meio de pagamento (necessário na tela do fornecedor para Confirmar PIX)
+    ped.setdefault("meio_pagamento", "")
+    ped.setdefault("pix_manual_txid", "")
+    pay_parts = []
+    if "meio_pagamento" in cols:
+        pay_parts.append("meio_pagamento")
+    if "pix_manual_txid" in cols:
+        pay_parts.append("pix_manual_txid")
+    if pay_parts:
+        cur.execute(
+            f"SELECT {', '.join(pay_parts)} FROM tbl_pedido WHERE id = %s",
+            (id_pedido,),
+        )
+        pay = cur.fetchone()
+        if pay:
+            pi = 0
+            if "meio_pagamento" in cols:
+                ped["meio_pagamento"] = (pay[pi] or "").strip()
+                pi += 1
+            if "pix_manual_txid" in cols:
+                ped["pix_manual_txid"] = (pay[pi] or "").strip()
+            if not ped["meio_pagamento"] and ped.get("pix_manual_txid"):
+                ped["meio_pagamento"] = "pix_manual"
+
 
 def listar_itens_pedido(cur, id_pedido: int) -> list[dict]:
     cur.execute(

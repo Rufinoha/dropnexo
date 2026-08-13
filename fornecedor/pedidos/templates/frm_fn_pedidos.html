@@ -3,7 +3,7 @@
 {% set nav_ativo = 'fn_pedidos' %}
 {% block topbar_title %}Pedidos recebidos{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('fn_pedidos.static', filename='style/Cfn_pedidos.css') }}?v=9" />
+<link rel="stylesheet" href="{{ url_for('fn_pedidos.static', filename='style/Cfn_pedidos.css') }}?v=10" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal PdFn_Page">
@@ -68,5 +68,5 @@
 {% endblock %}
 {% block page_js %}
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-<script src="{{ url_for('fn_pedidos.static', filename='script/Sfn_pedidos.js') }}?v=10"></script>
+<script src="{{ url_for('fn_pedidos.static', filename='script/Sfn_pedidos.js') }}?v=11"></script>
 {% endblock %}

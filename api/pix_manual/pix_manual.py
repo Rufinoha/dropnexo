@@ -407,8 +407,18 @@ def confirmar_pix_manual(
     ped = obter_pedido(cur, id_pedido, id_fornecedor=id_fornecedor)
     if not ped:
         raise ValueError("Pedido não encontrado.")
-    if ped.get("meio_pagamento") != "pix_manual":
+    meio = (ped.get("meio_pagamento") or "").strip().lower()
+    tem_txid = bool((ped.get("pix_manual_txid") or "").strip())
+    if meio != "pix_manual" and not tem_txid:
         raise ValueError("Este pedido não foi pago via PIX manual.")
+    if meio != "pix_manual" and tem_txid:
+        cur.execute(
+            """
+            UPDATE tbl_pedido SET meio_pagamento = 'pix_manual'
+            WHERE id = %s AND COALESCE(NULLIF(meio_pagamento, ''), '') = ''
+            """,
+            (id_pedido,),
+        )
     st = status_vendedor_pedido(ped)
     if st not in (STATUS_AGUARDANDO, STATUS_IMPORTADO, STATUS_AGUARDANDO_CONFIRMACAO):
         raise ValueError("Este pedido não está aguardando confirmação de pagamento.")

@@ -179,8 +179,13 @@
     const comprovantes = (p.anexos || []).filter((a) => a.tipo === "comprovante_pix");
     const temComprovante = comprovantes.length > 0;
     const st = stV(p);
+    const meio = String(p.meio_pagamento || "").toLowerCase();
+    const ehPixManual =
+      meio === "pix_manual" ||
+      !!(p.pix_manual_txid || "").trim() ||
+      String(p.status_pagamento || "").toLowerCase() === "comprovante_enviado";
     const podeConfirmarPix =
-      p.meio_pagamento === "pix_manual" &&
+      ehPixManual &&
       ["aguardando_pagamento", "importado", "aguardando_confirmacao"].includes(st);
 
     if (podeConfirmarPix) {
