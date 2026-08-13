@@ -260,6 +260,7 @@
       j.total_encontrados != null || r.encontrados != null || j.importados != null;
     const encontrados = r.encontrados ?? j.total_encontrados ?? 0;
     const importados = r.importados ?? j.importados ?? 0;
+    const atualizados = r.atualizados ?? j.atualizados ?? 0;
     const cancelados = r.cancelados ?? j.cancelados ?? 0;
     const ignorados = r.ignorados ?? j.ignorados ?? 0;
     const erros = j.detalhes_erros || [];
@@ -267,8 +268,9 @@
       ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:0.35rem 0.75rem;font-size:0.9rem">
           <span>Encontrados no ML</span><strong>${encontrados}</strong>
           <span>Criados no DropNexo</span><strong>${importados}</strong>
+          <span>Atualizados (dados)</span><strong>${atualizados}</strong>
           <span>Cancelamentos</span><strong>${cancelados}</strong>
-          <span>Ignorados</span><strong>${ignorados}</strong>
+          <span>Já existentes</span><strong>${ignorados}</strong>
         </div>`
       : "";
     return `
@@ -318,13 +320,20 @@
         throw new Error(detalhe);
       }
       const importados = Number(j.importados || 0);
+      const atualizados = Number(j.atualizados || 0);
       const erros = j.detalhes_erros || [];
-      const icon = importados > 0 && !erros.length ? "success" : importados > 0 ? "info" : erros.length ? "warning" : "success";
+      const soInfo = erros.every((e) => String(e).includes("já exist") || String(e).includes("atualizei"));
+      const icon =
+        importados > 0 || atualizados > 0
+          ? "success"
+          : erros.length && !soInfo
+            ? "warning"
+            : "info";
       const title =
         importados > 0
           ? `${importados} pedido(s) importado(s)`
-          : erros.length
-            ? "Nenhum pedido novo"
+          : atualizados > 0
+            ? `${atualizados} pedido(s) atualizado(s)`
             : "Sincronização concluída";
       if (temSwal) {
         await Swal.fire({

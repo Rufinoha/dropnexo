@@ -130,40 +130,56 @@ def _telefone_ml(buyer: dict, shipment: dict | None) -> str:
     return ""
 
 
-def _documento_ml(buyer: dict, order: dict, billing_info: dict | None = None) -> str:
-    candidatos: list[Any] = []
-    if isinstance(billing_info, dict):
-        bi = billing_info.get("billing_info") if isinstance(billing_info.get("billing_info"), dict) else None
-        if not bi and isinstance(billing_info.get("buyer"), dict):
-            bi = (billing_info.get("buyer") or {}).get("billing_info")
-        if isinstance(bi, dict):
-            candidatos.append(bi.get("doc_number"))
-            ident = bi.get("identification") or {}
-            if isinstance(ident, dict):
-                candidatos.append(ident.get("number"))
-        candidatos.append(billing_info.get("doc_number"))
-        ident_top = billing_info.get("identification") or {}
-        if isinstance(ident_top, dict):
-            candidatos.append(ident_top.get("number"))
-
-    billing = buyer.get("billing_info") or {}
-    if isinstance(billing, dict):
-        candidatos.append(billing.get("doc_number"))
-        ident_b = billing.get("identification") or {}
-        if isinstance(ident_b, dict):
-            candidatos.append(ident_b.get("number"))
-    ident = buyer.get("identification") or {}
+def _docs_de_bloco(bloco: Any) -> list[str]:
+    """Extrai possíveis documentos de um dict de billing (v1/v2)."""
+    out: list[str] = []
+    if not isinstance(bloco, dict):
+        return out
+    out.append(str(bloco.get("doc_number") or ""))
+    out.append(str(bloco.get("number") or ""))
+    ident = bloco.get("identification") or {}
     if isinstance(ident, dict):
-        candidatos.append(ident.get("number"))
+        out.append(str(ident.get("number") or ""))
+    for key in ("additional_info", "attributes", "taxes"):
+        lista = bloco.get(key)
+        if not isinstance(lista, list):
+            continue
+        for item in lista:
+            if not isinstance(item, dict):
+                continue
+            tipo = str(item.get("type") or item.get("key") or "").upper()
+            if tipo in ("DOC_NUMBER", "DOCUMENT_NUMBER", "CPF", "CNPJ", "TAX_ID"):
+                out.append(str(item.get("value") or item.get("number") or ""))
+            elif item.get("number") and not tipo:
+                out.append(str(item.get("number") or ""))
+    return out
+
+
+def _documento_ml(buyer: dict, order: dict, billing_info: dict | None = None) -> str:
+    candidatos: list[str] = []
+    if isinstance(billing_info, dict):
+        candidatos.extend(_docs_de_bloco(billing_info))
+        candidatos.extend(_docs_de_bloco(billing_info.get("billing_info")))
+        buyer_b = billing_info.get("buyer") or {}
+        if isinstance(buyer_b, dict):
+            candidatos.extend(_docs_de_bloco(buyer_b))
+            candidatos.extend(_docs_de_bloco(buyer_b.get("billing_info")))
+
+    candidatos.extend(_docs_de_bloco(buyer.get("billing_info")))
+    candidatos.extend(_docs_de_bloco(buyer.get("identification")))
     taxes = order.get("taxes") or {}
     if isinstance(taxes, dict):
-        candidatos.append(taxes.get("id"))
+        candidatos.append(str(taxes.get("id") or ""))
 
+    melhor = ""
     for doc in candidatos:
-        d = _digitos(str(doc or ""))
-        if len(d) >= 11:
+        d = _digitos(doc)
+        if len(d) in (11, 14):
             return d
-    return ""
+        if len(d) > len(melhor):
+            melhor = d
+    # Aceita documento com 11+ dígitos mesmo fora do padrão estrito
+    return melhor if len(melhor) >= 11 else ""
 
 
 def _buscar_billing_info_ml(cur, id_tenant: int, id_ml_pedido: str) -> dict | None:
@@ -305,45 +321,99 @@ def parse_pedido_ml(
     }
 
 
-def _preencher_cliente_pedidos_ml(cur, ids_pedido: list[int], cliente: dict) -> None:
-    """Completa campos vazios do comprador (não sobrescreve o que já foi preenchido)."""
+def _ids_pedido_local_ml(cur, id_tenant: int, id_ml_pedido: str) -> list[int]:
+    """Resolve IDs locais por id_ml_pedido e, se preciso, pelo mapa de integração."""
+    from core.pedidos.servico import listar_pedidos_por_id_ml
+
+    ids = [int(x) for x in listar_pedidos_por_id_ml(cur, int(id_tenant), str(id_ml_pedido))]
+    if ids:
+        return ids
+    cur.execute(
+        """
+        SELECT DISTINCT id_dropnexo FROM tbl_integracao_map
+        WHERE id_tenant = %s AND provedor = 'mercado_livre'
+          AND contexto = 'vendedor' AND entidade = 'pedido'
+          AND (id_bling = %s OR id_bling LIKE %s)
+          AND COALESCE(id_dropnexo, 0) > 0
+        """,
+        (int(id_tenant), str(id_ml_pedido), f"{id_ml_pedido}:%"),
+    )
+    for row in cur.fetchall() or []:
+        try:
+            pid = int(row[0] or 0)
+        except (TypeError, ValueError):
+            continue
+        if pid > 0 and pid not in ids:
+            ids.append(pid)
+    return ids
+
+
+def _preencher_cliente_pedidos_ml(cur, ids_pedido: list[int], cliente: dict) -> dict[str, Any]:
+    """
+    Completa campos vazios do comprador.
+    Retorna {atualizado, pedidos, campos} para o resumo da sync.
+    """
+    vazio = {"atualizado": False, "pedidos": 0, "campos": []}
     if not ids_pedido or not isinstance(cliente, dict):
-        return
+        return vazio
     nome = (cliente.get("nome") or "").strip()
     email = (cliente.get("email") or "").strip()
     telefone = (cliente.get("telefone") or "").strip()
     documento = _digitos(cliente.get("documento"))
+    if not any((nome, email, telefone, documento)):
+        return vazio
+
+    campos_ok: set[str] = set()
+    pedidos_ok = 0
     for pid in ids_pedido:
         cur.execute(
             """
-            UPDATE tbl_pedido SET
-              cliente_nome = CASE
-                WHEN COALESCE(NULLIF(TRIM(cliente_nome), ''), '') IN ('', 'Cliente Mercado Livre')
-                     AND %s <> '' THEN %s
-                ELSE cliente_nome END,
-              cliente_email = CASE
-                WHEN COALESCE(NULLIF(TRIM(cliente_email), ''), '') = '' AND %s <> '' THEN %s
-                ELSE cliente_email END,
-              cliente_telefone = CASE
-                WHEN COALESCE(NULLIF(TRIM(cliente_telefone), ''), '') = '' AND %s <> '' THEN %s
-                ELSE cliente_telefone END,
-              cliente_documento = CASE
-                WHEN COALESCE(NULLIF(TRIM(cliente_documento), ''), '') = '' AND %s <> '' THEN %s
-                ELSE cliente_documento END
-            WHERE id = %s
+            SELECT
+              COALESCE(NULLIF(TRIM(cliente_nome), ''), ''),
+              COALESCE(NULLIF(TRIM(cliente_email), ''), ''),
+              COALESCE(NULLIF(TRIM(cliente_telefone), ''), ''),
+              COALESCE(NULLIF(TRIM(cliente_documento), ''), '')
+            FROM tbl_pedido WHERE id = %s
             """,
-            (
-                nome,
-                nome,
-                email,
-                email,
-                telefone,
-                telefone,
-                documento,
-                documento,
-                int(pid),
-            ),
+            (int(pid),),
         )
+        row = cur.fetchone()
+        if not row:
+            continue
+        nome_atual, email_atual, tel_atual, doc_atual = [str(x or "") for x in row]
+        sets: list[str] = []
+        params: list[Any] = []
+        if nome and (not nome_atual or nome_atual == "Cliente Mercado Livre"):
+            sets.append("cliente_nome = %s")
+            params.append(nome)
+            campos_ok.add("nome")
+        if email and not email_atual:
+            sets.append("cliente_email = %s")
+            params.append(email)
+            campos_ok.add("e-mail")
+        if telefone and not tel_atual:
+            sets.append("cliente_telefone = %s")
+            params.append(telefone)
+            campos_ok.add("telefone")
+        if documento and not _digitos(doc_atual):
+            sets.append("cliente_documento = %s")
+            params.append(documento)
+            campos_ok.add("CPF/CNPJ")
+        if not sets:
+            continue
+        # Se veio do mapa sem id_ml_pedido na linha, aproveita para gravar o vínculo.
+        params.append(int(pid))
+        cur.execute(
+            f"UPDATE tbl_pedido SET {', '.join(sets)} WHERE id = %s",
+            tuple(params),
+        )
+        pedidos_ok += 1
+
+    return {
+        "atualizado": pedidos_ok > 0,
+        "pedidos": pedidos_ok,
+        "campos": sorted(campos_ok),
+    }
 
 
 def _buscar_shipment_ml(cur, id_tenant: int, order: dict) -> dict | None:
@@ -463,10 +533,26 @@ def _importar_um_pedido_ml(cur, id_tenant: int, id_ml_pedido: str) -> dict[str, 
     dados_cliente = parse_pedido_ml(pedido, shipment, billing_info=billing)
 
     if _pedido_ml_ja_processado(cur, id_tenant, id_ml):
-        from core.pedidos.servico import listar_pedidos_por_id_ml, salvar_id_ml_shipment
+        from core.pedidos.servico import salvar_id_ml_shipment
 
-        ids_locais = listar_pedidos_por_id_ml(cur, int(id_tenant), id_ml)
-        _preencher_cliente_pedidos_ml(cur, ids_locais, dados_cliente.get("cliente") or {})
+        ids_locais = _ids_pedido_local_ml(cur, int(id_tenant), id_ml)
+        # Garante id_ml_pedido nas linhas encontradas só pelo mapa
+        if ids_locais:
+            from core.pedidos.servico import _garantir_coluna_id_ml_pedido, _pedido_colunas
+
+            if _garantir_coluna_id_ml_pedido(cur) and "id_ml_pedido" in _pedido_colunas(cur):
+                for pid in ids_locais:
+                    cur.execute(
+                        """
+                        UPDATE tbl_pedido
+                        SET id_ml_pedido = COALESCE(NULLIF(TRIM(id_ml_pedido), ''), %s)
+                        WHERE id = %s AND id_tenant_vendedor = %s
+                        """,
+                        (str(id_ml), int(pid), int(id_tenant)),
+                    )
+        fill = _preencher_cliente_pedidos_ml(
+            cur, ids_locais, dados_cliente.get("cliente") or {}
+        )
         ship_id = (shipment or {}).get("id") if isinstance(shipment, dict) else None
         if not ship_id and isinstance(pedido.get("shipping"), dict):
             ship_id = (pedido.get("shipping") or {}).get("id")
@@ -475,10 +561,13 @@ def _importar_um_pedido_ml(cur, id_tenant: int, id_ml_pedido: str) -> dict[str, 
                 salvar_id_ml_shipment(cur, int(pid), ship_id)
         return {
             "importado": False,
-            "motivo": "ja_importado",
+            "atualizado": bool(fill.get("atualizado")),
+            "motivo": "dados_atualizados" if fill.get("atualizado") else "ja_importado",
             "id_ml_pedido": id_ml,
             "id_ml_shipment": ship_id,
             "ids_pedido": ids_locais,
+            "campos_atualizados": fill.get("campos") or [],
+            "cliente_ml": dados_cliente.get("cliente") or {},
         }
 
     if status not in ("paid", "confirmed"):
@@ -595,9 +684,11 @@ def importar_pedidos_mercado_livre(cur, id_tenant: int, *, dias: int = 7) -> dic
                     ids.append(sid)
 
     importados = 0
+    atualizados = 0
     cancelados = 0
     ignorados = 0
     erros: list[str] = []
+    infos: list[str] = []
     ids_pedidos: list[int] = []
 
     for idx, id_ml in enumerate(ids):
@@ -631,6 +722,24 @@ def importar_pedidos_mercado_livre(cur, id_tenant: int, *, dias: int = 7) -> dic
             elif res.get("cancelado"):
                 cancelados += 1
                 ids_pedidos.extend(int(x) for x in (res.get("ids_pedido") or []))
+            elif res.get("atualizado") or res.get("motivo") == "dados_atualizados":
+                atualizados += 1
+                ids_pedidos.extend(int(x) for x in (res.get("ids_pedido") or []))
+                campos = res.get("campos_atualizados") or []
+                infos.append(
+                    f"#{id_ml}: pedido já existia — atualizei {', '.join(campos) or 'dados do comprador'}."
+                )
+                try:
+                    cur.execute(f"SAVEPOINT {sp}_docs")
+                    _tentar_puxar_documentos_auto_ml(
+                        cur, int(id_tenant), id_ml_pedido=str(id_ml)
+                    )
+                    cur.execute(f"RELEASE SAVEPOINT {sp}_docs")
+                except Exception:
+                    try:
+                        cur.execute(f"ROLLBACK TO SAVEPOINT {sp}_docs")
+                    except Exception:
+                        pass
             else:
                 ignorados += 1
                 motivo = res.get("motivo") or "ignorado"
@@ -653,7 +762,10 @@ def importar_pedidos_mercado_livre(cur, id_tenant: int, *, dias: int = 7) -> dic
                         f"#{id_ml}: {_mensagem_erro_amigavel_ml(res['mensagem'])}"
                     )
                 elif motivo == "ja_importado":
-                    # Re-tenta documentos em pedidos já existentes.
+                    infos.append(
+                        f"#{id_ml}: pedido já estava no DropNexo "
+                        "(CPF/e-mail/telefone já preenchidos ou o ML não enviou esses dados)."
+                    )
                     try:
                         cur.execute(f"SAVEPOINT {sp}_docs")
                         _tentar_puxar_documentos_auto_ml(
@@ -685,25 +797,29 @@ def importar_pedidos_mercado_livre(cur, id_tenant: int, *, dias: int = 7) -> dic
 
     msg = (
         f"{importados} pedido(s) criado(s). "
+        f"{atualizados} atualizado(s). "
         f"{cancelados} cancelamento(s). "
-        f"{ignorados} ignorado(s)."
+        f"{ignorados} já existente(s)/ignorado(s)."
     )
-    if erros:
-        msg += f" {len(erros)} com detalhe."
-        if importados == 0:
-            msg += f" Motivo: {erros[0]}"
+    detalhes = (infos + erros)[:8]
+    if erros and importados == 0 and atualizados == 0:
+        msg += f" Motivo: {erros[0]}"
+    elif infos and importados == 0:
+        msg += f" {infos[0]}"
 
     return {
         "message": msg,
         "total_encontrados": len(ids),
         "importados": importados,
+        "atualizados": atualizados,
         "cancelados": cancelados,
         "ignorados": ignorados,
         "ids_pedido": ids_pedidos[:20],
-        "detalhes_erros": erros[:8],
+        "detalhes_erros": detalhes,
         "resumo": {
             "encontrados": len(ids),
             "importados": importados,
+            "atualizados": atualizados,
             "cancelados": cancelados,
             "ignorados": ignorados,
             "erros": len(erros),
