@@ -690,18 +690,16 @@ def pedidos_frete_integracao_puxar(id_pedido: int):
         anexos = listar_anexos_pedido(cur, id_pedido, id_vendedor=id_v)
         docs = pedido_docs_frete_ok(cur, id_pedido)
         conn.commit()
-        # DEV: devolve motivo técnico da NF para depurar no Network
+        # DEV: trilha completa das tentativas na API ML (Console / Network)
         if session.get("eh_desenvolvedor") and isinstance(res, dict):
-            res.setdefault(
-                "fiscal_debug",
-                {
-                    "fiscal_status": res.get("fiscal_status"),
-                    "fiscal_motivo": res.get("fiscal_motivo"),
-                    "formato": (res.get("fiscal") or {}).get("formato")
-                    if isinstance(res.get("fiscal"), dict)
-                    else None,
-                },
-            )
+            res["fiscal_debug"] = {
+                "fiscal_status": res.get("fiscal_status"),
+                "fiscal_motivo": res.get("fiscal_motivo"),
+                "formato": (res.get("fiscal") or {}).get("formato")
+                if isinstance(res.get("fiscal"), dict)
+                else None,
+                "probe": res.get("fiscal_probe") or [],
+            }
         return jsonify(success=True, anexos=anexos, frete_docs=docs, **res)
     except ValueError as e:
         conn.rollback()

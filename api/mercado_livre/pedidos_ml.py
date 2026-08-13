@@ -1692,9 +1692,22 @@ def _invoice_bate_pedido(inv: dict[str, Any], order_id: str, pack_id: str | None
     return False
 
 
+class MlFiscalError(ValueError):
+    """Falha ao obter NF do ML, com trilha de tentativas para diagnóstico."""
+
+    def __init__(self, message: str, *, probe: list[str] | None = None):
+        super().__init__(message)
+        self.probe = list(probe or [])
+
+
 def _baixar_doc_faturador_ml(
-    cur, id_vendedor: int, order_id: str, pack_id: str | None
-) -> tuple[bytes | None, dict[str, Any] | None, Exception | None]:
+    cur,
+    id_vendedor: int,
+    order_id: str,
+    pack_id: str | None,
+    *,
+    ship_id: str | None = None,
+) -> tuple[bytes | None, dict[str, Any] | None, Exception | None, list[str]]:
     """
     NF emitida pelo Faturador MLB.
     Paths reais (MLB):
@@ -1708,6 +1721,7 @@ def _baixar_doc_faturador_ml(
         carregar_config_ml,
     )
 
+    tentativas: list[str] = []
     cfg = carregar_config_ml(cur, int(id_vendedor))
     user_id = cfg.get("ml_user_id")
     if not user_id:
@@ -1715,13 +1729,13 @@ def _baixar_doc_faturador_ml(
             me = api_request(cur, int(id_vendedor), "GET", "/users/me")
             user_id = me.get("id") if isinstance(me, dict) else None
         except RuntimeError as e:
-            return None, None, e
+            return None, None, e, [f"ERR users/me: {e}"]
     if not user_id:
-        return None, None, ValueError("Conta ML sem user_id.")
+        return None, None, ValueError("Conta ML sem user_id."), ["sem ml_user_id"]
 
     last_err: Exception | None = None
     invoice: dict[str, Any] | None = None
-    tentativas: list[str] = []
+    tentativas.append(f"user_id={user_id} order={order_id} pack={pack_id} ship={ship_id}")
 
     candidatos_json = [
         f"/users/{user_id}/invoices/sites/MLB/orders/{order_id}",
@@ -1733,7 +1747,13 @@ def _baixar_doc_faturador_ml(
             [
                 f"/users/{user_id}/invoices/sites/MLB/packs/{pack_id}",
                 f"/users/{user_id}/invoices/packs/{pack_id}",
-                f"/users/{user_id}/invoices/sites/MLB/shipments/{pack_id}",
+            ]
+        )
+    if ship_id:
+        candidatos_json.extend(
+            [
+                f"/users/{user_id}/invoices/sites/MLB/shipments/{ship_id}",
+                f"/users/{user_id}/invoices/shipments/{ship_id}",
             ]
         )
 
@@ -1776,10 +1796,13 @@ def _baixar_doc_faturador_ml(
                 break
 
     if not invoice:
-        detalhe = "; ".join(tentativas[-6:]) if tentativas else "sem tentativas"
+        detalhe = "; ".join(tentativas[-8:]) if tentativas else "sem tentativas"
         _log.warning("Faturador ML sem invoice pedido_ml=%s | %s", order_id, detalhe)
-        return None, None, last_err or ValueError(
-            "Nota do Faturador ML não encontrada para o pedido."
+        return (
+            None,
+            None,
+            last_err or ValueError("Nota do Faturador ML não encontrada para o pedido."),
+            tentativas,
         )
 
     attrs = invoice.get("attributes") if isinstance(invoice.get("attributes"), dict) else {}
@@ -1828,17 +1851,20 @@ def _baixar_doc_faturador_ml(
             continue
         tentativas.append(f"OK DOC {loc} ({len(raw)}b)")
         if _eh_pdf_bytes(raw):
-            return raw, meta, None
+            return raw, meta, None, tentativas
         if _eh_xml_bytes(raw) and xml_fallback is None:
             xml_fallback = raw
     if xml_fallback:
-        return xml_fallback, meta, None
+        return xml_fallback, meta, None, tentativas
 
     # Sem arquivo nativo, mas com chave/número → comprovante PDF gerado depois
     if meta.get("key") or meta.get("number") not in (None, ""):
-        return None, meta, last_err
+        tentativas.append(
+            f"meta ok key={meta.get('key') or '-'} num={meta.get('number') or '-'}"
+        )
+        return None, meta, last_err, tentativas
 
-    return None, None, last_err or ValueError("Faturador ML sem DANFE/XML.")
+    return None, None, last_err or ValueError("Faturador ML sem DANFE/XML."), tentativas
 
 
 def baixar_nf_ml(
@@ -1892,7 +1918,11 @@ def baixar_nf_ml(
     last_err = None
     invoices: list[dict[str, Any]] = []
     gerado_local = False
+    probe: list[str] = [
+        f"pedido_dn={id_pedido} order_ml={order_id} ship={ship_id}"
+    ]
     pack_id = _resolver_pack_id_ml(cur, int(id_vendedor), ped, str(order_id) if order_id else None)
+    probe.append(f"pack_id={pack_id}")
 
     def _guardar(raw: bytes | None, base: str | None = None) -> None:
         nonlocal content, xml_candidato, nome_base
@@ -1902,20 +1932,28 @@ def baixar_nf_ml(
             nome_base = base
         if _eh_pdf_bytes(raw):
             content = raw
+            probe.append(f"guardou PDF ({len(raw)}b) base={base or nome_base}")
             return
         if _eh_xml_bytes(raw) and xml_candidato is None:
             xml_candidato = raw
+            probe.append(f"guardou XML candidato ({len(raw)}b) base={base or nome_base}")
 
     # 1) Faturador MLB — onde a NF emitida no painel realmente fica
     faturador_meta: dict[str, Any] | None = None
     if not content and order_id:
-        raw, meta, err = _baixar_doc_faturador_ml(
-            cur, int(id_vendedor), str(order_id), pack_id
+        raw, meta, err, tent = _baixar_doc_faturador_ml(
+            cur,
+            int(id_vendedor),
+            str(order_id),
+            pack_id,
+            ship_id=str(ship_id) if ship_id else None,
         )
+        probe.extend(tent or [])
         if raw:
             _guardar(raw, f"nf_ml_{order_id}")
         elif meta:
             faturador_meta = meta
+            probe.append("faturador: só metadados (sem arquivo)")
         if err:
             last_err = err
             _log.info("ML faturador pedido %s: %s", id_pedido, err)
@@ -1927,6 +1965,7 @@ def baixar_nf_ml(
             _guardar(raw, f"nf_ml_{pack_id}")
         elif err:
             last_err = err
+            probe.append(f"packs/fiscal_documents: {err}")
             _log.info("ML packs fiscal_documents pedido %s: %s", id_pedido, err)
 
     # 3) fiscal-info — XML oficial da NF-e/DC-e (API de transportadoras)
@@ -1934,6 +1973,7 @@ def baixar_nf_ml(
         try:
             info = api_request(cur, int(id_vendedor), "GET", f"/shipments/{ship_id}/fiscal-info")
             invoices = _extrair_invoices_fiscal_info(info)
+            probe.append(f"fiscal-info: {len(invoices)} invoice(s)")
             if not content:
                 for inv in invoices:
                     tipo_anexo = inv["tipo_anexo"]
@@ -1943,7 +1983,6 @@ def baixar_nf_ml(
                         else f"nf_ml_{ship_id}"
                     )
                     href = inv.get("href") or ""
-                    # XML primeiro (o que o ML realmente libera), depois tenta PDF
                     for try_href in (
                         href,
                         _href_com_doctype(href, "xml") if href else "",
@@ -1955,6 +1994,7 @@ def baixar_nf_ml(
                             raw = api_request_bytes(cur, int(id_vendedor), "GET", try_href)
                         except RuntimeError as e:
                             last_err = e
+                            probe.append(f"ERR fiscal href: {e}")
                             continue
                         _guardar(raw, base)
                         if content:
@@ -1963,6 +2003,7 @@ def baixar_nf_ml(
                         break
         except RuntimeError as e:
             last_err = e
+            probe.append(f"ERR fiscal-info: {e}")
             _log.info("ML fiscal-info pedido %s: %s", id_pedido, e)
 
     # 4) endpoints legados de invoice
@@ -1992,10 +2033,12 @@ def baixar_nf_ml(
                     break
             except RuntimeError as e:
                 last_err = e
+                probe.append(f"ERR {path}: {e}")
 
     # 5) Aceita XML se não houver PDF nativo
     if not content and xml_candidato:
         content = xml_candidato
+        probe.append("usando XML candidato")
 
     # 6) Último recurso: PDF de expedição com chave oficial
     if not content:
@@ -2019,26 +2062,28 @@ def baixar_nf_ml(
                     order_id=str(order_id) if order_id else None,
                 )
                 gerado_local = True
+                probe.append("PDF comprovante gerado localmente")
             except Exception as e:
                 _log.warning("Falha ao gerar PDF fiscal ML pedido %s: %s", id_pedido, e)
                 last_err = e
+                probe.append(f"ERR gerar PDF: {e}")
 
     is_pdf = _eh_pdf_bytes(content)
     is_xml = _eh_xml_bytes(content)
     if not is_pdf and not is_xml:
         detalhe = str(last_err or "")
         if "fiscal info not found" in detalhe.lower() or "not found" in detalhe.lower():
-            raise ValueError(
+            msg = (
                 "A nota ainda não aparece na API do Mercado Livre para este envio. "
                 "Se você emitiu no painel, aguarde alguns minutos ou anexe PDF/XML na aba Manual."
             )
-        if "forbidden" in detalhe.lower() or "403" in detalhe:
-            raise ValueError(
+        elif "forbidden" in detalhe.lower() or "403" in detalhe:
+            msg = (
                 "O Mercado Livre não liberou a nota pela API desta conta. "
                 "Anexe PDF ou XML na aba Manual, ou tente de novo mais tarde."
             )
-        raise ValueError(
-            _mensagem_doc_ml_amigavel(
+        else:
+            msg = _mensagem_doc_ml_amigavel(
                 last_err
                 or (
                     "Nota fiscal ainda não liberada na API do Mercado Livre "
@@ -2046,7 +2091,7 @@ def baixar_nf_ml(
                 ),
                 tipo="fiscal",
             )
-        )
+        raise MlFiscalError(msg, probe=probe)
 
     pasta = Path(pasta_destino)
     pasta.mkdir(parents=True, exist_ok=True)
@@ -2173,6 +2218,12 @@ def puxar_documentos_integracao_ml(
             cur, id_vendedor, id_pedido, pasta_destino, id_usuario=id_usuario
         )
         out["fiscal_status"] = "ok"
+    except MlFiscalError as e:
+        msg = str(e) or _mensagem_doc_ml_amigavel(e, tipo="fiscal")
+        out["avisos"].append(msg)
+        out["fiscal_status"] = "pendente"
+        out["fiscal_motivo"] = msg
+        out["fiscal_probe"] = e.probe
     except (ValueError, RuntimeError) as e:
         msg = _mensagem_doc_ml_amigavel(e, tipo="fiscal")
         out["avisos"].append(msg)
