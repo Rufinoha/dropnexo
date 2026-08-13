@@ -1577,6 +1577,238 @@ def _pdf_comprovante_fiscal_ml(
     return buf.getvalue()
 
 
+def _resolver_pack_id_ml(cur, id_vendedor: int, ped: dict, order_id: str | None) -> str | None:
+    """pack_id do pedido ML; se nulo na order, a doc do ML manda usar o próprio order_id."""
+    pack = ped.get("id_ml_pack") or ped.get("pack_id")
+    if pack:
+        return str(pack)
+    if not order_id:
+        return None
+    from api.mercado_livre.mercado_livre import api_request
+
+    try:
+        order = api_request(cur, int(id_vendedor), "GET", f"/orders/{order_id}")
+    except RuntimeError:
+        return str(order_id)
+    if not isinstance(order, dict):
+        return str(order_id)
+    pack = order.get("pack_id")
+    return str(pack) if pack else str(order_id)
+
+
+def _baixar_pdf_packs_fiscal_documents(
+    cur, id_vendedor: int, pack_id: str
+) -> tuple[bytes | None, Exception | None]:
+    """Lista e baixa PDF anexado em /packs/{id}/fiscal_documents (API de vendedor)."""
+    from api.mercado_livre.mercado_livre import api_request, api_request_bytes
+
+    last_err: Exception | None = None
+    try:
+        listing = api_request(
+            cur, int(id_vendedor), "GET", f"/packs/{pack_id}/fiscal_documents"
+        )
+    except RuntimeError as e:
+        return None, e
+
+    docs: list[Any] = []
+    if isinstance(listing, dict):
+        docs = (
+            listing.get("fiscal_documents")
+            or listing.get("documents")
+            or listing.get("results")
+            or []
+        )
+        if not docs and listing.get("id"):
+            docs = [listing]
+    elif isinstance(listing, list):
+        docs = listing
+
+    if not docs:
+        return None, ValueError("Nenhum documento fiscal anexado no pack do ML.")
+
+    for doc in docs:
+        if not isinstance(doc, dict):
+            continue
+        file_id = (
+            doc.get("id")
+            or doc.get("filename")
+            or doc.get("file_id")
+            or doc.get("fiscal_document_id")
+        )
+        tipo = str(doc.get("type") or doc.get("file_type") or doc.get("mime_type") or "").lower()
+        nome = str(doc.get("filename") or doc.get("name") or file_id or "").lower()
+        # Prefere PDF; se só houver um item, tenta mesmo assim
+        if tipo and "xml" in tipo and "pdf" not in tipo:
+            continue
+        if nome.endswith(".xml") and not nome.endswith(".pdf"):
+            continue
+        if not file_id:
+            continue
+        try:
+            raw = api_request_bytes(
+                cur,
+                int(id_vendedor),
+                "GET",
+                f"/packs/{pack_id}/fiscal_documents/{file_id}",
+            )
+        except RuntimeError as e:
+            last_err = e
+            continue
+        if _eh_pdf_bytes(raw):
+            return raw, None
+        if _eh_xml_bytes(raw):
+            last_err = ValueError("ML liberou XML no pack (sem PDF).")
+    return None, last_err or ValueError("Documentos do pack sem PDF utilizável.")
+
+
+def _baixar_pdf_faturador_ml(
+    cur, id_vendedor: int, order_id: str, pack_id: str | None
+) -> tuple[bytes | None, dict[str, Any] | None, Exception | None]:
+    """
+    Tenta a NF emitida pelo Faturador do ML (users/.../invoices).
+    Retorna (pdf, meta_para_comprovante, erro).
+    """
+    from api.mercado_livre.mercado_livre import (
+        api_request,
+        api_request_bytes,
+        carregar_config_ml,
+    )
+
+    cfg = carregar_config_ml(cur, int(id_vendedor))
+    user_id = cfg.get("ml_user_id")
+    if not user_id:
+        try:
+            me = api_request(cur, int(id_vendedor), "GET", "/users/me")
+            user_id = me.get("id") if isinstance(me, dict) else None
+        except RuntimeError as e:
+            return None, None, e
+    if not user_id:
+        return None, None, ValueError("Conta ML sem user_id.")
+
+    last_err: Exception | None = None
+    invoice: dict[str, Any] | None = None
+
+    candidatos_json = [
+        f"/users/{user_id}/invoices/orders/{order_id}",
+        f"/users/{user_id}/invoices/order/{order_id}",
+    ]
+    if pack_id:
+        candidatos_json.append(f"/users/{user_id}/invoices/packs/{pack_id}")
+        candidatos_json.append(f"/users/{user_id}/invoices/pack/{pack_id}")
+
+    for path in candidatos_json:
+        try:
+            data = api_request(cur, int(id_vendedor), "GET", path)
+        except RuntimeError as e:
+            last_err = e
+            continue
+        if isinstance(data, dict) and (data.get("id") or data.get("attributes")):
+            invoice = data
+            break
+        if isinstance(data, dict):
+            results = data.get("results") or data.get("invoices") or []
+            if isinstance(results, list) and results and isinstance(results[0], dict):
+                invoice = results[0]
+                break
+        if isinstance(data, list) and data and isinstance(data[0], dict):
+            invoice = data[0]
+            break
+
+    if not invoice:
+        # Busca recente e cruza por order/pack
+        for path, params in (
+            (f"/users/{user_id}/invoices/search", {"limit": 20, "offset": 0}),
+            (f"/users/{user_id}/invoices", {"limit": 20, "offset": 0}),
+        ):
+            try:
+                data = api_request(cur, int(id_vendedor), "GET", path, params=params)
+            except RuntimeError as e:
+                last_err = e
+                continue
+            results = []
+            if isinstance(data, dict):
+                results = data.get("results") or data.get("invoices") or []
+            elif isinstance(data, list):
+                results = data
+            oid = str(order_id)
+            pid = str(pack_id or "")
+            for item in results:
+                if not isinstance(item, dict):
+                    continue
+                items = item.get("items") or []
+                ext_orders = {
+                    str(it.get("external_order_id") or "")
+                    for it in items
+                    if isinstance(it, dict)
+                }
+                pack_item = str(item.get("pack_id") or "")
+                if oid in ext_orders or (pid and pack_item == pid):
+                    invoice = item
+                    break
+                # alguns retornos trazem orders: [id, ...]
+                orders = item.get("orders") or []
+                if oid in {str(x) for x in orders}:
+                    invoice = item
+                    break
+            if invoice:
+                break
+
+    if not invoice:
+        return None, None, last_err or ValueError("Nota do Faturador ML não encontrada para o pedido.")
+
+    attrs = invoice.get("attributes") if isinstance(invoice.get("attributes"), dict) else {}
+    inv_id = invoice.get("id")
+    meta = {
+        "key": str(attrs.get("invoice_key") or invoice.get("invoice_key") or "").strip(),
+        "number": invoice.get("invoice_number") or attrs.get("invoice_number"),
+        "serie": invoice.get("invoice_series") or attrs.get("invoice_series"),
+        "amount": invoice.get("amount"),
+        "date": invoice.get("issued_date") or attrs.get("authorization_date"),
+        "tipo_anexo": "nf",
+        "sender_cnpj": "",
+        "sender_ie": "",
+    }
+    issuer = invoice.get("issuer") if isinstance(invoice.get("issuer"), dict) else {}
+    idents = issuer.get("identifications") if isinstance(issuer.get("identifications"), dict) else {}
+    meta["sender_cnpj"] = str(idents.get("cnpj") or "").strip()
+    meta["sender_ie"] = str(idents.get("ie") or "").strip()
+
+    # Caminhos possíveis do DANFE PDF
+    locations = []
+    for key in ("danfe_location", "document", "danfe"):
+        val = attrs.get(key)
+        if isinstance(val, str) and val.startswith("/"):
+            locations.append(val)
+    if inv_id:
+        locations.extend(
+            [
+                f"/users/{user_id}/invoices/{inv_id}/documents/danfe",
+                f"/users/{user_id}/invoices/{inv_id}/danfe",
+                f"/users/{user_id}/invoices/{inv_id}/documents?type=danfe",
+            ]
+        )
+        for loc in list(locations):
+            if loc.startswith("/danfe") or loc.startswith("/xml"):
+                locations.append(f"/users/{user_id}/invoices/{inv_id}{loc}")
+
+    for loc in locations:
+        if not loc or loc.startswith("/xml"):
+            continue
+        try:
+            raw = api_request_bytes(cur, int(id_vendedor), "GET", loc)
+        except RuntimeError as e:
+            last_err = e
+            continue
+        if _eh_pdf_bytes(raw):
+            return raw, meta, None
+
+    # Sem PDF nativo, mas com chave/número → comprovante
+    if meta.get("key") or meta.get("number") not in (None, ""):
+        return None, meta, last_err
+
+    return None, None, last_err or ValueError("Faturador ML sem DANFE PDF.")
+
+
 def baixar_nf_ml(
     cur,
     id_vendedor: int,
@@ -1627,43 +1859,70 @@ def baixar_nf_ml(
     last_err = None
     invoices: list[dict[str, Any]] = []
     gerado_local = False
+    pack_id = _resolver_pack_id_ml(cur, int(id_vendedor), ped, str(order_id) if order_id else None)
 
-    # 1) fiscal-info — fonte oficial; ML costuma devolver só XML no href
+    # 1) Pack fiscal_documents — caminho correto do vendedor (JSON + download por id)
+    if pack_id and not content:
+        raw, err = _baixar_pdf_packs_fiscal_documents(cur, int(id_vendedor), pack_id)
+        if raw:
+            content = raw
+            nome_base = f"nf_ml_{pack_id}"
+        elif err:
+            last_err = err
+            _log.info("ML packs fiscal_documents pedido %s: %s", id_pedido, err)
+
+    # 2) Faturador ML (users/.../invoices) — DANFE ou metadados
+    faturador_meta: dict[str, Any] | None = None
+    if not content and order_id:
+        raw, meta, err = _baixar_pdf_faturador_ml(
+            cur, int(id_vendedor), str(order_id), pack_id
+        )
+        if raw:
+            content = raw
+            nome_base = f"nf_ml_{order_id}"
+        elif meta:
+            faturador_meta = meta
+        if err:
+            last_err = err
+            _log.info("ML faturador pedido %s: %s", id_pedido, err)
+
+    # 3) fiscal-info — API de transportadoras; às vezes o seller também lê
     if ship_id:
         try:
             info = api_request(cur, int(id_vendedor), "GET", f"/shipments/{ship_id}/fiscal-info")
             invoices = _extrair_invoices_fiscal_info(info)
-            for inv in invoices:
-                tipo_anexo = inv["tipo_anexo"]
-                nome_base = (
-                    f"declaracao_ml_{ship_id}"
-                    if tipo_anexo == "declaracao"
-                    else f"nf_ml_{ship_id}"
-                )
-                href = inv.get("href") or ""
-                # Tenta PDF nativo (quando o gateway aceita doctype=pdf)
-                for try_href in (
-                    _href_com_doctype(href, "pdf") if href else "",
-                    href,
-                ):
-                    if not try_href:
-                        continue
-                    try:
-                        raw = api_request_bytes(cur, int(id_vendedor), "GET", try_href)
-                    except RuntimeError as e:
-                        last_err = e
-                        continue
-                    if _eh_pdf_bytes(raw):
-                        content = raw
+            if not content:
+                for inv in invoices:
+                    tipo_anexo = inv["tipo_anexo"]
+                    nome_base = (
+                        f"declaracao_ml_{ship_id}"
+                        if tipo_anexo == "declaracao"
+                        else f"nf_ml_{ship_id}"
+                    )
+                    href = inv.get("href") or ""
+                    for try_href in (
+                        _href_com_doctype(href, "pdf") if href else "",
+                        href,
+                    ):
+                        if not try_href:
+                            continue
+                        try:
+                            raw = api_request_bytes(cur, int(id_vendedor), "GET", try_href)
+                        except RuntimeError as e:
+                            last_err = e
+                            continue
+                        if _eh_pdf_bytes(raw):
+                            content = raw
+                            break
+                        if _eh_xml_bytes(raw):
+                            last_err = ValueError("ML liberou XML fiscal (sem DANFE PDF nativo).")
+                    if content:
                         break
-                    if _eh_xml_bytes(raw):
-                        last_err = ValueError("ML liberou XML fiscal (sem DANFE PDF nativo).")
-                if content:
-                    break
         except RuntimeError as e:
             last_err = e
+            _log.info("ML fiscal-info pedido %s: %s", id_pedido, e)
 
-    # 2) endpoints alternativos de invoice (PDF quando existir)
+    # 4) endpoints legados de invoice (PDF quando existir)
     if not content:
         candidatos: list[tuple[str, dict | None]] = []
         if ship_id:
@@ -1677,9 +1936,6 @@ def baixar_nf_ml(
         if order_id:
             candidatos.append((f"/orders/{order_id}/invoice", {"doctype": "pdf"}))
             candidatos.append((f"/orders/{order_id}/invoice", None))
-            pack = ped.get("id_ml_pack") or ped.get("pack_id")
-            if pack:
-                candidatos.append((f"/packs/{pack}/fiscal_documents", None))
 
         for path, params in candidatos:
             try:
@@ -1694,11 +1950,15 @@ def baixar_nf_ml(
             except RuntimeError as e:
                 last_err = e
 
-    # 3) NF já emitida no fiscal-info → gera PDF de expedição com chave oficial
-    if not content and invoices:
-        meta = invoices[0]
-        if meta.get("key") or meta.get("number") not in (None, ""):
-            tipo_anexo = meta["tipo_anexo"]
+    # 5) Gera PDF de expedição com chave oficial (fiscal-info ou faturador)
+    if not content:
+        meta = None
+        if invoices:
+            meta = invoices[0]
+        elif faturador_meta:
+            meta = faturador_meta
+        if meta and (meta.get("key") or meta.get("number") not in (None, "")):
+            tipo_anexo = meta.get("tipo_anexo") or "nf"
             nome_base = (
                 f"declaracao_ml_{ship_id or order_id or id_pedido}"
                 if tipo_anexo == "declaracao"
@@ -1717,9 +1977,25 @@ def baixar_nf_ml(
                 last_err = e
 
     if not _eh_pdf_bytes(content):
+        # Mensagem mais precisa: emitida no painel ≠ liberada na API do vendedor
+        detalhe = str(last_err or "")
+        if "fiscal info not found" in detalhe.lower() or "not found" in detalhe.lower():
+            raise ValueError(
+                "A nota ainda não aparece na API do Mercado Livre para este envio. "
+                "Se você emitiu no painel, aguarde alguns minutos ou anexe o PDF na aba Manual."
+            )
+        if "forbidden" in detalhe.lower() or "403" in detalhe:
+            raise ValueError(
+                "O Mercado Livre não liberou a nota pela API desta conta. "
+                "Anexe o PDF da NF na aba Manual, ou tente de novo mais tarde."
+            )
         raise ValueError(
             _mensagem_doc_ml_amigavel(
-                last_err or "Nota fiscal ainda não liberada no Mercado Livre.",
+                last_err
+                or (
+                    "Nota fiscal ainda não liberada na API do Mercado Livre "
+                    "(emitida no painel pode demorar a aparecer)."
+                ),
                 tipo="fiscal",
             )
         )
@@ -1794,8 +2070,9 @@ def _mensagem_doc_ml_amigavel(err: str | Exception, *, tipo: str = "documento") 
         )
     if tipo == "fiscal" or "nota" in low or "invoice" in low or "fiscal" in low:
         return (
-            "Nota fiscal ainda não disponível no Mercado Livre. "
-            "Após emitir no ML, aguarde alguns minutos e tente de novo."
+            "A nota ainda não está liberada na API do Mercado Livre para integração. "
+            "Emitir no painel do ML não libera na hora — aguarde alguns minutos e tente de novo, "
+            "ou anexe o PDF na aba Manual."
         )
     if not s or len(s) > 180 or "bad request" in low:
         return (
