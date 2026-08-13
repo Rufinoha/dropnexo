@@ -1364,6 +1364,219 @@ def baixar_etiqueta_ml(
     }
 
 
+def _eh_pdf_bytes(raw: bytes | None) -> bool:
+    return bool(raw and len(raw) >= 80 and raw[:4] == b"%PDF")
+
+
+def _eh_xml_bytes(raw: bytes | None) -> bool:
+    if not raw or len(raw) < 20:
+        return False
+    head = raw[:80].lstrip()
+    return head.startswith(b"<?xml") or head.startswith(b"<")
+
+
+def _href_com_doctype(href: str, doctype: str) -> str:
+    """Troca/insere doctype=pdf|xml no href do fiscal-info do ML."""
+    from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
+
+    href = (href or "").strip()
+    if not href:
+        return ""
+    parsed = urlparse(href)
+    q = [(k, v) for k, v in parse_qsl(parsed.query, keep_blank_values=True) if k.lower() != "doctype"]
+    q.append(("doctype", doctype))
+    return urlunparse(parsed._replace(query=urlencode(q)))
+
+
+def _extrair_invoices_fiscal_info(info: Any) -> list[dict[str, Any]]:
+    """Normaliza fiscal-info do ML em lista de invoices com metadados."""
+    out: list[dict[str, Any]] = []
+    if not isinstance(info, dict):
+        return out
+    fiscal_list = info.get("fiscal_data") or []
+    if not isinstance(fiscal_list, list):
+        fiscal_list = [fiscal_list]
+    if isinstance(info.get("invoice"), dict):
+        fiscal_list = [info] + list(fiscal_list)
+
+    for bloco in fiscal_list:
+        if not isinstance(bloco, dict):
+            continue
+        inv = bloco.get("invoice") if isinstance(bloco.get("invoice"), dict) else bloco
+        if not isinstance(inv, dict):
+            continue
+        doc = inv.get("document") if isinstance(inv.get("document"), dict) else {}
+        sender = (
+            bloco.get("sender_identification")
+            if isinstance(bloco.get("sender_identification"), dict)
+            else {}
+        )
+        doc_type = str(doc.get("type") or inv.get("type") or "").lower()
+        chave = str(inv.get("key") or "").strip()
+        href = str(doc.get("href") or inv.get("href") or "").strip()
+        if not chave and not href:
+            continue
+        is_dce = "dce" in doc_type or (chave.startswith("35") and len(chave) >= 44)
+        out.append(
+            {
+                "key": chave,
+                "number": inv.get("number"),
+                "serie": inv.get("serie"),
+                "amount": inv.get("amount"),
+                "date": inv.get("date"),
+                "cfop": inv.get("cfop"),
+                "href": href,
+                "doc_type": doc_type,
+                "format": str(doc.get("format") or "").lower(),
+                "tipo_anexo": "declaracao" if is_dce else "nf",
+                "sender_cnpj": str(sender.get("number") or "").strip(),
+                "sender_ie": str(sender.get("state_tax_id") or "").strip(),
+            }
+        )
+    return out
+
+
+def _pdf_comprovante_fiscal_ml(
+    meta: dict[str, Any],
+    *,
+    id_pedido_dn: int | None = None,
+    ship_id: str | None = None,
+    order_id: str | None = None,
+) -> bytes:
+    """
+    Gera PDF de expedição a partir dos dados liberados no fiscal-info.
+
+    A API pública do ML entrega o XML da NF-e/DC-e; o DropNexo precisa de PDF
+    para o fornecedor. Este comprovante traz chave, número e valor oficiais.
+    """
+    from io import BytesIO
+
+    from fpdf import FPDF
+
+    def _txt(s: str) -> str:
+        # Helvetica core font: latin-1
+        return (
+            str(s or "")
+            .replace("—", "-")
+            .replace("–", "-")
+            .replace("·", "-")
+            .replace("…", "...")
+            .encode("latin-1", "replace")
+            .decode("latin-1")
+        )
+
+    is_dce = meta.get("tipo_anexo") == "declaracao"
+    titulo = "Declaracao de conteudo (DC-e)" if is_dce else "Nota fiscal eletronica (NF-e)"
+    chave = str(meta.get("key") or "").strip()
+    chave_fmt = " ".join(chave[i : i + 4] for i in range(0, len(chave), 4)) if chave else "-"
+
+    numero = meta.get("number")
+    serie = meta.get("serie")
+    amount = meta.get("amount")
+    data = str(meta.get("date") or "").strip()
+    if "T" in data:
+        data = data.replace("T", " ")[:19]
+
+    try:
+        valor_txt = f"R$ {float(amount):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    except (TypeError, ValueError):
+        valor_txt = "-" if amount in (None, "") else str(amount)
+
+    pdf = FPDF(orientation="P", unit="mm", format="A4")
+    pdf.set_auto_page_break(auto=True, margin=18)
+    pdf.add_page()
+    pdf.set_margins(16, 16, 16)
+    usable = pdf.w - pdf.l_margin - pdf.r_margin
+
+    pdf.set_fill_color(2, 31, 129)
+    pdf.rect(0, 0, 210, 28, "F")
+    pdf.set_text_color(255, 255, 255)
+    pdf.set_font("Helvetica", "B", 16)
+    pdf.set_xy(16, 8)
+    pdf.cell(usable, 8, _txt("DropNexo - Documento fiscal"), new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font("Helvetica", "", 10)
+    pdf.set_x(16)
+    pdf.cell(
+        usable,
+        6,
+        _txt("Comprovante para expedicao (dados oficiais do Mercado Livre)"),
+        new_x="LMARGIN",
+        new_y="NEXT",
+    )
+
+    pdf.set_text_color(15, 23, 42)
+    pdf.ln(10)
+    pdf.set_font("Helvetica", "B", 13)
+    pdf.cell(usable, 8, _txt(titulo), new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font("Helvetica", "", 9)
+    pdf.set_text_color(71, 85, 105)
+    pdf.multi_cell(
+        usable,
+        5,
+        _txt(
+            "O Mercado Livre libera o XML da nota na API. Geramos este PDF com os "
+            "dados fiscais oficiais para o fornecedor poder despachar no DropNexo."
+        ),
+    )
+    pdf.ln(4)
+
+    def _linha(rotulo: str, valor: str, *, largo: bool = False) -> None:
+        pdf.set_x(pdf.l_margin)
+        pdf.set_font("Helvetica", "", 9)
+        pdf.set_text_color(100, 116, 139)
+        if largo:
+            pdf.cell(usable, 6, _txt(rotulo), new_x="LMARGIN", new_y="NEXT")
+            pdf.set_font("Helvetica", "B", 10)
+            pdf.set_text_color(15, 23, 42)
+            pdf.multi_cell(usable, 6, _txt(valor or "-"))
+            return
+        pdf.cell(44, 7, _txt(rotulo))
+        pdf.set_font("Helvetica", "B", 10)
+        pdf.set_text_color(15, 23, 42)
+        pdf.cell(usable - 44, 7, _txt(valor or "-"), new_x="LMARGIN", new_y="NEXT")
+
+    _linha("Chave de acesso", chave_fmt, largo=True)
+    if numero not in (None, ""):
+        _linha("Numero", str(numero))
+    if serie not in (None, ""):
+        _linha("Serie", str(serie))
+    _linha("Valor", valor_txt)
+    if data:
+        _linha("Emissao", data)
+    if meta.get("cfop") not in (None, ""):
+        _linha("CFOP", str(meta.get("cfop")))
+    if meta.get("sender_cnpj"):
+        _linha("CNPJ emitente", str(meta.get("sender_cnpj")))
+    if meta.get("sender_ie"):
+        _linha("IE emitente", str(meta.get("sender_ie")))
+    if order_id:
+        _linha("Pedido ML", str(order_id))
+    if ship_id:
+        _linha("Envio ML", str(ship_id))
+    if id_pedido_dn:
+        _linha("Pedido DropNexo", str(id_pedido_dn))
+
+    pdf.ln(6)
+    pdf.set_draw_color(226, 232, 240)
+    y = pdf.get_y()
+    pdf.line(pdf.l_margin, y, pdf.w - pdf.r_margin, y)
+    pdf.ln(4)
+    pdf.set_font("Helvetica", "", 8)
+    pdf.set_text_color(100, 116, 139)
+    pdf.multi_cell(
+        usable,
+        4.5,
+        _txt(
+            "Documento gerado automaticamente pelo DropNexo. A chave de acesso e os "
+            "demais campos vem do fiscal-info do Mercado Envios. Conserve junto a etiqueta."
+        ),
+    )
+
+    buf = BytesIO()
+    pdf.output(buf)
+    return buf.getvalue()
+
+
 def baixar_nf_ml(
     cur,
     id_vendedor: int,
@@ -1372,9 +1585,8 @@ def baixar_nf_ml(
     *,
     id_usuario: int | None = None,
 ) -> dict[str, Any]:
-    """Tenta baixar NF/declaração emitida no Mercado Livre (best-effort)."""
+    """Baixa NF/declaração do ML (PDF nativo ou comprovante gerado do fiscal-info)."""
     from pathlib import Path
-    from urllib.parse import urlparse
 
     from api.mercado_livre.mercado_livre import api_request, api_request_bytes, ml_conectado
     from core.pedidos.servico import (
@@ -1413,51 +1625,57 @@ def baixar_nf_ml(
     tipo_anexo = "nf"
     nome_base = f"nf_ml_{ship_id or order_id or id_pedido}"
     last_err = None
+    invoices: list[dict[str, Any]] = []
+    gerado_local = False
 
-    # 1) fiscal-info do shipment (href XML/PDF quando disponível)
+    # 1) fiscal-info — fonte oficial; ML costuma devolver só XML no href
     if ship_id:
         try:
             info = api_request(cur, int(id_vendedor), "GET", f"/shipments/{ship_id}/fiscal-info")
-            fiscal_list = []
-            if isinstance(info, dict):
-                fiscal_list = info.get("fiscal_data") or []
-                if isinstance(info.get("invoice"), dict):
-                    fiscal_list = [info] + list(fiscal_list)
-            for bloco in fiscal_list:
-                if not isinstance(bloco, dict):
-                    continue
-                inv = bloco.get("invoice") if isinstance(bloco.get("invoice"), dict) else bloco
-                doc = inv.get("document") if isinstance(inv.get("document"), dict) else {}
-                href = (doc.get("href") or inv.get("href") or "").strip()
-                doc_type = str(doc.get("type") or inv.get("type") or "").lower()
-                if "dce" in doc_type:
-                    tipo_anexo = "declaracao"
-                    nome_base = f"declaracao_ml_{ship_id}"
-                if href:
-                    path = href if href.startswith("http") else href
-                    # api_request_bytes aceita path absoluto ou relativo
-                    parsed = urlparse(path)
-                    req_path = path if parsed.scheme else path
-                    raw = api_request_bytes(cur, int(id_vendedor), "GET", req_path)
-                    if raw and len(raw) >= 80 and raw[:4] == b"%PDF":
+            invoices = _extrair_invoices_fiscal_info(info)
+            for inv in invoices:
+                tipo_anexo = inv["tipo_anexo"]
+                nome_base = (
+                    f"declaracao_ml_{ship_id}"
+                    if tipo_anexo == "declaracao"
+                    else f"nf_ml_{ship_id}"
+                )
+                href = inv.get("href") or ""
+                # Tenta PDF nativo (quando o gateway aceita doctype=pdf)
+                for try_href in (
+                    _href_com_doctype(href, "pdf") if href else "",
+                    href,
+                ):
+                    if not try_href:
+                        continue
+                    try:
+                        raw = api_request_bytes(cur, int(id_vendedor), "GET", try_href)
+                    except RuntimeError as e:
+                        last_err = e
+                        continue
+                    if _eh_pdf_bytes(raw):
                         content = raw
                         break
-                    if raw and (raw[:5].lstrip().startswith(b"<?xml") or raw[:1] == b"<"):
-                        last_err = ValueError("ML retornou XML; aguardando DANFE PDF.")
+                    if _eh_xml_bytes(raw):
+                        last_err = ValueError("ML liberou XML fiscal (sem DANFE PDF nativo).")
+                if content:
+                    break
         except RuntimeError as e:
             last_err = e
 
-    # 2) endpoints comuns de invoice do pedido/shipment
+    # 2) endpoints alternativos de invoice (PDF quando existir)
     if not content:
-        candidatos = []
+        candidatos: list[tuple[str, dict | None]] = []
         if ship_id:
             candidatos.extend(
                 [
+                    (f"/shipments/{ship_id}/invoice", {"doctype": "pdf"}),
                     (f"/shipments/{ship_id}/invoice", None),
                     (f"/shipments/{ship_id}/documents/invoice", None),
                 ]
             )
         if order_id:
+            candidatos.append((f"/orders/{order_id}/invoice", {"doctype": "pdf"}))
             candidatos.append((f"/orders/{order_id}/invoice", None))
             pack = ped.get("id_ml_pack") or ped.get("pack_id")
             if pack:
@@ -1468,35 +1686,46 @@ def baixar_nf_ml(
                 raw = api_request_bytes(
                     cur, int(id_vendedor), "GET", path, params=params
                 )
-                if raw and len(raw) >= 80 and raw[:4] == b"%PDF":
+                if _eh_pdf_bytes(raw):
                     content = raw
                     break
-                if raw and (raw[:5].lstrip().startswith(b"<?xml") or raw[:1] == b"<"):
-                    last_err = ValueError("ML retornou XML; aguardando DANFE PDF.")
-                    content = None
+                if _eh_xml_bytes(raw):
+                    last_err = ValueError("ML liberou XML fiscal (sem DANFE PDF nativo).")
             except RuntimeError as e:
                 last_err = e
-                content = None
 
-    if not content or len(content) < 80:
+    # 3) NF já emitida no fiscal-info → gera PDF de expedição com chave oficial
+    if not content and invoices:
+        meta = invoices[0]
+        if meta.get("key") or meta.get("number") not in (None, ""):
+            tipo_anexo = meta["tipo_anexo"]
+            nome_base = (
+                f"declaracao_ml_{ship_id or order_id or id_pedido}"
+                if tipo_anexo == "declaracao"
+                else f"nf_ml_{ship_id or order_id or id_pedido}"
+            )
+            try:
+                content = _pdf_comprovante_fiscal_ml(
+                    meta,
+                    id_pedido_dn=int(id_pedido),
+                    ship_id=str(ship_id) if ship_id else None,
+                    order_id=str(order_id) if order_id else None,
+                )
+                gerado_local = True
+            except Exception as e:
+                _log.warning("Falha ao gerar PDF fiscal ML pedido %s: %s", id_pedido, e)
+                last_err = e
+
+    if not _eh_pdf_bytes(content):
         raise ValueError(
             _mensagem_doc_ml_amigavel(
-                last_err or "DANFE PDF ainda não disponível no Mercado Livre.",
+                last_err or "Nota fiscal ainda não liberada no Mercado Livre.",
                 tipo="fiscal",
             )
         )
 
     pasta = Path(pasta_destino)
     pasta.mkdir(parents=True, exist_ok=True)
-    is_xml = content[:5].lstrip().startswith(b"<?xml") or content[:1] == b"<"
-    is_pdf = content[:4] == b"%PDF"
-    if is_xml or not is_pdf:
-        raise ValueError(
-            _mensagem_doc_ml_amigavel(
-                "DANFE PDF indisponível (XML/outros formatos).",
-                tipo="fiscal",
-            )
-        )
     nome_arquivo = f"{nome_base}.pdf"
     destino = pasta / f"{id_pedido}_{tipo_anexo}_{int(datetime.now(timezone.utc).timestamp())}.pdf"
     destino.write_bytes(content)
@@ -1511,15 +1740,20 @@ def baixar_nf_ml(
         len(content),
         id_usuario=id_usuario,
     )
-    return {
-        "message": (
-            "Declaração ML baixada."
+    if gerado_local:
+        msg = (
+            "Declaração gerada a partir dos dados fiscais do Mercado Livre."
             if tipo_anexo == "declaracao"
-            else "DANFE ML baixada."
-        ),
+            else "Nota fiscal gerada a partir dos dados oficiais do Mercado Livre."
+        )
+    else:
+        msg = "Declaração ML baixada." if tipo_anexo == "declaracao" else "DANFE ML baixada."
+    return {
+        "message": msg,
         "anexo": anexo,
         "tipo": tipo_anexo,
         "ja_existia": False,
+        "gerado_local": gerado_local,
     }
 
 
@@ -1613,8 +1847,14 @@ def puxar_documentos_integracao_ml(
         out["fiscal_motivo"] = msg
 
     # Não levanta erro cru: o front monta um aviso amigável com os status.
+    fiscal_obj = out.get("fiscal") if isinstance(out.get("fiscal"), dict) else {}
     if out["etiqueta"] and out["fiscal"]:
-        out["message"] = "Etiqueta e nota baixadas do Mercado Livre."
+        if fiscal_obj.get("gerado_local"):
+            out["message"] = (
+                "Etiqueta baixada. Nota anexada com os dados fiscais oficiais do ML."
+            )
+        else:
+            out["message"] = "Etiqueta e nota baixadas do Mercado Livre."
         out["ok"] = True
     elif out["etiqueta"]:
         out["message"] = "Etiqueta baixada. A nota ainda não está disponível no ML."

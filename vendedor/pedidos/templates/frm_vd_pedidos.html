@@ -3,7 +3,7 @@
 {% set nav_ativo = 'vd_pedidos' %}
 {% block topbar_title %}Pedidos{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('vd_pedidos.static', filename='style/Cvd_pedidos.css') }}?v=20" />
+<link rel="stylesheet" href="{{ url_for('vd_pedidos.static', filename='style/Cvd_pedidos.css') }}?v=21" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal Pd_Page">
@@ -88,8 +88,8 @@
           <button type="button" class="Pd_WizNavItem" data-painel="frete">
             <span class="Pd_WizNavIco"><i data-lucide="truck"></i></span>
             <span class="Pd_WizNavTxt">
-              <strong>Frete</strong>
-              <small id="pd_navFrete">Integração, DropNexo ou Manual</small>
+              <strong>Frete e NF</strong>
+              <small id="pd_navFrete">Etiqueta e nota fiscal</small>
             </span>
           </button>
           <button type="button" class="Pd_WizNavItem" data-painel="valores">
@@ -190,8 +190,8 @@
           <header class="Pd_WizPaneHead">
             <span class="Pd_WizPaneIco"><i data-lucide="truck"></i></span>
             <div>
-              <h4>Frete</h4>
-              <p>Integração do canal, frete DropNexo ou envio manual em PDF.</p>
+              <h4>Frete e NF</h4>
+              <p>Etiqueta de envio e nota fiscal (ou declaração) para o fornecedor despachar.</p>
             </div>
           </header>
           <div class="Pd_WizPaneBody">
@@ -199,7 +199,7 @@
             <div id="pd_freteConteudo" class="Pd_FreteConteudo">
               <p class="Pd_Hint">Salve o rascunho e informe o endereço para definir o envio.</p>
             </div>
-            <p class="Pd_Hint Pd_FreteNota">Para expedir: <strong>etiqueta</strong> + (<strong>NF</strong> ou <strong>declaração de conteúdo</strong>), sempre em PDF. O frete não entra no pagamento ao fornecedor.</p>
+            <p class="Pd_Hint Pd_FreteNota">Para expedir o fornecedor precisa de <strong>etiqueta</strong> + <strong>NF ou declaração</strong> em PDF. O valor do frete não entra no pagamento ao fornecedor.</p>
           </div>
         </section>
 
@@ -254,6 +254,6 @@
 {% endblock %}
 {% block page_js %}
 <script defer src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
-<script defer src="{{ url_for('vd_pedidos.static', filename='script/Svd_pedidos.js') }}?v=33"></script>
+<script defer src="{{ url_for('vd_pedidos.static', filename='script/Svd_pedidos.js') }}?v=34"></script>
 <script id="pd_cfg" type="application/json">{{ {"mp_icone": url_for("mercadopago.static", filename="imge/icone_mercadopago.png")}|tojson }}</script>
 {% endblock %}

@@ -206,14 +206,66 @@
     };
   }
 
-  function renderFreteDocsChecklist(ped) {
-    const d = freteDocsStatus(ped);
+  function anexoHref(a) {
+    return `/vendedor/pedidos/anexos/arquivo?caminho=${encodeURIComponent(a.caminho)}`;
+  }
+
+  function renderDocChip(a) {
     return `
-      <div class="Pd_FreteDocsCheck ${d.ok ? "is-ok" : "is-pendente"}">
-        <span class="${d.temEtiqueta ? "is-ok" : ""}">Etiqueta ${d.temEtiqueta ? "✓" : "—"}</span>
-        <span class="${d.temFiscal ? "is-ok" : ""}">NF ou declaração ${d.temFiscal ? "✓" : "—"}</span>
-        ${d.ok ? "" : `<small class="Pd_Hint">Falta: ${esc(d.faltando.join(", "))}.</small>`}
+      <a class="Pd_DocChip" href="${anexoHref(a)}" target="_blank" rel="noopener" title="${esc(a.nome_original || "PDF")}">
+        <i data-lucide="file-text" aria-hidden="true"></i>
+        <span>${esc(a.nome_original || "documento.pdf")}</span>
+      </a>`;
+  }
+
+  function renderDocStatusCard(opts) {
+    const { ok, titulo, sub, anexos, emptyHint } = opts;
+    const lista = (anexos || []).filter(Boolean);
+    return `
+      <article class="Pd_DocCard ${ok ? "is-ok" : "is-pendente"}">
+        <div class="Pd_DocCardTop">
+          <span class="Pd_DocCardBadge" aria-hidden="true">
+            <i data-lucide="${ok ? "check" : "clock"}"></i>
+          </span>
+          <div class="Pd_DocCardTxt">
+            <strong>${esc(titulo)}</strong>
+            <small>${esc(sub)}</small>
+          </div>
+        </div>
+        ${
+          lista.length
+            ? `<div class="Pd_DocChips">${lista.map(renderDocChip).join("")}</div>`
+            : `<p class="Pd_DocCardEmpty">${esc(emptyHint || "Aguardando…")}</p>`
+        }
+      </article>`;
+  }
+
+  function renderFreteDocsDuo(ped, { emptyEtq, emptyNf } = {}) {
+    const d = freteDocsStatus(ped);
+    const etqs = (ped.anexos || []).filter((a) => a.tipo === "etiqueta");
+    const fiscais = (ped.anexos || []).filter((a) => a.tipo === "nf" || a.tipo === "declaracao");
+    const tituloNf = d.temDeclaracao && !d.temNf ? "Declaração" : "Nota fiscal";
+    return `
+      <div class="Pd_DocDuo ${d.ok ? "is-completo" : ""}">
+        ${renderDocStatusCard({
+          ok: d.temEtiqueta,
+          titulo: "Etiqueta",
+          sub: d.temEtiqueta ? "Pronta para o fornecedor" : "Ainda não anexada",
+          anexos: etqs,
+          emptyHint: emptyEtq || "Sem etiqueta ainda",
+        })}
+        ${renderDocStatusCard({
+          ok: d.temFiscal,
+          titulo: tituloNf,
+          sub: d.temFiscal ? "Pronta para o fornecedor" : "Ainda não anexada",
+          anexos: fiscais,
+          emptyHint: emptyNf || "Sem NF ou declaração ainda",
+        })}
       </div>`;
+  }
+
+  function renderFreteDocsChecklist(ped) {
+    return renderFreteDocsDuo(ped);
   }
 
   function sincronizarModoFreteDoGrupo() {
@@ -330,7 +382,7 @@
   function atualizarNavFrete() {
     if (!elNavFrete) return;
     if (!pedidosGrupo.length) {
-      elNavFrete.textContent = "Integração, DropNexo ou Manual";
+      elNavFrete.textContent = "Etiqueta e nota fiscal";
       return;
     }
     const ok = pedidosGrupo.every((p) => freteDocsStatus(p).ok);
@@ -338,7 +390,11 @@
       (s, p) => s + (p.anexos || []).filter((a) => ["etiqueta", "nf", "declaracao"].includes(a.tipo)).length,
       0
     );
-    elNavFrete.textContent = ok ? "Documentos ok" : qtd ? `${qtd} arquivo(s) · incompleto` : "Integração, DropNexo ou Manual";
+    elNavFrete.textContent = ok
+      ? "Pronto para expedir"
+      : qtd
+        ? `${qtd} doc(s) · falta completar`
+        : "Etiqueta e nota fiscal";
   }
 
   async function carregarGrupo(idG) {
@@ -775,8 +831,8 @@
     return lista
       .map(
         (a) => `
-      <li>
-        <a href="/vendedor/pedidos/anexos/arquivo?caminho=${encodeURIComponent(a.caminho)}" target="_blank" rel="noopener">${esc(a.nome_original)}</a>
+      <li class="Pd_AnexoLinha">
+        ${renderDocChip(a)}
         ${podeRemover ? `<button type="button" class="Pd_BtnLink Pd_BtnLink--danger" data-del-anexo="${a.id}">Remover</button>` : ""}
       </li>`
       )
@@ -849,21 +905,37 @@
     }
     if (isMl || isTt) {
       const docs = freteDocsStatus(ped);
-      const hint = isTt
-        ? "Nesta aba o DropNexo busca <strong>etiqueta</strong> e <strong>nota (DANFE)</strong> direto no TikTok Shop — sem anexo manual."
-        : "Nesta aba o DropNexo busca <strong>etiqueta de transporte</strong> e <strong>nota fiscal (DANFE)</strong> direto no Mercado Livre — sem anexo manual.";
-      const btnTxt = isTt
-        ? "Baixar etiqueta e nota (TikTok)"
-        : "Baixar etiqueta e nota (Mercado Livre)";
+      const canalCurto = isTt ? "TikTok" : "Mercado Livre";
+      const btnTxt = docs.ok
+        ? `Atualizar documentos (${canalCurto})`
+        : docs.temEtiqueta || docs.temFiscal
+          ? `Completar documentos (${canalCurto})`
+          : `Buscar etiqueta e NF (${canalCurto})`;
+      const heroSub = docs.ok
+        ? "Tudo certo — o fornecedor já pode despachar com estes PDFs."
+        : isTt
+          ? "Buscamos etiqueta e nota direto no TikTok Shop. Se faltar algo, tente de novo ou use Manual."
+          : "Buscamos etiqueta e nota direto no Mercado Livre. Se a NF já foi emitida, o DropNexo monta o PDF de expedição.";
       return `
-      <div class="Pd_FreteIntegracao">
-        <p class="Pd_Hint">${hint}</p>
-        <p class="Pd_Hint">Se ainda não estiver liberado no canal, o botão explica o motivo. Para anexar PDF à mão, use a aba <strong>Manual</strong>.</p>
-        <button type="button" class="Cl_botaoprimario" data-puxar-integracao="${ped.id}">${btnTxt}</button>
-        ${renderFreteDocsChecklist(ped)}
-        ${docs.temEtiqueta ? renderAnexosSomenteLeitura(ped, "etiqueta", "Etiqueta") : ""}
-        ${docs.temNf ? renderAnexosSomenteLeitura(ped, "nf", "Nota fiscal") : ""}
-        ${docs.temDeclaracao ? renderAnexosSomenteLeitura(ped, "declaracao", "Declaração") : ""}
+      <div class="Pd_FreteIntegracao Pd_FreteIntegracao--canal">
+        <div class="Pd_FreteHero">
+          <div class="Pd_FreteHeroTxt">
+            <span class="Pd_FreteHeroTag">${esc(canalCurto)}</span>
+            <strong>${docs.ok ? "Documentos prontos" : "Documentos do canal"}</strong>
+            <p>${heroSub}</p>
+          </div>
+          <button type="button" class="Cl_botaoprimario Pd_FreteHeroBtn" data-puxar-integracao="${ped.id}">
+            <i data-lucide="download" aria-hidden="true"></i>
+            ${btnTxt}
+          </button>
+        </div>
+        ${renderFreteDocsDuo(ped, {
+          emptyEtq: `Clique em buscar para puxar do ${canalCurto}`,
+          emptyNf: isMl
+            ? "Após emitir no ML, busque de novo — geramos o PDF automaticamente"
+            : `Clique em buscar para puxar do ${canalCurto}`,
+        })}
+        <p class="Pd_FreteFootHint">Precisa anexar à mão? Use a aba <strong>Manual</strong>.</p>
       </div>`;
     }
     return `
@@ -1162,20 +1234,21 @@
               : etqOk || nfOk
                 ? "Parcialmente disponível"
                 : "Ainda não disponível";
-          const card = (ok, nome, motivo) => `
+          const nfDetail = nfOk
+            ? j.fiscal?.gerado_local
+              ? "PDF gerado com a chave e dados oficiais do ML."
+              : "Arquivo anexado ao pedido."
+            : nfMotivo;
+          const card = (ok, nome, detail) => `
             <div style="padding:0.7rem 0.8rem;border-radius:10px;border:1px solid ${
               ok ? "#bbf7d0" : "#fde68a"
             };background:${ok ? "#f0fdf4" : "#fffbeb"};margin:0.4rem 0">
               <div style="font-weight:800;color:${ok ? "#166534" : "#92400e"}">${nome}: ${
-                ok ? "pronta ✓" : "pendente"
+                ok ? "pronta" : "pendente"
               }</div>
-              ${
-                ok
-                  ? `<div style="margin-top:0.2rem;font-size:0.85rem;color:#15803d">Arquivo anexado ao pedido.</div>`
-                  : `<div style="margin-top:0.25rem;font-size:0.88rem;line-height:1.4;color:#78350f">${esc(
-                      motivo
-                    )}</div>`
-              }
+              <div style="margin-top:0.25rem;font-size:0.88rem;line-height:1.4;color:${
+                ok ? "#15803d" : "#78350f"
+              }">${esc(detail || "")}</div>
             </div>`;
           if (temSwal) {
             await Swal.fire({
@@ -1183,13 +1256,17 @@
               title,
               html: `<div style="text-align:left">
                 <p style="margin:0 0 0.55rem;color:#475569">${esc(
-                  j.message || "Consultamos o Mercado Livre."
+                  j.message || "Consultamos a integração."
                 )}</p>
-                ${card(etqOk, "Etiqueta", etqMotivo)}
-                ${card(nfOk, "Nota fiscal", nfMotivo)}
-                <p style="margin:0.75rem 0 0;font-size:0.85rem;color:#64748b;line-height:1.4">
-                  Pode tentar de novo quando o ML liberar. Para anexar PDF agora, use a aba <strong>Manual</strong>.
-                </p>
+                ${card(etqOk, "Etiqueta", etqOk ? "Arquivo anexado ao pedido." : etqMotivo)}
+                ${card(nfOk, "Nota fiscal", nfDetail)}
+                ${
+                  etqOk && nfOk
+                    ? ""
+                    : `<p style="margin:0.75rem 0 0;font-size:0.85rem;color:#64748b;line-height:1.4">
+                  Pode tentar de novo quando o canal liberar. Para anexar PDF agora, use a aba <strong>Manual</strong>.
+                </p>`
+                }
               </div>`,
               confirmButtonText: "Entendi",
               confirmButtonColor: "#021F81",
