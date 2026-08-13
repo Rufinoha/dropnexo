@@ -3,7 +3,7 @@
 {% set nav_ativo = 'vd_pedidos' %}
 {% block topbar_title %}Pedidos{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('vd_pedidos.static', filename='style/Cvd_pedidos.css') }}?v=21" />
+<link rel="stylesheet" href="{{ url_for('vd_pedidos.static', filename='style/Cvd_pedidos.css') }}?v=22" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal Pd_Page">
@@ -199,7 +199,7 @@
             <div id="pd_freteConteudo" class="Pd_FreteConteudo">
               <p class="Pd_Hint">Salve o rascunho e informe o endereço para definir o envio.</p>
             </div>
-            <p class="Pd_Hint Pd_FreteNota">Para expedir o fornecedor precisa de <strong>etiqueta</strong> + <strong>NF ou declaração</strong> em PDF. O valor do frete não entra no pagamento ao fornecedor.</p>
+            <p class="Pd_Hint Pd_FreteNota">Para expedir o fornecedor precisa de <strong>etiqueta</strong> (PDF) + <strong>NF ou declaração</strong> (PDF ou XML). O valor do frete não entra no pagamento ao fornecedor.</p>
           </div>
         </section>
 
@@ -254,6 +254,6 @@
 {% endblock %}
 {% block page_js %}
 <script defer src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
-<script defer src="{{ url_for('vd_pedidos.static', filename='script/Svd_pedidos.js') }}?v=34"></script>
+<script defer src="{{ url_for('vd_pedidos.static', filename='script/Svd_pedidos.js') }}?v=35"></script>
 <script id="pd_cfg" type="application/json">{{ {"mp_icone": url_for("mercadopago.static", filename="imge/icone_mercadopago.png")}|tojson }}</script>
 {% endblock %}

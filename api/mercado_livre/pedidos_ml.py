@@ -1596,13 +1596,14 @@ def _resolver_pack_id_ml(cur, id_vendedor: int, ped: dict, order_id: str | None)
     return str(pack) if pack else str(order_id)
 
 
-def _baixar_pdf_packs_fiscal_documents(
+def _baixar_doc_packs_fiscal_documents(
     cur, id_vendedor: int, pack_id: str
 ) -> tuple[bytes | None, Exception | None]:
-    """Lista e baixa PDF anexado em /packs/{id}/fiscal_documents (API de vendedor)."""
+    """Lista e baixa NF do pack (PDF preferencial; XML também vale)."""
     from api.mercado_livre.mercado_livre import api_request, api_request_bytes
 
     last_err: Exception | None = None
+    xml_fallback: bytes | None = None
     try:
         listing = api_request(
             cur, int(id_vendedor), "GET", f"/packs/{pack_id}/fiscal_documents"
@@ -1635,13 +1636,6 @@ def _baixar_pdf_packs_fiscal_documents(
             or doc.get("file_id")
             or doc.get("fiscal_document_id")
         )
-        tipo = str(doc.get("type") or doc.get("file_type") or doc.get("mime_type") or "").lower()
-        nome = str(doc.get("filename") or doc.get("name") or file_id or "").lower()
-        # Prefere PDF; se só houver um item, tenta mesmo assim
-        if tipo and "xml" in tipo and "pdf" not in tipo:
-            continue
-        if nome.endswith(".xml") and not nome.endswith(".pdf"):
-            continue
         if not file_id:
             continue
         try:
@@ -1656,17 +1650,19 @@ def _baixar_pdf_packs_fiscal_documents(
             continue
         if _eh_pdf_bytes(raw):
             return raw, None
-        if _eh_xml_bytes(raw):
-            last_err = ValueError("ML liberou XML no pack (sem PDF).")
-    return None, last_err or ValueError("Documentos do pack sem PDF utilizável.")
+        if _eh_xml_bytes(raw) and xml_fallback is None:
+            xml_fallback = raw
+    if xml_fallback:
+        return xml_fallback, None
+    return None, last_err or ValueError("Documentos do pack sem PDF/XML utilizável.")
 
 
-def _baixar_pdf_faturador_ml(
+def _baixar_doc_faturador_ml(
     cur, id_vendedor: int, order_id: str, pack_id: str | None
 ) -> tuple[bytes | None, dict[str, Any] | None, Exception | None]:
     """
     Tenta a NF emitida pelo Faturador do ML (users/.../invoices).
-    Retorna (pdf, meta_para_comprovante, erro).
+    Retorna (pdf_ou_xml, meta_para_comprovante, erro).
     """
     from api.mercado_livre.mercado_livre import (
         api_request,
@@ -1773,9 +1769,9 @@ def _baixar_pdf_faturador_ml(
     meta["sender_cnpj"] = str(idents.get("cnpj") or "").strip()
     meta["sender_ie"] = str(idents.get("ie") or "").strip()
 
-    # Caminhos possíveis do DANFE PDF
+    # Caminhos possíveis do DANFE PDF e do XML oficial
     locations = []
-    for key in ("danfe_location", "document", "danfe"):
+    for key in ("danfe_location", "xml_location", "document", "danfe"):
         val = attrs.get(key)
         if isinstance(val, str) and val.startswith("/"):
             locations.append(val)
@@ -1784,15 +1780,19 @@ def _baixar_pdf_faturador_ml(
             [
                 f"/users/{user_id}/invoices/{inv_id}/documents/danfe",
                 f"/users/{user_id}/invoices/{inv_id}/danfe",
+                f"/users/{user_id}/invoices/{inv_id}/documents/xml",
+                f"/users/{user_id}/invoices/{inv_id}/xml",
                 f"/users/{user_id}/invoices/{inv_id}/documents?type=danfe",
+                f"/users/{user_id}/invoices/{inv_id}/documents?type=xml",
             ]
         )
         for loc in list(locations):
             if loc.startswith("/danfe") or loc.startswith("/xml"):
                 locations.append(f"/users/{user_id}/invoices/{inv_id}{loc}")
 
+    xml_fallback: bytes | None = None
     for loc in locations:
-        if not loc or loc.startswith("/xml"):
+        if not loc:
             continue
         try:
             raw = api_request_bytes(cur, int(id_vendedor), "GET", loc)
@@ -1801,12 +1801,16 @@ def _baixar_pdf_faturador_ml(
             continue
         if _eh_pdf_bytes(raw):
             return raw, meta, None
+        if _eh_xml_bytes(raw) and xml_fallback is None:
+            xml_fallback = raw
+    if xml_fallback:
+        return xml_fallback, meta, None
 
-    # Sem PDF nativo, mas com chave/número → comprovante
+    # Sem arquivo nativo, mas com chave/número → comprovante PDF gerado depois
     if meta.get("key") or meta.get("number") not in (None, ""):
         return None, meta, last_err
 
-    return None, None, last_err or ValueError("Faturador ML sem DANFE PDF.")
+    return None, None, last_err or ValueError("Faturador ML sem DANFE/XML.")
 
 
 def baixar_nf_ml(
@@ -1854,6 +1858,7 @@ def baixar_nf_ml(
             }
 
     content = None
+    xml_candidato: bytes | None = None
     tipo_anexo = "nf"
     nome_base = f"nf_ml_{ship_id or order_id or id_pedido}"
     last_err = None
@@ -1861,32 +1866,42 @@ def baixar_nf_ml(
     gerado_local = False
     pack_id = _resolver_pack_id_ml(cur, int(id_vendedor), ped, str(order_id) if order_id else None)
 
-    # 1) Pack fiscal_documents — caminho correto do vendedor (JSON + download por id)
-    if pack_id and not content:
-        raw, err = _baixar_pdf_packs_fiscal_documents(cur, int(id_vendedor), pack_id)
-        if raw:
+    def _guardar(raw: bytes | None, base: str | None = None) -> None:
+        nonlocal content, xml_candidato, nome_base
+        if not raw:
+            return
+        if base:
+            nome_base = base
+        if _eh_pdf_bytes(raw):
             content = raw
-            nome_base = f"nf_ml_{pack_id}"
+            return
+        if _eh_xml_bytes(raw) and xml_candidato is None:
+            xml_candidato = raw
+
+    # 1) Pack fiscal_documents — caminho do vendedor (PDF ou XML)
+    if pack_id and not content:
+        raw, err = _baixar_doc_packs_fiscal_documents(cur, int(id_vendedor), pack_id)
+        if raw:
+            _guardar(raw, f"nf_ml_{pack_id}")
         elif err:
             last_err = err
             _log.info("ML packs fiscal_documents pedido %s: %s", id_pedido, err)
 
-    # 2) Faturador ML (users/.../invoices) — DANFE ou metadados
+    # 2) Faturador ML (users/.../invoices) — DANFE/XML ou metadados
     faturador_meta: dict[str, Any] | None = None
     if not content and order_id:
-        raw, meta, err = _baixar_pdf_faturador_ml(
+        raw, meta, err = _baixar_doc_faturador_ml(
             cur, int(id_vendedor), str(order_id), pack_id
         )
         if raw:
-            content = raw
-            nome_base = f"nf_ml_{order_id}"
+            _guardar(raw, f"nf_ml_{order_id}")
         elif meta:
             faturador_meta = meta
         if err:
             last_err = err
             _log.info("ML faturador pedido %s: %s", id_pedido, err)
 
-    # 3) fiscal-info — API de transportadoras; às vezes o seller também lê
+    # 3) fiscal-info — XML oficial da NF-e/DC-e (muito comum no ML)
     if ship_id:
         try:
             info = api_request(cur, int(id_vendedor), "GET", f"/shipments/{ship_id}/fiscal-info")
@@ -1894,15 +1909,17 @@ def baixar_nf_ml(
             if not content:
                 for inv in invoices:
                     tipo_anexo = inv["tipo_anexo"]
-                    nome_base = (
+                    base = (
                         f"declaracao_ml_{ship_id}"
                         if tipo_anexo == "declaracao"
                         else f"nf_ml_{ship_id}"
                     )
                     href = inv.get("href") or ""
+                    # XML primeiro (o que o ML realmente libera), depois tenta PDF
                     for try_href in (
-                        _href_com_doctype(href, "pdf") if href else "",
                         href,
+                        _href_com_doctype(href, "xml") if href else "",
+                        _href_com_doctype(href, "pdf") if href else "",
                     ):
                         if not try_href:
                             continue
@@ -1911,30 +1928,30 @@ def baixar_nf_ml(
                         except RuntimeError as e:
                             last_err = e
                             continue
-                        if _eh_pdf_bytes(raw):
-                            content = raw
+                        _guardar(raw, base)
+                        if content:
                             break
-                        if _eh_xml_bytes(raw):
-                            last_err = ValueError("ML liberou XML fiscal (sem DANFE PDF nativo).")
                     if content:
                         break
         except RuntimeError as e:
             last_err = e
             _log.info("ML fiscal-info pedido %s: %s", id_pedido, e)
 
-    # 4) endpoints legados de invoice (PDF quando existir)
+    # 4) endpoints legados de invoice
     if not content:
         candidatos: list[tuple[str, dict | None]] = []
         if ship_id:
             candidatos.extend(
                 [
                     (f"/shipments/{ship_id}/invoice", {"doctype": "pdf"}),
+                    (f"/shipments/{ship_id}/invoice", {"doctype": "xml"}),
                     (f"/shipments/{ship_id}/invoice", None),
                     (f"/shipments/{ship_id}/documents/invoice", None),
                 ]
             )
         if order_id:
             candidatos.append((f"/orders/{order_id}/invoice", {"doctype": "pdf"}))
+            candidatos.append((f"/orders/{order_id}/invoice", {"doctype": "xml"}))
             candidatos.append((f"/orders/{order_id}/invoice", None))
 
         for path, params in candidatos:
@@ -1942,15 +1959,17 @@ def baixar_nf_ml(
                 raw = api_request_bytes(
                     cur, int(id_vendedor), "GET", path, params=params
                 )
-                if _eh_pdf_bytes(raw):
-                    content = raw
+                _guardar(raw)
+                if content:
                     break
-                if _eh_xml_bytes(raw):
-                    last_err = ValueError("ML liberou XML fiscal (sem DANFE PDF nativo).")
             except RuntimeError as e:
                 last_err = e
 
-    # 5) Gera PDF de expedição com chave oficial (fiscal-info ou faturador)
+    # 5) Aceita XML se não houver PDF nativo
+    if not content and xml_candidato:
+        content = xml_candidato
+
+    # 6) Último recurso: PDF de expedição com chave oficial
     if not content:
         meta = None
         if invoices:
@@ -1976,18 +1995,19 @@ def baixar_nf_ml(
                 _log.warning("Falha ao gerar PDF fiscal ML pedido %s: %s", id_pedido, e)
                 last_err = e
 
-    if not _eh_pdf_bytes(content):
-        # Mensagem mais precisa: emitida no painel ≠ liberada na API do vendedor
+    is_pdf = _eh_pdf_bytes(content)
+    is_xml = _eh_xml_bytes(content)
+    if not is_pdf and not is_xml:
         detalhe = str(last_err or "")
         if "fiscal info not found" in detalhe.lower() or "not found" in detalhe.lower():
             raise ValueError(
                 "A nota ainda não aparece na API do Mercado Livre para este envio. "
-                "Se você emitiu no painel, aguarde alguns minutos ou anexe o PDF na aba Manual."
+                "Se você emitiu no painel, aguarde alguns minutos ou anexe PDF/XML na aba Manual."
             )
         if "forbidden" in detalhe.lower() or "403" in detalhe:
             raise ValueError(
                 "O Mercado Livre não liberou a nota pela API desta conta. "
-                "Anexe o PDF da NF na aba Manual, ou tente de novo mais tarde."
+                "Anexe PDF ou XML na aba Manual, ou tente de novo mais tarde."
             )
         raise ValueError(
             _mensagem_doc_ml_amigavel(
@@ -2002,8 +2022,9 @@ def baixar_nf_ml(
 
     pasta = Path(pasta_destino)
     pasta.mkdir(parents=True, exist_ok=True)
-    nome_arquivo = f"{nome_base}.pdf"
-    destino = pasta / f"{id_pedido}_{tipo_anexo}_{int(datetime.now(timezone.utc).timestamp())}.pdf"
+    ext = ".pdf" if is_pdf else ".xml"
+    nome_arquivo = f"{nome_base}{ext}"
+    destino = pasta / f"{id_pedido}_{tipo_anexo}_{int(datetime.now(timezone.utc).timestamp())}{ext}"
     destino.write_bytes(content)
     caminho_db = f"upload/tenant{id_vendedor}/pedidos/{destino.name}"
     anexo = registrar_anexo_pedido(
@@ -2022,6 +2043,12 @@ def baixar_nf_ml(
             if tipo_anexo == "declaracao"
             else "Nota fiscal gerada a partir dos dados oficiais do Mercado Livre."
         )
+    elif is_xml:
+        msg = (
+            "XML da declaração ML baixado."
+            if tipo_anexo == "declaracao"
+            else "XML da nota fiscal ML baixado."
+        )
     else:
         msg = "Declaração ML baixada." if tipo_anexo == "declaracao" else "DANFE ML baixada."
     return {
@@ -2030,6 +2057,7 @@ def baixar_nf_ml(
         "tipo": tipo_anexo,
         "ja_existia": False,
         "gerado_local": gerado_local,
+        "formato": "pdf" if is_pdf else "xml",
     }
 
 
@@ -2058,10 +2086,10 @@ def _mensagem_doc_ml_amigavel(err: str | Exception, *, tipo: str = "documento") 
         )
     if "shipment" in low and ("not found" in low or "404" in low):
         return "Envio do Mercado Livre ainda não encontrado para este pedido."
-    if "danfe" in low or ("pdf" in low and "indispon" in low) or "xml" in low:
+    if "danfe" in low or ("pdf" in low and "indispon" in low):
         return (
-            "Nota fiscal ainda não disponível em PDF no Mercado Livre. "
-            "Assim que for emitida e liberada, tente novamente."
+            "Nota fiscal ainda não disponível no Mercado Livre. "
+            "Assim que for emitida e liberada (PDF ou XML), tente novamente."
         )
     if "etiqueta indispon" in low or (tipo == "etiqueta" and ("400" in low or "mercadolivre" in low.replace(" ", ""))):
         return (
@@ -2072,7 +2100,7 @@ def _mensagem_doc_ml_amigavel(err: str | Exception, *, tipo: str = "documento") 
         return (
             "A nota ainda não está liberada na API do Mercado Livre para integração. "
             "Emitir no painel do ML não libera na hora — aguarde alguns minutos e tente de novo, "
-            "ou anexe o PDF na aba Manual."
+            "ou anexe PDF/XML na aba Manual."
         )
     if not s or len(s) > 180 or "bad request" in low:
         return (
@@ -2130,6 +2158,8 @@ def puxar_documentos_integracao_ml(
             out["message"] = (
                 "Etiqueta baixada. Nota anexada com os dados fiscais oficiais do ML."
             )
+        elif fiscal_obj.get("formato") == "xml":
+            out["message"] = "Etiqueta e XML da nota baixados do Mercado Livre."
         else:
             out["message"] = "Etiqueta e nota baixadas do Mercado Livre."
         out["ok"] = True
@@ -2137,7 +2167,11 @@ def puxar_documentos_integracao_ml(
         out["message"] = "Etiqueta baixada. A nota ainda não está disponível no ML."
         out["ok"] = True
     elif out["fiscal"]:
-        out["message"] = "Nota baixada. A etiqueta ainda não está disponível no ML."
+        out["message"] = (
+            "XML da nota baixado. A etiqueta ainda não está disponível no ML."
+            if fiscal_obj.get("formato") == "xml"
+            else "Nota baixada. A etiqueta ainda não está disponível no ML."
+        )
         out["ok"] = True
     else:
         out["message"] = (

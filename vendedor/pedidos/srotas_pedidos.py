@@ -269,9 +269,11 @@ def pedido_anexos_upload(id_pedido: int):
     ext = _extensao_anexo(arquivo.filename)
     if not ext:
         return jsonify(success=False, message="Use PDF, XML, PNG ou JPG."), 400
-    # Frete / fiscal do pedido: sempre PDF
-    if tipo in ("etiqueta", "nf", "declaracao") and ext != ".pdf":
-        return jsonify(success=False, message="Envie o arquivo em PDF."), 400
+    # Etiqueta: PDF. NF/declaração: PDF ou XML (ML costuma liberar só XML).
+    if tipo == "etiqueta" and ext != ".pdf":
+        return jsonify(success=False, message="Envie a etiqueta em PDF."), 400
+    if tipo in ("nf", "declaracao") and ext not in (".pdf", ".xml"):
+        return jsonify(success=False, message="Envie a nota em PDF ou XML."), 400
     stream = arquivo.stream
     stream.seek(0, 2)
     tamanho = stream.tell()

@@ -211,10 +211,12 @@
   }
 
   function renderDocChip(a) {
+    const nome = a.nome_original || "documento";
+    const isXml = /\.xml$/i.test(nome) || /\.xml$/i.test(a.caminho || "");
     return `
-      <a class="Pd_DocChip" href="${anexoHref(a)}" target="_blank" rel="noopener" title="${esc(a.nome_original || "PDF")}">
-        <i data-lucide="file-text" aria-hidden="true"></i>
-        <span>${esc(a.nome_original || "documento.pdf")}</span>
+      <a class="Pd_DocChip" href="${anexoHref(a)}" target="_blank" rel="noopener" title="${esc(nome)}">
+        <i data-lucide="${isXml ? "file-code" : "file-text"}" aria-hidden="true"></i>
+        <span>${esc(nome)}</span>
       </a>`;
   }
 
@@ -845,13 +847,17 @@
     const st = stV(ped);
     const bloqueado = st === "cancelado" || st === "entregue" || st === "em_expedicao";
     const ok = pode && !bloqueado;
+    const aceitaXml = tipo === "nf" || tipo === "declaracao";
+    const accept = aceitaXml ? ".pdf,.xml,application/pdf,text/xml,application/xml" : ".pdf,application/pdf";
+    const hintFmt = aceitaXml ? "PDF ou XML · máx. 5 MB" : "Somente PDF · máx. 5 MB";
+    const btnTxt = aceitaXml ? "Anexar PDF/XML" : "Anexar PDF";
     return `
       <div class="Pd_FreteUploadBloco">
         <h6>${esc(rotulo)}</h6>
         <div class="Pd_AnexoUpload">
-          <input type="file" id="${inpId}" class="Pd_AnexoInput" hidden accept=".pdf,application/pdf" data-frete-doc-upload="${ped.id}" data-tipo="${tipo}" ${ok ? "" : "disabled"} />
-          ${ok ? `<label for="${inpId}" class="Cl_botaoFiltro Pd_AnexoBtn">Anexar PDF</label>` : ""}
-          <span class="Pd_Hint">Somente PDF · máx. 5 MB</span>
+          <input type="file" id="${inpId}" class="Pd_AnexoInput" hidden accept="${accept}" data-frete-doc-upload="${ped.id}" data-tipo="${tipo}" ${ok ? "" : "disabled"} />
+          ${ok ? `<label for="${inpId}" class="Cl_botaoFiltro Pd_AnexoBtn">${btnTxt}</label>` : ""}
+          <span class="Pd_Hint">${hintFmt}</span>
         </div>
         <ul class="Pd_AnexoItens Pd_FreteEtqLista">
           ${renderListaAnexosTipo(ped, tipo, "Nenhum arquivo.", ok)}
@@ -912,10 +918,10 @@
           ? `Completar documentos (${canalCurto})`
           : `Buscar etiqueta e NF (${canalCurto})`;
       const heroSub = docs.ok
-        ? "Tudo certo — o fornecedor já pode despachar com estes PDFs."
+        ? "Tudo certo — o fornecedor já pode despachar com estes arquivos."
         : isTt
           ? "Buscamos etiqueta e nota direto no TikTok Shop. Se faltar algo, tente de novo ou use Manual."
-          : "Buscamos etiqueta e nota direto no Mercado Livre. Se a NF já foi emitida, o DropNexo monta o PDF de expedição.";
+          : "Buscamos etiqueta e nota (PDF ou XML) direto no Mercado Livre.";
       return `
       <div class="Pd_FreteIntegracao Pd_FreteIntegracao--canal">
         <div class="Pd_FreteHero">
@@ -932,7 +938,7 @@
         ${renderFreteDocsDuo(ped, {
           emptyEtq: `Clique em buscar para puxar do ${canalCurto}`,
           emptyNf: isMl
-            ? "Após emitir no ML, busque de novo — geramos o PDF automaticamente"
+            ? "Após emitir no ML, busque de novo — importamos PDF ou XML"
             : `Clique em buscar para puxar do ${canalCurto}`,
         })}
         <p class="Pd_FreteFootHint">Precisa anexar à mão? Use a aba <strong>Manual</strong>.</p>
@@ -1073,8 +1079,21 @@
     const tipo = input.dataset.tipo || "etiqueta";
     const file = input.files?.[0];
     if (!idPed || !file) return;
-    if (!/\.pdf$/i.test(file.name || "")) {
-      if (window.Swal) Swal.fire({ icon: "warning", title: "PDF", text: "Envie somente arquivo PDF.", confirmButtonColor: "#021F81" });
+    const nome = file.name || "";
+    const okPdf = /\.pdf$/i.test(nome);
+    const okXml = (tipo === "nf" || tipo === "declaracao") && /\.xml$/i.test(nome);
+    if (!okPdf && !okXml) {
+      if (window.Swal) {
+        Swal.fire({
+          icon: "warning",
+          title: "Arquivo",
+          text:
+            tipo === "nf" || tipo === "declaracao"
+              ? "Envie a nota em PDF ou XML."
+              : "Envie somente arquivo PDF.",
+          confirmButtonColor: "#021F81",
+        });
+      }
       input.value = "";
       return;
     }
@@ -1237,7 +1256,9 @@
           const nfDetail = nfOk
             ? j.fiscal?.gerado_local
               ? "PDF gerado com a chave e dados oficiais do ML."
-              : "Arquivo anexado ao pedido."
+              : j.fiscal?.formato === "xml"
+                ? "XML da nota anexado ao pedido."
+                : "Arquivo anexado ao pedido."
             : nfMotivo;
           const card = (ok, nome, detail) => `
             <div style="padding:0.7rem 0.8rem;border-radius:10px;border:1px solid ${
