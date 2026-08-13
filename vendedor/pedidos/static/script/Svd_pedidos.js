@@ -3,7 +3,7 @@
     rascunho: "Rascunho",
     importado: "Importado",
     aguardando_pagamento: "Aguardando pagamento",
-    aguardando_confirmacao: "Comprovante — aguardando fornecedor",
+    aguardando_confirmacao: "Aguardando aprovação",
     pago: "Pago (fornecedor aprovou)",
     cancelado: "Cancelado",
     em_expedicao: "Em expedição",
@@ -479,9 +479,8 @@
         if (ped) {
           if (j.pedido) Object.assign(ped, j.pedido);
           else {
-            ped.status_vendedor =
-              ped.origem && ped.origem !== "manual" ? "importado" : "aguardando_pagamento";
-            ped.status = ped.status_vendedor;
+            ped.status_vendedor = "aguardando_pagamento";
+            ped.status = "aguardando_pagamento";
             ped.status_pagamento = "pendente";
             ped.pago_em = null;
           }
@@ -1943,8 +1942,8 @@
       if (j.pedido) {
         Object.assign(ped, j.pedido);
       } else {
-        ped.status_vendedor = ped.origem && ped.origem !== "manual" ? "importado" : "aguardando_pagamento";
-        ped.status = ped.status_vendedor;
+        ped.status_vendedor = "aguardando_pagamento";
+        ped.status = "aguardando_pagamento";
         ped.status_pagamento = "pendente";
         ped.pago_em = null;
         ped.meio_pagamento = "pix_manual";
@@ -2009,7 +2008,7 @@
         ped.pix_manual_payload = j.payload;
         ped.pix_manual_txid = j.txid;
         if (j.reaberto || j.status_vendedor) {
-          ped.status_vendedor = j.status_vendedor || (ped.origem && ped.origem !== "manual" ? "importado" : "aguardando_pagamento");
+          ped.status_vendedor = j.status_vendedor || "aguardando_pagamento";
           ped.status = ped.status_vendedor;
           ped.status_pagamento = "pendente";
           ped.pago_em = null;

@@ -185,7 +185,6 @@ from core.pedidos.servico import (
     _status_vendedor_pagavel,
     marcar_pedido_pago,
     obter_pedido,
-    origem_e_canal_externo,
     pedido_tem_comprovante_pix,
     registrar_historico,
     status_vendedor_pedido,
@@ -204,6 +203,26 @@ def meio_pix_manual_fornecedor(cur, id_fornecedor: int) -> dict:
     }
 
 
+def _marcar_aguardando_pagamento(cur, id_pedido: int) -> None:
+    """Fornecedor vê o pedido neste status até o vendedor anexar o comprovante."""
+    set_sv, dup = _sql_set_status_vendedor(cur)
+    params: list = [STATUS_AGUARDANDO]
+    if dup:
+        params.append(STATUS_AGUARDANDO)
+    params.extend([agora_utc(), id_pedido])
+    cur.execute(
+        f"""
+        UPDATE tbl_pedido SET
+            {set_sv},
+            status_pagamento = 'pendente',
+            pago_em = NULL,
+            atualizado_em = %s
+        WHERE id = %s
+        """,
+        params,
+    )
+
+
 def _gerar_payload_e_gravar_pix(cur, ped: dict, *, id_pedido: int) -> dict:
     id_forn = int(ped["id_tenant_fornecedor"])
     if not pix_manual_ativo(cur, id_forn):
@@ -218,22 +237,31 @@ def _gerar_payload_e_gravar_pix(cur, ped: dict, *, id_pedido: int) -> dict:
         valor=float(ped["valor_total"]),
         txid=txid,
     )
+    # Sempre fica aguardando_pagamento (visível pro fornecedor)
+    set_sv, dup = _sql_set_status_vendedor(cur)
+    params: list = [STATUS_AGUARDANDO]
+    if dup:
+        params.append(STATUS_AGUARDANDO)
+    params.extend([payload, txid, agora_utc(), id_pedido])
     cur.execute(
-        """
+        f"""
         UPDATE tbl_pedido SET
+            {set_sv},
+            status_pagamento = 'pendente',
+            pago_em = NULL,
             meio_pagamento = 'pix_manual',
             pix_manual_payload = %s,
             pix_manual_txid = %s,
             atualizado_em = %s
         WHERE id = %s
         """,
-        (payload, txid, agora_utc(), id_pedido),
+        params,
     )
     registrar_historico(
         cur,
         id_pedido,
         "pix_manual",
-        f"PIX manual gerado. Referência: {txid}.",
+        f"PIX manual gerado. Referência: {txid}. Aguardando pagamento.",
         None,
     )
     return {
@@ -243,7 +271,7 @@ def _gerar_payload_e_gravar_pix(cur, ped: dict, *, id_pedido: int) -> dict:
         "numero_pedido": ped.get("numero"),
         "nome_beneficiario": cfg.get("nome_beneficiario"),
         "status_pagamento": "pendente",
-        "status_vendedor": status_vendedor_pedido(ped),
+        "status_vendedor": STATUS_AGUARDANDO,
     }
 
 
@@ -298,33 +326,20 @@ def voltar_cobranca_apos_remover_comprovante(
     ):
         raise ValueError("Pagamento já aprovado pelo fornecedor. Não é possível remover o comprovante.")
 
-    alvo = (
-        STATUS_IMPORTADO
-        if origem_e_canal_externo(ped.get("origem"))
-        else STATUS_AGUARDANDO
-    )
-    set_sv, dup = _sql_set_status_vendedor(cur)
-    params: list = [alvo]
-    if dup:
-        params.append(alvo)
-    params.extend([agora_utc(), id_pedido])
+    _marcar_aguardando_pagamento(cur, id_pedido)
     cur.execute(
-        f"""
+        """
         UPDATE tbl_pedido SET
-            {set_sv},
-            status_pagamento = 'pendente',
-            pago_em = NULL,
-            meio_pagamento = COALESCE(NULLIF(meio_pagamento, ''), 'pix_manual'),
-            atualizado_em = %s
+            meio_pagamento = COALESCE(NULLIF(meio_pagamento, ''), 'pix_manual')
         WHERE id = %s
         """,
-        params,
+        (id_pedido,),
     )
     registrar_historico(
         cur,
         id_pedido,
         "comprovante_removido",
-        "Comprovante PIX removido. Gere o PIX novamente se precisar.",
+        "Comprovante PIX removido. Status: aguardando pagamento.",
         id_usuario,
     )
     ped2 = obter_pedido(cur, id_pedido, id_vendedor=id_vendedor)
@@ -419,40 +434,25 @@ def reabrir_pagamento_pix_manual(
     if pedido_tem_comprovante_pix(cur, id_pedido):
         raise ValueError("Remova o comprovante antes de gerar o PIX novamente.")
 
-    alvo = (
-        STATUS_IMPORTADO
-        if origem_e_canal_externo(ped.get("origem"))
-        else STATUS_AGUARDANDO
-    )
-    set_sv, dup = _sql_set_status_vendedor(cur)
-    params: list = [alvo]
-    if dup:
-        params.append(alvo)
-    params.extend([agora_utc(), id_pedido])
     cur.execute(
-        f"""
+        """
         UPDATE tbl_pedido SET
-            {set_sv},
-            status_pagamento = 'pendente',
-            pago_em = NULL,
-            meio_pagamento = COALESCE(NULLIF(meio_pagamento, ''), 'pix_manual'),
-            atualizado_em = %s
+            meio_pagamento = COALESCE(NULLIF(meio_pagamento, ''), 'pix_manual')
         WHERE id = %s
         """,
-        params,
+        (id_pedido,),
     )
     registrar_historico(
         cur,
         id_pedido,
         "pix_reaberto",
-        "Cobrança PIX reaberta. Gere o QR/copia e cola, anexe o comprovante e aguarde o fornecedor aprovar.",
+        "Cobrança PIX reaberta — aguardando pagamento.",
         id_usuario,
     )
     ped2 = obter_pedido(cur, id_pedido, id_vendedor=id_vendedor)
     if not ped2:
         raise ValueError("Pedido não encontrado após reabrir cobrança.")
     out = _gerar_payload_e_gravar_pix(cur, ped2, id_pedido=id_pedido)
-    out["status_vendedor"] = status_vendedor_pedido(ped2)
     out["reaberto"] = True
     return out
 

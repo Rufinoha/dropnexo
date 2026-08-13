@@ -1,7 +1,7 @@
 (function () {
   const LABEL = {
     aguardando_pagamento: "Aguardando pagamento",
-    aguardando_confirmacao: "Pago — aguardando confirmação",
+    aguardando_confirmacao: "Aguardando aprovação",
     pago: "Pagamento confirmado",
     cancelado: "Cancelado",
     em_expedicao: "Em expedição",
