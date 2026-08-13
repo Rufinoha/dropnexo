@@ -1657,12 +1657,50 @@ def _baixar_doc_packs_fiscal_documents(
     return None, last_err or ValueError("Documentos do pack sem PDF/XML utilizável.")
 
 
+def _normalizar_invoice_ml(data: Any) -> dict[str, Any] | None:
+    """Extrai um objeto invoice de respostas variadas do Faturador."""
+    if isinstance(data, list) and data and isinstance(data[0], dict):
+        return data[0]
+    if not isinstance(data, dict):
+        return None
+    if data.get("id") or data.get("attributes") or data.get("invoice_number"):
+        return data
+    for key in ("results", "invoices", "data"):
+        results = data.get(key)
+        if isinstance(results, list) and results and isinstance(results[0], dict):
+            return results[0]
+    return None
+
+
+def _invoice_bate_pedido(inv: dict[str, Any], order_id: str, pack_id: str | None) -> bool:
+    oid = str(order_id)
+    pid = str(pack_id or "")
+    if str(inv.get("pack_id") or "") == pid and pid:
+        return True
+    if oid in {str(x) for x in (inv.get("orders") or [])}:
+        return True
+    ship = inv.get("shipment") if isinstance(inv.get("shipment"), dict) else {}
+    if pid and str(ship.get("id") or "") == pid:
+        return True
+    for it in inv.get("items") or []:
+        if not isinstance(it, dict):
+            continue
+        if str(it.get("external_order_id") or "") == oid:
+            return True
+        if pid and str(it.get("pack_id") or "") == pid:
+            return True
+    return False
+
+
 def _baixar_doc_faturador_ml(
     cur, id_vendedor: int, order_id: str, pack_id: str | None
 ) -> tuple[bytes | None, dict[str, Any] | None, Exception | None]:
     """
-    Tenta a NF emitida pelo Faturador do ML (users/.../invoices).
-    Retorna (pdf_ou_xml, meta_para_comprovante, erro).
+    NF emitida pelo Faturador MLB.
+    Paths reais (MLB):
+      GET /users/{uid}/invoices/sites/MLB/orders/{order_id}
+      DANFE /users/{uid}/invoices/sites/MLB/documents/danfe/{invoice_id}
+      XML   /users/{uid}/invoices/documents/xml/{invoice_id}/authorized
     """
     from api.mercado_livre.mercado_livre import (
         api_request,
@@ -1683,74 +1721,66 @@ def _baixar_doc_faturador_ml(
 
     last_err: Exception | None = None
     invoice: dict[str, Any] | None = None
+    tentativas: list[str] = []
 
     candidatos_json = [
+        f"/users/{user_id}/invoices/sites/MLB/orders/{order_id}",
         f"/users/{user_id}/invoices/orders/{order_id}",
-        f"/users/{user_id}/invoices/order/{order_id}",
+        f"/users/{user_id}/invoices/sites/MLB/order/{order_id}",
     ]
     if pack_id:
-        candidatos_json.append(f"/users/{user_id}/invoices/packs/{pack_id}")
-        candidatos_json.append(f"/users/{user_id}/invoices/pack/{pack_id}")
+        candidatos_json.extend(
+            [
+                f"/users/{user_id}/invoices/sites/MLB/packs/{pack_id}",
+                f"/users/{user_id}/invoices/packs/{pack_id}",
+                f"/users/{user_id}/invoices/sites/MLB/shipments/{pack_id}",
+            ]
+        )
 
     for path in candidatos_json:
         try:
             data = api_request(cur, int(id_vendedor), "GET", path)
+            inv = _normalizar_invoice_ml(data)
+            tentativas.append(f"OK {path}")
+            if inv:
+                invoice = inv
+                break
         except RuntimeError as e:
             last_err = e
-            continue
-        if isinstance(data, dict) and (data.get("id") or data.get("attributes")):
-            invoice = data
-            break
-        if isinstance(data, dict):
-            results = data.get("results") or data.get("invoices") or []
-            if isinstance(results, list) and results and isinstance(results[0], dict):
-                invoice = results[0]
-                break
-        if isinstance(data, list) and data and isinstance(data[0], dict):
-            invoice = data[0]
-            break
+            tentativas.append(f"ERR {path}: {e}")
 
     if not invoice:
-        # Busca recente e cruza por order/pack
         for path, params in (
-            (f"/users/{user_id}/invoices/search", {"limit": 20, "offset": 0}),
-            (f"/users/{user_id}/invoices", {"limit": 20, "offset": 0}),
+            (f"/users/{user_id}/invoices/sites/MLB/search", {"limit": 30, "offset": 0}),
+            (f"/users/{user_id}/invoices/sites/MLB", {"limit": 30, "offset": 0}),
+            (f"/users/{user_id}/invoices/search", {"limit": 30, "offset": 0}),
+            (f"/users/{user_id}/invoices", {"limit": 30, "offset": 0}),
         ):
             try:
                 data = api_request(cur, int(id_vendedor), "GET", path, params=params)
+                tentativas.append(f"OK {path}")
             except RuntimeError as e:
                 last_err = e
+                tentativas.append(f"ERR {path}: {e}")
                 continue
-            results = []
+            results: list[Any] = []
             if isinstance(data, dict):
-                results = data.get("results") or data.get("invoices") or []
+                results = data.get("results") or data.get("invoices") or data.get("data") or []
             elif isinstance(data, list):
                 results = data
-            oid = str(order_id)
-            pid = str(pack_id or "")
             for item in results:
-                if not isinstance(item, dict):
-                    continue
-                items = item.get("items") or []
-                ext_orders = {
-                    str(it.get("external_order_id") or "")
-                    for it in items
-                    if isinstance(it, dict)
-                }
-                pack_item = str(item.get("pack_id") or "")
-                if oid in ext_orders or (pid and pack_item == pid):
-                    invoice = item
-                    break
-                # alguns retornos trazem orders: [id, ...]
-                orders = item.get("orders") or []
-                if oid in {str(x) for x in orders}:
+                if isinstance(item, dict) and _invoice_bate_pedido(item, str(order_id), pack_id):
                     invoice = item
                     break
             if invoice:
                 break
 
     if not invoice:
-        return None, None, last_err or ValueError("Nota do Faturador ML não encontrada para o pedido.")
+        detalhe = "; ".join(tentativas[-6:]) if tentativas else "sem tentativas"
+        _log.warning("Faturador ML sem invoice pedido_ml=%s | %s", order_id, detalhe)
+        return None, None, last_err or ValueError(
+            "Nota do Faturador ML não encontrada para o pedido."
+        )
 
     attrs = invoice.get("attributes") if isinstance(invoice.get("attributes"), dict) else {}
     inv_id = invoice.get("id")
@@ -1769,26 +1799,22 @@ def _baixar_doc_faturador_ml(
     meta["sender_cnpj"] = str(idents.get("cnpj") or "").strip()
     meta["sender_ie"] = str(idents.get("ie") or "").strip()
 
-    # Caminhos possíveis do DANFE PDF e do XML oficial
-    locations = []
-    for key in ("danfe_location", "xml_location", "document", "danfe"):
+    # Paths oficiais MLB (danfe_location / xml_location já vêm absolutos no resource)
+    locations: list[str] = []
+    for key in ("danfe_location", "xml_location"):
         val = attrs.get(key)
         if isinstance(val, str) and val.startswith("/"):
             locations.append(val)
     if inv_id:
         locations.extend(
             [
-                f"/users/{user_id}/invoices/{inv_id}/documents/danfe",
-                f"/users/{user_id}/invoices/{inv_id}/danfe",
-                f"/users/{user_id}/invoices/{inv_id}/documents/xml",
-                f"/users/{user_id}/invoices/{inv_id}/xml",
-                f"/users/{user_id}/invoices/{inv_id}/documents?type=danfe",
-                f"/users/{user_id}/invoices/{inv_id}/documents?type=xml",
+                f"/users/{user_id}/invoices/sites/MLB/documents/danfe/{inv_id}",
+                f"/users/{user_id}/invoices/documents/xml/{inv_id}/authorized",
+                f"/users/{user_id}/invoices/documents/xml/{inv_id}",
+                f"/users/{user_id}/invoices/sites/MLB/{inv_id}",
+                f"/users/{user_id}/invoices/{inv_id}",
             ]
         )
-        for loc in list(locations):
-            if loc.startswith("/danfe") or loc.startswith("/xml"):
-                locations.append(f"/users/{user_id}/invoices/{inv_id}{loc}")
 
     xml_fallback: bytes | None = None
     for loc in locations:
@@ -1798,7 +1824,9 @@ def _baixar_doc_faturador_ml(
             raw = api_request_bytes(cur, int(id_vendedor), "GET", loc)
         except RuntimeError as e:
             last_err = e
+            tentativas.append(f"ERR DOC {loc}: {e}")
             continue
+        tentativas.append(f"OK DOC {loc} ({len(raw)}b)")
         if _eh_pdf_bytes(raw):
             return raw, meta, None
         if _eh_xml_bytes(raw) and xml_fallback is None:
@@ -1878,16 +1906,7 @@ def baixar_nf_ml(
         if _eh_xml_bytes(raw) and xml_candidato is None:
             xml_candidato = raw
 
-    # 1) Pack fiscal_documents — caminho do vendedor (PDF ou XML)
-    if pack_id and not content:
-        raw, err = _baixar_doc_packs_fiscal_documents(cur, int(id_vendedor), pack_id)
-        if raw:
-            _guardar(raw, f"nf_ml_{pack_id}")
-        elif err:
-            last_err = err
-            _log.info("ML packs fiscal_documents pedido %s: %s", id_pedido, err)
-
-    # 2) Faturador ML (users/.../invoices) — DANFE/XML ou metadados
+    # 1) Faturador MLB — onde a NF emitida no painel realmente fica
     faturador_meta: dict[str, Any] | None = None
     if not content and order_id:
         raw, meta, err = _baixar_doc_faturador_ml(
@@ -1901,7 +1920,16 @@ def baixar_nf_ml(
             last_err = err
             _log.info("ML faturador pedido %s: %s", id_pedido, err)
 
-    # 3) fiscal-info — XML oficial da NF-e/DC-e (muito comum no ML)
+    # 2) Pack fiscal_documents — NF anexada manualmente no pack
+    if pack_id and not content:
+        raw, err = _baixar_doc_packs_fiscal_documents(cur, int(id_vendedor), pack_id)
+        if raw:
+            _guardar(raw, f"nf_ml_{pack_id}")
+        elif err:
+            last_err = err
+            _log.info("ML packs fiscal_documents pedido %s: %s", id_pedido, err)
+
+    # 3) fiscal-info — XML oficial da NF-e/DC-e (API de transportadoras)
     if ship_id:
         try:
             info = api_request(cur, int(id_vendedor), "GET", f"/shipments/{ship_id}/fiscal-info")

@@ -1240,6 +1240,11 @@
         }
         try {
           const j = await puxarIntegracaoPedido(+btn.dataset.puxarIntegracao);
+          if (j?.fiscal_debug) {
+            try {
+              console.info("[DropNexo] fiscal_debug ML", j.fiscal_debug);
+            } catch (_) {}
+          }
           await renderFretePainel();
           atualizarNavFrete();
           const etqOk = !!j.etiqueta;
