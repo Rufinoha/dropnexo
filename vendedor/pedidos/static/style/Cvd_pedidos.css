@@ -914,6 +914,26 @@
   background: #fff;
 }
 
+.Pd_PayCard--pixManual .Pd_PayCardHead[data-pagar] {
+  cursor: pointer;
+  border-radius: 8px;
+  margin: -0.25rem;
+  padding: 0.25rem;
+  transition: background 0.15s ease;
+}
+
+.Pd_PayCard--pixManual .Pd_PayCardHead[data-pagar]:hover {
+  background: #ecfdf5;
+}
+
+.Pd_BtnPagar--destaque {
+  min-width: 160px;
+  font-weight: 700;
+  background: #32bcad !important;
+  border-color: #32bcad !important;
+  color: #fff !important;
+}
+
 .Pd_PayCardHead {
   display: flex;
   align-items: center;

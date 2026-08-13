@@ -263,21 +263,18 @@ def iniciar_pix_manual(
     if not ped:
         raise ValueError("Pedido não encontrado.")
     st = status_vendedor_pedido(ped)
-    if st in ("em_expedicao", "entregue", "cancelado"):
+    if st in ("entregue", "cancelado"):
         raise ValueError("Não é possível gerar PIX neste status do pedido.")
     if pedido_tem_comprovante_pix(cur, id_pedido):
         raise ValueError(
             "Já existe comprovante anexado. Remova o comprovante para gerar o PIX novamente."
         )
 
-    # Legado / inconsistente sem comprovante: reabre e gera
-    if st in (STATUS_PAGO, STATUS_AGUARDANDO_CONFIRMACAO):
+    # Qualquer status sem comprovante (pago/expedição legado etc.): reabre e gera
+    if st not in (STATUS_IMPORTADO, STATUS_AGUARDANDO):
         return reabrir_pagamento_pix_manual(
             cur, id_vendedor, id_pedido, id_usuario=id_usuario
         )
-
-    if not _status_vendedor_pagavel(st):
-        raise ValueError("Somente pedidos importados ou aguardando pagamento podem usar PIX manual.")
 
     return _gerar_payload_e_gravar_pix(cur, ped, id_pedido=id_pedido)
 
@@ -417,10 +414,10 @@ def reabrir_pagamento_pix_manual(
     if not ped:
         raise ValueError("Pedido não encontrado.")
     st = status_vendedor_pedido(ped)
-    if st in ("em_expedicao", "entregue", "cancelado"):
+    if st in ("entregue", "cancelado"):
         raise ValueError("Não é possível reabrir cobrança neste status.")
-    if st not in (STATUS_PAGO, STATUS_AGUARDANDO_CONFIRMACAO):
-        raise ValueError("Só é possível reabrir cobrança em pedidos pagos ou aguardando confirmação.")
+    if pedido_tem_comprovante_pix(cur, id_pedido):
+        raise ValueError("Remova o comprovante antes de gerar o PIX novamente.")
 
     alvo = (
         STATUS_IMPORTADO

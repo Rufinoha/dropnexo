@@ -1574,9 +1574,14 @@
     });
 
     elPayIntegracoes.querySelectorAll("[data-pagar]").forEach((btn) => {
-      btn.addEventListener("click", () =>
-        pagarCard(+btn.dataset.pagar, btn.dataset.integ, +btn.dataset.ped)
-      );
+      const go = () => pagarCard(+btn.dataset.pagar, btn.dataset.integ, +btn.dataset.ped);
+      btn.addEventListener("click", go);
+      btn.addEventListener("keydown", (ev) => {
+        if (ev.key === "Enter" || ev.key === " ") {
+          ev.preventDefault();
+          go();
+        }
+      });
     });
 
     elPayIntegracoes.querySelectorAll("[data-reabrir-pix]").forEach((btn) => {
@@ -1619,37 +1624,32 @@
     const stPag = (ped?.status_pagamento || "").toLowerCase();
     const comprovantes = (ped?.anexos || []).filter((a) => a.tipo === "comprovante_pix");
     const temComprovante = comprovantes.length > 0;
-    // Pago de verdade = fornecedor confirmou (pago_em / status_pagamento=pago)
     const pagoConfirmadoForn =
       ped &&
       ["pago", "em_expedicao", "entregue"].includes(stV(ped)) &&
-      (stPag === "pago" || !!ped.pago_em);
+      (stPag === "pago" || !!ped.pago_em) &&
+      temComprovante;
     const aguardando = stV(ped) === "aguardando_pagamento";
-    const aguardandoConf =
-      temComprovante ||
-      stV(ped) === "aguardando_confirmacao" ||
-      stPag === "comprovante_enviado";
+    const aguardandoConf = temComprovante || stV(ped) === "aguardando_confirmacao";
     const importado = stV(ped) === "importado";
     const rascunho = stV(ped) === "rascunho";
-    const pixManualAtivo = ped?.meio_pagamento === "pix_manual" || ped?.pix_manual_payload;
-    const bloqueadoExpedicao =
-      ped && ["em_expedicao", "entregue", "cancelado"].includes(stV(ped));
-    // Gerar PIX disponível até anexar o comprovante (volta se excluir o comprovante)
+    const pixManualAtivo = !!(ped?.meio_pagamento === "pix_manual" || ped?.pix_manual_payload);
+    const st = stV(ped);
+    const idPed = ped?.id || 0;
+    // Botão liberado até ter comprovante (cancela/entregue não)
     const podeGerarPixManual =
-      isPixManual && ped && !bloqueadoExpedicao && !rascunho && !temComprovante;
+      isPixManual && !!idPed && !temComprovante && !["cancelado", "entregue"].includes(st);
 
     let statusHtml = "";
-    if (pagoConfirmadoForn && (!isPixManual || temComprovante)) {
+    if (pagoConfirmadoForn) {
       const quando = ped.pago_em ? new Date(ped.pago_em).toLocaleString("pt-BR") : "";
       statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pago">Pagamento aprovado pelo fornecedor${quando ? ` · ${esc(quando)}` : ""}</div>`;
-    } else if (pagoConfirmadoForn && isPixManual && !temComprovante) {
-      statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pendente">Gere o PIX e anexe o comprovante para o fornecedor confirmar</div>`;
     } else if (temComprovante && isPixManual) {
-      statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pendente">Comprovante enviado — aguardando o fornecedor confirmar o pagamento</div>`;
-    } else if (importado) {
-      statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pendente">Cliente pagou no canal. Pague o fornecedor via PIX · ${fmt(totalFornecedorPedido(ped))}</div>`;
-    } else if (aguardando) {
-      statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pendente">Gere o PIX, pague e anexe o comprovante · ${fmt(totalFornecedorPedido(ped))}</div>`;
+      statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pendente">Comprovante enviado — aguardando o fornecedor confirmar</div>`;
+    } else if (isPixManual && ped) {
+      statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pendente">Clique em <strong>Gerar PIX</strong> para ver o QR e o copia e cola · ${fmt(totalFornecedorPedido(ped))}</div>`;
+    } else if (importado || aguardando) {
+      statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pendente">Pague o fornecedor · ${fmt(totalFornecedorPedido(ped))}</div>`;
     } else if (rascunho) {
       statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pendente">Confirme o pedido para pagar</div>`;
     }
@@ -1661,8 +1661,8 @@
     const opcoes = [];
     if (isPixManual) {
       opcoes.push(`
-        <label class="Pd_PayOpcao Pd_PayOpcao--pix${pref === "pix_manual" || !pref ? " is-selected" : ""}">
-          <input type="radio" name="pd_meio_${k}" value="pix_manual"${pref === "pix_manual" || !pref ? " checked" : ""} />
+        <label class="Pd_PayOpcao Pd_PayOpcao--pix is-selected">
+          <input type="radio" name="pd_meio_${k}" value="pix_manual" checked />
           PIX Manual
         </label>`);
     } else {
@@ -1684,21 +1684,27 @@
 
     const podePagarMp =
       !isPixManual && (aguardando || importado) && !pagoConfirmadoForn && !aguardandoConf;
-    const idPed = ped?.id || 0;
-    const passosPix =
-      isPixManual && ped && !bloqueadoExpedicao && !rascunho && !pagoConfirmadoForn
-        ? `<ol class="Pd_PixPassos">
-            <li>Gere o PIX (QR / copia e cola)</li>
-            <li>Anexe o comprovante</li>
-            <li>Fornecedor confirma o pagamento</li>
-          </ol>`
-        : "";
+    const passosPix = isPixManual && ped && podeGerarPixManual
+      ? `<ol class="Pd_PixPassos">
+          <li>Gere o PIX (QR / copia e cola)</li>
+          <li>Anexe o comprovante</li>
+          <li>Fornecedor confirma o pagamento</li>
+        </ol>`
+      : "";
     const labelGerar = pixManualAtivo ? "Gerar PIX novamente" : "Gerar PIX";
     const payRow = `
       <div class="Pd_PayRow">
         ${statusHtml || ""}
-        ${podeGerarPixManual ? `<button type="button" class="Cl_BtnSalvar Pd_BtnPagar" data-pagar="${idForn}" data-integ="${esc(integracao)}" data-ped="${idPed}">${labelGerar}</button>` : ""}
-        ${podePagarMp ? `<button type="button" class="Cl_BtnSalvar Pd_BtnPagar" data-pagar="${idForn}" data-integ="${esc(integracao)}" data-ped="${idPed}">Gerar PIX</button>` : ""}
+        ${
+          podeGerarPixManual
+            ? `<button type="button" class="Cl_BtnSalvar Pd_BtnPagar Pd_BtnPagar--destaque" data-pagar="${idForn}" data-integ="${esc(integracao)}" data-ped="${idPed}">${labelGerar}</button>`
+            : ""
+        }
+        ${
+          podePagarMp
+            ? `<button type="button" class="Cl_BtnSalvar Pd_BtnPagar" data-pagar="${idForn}" data-integ="${esc(integracao)}" data-ped="${idPed}">Gerar PIX</button>`
+            : ""
+        }
       </div>`;
 
     const listaComprovantes = temComprovante
@@ -1709,7 +1715,7 @@
             <div class="Pd_ComprovanteItem">
               <a href="${anexoHref(a)}" target="_blank" rel="noopener">${esc(a.nome_original || "Comprovante")}</a>
               ${
-                !pagoConfirmadoForn && !bloqueadoExpedicao
+                !pagoConfirmadoForn && st !== "entregue" && st !== "cancelado"
                   ? `<button type="button" class="Pd_BtnLink Pd_BtnLink--danger" data-del-anexo="${a.id}">Excluir comprovante</button>`
                   : ""
               }
@@ -1719,16 +1725,19 @@
         </div>`
       : "";
     const mostrarUploadComprovante =
-      isPixManual && ped && !bloqueadoExpedicao && !pagoConfirmadoForn && !temComprovante && pixManualAtivo;
-    const mostrarQr = pixManualAtivo && !temComprovante && !pagoConfirmadoForn;
-    const pixBox = isPixManual && ped && (pixManualAtivo || podeGerarPixManual || temComprovante)
+      isPixManual && ped && !pagoConfirmadoForn && !temComprovante && pixManualAtivo;
+    const mostrarQr = pixManualAtivo && !temComprovante;
+    const pixBox = isPixManual && ped
       ? `<div class="Pd_PixInline" id="pd_pixm_${ped.id}" ${mostrarQr ? "" : "hidden"}></div>
          ${listaComprovantes}
-         ${mostrarUploadComprovante ? `
-         <div class="Pd_ComprovanteUpload">
+         ${
+           mostrarUploadComprovante
+             ? `<div class="Pd_ComprovanteUpload">
            <label class="Pd_Hint">Após pagar, anexe o comprovante:</label>
            <input type="file" class="Pd_AnexoInput" accept=".pdf,.png,.jpg,.jpeg,.webp" data-upload-comprovante="${ped.id}" />
-         </div>` : ""}`
+         </div>`
+             : ""
+         }`
       : isPixManual
         ? ""
         : podePagarMp
@@ -1736,15 +1745,19 @@
           : "";
 
     return `
-      <div class="Pd_PayCard" data-forn="${idForn}" data-pay-key="${esc(k)}" data-integ="${esc(integracao)}">
-        <div class="Pd_PayCardHead">
+      <div class="Pd_PayCard${isPixManual ? " Pd_PayCard--pixManual" : ""}" data-forn="${idForn}" data-pay-key="${esc(k)}" data-integ="${esc(integracao)}">
+        <div class="Pd_PayCardHead"${
+          podeGerarPixManual
+            ? ` role="button" tabindex="0" data-pagar="${idForn}" data-integ="${esc(integracao)}" data-ped="${idPed}" title="Clique para gerar o PIX"`
+            : ""
+        }>
           ${logoHtml}
           <div>
             <div class="Pd_PayCardNome">${esc(nomeInteg)}</div>
             <div class="Pd_PayCardForn">${esc(fornNome)}${ped?.numero ? ` · ${esc(ped.numero)}` : ""}</div>
           </div>
         </div>
-        ${(aguardando || importado || rascunho || podeGerarPixManual || !ped) && opcoes.length ? `<div class="Pd_PayOpcoes">${opcoes.join("")}</div>` : ""}
+        ${opcoes.length ? `<div class="Pd_PayOpcoes">${opcoes.join("")}</div>` : ""}
         ${passosPix}
         ${payRow}
         ${pixBox}
@@ -1963,10 +1976,18 @@
     const okStatusMp = ["importado", "aguardando_pagamento"].includes(st);
     const temComp = (ped.anexos || []).some((a) => a.tipo === "comprovante_pix");
     const okStatusPixManual =
-      isPixManual &&
-      !temComp &&
-      !["em_expedicao", "entregue", "cancelado", "rascunho"].includes(st);
-    if (!okStatusMp && !okStatusPixManual) return;
+      isPixManual && !temComp && !["entregue", "cancelado"].includes(st);
+    if (!okStatusMp && !okStatusPixManual) {
+      if (isPixManual && temComp && window.Swal) {
+        Swal.fire({
+          icon: "info",
+          title: "Comprovante já anexado",
+          text: "Exclua o comprovante se quiser gerar o PIX de novo.",
+          confirmButtonColor: "#021F81",
+        });
+      }
+      return;
+    }
 
     const k = payKey(idForn, integracao);
     const meio = meioPagamentoPorFornecedor[k] || (isPixManual ? "pix_manual" : "pix");

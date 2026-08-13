@@ -3,7 +3,7 @@
 {% set nav_ativo = 'vd_pedidos' %}
 {% block topbar_title %}Pedidos{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('vd_pedidos.static', filename='style/Cvd_pedidos.css') }}?v=23" />
+<link rel="stylesheet" href="{{ url_for('vd_pedidos.static', filename='style/Cvd_pedidos.css') }}?v=24" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal Pd_Page">
@@ -230,7 +230,7 @@
 
             <div class="Pd_PaySection">
               <h5>Forma de pagamento</h5>
-              <p class="Pd_Hint">Escolha PIX ou cartão e use <strong>Pagar agora</strong> após confirmar o pedido. O status do pagamento aparece neste painel.</p>
+              <p class="Pd_Hint">No PIX Manual, clique em <strong>Gerar PIX</strong> para ver o QR e o copia e cola. Depois anexe o comprovante e aguarde o fornecedor confirmar.</p>
               <div id="pd_payIntegracoes" class="Pd_PayIntegracoes">
                 <p class="Pd_Hint">Adicione produtos para ver as opções de pagamento.</p>
               </div>
@@ -254,6 +254,6 @@
 {% endblock %}
 {% block page_js %}
 <script defer src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
-<script defer src="{{ url_for('vd_pedidos.static', filename='script/Svd_pedidos.js') }}?v=40"></script>
+<script defer src="{{ url_for('vd_pedidos.static', filename='script/Svd_pedidos.js') }}?v=41"></script>
 <script id="pd_cfg" type="application/json">{{ {"mp_icone": url_for("mercadopago.static", filename="imge/icone_mercadopago.png")}|tojson }}</script>
 {% endblock %}
