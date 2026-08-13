@@ -245,63 +245,143 @@
     }
   });
 
-  function htmlListaErros(erros) {
-    if (!erros?.length) return "";
-    const itens = erros
-      .slice(0, 6)
-      .map((e) => `<li style="margin:0.25rem 0;text-align:left">${esc(e)}</li>`)
-      .join("");
-    return `<ul style="margin:0.65rem 0 0;padding-left:1.15rem;font-size:0.9rem;line-height:1.4">${itens}</ul>`;
+  function esc(s) {
+    return String(s ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
   }
 
-  function montarHtmlResultadoSync(j) {
-    const r = j.resumo || {};
-    const temResumoPedidos =
-      j.total_encontrados != null || r.encontrados != null || j.importados != null;
-    const encontrados = r.encontrados ?? j.total_encontrados ?? 0;
-    const importados = r.importados ?? j.importados ?? 0;
-    const atualizados = r.atualizados ?? j.atualizados ?? 0;
-    const cancelados = r.cancelados ?? j.cancelados ?? 0;
-    const ignorados = r.ignorados ?? j.ignorados ?? 0;
-    const erros = j.detalhes_erros || [];
-    const grid = temResumoPedidos
-      ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:0.35rem 0.75rem;font-size:0.9rem">
-          <span>Encontrados no ML</span><strong>${encontrados}</strong>
-          <span>Criados no DropNexo</span><strong>${importados}</strong>
-          <span>Atualizados (dados)</span><strong>${atualizados}</strong>
-          <span>Cancelamentos</span><strong>${cancelados}</strong>
-          <span>Já existentes</span><strong>${ignorados}</strong>
-        </div>`
-      : "";
-    return `
-      <div style="text-align:left;font-size:0.95rem;line-height:1.45">
-        <p style="margin:0 0 0.55rem">${esc(j.message || "Sincronização concluída.")}</p>
-        ${grid}
-        ${
-          erros.length
-            ? `<p style="margin:0.85rem 0 0;font-weight:700">O que aconteceu</p>${htmlListaErros(erros)}`
-            : ""
+  function waitSwal(ms = 2500) {
+    if (window.Swal) return Promise.resolve(window.Swal);
+    return new Promise((resolve) => {
+      const t0 = Date.now();
+      const id = setInterval(() => {
+        if (window.Swal || Date.now() - t0 > ms) {
+          clearInterval(id);
+          resolve(window.Swal || null);
         }
+      }, 40);
+    });
+  }
+
+  function htmlLoadingSync(titulo, sub) {
+    return `
+      <div class="MlSync_Card">
+        <div class="MlSync_Hero">
+          <div class="MlSync_HeroBadge">Mercado Livre</div>
+          <h3 class="MlSync_HeroTitle">${esc(titulo || "Sincronizando…")}</h3>
+          <p class="MlSync_HeroSub">${esc(sub || "Aguarde um instante.")}</p>
+        </div>
+        <div class="MlSync_Body">
+          <ul class="MlSync_Steps" id="ml_sync_steps">
+            <li class="MlSync_Step is-on" data-step="1"><i class="MlSync_Dot"></i> Conectando à conta ML</li>
+            <li class="MlSync_Step" data-step="2"><i class="MlSync_Dot"></i> Buscando pedidos pagos</li>
+            <li class="MlSync_Step" data-step="3"><i class="MlSync_Dot"></i> Importando / atualizando no DropNexo</li>
+          </ul>
+          <div class="MlSync_Bar" aria-hidden="true"><i></i></div>
+        </div>
+      </div>`;
+  }
+
+  function avancarStepsLoading() {
+    const steps = document.querySelectorAll("#ml_sync_steps .MlSync_Step");
+    if (!steps.length) return null;
+    let i = 0;
+    steps[0].classList.add("is-on");
+    return setInterval(() => {
+      if (i < steps.length) {
+        steps[i].classList.remove("is-on");
+        steps[i].classList.add("is-done");
+      }
+      i += 1;
+      if (i < steps.length) steps[i].classList.add("is-on");
+    }, 900);
+  }
+
+  function htmlResultadoSync(j, heroTitle, heroSub) {
+    const r = j.resumo || {};
+    const encontrados = Number(r.encontrados ?? j.total_encontrados ?? 0);
+    const importados = Number(r.importados ?? j.importados ?? 0);
+    const atualizados = Number(r.atualizados ?? j.atualizados ?? 0);
+    const cancelados = Number(r.cancelados ?? j.cancelados ?? 0);
+    const ignorados = Number(r.ignorados ?? j.ignorados ?? 0);
+    const detalhes = j.detalhes_erros || [];
+    const temPedidos =
+      j.total_encontrados != null || r.encontrados != null || j.importados != null;
+
+    const metrics = temPedidos
+      ? `
+      <div class="MlSync_Metrics">
+        <div class="MlSync_Metric"><b>${encontrados}</b><span>Encontrados</span></div>
+        <div class="MlSync_Metric is-ok"><b>${importados}</b><span>Criados</span></div>
+        <div class="MlSync_Metric is-ok"><b>${atualizados}</b><span>Atualizados</span></div>
+        <div class="MlSync_Metric is-mute"><b>${ignorados}</b><span>Já no DropNexo</span></div>
       </div>
-    `;
+      ${cancelados ? `<p class="MlSync_Msg">${cancelados} cancelamento(s) sincronizado(s).</p>` : ""}`
+      : `<p class="MlSync_Msg">${esc(j.message || "Concluído.")}</p>`;
+
+    const lista = detalhes.length
+      ? `<div class="MlSync_Details"><strong>O que aconteceu</strong><ul>${detalhes
+          .slice(0, 6)
+          .map((e) => `<li>${esc(e)}</li>`)
+          .join("")}</ul></div>`
+      : "";
+
+    return `
+      <div class="MlSync_Card">
+        <div class="MlSync_Hero">
+          <div class="MlSync_HeroBadge">Mercado Livre</div>
+          <h3 class="MlSync_HeroTitle">${esc(heroTitle)}</h3>
+          <p class="MlSync_HeroSub">${esc(heroSub || j.message || "")}</p>
+        </div>
+        <div class="MlSync_Body">
+          ${metrics}
+          ${temPedidos && j.message ? `<p class="MlSync_Msg">${esc(j.message)}</p>` : ""}
+          ${lista}
+        </div>
+      </div>`;
+  }
+
+  function htmlErroSync(msg) {
+    return `
+      <div class="MlSync_Card">
+        <div class="MlSync_Hero" style="background:linear-gradient(135deg,#7f1d1d 0%,#b91c1c 55%,#ea580c 100%)">
+          <div class="MlSync_HeroBadge">Atenção</div>
+          <h3 class="MlSync_HeroTitle">Não foi possível sincronizar</h3>
+          <p class="MlSync_HeroSub">Revise o detalhe abaixo e tente de novo.</p>
+        </div>
+        <div class="MlSync_Body">
+          <div class="MlSync_Details" style="background:#fef2f2;border-color:#fecaca">
+            <strong style="color:#991b1b">Motivo</strong>
+            <ul style="color:#7f1d1d"><li>${esc(msg)}</li></ul>
+          </div>
+        </div>
+      </div>`;
   }
 
   async function postSync(url, btn, tituloLoading, textoLoading) {
     if (!btn) return;
     btn.disabled = true;
-    const temSwal = !!window.Swal;
-    if (temSwal) {
-      Swal.fire({
-        title: tituloLoading || "Processando…",
-        html: `<p style="margin:0;color:#64748b">${esc(textoLoading || "Aguarde…")}</p>`,
+    const SwalApi = await waitSwal();
+    let stepTimer = null;
+
+    if (SwalApi) {
+      SwalApi.fire({
+        html: htmlLoadingSync(tituloLoading, textoLoading),
+        showConfirmButton: false,
         allowOutsideClick: false,
         allowEscapeKey: false,
-        showConfirmButton: false,
-        didOpen: () => Swal.showLoading(),
+        customClass: { popup: "MlSyncSwal" },
+        didOpen: () => {
+          stepTimer = avancarStepsLoading();
+        },
       });
     } else {
       mostrarMsg(textoLoading || "Processando…", false);
     }
+
     try {
       const r = await fetch(url, {
         method: "POST",
@@ -316,50 +396,48 @@
         throw new Error(r.status >= 500 ? "Erro no servidor." : "Resposta inválida do servidor.");
       }
       if (!r.ok || !j.success) {
-        const detalhe = (j.detalhes_erros && j.detalhes_erros[0]) || j.message || "Falha na sincronização.";
+        const detalhe =
+          (j.detalhes_erros && j.detalhes_erros[0]) || j.message || "Falha na sincronização.";
         throw new Error(detalhe);
       }
+
       const importados = Number(j.importados || 0);
       const atualizados = Number(j.atualizados || 0);
-      const erros = j.detalhes_erros || [];
-      const soInfo = erros.every((e) => String(e).includes("já exist") || String(e).includes("atualizei"));
-      const icon =
-        importados > 0 || atualizados > 0
-          ? "success"
-          : erros.length && !soInfo
-            ? "warning"
-            : "info";
-      const title =
+      const heroTitle =
         importados > 0
           ? `${importados} pedido(s) importado(s)`
           : atualizados > 0
             ? `${atualizados} pedido(s) atualizado(s)`
             : "Sincronização concluída";
-      if (temSwal) {
-        await Swal.fire({
-          icon,
-          title,
-          html: montarHtmlResultadoSync(j),
-          confirmButtonText: "Ok",
-          confirmButtonColor: "#021F81",
-          width: "32rem",
+      const heroSub =
+        importados > 0 || atualizados > 0
+          ? "Tudo certo — confira o resumo abaixo."
+          : "Nada novo para criar; veja o detalhe dos pedidos encontrados.";
+
+      if (SwalApi) {
+        if (stepTimer) clearInterval(stepTimer);
+        await SwalApi.fire({
+          html: htmlResultadoSync(j, heroTitle, heroSub),
+          confirmButtonText: "Perfeito",
+          customClass: { popup: "MlSyncSwal" },
+          showClass: { popup: "swal2-show" },
         });
       } else {
-        mostrarMsg(j.message || title, false);
+        mostrarMsg(j.message || heroTitle, false);
       }
     } catch (e) {
-      if (temSwal) {
-        await Swal.fire({
-          icon: "error",
-          title: "Não foi possível sincronizar",
-          html: `<p style="text-align:left;margin:0;line-height:1.45">${esc(e.message)}</p>`,
-          confirmButtonText: "Ok",
-          confirmButtonColor: "#021F81",
+      if (SwalApi) {
+        if (stepTimer) clearInterval(stepTimer);
+        await SwalApi.fire({
+          html: htmlErroSync(e.message),
+          confirmButtonText: "Entendi",
+          customClass: { popup: "MlSyncSwal" },
         });
       } else {
         mostrarMsg(e.message, true);
       }
     } finally {
+      if (stepTimer) clearInterval(stepTimer);
       btn.disabled = false;
     }
   }
@@ -369,17 +447,9 @@
       "/api/integracoes/mercado-livre/sync/pedidos",
       el.btnSync,
       "Buscando pedidos…",
-      "Consultando o Mercado Livre e importando pedidos pagos. Isso pode levar alguns segundos."
+      "Consultando o Mercado Livre e sincronizando com o DropNexo."
     )
   );
-
-  function esc(s) {
-    return String(s ?? "")
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;");
-  }
 
   function valorCategoriaMlLinha(tr) {
     return (tr.querySelector(".ml-hid-cat")?.value || "").trim().toUpperCase();
