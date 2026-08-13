@@ -6,7 +6,11 @@ import time
 from flask import Blueprint, jsonify, render_template, request, send_file, session, url_for
 
 from core.pedidos.servico import listar_meios_fornecedor
-from api.pix_manual.pix_manual import iniciar_pix_manual, marcar_comprovante_enviado
+from api.pix_manual.pix_manual import (
+    iniciar_pix_manual,
+    marcar_comprovante_enviado,
+    reabrir_pagamento_pix_manual,
+)
 
 from global_utils import Var_ConectarBanco, exigir_modulo, exigir_permissao, login_obrigatorio
 from core.pedidos.servico import (
@@ -894,6 +898,36 @@ def pedidos_pagar():
         return jsonify(success=False, message=str(e)), 400
     except RuntimeError as e:
         return jsonify(success=False, message=str(e)), 502
+    finally:
+        conn.close()
+
+
+@vd_pedidos_bp.post("/vendedor/pedidos/<int:id_pedido>/pix-manual/reabrir")
+@login_obrigatorio()
+@exigir_modulo(MODULO_VENDEDOR)
+@exigir_permissao(codigo="vd_pedidos.editar")
+def pedidos_pix_manual_reabrir(id_pedido: int):
+    """Reabre cobrança PIX: QR + copia e cola; pago só após comprovante + aprovação do fornecedor."""
+    id_v = _id_vendedor()
+    if not id_v:
+        return jsonify(success=False, message="Sessão inválida."), 403
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        result = reabrir_pagamento_pix_manual(
+            cur, id_v, id_pedido, id_usuario=_id_usuario()
+        )
+        ped = obter_pedido(cur, id_pedido, id_vendedor=id_v)
+        conn.commit()
+        return jsonify(
+            success=True,
+            message="PIX gerado. Pague, anexe o comprovante e aguarde o fornecedor aprovar.",
+            pedido=ped,
+            **result,
+        )
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 400
     finally:
         conn.close()
 

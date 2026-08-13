@@ -312,15 +312,38 @@ def _sql_set_status_vendedor(cur, status_placeholder: str = "%s") -> tuple[str, 
     return f"{cv} = {status_placeholder}", False
 
 
-def _normalizar_status_pedido(origem: str, sv: str, sc: str | None) -> tuple[str, str]:
-    """Compatível com schema antigo (só status) e pedidos de canal já gravados."""
+def _normalizar_status_pedido(
+    origem: str,
+    sv: str,
+    sc: str | None,
+    *,
+    status_pagamento: str | None = None,
+    pago_em=None,
+) -> tuple[str, str]:
+    """
+    Compatível com schema antigo e pedidos de canal.
+
+    Em canais (ML/Bling/…), um status vendedor "pago" legado sem confirmação
+    ao fornecedor (sem pago_em / status_pagamento=pago) significava só
+    "cliente pagou no marketplace" → trata como importado.
+
+    Pagamento ao fornecedor de verdade: status_pagamento=pago ou pago_em
+    preenchido — aí "pago" permanece (após aprovação do fornecedor no PIX).
+    """
     origem_l = (origem or "manual").strip().lower()
     status_v = (sv or "").strip()
     status_c = (sc or "").strip()
     canal = origem_l in ("bling", "mercado_livre", "tiktok", "amazon")
     if not status_c:
         status_c = STATUS_COMPRADOR_PAGO if canal else STATUS_COMPRADOR_PENDENTE
-    if canal and status_v == STATUS_PAGO and status_c == STATUS_COMPRADOR_PAGO:
+    pag = (status_pagamento or "").strip().lower()
+    pago_confirmado_fornecedor = bool(pago_em) or pag == "pago"
+    if (
+        canal
+        and status_v == STATUS_PAGO
+        and status_c == STATUS_COMPRADOR_PAGO
+        and not pago_confirmado_fornecedor
+    ):
         status_v = STATUS_IMPORTADO
     return status_v, status_c
 
@@ -450,7 +473,11 @@ def sql_pedidos_resumo(cur) -> str:
 
 def _pedido_dict(row, fornecedor_nome: str | None = None, vendedor_nome: str | None = None) -> dict:
     origem = row[5]
-    sv, sc = _normalizar_status_pedido(origem, row[6], row[7])
+    status_pag = row[8]
+    pago_em = row[25] if len(row) > 25 else None
+    sv, sc = _normalizar_status_pedido(
+        origem, row[6], row[7], status_pagamento=status_pag, pago_em=pago_em
+    )
     return {
         "id": row[0],
         "id_grupo": row[1],
@@ -461,7 +488,7 @@ def _pedido_dict(row, fornecedor_nome: str | None = None, vendedor_nome: str | N
         "status_vendedor": sv,
         "status_comprador": sc,
         "status": sv,
-        "status_pagamento": row[8],
+        "status_pagamento": status_pag,
         "cliente_nome": row[9] or "",
         "cliente_email": row[10] or "",
         "cliente_telefone": row[11] or "",
@@ -1477,13 +1504,22 @@ def marcar_pedido_pago(
     """Marca pedido como pago. Retorna False se já estava pago."""
     cv = col_status_vendedor(cur)
     cur.execute(
-        f"SELECT {cv}, status_pagamento, origem FROM tbl_pedido WHERE id = %s",
+        f"SELECT {cv}, status_pagamento, origem, pago_em FROM tbl_pedido WHERE id = %s",
         (id_pedido,),
     )
     row = cur.fetchone()
     if not row:
         raise ValueError("Pedido não encontrado.")
-    sv, _ = _normalizar_status_pedido(row[2] or "", row[0], None)
+    sv_raw = (row[0] or "").strip()
+    if sv_raw == STATUS_PAGO and (row[3] or (row[1] or "").strip().lower() == "pago"):
+        return False
+    sv, _ = _normalizar_status_pedido(
+        row[2] or "",
+        row[0],
+        None,
+        status_pagamento=row[1],
+        pago_em=row[3],
+    )
     if sv == STATUS_PAGO:
         return False
     if not _status_vendedor_pagavel(sv):
@@ -3037,7 +3073,13 @@ def _montar_contexto_pedidos(
     itens: list[dict] = []
     pedidos: list[dict] = []
     for pid, sv, sc, status_pag, meio_pag, origem, valor_total, id_forn, forn_nome, numero, pago_em, pix_payload, pix_txid in pedidos_rows:
-        sv, sc = _normalizar_status_pedido(origem or "manual", sv, sc)
+        sv, sc = _normalizar_status_pedido(
+            origem or "manual",
+            sv,
+            sc,
+            status_pagamento=status_pag,
+            pago_em=pago_em,
+        )
         frete_info = {}
         try:
             from api.melhor_envio.melhor_envio import frete_resumo_pedido

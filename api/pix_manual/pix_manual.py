@@ -180,10 +180,12 @@ from core.pedidos.servico import (
     STATUS_AGUARDANDO,
     STATUS_AGUARDANDO_CONFIRMACAO,
     STATUS_IMPORTADO,
+    STATUS_PAGO,
     _sql_set_status_vendedor,
     _status_vendedor_pagavel,
     marcar_pedido_pago,
     obter_pedido,
+    origem_e_canal_externo,
     registrar_historico,
     status_vendedor_pedido,
 )
@@ -291,20 +293,24 @@ def confirmar_pix_manual(
     id_fornecedor: int,
     id_usuario: int | None = None,
 ) -> None:
+    """Só marca pago depois do vendedor anexar o comprovante (aprovação do fornecedor)."""
     ped = obter_pedido(cur, id_pedido, id_fornecedor=id_fornecedor)
     if not ped:
         raise ValueError("Pedido não encontrado.")
     if ped.get("meio_pagamento") != "pix_manual":
         raise ValueError("Este pedido não foi pago via PIX manual.")
     st = status_vendedor_pedido(ped)
-    if st not in (STATUS_AGUARDANDO_CONFIRMACAO, STATUS_AGUARDANDO, STATUS_IMPORTADO):
-        raise ValueError("Pedido não está aguardando confirmação de pagamento.")
-    if ped.get("status_pagamento") not in ("comprovante_enviado", "pendente"):
-        raise ValueError("Situação de pagamento inválida para confirmação.")
-    if st != STATUS_AGUARDANDO_CONFIRMACAO and ped.get("status_pagamento") != "comprovante_enviado":
-        raise ValueError("Aguarde o vendedor anexar o comprovante antes de confirmar.")
+    if st != STATUS_AGUARDANDO_CONFIRMACAO:
+        raise ValueError("Aguarde o vendedor anexar o comprovante PIX antes de aprovar.")
+    if (ped.get("status_pagamento") or "").strip().lower() != "comprovante_enviado":
+        raise ValueError("Só é possível aprovar após o envio do comprovante.")
 
-    marcar_pedido_pago(cur, id_pedido, id_usuario=id_usuario)
+    marcar_pedido_pago(
+        cur,
+        id_pedido,
+        id_usuario=id_usuario,
+        detalhe="Fornecedor aprovou o comprovante PIX manual.",
+    )
     registrar_historico(
         cur,
         id_pedido,
@@ -312,6 +318,58 @@ def confirmar_pix_manual(
         "Fornecedor confirmou recebimento do PIX manual.",
         id_usuario,
     )
+
+
+def reabrir_pagamento_pix_manual(
+    cur,
+    id_vendedor: int,
+    id_pedido: int,
+    *,
+    id_usuario: int | None = None,
+) -> dict:
+    """
+    Volta o pedido para cobrança PIX (QR/copia e cola), sem marcar pago.
+    Fluxo: gerar PIX → anexar comprovante → fornecedor aprova.
+    """
+    ped = obter_pedido(cur, id_pedido, id_vendedor=id_vendedor)
+    if not ped:
+        raise ValueError("Pedido não encontrado.")
+    st = status_vendedor_pedido(ped)
+    if st in ("em_expedicao", "entregue", "cancelado"):
+        raise ValueError("Não é possível reabrir cobrança neste status.")
+    if st not in (STATUS_PAGO, STATUS_AGUARDANDO_CONFIRMACAO):
+        raise ValueError("Só é possível reabrir cobrança em pedidos pagos ou aguardando confirmação.")
+
+    alvo = (
+        STATUS_IMPORTADO
+        if origem_e_canal_externo(ped.get("origem"))
+        else STATUS_AGUARDANDO
+    )
+    set_sv, dup = _sql_set_status_vendedor(cur)
+    params: list = [alvo]
+    if dup:
+        params.append(alvo)
+    params.extend([agora_utc(), id_pedido])
+    cur.execute(
+        f"""
+        UPDATE tbl_pedido SET
+            {set_sv},
+            status_pagamento = 'pendente',
+            pago_em = NULL,
+            meio_pagamento = COALESCE(NULLIF(meio_pagamento, ''), 'pix_manual'),
+            atualizado_em = %s
+        WHERE id = %s
+        """,
+        params,
+    )
+    registrar_historico(
+        cur,
+        id_pedido,
+        "pix_reaberto",
+        "Cobrança PIX reaberta. Gere o QR/copia e cola, anexe o comprovante e aguarde o fornecedor aprovar.",
+        id_usuario,
+    )
+    return iniciar_pix_manual(cur, id_vendedor, id_pedido)
 
 
 def rejeitar_comprovante_pix(

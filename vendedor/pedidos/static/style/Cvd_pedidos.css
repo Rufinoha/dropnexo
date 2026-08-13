@@ -977,6 +977,18 @@
 .Pd_PayStatus--pendente { color: #92400e; }
 .Pd_PayStatus--erro { color: #991b1b; }
 
+.Pd_PixPassos {
+  margin: 0.55rem 0 0.35rem;
+  padding-left: 1.15rem;
+  color: #475569;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.Pd_PixPassos li {
+  margin: 0.15rem 0;
+}
+
 .Pd_PixInline {
   margin-top: 0.75rem;
   padding-top: 0.75rem;
