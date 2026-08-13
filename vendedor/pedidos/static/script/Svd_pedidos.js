@@ -1151,28 +1151,47 @@
           const j = await puxarIntegracaoPedido(+btn.dataset.puxarIntegracao);
           await renderFretePainel();
           atualizarNavFrete();
-          const avisos = Array.isArray(j.avisos) ? j.avisos : [];
           const etqOk = !!j.etiqueta;
           const nfOk = !!j.fiscal;
+          const etqMotivo = j.etiqueta_motivo || (!etqOk ? "Ainda não liberada no Mercado Livre." : "");
+          const nfMotivo = j.fiscal_motivo || (!nfOk ? "Ainda não liberada no Mercado Livre." : "");
           const icon = etqOk && nfOk ? "success" : etqOk || nfOk ? "info" : "warning";
-          const linhas = [
-            `<li><strong>Etiqueta:</strong> ${etqOk ? "baixada" : "ainda não disponível"}</li>`,
-            `<li><strong>Nota fiscal:</strong> ${nfOk ? "baixada" : "ainda não disponível"}</li>`,
-          ];
-          const avisosHtml = avisos.length
-            ? `<p style="margin:0.75rem 0 0;font-weight:700">Detalhes</p><ul style="margin:0.35rem 0 0;padding-left:1.1rem;text-align:left">${avisos
-                .slice(0, 5)
-                .map((a) => `<li>${esc(a)}</li>`)
-                .join("")}</ul>`
-            : "";
+          const title =
+            etqOk && nfOk
+              ? "Documentos baixados"
+              : etqOk || nfOk
+                ? "Parcialmente disponível"
+                : "Ainda não disponível";
+          const card = (ok, nome, motivo) => `
+            <div style="padding:0.7rem 0.8rem;border-radius:10px;border:1px solid ${
+              ok ? "#bbf7d0" : "#fde68a"
+            };background:${ok ? "#f0fdf4" : "#fffbeb"};margin:0.4rem 0">
+              <div style="font-weight:800;color:${ok ? "#166534" : "#92400e"}">${nome}: ${
+                ok ? "pronta ✓" : "pendente"
+              }</div>
+              ${
+                ok
+                  ? `<div style="margin-top:0.2rem;font-size:0.85rem;color:#15803d">Arquivo anexado ao pedido.</div>`
+                  : `<div style="margin-top:0.25rem;font-size:0.88rem;line-height:1.4;color:#78350f">${esc(
+                      motivo
+                    )}</div>`
+              }
+            </div>`;
           if (temSwal) {
             await Swal.fire({
               icon,
-              title: etqOk || nfOk ? "Documentos da integração" : "Nada disponível ainda",
-              html: `<div style="text-align:left"><p style="margin:0 0 0.5rem">${esc(
-                j.message || ""
-              )}</p><ul style="margin:0;padding-left:1.1rem">${linhas.join("")}</ul>${avisosHtml}</div>`,
-              confirmButtonText: "Ok",
+              title,
+              html: `<div style="text-align:left">
+                <p style="margin:0 0 0.55rem;color:#475569">${esc(
+                  j.message || "Consultamos o Mercado Livre."
+                )}</p>
+                ${card(etqOk, "Etiqueta", etqMotivo)}
+                ${card(nfOk, "Nota fiscal", nfMotivo)}
+                <p style="margin:0.75rem 0 0;font-size:0.85rem;color:#64748b;line-height:1.4">
+                  Pode tentar de novo quando o ML liberar. Para anexar PDF agora, use a aba <strong>Manual</strong>.
+                </p>
+              </div>`,
+              confirmButtonText: "Entendi",
               confirmButtonColor: "#021F81",
             });
           }
@@ -1180,12 +1199,14 @@
           if (temSwal) {
             await Swal.fire({
               icon: "warning",
-              title: "Documentos ainda não disponíveis",
-              html: `<p style="text-align:left;margin:0;line-height:1.45">${esc(e.message)}</p>
-                <p style="text-align:left;margin:0.75rem 0 0;color:#64748b;font-size:0.9rem">
-                  A etiqueta libera quando o envio está pronto no canal. A nota, após a emissão. Se precisar anexar PDF agora, use a aba <strong>Manual</strong>.
-                </p>`,
-              confirmButtonText: "Ok",
+              title: "Não foi possível buscar",
+              html: `<div style="text-align:left">
+                <p style="margin:0;line-height:1.45;color:#334155">${esc(e.message)}</p>
+                <p style="margin:0.75rem 0 0;color:#64748b;font-size:0.9rem;line-height:1.4">
+                  Tente novamente em alguns minutos ou anexe o PDF na aba <strong>Manual</strong>.
+                </p>
+              </div>`,
+              confirmButtonText: "Entendi",
               confirmButtonColor: "#021F81",
             });
           }

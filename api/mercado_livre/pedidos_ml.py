@@ -1330,9 +1330,10 @@ def baixar_etiqueta_ml(
 
     if not content:
         raise ValueError(
-            str(last_err)
-            if last_err
-            else "Etiqueta indisponível. No ML ela costuma liberar em ready_to_ship."
+            _mensagem_doc_ml_amigavel(
+                last_err or "Etiqueta indisponível.",
+                tipo="etiqueta",
+            )
         )
 
     # ZIP (zpl/pdf bundle) — grava como .zip se magic ZIP
@@ -1479,9 +1480,10 @@ def baixar_nf_ml(
 
     if not content or len(content) < 80:
         raise ValueError(
-            str(last_err)
-            if last_err
-            else "DANFE PDF ainda não disponível no Mercado Livre."
+            _mensagem_doc_ml_amigavel(
+                last_err or "DANFE PDF ainda não disponível no Mercado Livre.",
+                tipo="fiscal",
+            )
         )
 
     pasta = Path(pasta_destino)
@@ -1490,7 +1492,10 @@ def baixar_nf_ml(
     is_pdf = content[:4] == b"%PDF"
     if is_xml or not is_pdf:
         raise ValueError(
-            "DANFE PDF indisponível no Mercado Livre (XML/outros formatos são ignorados)."
+            _mensagem_doc_ml_amigavel(
+                "DANFE PDF indisponível (XML/outros formatos).",
+                tipo="fiscal",
+            )
         )
     nome_arquivo = f"{nome_base}.pdf"
     destino = pasta / f"{id_pedido}_{tipo_anexo}_{int(datetime.now(timezone.utc).timestamp())}.pdf"
@@ -1518,6 +1523,57 @@ def baixar_nf_ml(
     }
 
 
+def _mensagem_doc_ml_amigavel(err: str | Exception, *, tipo: str = "documento") -> str:
+    """Traduz erros técnicos do ML (HTML/JSON) em frase curta para o vendedor."""
+    s = str(err or "").strip()
+    low = s.lower()
+    # Remove lixo HTML de gateway (tengine / 400 Bad Request)
+    for marker in ("<!doctype", "<html", "<head>", "<body>"):
+        idx = low.find(marker)
+        if idx >= 0:
+            s = s[:idx].strip(" :.-")
+            low = s.lower()
+            break
+    s = re.sub(r"\s+", " ", s).strip()
+
+    if "invoice_pending" in low:
+        return (
+            "Etiqueta bloqueada no Mercado Livre: a nota fiscal ainda não foi emitida "
+            "(status: aguardando NF). Emita a NF no ML e tente de novo."
+        )
+    if "ready_to_ship" in low or "not_ready" in low or "status is pending" in low:
+        return (
+            "Etiqueta ainda não liberada. No Mercado Livre ela costuma aparecer "
+            "quando o envio está pronto para despacho."
+        )
+    if "shipment" in low and ("not found" in low or "404" in low):
+        return "Envio do Mercado Livre ainda não encontrado para este pedido."
+    if "danfe" in low or ("pdf" in low and "indispon" in low) or "xml" in low:
+        return (
+            "Nota fiscal ainda não disponível em PDF no Mercado Livre. "
+            "Assim que for emitida e liberada, tente novamente."
+        )
+    if "etiqueta indispon" in low or (tipo == "etiqueta" and ("400" in low or "mercadolivre" in low.replace(" ", ""))):
+        return (
+            "Etiqueta ainda não disponível no Mercado Livre. "
+            "Confira se a NF foi emitida e se o envio já está pronto."
+        )
+    if tipo == "fiscal" or "nota" in low or "invoice" in low or "fiscal" in low:
+        return (
+            "Nota fiscal ainda não disponível no Mercado Livre. "
+            "Após emitir no ML, aguarde alguns minutos e tente de novo."
+        )
+    if not s or len(s) > 180 or "bad request" in low:
+        return (
+            f"{'Etiqueta' if tipo == 'etiqueta' else 'Nota' if tipo == 'fiscal' else 'Documento'} "
+            "ainda não disponível no Mercado Livre. Tente novamente em instantes."
+        )
+    # Último recurso: frase curta sem códigos HTML
+    limpo = re.sub(r"mercado livre( api)? \(\d+\):\s*", "", s, flags=re.I)
+    limpo = re.sub(r"shipment id \d+:\s*", "", limpo, flags=re.I)
+    return limpo[:160]
+
+
 def puxar_documentos_integracao_ml(
     cur,
     id_vendedor: int,
@@ -1527,37 +1583,48 @@ def puxar_documentos_integracao_ml(
     id_usuario: int | None = None,
 ) -> dict[str, Any]:
     """Puxa etiqueta e, se existir, NF/declaração do Mercado Livre."""
-    out: dict[str, Any] = {"origem": "mercado_livre", "etiqueta": None, "fiscal": None, "avisos": []}
+    out: dict[str, Any] = {
+        "origem": "mercado_livre",
+        "etiqueta": None,
+        "fiscal": None,
+        "avisos": [],
+        "etiqueta_status": "pendente",
+        "fiscal_status": "pendente",
+    }
     try:
         out["etiqueta"] = baixar_etiqueta_ml(
             cur, id_vendedor, id_pedido, pasta_destino, id_usuario=id_usuario
         )
-    except ValueError as e:
-        out["avisos"].append(str(e))
+        out["etiqueta_status"] = "ok"
+    except (ValueError, RuntimeError) as e:
+        msg = _mensagem_doc_ml_amigavel(e, tipo="etiqueta")
+        out["avisos"].append(msg)
+        out["etiqueta_status"] = "pendente"
+        out["etiqueta_motivo"] = msg
     try:
         out["fiscal"] = baixar_nf_ml(
             cur, id_vendedor, id_pedido, pasta_destino, id_usuario=id_usuario
         )
-    except ValueError as e:
-        out["avisos"].append(str(e))
+        out["fiscal_status"] = "ok"
+    except (ValueError, RuntimeError) as e:
+        msg = _mensagem_doc_ml_amigavel(e, tipo="fiscal")
+        out["avisos"].append(msg)
+        out["fiscal_status"] = "pendente"
+        out["fiscal_motivo"] = msg
 
-    if not out["etiqueta"] and not out["fiscal"]:
-        detalhe = "; ".join(str(a) for a in (out["avisos"] or [])[:3])
-        raise ValueError(
-            detalhe
-            or "Etiqueta e nota ainda não estão disponíveis no Mercado Livre. "
-            "A etiqueta costuma liberar em 'pronto para enviar'; a NF, após a emissão."
+    # Não levanta erro cru: o front monta um aviso amigável com os status.
+    if out["etiqueta"] and out["fiscal"]:
+        out["message"] = "Etiqueta e nota baixadas do Mercado Livre."
+        out["ok"] = True
+    elif out["etiqueta"]:
+        out["message"] = "Etiqueta baixada. A nota ainda não está disponível no ML."
+        out["ok"] = True
+    elif out["fiscal"]:
+        out["message"] = "Nota baixada. A etiqueta ainda não está disponível no ML."
+        out["ok"] = True
+    else:
+        out["message"] = (
+            "Ainda não há documentos liberados no Mercado Livre para este pedido."
         )
-
-    msgs = []
-    if out["etiqueta"]:
-        msgs.append(out["etiqueta"].get("message") or "Etiqueta baixada.")
-    else:
-        msgs.append("Etiqueta ainda não disponível no ML.")
-    if out["fiscal"]:
-        msgs.append(out["fiscal"].get("message") or "Nota baixada.")
-    else:
-        msgs.append("Nota ainda não disponível no ML.")
-    out["message"] = " ".join(msgs)
-    out["ok"] = True
+        out["ok"] = False
     return out
