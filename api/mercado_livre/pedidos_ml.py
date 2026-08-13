@@ -13,7 +13,12 @@ _log = logging.getLogger(__name__)
 
 
 def _pedido_ml_ja_processado(cur, id_tenant: int, id_ml_pedido: str) -> bool:
-    try:
+    from core.pedidos.servico import _garantir_coluna_id_ml_pedido, _pedido_colunas
+
+    # Nunca engolir erro SQL: no Postgres isso aborta a transação e o próximo
+    # comando vira "current transaction is aborted...".
+    _garantir_coluna_id_ml_pedido(cur)
+    if "id_ml_pedido" in _pedido_colunas(cur):
         cur.execute(
             """
             SELECT 1 FROM tbl_pedido
@@ -24,8 +29,6 @@ def _pedido_ml_ja_processado(cur, id_tenant: int, id_ml_pedido: str) -> bool:
         )
         if cur.fetchone():
             return True
-    except Exception:
-        pass
 
     cur.execute(
         """
@@ -199,12 +202,18 @@ def _buscar_shipment_ml(cur, id_tenant: int, order: dict) -> dict | None:
 
 def _resolver_itens_variante(cur, id_tenant: int, dados: dict) -> dict:
     from api.mercado_livre.sync_runtime import _variante_por_ml_item
+    from core.pedidos.servico import _resolver_item_meus_produtos_por_sku
 
     resolvidos: list[dict] = []
     ignorados = 0
     for raw in dados.get("itens") or []:
         ml_item_id = str(raw.get("ml_item_id") or "").strip()
+        sku = (raw.get("sku") or "").strip()
         id_variante = _variante_por_ml_item(cur, id_tenant, ml_item_id) if ml_item_id else None
+        if not id_variante and sku:
+            item = _resolver_item_meus_produtos_por_sku(cur, id_tenant, sku)
+            if item:
+                id_variante = int(item["id_variante"])
         if not id_variante:
             ignorados += 1
             continue
@@ -319,8 +328,9 @@ def _importar_um_pedido_ml(cur, id_tenant: int, id_ml_pedido: str) -> dict[str, 
 
     try:
         ids = importar_pedido_ml(cur, id_tenant, id_ml, dados)
-    except Exception as e:
-        _log.exception("Falha ao criar pedido ML %s", id_ml)
+    except (ValueError, RuntimeError) as e:
+        # Erros de negócio (sem item/vínculo/capacidade). Falhas SQL sobem
+        # para o SAVEPOINT do loop — engolir abortaria a transação.
         return {"importado": False, "motivo": "erro_criar", "mensagem": str(e)[:250]}
 
     if not ids:
@@ -380,11 +390,17 @@ def importar_pedido_ml_por_id(cur, id_tenant: int, id_ml_pedido: str) -> dict[st
 
 def importar_pedidos_mercado_livre(cur, id_tenant: int, *, dias: int = 7) -> dict:
     from api.mercado_livre.mercado_livre import api_request, carregar_config_ml
+    from core.pedidos.servico import _garantir_coluna_id_ml_pedido
 
     cfg = carregar_config_ml(cur, id_tenant)
     ml_user_id = cfg.get("ml_user_id")
     if not ml_user_id:
         raise RuntimeError("Perfil Mercado Livre sem user_id. Reconecte a conta.")
+
+    if not _garantir_coluna_id_ml_pedido(cur):
+        raise RuntimeError(
+            "Coluna id_ml_pedido ausente. Aplique __doc/sql/076_pedido_id_ml.sql."
+        )
 
     desde = datetime.now(timezone.utc) - timedelta(days=max(1, min(dias, 60)))
     base_params = {
@@ -417,21 +433,70 @@ def importar_pedidos_mercado_livre(cur, id_tenant: int, *, dias: int = 7) -> dic
     erros: list[str] = []
     ids_pedidos: list[int] = []
 
-    for id_ml in ids:
+    for idx, id_ml in enumerate(ids):
+        sp = f"ml_pedido_{idx}"
         try:
+            cur.execute(f"SAVEPOINT {sp}")
             res = _importar_um_pedido_ml(cur, id_tenant, id_ml)
+            try:
+                cur.execute(f"RELEASE SAVEPOINT {sp}")
+            except Exception:
+                cur.execute(f"ROLLBACK TO SAVEPOINT {sp}")
+                raise
             if res.get("importado"):
                 importados += 1
                 ids_pedidos.extend(int(x) for x in (res.get("ids_pedido") or []))
+                # Tenta etiqueta/NF já na importação manual (best-effort).
+                try:
+                    cur.execute(f"SAVEPOINT {sp}_docs")
+                    _tentar_puxar_documentos_auto_ml(
+                        cur,
+                        int(id_tenant),
+                        id_ml_pedido=str(id_ml),
+                        ids_pedido=[int(x) for x in (res.get("ids_pedido") or [])],
+                    )
+                    cur.execute(f"RELEASE SAVEPOINT {sp}_docs")
+                except Exception:
+                    try:
+                        cur.execute(f"ROLLBACK TO SAVEPOINT {sp}_docs")
+                    except Exception:
+                        pass
             elif res.get("cancelado"):
                 cancelados += 1
                 ids_pedidos.extend(int(x) for x in (res.get("ids_pedido") or []))
             else:
                 ignorados += 1
-                if res.get("motivo") == "erro_criar" and res.get("mensagem"):
+                motivo = res.get("motivo") or "ignorado"
+                if motivo == "erro_criar" and res.get("mensagem"):
                     erros.append(f"#{id_ml}: {res['mensagem']}")
+                elif motivo == "sem_match":
+                    erros.append(
+                        f"#{id_ml}: itens do ML sem vínculo em Meus produtos "
+                        f"(anúncio não mapeado / sem SKU)."
+                    )
+                elif motivo == "status_nao_pago":
+                    erros.append(f"#{id_ml}: status ML '{res.get('status')}' (ainda não pago).")
+                elif motivo == "erro_api" and res.get("mensagem"):
+                    erros.append(f"#{id_ml}: {res['mensagem']}")
+                elif motivo == "ja_importado":
+                    # Re-tenta documentos em pedidos já existentes.
+                    try:
+                        cur.execute(f"SAVEPOINT {sp}_docs")
+                        _tentar_puxar_documentos_auto_ml(
+                            cur, int(id_tenant), id_ml_pedido=str(id_ml)
+                        )
+                        cur.execute(f"RELEASE SAVEPOINT {sp}_docs")
+                    except Exception:
+                        try:
+                            cur.execute(f"ROLLBACK TO SAVEPOINT {sp}_docs")
+                        except Exception:
+                            pass
         except Exception as e:
-            erros.append(f"#{id_ml}: {str(e)[:120]}")
+            try:
+                cur.execute(f"ROLLBACK TO SAVEPOINT {sp}")
+            except Exception:
+                pass
+            erros.append(f"#{id_ml}: {str(e)[:160]}")
             ignorados += 1
 
     agora = agora_utc()
@@ -451,6 +516,8 @@ def importar_pedidos_mercado_livre(cur, id_tenant: int, *, dias: int = 7) -> dic
     )
     if erros:
         msg += f" {len(erros)} erro(s)."
+        if importados == 0:
+            msg += f" Detalhe: {erros[0]}"
 
     return {
         "message": msg,
@@ -478,6 +545,77 @@ def _tenant_por_ml_user(cur, ml_user_id: int | str) -> int | None:
     )
     row = cur.fetchone()
     return int(row[0]) if row and row[0] else None
+
+
+def _pasta_anexos_tenant_ml(id_tenant: int):
+    from pathlib import Path
+
+    pasta = Path(__file__).resolve().parents[2] / "upload" / f"tenant{int(id_tenant)}" / "pedidos"
+    pasta.mkdir(parents=True, exist_ok=True)
+    return pasta
+
+
+def _tentar_puxar_documentos_auto_ml(
+    cur,
+    id_tenant: int,
+    *,
+    id_ml_pedido: str | None = None,
+    ids_pedido: list[int] | None = None,
+) -> dict[str, Any]:
+    """
+    Best-effort: baixa etiqueta de transporte e NF/DANFE do ML para pedidos locais.
+    Não falha o webhook se o documento ainda não estiver liberado no ML.
+    """
+    from core.pedidos.servico import listar_pedidos_por_id_ml
+
+    pids: list[int] = []
+    if ids_pedido:
+        pids.extend(int(x) for x in ids_pedido if x)
+    if id_ml_pedido:
+        for pid in listar_pedidos_por_id_ml(cur, int(id_tenant), str(id_ml_pedido)):
+            if int(pid) not in pids:
+                pids.append(int(pid))
+    if not pids:
+        return {"docs_tentados": 0, "etiqueta_ok": 0, "fiscal_ok": 0, "docs_avisos": []}
+
+    pasta = _pasta_anexos_tenant_ml(id_tenant)
+    etiqueta_ok = 0
+    fiscal_ok = 0
+    avisos: list[str] = []
+
+    try:
+        from api.melhor_envio.melhor_envio import definir_modo_frete_integracao
+    except Exception:
+        definir_modo_frete_integracao = None  # type: ignore
+
+    for pid in pids:
+        try:
+            if definir_modo_frete_integracao:
+                try:
+                    definir_modo_frete_integracao(cur, int(id_tenant), int(pid))
+                except ValueError:
+                    pass
+            res = puxar_documentos_integracao_ml(
+                cur, int(id_tenant), int(pid), pasta, id_usuario=None
+            )
+            if res.get("etiqueta"):
+                etiqueta_ok += 1
+            if res.get("fiscal"):
+                fiscal_ok += 1
+            for a in res.get("avisos") or []:
+                avisos.append(f"#{pid}: {a}")
+        except ValueError as e:
+            avisos.append(f"#{pid}: {e}")
+        except Exception as e:
+            avisos.append(f"#{pid}: {str(e)[:120]}")
+            _log.info("Auto docs ML pedido %s: %s", pid, e)
+
+    return {
+        "docs_tentados": len(pids),
+        "etiqueta_ok": etiqueta_ok,
+        "fiscal_ok": fiscal_ok,
+        "docs_avisos": avisos[:8],
+    }
 
 
 def processar_webhook_pedido_ml(cur, payload: dict) -> dict[str, Any]:
@@ -530,10 +668,54 @@ def processar_webhook_pedido_ml(cur, payload: dict) -> dict[str, Any]:
         return {"ok": True, "id_tenant": id_tenant, **res}
 
     if not cfg.get("pedidos_importar_auto"):
-        return {"ok": True, "ignorado": True, "motivo": "importacao_auto_desligada"}
+        # Mesmo sem auto-import, tenta etiqueta/NF se o pedido local já existir.
+        docs = _tentar_puxar_documentos_auto_ml(
+            cur, int(id_tenant), id_ml_pedido=str(id_ml)
+        )
+        return {
+            "ok": True,
+            "ignorado": True,
+            "motivo": "importacao_auto_desligada",
+            **docs,
+        }
 
-    res = _importar_um_pedido_ml(cur, int(id_tenant), str(id_ml))
-    return {"ok": True, "id_tenant": id_tenant, **res}
+    from core.pedidos.servico import _garantir_coluna_id_ml_pedido
+
+    if not _garantir_coluna_id_ml_pedido(cur):
+        return {
+            "ok": False,
+            "motivo": "schema_id_ml_pedido",
+            "mensagem": "Coluna id_ml_pedido ausente. Aplique SQL 076.",
+        }
+
+    try:
+        cur.execute("SAVEPOINT sp_ml_webhook_pedido")
+        res = _importar_um_pedido_ml(cur, int(id_tenant), str(id_ml))
+        try:
+            cur.execute("RELEASE SAVEPOINT sp_ml_webhook_pedido")
+        except Exception:
+            cur.execute("ROLLBACK TO SAVEPOINT sp_ml_webhook_pedido")
+            raise
+    except Exception as e:
+        try:
+            cur.execute("ROLLBACK TO SAVEPOINT sp_ml_webhook_pedido")
+        except Exception:
+            pass
+        _log.exception("Webhook ML falhou ao importar pedido %s", id_ml)
+        return {
+            "ok": False,
+            "motivo": "erro_importar",
+            "mensagem": str(e)[:250],
+            "id_ml_pedido": str(id_ml),
+        }
+
+    docs = _tentar_puxar_documentos_auto_ml(
+        cur,
+        int(id_tenant),
+        id_ml_pedido=str(id_ml),
+        ids_pedido=[int(x) for x in (res.get("ids_pedido") or [])],
+    )
+    return {"ok": True, "id_tenant": id_tenant, **res, **docs}
 
 
 def _processar_webhook_shipment_ml(
@@ -575,6 +757,7 @@ def _processar_webhook_shipment_ml(
         return {"ok": True, "topic": "shipments", **res}
 
     avancados = 0
+    ids_locais: list[int] = []
     if order_id:
         from core.pedidos.servico import listar_pedidos_por_id_ml, salvar_id_ml_shipment
         from core.pedidos.status_integracao import (
@@ -584,6 +767,7 @@ def _processar_webhook_shipment_ml(
 
         novo = mapear_status_ml_para_dn(None, shipping_status=st)
         for pid in listar_pedidos_por_id_ml(cur, id_tenant, str(order_id)):
+            ids_locais.append(int(pid))
             salvar_id_ml_shipment(cur, int(pid), ship_id)
             if novo and aplicar_status_avancado(
                 cur,
@@ -594,6 +778,16 @@ def _processar_webhook_shipment_ml(
             ):
                 avancados += 1
 
+    # Etiqueta costuma liberar em ready_to_ship / shipped; NF quando o ML emitir.
+    docs: dict[str, Any] = {}
+    if order_id and ids_locais and st not in ("cancelled", "canceled"):
+        docs = _tentar_puxar_documentos_auto_ml(
+            cur,
+            int(id_tenant),
+            id_ml_pedido=str(order_id),
+            ids_pedido=ids_locais,
+        )
+
     return {
         "ok": True,
         "topic": "shipments",
@@ -601,6 +795,7 @@ def _processar_webhook_shipment_ml(
         "status": st,
         "order_id": order_id,
         "status_avancados": avancados,
+        **docs,
     }
 
 

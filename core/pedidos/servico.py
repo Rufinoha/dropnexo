@@ -336,6 +336,7 @@ def _garantir_coluna_id_ml_pedido(cur) -> bool:
     if "id_ml_pedido" in cols:
         return True
     try:
+        cur.execute("SAVEPOINT sp_garantir_id_ml_pedido")
         cur.execute(
             """
             ALTER TABLE tbl_pedido
@@ -349,7 +350,12 @@ def _garantir_coluna_id_ml_pedido(cur) -> bool:
               WHERE id_ml_pedido IS NOT NULL
             """
         )
+        cur.execute("RELEASE SAVEPOINT sp_garantir_id_ml_pedido")
     except Exception:
+        try:
+            cur.execute("ROLLBACK TO SAVEPOINT sp_garantir_id_ml_pedido")
+        except Exception:
+            pass
         return False
     _PEDIDO_COL_CACHE = None
     return "id_ml_pedido" in _pedido_colunas(cur)
