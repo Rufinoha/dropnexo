@@ -18,6 +18,7 @@
     valor_pedido: document.getElementById("req_valor_pedido"),
     texto: document.getElementById("req_texto_adicional"),
     mostrar_contato: document.getElementById("req_mostrar_contato"),
+    aprovacao_automatica: document.getElementById("req_aprovacao_automatica"),
     form: document.getElementById("formRequisitosVendedor"),
   };
 
@@ -56,6 +57,7 @@
     if (el.valor_pedido) el.valor_pedido.value = r.valor_taxa_pedido ?? "";
     if (el.texto) el.texto.value = r.texto_adicional || "";
     if (el.mostrar_contato) el.mostrar_contato.checked = r.mostrar_contato_vendedor !== false;
+    if (el.aprovacao_automatica) el.aprovacao_automatica.checked = !!r.aprovacao_automatica;
     syncTodosValores();
   }
 
@@ -77,6 +79,7 @@
       cobra_taxa_pedido: !!el.cobra_pedido?.checked,
       valor_taxa_pedido: parseFloat(el.valor_pedido?.value || "0") || 0,
       mostrar_contato_vendedor: !!el.mostrar_contato?.checked,
+      aprovacao_automatica: !!el.aprovacao_automatica?.checked,
       texto_adicional: (el.texto?.value || "").trim(),
     };
     const r = await fetch(API_SALVAR, {

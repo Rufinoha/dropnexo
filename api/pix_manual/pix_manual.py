@@ -400,29 +400,42 @@ def confirmar_pix_manual(
     id_fornecedor: int,
     id_usuario: int | None = None,
 ) -> None:
-    """Só marca pago depois do vendedor anexar o comprovante (aprovação do fornecedor)."""
+    """
+    Fornecedor confirma o PIX recebido.
+    Pode aprovar com ou sem comprovante anexado (ex.: viu o crédito no banco).
+    """
     ped = obter_pedido(cur, id_pedido, id_fornecedor=id_fornecedor)
     if not ped:
         raise ValueError("Pedido não encontrado.")
     if ped.get("meio_pagamento") != "pix_manual":
         raise ValueError("Este pedido não foi pago via PIX manual.")
     st = status_vendedor_pedido(ped)
-    if st != STATUS_AGUARDANDO_CONFIRMACAO:
-        raise ValueError("Aguarde o vendedor anexar o comprovante PIX antes de aprovar.")
-    if (ped.get("status_pagamento") or "").strip().lower() != "comprovante_enviado":
-        raise ValueError("Só é possível aprovar após o envio do comprovante.")
+    if st not in (STATUS_AGUARDANDO, STATUS_IMPORTADO, STATUS_AGUARDANDO_CONFIRMACAO):
+        raise ValueError("Este pedido não está aguardando confirmação de pagamento.")
+
+    tem_comprovante = pedido_tem_comprovante_pix(cur, id_pedido)
+    detalhe = (
+        "Fornecedor aprovou o comprovante PIX manual."
+        if tem_comprovante
+        else "Fornecedor confirmou recebimento do PIX (sem comprovante anexado)."
+    )
+    hist = (
+        "Fornecedor confirmou recebimento do PIX manual."
+        if tem_comprovante
+        else "Fornecedor confirmou recebimento do PIX sem comprovante anexado."
+    )
 
     marcar_pedido_pago(
         cur,
         id_pedido,
         id_usuario=id_usuario,
-        detalhe="Fornecedor aprovou o comprovante PIX manual.",
+        detalhe=detalhe,
     )
     registrar_historico(
         cur,
         id_pedido,
         "pago_manual",
-        "Fornecedor confirmou recebimento do PIX manual.",
+        hist,
         id_usuario,
     )
 

@@ -6,6 +6,22 @@ from __future__ import annotations
 from decimal import Decimal
 
 
+_COLUNA_APROVACAO_OK: bool | None = None
+
+
+def garantir_coluna_aprovacao_automatica(cur) -> None:
+    global _COLUNA_APROVACAO_OK
+    if _COLUNA_APROVACAO_OK:
+        return
+    cur.execute(
+        """
+        ALTER TABLE tbl_fornecedor_requisitos_vendedor
+          ADD COLUMN IF NOT EXISTS aprovacao_automatica BOOLEAN NOT NULL DEFAULT FALSE
+        """
+    )
+    _COLUNA_APROVACAO_OK = True
+
+
 def _row_para_dict(row) -> dict:
     if not row:
         return requisitos_padrao()
@@ -21,6 +37,7 @@ def _row_para_dict(row) -> dict:
         "valor_taxa_pedido": float(row[8] or 0) if len(row) > 8 else 0.0,
         "mostrar_contato_vendedor": bool(row[9]) if len(row) > 9 else True,
         "visivel_rede_vendedor": bool(row[10]) if len(row) > 10 else False,
+        "aprovacao_automatica": bool(row[11]) if len(row) > 11 else False,
     }
 
 
@@ -37,16 +54,18 @@ def requisitos_padrao() -> dict:
         "texto_adicional": "",
         "mostrar_contato_vendedor": True,
         "visivel_rede_vendedor": False,
+        "aprovacao_automatica": False,
     }
 
 
 def carregar_requisitos_raw(cur, id_fornecedor: int) -> tuple[dict, bool]:
+    garantir_coluna_aprovacao_automatica(cur)
     cur.execute(
         """
         SELECT exige_cnpj, exige_nf, cobra_taxa_vinculo, valor_taxa_vinculo,
                cobra_taxa_mensal, valor_taxa_mensal, texto_adicional,
                cobra_taxa_pedido, valor_taxa_pedido, mostrar_contato_vendedor,
-               visivel_rede_vendedor
+               visivel_rede_vendedor, aprovacao_automatica
         FROM tbl_fornecedor_requisitos_vendedor
         WHERE id_tenant = %s
         """,
@@ -95,25 +114,31 @@ def carregar_contato_responsavel_fornecedor(cur, id_fornecedor: int) -> dict | N
 
 
 def salvar_requisitos(cur, id_fornecedor: int, dados: dict) -> None:
-    exige_cnpj = bool(dados.get("exige_cnpj"))
-    exige_nf = bool(dados.get("exige_nf"))
-    cobra_vinculo = bool(dados.get("cobra_taxa_vinculo"))
-    cobra_mensal = bool(dados.get("cobra_taxa_mensal"))
-    cobra_pedido = bool(dados.get("cobra_taxa_pedido"))
-    mostrar_contato = bool(dados.get("mostrar_contato_vendedor", True))
-    visivel_rede = bool(dados.get("visivel_rede_vendedor", False))
-    valor_vinculo = max(0, float(dados.get("valor_taxa_vinculo") or 0))
-    valor_mensal = max(0, float(dados.get("valor_taxa_mensal") or 0))
-    valor_pedido = max(0, float(dados.get("valor_taxa_pedido") or 0))
-    texto = (dados.get("texto_adicional") or "").strip() or None
+    garantir_coluna_aprovacao_automatica(cur)
+    atual, _ = carregar_requisitos_raw(cur, id_fornecedor)
+    # Preserva campos que a tela de requisitos não envia (ex.: visível na rede)
+    merged = {**atual, **(dados or {})}
+    exige_cnpj = bool(merged.get("exige_cnpj"))
+    exige_nf = bool(merged.get("exige_nf"))
+    cobra_vinculo = bool(merged.get("cobra_taxa_vinculo"))
+    cobra_mensal = bool(merged.get("cobra_taxa_mensal"))
+    cobra_pedido = bool(merged.get("cobra_taxa_pedido"))
+    mostrar_contato = bool(merged.get("mostrar_contato_vendedor", True))
+    visivel_rede = bool(merged.get("visivel_rede_vendedor", False))
+    aprovacao_auto = bool(merged.get("aprovacao_automatica", False))
+    valor_vinculo = max(0, float(merged.get("valor_taxa_vinculo") or 0))
+    valor_mensal = max(0, float(merged.get("valor_taxa_mensal") or 0))
+    valor_pedido = max(0, float(merged.get("valor_taxa_pedido") or 0))
+    texto = (merged.get("texto_adicional") or "").strip() or None
 
     cur.execute(
         """
         INSERT INTO tbl_fornecedor_requisitos_vendedor
             (id_tenant, exige_cnpj, exige_nf, cobra_taxa_vinculo, valor_taxa_vinculo,
              cobra_taxa_mensal, valor_taxa_mensal, cobra_taxa_pedido, valor_taxa_pedido,
-             mostrar_contato_vendedor, visivel_rede_vendedor, texto_adicional, atualizado_em)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+             mostrar_contato_vendedor, visivel_rede_vendedor, aprovacao_automatica,
+             texto_adicional, atualizado_em)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
         ON CONFLICT (id_tenant) DO UPDATE SET
             exige_cnpj = EXCLUDED.exige_cnpj,
             exige_nf = EXCLUDED.exige_nf,
@@ -125,6 +150,7 @@ def salvar_requisitos(cur, id_fornecedor: int, dados: dict) -> None:
             valor_taxa_pedido = EXCLUDED.valor_taxa_pedido,
             mostrar_contato_vendedor = EXCLUDED.mostrar_contato_vendedor,
             visivel_rede_vendedor = EXCLUDED.visivel_rede_vendedor,
+            aprovacao_automatica = EXCLUDED.aprovacao_automatica,
             texto_adicional = EXCLUDED.texto_adicional,
             atualizado_em = NOW()
         """,
@@ -140,6 +166,7 @@ def salvar_requisitos(cur, id_fornecedor: int, dados: dict) -> None:
             Decimal(str(valor_pedido)),
             mostrar_contato,
             visivel_rede,
+            aprovacao_auto,
             texto,
         ),
     )

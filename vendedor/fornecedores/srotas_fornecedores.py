@@ -1162,6 +1162,37 @@ def solicitar_vinculo():
                     message=mensagem_limite_conexoes(tipo="vendedor", limite=int(limite_forn)),
                 ), 403
 
+        auto_aprovar = bool(req.get("aprovacao_automatica"))
+        if auto_aprovar:
+            from sistema.planos.limites import limites_plano, mensagem_limite_conexoes
+
+            lim_fn = limites_plano(tipo_negocio="fornecedor")
+            limite_vd = lim_fn.get("conexoes")
+            if limite_vd is not None:
+                cur.execute(
+                    """
+                    SELECT COUNT(*) FROM tbl_vinculo_vendedor_fornecedor
+                    WHERE id_tenant_fornecedor = %s
+                      AND status IN ('ativo', 'pausado')
+                      AND id_tenant_vendedor <> %s
+                    """,
+                    (id_forn, id_vendedor),
+                )
+                aprovados = int(cur.fetchone()[0] or 0)
+                if aprovados >= int(limite_vd):
+                    return jsonify(
+                        success=False,
+                        message=mensagem_limite_conexoes(
+                            tipo="fornecedor", limite=int(limite_vd)
+                        ),
+                    ), 403
+
+        status_vinculo = "ativo" if auto_aprovar else "aguardando"
+        respondido_em = agora_utc() if auto_aprovar else None
+        msg_resposta = "Aprovação automática" if auto_aprovar else None
+        msg_solicitacao = (body.get("mensagem") or "").strip() or None
+        snap_json = json.dumps(snap, ensure_ascii=False)
+
         cur.execute(
             """
             SELECT status FROM tbl_vinculo_vendedor_fornecedor
@@ -1174,20 +1205,24 @@ def solicitar_vinculo():
             st = row[0]
             if st == "ativo":
                 return jsonify(success=False, message="Você já está conectado a este fornecedor."), 409
-            if st == "aguardando":
+            if st == "aguardando" and not auto_aprovar:
                 return jsonify(success=False, message="Solicitação já enviada. Aguarde aprovação."), 409
             cur.execute(
                 """
                 UPDATE tbl_vinculo_vendedor_fornecedor
-                SET status = 'aguardando', solicitado_em = NOW(), respondido_em = NULL,
-                    mensagem_resposta = NULL,
+                SET status = %s, solicitado_em = NOW(),
+                    respondido_em = %s,
+                    mensagem_resposta = %s,
                     snapshot_vendedor = %s::jsonb,
                     mensagem_solicitacao = %s
                 WHERE id_tenant_vendedor = %s AND id_tenant_fornecedor = %s
                 """,
                 (
-                    json.dumps(snap, ensure_ascii=False),
-                    (body.get("mensagem") or "").strip() or None,
+                    status_vinculo,
+                    respondido_em,
+                    msg_resposta,
+                    snap_json,
+                    msg_solicitacao,
                     id_vendedor,
                     id_forn,
                 ),
@@ -1196,18 +1231,34 @@ def solicitar_vinculo():
             cur.execute(
                 """
                 INSERT INTO tbl_vinculo_vendedor_fornecedor
-                    (id_tenant_vendedor, id_tenant_fornecedor, status, snapshot_vendedor, mensagem_solicitacao)
-                VALUES (%s, %s, 'aguardando', %s::jsonb, %s)
+                    (id_tenant_vendedor, id_tenant_fornecedor, status, snapshot_vendedor,
+                     mensagem_solicitacao, respondido_em, mensagem_resposta)
+                VALUES (%s, %s, %s, %s::jsonb, %s, %s, %s)
                 """,
                 (
                     id_vendedor,
                     id_forn,
-                    json.dumps(snap, ensure_ascii=False),
-                    (body.get("mensagem") or "").strip() or None,
+                    status_vinculo,
+                    snap_json,
+                    msg_solicitacao,
+                    respondido_em,
+                    msg_resposta,
                 ),
             )
         conn.commit()
-        return jsonify(success=True, message="Solicitação enviada. Aguardando aprovação do fornecedor.")
+        if auto_aprovar:
+            return jsonify(
+                success=True,
+                message="Vínculo aprovado automaticamente. Vocês já estão conectados.",
+                status_vinculo="ativo",
+                aprovacao_automatica=True,
+            )
+        return jsonify(
+            success=True,
+            message="Solicitação enviada. Aguardando aprovação do fornecedor.",
+            status_vinculo="aguardando",
+            aprovacao_automatica=False,
+        )
     finally:
         conn.close()
 

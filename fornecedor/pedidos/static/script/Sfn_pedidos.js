@@ -177,19 +177,25 @@
     if (!foot) return;
     foot.innerHTML = "";
     const comprovantes = (p.anexos || []).filter((a) => a.tipo === "comprovante_pix");
-    const aguardaConf =
-      stV(p) === "aguardando_confirmacao" ||
-      (stV(p) === "aguardando_pagamento" &&
-        p.meio_pagamento === "pix_manual" &&
-        (p.status_pagamento === "comprovante_enviado" || comprovantes.length));
+    const temComprovante = comprovantes.length > 0;
+    const st = stV(p);
+    const podeConfirmarPix =
+      p.meio_pagamento === "pix_manual" &&
+      ["aguardando_pagamento", "importado", "aguardando_confirmacao"].includes(st);
 
-    if (aguardaConf && p.meio_pagamento === "pix_manual") {
+    if (podeConfirmarPix) {
       const links = comprovantes
         .map(
           (a) =>
             `<li><a href="/fornecedor/pedidos/anexos/arquivo?caminho=${encodeURIComponent(a.caminho)}" target="_blank" rel="noopener">${esc(a.nome_original)}</a></li>`
         )
         .join("");
+      const avisoSemComp = temComprovante
+        ? ""
+        : `<p class="PdFn_PayValidHint">Sem comprovante anexado — você pode confirmar se já viu o crédito no banco.</p>`;
+      const btnRejeitar = temComprovante
+        ? `<button type="button" class="Cl_BtnExcluir" id="pd_fn_btn_rej_pix">Rejeitar comprovante</button>`
+        : "";
       foot.innerHTML = `
         <div class="PdFn_PayValid">
           <div class="PdFn_PayValidHead">
@@ -199,38 +205,40 @@
               <p>Confirme só depois de verificar o crédito na sua conta.</p>
             </div>
           </div>
-          <ul class="PdFn_PayValidList">${links || "<li>Comprovante pendente de anexo</li>"}</ul>
+          <ul class="PdFn_PayValidList">${links || "<li>Nenhum comprovante anexado pelo vendedor</li>"}</ul>
+          ${avisoSemComp}
           <div class="PdFn_PayValidBtns">
             <button type="button" class="Cl_botaoprimario" id="pd_fn_btn_conf_pix">Confirmar pagamento</button>
-            <button type="button" class="Cl_BtnExcluir" id="pd_fn_btn_rej_pix">Rejeitar comprovante</button>
+            ${btnRejeitar}
           </div>
         </div>`;
-      document.getElementById("pd_fn_btn_conf_pix")?.addEventListener("click", () => confirmarPix(p.id));
+      document
+        .getElementById("pd_fn_btn_conf_pix")
+        ?.addEventListener("click", () => confirmarPix(p.id, temComprovante));
       document.getElementById("pd_fn_btn_rej_pix")?.addEventListener("click", () => rejeitarPix(p.id));
       return;
     }
 
-    if (stV(p) === "pago") {
+    if (st === "pago") {
       foot.innerHTML = `
         <div class="PdFn_PayValid is-ok">
           <strong>Pagamento confirmado</strong>
           <p>Pedido liberado. Pronto para seguir com a expedição quando os documentos estiverem ok.</p>
         </div>`;
-    } else if (["aguardando_pagamento", "importado"].includes(stV(p))) {
-      foot.innerHTML = `
-        <div class="PdFn_PayValid is-wait">
-          <strong>Aguardando pagamento</strong>
-          <p>O vendedor ainda não enviou o comprovante PIX.</p>
-        </div>`;
     }
   }
 
-  async function confirmarPix(id) {
+  async function confirmarPix(id, temComprovante) {
+    const extra = temComprovante
+      ? ""
+      : "<br><br>O vendedor <strong>não anexou comprovante</strong>. Confirme apenas se o PIX já apareceu na sua conta.";
     const conf = window.Swal
       ? await Swal.fire({
           icon: "question",
           title: "Confirmar pagamento?",
-          html: "Só confirme se o PIX já caiu na sua conta. Isso libera o pedido como <strong>Pagamento confirmado</strong>.",
+          html:
+            "Só confirme se o PIX já caiu na sua conta. Isso libera o pedido como <strong>Pagamento confirmado</strong>." +
+            extra,
           showCancelButton: true,
           confirmButtonText: "Sim, confirmar",
           cancelButtonText: "Cancelar",

@@ -49,6 +49,16 @@
               <span class="Cl_SwitchSlider"></span>
             </label>
           </div>
+          <div class="mp-req-row">
+            <div class="mp-req-rowText">
+              <strong>Aprovação automática</strong>
+              <span>Se ligada, solicitações de vínculo são aprovadas na hora. Se desligada, você aprova manualmente em Vendedores.</span>
+            </div>
+            <label class="Cl_Switch mp-req-switch" title="Aprovação automática">
+              <input type="checkbox" id="req_aprovacao_automatica" />
+              <span class="Cl_SwitchSlider"></span>
+            </label>
+          </div>
         </fieldset>
 
         <fieldset class="mp-req-panel">
@@ -116,6 +126,6 @@
   </div>
 
   <script src="{{ url_for('static', filename='script/global_utils.js') }}"></script>
-  <script src="{{ url_for('fn_parametros.static', filename='script/Sfn_parametros_requisitos.js') }}?v=1"></script>
+  <script src="{{ url_for('fn_parametros.static', filename='script/Sfn_parametros_requisitos.js') }}?v=2"></script>
 </body>
 </html>

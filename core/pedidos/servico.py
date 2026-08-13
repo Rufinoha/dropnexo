@@ -36,8 +36,8 @@ def _frete_editavel_status(st: str) -> bool:
 
 
 def _status_vendedor_pagavel(st: str) -> bool:
-    """Pode iniciar/continuar pagamento (ainda sem comprovante em validação)."""
-    return st in (STATUS_IMPORTADO, STATUS_AGUARDANDO)
+    """Pode ser marcado como pago ao fornecedor (inclui pós-comprovante)."""
+    return st in (STATUS_IMPORTADO, STATUS_AGUARDANDO, STATUS_AGUARDANDO_CONFIRMACAO)
 
 
 def _float(v) -> float:
@@ -1596,7 +1596,9 @@ def marcar_pedido_pago(
     if sv == STATUS_PAGO:
         return False
     if not _status_vendedor_pagavel(sv):
-        raise ValueError("Somente pedidos importados ou aguardando pagamento podem ser marcados como pagos.")
+        raise ValueError(
+            "Somente pedidos aguardando pagamento ou confirmação podem ser marcados como pagos."
+        )
 
     agora = agora_utc()
     set_sv, dup = _sql_set_status_vendedor(cur)
