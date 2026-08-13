@@ -186,6 +186,7 @@ from core.pedidos.servico import (
     marcar_pedido_pago,
     obter_pedido,
     origem_e_canal_externo,
+    pedido_tem_comprovante_pix,
     registrar_historico,
     status_vendedor_pedido,
 )
@@ -203,13 +204,7 @@ def meio_pix_manual_fornecedor(cur, id_fornecedor: int) -> dict:
     }
 
 
-def iniciar_pix_manual(cur, id_vendedor: int, id_pedido: int) -> dict:
-    ped = obter_pedido(cur, id_pedido, id_vendedor=id_vendedor)
-    if not ped:
-        raise ValueError("Pedido não encontrado.")
-    if not _status_vendedor_pagavel(status_vendedor_pedido(ped)):
-        raise ValueError("Somente pedidos importados ou aguardando pagamento podem usar PIX manual.")
-
+def _gerar_payload_e_gravar_pix(cur, ped: dict, *, id_pedido: int) -> dict:
     id_forn = int(ped["id_tenant_fornecedor"])
     if not pix_manual_ativo(cur, id_forn):
         raise ValueError("Fornecedor não configurou PIX manual.")
@@ -223,7 +218,6 @@ def iniciar_pix_manual(cur, id_vendedor: int, id_pedido: int) -> dict:
         valor=float(ped["valor_total"]),
         txid=txid,
     )
-
     cur.execute(
         """
         UPDATE tbl_pedido SET
@@ -248,8 +242,96 @@ def iniciar_pix_manual(cur, id_vendedor: int, id_pedido: int) -> dict:
         "valor_total": ped["valor_total"],
         "numero_pedido": ped.get("numero"),
         "nome_beneficiario": cfg.get("nome_beneficiario"),
-        "status_pagamento": ped.get("status_pagamento") or "pendente",
+        "status_pagamento": "pendente",
+        "status_vendedor": status_vendedor_pedido(ped),
     }
+
+
+def iniciar_pix_manual(
+    cur,
+    id_vendedor: int,
+    id_pedido: int,
+    *,
+    id_usuario: int | None = None,
+) -> dict:
+    """
+    Gera QR/copia e cola. Não marca como pago.
+    Fluxo: gerar PIX → anexar comprovante → fornecedor aprova.
+    Com comprovante anexado, não gera de novo (remova o comprovante antes).
+    """
+    ped = obter_pedido(cur, id_pedido, id_vendedor=id_vendedor)
+    if not ped:
+        raise ValueError("Pedido não encontrado.")
+    st = status_vendedor_pedido(ped)
+    if st in ("em_expedicao", "entregue", "cancelado"):
+        raise ValueError("Não é possível gerar PIX neste status do pedido.")
+    if pedido_tem_comprovante_pix(cur, id_pedido):
+        raise ValueError(
+            "Já existe comprovante anexado. Remova o comprovante para gerar o PIX novamente."
+        )
+
+    # Legado / inconsistente sem comprovante: reabre e gera
+    if st in (STATUS_PAGO, STATUS_AGUARDANDO_CONFIRMACAO):
+        return reabrir_pagamento_pix_manual(
+            cur, id_vendedor, id_pedido, id_usuario=id_usuario
+        )
+
+    if not _status_vendedor_pagavel(st):
+        raise ValueError("Somente pedidos importados ou aguardando pagamento podem usar PIX manual.")
+
+    return _gerar_payload_e_gravar_pix(cur, ped, id_pedido=id_pedido)
+
+
+def voltar_cobranca_apos_remover_comprovante(
+    cur,
+    id_pedido: int,
+    *,
+    id_vendedor: int | None = None,
+    id_usuario: int | None = None,
+) -> dict:
+    """Após excluir o comprovante: volta a permitir Gerar PIX (ainda não pago)."""
+    ped = obter_pedido(cur, id_pedido, id_vendedor=id_vendedor)
+    if not ped:
+        raise ValueError("Pedido não encontrado.")
+    st = status_vendedor_pedido(ped)
+    if st in ("em_expedicao", "entregue", "cancelado"):
+        raise ValueError("Não é possível alterar cobrança neste status.")
+    if st == STATUS_PAGO and (
+        ped.get("pago_em") or (ped.get("status_pagamento") or "").lower() == "pago"
+    ):
+        raise ValueError("Pagamento já aprovado pelo fornecedor. Não é possível remover o comprovante.")
+
+    alvo = (
+        STATUS_IMPORTADO
+        if origem_e_canal_externo(ped.get("origem"))
+        else STATUS_AGUARDANDO
+    )
+    set_sv, dup = _sql_set_status_vendedor(cur)
+    params: list = [alvo]
+    if dup:
+        params.append(alvo)
+    params.extend([agora_utc(), id_pedido])
+    cur.execute(
+        f"""
+        UPDATE tbl_pedido SET
+            {set_sv},
+            status_pagamento = 'pendente',
+            pago_em = NULL,
+            meio_pagamento = COALESCE(NULLIF(meio_pagamento, ''), 'pix_manual'),
+            atualizado_em = %s
+        WHERE id = %s
+        """,
+        params,
+    )
+    registrar_historico(
+        cur,
+        id_pedido,
+        "comprovante_removido",
+        "Comprovante PIX removido. Gere o PIX novamente se precisar.",
+        id_usuario,
+    )
+    ped2 = obter_pedido(cur, id_pedido, id_vendedor=id_vendedor)
+    return ped2 or ped
 
 
 def marcar_comprovante_enviado(cur, id_pedido: int, *, id_vendedor: int | None = None) -> None:
@@ -369,7 +451,13 @@ def reabrir_pagamento_pix_manual(
         "Cobrança PIX reaberta. Gere o QR/copia e cola, anexe o comprovante e aguarde o fornecedor aprovar.",
         id_usuario,
     )
-    return iniciar_pix_manual(cur, id_vendedor, id_pedido)
+    ped2 = obter_pedido(cur, id_pedido, id_vendedor=id_vendedor)
+    if not ped2:
+        raise ValueError("Pedido não encontrado após reabrir cobrança.")
+    out = _gerar_payload_e_gravar_pix(cur, ped2, id_pedido=id_pedido)
+    out["status_vendedor"] = status_vendedor_pedido(ped2)
+    out["reaberto"] = True
+    return out
 
 
 def rejeitar_comprovante_pix(

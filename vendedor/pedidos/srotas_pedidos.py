@@ -10,6 +10,7 @@ from api.pix_manual.pix_manual import (
     iniciar_pix_manual,
     marcar_comprovante_enviado,
     reabrir_pagamento_pix_manual,
+    voltar_cobranca_apos_remover_comprovante,
 )
 
 from global_utils import Var_ConectarBanco, exigir_modulo, exigir_permissao, login_obrigatorio
@@ -21,6 +22,7 @@ from core.pedidos.servico import (
     confirmar_pedido,
     excluir_anexo_pedido,
     listar_anexos_pedido,
+    pedido_tem_comprovante_pix,
     listar_fornecedores_pedido,
     listar_pedidos_vendedor,
     obter_contexto_pedido_vendedor,
@@ -340,9 +342,26 @@ def pedido_anexo_excluir(id_anexo: int):
                     arquivo.unlink()
                 except OSError:
                     pass
+        pedido = None
+        if info.get("tipo") == "comprovante_pix":
+            ainda_tem = pedido_tem_comprovante_pix(cur, int(info["id_pedido"]))
+            if not ainda_tem:
+                pedido = voltar_cobranca_apos_remover_comprovante(
+                    cur,
+                    int(info["id_pedido"]),
+                    id_vendedor=id_v,
+                    id_usuario=_id_usuario(),
+                )
         conn.commit()
-        return jsonify(success=True, message="Anexo removido.")
+        return jsonify(
+            success=True,
+            message="Anexo removido.",
+            tipo=info.get("tipo") or "",
+            id_pedido=info.get("id_pedido"),
+            pedido=pedido,
+        )
     except ValueError as e:
+        conn.rollback()
         return jsonify(success=False, message=str(e)), 400
     finally:
         conn.close()
@@ -881,7 +900,9 @@ def pedidos_pagar():
     try:
         cur = conn.cursor()
         if meio == "pix_manual":
-            result = iniciar_pix_manual(cur, id_v, id_pedido)
+            result = iniciar_pix_manual(
+                cur, id_v, id_pedido, id_usuario=_id_usuario()
+            )
             msg = "PIX manual gerado."
         else:
             result = iniciar_pagamento(

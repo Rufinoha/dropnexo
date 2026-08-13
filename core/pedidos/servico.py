@@ -3312,7 +3312,7 @@ def excluir_anexo_pedido(cur, id_vendedor: int, id_anexo: int) -> dict:
         raise ValueError("Anexos ainda não disponíveis.")
     cur.execute(
         """
-        SELECT a.id, a.id_pedido, a.caminho
+        SELECT a.id, a.id_pedido, a.caminho, a.tipo
         FROM tbl_pedido_anexo a
         JOIN tbl_pedido p ON p.id = a.id_pedido
         WHERE a.id = %s AND p.id_tenant_vendedor = %s
@@ -3323,7 +3323,26 @@ def excluir_anexo_pedido(cur, id_vendedor: int, id_anexo: int) -> dict:
     if not row:
         raise ValueError("Anexo não encontrado.")
     cur.execute("DELETE FROM tbl_pedido_anexo WHERE id = %s", (id_anexo,))
-    return {"id": row[0], "id_pedido": row[1], "caminho": row[2]}
+    return {
+        "id": row[0],
+        "id_pedido": row[1],
+        "caminho": row[2],
+        "tipo": (row[3] or "").strip().lower(),
+    }
+
+
+def pedido_tem_comprovante_pix(cur, id_pedido: int) -> bool:
+    if not _tem_tabela_anexo(cur):
+        return False
+    cur.execute(
+        """
+        SELECT 1 FROM tbl_pedido_anexo
+        WHERE id_pedido = %s AND tipo = 'comprovante_pix'
+        LIMIT 1
+        """,
+        (id_pedido,),
+    )
+    return cur.fetchone() is not None
 
 
 # ── estoque_reserva ───────────────────────────────────

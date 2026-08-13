@@ -468,9 +468,26 @@
       });
       const j = await parseJsonResp(r);
       if (!j.success) throw new Error(j.message || "Erro ao remover.");
+      const idPed = j.id_pedido || pedidosGrupo.find((p) =>
+        (p.anexos || []).some((a) => a.id === idAnexo)
+      )?.id;
       pedidosGrupo.forEach((p) => {
         p.anexos = (p.anexos || []).filter((a) => a.id !== idAnexo);
       });
+      if (j.tipo === "comprovante_pix" && idPed) {
+        const ped = pedidosGrupo.find((p) => p.id === idPed);
+        if (ped) {
+          if (j.pedido) Object.assign(ped, j.pedido);
+          else {
+            ped.status_vendedor =
+              ped.origem && ped.origem !== "manual" ? "importado" : "aguardando_pagamento";
+            ped.status = ped.status_vendedor;
+            ped.status_pagamento = "pendente";
+            ped.pago_em = null;
+          }
+        }
+        if (painelAtivo === "valores") await renderPayIntegracoes();
+      }
       atualizarNavFrete();
       if (painelAtivo === "frete") await renderFretePainel();
     } catch (e) {
@@ -1570,8 +1587,17 @@
       inp.addEventListener("change", () => enviarComprovantePix(inp));
     });
 
+    elPayIntegracoes.querySelectorAll("[data-del-anexo]").forEach((btn) => {
+      btn.addEventListener("click", () => excluirAnexo(+btn.dataset.delAnexo));
+    });
+
     cards.forEach(({ ped }) => {
-      if (ped?.pix_manual_payload && document.getElementById(`pd_pixm_${ped.id}`)) {
+      const temComp = (ped?.anexos || []).some((a) => a.tipo === "comprovante_pix");
+      if (
+        ped?.pix_manual_payload &&
+        !temComp &&
+        document.getElementById(`pd_pixm_${ped.id}`)
+      ) {
         mostrarPixManualInline(ped.id, {
           payload: ped.pix_manual_payload,
           txid: ped.pix_manual_txid,
@@ -1591,6 +1617,8 @@
     const k = payKey(idForn, integracao);
     const pref = meioPagamentoPorFornecedor[k] || "";
     const stPag = (ped?.status_pagamento || "").toLowerCase();
+    const comprovantes = (ped?.anexos || []).filter((a) => a.tipo === "comprovante_pix");
+    const temComprovante = comprovantes.length > 0;
     // Pago de verdade = fornecedor confirmou (pago_em / status_pagamento=pago)
     const pagoConfirmadoForn =
       ped &&
@@ -1598,30 +1626,32 @@
       (stPag === "pago" || !!ped.pago_em);
     const aguardando = stV(ped) === "aguardando_pagamento";
     const aguardandoConf =
-      stV(ped) === "aguardando_confirmacao" || stPag === "comprovante_enviado";
+      temComprovante ||
+      stV(ped) === "aguardando_confirmacao" ||
+      stPag === "comprovante_enviado";
     const importado = stV(ped) === "importado";
     const rascunho = stV(ped) === "rascunho";
     const pixManualAtivo = ped?.meio_pagamento === "pix_manual" || ped?.pix_manual_payload;
-    const podeReabrirPix =
-      isPixManual &&
-      ped &&
-      !["em_expedicao", "entregue", "cancelado"].includes(stV(ped)) &&
-      (pagoConfirmadoForn || aguardandoConf || (stV(ped) === "pago" && !pagoConfirmadoForn));
+    const bloqueadoExpedicao =
+      ped && ["em_expedicao", "entregue", "cancelado"].includes(stV(ped));
+    // Gerar PIX disponível até anexar o comprovante (volta se excluir o comprovante)
+    const podeGerarPixManual =
+      isPixManual && ped && !bloqueadoExpedicao && !rascunho && !temComprovante;
 
     let statusHtml = "";
-    if (pagoConfirmadoForn) {
+    if (pagoConfirmadoForn && (!isPixManual || temComprovante)) {
       const quando = ped.pago_em ? new Date(ped.pago_em).toLocaleString("pt-BR") : "";
       statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pago">Pagamento aprovado pelo fornecedor${quando ? ` · ${esc(quando)}` : ""}</div>`;
-    } else if (aguardandoConf && isPixManual) {
-      statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pendente">Comprovante enviado — aguardando aprovação do fornecedor</div>`;
+    } else if (pagoConfirmadoForn && isPixManual && !temComprovante) {
+      statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pendente">Gere o PIX e anexe o comprovante para o fornecedor confirmar</div>`;
+    } else if (temComprovante && isPixManual) {
+      statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pendente">Comprovante enviado — aguardando o fornecedor confirmar o pagamento</div>`;
     } else if (importado) {
       statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pendente">Cliente pagou no canal. Pague o fornecedor via PIX · ${fmt(totalFornecedorPedido(ped))}</div>`;
     } else if (aguardando) {
       statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pendente">Gere o PIX, pague e anexe o comprovante · ${fmt(totalFornecedorPedido(ped))}</div>`;
     } else if (rascunho) {
       statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pendente">Confirme o pedido para pagar</div>`;
-    } else if (stV(ped) === "pago" && isPixManual && !pagoConfirmadoForn) {
-      statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pendente">Cobrança precisa ser reaberta para gerar o PIX</div>`;
     }
 
     const logoHtml = icone
@@ -1652,34 +1682,56 @@
       }
     }
 
-    const podePagar = (aguardando || importado) && !pagoConfirmadoForn && !aguardandoConf;
+    const podePagarMp =
+      !isPixManual && (aguardando || importado) && !pagoConfirmadoForn && !aguardandoConf;
     const idPed = ped?.id || 0;
     const passosPix =
-      isPixManual && (podePagar || pixManualAtivo) && !pagoConfirmadoForn && !aguardandoConf
+      isPixManual && ped && !bloqueadoExpedicao && !rascunho && !pagoConfirmadoForn
         ? `<ol class="Pd_PixPassos">
-            <li>Gere o QR / copia e cola</li>
-            <li>Pague no app do banco</li>
+            <li>Gere o PIX (QR / copia e cola)</li>
             <li>Anexe o comprovante</li>
-            <li>Aguarde o fornecedor aprovar</li>
+            <li>Fornecedor confirma o pagamento</li>
           </ol>`
         : "";
+    const labelGerar = pixManualAtivo ? "Gerar PIX novamente" : "Gerar PIX";
     const payRow = `
       <div class="Pd_PayRow">
         ${statusHtml || ""}
-        ${podePagar ? `<button type="button" class="Cl_BtnSalvar Pd_BtnPagar" data-pagar="${idForn}" data-integ="${esc(integracao)}" data-ped="${idPed}">Gerar PIX</button>` : ""}
-        ${podeReabrirPix ? `<button type="button" class="Cl_botaoFiltro" data-reabrir-pix="${idPed}">Gerar PIX novamente</button>` : ""}
+        ${podeGerarPixManual ? `<button type="button" class="Cl_BtnSalvar Pd_BtnPagar" data-pagar="${idForn}" data-integ="${esc(integracao)}" data-ped="${idPed}">${labelGerar}</button>` : ""}
+        ${podePagarMp ? `<button type="button" class="Cl_BtnSalvar Pd_BtnPagar" data-pagar="${idForn}" data-integ="${esc(integracao)}" data-ped="${idPed}">Gerar PIX</button>` : ""}
       </div>`;
 
-    const pixBox = isPixManual && ped && (pixManualAtivo || podePagar)
-      ? `<div class="Pd_PixInline" id="pd_pixm_${ped.id}" ${pixManualAtivo ? "" : "hidden"}></div>
-         ${pixManualAtivo && !pagoConfirmadoForn && !aguardandoConf ? `
+    const listaComprovantes = temComprovante
+      ? `<div class="Pd_ComprovanteLista">
+          ${comprovantes
+            .map(
+              (a) => `
+            <div class="Pd_ComprovanteItem">
+              <a href="${anexoHref(a)}" target="_blank" rel="noopener">${esc(a.nome_original || "Comprovante")}</a>
+              ${
+                !pagoConfirmadoForn && !bloqueadoExpedicao
+                  ? `<button type="button" class="Pd_BtnLink Pd_BtnLink--danger" data-del-anexo="${a.id}">Excluir comprovante</button>`
+                  : ""
+              }
+            </div>`
+            )
+            .join("")}
+        </div>`
+      : "";
+    const mostrarUploadComprovante =
+      isPixManual && ped && !bloqueadoExpedicao && !pagoConfirmadoForn && !temComprovante && pixManualAtivo;
+    const mostrarQr = pixManualAtivo && !temComprovante && !pagoConfirmadoForn;
+    const pixBox = isPixManual && ped && (pixManualAtivo || podeGerarPixManual || temComprovante)
+      ? `<div class="Pd_PixInline" id="pd_pixm_${ped.id}" ${mostrarQr ? "" : "hidden"}></div>
+         ${listaComprovantes}
+         ${mostrarUploadComprovante ? `
          <div class="Pd_ComprovanteUpload">
-           <label class="Pd_Hint">Após pagar, anexe o comprovante (só então o fornecedor pode aprovar):</label>
+           <label class="Pd_Hint">Após pagar, anexe o comprovante:</label>
            <input type="file" class="Pd_AnexoInput" accept=".pdf,.png,.jpg,.jpeg,.webp" data-upload-comprovante="${ped.id}" />
          </div>` : ""}`
       : isPixManual
         ? ""
-        : podePagar
+        : podePagarMp
           ? `<div class="Pd_PixInline" id="pd_pix_${idPed}" hidden></div>`
           : "";
 
@@ -1692,7 +1744,7 @@
             <div class="Pd_PayCardForn">${esc(fornNome)}${ped?.numero ? ` · ${esc(ped.numero)}` : ""}</div>
           </div>
         </div>
-        ${(aguardando || importado || rascunho || !ped) && opcoes.length ? `<div class="Pd_PayOpcoes">${opcoes.join("")}</div>` : ""}
+        ${(aguardando || importado || rascunho || podeGerarPixManual || !ped) && opcoes.length ? `<div class="Pd_PayOpcoes">${opcoes.join("")}</div>` : ""}
         ${passosPix}
         ${payRow}
         ${pixBox}
@@ -1769,16 +1821,18 @@
         ped.status_pagamento = "comprovante_enviado";
         ped.status_vendedor = "aguardando_confirmacao";
         ped.status = "aguardando_confirmacao";
+        ped.anexos = ped.anexos || [];
+        if (j.anexo) ped.anexos.push(j.anexo);
       }
       if (window.Swal) {
         Swal.fire({
           icon: "success",
           title: "Comprovante enviado",
-          text: "Ainda não está pago. O fornecedor precisa aprovar o comprovante.",
+          text: "Aguardando o fornecedor confirmar o pagamento.",
           confirmButtonColor: "#021F81",
         });
       }
-      renderPayIntegracoes();
+      await renderPayIntegracoes();
     } catch (e) {
       if (window.Swal) Swal.fire({ icon: "error", title: "Comprovante", text: e.message, confirmButtonColor: "#021F81" });
     } finally {
@@ -1903,10 +1957,19 @@
 
   async function pagarCard(idForn, integracao, idPed) {
     const ped = pedidosGrupo.find((p) => p.id === idPed);
-    if (!ped || !["importado", "aguardando_pagamento"].includes(stV(ped))) return;
+    if (!ped) return;
+    const st = stV(ped);
+    const isPixManual = integracao === "pix-manual";
+    const okStatusMp = ["importado", "aguardando_pagamento"].includes(st);
+    const temComp = (ped.anexos || []).some((a) => a.tipo === "comprovante_pix");
+    const okStatusPixManual =
+      isPixManual &&
+      !temComp &&
+      !["em_expedicao", "entregue", "cancelado", "rascunho"].includes(st);
+    if (!okStatusMp && !okStatusPixManual) return;
 
     const k = payKey(idForn, integracao);
-    const meio = meioPagamentoPorFornecedor[k] || (integracao === "pix-manual" ? "pix_manual" : "pix");
+    const meio = meioPagamentoPorFornecedor[k] || (isPixManual ? "pix_manual" : "pix");
     const btn = elPayIntegracoes?.querySelector(`[data-pagar="${idForn}"][data-integ="${integracao}"]`);
     if (btn) btn.disabled = true;
 
@@ -1924,7 +1987,22 @@
         ped.meio_pagamento = "pix_manual";
         ped.pix_manual_payload = j.payload;
         ped.pix_manual_txid = j.txid;
+        if (j.reaberto || j.status_vendedor) {
+          ped.status_vendedor = j.status_vendedor || (ped.origem && ped.origem !== "manual" ? "importado" : "aguardando_pagamento");
+          ped.status = ped.status_vendedor;
+          ped.status_pagamento = "pendente";
+          ped.pago_em = null;
+        }
+        await renderPayIntegracoes();
         mostrarPixManualInline(idPed, j);
+        if (window.Swal) {
+          Swal.fire({
+            icon: "success",
+            title: "PIX gerado",
+            text: "Pague, anexe o comprovante e aguarde o fornecedor aprovar.",
+            confirmButtonColor: "#021F81",
+          });
+        }
         return;
       }
       if (meio === "pix") {
