@@ -1600,6 +1600,7 @@
       if (
         ped?.pix_manual_payload &&
         !temComp &&
+        freteDocsStatus(ped).ok &&
         document.getElementById(`pd_pixm_${ped.id}`)
       ) {
         mostrarPixManualInline(ped.id, {
@@ -1635,6 +1636,8 @@
     const pixManualAtivo = !!(ped?.meio_pagamento === "pix_manual" || ped?.pix_manual_payload);
     const st = stV(ped);
     const idPed = ped?.id || 0;
+    const docsFreteOk = ped ? freteDocsStatus(ped).ok : false;
+    const docsFreteFaltando = ped ? freteDocsStatus(ped).faltando : [];
     // Botão liberado até ter comprovante (cancela/entregue não)
     const podeGerarPixManual =
       isPixManual && !!idPed && !temComprovante && !["cancelado", "entregue"].includes(st);
@@ -1645,6 +1648,8 @@
       statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pago">Pagamento aprovado pelo fornecedor${quando ? ` · ${esc(quando)}` : ""}</div>`;
     } else if (temComprovante && isPixManual) {
       statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pendente">Comprovante enviado — aguardando o fornecedor confirmar</div>`;
+    } else if (isPixManual && ped && !docsFreteOk) {
+      statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pendente">Antes de gerar o PIX, anexe em <strong>Frete e NF</strong>: ${esc(docsFreteFaltando.join(", "))}</div>`;
     } else if (isPixManual && ped) {
       statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pendente">Clique em <strong>Gerar PIX</strong> para ver o QR e o copia e cola · ${fmt(totalFornecedorPedido(ped))}</div>`;
     } else if (importado || aguardando) {
@@ -1683,14 +1688,25 @@
 
     const podePagarMp =
       !isPixManual && (aguardando || importado) && !pagoConfirmadoForn && !aguardandoConf;
-    const passosPix = isPixManual && ped && podeGerarPixManual
-      ? `<ol class="Pd_PixPassos">
+    const passosPix =
+      isPixManual && ped && podeGerarPixManual && docsFreteOk
+        ? `<ol class="Pd_PixPassos">
           <li>Gere o PIX (QR / copia e cola)</li>
           <li>Anexe o comprovante</li>
           <li>Fornecedor confirma o pagamento</li>
         </ol>`
-      : "";
-    const labelGerar = pixManualAtivo ? "Gerar PIX novamente" : "Gerar PIX";
+        : isPixManual && ped && podeGerarPixManual && !docsFreteOk
+          ? `<ol class="Pd_PixPassos">
+          <li>Anexe etiqueta + NF/declaração em Frete e NF</li>
+          <li>Gere o PIX e pague</li>
+          <li>Anexe o comprovante</li>
+        </ol>`
+          : "";
+    const labelGerar = !docsFreteOk
+      ? "Gerar PIX"
+      : pixManualAtivo
+        ? "Gerar PIX novamente"
+        : "Gerar PIX";
     const payRow = `
       <div class="Pd_PayRow">
         ${statusHtml || ""}
@@ -1724,8 +1740,13 @@
         </div>`
       : "";
     const mostrarUploadComprovante =
-      isPixManual && ped && !pagoConfirmadoForn && !temComprovante && pixManualAtivo;
-    const mostrarQr = pixManualAtivo && !temComprovante;
+      isPixManual &&
+      ped &&
+      !pagoConfirmadoForn &&
+      !temComprovante &&
+      pixManualAtivo &&
+      docsFreteOk;
+    const mostrarQr = pixManualAtivo && !temComprovante && docsFreteOk;
     const pixBox = isPixManual && ped
       ? `<div class="Pd_PixInline" id="pd_pixm_${ped.id}" ${mostrarQr ? "" : "hidden"}></div>
          ${listaComprovantes}
@@ -1913,6 +1934,10 @@
   async function reabrirPixManual(idPed) {
     const ped = pedidosGrupo.find((p) => p.id === idPed);
     if (!ped) return;
+    if (!freteDocsStatus(ped).ok) {
+      await avisarDocsFreteObrigatorios(ped);
+      return;
+    }
     const ok = window.Swal
       ? (
           await Swal.fire({
@@ -1967,6 +1992,31 @@
     }
   }
 
+  async function avisarDocsFreteObrigatorios(ped) {
+    const docs = freteDocsStatus(ped);
+    const lista = (docs.faltando || []).map((f) => `<li>${esc(f)}</li>`).join("");
+    if (window.Swal) {
+      const r = await Swal.fire({
+        icon: "warning",
+        title: "Documentos pendentes",
+        html: `<p style="text-align:left;margin:0 0 0.6rem;color:#334155;line-height:1.45">
+          Para gerar o PIX, anexe em <strong>Frete e NF</strong>:
+        </p>
+        <ul style="text-align:left;margin:0;padding-left:1.2rem;color:#334155">${lista}</ul>`,
+        confirmButtonText: "Ir para Frete e NF",
+        showCancelButton: true,
+        cancelButtonText: "Fechar",
+        confirmButtonColor: "#021F81",
+      });
+      if (r.isConfirmed && typeof irPainel === "function") {
+        pedidoFocoFrete = ped.id;
+        irPainel("frete");
+      }
+    } else {
+      alert(`Antes de gerar o PIX, anexe: ${(docs.faltando || []).join(", ")}`);
+    }
+  }
+
   async function pagarCard(idForn, integracao, idPed) {
     const ped = pedidosGrupo.find((p) => p.id === idPed);
     if (!ped) return;
@@ -1985,6 +2035,11 @@
           confirmButtonColor: "#021F81",
         });
       }
+      return;
+    }
+
+    if (isPixManual && !freteDocsStatus(ped).ok) {
+      await avisarDocsFreteObrigatorios(ped);
       return;
     }
 
@@ -2014,7 +2069,7 @@
           ped.pago_em = null;
         }
         await renderPayIntegracoes();
-        mostrarPixManualInline(idPed, j);
+        if (freteDocsStatus(ped).ok) mostrarPixManualInline(idPed, j);
         if (window.Swal) {
           Swal.fire({
             icon: "success",

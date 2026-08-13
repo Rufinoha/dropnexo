@@ -185,10 +185,22 @@ from core.pedidos.servico import (
     _status_vendedor_pagavel,
     marcar_pedido_pago,
     obter_pedido,
+    pedido_docs_frete_ok,
     pedido_tem_comprovante_pix,
     registrar_historico,
     status_vendedor_pedido,
 )
+
+
+def _exigir_docs_frete_para_pix(cur, id_pedido: int) -> None:
+    docs = pedido_docs_frete_ok(cur, id_pedido)
+    if docs.get("ok"):
+        return
+    faltando = docs.get("faltando") or []
+    detalhe = ", ".join(faltando) if faltando else "etiqueta e nota fiscal/declaração"
+    raise ValueError(
+        f"Antes de gerar o PIX, anexe em Frete e NF: {detalhe}."
+    )
 
 
 def meio_pix_manual_fornecedor(cur, id_fornecedor: int) -> dict:
@@ -297,6 +309,7 @@ def iniciar_pix_manual(
         raise ValueError(
             "Já existe comprovante anexado. Remova o comprovante para gerar o PIX novamente."
         )
+    _exigir_docs_frete_para_pix(cur, id_pedido)
 
     # Qualquer status sem comprovante (pago/expedição legado etc.): reabre e gera
     if st not in (STATUS_IMPORTADO, STATUS_AGUARDANDO):
@@ -433,6 +446,7 @@ def reabrir_pagamento_pix_manual(
         raise ValueError("Não é possível reabrir cobrança neste status.")
     if pedido_tem_comprovante_pix(cur, id_pedido):
         raise ValueError("Remova o comprovante antes de gerar o PIX novamente.")
+    _exigir_docs_frete_para_pix(cur, id_pedido)
 
     cur.execute(
         """
