@@ -22,7 +22,6 @@
     freteGratis: document.getElementById("ml_frete_gratis"),
     garantiaTipo: document.getElementById("ml_garantia_tipo"),
     garantiaTempo: document.getElementById("ml_garantia_tempo"),
-    webhookUrl: document.getElementById("ml_webhook_url"),
     msg: document.getElementById("ml_msg"),
     msgModal: document.getElementById("ml_msg_modal"),
     subtabs: document.getElementById("ml_subtabs"),
@@ -144,9 +143,6 @@
     if (el.freteGratis) el.freteGratis.checked = !!cfg.frete_gratis;
     if (el.garantiaTipo) el.garantiaTipo.value = cfg.garantia_tipo_padrao || "";
     if (el.garantiaTempo) el.garantiaTempo.value = cfg.garantia_tempo_padrao || "";
-    if (el.webhookUrl) {
-      el.webhookUrl.textContent = cfg.webhook_url || "—";
-    }
     const modo = cfg.produtos_modo || "vincular_sku";
     document.querySelectorAll('input[name="ml_produtos_modo"]').forEach((r) => {
       r.checked = r.value === modo;
@@ -249,10 +245,61 @@
     }
   });
 
-  async function postSync(url, btn, loading) {
+  function htmlListaErros(erros) {
+    if (!erros?.length) return "";
+    const itens = erros
+      .slice(0, 6)
+      .map((e) => `<li style="margin:0.25rem 0;text-align:left">${esc(e)}</li>`)
+      .join("");
+    return `<ul style="margin:0.65rem 0 0;padding-left:1.15rem;font-size:0.9rem;line-height:1.4">${itens}</ul>`;
+  }
+
+  function montarHtmlResultadoSync(j) {
+    const r = j.resumo || {};
+    const temResumoPedidos =
+      j.total_encontrados != null || r.encontrados != null || j.importados != null;
+    const encontrados = r.encontrados ?? j.total_encontrados ?? 0;
+    const importados = r.importados ?? j.importados ?? 0;
+    const cancelados = r.cancelados ?? j.cancelados ?? 0;
+    const ignorados = r.ignorados ?? j.ignorados ?? 0;
+    const erros = j.detalhes_erros || [];
+    const grid = temResumoPedidos
+      ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:0.35rem 0.75rem;font-size:0.9rem">
+          <span>Encontrados no ML</span><strong>${encontrados}</strong>
+          <span>Criados no DropNexo</span><strong>${importados}</strong>
+          <span>Cancelamentos</span><strong>${cancelados}</strong>
+          <span>Ignorados</span><strong>${ignorados}</strong>
+        </div>`
+      : "";
+    return `
+      <div style="text-align:left;font-size:0.95rem;line-height:1.45">
+        <p style="margin:0 0 0.55rem">${esc(j.message || "Sincronização concluída.")}</p>
+        ${grid}
+        ${
+          erros.length
+            ? `<p style="margin:0.85rem 0 0;font-weight:700">O que aconteceu</p>${htmlListaErros(erros)}`
+            : ""
+        }
+      </div>
+    `;
+  }
+
+  async function postSync(url, btn, tituloLoading, textoLoading) {
     if (!btn) return;
     btn.disabled = true;
-    mostrarMsg(loading, false);
+    const temSwal = !!window.Swal;
+    if (temSwal) {
+      Swal.fire({
+        title: tituloLoading || "Processando…",
+        html: `<p style="margin:0;color:#64748b">${esc(textoLoading || "Aguarde…")}</p>`,
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        showConfirmButton: false,
+        didOpen: () => Swal.showLoading(),
+      });
+    } else {
+      mostrarMsg(textoLoading || "Processando…", false);
+    }
     try {
       const r = await fetch(url, {
         method: "POST",
@@ -266,21 +313,55 @@
       } catch {
         throw new Error(r.status >= 500 ? "Erro no servidor." : "Resposta inválida do servidor.");
       }
-      if (!r.ok || !j.success) throw new Error(j.message || "Falha.");
-      let msg = j.message || "Concluído.";
-      if (j.detalhes_erros?.length) {
-        msg += " " + j.detalhes_erros.slice(0, 2).join(" · ");
+      if (!r.ok || !j.success) {
+        const detalhe = (j.detalhes_erros && j.detalhes_erros[0]) || j.message || "Falha na sincronização.";
+        throw new Error(detalhe);
       }
-      mostrarMsg(msg, false);
+      const importados = Number(j.importados || 0);
+      const erros = j.detalhes_erros || [];
+      const icon = importados > 0 && !erros.length ? "success" : importados > 0 ? "info" : erros.length ? "warning" : "success";
+      const title =
+        importados > 0
+          ? `${importados} pedido(s) importado(s)`
+          : erros.length
+            ? "Nenhum pedido novo"
+            : "Sincronização concluída";
+      if (temSwal) {
+        await Swal.fire({
+          icon,
+          title,
+          html: montarHtmlResultadoSync(j),
+          confirmButtonText: "Ok",
+          confirmButtonColor: "#021F81",
+          width: "32rem",
+        });
+      } else {
+        mostrarMsg(j.message || title, false);
+      }
     } catch (e) {
-      mostrarMsg(e.message, true);
+      if (temSwal) {
+        await Swal.fire({
+          icon: "error",
+          title: "Não foi possível sincronizar",
+          html: `<p style="text-align:left;margin:0;line-height:1.45">${esc(e.message)}</p>`,
+          confirmButtonText: "Ok",
+          confirmButtonColor: "#021F81",
+        });
+      } else {
+        mostrarMsg(e.message, true);
+      }
     } finally {
       btn.disabled = false;
     }
   }
 
   el.btnSync?.addEventListener("click", () =>
-    postSync("/api/integracoes/mercado-livre/sync/pedidos", el.btnSync, "Buscando pedidos no Mercado Livre…")
+    postSync(
+      "/api/integracoes/mercado-livre/sync/pedidos",
+      el.btnSync,
+      "Buscando pedidos…",
+      "Consultando o Mercado Livre e importando pedidos pagos. Isso pode levar alguns segundos."
+    )
   );
 
   function esc(s) {
@@ -647,7 +728,8 @@
     postSync(
       "/api/integracoes/mercado-livre/sync/estoque",
       el.btnSyncEstoque,
-      "Enviando estoque ao Mercado Livre…"
+      "Sincronizando estoque…",
+      "Enviando quantidades ao Mercado Livre. Aguarde…"
     )
   );
 

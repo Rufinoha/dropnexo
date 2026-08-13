@@ -12,6 +12,36 @@ from global_utils import agora_utc
 _log = logging.getLogger(__name__)
 
 
+def _mensagem_erro_amigavel_ml(err: str | Exception) -> str:
+    """Traduz erros técnicos de importação ML para linguagem de vendedor."""
+    s = str(err or "").strip()
+    low = s.lower()
+    if "tbl_pedido_origem_check" in low or "origem_check" in low:
+        return (
+            "O banco ainda não aceitava pedidos do Mercado Livre. "
+            "Atualize o sistema e tente novamente."
+        )
+    if "transaction is aborted" in low:
+        return "Falha interna na sincronização. Tente buscar os pedidos novamente."
+    if "sem vínculo" in low or "sem_match" in low or "não encontrado em meus produtos" in low:
+        return s
+    if "não encontrado em meus produtos" in low or "não encontrado em Meus produtos" in low:
+        return (
+            "Produto do pedido não está vinculado em Meus produtos. "
+            "Publique ou vincule o anúncio e tente de novo."
+        )
+    if "sem vínculo ativo" in low:
+        return "Há produto de fornecedor sem vínculo ativo. Reative o vínculo e tente de novo."
+    if "capacidade" in low or "limite" in low:
+        return s
+    # Evita despejar DETAIL/Failing row do Postgres na tela
+    if "violates check constraint" in low or "failing row contains" in low:
+        return "Não foi possível criar o pedido por uma regra do banco. Tente novamente após atualizar o sistema."
+    if len(s) > 220:
+        return s[:217] + "…"
+    return s
+
+
 def _pedido_ml_ja_processado(cur, id_tenant: int, id_ml_pedido: str) -> bool:
     from core.pedidos.servico import _garantir_coluna_id_ml_pedido, _pedido_colunas
 
@@ -390,7 +420,7 @@ def importar_pedido_ml_por_id(cur, id_tenant: int, id_ml_pedido: str) -> dict[st
 
 def importar_pedidos_mercado_livre(cur, id_tenant: int, *, dias: int = 7) -> dict:
     from api.mercado_livre.mercado_livre import api_request, carregar_config_ml
-    from core.pedidos.servico import _garantir_coluna_id_ml_pedido
+    from core.pedidos.servico import _garantir_check_origem_pedido, _garantir_coluna_id_ml_pedido
 
     cfg = carregar_config_ml(cur, id_tenant)
     ml_user_id = cfg.get("ml_user_id")
@@ -401,6 +431,7 @@ def importar_pedidos_mercado_livre(cur, id_tenant: int, *, dias: int = 7) -> dic
         raise RuntimeError(
             "Coluna id_ml_pedido ausente. Aplique __doc/sql/076_pedido_id_ml.sql."
         )
+    _garantir_check_origem_pedido(cur)
 
     desde = datetime.now(timezone.utc) - timedelta(days=max(1, min(dias, 60)))
     base_params = {
@@ -468,16 +499,23 @@ def importar_pedidos_mercado_livre(cur, id_tenant: int, *, dias: int = 7) -> dic
                 ignorados += 1
                 motivo = res.get("motivo") or "ignorado"
                 if motivo == "erro_criar" and res.get("mensagem"):
-                    erros.append(f"#{id_ml}: {res['mensagem']}")
+                    erros.append(
+                        f"#{id_ml}: {_mensagem_erro_amigavel_ml(res['mensagem'])}"
+                    )
                 elif motivo == "sem_match":
                     erros.append(
-                        f"#{id_ml}: itens do ML sem vínculo em Meus produtos "
-                        f"(anúncio não mapeado / sem SKU)."
+                        f"#{id_ml}: itens do anúncio sem vínculo em Meus produtos "
+                        f"(publique/vincule o produto ou confira o SKU)."
                     )
                 elif motivo == "status_nao_pago":
-                    erros.append(f"#{id_ml}: status ML '{res.get('status')}' (ainda não pago).")
+                    erros.append(
+                        f"#{id_ml}: pedido ainda não está pago no ML "
+                        f"(status: {res.get('status') or '?'})."
+                    )
                 elif motivo == "erro_api" and res.get("mensagem"):
-                    erros.append(f"#{id_ml}: {res['mensagem']}")
+                    erros.append(
+                        f"#{id_ml}: {_mensagem_erro_amigavel_ml(res['mensagem'])}"
+                    )
                 elif motivo == "ja_importado":
                     # Re-tenta documentos em pedidos já existentes.
                     try:
@@ -496,7 +534,7 @@ def importar_pedidos_mercado_livre(cur, id_tenant: int, *, dias: int = 7) -> dic
                 cur.execute(f"ROLLBACK TO SAVEPOINT {sp}")
             except Exception:
                 pass
-            erros.append(f"#{id_ml}: {str(e)[:160]}")
+            erros.append(f"#{id_ml}: {_mensagem_erro_amigavel_ml(e)}")
             ignorados += 1
 
     agora = agora_utc()
@@ -510,14 +548,14 @@ def importar_pedidos_mercado_livre(cur, id_tenant: int, *, dias: int = 7) -> dic
     )
 
     msg = (
-        f"{importados} pedido(s) do Mercado Livre criado(s) em Pedidos. "
-        f"{cancelados} cancelamento(s) sincronizado(s). "
+        f"{importados} pedido(s) criado(s). "
+        f"{cancelados} cancelamento(s). "
         f"{ignorados} ignorado(s)."
     )
     if erros:
-        msg += f" {len(erros)} erro(s)."
+        msg += f" {len(erros)} com detalhe."
         if importados == 0:
-            msg += f" Detalhe: {erros[0]}"
+            msg += f" Motivo: {erros[0]}"
 
     return {
         "message": msg,
@@ -526,7 +564,14 @@ def importar_pedidos_mercado_livre(cur, id_tenant: int, *, dias: int = 7) -> dic
         "cancelados": cancelados,
         "ignorados": ignorados,
         "ids_pedido": ids_pedidos[:20],
-        "detalhes_erros": erros[:5],
+        "detalhes_erros": erros[:8],
+        "resumo": {
+            "encontrados": len(ids),
+            "importados": importados,
+            "cancelados": cancelados,
+            "ignorados": ignorados,
+            "erros": len(erros),
+        },
     }
 
 

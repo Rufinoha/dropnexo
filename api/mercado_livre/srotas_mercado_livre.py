@@ -247,7 +247,9 @@ def sync_pedidos():
         return jsonify(success=True, **resultado)
     except Exception as e:
         conn.rollback()
-        return jsonify(success=False, message=str(e)[:300]), 400
+        from api.mercado_livre.pedidos_ml import _mensagem_erro_amigavel_ml
+
+        return jsonify(success=False, message=_mensagem_erro_amigavel_ml(e)), 400
     finally:
         conn.close()
 

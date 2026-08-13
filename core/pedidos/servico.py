@@ -361,6 +361,56 @@ def _garantir_coluna_id_ml_pedido(cur) -> bool:
     return "id_ml_pedido" in _pedido_colunas(cur)
 
 
+def _garantir_check_origem_pedido(cur) -> None:
+    """
+    Garante que tbl_pedido_origem_check aceite canais de marketplace.
+    Bancos antigos só tinham manual/bling e bloqueavam mercado_livre/tiktok/amazon.
+    """
+    origens = (
+        "manual",
+        "bling",
+        "mercado_livre",
+        "tiktok",
+        "amazon",
+        "loja_virtual",
+        "xml_dropshipping",
+    )
+    lista = ", ".join(f"'{o}'" for o in origens)
+    try:
+        cur.execute("SAVEPOINT sp_garantir_origem_pedido")
+        cur.execute(
+            """
+            SELECT pg_get_constraintdef(c.oid)
+            FROM pg_constraint c
+            JOIN pg_class t ON t.oid = c.conrelid
+            JOIN pg_namespace n ON n.oid = t.relnamespace
+            WHERE n.nspname = 'public'
+              AND t.relname = 'tbl_pedido'
+              AND c.conname = 'tbl_pedido_origem_check'
+            """
+        )
+        row = cur.fetchone()
+        defn = (row[0] or "") if row else ""
+        precisa = (not defn) or any(o not in defn for o in ("mercado_livre", "tiktok", "amazon"))
+        if precisa:
+            cur.execute(
+                "ALTER TABLE tbl_pedido DROP CONSTRAINT IF EXISTS tbl_pedido_origem_check"
+            )
+            cur.execute(
+                f"""
+                ALTER TABLE tbl_pedido
+                  ADD CONSTRAINT tbl_pedido_origem_check
+                  CHECK (origem IS NULL OR origem IN ({lista}))
+                """
+            )
+        cur.execute("RELEASE SAVEPOINT sp_garantir_origem_pedido")
+    except Exception:
+        try:
+            cur.execute("ROLLBACK TO SAVEPOINT sp_garantir_origem_pedido")
+        except Exception:
+            pass
+
+
 def pedido_cols_sql(cur) -> str:
     cv = col_status_vendedor(cur)
     cols = _pedido_colunas(cur)
@@ -2011,6 +2061,7 @@ def importar_pedido_ml(
         raise RuntimeError(
             "Coluna id_ml_pedido ausente. Aplique __doc/sql/076_pedido_id_ml.sql."
         )
+    _garantir_check_origem_pedido(cur)
 
     itens_parsed = dados.get("itens") or []
     if not itens_parsed:
