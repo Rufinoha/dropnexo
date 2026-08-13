@@ -682,11 +682,39 @@ def listar_pedidos_vendedor(cur, id_vendedor: int, status: str | None = None) ->
     return [_pedido_dict(r[:29], fornecedor_nome=r[29]) for r in cur.fetchall()]
 
 
+def _promover_importado_para_aguardando_pagamento(cur, id_fornecedor: int) -> int:
+    """
+    Pedido de canal 'importado' = vendedor ainda vai pagar o fornecedor.
+    Fornecedor deve ver como aguardando_pagamento.
+    """
+    cv = col_status_vendedor(cur)
+    set_sv, dup = _sql_set_status_vendedor(cur)
+    params: list[Any] = [STATUS_AGUARDANDO]
+    if dup:
+        params.append(STATUS_AGUARDANDO)
+    params.extend([agora_utc(), id_fornecedor, STATUS_IMPORTADO])
+    cur.execute(
+        f"""
+        UPDATE tbl_pedido SET
+            {set_sv},
+            atualizado_em = %s
+        WHERE id_tenant_fornecedor = %s
+          AND {cv} = %s
+        """,
+        params,
+    )
+    return cur.rowcount or 0
+
+
 def listar_pedidos_fornecedor(cur, id_fornecedor: int, status: str | None = None) -> list[dict]:
     cv = col_status_vendedor(cur)
-    where = [f"p.id_tenant_fornecedor = %s", f"p.{cv} NOT IN ('rascunho', 'importado')"]
-    params: list[Any] = [id_fornecedor]
+    # Rascunho não aparece; importado → aguardando_pagamento (visível pro fornecedor)
+    _promover_importado_para_aguardando_pagamento(cur, id_fornecedor)
+
+    where = [f"p.id_tenant_fornecedor = %s", f"p.{cv} <> %s"]
+    params: list[Any] = [id_fornecedor, STATUS_RASCUNHO]
     if status:
+        # filtro da tela: "aguardando_pagamento" também pega legado importado (já promovido)
         where.append(f"p.{cv} = %s")
         params.append(status)
     cur.execute(
@@ -702,7 +730,12 @@ def listar_pedidos_fornecedor(cur, id_fornecedor: int, status: str | None = None
         """,
         params,
     )
-    return [_pedido_dict(r[:29], vendedor_nome=r[30]) for r in cur.fetchall()]
+    out = [_pedido_dict(r[:29], vendedor_nome=r[30]) for r in cur.fetchall()]
+    for ped in out:
+        if status_vendedor_pedido(ped) == STATUS_IMPORTADO:
+            ped["status_vendedor"] = STATUS_AGUARDANDO
+            ped["status"] = STATUS_AGUARDANDO
+    return out
 
 
 def _parse_atributos_variante(raw) -> dict[str, str]:

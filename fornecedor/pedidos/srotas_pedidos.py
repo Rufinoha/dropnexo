@@ -109,7 +109,12 @@ def pedidos_dados():
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
-        return jsonify(success=True, pedidos=listar_pedidos_fornecedor(cur, id_f, status))
+        pedidos = listar_pedidos_fornecedor(cur, id_f, status)
+        try:
+            conn.commit()
+        except Exception:
+            pass
+        return jsonify(success=True, pedidos=pedidos)
     finally:
         conn.close()
 

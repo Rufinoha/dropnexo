@@ -1,5 +1,6 @@
 (function () {
   const LABEL = {
+    importado: "Aguardando pagamento",
     aguardando_pagamento: "Aguardando pagamento",
     aguardando_confirmacao: "Aguardando aprovação",
     pago: "Pagamento confirmado",
