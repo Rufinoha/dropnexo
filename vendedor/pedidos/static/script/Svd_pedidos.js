@@ -803,11 +803,24 @@
       </div>`;
   }
 
+  function renderAnexosSomenteLeitura(ped, tipo, titulo) {
+    const lista = (ped.anexos || []).filter((a) => a.tipo === tipo);
+    if (!lista.length) return "";
+    return `
+      <div class="Pd_FreteUploadBloco">
+        <h6>${esc(titulo)}</h6>
+        <ul class="Pd_AnexoItens Pd_FreteEtqLista">
+          ${renderListaAnexosTipo(ped, tipo, "", false)}
+        </ul>
+      </div>`;
+  }
+
   function renderFreteIntegracao(ped) {
     const origem = (ped.origem || "").toLowerCase();
     const isTt = origem === "tiktok";
     const isAmz = origem === "amazon";
     const isBling = origem === "bling";
+    const isMl = origem === "mercado_livre";
     const canal = isAmz
       ? "Amazon"
       : isTt
@@ -828,22 +841,36 @@
       return `
       <div class="Pd_FreteIntegracao">
         <p class="Pd_Hint">Pedido do <strong>Bling</strong>. Puxamos a DANFE em PDF (sem XML). A etiqueta de frete deve ser anexada manualmente.</p>
-        <button type="button" class="Cl_botaoFiltro" data-puxar-integracao="${ped.id}">Puxar DANFE (Bling)</button>
+        <button type="button" class="Cl_botaoprimario" data-puxar-integracao="${ped.id}">Puxar DANFE (Bling)</button>
         ${renderFreteDocsChecklist(ped)}
         ${renderUploadPdfFrete(ped, "etiqueta", "Etiqueta de frete")}
         ${renderEscolhaFiscal(ped, { obrigatorioEscolher: false })}
       </div>`;
     }
-    const hint = isTt
-      ? "Pedido do TikTok Shop. Puxamos a etiqueta (e DANFE PDF, se existir) da integração."
-      : "Pedido do Mercado Livre. Puxamos a etiqueta do Mercado Envios e a DANFE em PDF, se já tiver sido emitida.";
-    return `
+    if (isMl || isTt) {
+      const docs = freteDocsStatus(ped);
+      const hint = isTt
+        ? "Nesta aba o DropNexo busca <strong>etiqueta</strong> e <strong>nota (DANFE)</strong> direto no TikTok Shop — sem anexo manual."
+        : "Nesta aba o DropNexo busca <strong>etiqueta de transporte</strong> e <strong>nota fiscal (DANFE)</strong> direto no Mercado Livre — sem anexo manual.";
+      const btnTxt = isTt
+        ? "Baixar etiqueta e nota (TikTok)"
+        : "Baixar etiqueta e nota (Mercado Livre)";
+      return `
       <div class="Pd_FreteIntegracao">
         <p class="Pd_Hint">${hint}</p>
-        <button type="button" class="Cl_botaoFiltro" data-puxar-integracao="${ped.id}">Puxar da integração (${esc(canal)})</button>
+        <p class="Pd_Hint">Se ainda não estiver liberado no canal, o botão explica o motivo. Para anexar PDF à mão, use a aba <strong>Manual</strong>.</p>
+        <button type="button" class="Cl_botaoprimario" data-puxar-integracao="${ped.id}">${btnTxt}</button>
         ${renderFreteDocsChecklist(ped)}
-        ${renderUploadPdfFrete(ped, "etiqueta", "Etiqueta (fallback PDF)")}
-        ${renderEscolhaFiscal(ped, { obrigatorioEscolher: false })}
+        ${docs.temEtiqueta ? renderAnexosSomenteLeitura(ped, "etiqueta", "Etiqueta") : ""}
+        ${docs.temNf ? renderAnexosSomenteLeitura(ped, "nf", "Nota fiscal") : ""}
+        ${docs.temDeclaracao ? renderAnexosSomenteLeitura(ped, "declaracao", "Declaração") : ""}
+      </div>`;
+    }
+    return `
+      <div class="Pd_FreteIntegracao">
+        <p class="Pd_Hint">Pedido de ${esc(canal)}. Use o botão para puxar documentos da integração.</p>
+        <button type="button" class="Cl_botaoprimario" data-puxar-integracao="${ped.id}">Puxar da integração (${esc(canal)})</button>
+        ${renderFreteDocsChecklist(ped)}
       </div>`;
   }
 
@@ -1109,19 +1136,59 @@
     elFreteConteudo.querySelectorAll("[data-puxar-integracao]").forEach((btn) => {
       btn.addEventListener("click", async () => {
         btn.disabled = true;
+        const temSwal = !!window.Swal;
+        if (temSwal) {
+          Swal.fire({
+            title: "Buscando documentos…",
+            html: "<p style='margin:0;color:#64748b'>Consultando etiqueta e nota na integração.</p>",
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            showConfirmButton: false,
+            didOpen: () => Swal.showLoading(),
+          });
+        }
         try {
           const j = await puxarIntegracaoPedido(+btn.dataset.puxarIntegracao);
           await renderFretePainel();
           atualizarNavFrete();
-          Swal.fire({
-            icon: "success",
-            title: "Integração",
-            text: j.message || "Documentos puxados.",
-            timer: 2200,
-            showConfirmButton: false,
-          });
+          const avisos = Array.isArray(j.avisos) ? j.avisos : [];
+          const etqOk = !!j.etiqueta;
+          const nfOk = !!j.fiscal;
+          const icon = etqOk && nfOk ? "success" : etqOk || nfOk ? "info" : "warning";
+          const linhas = [
+            `<li><strong>Etiqueta:</strong> ${etqOk ? "baixada" : "ainda não disponível"}</li>`,
+            `<li><strong>Nota fiscal:</strong> ${nfOk ? "baixada" : "ainda não disponível"}</li>`,
+          ];
+          const avisosHtml = avisos.length
+            ? `<p style="margin:0.75rem 0 0;font-weight:700">Detalhes</p><ul style="margin:0.35rem 0 0;padding-left:1.1rem;text-align:left">${avisos
+                .slice(0, 5)
+                .map((a) => `<li>${esc(a)}</li>`)
+                .join("")}</ul>`
+            : "";
+          if (temSwal) {
+            await Swal.fire({
+              icon,
+              title: etqOk || nfOk ? "Documentos da integração" : "Nada disponível ainda",
+              html: `<div style="text-align:left"><p style="margin:0 0 0.5rem">${esc(
+                j.message || ""
+              )}</p><ul style="margin:0;padding-left:1.1rem">${linhas.join("")}</ul>${avisosHtml}</div>`,
+              confirmButtonText: "Ok",
+              confirmButtonColor: "#021F81",
+            });
+          }
         } catch (e) {
-          Swal.fire({ icon: "error", title: "Integração", text: e.message, confirmButtonColor: "#021F81" });
+          if (temSwal) {
+            await Swal.fire({
+              icon: "warning",
+              title: "Documentos ainda não disponíveis",
+              html: `<p style="text-align:left;margin:0;line-height:1.45">${esc(e.message)}</p>
+                <p style="text-align:left;margin:0.75rem 0 0;color:#64748b;font-size:0.9rem">
+                  A etiqueta libera quando o envio está pronto no canal. A nota, após a emissão. Se precisar anexar PDF agora, use a aba <strong>Manual</strong>.
+                </p>`,
+              confirmButtonText: "Ok",
+              confirmButtonColor: "#021F81",
+            });
+          }
         } finally {
           btn.disabled = false;
         }

@@ -279,10 +279,13 @@ def api_request(
     params: dict | None = None,
     json_body: dict | None = None,
     timeout: tuple[float, float] | None = None,
+    extra_headers: dict | None = None,
 ) -> Any:
     token = obter_access_token_valido(cur, id_tenant)
     url = path if path.startswith("http") else f"{ML_API_BASE}{path}"
     headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
+    if extra_headers:
+        headers.update({str(k): str(v) for k, v in extra_headers.items() if v is not None})
     try:
         r = requests.request(
             method.upper(),

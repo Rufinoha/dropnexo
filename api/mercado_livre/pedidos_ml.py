@@ -88,38 +88,121 @@ def _nome_comprador_ml(buyer: dict) -> str:
     return (buyer.get("nickname") or "Cliente Mercado Livre").strip()
 
 
+def _fone_de_obj(phone: Any) -> str:
+    if isinstance(phone, dict):
+        area = str(phone.get("area_code") or "").strip()
+        num = str(phone.get("number") or "").strip()
+        if num:
+            return f"{area}{num}".strip()
+        return ""
+    return str(phone or "").strip()
+
+
 def _telefone_ml(buyer: dict, shipment: dict | None) -> str:
-    for fonte in (buyer, (shipment or {}).get("receiver_address") or {}):
-        if not isinstance(fonte, dict):
-            continue
-        phone = fonte.get("phone") or fonte.get("receiver_phone") or {}
-        if isinstance(phone, dict):
-            area = str(phone.get("area_code") or "").strip()
-            num = str(phone.get("number") or "").strip()
-            if num:
-                return f"{area}{num}".strip()
-        elif phone:
-            return str(phone).strip()
+    fontes: list[Any] = []
+    if isinstance(buyer, dict):
+        fontes.extend(
+            [
+                buyer.get("phone"),
+                buyer.get("alternative_phone"),
+                buyer.get("receiver_phone"),
+            ]
+        )
+    if isinstance(shipment, dict):
+        dest = shipment.get("destination") if isinstance(shipment.get("destination"), dict) else {}
+        addr = (
+            shipment.get("receiver_address")
+            or (dest.get("shipping_address") if dest else None)
+            or {}
+        )
+        fontes.extend(
+            [
+                shipment.get("receiver_phone"),
+                dest.get("receiver_phone") if isinstance(dest, dict) else None,
+                addr.get("phone") if isinstance(addr, dict) else None,
+                addr.get("receiver_phone") if isinstance(addr, dict) else None,
+            ]
+        )
+    for phone in fontes:
+        tel = _fone_de_obj(phone)
+        if tel:
+            return tel
     return ""
 
 
-def _documento_ml(buyer: dict, order: dict) -> str:
+def _documento_ml(buyer: dict, order: dict, billing_info: dict | None = None) -> str:
+    candidatos: list[Any] = []
+    if isinstance(billing_info, dict):
+        bi = billing_info.get("billing_info") if isinstance(billing_info.get("billing_info"), dict) else None
+        if not bi and isinstance(billing_info.get("buyer"), dict):
+            bi = (billing_info.get("buyer") or {}).get("billing_info")
+        if isinstance(bi, dict):
+            candidatos.append(bi.get("doc_number"))
+            ident = bi.get("identification") or {}
+            if isinstance(ident, dict):
+                candidatos.append(ident.get("number"))
+        candidatos.append(billing_info.get("doc_number"))
+        ident_top = billing_info.get("identification") or {}
+        if isinstance(ident_top, dict):
+            candidatos.append(ident_top.get("number"))
+
     billing = buyer.get("billing_info") or {}
     if isinstance(billing, dict):
-        doc = billing.get("doc_number")
-        if not doc:
-            ident_b = billing.get("identification") or {}
-            if isinstance(ident_b, dict):
-                doc = ident_b.get("number")
-        if doc:
-            return _digitos(str(doc))
+        candidatos.append(billing.get("doc_number"))
+        ident_b = billing.get("identification") or {}
+        if isinstance(ident_b, dict):
+            candidatos.append(ident_b.get("number"))
     ident = buyer.get("identification") or {}
-    if isinstance(ident, dict) and ident.get("number"):
-        return _digitos(str(ident["number"]))
+    if isinstance(ident, dict):
+        candidatos.append(ident.get("number"))
     taxes = order.get("taxes") or {}
     if isinstance(taxes, dict):
-        return _digitos(str(taxes.get("id") or ""))
+        candidatos.append(taxes.get("id"))
+
+    for doc in candidatos:
+        d = _digitos(str(doc or ""))
+        if len(d) >= 11:
+            return d
     return ""
+
+
+def _buscar_billing_info_ml(cur, id_tenant: int, id_ml_pedido: str) -> dict | None:
+    """CPF/CNPJ e dados fiscais do comprador (endpoint dedicado do ML)."""
+    from api.mercado_livre.mercado_livre import api_request
+
+    oid = str(id_ml_pedido or "").strip()
+    if not oid:
+        return None
+    for headers in ({"x-version": "2"}, None):
+        try:
+            data = api_request(
+                cur,
+                int(id_tenant),
+                "GET",
+                f"/orders/{oid}/billing_info",
+                extra_headers=headers,
+            )
+            if isinstance(data, dict) and data:
+                return data
+        except RuntimeError as e:
+            _log.info("billing_info ML %s: %s", oid, e)
+    return None
+
+
+def _nome_de_billing(billing_info: dict | None, buyer: dict) -> str:
+    if isinstance(billing_info, dict):
+        bi = None
+        if isinstance(billing_info.get("buyer"), dict):
+            bi = (billing_info.get("buyer") or {}).get("billing_info")
+        if not isinstance(bi, dict):
+            bi = billing_info.get("billing_info")
+        if isinstance(bi, dict):
+            first = (bi.get("name") or bi.get("first_name") or "").strip()
+            last = (bi.get("last_name") or "").strip()
+            nome = f"{first} {last}".strip()
+            if nome:
+                return nome
+    return _nome_comprador_ml(buyer)
 
 
 def _entrega_de_shipment(shipment: dict | None) -> dict[str, str]:
@@ -158,8 +241,13 @@ def _entrega_de_shipment(shipment: dict | None) -> dict[str, str]:
     }
 
 
-def parse_pedido_ml(order: dict, shipment: dict | None = None) -> dict[str, Any]:
-    """Extrai cliente, entrega e itens de um order ML (+ shipment opcional)."""
+def parse_pedido_ml(
+    order: dict,
+    shipment: dict | None = None,
+    *,
+    billing_info: dict | None = None,
+) -> dict[str, Any]:
+    """Extrai cliente, entrega e itens de um order ML (+ shipment / billing_info)."""
     buyer = order.get("buyer") or {}
     if not isinstance(buyer, dict):
         buyer = {}
@@ -199,13 +287,15 @@ def parse_pedido_ml(order: dict, shipment: dict | None = None) -> dict[str, Any]
             (opt.get("cost") if isinstance(opt, dict) else 0) or shipment.get("base_cost") or 0
         )
 
+    email = (buyer.get("email") or "").strip() or None
+    # ML costuma omitir e-mail real por privacidade; mantém se vier.
     return {
         "numero_ml": str(order.get("id") or ""),
         "cliente": {
-            "nome": _nome_comprador_ml(buyer),
-            "email": (buyer.get("email") or "").strip() or None,
+            "nome": _nome_de_billing(billing_info, buyer),
+            "email": email,
             "telefone": _telefone_ml(buyer, shipment) or None,
-            "documento": _documento_ml(buyer, order) or None,
+            "documento": _documento_ml(buyer, order, billing_info) or None,
         },
         "entrega": _entrega_de_shipment(shipment),
         "itens": itens,
@@ -213,6 +303,47 @@ def parse_pedido_ml(order: dict, shipment: dict | None = None) -> dict[str, Any]
         "observacoes": "",
         "total_ml": float(order.get("total_amount") or 0),
     }
+
+
+def _preencher_cliente_pedidos_ml(cur, ids_pedido: list[int], cliente: dict) -> None:
+    """Completa campos vazios do comprador (não sobrescreve o que já foi preenchido)."""
+    if not ids_pedido or not isinstance(cliente, dict):
+        return
+    nome = (cliente.get("nome") or "").strip()
+    email = (cliente.get("email") or "").strip()
+    telefone = (cliente.get("telefone") or "").strip()
+    documento = _digitos(cliente.get("documento"))
+    for pid in ids_pedido:
+        cur.execute(
+            """
+            UPDATE tbl_pedido SET
+              cliente_nome = CASE
+                WHEN COALESCE(NULLIF(TRIM(cliente_nome), ''), '') IN ('', 'Cliente Mercado Livre')
+                     AND %s <> '' THEN %s
+                ELSE cliente_nome END,
+              cliente_email = CASE
+                WHEN COALESCE(NULLIF(TRIM(cliente_email), ''), '') = '' AND %s <> '' THEN %s
+                ELSE cliente_email END,
+              cliente_telefone = CASE
+                WHEN COALESCE(NULLIF(TRIM(cliente_telefone), ''), '') = '' AND %s <> '' THEN %s
+                ELSE cliente_telefone END,
+              cliente_documento = CASE
+                WHEN COALESCE(NULLIF(TRIM(cliente_documento), ''), '') = '' AND %s <> '' THEN %s
+                ELSE cliente_documento END
+            WHERE id = %s
+            """,
+            (
+                nome,
+                nome,
+                email,
+                email,
+                telefone,
+                telefone,
+                documento,
+                documento,
+                int(pid),
+            ),
+        )
 
 
 def _buscar_shipment_ml(cur, id_tenant: int, order: dict) -> dict | None:
@@ -327,28 +458,33 @@ def _importar_um_pedido_ml(cur, id_tenant: int, id_ml_pedido: str) -> dict[str, 
             cur, id_tenant, id_ml, motivo="Pedido cancelado no Mercado Livre."
         )
 
+    shipment = _buscar_shipment_ml(cur, id_tenant, pedido)
+    billing = _buscar_billing_info_ml(cur, id_tenant, id_ml)
+    dados_cliente = parse_pedido_ml(pedido, shipment, billing_info=billing)
+
     if _pedido_ml_ja_processado(cur, id_tenant, id_ml):
-        ship = _buscar_shipment_ml(cur, id_tenant, pedido)
-        ship_id = (ship or {}).get("id") if isinstance(ship, dict) else None
+        from core.pedidos.servico import listar_pedidos_por_id_ml, salvar_id_ml_shipment
+
+        ids_locais = listar_pedidos_por_id_ml(cur, int(id_tenant), id_ml)
+        _preencher_cliente_pedidos_ml(cur, ids_locais, dados_cliente.get("cliente") or {})
+        ship_id = (shipment or {}).get("id") if isinstance(shipment, dict) else None
         if not ship_id and isinstance(pedido.get("shipping"), dict):
             ship_id = (pedido.get("shipping") or {}).get("id")
         if ship_id:
-            from core.pedidos.servico import listar_pedidos_por_id_ml, salvar_id_ml_shipment
-
-            for pid in listar_pedidos_por_id_ml(cur, int(id_tenant), id_ml):
+            for pid in ids_locais:
                 salvar_id_ml_shipment(cur, int(pid), ship_id)
         return {
             "importado": False,
             "motivo": "ja_importado",
             "id_ml_pedido": id_ml,
             "id_ml_shipment": ship_id,
+            "ids_pedido": ids_locais,
         }
 
     if status not in ("paid", "confirmed"):
         return {"importado": False, "motivo": "status_nao_pago", "status": status}
 
-    shipment = _buscar_shipment_ml(cur, id_tenant, pedido)
-    dados = _resolver_itens_variante(cur, id_tenant, parse_pedido_ml(pedido, shipment))
+    dados = _resolver_itens_variante(cur, id_tenant, dados_cliente)
     if not dados.get("itens"):
         return {
             "importado": False,
@@ -1290,13 +1426,22 @@ def puxar_documentos_integracao_ml(
         out["avisos"].append(str(e))
 
     if not out["etiqueta"] and not out["fiscal"]:
-        raise ValueError(out["avisos"][0] if out["avisos"] else "Nada disponível na integração.")
+        detalhe = "; ".join(str(a) for a in (out["avisos"] or [])[:3])
+        raise ValueError(
+            detalhe
+            or "Etiqueta e nota ainda não estão disponíveis no Mercado Livre. "
+            "A etiqueta costuma liberar em 'pronto para enviar'; a NF, após a emissão."
+        )
 
     msgs = []
     if out["etiqueta"]:
-        msgs.append(out["etiqueta"].get("message") or "Etiqueta ok.")
+        msgs.append(out["etiqueta"].get("message") or "Etiqueta baixada.")
+    else:
+        msgs.append("Etiqueta ainda não disponível no ML.")
     if out["fiscal"]:
-        msgs.append(out["fiscal"].get("message") or "Documento fiscal ok.")
+        msgs.append(out["fiscal"].get("message") or "Nota baixada.")
+    else:
+        msgs.append("Nota ainda não disponível no ML.")
     out["message"] = " ".join(msgs)
     out["ok"] = True
     return out
