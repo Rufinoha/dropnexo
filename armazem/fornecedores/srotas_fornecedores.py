@@ -46,38 +46,85 @@ def _so_digitos(v: str) -> str:
     return re.sub(r"\D", "", v or "")
 
 
+_LOGO_COL_OK: bool | None = None
+
+
+def _tem_coluna_logo(cur) -> bool:
+    global _LOGO_COL_OK
+    if _LOGO_COL_OK is True:
+        return True
+    cur.execute(
+        """
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'tbl_armazem_fornecedor'
+          AND column_name = 'logo_caminho'
+        LIMIT 1
+        """
+    )
+    _LOGO_COL_OK = bool(cur.fetchone())
+    return _LOGO_COL_OK
+
+
 def garantir_tabela_fornecedor_armazem(cur) -> None:
-    cur.execute(
-        """
-        CREATE TABLE IF NOT EXISTS tbl_armazem_fornecedor (
-            id BIGSERIAL PRIMARY KEY,
-            id_tenant_armazem BIGINT NOT NULL REFERENCES tbl_tenant(id) ON DELETE CASCADE,
-            nome VARCHAR(200) NOT NULL,
-            nome_fantasia VARCHAR(200),
-            documento VARCHAR(20),
-            email VARCHAR(200),
-            telefone VARCHAR(30),
-            whatsapp VARCHAR(30),
-            observacoes TEXT,
-            logo_caminho VARCHAR(500),
-            ativo BOOLEAN NOT NULL DEFAULT TRUE,
-            criado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-            atualizado_em TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    """Garante tabela/coluna. DDL é best-effort (app user pode não ser owner)."""
+    global _LOGO_COL_OK
+    try:
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS tbl_armazem_fornecedor (
+                id BIGSERIAL PRIMARY KEY,
+                id_tenant_armazem BIGINT NOT NULL REFERENCES tbl_tenant(id) ON DELETE CASCADE,
+                nome VARCHAR(200) NOT NULL,
+                nome_fantasia VARCHAR(200),
+                documento VARCHAR(20),
+                email VARCHAR(200),
+                telefone VARCHAR(30),
+                whatsapp VARCHAR(30),
+                observacoes TEXT,
+                logo_caminho VARCHAR(500),
+                ativo BOOLEAN NOT NULL DEFAULT TRUE,
+                criado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                atualizado_em TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+            """
         )
+    except Exception:
+        pass
+    if not _tem_coluna_logo(cur):
+        try:
+            cur.execute(
+                """
+                ALTER TABLE tbl_armazem_fornecedor
+                  ADD COLUMN logo_caminho VARCHAR(500)
+                """
+            )
+            _LOGO_COL_OK = True
+        except Exception:
+            # Sem ownership: rode sql/024_armazem_fornecedor_logo.sql como postgres.
+            _LOGO_COL_OK = False
+    try:
+        cur.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_armazem_fornecedor_tenant
+              ON tbl_armazem_fornecedor (id_tenant_armazem)
+            """
+        )
+    except Exception:
+        pass
+
+
+def _cols_select(cur) -> str:
+    if _tem_coluna_logo(cur):
+        return """
+            id, nome, nome_fantasia, documento, email, telefone, whatsapp,
+            observacoes, ativo, logo_caminho
         """
-    )
-    cur.execute(
-        """
-        ALTER TABLE tbl_armazem_fornecedor
-          ADD COLUMN IF NOT EXISTS logo_caminho VARCHAR(500)
-        """
-    )
-    cur.execute(
-        """
-        CREATE INDEX IF NOT EXISTS idx_armazem_fornecedor_tenant
-          ON tbl_armazem_fornecedor (id_tenant_armazem)
-        """
-    )
+    return """
+        id, nome, nome_fantasia, documento, email, telefone, whatsapp,
+        observacoes, ativo, NULL::varchar AS logo_caminho
+    """
 
 
 def _logo_url(fid: int, caminho: str | None) -> str:
