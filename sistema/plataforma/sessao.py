@@ -107,7 +107,7 @@ def resolver_url_menu(data_page: str, nav_codigo: str | None = None) -> str:
         "az_pedidos": "az_pedidos.pedidos",
         "az_parametros": "az_parametros.parametros_pagina",
         "az_usuarios": "az_usuarios.usuarios",
-        "az_integracoes": "integracoes.pagina",
+        "az_integracoes": "az_integracoes.pagina",
         "az_vendedores": "az_vendedores.vendedores",
     }
     rotas = {
@@ -142,7 +142,7 @@ def resolver_url_menu(data_page: str, nav_codigo: str | None = None) -> str:
         "/armazem/pedidos": "az_pedidos.pedidos",
         "/armazem/parametros": "az_parametros.parametros_pagina",
         "/armazem/usuarios": "az_usuarios.usuarios",
-        "/armazem/integracoes": "integracoes.pagina",
+        "/armazem/integracoes": "az_integracoes.pagina",
         "/armazem/vendedores": "az_vendedores.vendedores",
     }
     endpoint = rotas_por_nav.get(nav) or rotas.get(page)

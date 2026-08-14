@@ -36,7 +36,7 @@
   };
   if (!el.tbody) return;
 
-  const BASE = "/catalogos";
+  const BASE = window.CAT_BASE || "/catalogos";
 
   function util() {
     return window.Util || { gerarIconeTech: () => "…" };

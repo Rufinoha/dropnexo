@@ -4,8 +4,9 @@
 (function () {
   "use strict";
 
-  const API_DADOS = "/fornecedor/parametros/requisitos-vendedor/dados";
-  const API_SALVAR = "/fornecedor/parametros/requisitos-vendedor/salvar";
+  const API_BASE = window.PAR_API_BASE || "/fornecedor/parametros";
+  const API_DADOS = `${API_BASE}/requisitos-vendedor/dados`;
+  const API_SALVAR = `${API_BASE}/requisitos-vendedor/salvar`;
 
   const el = {
     exige_cnpj: document.getElementById("req_exige_cnpj"),

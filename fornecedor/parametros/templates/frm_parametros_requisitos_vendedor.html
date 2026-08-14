@@ -125,7 +125,8 @@
     </form>
   </div>
 
+  <script>window.PAR_API_BASE = {{ (par_api_base|default('/fornecedor/parametros'))|tojson }};</script>
   <script src="{{ url_for('static', filename='script/global_utils.js') }}"></script>
-  <script src="{{ url_for('fn_parametros.static', filename='script/Sfn_parametros_requisitos.js') }}?v=2"></script>
+  <script src="{{ url_for('fn_parametros.static', filename='script/Sfn_parametros_requisitos.js') }}?v=3"></script>
 </body>
 </html>

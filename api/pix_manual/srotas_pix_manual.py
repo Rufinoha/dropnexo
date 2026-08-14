@@ -12,7 +12,7 @@ from api.pix_manual.pix_manual import (
     salvar_config_pix_manual,
 )
 from global_utils import Var_ConectarBanco, login_obrigatorio
-from sistema.plataforma.sessao import MODULO_FORNECEDOR, garantir_modulo_sessao
+from sistema.plataforma.sessao import MODULO_ARMAZEM, MODULO_FORNECEDOR, garantir_modulo_sessao
 
 _MOD = Path(__file__).resolve().parent
 pix_manual_bp = Blueprint(
@@ -36,9 +36,9 @@ def _id_tenant() -> int | None:
 def _exigir_fornecedor():
     if session.get("eh_desenvolvedor"):
         return None
-    if garantir_modulo_sessao() == MODULO_FORNECEDOR:
+    if garantir_modulo_sessao() in (MODULO_FORNECEDOR, MODULO_ARMAZEM):
         return None
-    return jsonify(success=False, message="Apenas fornecedores."), 403
+    return jsonify(success=False, message="Apenas fornecedores e armazéns."), 403
 
 
 @pix_manual_bp.get("/api/integracoes/pix-manual/status")

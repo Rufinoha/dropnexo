@@ -15,20 +15,43 @@
 }
 .AzForn_Grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: 0.75rem;
 }
 .AzForn_Card {
   background: #fff;
   border: 1px solid #e2e8f0;
   border-radius: 12px;
-  padding: 1rem;
+  padding: 0.9rem 1rem;
   cursor: pointer;
   display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
+  gap: 0.75rem;
+  align-items: flex-start;
 }
 .AzForn_Card:hover { border-color: #94a3b8; }
+.AzForn_CardLogo {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  flex-shrink: 0;
+}
+.AzForn_CardLogoPh {
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  border: 1px dashed #cbd5e1;
+  background: #f8fafc;
+  flex-shrink: 0;
+}
+.AzForn_CardBody {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
 .AzForn_Card strong { color: #0f172a; }
 .AzForn_Card span { color: #64748b; font-size: 0.88rem; }
 .AzForn_Meta { font-size: 0.8rem !important; }
@@ -77,6 +100,59 @@
   cursor: pointer;
 }
 .AzForn_Form { padding: 1rem 1.2rem 1.2rem; display: grid; gap: 0.75rem; }
+.AzForn_LogoBlock {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.45rem;
+  padding-bottom: 0.35rem;
+}
+.AzForn_LogoLabel {
+  font-size: 0.82rem;
+  color: #475569;
+  font-weight: 600;
+}
+.AzForn_LogoFrame {
+  width: 120px;
+  height: 72px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 12px;
+  background: #f8fafc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.AzForn_LogoImg {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+.AzForn_LogoPh {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  color: #94a3b8;
+  font-size: 0.72rem;
+}
+.AzForn_LogoBtn {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.4rem 0.7rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fff;
+  color: #0f172a;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+.AzForn_LogoBtn:hover { border-color: #94a3b8; }
+.AzForn_LogoHint {
+  margin: 0;
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
 .AzForn_Field label { display: block; font-size: 0.82rem; color: #475569; margin-bottom: 0.25rem; }
 .AzForn_Field input,
 .AzForn_Field textarea {

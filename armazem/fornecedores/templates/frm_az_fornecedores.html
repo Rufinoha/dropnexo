@@ -3,7 +3,7 @@
 {% set nav_ativo = 'az_fornecedores' %}
 {% block topbar_title %}Fornecedores do armazém{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('az_fornecedores.static', filename='style/Caz_fornecedores.css') }}?v=1" />
+<link rel="stylesheet" href="{{ url_for('az_fornecedores.static', filename='style/Caz_fornecedores.css') }}?v=2" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal AzForn_Page">
@@ -39,6 +39,21 @@
     </header>
     <form id="az_forn_form" class="AzForn_Form" autocomplete="off">
       <input type="hidden" id="az_forn_id" value="" />
+
+      <div class="AzForn_LogoBlock">
+        <span class="AzForn_LogoLabel">Logotipo</span>
+        <div class="AzForn_LogoFrame" id="az_forn_logo_frame">
+          <img id="az_forn_logo_img" class="AzForn_LogoImg" alt="Logotipo" hidden />
+          <span id="az_forn_logo_ph" class="AzForn_LogoPh">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="11" r="1.5"/><path d="M21 16l-5-5-4 4-2-2-5 5"/></svg>
+            <span>Sem logotipo</span>
+          </span>
+        </div>
+        <label for="az_forn_logo_input" class="AzForn_LogoBtn">Escolher imagem</label>
+        <input type="file" id="az_forn_logo_input" accept="image/png,image/jpeg,image/webp" hidden />
+        <p class="AzForn_LogoHint">PNG, JPG ou WEBP · até 2 MB</p>
+      </div>
+
       <div class="AzForn_Field">
         <label for="az_forn_nome">Razão social / nome *</label>
         <input type="text" id="az_forn_nome" maxlength="200" required />
@@ -79,5 +94,5 @@
 </div>
 {% endblock %}
 {% block page_js %}
-<script src="{{ url_for('az_fornecedores.static', filename='script/Saz_fornecedores.js') }}?v=1"></script>
+<script src="{{ url_for('az_fornecedores.static', filename='script/Saz_fornecedores.js') }}?v=2"></script>
 {% endblock %}

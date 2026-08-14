@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const BASE = "/fornecedor/parametros/precificacao";
+  const BASE = (window.PAR_API_BASE || "/fornecedor/parametros") + "/precificacao";
   const qs = (s) => document.querySelector(s);
   const qsa = (s) => [...document.querySelectorAll(s)];
 

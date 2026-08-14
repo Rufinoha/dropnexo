@@ -807,8 +807,11 @@ def _menu_sidebar_fallback(mod_ativo: str = "vendedor") -> list[dict]:
             {"nome": "Fornecedores", "url": resolver_url_menu("/armazem/fornecedores", "az_fornecedores"), "icone_svg": _ICONES_SVG["users"], "nav_codigo": "az_fornecedores"},
             {"nome": "Depósitos", "url": resolver_url_menu("/armazem/depositos", "az_depositos"), "icone_svg": _ICONES_SVG["package"], "nav_codigo": "az_depositos"},
             {"nome": "Produtos", "url": resolver_url_menu("/armazem/produtos", "az_produtos"), "icone_svg": _ICONES_SVG["package"], "nav_codigo": "az_produtos"},
+            {"nome": "Movimentações", "url": resolver_url_menu("/armazem/movimentacoes", "az_movimentacoes"), "icone_svg": _ICONES_SVG["package"], "nav_codigo": "az_movimentacoes"},
             {"nome": "Pedidos", "url": resolver_url_menu("/armazem/pedidos", "az_pedidos"), "icone_svg": _ICONES_SVG["shopping-bag"], "nav_codigo": "az_pedidos"},
             {"nome": "Parâmetros", "url": resolver_url_menu("/armazem/parametros", "az_parametros"), "icone_svg": _ICONES_SVG["settings"], "nav_codigo": "az_parametros"},
+            {"nome": "Usuários", "url": resolver_url_menu("/armazem/usuarios", "az_usuarios"), "icone_svg": _ICONES_SVG["users"], "nav_codigo": "az_usuarios"},
+            {"nome": "Integrações", "url": resolver_url_menu("/armazem/integracoes", "az_integracoes"), "icone_svg": _ICONES_SVG["plug"], "nav_codigo": "az_integracoes"},
         ]
     return comum + [
         {"nome": "Fornecedores", "url": url_for("vd_fornecedores.pagina"), "icone_svg": _ICONES_SVG["users"], "nav_codigo": "fornecedores"},

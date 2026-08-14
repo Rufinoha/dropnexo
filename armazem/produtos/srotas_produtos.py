@@ -53,11 +53,36 @@ def garantir_coluna_dono(cur) -> None:
 @az_produtos_bp.get("/armazem/produtos")
 @login_obrigatorio()
 @exigir_modulo(MODULO_ARMAZEM)
-@exigir_permissao(codigo="az_produtos.ver")
+@exigir_permissao(codigos=["az_produtos.ver", "catalogos.ver", "produtos.ver"])
 def pagina():
     if (r := _exigir_armazem_tenant()) is not None:
         return r
-    return render_template("frm_az_produtos.html", nav_ativo="az_produtos")
+    id_tenant = _id_tenant()
+    bling_conectado = False
+    if id_tenant:
+        conn = Var_ConectarBanco()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT status FROM tbl_integracao_bling WHERE id_tenant = %s",
+                (id_tenant,),
+            )
+            row = cur.fetchone()
+            bling_conectado = bool(row and row[0] == "conectado")
+        finally:
+            conn.close()
+    # Mesma UI do catálogo do fornecedor (tabela, variações, imagens, estoque).
+    return render_template(
+        "frm_catalogos.html",
+        nav_ativo="az_produtos",
+        bling_conectado=bling_conectado,
+        cat_page_title="Produtos",
+        cat_topbar_title="Produtos do armazém",
+        cat_heading="Produtos",
+        cat_desc="Cadastre produtos, preços e estoque — mesmos recursos do catálogo do fornecedor.",
+        cat_api_base="/catalogos",
+        cat_ocultar_import_export=False,
+    )
 
 
 @az_produtos_bp.get("/armazem/produtos/dados")

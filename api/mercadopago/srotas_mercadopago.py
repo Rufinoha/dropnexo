@@ -20,7 +20,24 @@ from api.mercadopago.mercadopago import (
     url_autorizacao,
 )
 from global_utils import Var_ConectarBanco, login_obrigatorio, obter_base_url, usuario_tem_permissao
-from sistema.plataforma.sessao import MODULO_FORNECEDOR, garantir_modulo_sessao
+from sistema.plataforma.sessao import MODULO_ARMAZEM, MODULO_FORNECEDOR, garantir_modulo_sessao
+
+
+def _pode_integracoes() -> bool:
+    return bool(
+        session.get("eh_desenvolvedor")
+        or usuario_tem_permissao("integracoes.ver")
+        or usuario_tem_permissao("fn_integracoes.ver")
+        or usuario_tem_permissao("az_integracoes.ver")
+    )
+
+
+def _exigir_fornecedor():
+    if session.get("eh_desenvolvedor"):
+        return None
+    if garantir_modulo_sessao() in (MODULO_FORNECEDOR, MODULO_ARMAZEM):
+        return None
+    return redirect(url_for("integracoes.pagina", erro="Opções financeiras são apenas para fornecedores e armazéns."))
 
 _log = logging.getLogger(__name__)
 
@@ -38,22 +55,6 @@ mp_bp = Blueprint(
 
 def init_app(app):
     app.register_blueprint(mp_bp)
-
-
-def _pode_integracoes() -> bool:
-    return bool(
-        session.get("eh_desenvolvedor")
-        or usuario_tem_permissao("integracoes.ver")
-        or usuario_tem_permissao("fn_integracoes.ver")
-    )
-
-
-def _exigir_fornecedor():
-    if session.get("eh_desenvolvedor"):
-        return None
-    if garantir_modulo_sessao() == MODULO_FORNECEDOR:
-        return None
-    return redirect(url_for("integracoes.pagina", erro="Opções financeiras são apenas para fornecedores."))
 
 
 @mp_bp.get("/api/integracoes/mercadopago/oauth/iniciar")
@@ -119,8 +120,8 @@ def oauth_callback():
 def desconectar():
     if not _pode_integracoes():
         return jsonify(success=False, message="Sem permissão."), 403
-    if garantir_modulo_sessao() != MODULO_FORNECEDOR and not session.get("eh_desenvolvedor"):
-        return jsonify(success=False, message="Apenas fornecedores."), 403
+    if garantir_modulo_sessao() not in (MODULO_FORNECEDOR, MODULO_ARMAZEM) and not session.get("eh_desenvolvedor"):
+        return jsonify(success=False, message="Apenas fornecedores e armazéns."), 403
     id_tenant = session.get("id_tenant")
     conn = Var_ConectarBanco()
     try:
@@ -155,8 +156,8 @@ def status():
 def config_salvar():
     if not _pode_integracoes():
         return jsonify(success=False, message="Sem permissão."), 403
-    if garantir_modulo_sessao() != MODULO_FORNECEDOR and not session.get("eh_desenvolvedor"):
-        return jsonify(success=False, message="Apenas fornecedores."), 403
+    if garantir_modulo_sessao() not in (MODULO_FORNECEDOR, MODULO_ARMAZEM) and not session.get("eh_desenvolvedor"):
+        return jsonify(success=False, message="Apenas fornecedores e armazéns."), 403
     body = request.get_json(silent=True) or {}
     id_tenant = session.get("id_tenant")
     conn = Var_ConectarBanco()

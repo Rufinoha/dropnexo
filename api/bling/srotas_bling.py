@@ -114,6 +114,7 @@ def _pode_integracoes() -> bool:
         session.get("eh_desenvolvedor")
         or usuario_tem_permissao("integracoes.ver")
         or usuario_tem_permissao("fn_integracoes.ver")
+        or usuario_tem_permissao("az_integracoes.ver")
     )
 
 

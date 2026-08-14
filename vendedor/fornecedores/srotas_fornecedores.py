@@ -1130,23 +1130,11 @@ def requisitos_vinculo(id_fornecedor: int):
         cur.execute("SELECT tipo_negocio FROM tbl_tenant WHERE id = %s", (id_fornecedor,))
         tipo_nb = ((cur.fetchone() or [""])[0] or "").strip().lower()
         if tipo_nb == "armazem":
-            from armazem.parametros.srotas_parametros import carregar_parametros
+            from armazem.parametros.srotas_parametros import sincronizar_requisitos_com_armazem
 
-            az = carregar_parametros(cur, id_fornecedor)
-            req = {
-                "exige_cnpj": False,
-                "exige_nf": False,
-                "cobra_taxa_vinculo": False,
-                "valor_taxa_vinculo": 0,
-                "cobra_taxa_mensal": False,
-                "valor_taxa_mensal": 0,
-                "cobra_taxa_pedido": False,
-                "valor_taxa_pedido": 0,
-                "texto_adicional": az.get("texto_adicional") or "",
-                "aprovacao_automatica": bool(az.get("aprovacao_automatica")),
-                "mostrar_contato_vendedor": True,
-            }
+            req = sincronizar_requisitos_com_armazem(cur, id_fornecedor)
             tem_registro = True
+            conn.commit()
         else:
             req, tem_registro = carregar_requisitos_raw(cur, id_fornecedor)
         cur.execute("SELECT tipo_pessoa FROM tbl_tenant WHERE id = %s", (id_vendedor,))
@@ -1192,22 +1180,9 @@ def solicitar_vinculo():
             return jsonify(success=False, message="Fornecedor não encontrado."), 404
         tipo_forn = (tipo_row[0] or "").strip().lower()
         if tipo_forn == "armazem":
-            from armazem.parametros.srotas_parametros import carregar_parametros
+            from armazem.parametros.srotas_parametros import sincronizar_requisitos_com_armazem
 
-            az = carregar_parametros(cur, id_forn)
-            req = {
-                "exige_cnpj": False,
-                "exige_nf": False,
-                "cobra_taxa_vinculo": False,
-                "valor_taxa_vinculo": 0,
-                "cobra_taxa_mensal": False,
-                "valor_taxa_mensal": 0,
-                "cobra_taxa_pedido": False,
-                "valor_taxa_pedido": 0,
-                "texto_adicional": az.get("texto_adicional") or "",
-                "aprovacao_automatica": bool(az.get("aprovacao_automatica")),
-                "mostrar_contato_vendedor": True,
-            }
+            req = sincronizar_requisitos_com_armazem(cur, id_forn)
         else:
             req = carregar_requisitos(cur, id_forn)
         if requisitos_tem_conteudo(req):

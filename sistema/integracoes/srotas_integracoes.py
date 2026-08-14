@@ -8,7 +8,12 @@ from pathlib import Path
 
 from flask import render_template, session, url_for
 
-from sistema.plataforma.sessao import MODULO_FORNECEDOR, MODULO_VENDEDOR, garantir_modulo_sessao
+from sistema.plataforma.sessao import (
+    MODULO_ARMAZEM,
+    MODULO_FORNECEDOR,
+    MODULO_VENDEDOR,
+    garantir_modulo_sessao,
+)
 
 _RAIZ_PROJETO = Path(__file__).resolve().parents[2]
 _ICONES_API_DIR = _RAIZ_PROJETO / "static" / "imge" / "icone_api"
@@ -24,6 +29,10 @@ HUB_COPY_INTEGRACOES = {
         "titulo": "Integrações",
         "descricao": "Receba pagamentos dos vendedores e sincronize seu catálogo com ERPs.",
     },
+    MODULO_ARMAZEM: {
+        "titulo": "Integrações",
+        "descricao": "Receba pagamentos dos vendedores e sincronize seu catálogo com ERPs.",
+    },
     MODULO_VENDEDOR: {
         "titulo": "Integrações",
         "descricao": "Importe pedidos das suas lojas, contrate fretes e acompanhe envios.",
@@ -31,7 +40,7 @@ HUB_COPY_INTEGRACOES = {
 }
 
 _MOD_VENDEDOR = [MODULO_VENDEDOR]
-_MOD_FORNECEDOR = [MODULO_FORNECEDOR]
+_MOD_FORNECEDOR = [MODULO_FORNECEDOR, MODULO_ARMAZEM]
 
 CATEGORIAS_INTEGRACOES = [
     {
@@ -149,7 +158,7 @@ def _visivel_integracao_modulo(entidade: dict, modulo: str) -> bool:
     if mods:
         return modulo in mods
     if entidade.get("somente_fornecedor"):
-        return modulo == MODULO_FORNECEDOR
+        return modulo in (MODULO_FORNECEDOR, MODULO_ARMAZEM)
     return True
 
 
@@ -237,6 +246,13 @@ def render_pagina_integracoes(*, nav_codigo: str, icones_base_url: str):
     mod = garantir_modulo_sessao()
     copy = hub_copy_integracoes(mod)
     lim = limites_plano()
+    if not nav_codigo:
+        if mod == MODULO_ARMAZEM:
+            nav_codigo = "az_integracoes"
+        elif mod == MODULO_FORNECEDOR:
+            nav_codigo = "integracoes"
+        else:
+            nav_codigo = "integracoes"
     return render_template(
         "frm_integracoes_hub.html",
         nav_codigo=nav_codigo,
@@ -260,7 +276,12 @@ from pathlib import Path
 from flask import Blueprint, jsonify, redirect, render_template, request, session, url_for
 
 from global_utils import Var_ConectarBanco, login_obrigatorio, usuario_tem_permissao
-from sistema.plataforma.sessao import MODULO_FORNECEDOR, MODULO_VENDEDOR, garantir_modulo_sessao
+from sistema.plataforma.sessao import (
+    MODULO_ARMAZEM,
+    MODULO_FORNECEDOR,
+    MODULO_VENDEDOR,
+    garantir_modulo_sessao,
+)
 
 _MOD_DIR = Path(__file__).resolve().parent
 
@@ -287,6 +308,7 @@ def _pode_ver_integracoes() -> bool:
         session.get("eh_desenvolvedor")
         or usuario_tem_permissao("integracoes.ver")
         or usuario_tem_permissao("fn_integracoes.ver")
+        or usuario_tem_permissao("az_integracoes.ver")
     )
 
 
@@ -308,7 +330,11 @@ def _exigir_modulo(*modulos: str):
         return None
     if garantir_modulo_sessao() in modulos:
         return None
-    labels = {"fornecedor": "fornecedores", "vendedor": "vendedores"}
+    labels = {
+        "fornecedor": "fornecedores",
+        "vendedor": "vendedores",
+        "armazem": "armazéns",
+    }
     esperado = " ou ".join(labels.get(m, m) for m in modulos)
     return _redir_hub(f"Esta integração está disponível apenas para {esperado}.")
 
@@ -318,7 +344,9 @@ def _exigir_modulo(*modulos: str):
 def pagina():
     if not _pode_ver_integracoes():
         return redirect(url_for("dashboard.index"))
-    return render_pagina_integracoes(nav_codigo="integracoes", icones_base_url=_icones_base_url())
+    mod = garantir_modulo_sessao()
+    nav = "az_integracoes" if mod == MODULO_ARMAZEM else "integracoes"
+    return render_pagina_integracoes(nav_codigo=nav, icones_base_url=_icones_base_url())
 
 
 def _bling_conectado(id_tenant: int | None) -> bool:
@@ -351,7 +379,7 @@ def pagina_bling():
     papel = (request.args.get("papel") or _bling_papel_padrao()).strip().lower()
     if papel not in ("catalogo", "pedidos"):
         papel = _bling_papel_padrao()
-    if papel == "catalogo" and (r := _exigir_modulo(MODULO_FORNECEDOR)) is not None:
+    if papel == "catalogo" and (r := _exigir_modulo(MODULO_FORNECEDOR, MODULO_ARMAZEM)) is not None:
         return r
     if papel == "pedidos" and (r := _exigir_modulo(MODULO_VENDEDOR)) is not None:
         return r
@@ -378,7 +406,7 @@ def pagina_mercadopago():
         return redirect(url_for("dashboard.index"))
     if (r := _exigir_plano_integracao()) is not None:
         return r
-    if (r := _exigir_modulo(MODULO_FORNECEDOR)) is not None:
+    if (r := _exigir_modulo(MODULO_FORNECEDOR, MODULO_ARMAZEM)) is not None:
         return r
     from api.mercadopago.mercadopago import mp_conectado
 
@@ -408,7 +436,7 @@ def pagina_pix_manual():
         return redirect(url_for("dashboard.index"))
     if (r := _exigir_plano_integracao()) is not None:
         return r
-    if (r := _exigir_modulo(MODULO_FORNECEDOR)) is not None:
+    if (r := _exigir_modulo(MODULO_FORNECEDOR, MODULO_ARMAZEM)) is not None:
         return r
     from api.pix_manual.pix_manual import pix_manual_ativo
 
@@ -596,7 +624,7 @@ def hub_status():
     bling_conectado = _bling_conectado(id_tenant)
     integracoes: dict = {}
 
-    if modulo == MODULO_FORNECEDOR:
+    if modulo in (MODULO_FORNECEDOR, MODULO_ARMAZEM):
         mp_ok = False
         pix_ok = False
         conn = Var_ConectarBanco()

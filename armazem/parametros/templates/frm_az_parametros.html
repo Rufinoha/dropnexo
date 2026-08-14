@@ -3,73 +3,66 @@
 {% set nav_ativo = 'az_parametros' %}
 {% block topbar_title %}Parâmetros do armazém{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('az_parametros.static', filename='style/Caz_parametros.css') }}?v=1" />
+<link rel="stylesheet" href="{{ url_for('fn_parametros.static', filename='style/Cfn_parametros.css') }}?v=8" />
+<link rel="stylesheet" href="{{ url_for('az_parametros.static', filename='style/Caz_parametros.css') }}?v=2" />
 {% endblock %}
 {% block content %}
-<div class="Cl_ContainerApoio cl-page-principal AzPar_Page">
+<div class="Cl_ContainerApoio cl-page-principal FnPar_Wrap AzPar_Page">
   <div class="cl-page-title">
     <h2>Parâmetros</h2>
-    <p class="cl-page-desc">Defina como o armazém aparece na rede de vendedores e as regras de vínculo.</p>
+    <p class="cl-page-desc">Configure regras comerciais, visibilidade e como o armazém aparece na rede de vendedores.</p>
   </div>
 
-  <form id="az_par_form" class="AzPar_Form">
-    <section class="AzPar_Card">
-      <h3>Visibilidade na rede</h3>
-      <label class="AzPar_SwitchRow">
-        <span>
-          <strong>Visível para vendedores</strong>
-          <small>Quando ligada, o armazém (ou seus fornecedores, conforme o modo) entra na rede.</small>
-        </span>
-        <label class="Cl_Switch">
-          <input type="checkbox" id="az_par_visivel" />
-          <span class="Cl_SwitchSlider"></span>
-        </label>
-      </label>
-    </section>
-
-    <section class="AzPar_Card">
-      <h3>Como aparecer na rede</h3>
-      <p class="AzPar_Hint">O pagamento e a operação continuam no armazém nas duas opções.</p>
-      <label class="AzPar_Radio">
-        <input type="radio" name="modo_vitrine" id="az_par_modo_a" value="armazem" checked />
-        <span>
-          <strong>Opção A — Só o Armazém</strong>
-          <small>O vendedor vê um único fornecedor: este tenant armazém.</small>
-        </span>
-      </label>
-      <label class="AzPar_Radio">
-        <input type="radio" name="modo_vitrine" id="az_par_modo_b" value="fornecedores" />
-        <span>
-          <strong>Opção B — Fornecedores do armazém</strong>
-          <small>O vendedor vê cada fornecedor cadastrado como um card separado.</small>
-        </span>
-      </label>
-    </section>
-
-    <section class="AzPar_Card">
-      <h3>Vínculo com vendedores</h3>
-      <label class="AzPar_SwitchRow">
-        <span>
-          <strong>Aprovação automática</strong>
-          <small>Se ligada, solicitações são aprovadas na hora. Se desligada, o armazém aprova manualmente.</small>
-        </span>
-        <label class="Cl_Switch">
-          <input type="checkbox" id="az_par_aprovacao_auto" />
-          <span class="Cl_SwitchSlider"></span>
-        </label>
-      </label>
-      <div class="AzPar_Field">
-        <label for="az_par_texto">Observações adicionais</label>
-        <textarea id="az_par_texto" rows="4" placeholder="Regras extras, prazos, documentos…"></textarea>
+  <section class="FnPar_RedePainel" id="azParRedePainel" aria-labelledby="azParRedeTitulo">
+    <div class="FnPar_RedeHead">
+      <div>
+        <h3 id="azParRedeTitulo">Visibilidade na rede de vendedores</h3>
+        <p class="FnPar_RedeDesc">
+          Você decide quando o armazém aparece para vendedores. Na rede, só entram contas com esta opção
+          <strong>ativada</strong> e com <strong>ao menos 1 produto publicado</strong> no catálogo.
+        </p>
       </div>
-    </section>
-
-    <div class="Cl_BotoesApoio">
-      <button type="submit" class="Cl_BtnSalvar">Salvar parâmetros</button>
+      <label class="Cl_Switch FnPar_RedeSwitch" title="Exibir na rede de vendedores">
+        <input type="checkbox" id="azParVisivelRede" />
+        <span class="Cl_SwitchSlider"></span>
+      </label>
     </div>
-  </form>
+    <p class="FnPar_RedeStatus" id="azParRedeStatus" hidden></p>
+  </section>
+
+  <section class="AzPar_Card AzPar_ModoCard" aria-labelledby="azParModoTitulo">
+    <h3 id="azParModoTitulo">Como aparecer na rede</h3>
+    <p class="AzPar_Hint">O pagamento e a operação continuam no armazém nas duas opções.</p>
+    <label class="AzPar_Radio">
+      <input type="radio" name="modo_vitrine" id="az_par_modo_a" value="armazem" checked />
+      <span>
+        <strong>Opção A — Só o Armazém</strong>
+        <small>O vendedor vê um único fornecedor: este tenant armazém.</small>
+      </span>
+    </label>
+    <label class="AzPar_Radio">
+      <input type="radio" name="modo_vitrine" id="az_par_modo_b" value="fornecedores" />
+      <span>
+        <strong>Opção B — Fornecedores do armazém</strong>
+        <small>O vendedor vê cada fornecedor cadastrado como um card separado.</small>
+      </span>
+    </label>
+  </section>
+
+  <div class="FnPar_Grid" id="azParGrid">
+    <button type="button" class="FnPar_Card" data-card="precificacao">
+      <span class="FnPar_CardIcon" aria-hidden="true">%</span>
+      <strong>Precificação</strong>
+      <span class="FnPar_CardDesc">Defina descontos, acréscimos, taxas e comissão para calcular o preço Drop (valor_drop).</span>
+    </button>
+    <button type="button" class="FnPar_Card" data-card="requisitos_vendedor">
+      <span class="FnPar_CardIcon FnPar_CardIcon--rede" aria-hidden="true">✓</span>
+      <strong>Requisitos para vendedores</strong>
+      <span class="FnPar_CardDesc">CNPJ, NF, taxas, aprovação automática e texto — critérios antes do vendedor solicitar parceria.</span>
+    </button>
+  </div>
 </div>
 {% endblock %}
 {% block page_js %}
-<script src="{{ url_for('az_parametros.static', filename='script/Saz_parametros.js') }}?v=1"></script>
+<script src="{{ url_for('az_parametros.static', filename='script/Saz_parametros.js') }}?v=2"></script>
 {% endblock %}
