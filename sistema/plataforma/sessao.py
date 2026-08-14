@@ -21,32 +21,35 @@ from global_utils import (
 
 MODULO_FORNECEDOR = "fornecedor"
 MODULO_VENDEDOR = "vendedor"
-MODULOS_VALIDOS = (MODULO_FORNECEDOR, MODULO_VENDEDOR)
+MODULO_ARMAZEM = "armazem"
+MODULOS_VALIDOS = (MODULO_FORNECEDOR, MODULO_VENDEDOR, MODULO_ARMAZEM)
 
 
 def modulos_disponiveis(tipo_negocio: str | None) -> list[str]:
+    """Um tipo de negócio = um módulo. Híbrido legado vira vendedor até migração."""
     t = (tipo_negocio or "vendedor").strip().lower()
-    if t == "hibrido":
-        return [MODULO_FORNECEDOR, MODULO_VENDEDOR]
+    if t == "armazem":
+        return [MODULO_ARMAZEM]
     if t == "fornecedor":
         return [MODULO_FORNECEDOR]
+    # hibrido legado: um papel só (vendedor) — admin deve corrigir o tipo
     return [MODULO_VENDEDOR]
 
 
 def modulos_disponiveis_sessao() -> list[str]:
-    """DEV sempre enxerga Fornecedor + Vendedor (mesmo impersonando tenant fornecedor)."""
+    """Só o desenvolvedor enxerga todos os módulos."""
     if session.get("eh_desenvolvedor"):
-        return [MODULO_FORNECEDOR, MODULO_VENDEDOR]
+        return [MODULO_FORNECEDOR, MODULO_VENDEDOR, MODULO_ARMAZEM]
     return modulos_disponiveis(session.get("tenant_tipo_negocio", "vendedor"))
 
 
 def modulo_padrao(tipo_negocio: str | None) -> str:
     mods = modulos_disponiveis(tipo_negocio)
     t = (tipo_negocio or "vendedor").strip().lower()
+    if t == "armazem":
+        return MODULO_ARMAZEM
     if t == "fornecedor":
         return MODULO_FORNECEDOR
-    if t == "hibrido":
-        return MODULO_VENDEDOR
     return MODULO_VENDEDOR if MODULO_VENDEDOR in mods else mods[0]
 
 
@@ -61,12 +64,18 @@ def garantir_modulo_sessao() -> str:
 
 
 def rotulo_modulo(codigo: str) -> str:
-    return {"fornecedor": "Fornecedor", "vendedor": "Vendedor"}.get(codigo, codigo)
+    return {
+        "fornecedor": "Fornecedor",
+        "vendedor": "Vendedor",
+        "armazem": "Armazém",
+    }.get(codigo, codigo)
 
 
 def icone_modulo(codigo: str) -> str:
     if codigo == MODULO_FORNECEDOR:
         return "truck"
+    if codigo == MODULO_ARMAZEM:
+        return "warehouse"
     return "shopping-bag"
 
 
@@ -91,6 +100,15 @@ def resolver_url_menu(data_page: str, nav_codigo: str | None = None) -> str:
         "vd_loja_virtual": "vd_loja_virtual.pagina",
         "integracoes": "integracoes.pagina",
         "fn_parametros": "fn_parametros.parametros_pagina",
+        "az_fornecedores": "az_fornecedores.pagina",
+        "az_depositos": "az_depositos.depositos",
+        "az_produtos": "az_produtos.pagina",
+        "az_movimentacoes": "az_movimentacoes.pagina",
+        "az_pedidos": "az_pedidos.pedidos",
+        "az_parametros": "az_parametros.parametros_pagina",
+        "az_usuarios": "az_usuarios.usuarios",
+        "az_integracoes": "integracoes.pagina",
+        "az_vendedores": "az_vendedores.vendedores",
     }
     rotas = {
         "/index": "dashboard.index",
@@ -117,6 +135,15 @@ def resolver_url_menu(data_page: str, nav_codigo: str | None = None) -> str:
         "/vendedor/categorias": "vd_categorias.categorias",
         "/vendedor/loja-virtual": "vd_loja_virtual.pagina",
         "/configuracoes/fornecedores-plataforma": "config.fornecedores_plataforma",
+        "/armazem/fornecedores": "az_fornecedores.pagina",
+        "/armazem/depositos": "az_depositos.depositos",
+        "/armazem/produtos": "az_produtos.pagina",
+        "/armazem/movimentacoes": "az_movimentacoes.pagina",
+        "/armazem/pedidos": "az_pedidos.pedidos",
+        "/armazem/parametros": "az_parametros.parametros_pagina",
+        "/armazem/usuarios": "az_usuarios.usuarios",
+        "/armazem/integracoes": "integracoes.pagina",
+        "/armazem/vendedores": "az_vendedores.vendedores",
     }
     endpoint = rotas_por_nav.get(nav) or rotas.get(page)
     if endpoint:
@@ -156,6 +183,7 @@ def ctx_navegacao() -> dict:
 
 PERFIS_EQUIPE_FORNECEDOR = ("admin", "operador", "visualizador", "financeiro")
 PERFIS_EQUIPE_VENDEDOR = ("admin", "operador", "visualizador", "financeiro")
+PERFIS_EQUIPE_ARMAZEM = ("admin", "operador", "visualizador", "financeiro")
 
 
 def normalizar_bool(valor, padrao=True):

@@ -1,0 +1,62 @@
+{% extends "frm_base.html" %}
+{% block title %}Movimentações — {{ MARCA_NOME }}{% endblock %}
+{% set nav_ativo = 'az_movimentacoes' %}
+{% block topbar_title %}Movimentações de estoque{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('az_movimentacoes.static', filename='style/Caz_mov.css') }}?v=1" />
+{% endblock %}
+{% block content %}
+<div class="Cl_ContainerApoio cl-page-principal AzMov_Page">
+  <div class="AzMov_Header">
+    <div class="cl-page-title">
+      <h2>Movimentações</h2>
+      <p class="cl-page-desc">Entrada, saída e ajuste — o estoque do produto atualiza automaticamente.</p>
+    </div>
+    <button type="button" class="Cl_BtnIncluir" id="az_mov_btnNovo">Lançar movimentação</button>
+  </div>
+  <div id="az_mov_lista" class="AzMov_Lista"></div>
+  <div id="az_mov_vazio" class="AzMov_Vazio" hidden>Nenhuma movimentação ainda.</div>
+</div>
+
+<div id="az_mov_modal" class="AzMov_Modal" hidden>
+  <div class="AzMov_ModalInner">
+    <header class="AzMov_ModalHead">
+      <h3>Nova movimentação</h3>
+      <button type="button" class="AzMov_Close" id="az_mov_fechar">×</button>
+    </header>
+    <form id="az_mov_form" class="AzMov_Form">
+      <div class="AzMov_Field">
+        <label for="az_mov_tipo">Tipo</label>
+        <select id="az_mov_tipo">
+          <option value="entrada">Entrada</option>
+          <option value="saida">Saída</option>
+          <option value="ajuste">Ajuste (definir saldo)</option>
+        </select>
+      </div>
+      <div class="AzMov_Field">
+        <label for="az_mov_prod">Produto</label>
+        <select id="az_mov_prod" required></select>
+      </div>
+      <div class="AzMov_Field">
+        <label for="az_mov_dep">Depósito</label>
+        <select id="az_mov_dep" required></select>
+      </div>
+      <div class="AzMov_Field">
+        <label for="az_mov_qtd" id="az_mov_qtd_lbl">Quantidade</label>
+        <input type="number" id="az_mov_qtd" min="1" step="1" required />
+      </div>
+      <div class="AzMov_Field">
+        <label for="az_mov_obs">Observação</label>
+        <input type="text" id="az_mov_obs" maxlength="300" />
+      </div>
+      <div class="Cl_BotoesApoio">
+        <button type="submit" class="Cl_BtnSalvar">Confirmar</button>
+        <button type="button" class="Cl_BtnCancelar" id="az_mov_cancelar">Cancelar</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+{% block page_js %}
+<script src="{{ url_for('az_movimentacoes.static', filename='script/Saz_movimentacoes.js') }}?v=1"></script>
+{% endblock %}

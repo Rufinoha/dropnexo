@@ -793,7 +793,7 @@ def carregar_menu_sidebar() -> list[dict]:
 
 
 def _menu_sidebar_fallback(mod_ativo: str = "vendedor") -> list[dict]:
-    from sistema.plataforma.sessao import MODULO_FORNECEDOR, resolver_url_menu
+    from sistema.plataforma.sessao import MODULO_ARMAZEM, MODULO_FORNECEDOR, resolver_url_menu
 
     comum = [
         {"nome": "Dashboard", "url": url_for("dashboard.index"), "icone_svg": _ICONES_SVG["layout-dashboard"], "nav_codigo": "inicio"},
@@ -801,6 +801,14 @@ def _menu_sidebar_fallback(mod_ativo: str = "vendedor") -> list[dict]:
     if mod_ativo == MODULO_FORNECEDOR:
         return [
             {"nome": "Catálogo", "url": url_for("fn_catalogo.pagina"), "icone_svg": _ICONES_SVG["package"], "nav_codigo": "catalogos"},
+        ]
+    if mod_ativo == MODULO_ARMAZEM:
+        return comum + [
+            {"nome": "Fornecedores", "url": resolver_url_menu("/armazem/fornecedores", "az_fornecedores"), "icone_svg": _ICONES_SVG["users"], "nav_codigo": "az_fornecedores"},
+            {"nome": "Depósitos", "url": resolver_url_menu("/armazem/depositos", "az_depositos"), "icone_svg": _ICONES_SVG["package"], "nav_codigo": "az_depositos"},
+            {"nome": "Produtos", "url": resolver_url_menu("/armazem/produtos", "az_produtos"), "icone_svg": _ICONES_SVG["package"], "nav_codigo": "az_produtos"},
+            {"nome": "Pedidos", "url": resolver_url_menu("/armazem/pedidos", "az_pedidos"), "icone_svg": _ICONES_SVG["shopping-bag"], "nav_codigo": "az_pedidos"},
+            {"nome": "Parâmetros", "url": resolver_url_menu("/armazem/parametros", "az_parametros"), "icone_svg": _ICONES_SVG["settings"], "nav_codigo": "az_parametros"},
         ]
     return comum + [
         {"nome": "Fornecedores", "url": url_for("vd_fornecedores.pagina"), "icone_svg": _ICONES_SVG["users"], "nav_codigo": "fornecedores"},
@@ -1109,7 +1117,7 @@ def marktplace_produtos_excluir():
 # --- manutenção de tenant (DEV) ---
 
 MANUTENCAO_TENANT_PREFIX = "/configuracoes/manutencao-tenant"
-_TIPOS_NEGOCIO_OK = frozenset({"vendedor", "fornecedor", "hibrido"})
+_TIPOS_NEGOCIO_OK = frozenset({"vendedor", "fornecedor", "armazem"})
 _PLANOS_OK = frozenset({"starter", "professional", "scale", "enterprise"})
 
 

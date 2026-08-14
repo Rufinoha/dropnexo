@@ -1,0 +1,83 @@
+{% extends "frm_base.html" %}
+{% block title %}Fornecedores — {{ MARCA_NOME }}{% endblock %}
+{% set nav_ativo = 'az_fornecedores' %}
+{% block topbar_title %}Fornecedores do armazém{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('az_fornecedores.static', filename='style/Caz_fornecedores.css') }}?v=1" />
+{% endblock %}
+{% block content %}
+<div class="Cl_ContainerApoio cl-page-principal AzForn_Page">
+  <div class="AzForn_Header">
+    <div class="cl-page-title AzForn_HeaderText">
+      <h2>Fornecedores</h2>
+      <p class="cl-page-desc">Cadastre os donos dos produtos armazenados aqui. Cadastro local — sem login no DropNexo.</p>
+    </div>
+    <button type="button" class="Cl_BtnIncluir" id="az_forn_btnIncluir">Incluir fornecedor</button>
+  </div>
+
+  <div class="AzForn_Filtro">
+    <label class="AzForn_Search">
+      <input type="search" id="az_forn_busca" placeholder="Buscar por nome ou documento…" autocomplete="off" />
+    </label>
+  </div>
+
+  <div id="az_forn_grid" class="AzForn_Grid" aria-live="polite"></div>
+  <div id="az_forn_vazio" class="AzForn_Vazio" hidden>
+    <strong>Nenhum fornecedor cadastrado</strong>
+    <p>Inclua o primeiro fornecedor para poder vincular produtos ao dono correto.</p>
+  </div>
+</div>
+
+<div id="az_forn_modal" class="AzForn_Modal" hidden aria-hidden="true" role="dialog" aria-labelledby="az_forn_titulo">
+  <div class="AzForn_ModalInner">
+    <header class="AzForn_ModalHead">
+      <div>
+        <h3 id="az_forn_titulo">Novo fornecedor</h3>
+        <p class="AzForn_ModalSub">Dados do dono dos produtos neste armazém.</p>
+      </div>
+      <button type="button" class="AzForn_Close" id="az_forn_btnFechar" aria-label="Fechar">×</button>
+    </header>
+    <form id="az_forn_form" class="AzForn_Form" autocomplete="off">
+      <input type="hidden" id="az_forn_id" value="" />
+      <div class="AzForn_Field">
+        <label for="az_forn_nome">Razão social / nome *</label>
+        <input type="text" id="az_forn_nome" maxlength="200" required />
+      </div>
+      <div class="AzForn_Field">
+        <label for="az_forn_fantasia">Nome fantasia</label>
+        <input type="text" id="az_forn_fantasia" maxlength="200" />
+      </div>
+      <div class="AzForn_FieldGrid">
+        <div class="AzForn_Field">
+          <label for="az_forn_doc">CNPJ / CPF</label>
+          <input type="text" id="az_forn_doc" maxlength="18" />
+        </div>
+        <div class="AzForn_Field">
+          <label for="az_forn_email">E-mail</label>
+          <input type="email" id="az_forn_email" maxlength="200" />
+        </div>
+        <div class="AzForn_Field">
+          <label for="az_forn_tel">Telefone</label>
+          <input type="text" id="az_forn_tel" maxlength="20" />
+        </div>
+        <div class="AzForn_Field">
+          <label for="az_forn_wa">WhatsApp</label>
+          <input type="text" id="az_forn_wa" maxlength="20" />
+        </div>
+      </div>
+      <div class="AzForn_Field">
+        <label for="az_forn_obs">Observações</label>
+        <textarea id="az_forn_obs" rows="3" maxlength="2000"></textarea>
+      </div>
+      <div class="Cl_BotoesApoio AzForn_Foot">
+        <button type="submit" class="Cl_BtnSalvar">Salvar</button>
+        <button type="button" class="Cl_BtnCancelar" id="az_forn_btnCancelar">Cancelar</button>
+        <button type="button" class="Cl_BtnExcluir" id="az_forn_btnExcluir" hidden>Excluir</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+{% block page_js %}
+<script src="{{ url_for('az_fornecedores.static', filename='script/Saz_fornecedores.js') }}?v=1"></script>
+{% endblock %}

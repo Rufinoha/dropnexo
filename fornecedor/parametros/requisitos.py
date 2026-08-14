@@ -191,18 +191,38 @@ def salvar_visivel_rede_vendedor(cur, id_fornecedor: int, visivel: bool) -> None
 
 
 def sql_fornecedor_elegivel_rede_vendedor(alias_tenant: str = "t") -> str:
-    """Regras de negócio: switch ativo + ao menos 1 produto publicado."""
+    """Fornecedor clássico OU armazém com parâmetros + produto publicado."""
     a = alias_tenant
     return f"""
-        EXISTS (
-            SELECT 1 FROM tbl_fornecedor_requisitos_vendedor r
-            WHERE r.id_tenant = {a}.id AND r.visivel_rede_vendedor = TRUE
-        )
-        AND EXISTS (
-            SELECT 1 FROM tbl_produto p
-            WHERE p.id_tenant = {a}.id AND p.publicado = TRUE
+        (
+          (
+            {a}.tipo_negocio IN ('fornecedor', 'hibrido')
+            AND EXISTS (
+                SELECT 1 FROM tbl_fornecedor_requisitos_vendedor r
+                WHERE r.id_tenant = {a}.id AND r.visivel_rede_vendedor = TRUE
+            )
+            AND EXISTS (
+                SELECT 1 FROM tbl_produto p
+                WHERE p.id_tenant = {a}.id AND p.publicado = TRUE
+            )
+          )
+          OR
+          (
+            {a}.tipo_negocio = 'armazem'
+            AND EXISTS (
+                SELECT 1 FROM tbl_armazem_parametros a
+                WHERE a.id_tenant = {a}.id AND a.visivel_rede_vendedor = TRUE
+            )
+            AND EXISTS (
+                SELECT 1 FROM tbl_produto p
+                WHERE p.id_tenant = {a}.id AND p.publicado = TRUE
+            )
+          )
         )
     """
+
+
+SQL_TIPOS_REDE = "('fornecedor', 'hibrido', 'armazem')"
 
 
 def requisitos_tem_conteudo(req: dict) -> bool:

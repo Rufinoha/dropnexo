@@ -1,0 +1,63 @@
+{% extends "frm_base.html" %}
+{% block title %}Vendedores — {{ MARCA_NOME }}{% endblock %}
+{% block topbar_title %}Vendedores parceiros{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('az_vendedores.static', filename='style/Caz_vendedores.css') }}?v=6" />
+{% endblock %}
+{% block content %}
+<div class="Cl_ContainerApoio cl-page-principal VdParceiros_Page">
+  <div class="cl-page-title">
+    <h2>Vendedores parceiros</h2>
+    <p class="cl-page-desc">Aprove solicitações, pause ou encerre vínculos (estoques zerados na vitrine).</p>
+    <p class="VdParceiros_Hint">Clique duas vezes em um card para ver os detalhes e tomar a decisão.</p>
+  </div>
+
+  <div class="filter-panel VdParceiros_Filtros" id="vd_filtros">
+    <div class="filter-panel-fields">
+      <div class="filter-group" style="flex:1.2;min-width:12rem">
+        <label for="vd_fNome">Nome / responsável</label>
+        <input type="search" id="vd_fNome" placeholder="Nome fantasia ou responsável" autocomplete="off" />
+      </div>
+      <div class="filter-group" style="flex:1;min-width:11rem">
+        <label for="vd_fRazao">Razão social</label>
+        <input type="search" id="vd_fRazao" placeholder="Razão social" autocomplete="off" />
+      </div>
+      <div class="filter-group" style="flex:0.9;min-width:10rem">
+        <label for="vd_fDoc">Documento</label>
+        <input type="search" id="vd_fDoc" placeholder="CPF ou CNPJ" autocomplete="off" />
+      </div>
+      <div class="filter-group" style="flex:0.9;min-width:10rem">
+        <label for="vd_fStatus">Status</label>
+        <select id="vd_fStatus">
+          <option value="" selected>Todos</option>
+          <option value="pausado">Pausado</option>
+          <option value="aguardando">Aguardando aprovação</option>
+          <option value="ativo">Vinculado</option>
+        </select>
+      </div>
+    </div>
+    <div class="filter-panel-actions">
+      <button type="button" class="Cl_BtnSalvar" id="vd_btnFiltrar">Filtrar</button>
+      <button type="button" class="Cl_BtnLink" id="vd_btnLimparFiltro">Limpar</button>
+    </div>
+  </div>
+
+  <div id="vd_lista" class="VdParceiros_Grid" aria-live="polite"></div>
+  <p id="vd_vazio" class="VdParceiros_Vazio" hidden>Nenhuma solicitação ou vínculo.</p>
+</div>
+
+<div id="vd_modal" class="VdParceiros_Modal" hidden aria-hidden="true" role="dialog" aria-labelledby="vd_modalTitulo">
+  <div class="VdParceiros_ModalInner" role="document">
+    <header class="VdParceiros_ModalHead">
+      <h3 id="vd_modalTitulo">Detalhes do vendedor</h3>
+      <button type="button" class="Cl_BtnLink" id="vd_fecharModal" aria-label="Fechar">Fechar</button>
+    </header>
+    <div id="vd_modalBody" class="VdParceiros_ModalBody"></div>
+    <footer id="vd_modalFooter" class="VdParceiros_ModalFoot" hidden></footer>
+  </div>
+</div>
+{% endblock %}
+{% block page_js %}
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="{{ url_for('az_vendedores.static', filename='script/Saz_vendedores.js') }}?v=11"></script>
+{% endblock %}

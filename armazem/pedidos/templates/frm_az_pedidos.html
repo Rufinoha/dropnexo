@@ -1,0 +1,72 @@
+{% extends "frm_base.html" %}
+{% block title %}Pedidos recebidos — {{ MARCA_NOME }}{% endblock %}
+{% set nav_ativo = 'az_pedidos' %}
+{% block topbar_title %}Pedidos recebidos{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('az_pedidos.static', filename='style/Caz_pedidos.css') }}?v=10" />
+{% endblock %}
+{% block content %}
+<div class="Cl_ContainerApoio cl-page-principal PdFn_Page">
+  <header class="PdFn_Hero">
+    <div class="PdFn_HeroCopy">
+      <p class="PdFn_Eyebrow">Operação</p>
+      <h2>Pedidos recebidos</h2>
+      <p class="PdFn_HeroDesc">Acompanhe pagamento, aprove comprovantes e prepare a expedição — com foto do produto em cada pedido.</p>
+    </div>
+    <div class="PdFn_Stats" id="pd_fn_stats" aria-live="polite">
+      <div class="PdFn_Stat" data-stat="aguardando_pagamento">
+        <span class="PdFn_StatVal">0</span>
+        <span class="PdFn_StatLbl">Aguardando pagamento</span>
+      </div>
+      <div class="PdFn_Stat PdFn_Stat--focus" data-stat="aguardando_confirmacao">
+        <span class="PdFn_StatVal">0</span>
+        <span class="PdFn_StatLbl">Aguardando aprovação</span>
+      </div>
+      <div class="PdFn_Stat" data-stat="pago">
+        <span class="PdFn_StatVal">0</span>
+        <span class="PdFn_StatLbl">Pagos</span>
+      </div>
+    </div>
+  </header>
+
+  <div class="PdFn_Toolbar">
+    <div class="PdFn_Chips" id="pd_fn_chips" role="tablist" aria-label="Filtrar por situação">
+      <button type="button" class="PdFn_Chip is-active" data-status="" role="tab" aria-selected="true">Todos</button>
+      <button type="button" class="PdFn_Chip" data-status="aguardando_pagamento" role="tab">Aguardando pagamento</button>
+      <button type="button" class="PdFn_Chip" data-status="aguardando_confirmacao" role="tab">Aguardando aprovação</button>
+      <button type="button" class="PdFn_Chip" data-status="pago" role="tab">Confirmados</button>
+      <button type="button" class="PdFn_Chip" data-status="em_expedicao" role="tab">Em expedição</button>
+    </div>
+    <label class="PdFn_Search">
+      <span class="PdFn_SearchIco" aria-hidden="true"></span>
+      <input type="search" id="pd_fn_busca" placeholder="Buscar pedido, vendedor ou cliente…" autocomplete="off" />
+    </label>
+  </div>
+
+  <div id="pd_fn_lista" class="PdFn_Lista" aria-live="polite"></div>
+  <div id="pd_fn_vazio" class="PdFn_Vazio" hidden>
+    <div class="PdFn_VazioCard">
+      <strong>Nenhum pedido neste filtro</strong>
+      <p>Quando um vendedor da sua rede gerar o PIX ou anexar comprovante, o pedido aparece aqui.</p>
+    </div>
+  </div>
+</div>
+
+<div id="pd_fn_modal" class="PdFn_Modal" hidden>
+  <div class="PdFn_ModalInner" role="dialog" aria-modal="true" aria-labelledby="pd_fn_titulo">
+    <header class="PdFn_ModalHead">
+      <div>
+        <p class="PdFn_ModalKicker" id="pd_fn_kicker">Pedido</p>
+        <h3 id="pd_fn_titulo">Pedido</h3>
+      </div>
+      <button type="button" class="PdFn_Close" id="pd_fn_fechar" aria-label="Fechar">×</button>
+    </header>
+    <div id="pd_fn_body" class="PdFn_Body"></div>
+    <footer id="pd_fn_foot" class="PdFn_Foot"></footer>
+  </div>
+</div>
+{% endblock %}
+{% block page_js %}
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="{{ url_for('az_pedidos.static', filename='script/Saz_pedidos.js') }}?v=11"></script>
+{% endblock %}

@@ -574,7 +574,7 @@ def _where_rede(id_tenant: int, busca: str, id_fornecedor: str, id_categoria: st
         "p.publicado = TRUE",
         "v.ativo = TRUE",
         "t.ativo = TRUE",
-        "t.tipo_negocio IN ('fornecedor', 'hibrido')",
+        "t.tipo_negocio IN ('fornecedor', 'hibrido', 'armazem')",
     ]
     params: list = [id_tenant]
 
@@ -682,7 +682,7 @@ def combos():
                 AND p.publicado = TRUE
             WHERE t.id <> %s
               AND t.ativo = TRUE
-              AND t.tipo_negocio IN ('fornecedor', 'hibrido')
+              AND t.tipo_negocio IN ('fornecedor', 'hibrido', 'armazem')
             GROUP BY t.id, t.nome
             ORDER BY t.nome
             """,
@@ -833,7 +833,7 @@ def variante_detalhe(id_variante: int):
             LEFT JOIN tbl_produto_variante_estoque e ON e.id_variante = v.id
             WHERE v.id = %s AND p.id_tenant <> %s
               AND p.publicado = TRUE AND v.ativo = TRUE
-              AND t.ativo = TRUE AND t.tipo_negocio IN ('fornecedor', 'hibrido')
+              AND t.ativo = TRUE AND t.tipo_negocio IN ('fornecedor', 'hibrido', 'armazem')
             """,
             (id_variante, id_tenant),
         )
@@ -896,7 +896,7 @@ def segmentos_rede():
             INNER JOIN tbl_tenant t ON t.id = fs.id_tenant
                 AND t.id <> %s
                 AND t.ativo = TRUE
-                AND t.tipo_negocio IN ('fornecedor', 'hibrido')
+                AND t.tipo_negocio IN ('fornecedor', 'hibrido', 'armazem')
                 AND {elegivel}
             WHERE s.ativo = TRUE
               AND s.id_tenant IS NULL
@@ -928,7 +928,7 @@ def rede():
         where = [
             "t.id <> %s",
             "t.ativo = TRUE",
-            "t.tipo_negocio IN ('fornecedor', 'hibrido')",
+            "t.tipo_negocio IN ('fornecedor', 'hibrido', 'armazem')",
             elegivel,
         ]
         params: list = [id_vendedor]
@@ -1027,9 +1027,64 @@ def rede():
                     "motivo_recusa": row[11] or "" if st == "recusado" else "",
                     "motivo_status": row[12] or "",
                     "pode_despausar": pode_despausar,
+                    "tipo_negocio": None,
+                    "id_armazem_fornecedor": None,
                 }
             )
-        return jsonify(success=True, fornecedores=cards)
+
+        # Modo B: expandir armazéns em cards por fornecedor local (vínculo continua no tenant armazém)
+        expandido: list[dict] = []
+        for card in cards:
+            tid = card["id"]
+            cur.execute(
+                """
+                SELECT tipo_negocio FROM tbl_tenant WHERE id = %s
+                """,
+                (tid,),
+            )
+            tr = cur.fetchone()
+            tipo = (tr[0] or "").strip().lower() if tr else ""
+            card["tipo_negocio"] = tipo
+            if tipo != "armazem":
+                expandido.append(card)
+                continue
+            cur.execute(
+                """
+                SELECT modo_vitrine FROM tbl_armazem_parametros WHERE id_tenant = %s
+                """,
+                (tid,),
+            )
+            pr = cur.fetchone()
+            modo = (pr[0] or "armazem").strip().lower() if pr else "armazem"
+            if modo != "fornecedores":
+                expandido.append(card)
+                continue
+            cur.execute(
+                """
+                SELECT af.id, COALESCE(af.nome_fantasia, af.nome),
+                       (SELECT COUNT(*)::int FROM tbl_produto p
+                        WHERE p.id_tenant = %s AND p.publicado = TRUE
+                          AND p.id_armazem_fornecedor = af.id)
+                FROM tbl_armazem_fornecedor af
+                WHERE af.id_tenant_armazem = %s AND af.ativo = TRUE
+                ORDER BY 2
+                """,
+                (tid, tid),
+            )
+            facades = cur.fetchall()
+            if not facades:
+                expandido.append(card)
+                continue
+            for fid, nome_f, qtd in facades:
+                if int(qtd or 0) <= 0:
+                    continue
+                c2 = dict(card)
+                c2["nome"] = nome_f
+                c2["qtd_produtos"] = int(qtd or 0)
+                c2["id_armazem_fornecedor"] = int(fid)
+                c2["chave"] = f"az:{tid}:f:{fid}"
+                expandido.append(c2)
+        return jsonify(success=True, fornecedores=expandido)
     finally:
         conn.close()
 
@@ -1065,14 +1120,35 @@ def requisitos_vinculo(id_fornecedor: int):
             SELECT COALESCE(t.nome_fantasia, t.nome)
             FROM tbl_tenant t
             WHERE t.id = %s AND t.ativo = TRUE
-              AND t.tipo_negocio IN ('fornecedor', 'hibrido')
+              AND t.tipo_negocio IN ('fornecedor', 'hibrido', 'armazem')
             """,
             (id_fornecedor,),
         )
         forn = cur.fetchone()
         if not forn:
             return jsonify(success=False, message="Fornecedor não encontrado."), 404
-        req, tem_registro = carregar_requisitos_raw(cur, id_fornecedor)
+        cur.execute("SELECT tipo_negocio FROM tbl_tenant WHERE id = %s", (id_fornecedor,))
+        tipo_nb = ((cur.fetchone() or [""])[0] or "").strip().lower()
+        if tipo_nb == "armazem":
+            from armazem.parametros.srotas_parametros import carregar_parametros
+
+            az = carregar_parametros(cur, id_fornecedor)
+            req = {
+                "exige_cnpj": False,
+                "exige_nf": False,
+                "cobra_taxa_vinculo": False,
+                "valor_taxa_vinculo": 0,
+                "cobra_taxa_mensal": False,
+                "valor_taxa_mensal": 0,
+                "cobra_taxa_pedido": False,
+                "valor_taxa_pedido": 0,
+                "texto_adicional": az.get("texto_adicional") or "",
+                "aprovacao_automatica": bool(az.get("aprovacao_automatica")),
+                "mostrar_contato_vendedor": True,
+            }
+            tem_registro = True
+        else:
+            req, tem_registro = carregar_requisitos_raw(cur, id_fornecedor)
         cur.execute("SELECT tipo_pessoa FROM tbl_tenant WHERE id = %s", (id_vendedor,))
         tp = cur.fetchone()
         vendedor_pj = tp and tp[0] == "J"
@@ -1110,7 +1186,30 @@ def solicitar_vinculo():
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
-        req = carregar_requisitos(cur, id_forn)
+        cur.execute("SELECT tipo_negocio FROM tbl_tenant WHERE id = %s AND ativo = TRUE", (id_forn,))
+        tipo_row = cur.fetchone()
+        if not tipo_row:
+            return jsonify(success=False, message="Fornecedor não encontrado."), 404
+        tipo_forn = (tipo_row[0] or "").strip().lower()
+        if tipo_forn == "armazem":
+            from armazem.parametros.srotas_parametros import carregar_parametros
+
+            az = carregar_parametros(cur, id_forn)
+            req = {
+                "exige_cnpj": False,
+                "exige_nf": False,
+                "cobra_taxa_vinculo": False,
+                "valor_taxa_vinculo": 0,
+                "cobra_taxa_mensal": False,
+                "valor_taxa_mensal": 0,
+                "cobra_taxa_pedido": False,
+                "valor_taxa_pedido": 0,
+                "texto_adicional": az.get("texto_adicional") or "",
+                "aprovacao_automatica": bool(az.get("aprovacao_automatica")),
+                "mostrar_contato_vendedor": True,
+            }
+        else:
+            req = carregar_requisitos(cur, id_forn)
         if requisitos_tem_conteudo(req):
             if not body.get("aceite_requisitos"):
                 return jsonify(success=False, message="Aceite os requisitos do fornecedor para continuar."), 400
@@ -1466,7 +1565,7 @@ def loja_dados(id_fornecedor: int):
             LEFT JOIN tbl_vinculo_vendedor_fornecedor v
                 ON v.id_tenant_fornecedor = t.id AND v.id_tenant_vendedor = %s
             WHERE t.id = %s AND t.ativo = TRUE
-              AND t.tipo_negocio IN ('fornecedor', 'hibrido')
+              AND t.tipo_negocio IN ('fornecedor', 'hibrido', 'armazem')
             """,
             (id_vendedor, id_fornecedor),
         )

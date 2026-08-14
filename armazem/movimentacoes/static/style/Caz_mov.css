@@ -1,0 +1,27 @@
+.AzMov_Page { max-width: 900px; }
+.AzMov_Header { display:flex; justify-content:space-between; gap:1rem; margin-bottom:1rem; }
+.AzMov_Lista { display:grid; gap:0.55rem; }
+.AzMov_Card {
+  display:flex; justify-content:space-between; gap:1rem; align-items:center;
+  background:#fff; border:1px solid #e2e8f0; border-left:4px solid #94a3b8;
+  border-radius:10px; padding:0.85rem 1rem;
+}
+.AzMov_Card--entrada { border-left-color:#16a34a; }
+.AzMov_Card--saida { border-left-color:#dc2626; }
+.AzMov_Card--ajuste { border-left-color:#2563eb; }
+.AzMov_Card strong { display:block; color:#0f172a; }
+.AzMov_Card span, .AzMov_Card small { display:block; color:#64748b; font-size:0.86rem; }
+.AzMov_Qtd { text-align:right; }
+.AzMov_Qtd b { display:block; font-size:1.1rem; color:#0f172a; }
+.AzMov_Qtd small { color:#64748b; }
+.AzMov_Vazio { padding:2rem; text-align:center; color:#64748b; background:#f8fafc; border-radius:12px; border:1px dashed #cbd5e1; }
+.AzMov_Modal { position:fixed; inset:0; z-index:1200; background:rgba(15,23,42,.45); display:flex; align-items:center; justify-content:center; padding:1rem; }
+.AzMov_Modal[hidden] { display:none !important; }
+.AzMov_ModalInner { background:#fff; width:min(480px,100%); border-radius:14px; }
+.AzMov_ModalHead { display:flex; justify-content:space-between; align-items:center; padding:1rem 1.2rem; border-bottom:1px solid #e2e8f0; }
+.AzMov_ModalHead h3 { margin:0; }
+.AzMov_Close { border:1px solid #e2e8f0; background:#fff; width:36px; height:36px; border-radius:10px; font-size:1.3rem; cursor:pointer; }
+.AzMov_Form { padding:1rem 1.2rem 1.2rem; display:grid; gap:0.75rem; }
+.AzMov_Field label { display:block; font-size:0.82rem; color:#475569; margin-bottom:0.25rem; }
+.AzMov_Field input, .AzMov_Field select { width:100%; padding:0.55rem 0.7rem; border:1px solid #e2e8f0; border-radius:8px; }
+@media (max-width:640px) { .AzMov_Header { flex-direction:column; } }

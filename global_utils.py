@@ -44,7 +44,7 @@ def registrar_templates_modulos(app):
     raiz_projeto = Path(__file__).resolve().parent
     loaders: list[FileSystemLoader] = []
 
-    for pasta in ("fornecedor", "vendedor", "sistema"):
+    for pasta in ("fornecedor", "vendedor", "armazem", "sistema"):
         base = raiz_projeto / pasta
         if base.is_dir():
             for tpl_dir in base.rglob("templates"):

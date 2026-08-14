@@ -37,7 +37,7 @@ class DNJSONProvider(DefaultJSONProvider):
 
 def registrar_modulos(app: Flask) -> None:
     raiz = Path(__file__).resolve().parent
-    for pasta in ("fornecedor", "vendedor", "sistema"):
+    for pasta in ("fornecedor", "vendedor", "armazem", "sistema"):
         for arquivo in sorted((raiz / pasta).rglob("srotas_*.py")):
             mod_name = ".".join(arquivo.relative_to(raiz).with_suffix("").parts)
             mod = importlib.import_module(mod_name)

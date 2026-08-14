@@ -1,0 +1,77 @@
+{% extends "frm_base.html" %}
+{% block title %}Produtos — {{ MARCA_NOME }}{% endblock %}
+{% set nav_ativo = 'az_produtos' %}
+{% block topbar_title %}Produtos do armazém{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('az_produtos.static', filename='style/Caz_produtos.css') }}?v=1" />
+{% endblock %}
+{% block content %}
+<div class="Cl_ContainerApoio cl-page-principal AzProd_Page">
+  <div class="AzProd_Header">
+    <div class="cl-page-title">
+      <h2>Produtos</h2>
+      <p class="cl-page-desc">Cada produto pertence a um fornecedor local e tem estoque nos depósitos do armazém.</p>
+    </div>
+    <button type="button" class="Cl_BtnIncluir" id="az_prod_btnIncluir">Incluir produto</button>
+  </div>
+  <div class="AzProd_Filtros">
+    <input type="search" id="az_prod_busca" placeholder="Buscar nome ou SKU…" />
+    <select id="az_prod_filtro_forn"><option value="">Todos os fornecedores</option></select>
+  </div>
+  <div id="az_prod_grid" class="AzProd_Grid"></div>
+  <div id="az_prod_vazio" class="AzProd_Vazio" hidden>
+    <strong>Nenhum produto</strong>
+    <p>Cadastre fornecedores e depósitos antes, depois inclua o primeiro produto.</p>
+  </div>
+</div>
+
+<div id="az_prod_modal" class="AzProd_Modal" hidden>
+  <div class="AzProd_ModalInner">
+    <header class="AzProd_ModalHead">
+      <h3 id="az_prod_titulo">Novo produto</h3>
+      <button type="button" class="AzProd_Close" id="az_prod_btnFechar">×</button>
+    </header>
+    <form id="az_prod_form" class="AzProd_Form">
+      <input type="hidden" id="az_prod_id" />
+      <div class="AzProd_Field">
+        <label for="az_prod_forn">Fornecedor (dono) *</label>
+        <select id="az_prod_forn" required></select>
+      </div>
+      <div class="AzProd_Field">
+        <label for="az_prod_nome">Nome *</label>
+        <input type="text" id="az_prod_nome" maxlength="200" required />
+      </div>
+      <div class="AzProd_FieldGrid">
+        <div class="AzProd_Field">
+          <label for="az_prod_sku">SKU</label>
+          <input type="text" id="az_prod_sku" maxlength="80" />
+        </div>
+        <div class="AzProd_Field">
+          <label for="az_prod_preco">Preço / valor drop (R$)</label>
+          <input type="number" id="az_prod_preco" min="0" step="0.01" />
+        </div>
+      </div>
+      <div class="AzProd_Field">
+        <label for="az_prod_dep">Depósito padrão de expedição</label>
+        <select id="az_prod_dep"><option value="">—</option></select>
+      </div>
+      <label class="AzProd_Check">
+        <input type="checkbox" id="az_prod_pub" checked />
+        <span>Publicado na rede (visível para vendedores vinculados)</span>
+      </label>
+      <div class="AzProd_Estoque" id="az_prod_estoques">
+        <h4>Estoque por depósito</h4>
+        <div id="az_prod_estoque_list"></div>
+      </div>
+      <div class="Cl_BotoesApoio">
+        <button type="submit" class="Cl_BtnSalvar">Salvar</button>
+        <button type="button" class="Cl_BtnCancelar" id="az_prod_btnCancelar">Cancelar</button>
+        <button type="button" class="Cl_BtnExcluir" id="az_prod_btnExcluir" hidden>Despublicar</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+{% block page_js %}
+<script src="{{ url_for('az_produtos.static', filename='script/Saz_produtos.js') }}?v=1"></script>
+{% endblock %}

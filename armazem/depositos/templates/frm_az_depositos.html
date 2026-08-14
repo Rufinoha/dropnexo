@@ -1,0 +1,99 @@
+{% extends "frm_base.html" %}
+{% block title %}Depósitos — {{ MARCA_NOME }}{% endblock %}
+{% set nav_ativo = 'az_depositos' %}
+{% block topbar_title %}Depósitos de expedição{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('az_depositos.static', filename='style/Caz_depositos.css') }}" />
+{% endblock %}
+{% block content %}
+<div class="Cl_ContainerApoio cl-page-principal AzDep_Page">
+  <div class="AzDep_Header">
+    <div class="cl-page-title AzDep_HeaderText">
+      <h2>Filiais de expedição</h2>
+      <p class="cl-page-desc">Cadastre os endereços de onde seus pedidos serão despachados. Comece pelo CEP e dê um nome à filial (ex.: Filial SP).</p>
+    </div>
+    <button type="button" class="Cl_BtnIncluir AzDep_BtnIncluir" id="az_dep_btnIncluir">Incluir depósito</button>
+  </div>
+
+  <div id="az_dep_grid" class="AzDep_Grid" aria-live="polite"></div>
+  <div id="az_dep_vazio" class="AzDep_Vazio" hidden>
+    <div class="AzDep_VazioIco" aria-hidden="true">📦</div>
+    <p>Nenhum depósito cadastrado.</p>
+    <p class="AzDep_VazioHint">Clique em <strong>Incluir depósito</strong> e informe o CEP para começar.</p>
+  </div>
+</div>
+
+<div id="az_dep_modal" class="AzDep_Modal" hidden aria-hidden="true" role="dialog" aria-labelledby="az_dep_modalTitulo">
+  <div class="AzDep_ModalInner" role="document">
+    <header class="AzDep_ModalHead">
+      <div>
+        <h3 id="az_dep_modalTitulo">Novo depósito</h3>
+        <p class="AzDep_ModalSub">Informe o CEP e busque o endereço. Depois personalize o nome da filial.</p>
+      </div>
+      <button type="button" class="AzDep_ModalClose" id="az_dep_btnFechar" aria-label="Fechar">×</button>
+    </header>
+
+    <form id="az_dep_form" class="AzDep_Form" autocomplete="off">
+      <input type="hidden" id="az_dep_id" value="" />
+
+      <section class="AzDep_Secao AzDep_Secao--cep">
+        <h4>1. Localização</h4>
+        <div class="AzDep_CepRow">
+          <div class="AzDep_Field AzDep_Field--cep">
+            <label for="az_dep_cep">CEP</label>
+            <input type="text" id="az_dep_cep" inputmode="numeric" placeholder="00000-000" maxlength="9" />
+          </div>
+          <button type="button" class="Cl_botaoFiltro" id="az_dep_btnCep">Buscar CEP</button>
+        </div>
+      </section>
+
+      <section class="AzDep_Secao AzDep_Secao--endereco" id="az_dep_secEndereco" hidden>
+        <h4>2. Endereço</h4>
+        <div class="AzDep_Field">
+          <label for="az_dep_nome">Nome do depósito <span class="AzDep_Opcional">(ex.: Filial SP)</span></label>
+          <input type="text" id="az_dep_nome" placeholder="Filial São Paulo" maxlength="120" />
+        </div>
+        <div class="AzDep_FieldGrid">
+          <div class="AzDep_Field AzDep_Field--full">
+            <label for="az_dep_logradouro">Logradouro</label>
+            <input type="text" id="az_dep_logradouro" />
+          </div>
+          <div class="AzDep_Field">
+            <label for="az_dep_numero">Número</label>
+            <input type="text" id="az_dep_numero" placeholder="S/N" />
+          </div>
+          <div class="AzDep_Field">
+            <label for="az_dep_complemento">Complemento</label>
+            <input type="text" id="az_dep_complemento" />
+          </div>
+          <div class="AzDep_Field">
+            <label for="az_dep_bairro">Bairro</label>
+            <input type="text" id="az_dep_bairro" />
+          </div>
+          <div class="AzDep_Field">
+            <label for="az_dep_cidade">Cidade</label>
+            <input type="text" id="az_dep_cidade" />
+          </div>
+          <div class="AzDep_Field AzDep_Field--uf">
+            <label for="az_dep_uf">UF</label>
+            <input type="text" id="az_dep_uf" maxlength="2" />
+          </div>
+        </div>
+        <label class="AzDep_Check">
+          <input type="checkbox" id="az_dep_principal" />
+          <span>Depósito principal (padrão para novos produtos)</span>
+        </label>
+      </section>
+
+      <div class="Cl_BotoesApoio AzDep_ModalFoot" id="az_dep_secFoot" hidden>
+        <button type="submit" class="Cl_BtnSalvar" id="az_dep_btnSalvar">Salvar depósito</button>
+        <button type="button" class="Cl_BtnCancelar" id="az_dep_btnCancelar">Cancelar</button>
+        <button type="button" class="Cl_BtnExcluir" id="az_dep_btnExcluir" hidden>Excluir</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+{% block page_js %}
+<script src="{{ url_for('az_depositos.static', filename='script/Saz_depositos.js') }}"></script>
+{% endblock %}

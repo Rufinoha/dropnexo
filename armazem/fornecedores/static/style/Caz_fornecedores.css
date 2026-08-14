@@ -1,0 +1,97 @@
+.AzForn_Page { max-width: 1100px; }
+.AzForn_Header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+  margin-bottom: 1rem;
+}
+.AzForn_Filtro { margin-bottom: 1rem; }
+.AzForn_Search input {
+  width: min(420px, 100%);
+  padding: 0.65rem 0.85rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+.AzForn_Grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 0.75rem;
+}
+.AzForn_Card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 1rem;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.AzForn_Card:hover { border-color: #94a3b8; }
+.AzForn_Card strong { color: #0f172a; }
+.AzForn_Card span { color: #64748b; font-size: 0.88rem; }
+.AzForn_Meta { font-size: 0.8rem !important; }
+.AzForn_Vazio {
+  text-align: center;
+  padding: 2.5rem 1rem;
+  color: #64748b;
+  background: #f8fafc;
+  border-radius: 12px;
+  border: 1px dashed #cbd5e1;
+}
+.AzForn_Modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+.AzForn_Modal[hidden] { display: none !important; }
+.AzForn_ModalInner {
+  background: #fff;
+  width: min(560px, 100%);
+  border-radius: 14px;
+  max-height: 90vh;
+  overflow: auto;
+}
+.AzForn_ModalHead {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.2rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+.AzForn_ModalHead h3 { margin: 0; }
+.AzForn_ModalSub { margin: 0.25rem 0 0; color: #64748b; font-size: 0.88rem; }
+.AzForn_Close {
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  font-size: 1.3rem;
+  cursor: pointer;
+}
+.AzForn_Form { padding: 1rem 1.2rem 1.2rem; display: grid; gap: 0.75rem; }
+.AzForn_Field label { display: block; font-size: 0.82rem; color: #475569; margin-bottom: 0.25rem; }
+.AzForn_Field input,
+.AzForn_Field textarea {
+  width: 100%;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+.AzForn_FieldGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+.AzForn_Foot { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem; }
+@media (max-width: 640px) {
+  .AzForn_Header { flex-direction: column; }
+  .AzForn_FieldGrid { grid-template-columns: 1fr; }
+}

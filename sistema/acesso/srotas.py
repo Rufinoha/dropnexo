@@ -918,7 +918,7 @@ from core.dominio import consultar_cnpj
 
 cadastro_bp = Blueprint("cadastro", __name__)
 
-TIPOS_NEGOCIO = frozenset({"fornecedor", "vendedor"})
+TIPOS_NEGOCIO = frozenset({"fornecedor", "vendedor", "armazem"})
 
 MSG_SUCESSO_CADASTRO_FORNECEDOR = (
     "Cadastro realizado com sucesso! Você receberá um e-mail para finalizar o cadastro "
@@ -1050,10 +1050,15 @@ def pagina_cadastro():
     tipo = (request.args.get("tipo") or "").strip().lower()
     if tipo not in TIPOS_NEGOCIO:
         return redirect(url_for("public.home") + "#cadastro")
+    titulos = {
+        "fornecedor": "Fornecedor",
+        "vendedor": "Vendedor",
+        "armazem": "Armazém",
+    }
     return render_template(
         "frm_cadastro.html",
         tipo_negocio=tipo,
-        titulo_tipo="Fornecedor" if tipo == "fornecedor" else "Vendedor",
+        titulo_tipo=titulos.get(tipo, "Conta"),
     )
 
 
@@ -1103,9 +1108,9 @@ def api_cadastro_novo():
     uf = (dados.get("uf") or "").strip().upper()
 
     if tipo_negocio not in TIPOS_NEGOCIO:
-        return jsonify(success=False, message="Informe se você é fornecedor ou vendedor."), 400
+        return jsonify(success=False, message="Informe se você é fornecedor, vendedor ou armazém."), 400
 
-    if tipo_negocio == "fornecedor":
+    if tipo_negocio in ("fornecedor", "armazem"):
         tipo_pessoa = "J"
     elif tipo_pessoa not in ("F", "J"):
         return jsonify(success=False, message="Selecione Pessoa Física ou Jurídica."), 400
@@ -1116,7 +1121,7 @@ def api_cadastro_novo():
     if len(nome_completo) < 2:
         return jsonify(success=False, message="Informe o nome completo ou razão social."), 400
 
-    if tipo_negocio == "fornecedor":
+    if tipo_negocio in ("fornecedor", "armazem"):
         if len(nome_tenant) < 2:
             return jsonify(success=False, message="Informe o apelido ou nome fantasia."), 400
     else:
