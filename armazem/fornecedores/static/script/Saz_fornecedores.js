@@ -90,8 +90,17 @@
     const q = (busca?.value || "").trim();
     const url = q ? `${BASE}/dados?busca=${encodeURIComponent(q)}` : `${BASE}/dados`;
     const r = await fetch(url, { credentials: "same-origin" });
-    const j = await r.json();
-    if (!j.success) return;
+    let j;
+    try {
+      j = await r.json();
+    } catch {
+      if (window.Util?.alertar) Util.alertar("Falha ao carregar fornecedores (resposta inválida).", "error");
+      return;
+    }
+    if (!j.success) {
+      if (window.Util?.alertar) Util.alertar(j.message || "Erro ao listar fornecedores.", "error");
+      return;
+    }
     const lista = j.dados || [];
     if (!lista.length) {
       grid.innerHTML = "";

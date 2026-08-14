@@ -182,6 +182,12 @@ def dados():
             params,
         )
         return jsonify(success=True, dados=[_row_dict(r) for r in cur.fetchall()])
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return jsonify(success=False, message=f"Erro ao listar fornecedores: {e}"), 500
     finally:
         conn.close()
 
