@@ -706,10 +706,53 @@ _ICONES_SVG = {
     "settings": '<circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2"/>',
 }
 
+# Labels canônicos (evita seed SQL com client encoding errado — CP850 → ¢/‡/ƒ).
+_MENU_NOME_POR_NAV: dict[str, str] = {
+    "az_depositos": "Dep\u00f3sitos",
+    "az_movimentacoes": "Movimenta\u00e7\u00f5es",
+    "az_parametros": "Par\u00e2metros",
+    "az_usuarios": "Usu\u00e1rios",
+    "az_integracoes": "Integra\u00e7\u00f5es",
+    "az_fornecedores": "Fornecedores",
+    "az_produtos": "Produtos",
+    "az_pedidos": "Pedidos",
+    "az_vendedores": "Vendedores",
+}
+
 
 def _icone_svg_menu(nome: str | None) -> str:
     key = (nome or "layout-dashboard").strip().lower()
     return _ICONES_SVG.get(key, _ICONES_SVG["layout-dashboard"])
+
+
+def _nome_menu_canonico(nav_codigo: str | None, nome: str | None) -> str:
+    nav = (nav_codigo or "").strip()
+    if nav in _MENU_NOME_POR_NAV:
+        return _MENU_NOME_POR_NAV[nav]
+    return (nome or "").strip() or nav or "Menu"
+
+
+def _reparar_acentos_menu_armazem(cur) -> None:
+    """Corrige nome_menu no banco quando o seed veio com encoding errado."""
+    for nav, nome in _MENU_NOME_POR_NAV.items():
+        cur.execute(
+            """
+            UPDATE tbl_menu
+               SET nome_menu = %s
+             WHERE nav_codigo = %s
+               AND nome_menu IS DISTINCT FROM %s
+            """,
+            (nome, nav, nome),
+        )
+    cur.execute(
+        """
+        UPDATE tbl_menu_modulo
+           SET modulo = %s
+         WHERE LOWER(modulo) LIKE %s
+           AND modulo IS DISTINCT FROM %s
+        """,
+        ("Armaz\u00e9m", "%armaz%", "Armaz\u00e9m"),
+    )
 
 
 def carregar_menu_sidebar() -> list[dict]:
@@ -732,6 +775,15 @@ def carregar_menu_sidebar() -> list[dict]:
     try:
         conn = Var_ConectarBanco()
         cur = conn.cursor()
+        if mod_ativo == "armazem":
+            try:
+                _reparar_acentos_menu_armazem(cur)
+                conn.commit()
+            except Exception:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
 
         if acesso_total_menu:
             cur.execute(
@@ -768,7 +820,7 @@ def carregar_menu_sidebar() -> list[dict]:
             itens.append(
                 {
                     "id": mid,
-                    "nome": nome,
+                    "nome": _nome_menu_canonico(nav_codigo, nome),
                     "url": resolver_url_menu(data_page, nav_codigo),
                     "icone_svg": _icone_svg_menu(icone),
                     "nav_codigo": nav_codigo or "",
@@ -804,14 +856,14 @@ def _menu_sidebar_fallback(mod_ativo: str = "vendedor") -> list[dict]:
         ]
     if mod_ativo == MODULO_ARMAZEM:
         return comum + [
-            {"nome": "Fornecedores", "url": resolver_url_menu("/armazem/fornecedores", "az_fornecedores"), "icone_svg": _ICONES_SVG["users"], "nav_codigo": "az_fornecedores"},
-            {"nome": "Depósitos", "url": resolver_url_menu("/armazem/depositos", "az_depositos"), "icone_svg": _ICONES_SVG["package"], "nav_codigo": "az_depositos"},
-            {"nome": "Produtos", "url": resolver_url_menu("/armazem/produtos", "az_produtos"), "icone_svg": _ICONES_SVG["package"], "nav_codigo": "az_produtos"},
-            {"nome": "Movimentações", "url": resolver_url_menu("/armazem/movimentacoes", "az_movimentacoes"), "icone_svg": _ICONES_SVG["package"], "nav_codigo": "az_movimentacoes"},
-            {"nome": "Pedidos", "url": resolver_url_menu("/armazem/pedidos", "az_pedidos"), "icone_svg": _ICONES_SVG["shopping-bag"], "nav_codigo": "az_pedidos"},
-            {"nome": "Parâmetros", "url": resolver_url_menu("/armazem/parametros", "az_parametros"), "icone_svg": _ICONES_SVG["settings"], "nav_codigo": "az_parametros"},
-            {"nome": "Usuários", "url": resolver_url_menu("/armazem/usuarios", "az_usuarios"), "icone_svg": _ICONES_SVG["users"], "nav_codigo": "az_usuarios"},
-            {"nome": "Integrações", "url": resolver_url_menu("/armazem/integracoes", "az_integracoes"), "icone_svg": _ICONES_SVG["plug"], "nav_codigo": "az_integracoes"},
+            {"nome": _MENU_NOME_POR_NAV["az_fornecedores"], "url": resolver_url_menu("/armazem/fornecedores", "az_fornecedores"), "icone_svg": _ICONES_SVG["users"], "nav_codigo": "az_fornecedores"},
+            {"nome": _MENU_NOME_POR_NAV["az_depositos"], "url": resolver_url_menu("/armazem/depositos", "az_depositos"), "icone_svg": _ICONES_SVG["package"], "nav_codigo": "az_depositos"},
+            {"nome": _MENU_NOME_POR_NAV["az_produtos"], "url": resolver_url_menu("/armazem/produtos", "az_produtos"), "icone_svg": _ICONES_SVG["package"], "nav_codigo": "az_produtos"},
+            {"nome": _MENU_NOME_POR_NAV["az_movimentacoes"], "url": resolver_url_menu("/armazem/movimentacoes", "az_movimentacoes"), "icone_svg": _ICONES_SVG["package"], "nav_codigo": "az_movimentacoes"},
+            {"nome": _MENU_NOME_POR_NAV["az_pedidos"], "url": resolver_url_menu("/armazem/pedidos", "az_pedidos"), "icone_svg": _ICONES_SVG["shopping-bag"], "nav_codigo": "az_pedidos"},
+            {"nome": _MENU_NOME_POR_NAV["az_parametros"], "url": resolver_url_menu("/armazem/parametros", "az_parametros"), "icone_svg": _ICONES_SVG["settings"], "nav_codigo": "az_parametros"},
+            {"nome": _MENU_NOME_POR_NAV["az_usuarios"], "url": resolver_url_menu("/armazem/usuarios", "az_usuarios"), "icone_svg": _ICONES_SVG["users"], "nav_codigo": "az_usuarios"},
+            {"nome": _MENU_NOME_POR_NAV["az_integracoes"], "url": resolver_url_menu("/armazem/integracoes", "az_integracoes"), "icone_svg": _ICONES_SVG["plug"], "nav_codigo": "az_integracoes"},
         ]
     return comum + [
         {"nome": "Fornecedores", "url": url_for("vd_fornecedores.pagina"), "icone_svg": _ICONES_SVG["users"], "nav_codigo": "fornecedores"},
