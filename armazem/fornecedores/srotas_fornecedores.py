@@ -64,13 +64,14 @@ def _tem_coluna_logo(cur) -> bool:
         """
     )
     _LOGO_COL_OK = bool(cur.fetchone())
-    return _LOGO_COL_OK
+    return bool(_LOGO_COL_OK)
 
 
 def garantir_tabela_fornecedor_armazem(cur) -> None:
     """Garante tabela/coluna. DDL é best-effort (app user pode não ser owner)."""
     global _LOGO_COL_OK
     try:
+        cur.execute("SAVEPOINT az_forn_ddl")
         cur.execute(
             """
             CREATE TABLE IF NOT EXISTS tbl_armazem_fornecedor (
@@ -90,41 +91,57 @@ def garantir_tabela_fornecedor_armazem(cur) -> None:
             )
             """
         )
+        cur.execute("RELEASE SAVEPOINT az_forn_ddl")
     except Exception:
-        pass
+        try:
+            cur.execute("ROLLBACK TO SAVEPOINT az_forn_ddl")
+        except Exception:
+            pass
+
     if not _tem_coluna_logo(cur):
         try:
+            cur.execute("SAVEPOINT az_forn_logo")
             cur.execute(
                 """
                 ALTER TABLE tbl_armazem_fornecedor
                   ADD COLUMN logo_caminho VARCHAR(500)
                 """
             )
+            cur.execute("RELEASE SAVEPOINT az_forn_logo")
             _LOGO_COL_OK = True
         except Exception:
-            # Sem ownership: rode sql/024_armazem_fornecedor_logo.sql como postgres.
+            try:
+                cur.execute("ROLLBACK TO SAVEPOINT az_forn_logo")
+            except Exception:
+                pass
             _LOGO_COL_OK = False
+
     try:
+        cur.execute("SAVEPOINT az_forn_idx")
         cur.execute(
             """
             CREATE INDEX IF NOT EXISTS idx_armazem_fornecedor_tenant
               ON tbl_armazem_fornecedor (id_tenant_armazem)
             """
         )
+        cur.execute("RELEASE SAVEPOINT az_forn_idx")
     except Exception:
-        pass
+        try:
+            cur.execute("ROLLBACK TO SAVEPOINT az_forn_idx")
+        except Exception:
+            pass
 
 
 def _cols_select(cur) -> str:
     if _tem_coluna_logo(cur):
-        return """
-            id, nome, nome_fantasia, documento, email, telefone, whatsapp,
-            observacoes, ativo, logo_caminho
-        """
-    return """
-        id, nome, nome_fantasia, documento, email, telefone, whatsapp,
-        observacoes, ativo, NULL::varchar AS logo_caminho
-    """
+        return (
+            "id, nome, nome_fantasia, documento, email, telefone, whatsapp, "
+            "observacoes, ativo, logo_caminho"
+        )
+    return (
+        "id, nome, nome_fantasia, documento, email, telefone, whatsapp, "
+        "observacoes, ativo, NULL::varchar AS logo_caminho"
+    )
 
 
 def _logo_url(fid: int, caminho: str | None) -> str:
@@ -149,11 +166,6 @@ def _row_dict(row) -> dict:
         "logo_caminho": caminho or "",
         "logo_url": _logo_url(fid, caminho),
     }
-
-
-_COLS = """
-    id, nome, nome_fantasia, documento, email, telefone, whatsapp, observacoes, ativo, logo_caminho
-"""
 
 
 def _pasta_logo(id_tenant: int, id_fornecedor: int) -> Path:
@@ -221,7 +233,7 @@ def dados():
             params.extend([like, like, like])
         cur.execute(
             f"""
-            SELECT {_COLS}
+            SELECT {_cols_select(cur)}
             FROM tbl_armazem_fornecedor
             WHERE {where}
             ORDER BY COALESCE(NULLIF(nome_fantasia, ''), nome)
@@ -257,7 +269,7 @@ def apoio():
         garantir_tabela_fornecedor_armazem(cur)
         cur.execute(
             f"""
-            SELECT {_COLS}
+            SELECT {_cols_select(cur)}
             FROM tbl_armazem_fornecedor
             WHERE id = %s AND id_tenant_armazem = %s
             """,
@@ -298,15 +310,17 @@ def salvar():
     try:
         cur = conn.cursor()
         garantir_tabela_fornecedor_armazem(cur)
+        tem_logo = _tem_coluna_logo(cur)
+        ret = "RETURNING id, logo_caminho" if tem_logo else "RETURNING id"
         fid = body.get("id")
         if fid:
             cur.execute(
-                """
+                f"""
                 UPDATE tbl_armazem_fornecedor SET
                     nome=%s, nome_fantasia=%s, documento=%s, email=%s,
                     telefone=%s, whatsapp=%s, observacoes=%s, ativo=%s, atualizado_em=%s
                 WHERE id=%s AND id_tenant_armazem=%s
-                RETURNING id, logo_caminho
+                {ret}
                 """,
                 (
                     nome,
@@ -324,12 +338,12 @@ def salvar():
             )
         else:
             cur.execute(
-                """
+                f"""
                 INSERT INTO tbl_armazem_fornecedor (
                     id_tenant_armazem, nome, nome_fantasia, documento, email,
                     telefone, whatsapp, observacoes, ativo, atualizado_em
                 ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                RETURNING id, logo_caminho
+                {ret}
                 """,
                 (
                     id_tenant,
@@ -348,10 +362,11 @@ def salvar():
         if not row:
             return jsonify(success=False, message="Fornecedor não encontrado."), 404
         conn.commit()
+        logo = row[1] if tem_logo and len(row) > 1 else None
         return jsonify(
             success=True,
             id=row[0],
-            logo_url=_logo_url(int(row[0]), row[1]),
+            logo_url=_logo_url(int(row[0]), logo),
             message="Fornecedor salvo.",
         )
     finally:
@@ -386,6 +401,14 @@ def logo_upload(id_fornecedor: int):
     try:
         cur = conn.cursor()
         garantir_tabela_fornecedor_armazem(cur)
+        if not _tem_coluna_logo(cur):
+            return jsonify(
+                success=False,
+                message=(
+                    "Coluna de logotipo ainda não existe no banco. "
+                    "Execute sql/024_armazem_fornecedor_logo.sql como postgres."
+                ),
+            ), 400
         cur.execute(
             """
             SELECT logo_caminho FROM tbl_armazem_fornecedor
