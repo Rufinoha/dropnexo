@@ -114,6 +114,7 @@
     if (t === "fornecedor") return "Fornecedor";
     if (t === "vendedor") return "Vendedor";
     if (t === "hibrido") return "Híbrido";
+    if (t === "armazem") return "Armazém";
     return t || "Tenant";
   }
 
@@ -128,6 +129,10 @@
       lista = lista.filter(function (t) {
         const tipo = String(t.tipo_negocio || "").toLowerCase();
         return tipo === "vendedor" || tipo === "hibrido";
+      });
+    } else if (modoDevSuporte && filtroTipoTenant === "armazem") {
+      lista = lista.filter(function (t) {
+        return String(t.tipo_negocio || "").toLowerCase() === "armazem";
       });
     }
     if (!tenantSearch || !modoDevSuporte) return lista;

@@ -78,7 +78,7 @@
     if (el.warn) {
       el.warn.hidden = !risco;
       el.warn.textContent = risco
-        ? "Este tenant já tem dados de fornecedor. Se for só erro de cadastro e os contadores forem baixos, ok. Se já opera como fornecedor, prefira Híbrido."
+        ? "Este tenant já tem dados de fornecedor (produtos/vínculos/pedidos). Ao virar Armazém, isso permanece e a visibilidade na rede é copiada para os parâmetros do armazém. Confira após sair e entrar de novo."
         : "";
     }
     if (el.btnExcluir) {

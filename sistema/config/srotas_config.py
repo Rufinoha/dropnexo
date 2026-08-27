@@ -1491,11 +1491,23 @@ def manutencao_tenant_salvar():
             ):
                 avisos.append(
                     "Tenant tinha dados de fornecedor; o tipo foi alterado mesmo assim. "
-                    "Considere híbrido se precisar do painel fornecedor."
+                    "Produtos/vínculos/pedidos continuam no banco, mas o menu passa a ser de vendedor."
                 )
             if tipo == "fornecedor" and contagens["vinculos_como_vendedor"]:
                 avisos.append(
-                    "Tenant já tem vínculos como vendedor; confira se o perfil correto é híbrido."
+                    "Tenant já tem vínculos como vendedor; confira se o tipo correto é só fornecedor."
+                )
+            if tipo == "armazem" and tipo_antigo in ("fornecedor", "hibrido"):
+                avisos.append(
+                    "Parâmetros de rede/aprovação serão copiados para o módulo Armazém. "
+                    "Peça logout/login e confira Parâmetros do armazém."
+                )
+            if tipo == "armazem" and (
+                contagens["produtos"] or contagens["vinculos_como_fornecedor"]
+            ):
+                avisos.append(
+                    "Produtos e vínculos existentes permanecem. "
+                    "No modo B, associe cada produto a um fornecedor local."
                 )
 
         cur.execute(
@@ -1520,6 +1532,12 @@ def manutencao_tenant_salvar():
             )
             segmentos_removidos = int(cur.rowcount or 0)
 
+        mig_az = None
+        if tipo != tipo_antigo and tipo == "armazem" and tipo_antigo in ("fornecedor", "hibrido"):
+            from sistema.config.servico_manutencao_tenant import migrar_fornecedor_para_armazem
+
+            mig_az = migrar_fornecedor_para_armazem(cur, id_tenant)
+
         conn.commit()
 
         sessao_atualizada = False
@@ -1536,6 +1554,11 @@ def manutencao_tenant_salvar():
         msg = "Tenant atualizado."
         if tipo != tipo_antigo:
             msg = f"Tipo alterado de «{tipo_antigo}» para «{tipo}». Peça ao usuário para sair e entrar de novo."
+        if mig_az is not None:
+            if mig_az.get("visivel_rede_vendedor"):
+                msg += " Visibilidade na rede do vendedor mantida (parâmetros do armazém)."
+            else:
+                msg += " Abra Parâmetros do armazém para exibir na rede (ainda estava oculto)."
         if segmentos_removidos:
             msg += f" {segmentos_removidos} segmento(s) de fornecedor removido(s)."
 
@@ -1544,6 +1567,7 @@ def manutencao_tenant_salvar():
             message=msg,
             avisos=avisos,
             sessao_atualizada=sessao_atualizada,
+            migracao_armazem=mig_az,
             tenant={
                 "id": id_tenant,
                 "nome": nome,

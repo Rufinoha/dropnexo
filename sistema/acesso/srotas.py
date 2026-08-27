@@ -649,17 +649,18 @@ _ROTULO_TIPO_TENANT = {
     "fornecedor": "Fornecedor",
     "vendedor": "Vendedor",
     "hibrido": "Híbrido",
+    "armazem": "Armazém",
 }
 
 
 def _listar_tenants_dev(cur, id_tenant_atual: int | None) -> list[dict]:
-    """Todos os tenants ativos — suporte DEV (vendedor, fornecedor e híbrido)."""
+    """Todos os tenants ativos — suporte DEV (vendedor, fornecedor, híbrido e armazém)."""
     cur.execute(
         """
         SELECT t.id, t.nome, t.slug, t.plano, t.tipo_negocio, t.cidade, t.uf, t.documento
         FROM tbl_tenant t
         WHERE t.ativo = TRUE
-          AND t.tipo_negocio IN ('fornecedor', 'vendedor', 'hibrido')
+          AND t.tipo_negocio IN ('fornecedor', 'vendedor', 'hibrido', 'armazem')
         ORDER BY t.nome ASC
         """
     )
@@ -798,7 +799,7 @@ def api_trocar_tenant():
                 FROM tbl_usuario u
                 CROSS JOIN tbl_tenant t
                 WHERE u.id = %s AND t.id = %s AND t.ativo = TRUE
-                  AND t.tipo_negocio IN ('fornecedor', 'vendedor', 'hibrido')
+                  AND t.tipo_negocio IN ('fornecedor', 'vendedor', 'hibrido', 'armazem')
                 LIMIT 1
                 """,
                 (id_usuario, id_tenant),

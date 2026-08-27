@@ -226,6 +226,21 @@
       </section>
 
       <section class="Cat_TabPanel" data-panel="fornecedor" hidden>
+        <div id="painelFornecedorArmazem" class="Cat_FornPanel" hidden>
+          <p class="Cat_ImagemHint">
+            Associe o produto a um <strong>fornecedor local</strong> (cadastro do armazém).
+            Necessário no modo B da rede (vitrine por fornecedor).
+          </p>
+          <div class="Cl_FormCampo" style="max-width: 28rem;">
+            <label for="id_armazem_fornecedor">Fornecedor local</label>
+            <select id="id_armazem_fornecedor">
+              <option value="">Sem fornecedor</option>
+            </select>
+          </div>
+          <p class="Cat_ImagemHint">
+            Cadastre fornecedores em <strong>Armazém → Fornecedores</strong>.
+          </p>
+        </div>
         <div id="painelFornecedorVendedor" class="Cat_FornPanel" aria-live="polite">
           <div class="Cat_Placeholder Cat_FornPlaceholder">
             <p>Carregando dados do fornecedor…</p>
@@ -329,9 +344,14 @@
     window.CAT_APOIO_BASE = '/meus-produtos';
     window.CAT_APOIO_MODO = 'vendedor';
   </script>
+  {% else %}
+  <script>
+    window.CAT_TENANT_TIPO = {{ (session.get('tenant_tipo_negocio') or '')|tojson }};
+    window.CAT_MODULO_ATIVO = {{ (session.get('modulo_ativo') or '')|tojson }};
+  </script>
   {% endif %}
   <script src="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.js"></script>
   <script src="{{ url_for('fn_catalogo.static', filename='script/Scatalogo_descricao_editor.js') }}?v=1"></script>
-  <script src="{{ url_for('fn_catalogo.static', filename='script/Scatalogo_apoio.js') }}?v=28"></script>
+  <script src="{{ url_for('fn_catalogo.static', filename='script/Scatalogo_apoio.js') }}?v=29"></script>
 </body>
 </html>

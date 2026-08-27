@@ -16,6 +16,78 @@ def slug_protegido(slug: str) -> bool:
     return (slug or "").strip().lower() in _SLUGS_PROTEGIDOS
 
 
+def migrar_fornecedor_para_armazem(cur, id_tenant: int) -> dict:
+    """Ao trocar tipo fornecedor/híbrido → armazém: espelha rede/aprovação.
+
+    Cria/atualiza ``tbl_armazem_parametros`` a partir de
+    ``tbl_fornecedor_requisitos_vendedor`` para o tenant não sumir da rede.
+    """
+    id_tenant = int(id_tenant)
+    from armazem.parametros.srotas_parametros import garantir_tabela_parametros
+
+    garantir_tabela_parametros(cur)
+
+    visivel = False
+    auto = False
+    texto = None
+    tinha_req = False
+    try:
+        cur.execute(
+            """
+            SELECT COALESCE(visivel_rede_vendedor, FALSE),
+                   COALESCE(aprovacao_automatica, FALSE),
+                   texto_adicional
+            FROM tbl_fornecedor_requisitos_vendedor
+            WHERE id_tenant = %s
+            """,
+            (id_tenant,),
+        )
+        row = cur.fetchone()
+        if row:
+            tinha_req = True
+            visivel = bool(row[0])
+            auto = bool(row[1])
+            texto = (row[2] or "").strip() or None
+    except Exception:
+        # Tabela de requisitos pode não existir em bases antigas.
+        pass
+
+    cur.execute(
+        """
+        INSERT INTO tbl_armazem_parametros (
+            id_tenant, modo_vitrine, visivel_rede_vendedor,
+            aprovacao_automatica, texto_adicional, atualizado_em
+        )
+        VALUES (%s, 'armazem', %s, %s, %s, NOW())
+        ON CONFLICT (id_tenant) DO UPDATE SET
+            visivel_rede_vendedor = EXCLUDED.visivel_rede_vendedor,
+            aprovacao_automatica = EXCLUDED.aprovacao_automatica,
+            texto_adicional = COALESCE(EXCLUDED.texto_adicional, tbl_armazem_parametros.texto_adicional),
+            atualizado_em = NOW()
+        """,
+        (id_tenant, visivel, auto, texto),
+    )
+
+    # Mantém espelho nos requisitos (usado em telas compartilhadas).
+    if tinha_req:
+        cur.execute(
+            """
+            UPDATE tbl_fornecedor_requisitos_vendedor
+               SET visivel_rede_vendedor = %s,
+                   aprovacao_automatica = %s,
+                   texto_adicional = COALESCE(%s, texto_adicional)
+             WHERE id_tenant = %s
+            """,
+            (visivel, auto, texto, id_tenant),
+        )
+
+    return {
+        "visivel_rede_vendedor": visivel,
+        "aprovacao_automatica": auto,
+        "copiou_requisitos": tinha_req,
+    }
+
+
 def listar_tabelas_com_coluna_tenant(cur) -> list[tuple[str, str]]:
     """Tabelas públicas com coluna de tenant (exceto tbl_tenant)."""
     cur.execute(

@@ -491,6 +491,11 @@ body.fg-app {
   color: #166534;
 }
 
+.fg-tenant-tipo--armazem {
+  background: #e0f2fe;
+  color: #075985;
+}
+
 .fg-tenant-tipo--hibrido {
   background: #fef3c7;
   color: #92400e;

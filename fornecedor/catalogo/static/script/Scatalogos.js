@@ -115,7 +115,11 @@
       l.formato === "E"
         ? `<span class="Cat_BadgeVar">${Number(l.qtd_variantes || 0)} variações</span>`
         : `<span class="Cat_BadgeSimples">Simples</span>`;
-    return `<div class="Cat_PaiCell"><strong class="Cat_PaiNome">${escapeHtml(l.nome)}</strong>${badge}${badgeNaoPublicado(l.publicado)}</div>`;
+    const forn =
+      l.armazem_fornecedor_nome
+        ? `<span class="Cat_BadgeSimples" title="Fornecedor local">${escapeHtml(l.armazem_fornecedor_nome)}</span>`
+        : "";
+    return `<div class="Cat_PaiCell"><strong class="Cat_PaiNome">${escapeHtml(l.nome)}</strong>${badge}${forn}${badgeNaoPublicado(l.publicado)}</div>`;
   }
 
   function renderNomeVar(l) {

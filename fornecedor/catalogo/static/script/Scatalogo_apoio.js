@@ -79,6 +79,10 @@
   const BASE = window.CAT_APOIO_BASE || "/catalogos";
   const APOIO_MODO = window.CAT_APOIO_MODO || "fornecedor";
   const isVendedor = APOIO_MODO === "vendedor";
+  const isArmazem =
+    !isVendedor &&
+    ((window.CAT_TENANT_TIPO || "").toLowerCase() === "armazem" ||
+      (window.CAT_MODULO_ATIVO || "").toLowerCase() === "armazem");
 
   function apiBase() {
     if (isVendedor && !integrado) return "/catalogos";
@@ -1103,8 +1107,43 @@
     return map[st] || { txt: st || "—", cls: "is-muted" };
   }
 
+  function preencherSelectArmazemFornecedor(lista, selecionado) {
+    const sel = document.getElementById("id_armazem_fornecedor");
+    if (!sel) return;
+    const atual = selecionado != null && selecionado !== "" ? String(selecionado) : "";
+    const opts = ['<option value="">Sem fornecedor</option>'];
+    (lista || []).forEach((f) => {
+      const id = String(f.id);
+      const nome = String(f.nome || `#${id}`).replace(/</g, "&lt;").replace(/"/g, "&quot;");
+      opts.push(`<option value="${id}"${id === atual ? " selected" : ""}>${nome}</option>`);
+    });
+    sel.innerHTML = opts.join("");
+    if (atual) sel.value = atual;
+  }
+
+  async function carregarFornecedoresArmazemLocais(selecionado) {
+    if (!isArmazem) return;
+    const r = await fetch("/armazem/fornecedores/dados", { credentials: "same-origin" });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.success) {
+      preencherSelectArmazemFornecedor([], selecionado);
+      return;
+    }
+    const lista = (j.dados || []).map((d) => ({
+      id: d.id,
+      nome: d.nome_fantasia || d.nome || `#${d.id}`,
+    }));
+    preencherSelectArmazemFornecedor(lista, selecionado);
+  }
+
   function renderPainelFornecedor(forn) {
     const painel = document.getElementById("painelFornecedorVendedor");
+    const painelAz = document.getElementById("painelFornecedorArmazem");
+    if (painelAz) painelAz.hidden = !isArmazem;
+    if (painel) painel.hidden = !!isArmazem;
+    if (isArmazem) {
+      return;
+    }
     if (!painel) return;
     if (!isVendedor) {
       painel.innerHTML =
@@ -1272,6 +1311,13 @@
     syncFormatoUi();
     aplicarReadonlyIntegrado();
     renderPainelFornecedor(d.fornecedor);
+    if (isArmazem || d.contexto_armazem) {
+      if (Array.isArray(d.armazem_fornecedores) && d.armazem_fornecedores.length) {
+        preencherSelectArmazemFornecedor(d.armazem_fornecedores, d.id_armazem_fornecedor);
+      } else {
+        carregarFornecedoresArmazemLocais(d.id_armazem_fornecedor).catch(() => {});
+      }
+    }
     garantirBtnRestaurar();
     syncEstoqueUi();
     carregarImagens().then(syncAvisoImagens);
@@ -1414,6 +1460,9 @@
       quantidade: el.quantidade.value,
       imagem_url: imagemParaSalvar(),
       publicado: !!el.publicado.checked,
+      id_armazem_fornecedor: isArmazem
+        ? document.getElementById("id_armazem_fornecedor")?.value || null
+        : undefined,
     };
     const r = await fetch(`${apiBase()}/salvar`, {
       method: "POST",
@@ -1500,6 +1549,10 @@
     if (!idProduto) {
       syncFormatoUi();
       renderGaleria();
+      renderPainelFornecedor(null);
+      if (isArmazem) {
+        carregarFornecedoresArmazemLocais(null).catch(() => {});
+      }
       return;
     }
     if (!combosProntos) {

@@ -800,6 +800,53 @@ def _sanitizar_descricao_html(raw: str) -> str:
     return s.strip()
 
 
+def _contexto_armazem() -> bool:
+    tipo = (session.get("tenant_tipo_negocio") or "").strip().lower()
+    mod = (session.get("modulo_ativo") or "").strip().lower()
+    return tipo == "armazem" or mod == "armazem"
+
+
+def _garantir_produto_armazem_fornecedor(cur) -> None:
+    from armazem.fornecedores.srotas_fornecedores import garantir_tabela_fornecedor_armazem
+    from armazem.produtos.srotas_produtos import garantir_coluna_dono
+
+    garantir_tabela_fornecedor_armazem(cur)
+    garantir_coluna_dono(cur)
+
+
+def _parse_id_armazem_fornecedor(body: dict) -> int | None:
+    raw = body.get("id_armazem_fornecedor")
+    if raw in (None, "", 0, "0"):
+        return None
+    try:
+        v = int(raw)
+    except (TypeError, ValueError):
+        return None
+    return v if v > 0 else None
+
+
+def _aplicar_id_armazem_fornecedor(cur, *, id_tenant: int, id_produto: int, id_forn: int | None) -> None:
+    _garantir_produto_armazem_fornecedor(cur)
+    if id_forn is not None:
+        cur.execute(
+            """
+            SELECT 1 FROM tbl_armazem_fornecedor
+            WHERE id = %s AND id_tenant_armazem = %s AND ativo = TRUE
+            """,
+            (id_forn, id_tenant),
+        )
+        if not cur.fetchone():
+            raise ValueError("Fornecedor local inválido ou inativo.")
+    cur.execute(
+        """
+        UPDATE tbl_produto
+           SET id_armazem_fornecedor = %s
+         WHERE id = %s AND id_tenant = %s
+        """,
+        (id_forn, id_produto, id_tenant),
+    )
+
+
 EXTENSOES_IMAGEM = frozenset({".png", ".jpg", ".jpeg", ".webp"})
 MAX_BYTES_IMAGEM = 2 * 1024 * 1024
 MAX_IMAGENS_PRODUTO = 10
@@ -1066,6 +1113,7 @@ def _catalogo_montar_linhas_pai(
                     "qtd_variantes": len(vars_p),
                     "publicado": p.get("publicado", False),
                     "imagem_url": p["imagem_url"],
+                    "armazem_fornecedor_nome": p.get("armazem_fornecedor_nome") or "",
                 }
             )
             for i, v in enumerate(vars_p):
@@ -1107,6 +1155,7 @@ def _catalogo_montar_linhas_pai(
                 "qtd_variantes": len(vars_p) if p["formato"] == "E" else int(p.get("qtd_variantes") or 0),
                 "publicado": p.get("publicado", False),
                 "imagem_url": p["imagem_url"],
+                "armazem_fornecedor_nome": p.get("armazem_fornecedor_nome") or "",
             }
         )
     return linhas
@@ -1223,6 +1272,12 @@ def catalogos_dados():
 
         where_sql = " AND ".join(where)
         filtro_var_ativo = " AND v.ativo" if somente_ativos else ""
+        eh_az = _contexto_armazem()
+        if eh_az:
+            try:
+                _garantir_produto_armazem_fornecedor(cur)
+            except Exception:
+                eh_az = False
         cur.execute(
             f"""
             SELECT COUNT(*) FROM tbl_produto p WHERE {where_sql}
@@ -1230,27 +1285,53 @@ def catalogos_dados():
             params,
         )
         total = int(cur.fetchone()[0] or 0)
-        cur.execute(
-            f"""
-            SELECT p.id, p.sku, p.nome, p.formato, p.publicado,
-                   COALESCE(p.unidade, 'UN'),
-                   c.nome AS categoria,
-                   (SELECT COUNT(*) FROM tbl_produto_variante v WHERE v.id_produto = p.id{filtro_var_ativo}),
-                   (SELECT COALESCE(MIN(v.preco), 0) FROM tbl_produto_variante v WHERE v.id_produto = p.id{filtro_var_ativo}),
-                   (SELECT COALESCE(MAX(v.preco), 0) FROM tbl_produto_variante v WHERE v.id_produto = p.id{filtro_var_ativo}),
-                   (SELECT COALESCE(SUM(e2.quantidade), 0) FROM tbl_produto_variante v2
-                    LEFT JOIN tbl_produto_variante_estoque e2 ON e2.id_variante = v2.id
-                    WHERE v2.id_produto = p.id),
-                   COALESCE(vp.imagem_url, p.imagem_url)
-            FROM tbl_produto p
-            LEFT JOIN tbl_categoria c ON c.id = p.id_categoria
-            LEFT JOIN tbl_produto_variante vp ON vp.id = p.id_variante_padrao
-            WHERE {where_sql}
-            ORDER BY p.atualizado_em DESC, p.nome
-            LIMIT %s OFFSET %s
-            """,
-            params + [por_pagina, offset],
-        )
+        if eh_az:
+            cur.execute(
+                f"""
+                SELECT p.id, p.sku, p.nome, p.formato, p.publicado,
+                       COALESCE(p.unidade, 'UN'),
+                       c.nome AS categoria,
+                       (SELECT COUNT(*) FROM tbl_produto_variante v WHERE v.id_produto = p.id{filtro_var_ativo}),
+                       (SELECT COALESCE(MIN(v.preco), 0) FROM tbl_produto_variante v WHERE v.id_produto = p.id{filtro_var_ativo}),
+                       (SELECT COALESCE(MAX(v.preco), 0) FROM tbl_produto_variante v WHERE v.id_produto = p.id{filtro_var_ativo}),
+                       (SELECT COALESCE(SUM(e2.quantidade), 0) FROM tbl_produto_variante v2
+                        LEFT JOIN tbl_produto_variante_estoque e2 ON e2.id_variante = v2.id
+                        WHERE v2.id_produto = p.id),
+                       COALESCE(vp.imagem_url, p.imagem_url),
+                       p.id_armazem_fornecedor,
+                       COALESCE(af.nome_fantasia, af.nome, '')
+                FROM tbl_produto p
+                LEFT JOIN tbl_categoria c ON c.id = p.id_categoria
+                LEFT JOIN tbl_produto_variante vp ON vp.id = p.id_variante_padrao
+                LEFT JOIN tbl_armazem_fornecedor af ON af.id = p.id_armazem_fornecedor
+                WHERE {where_sql}
+                ORDER BY p.atualizado_em DESC, p.nome
+                LIMIT %s OFFSET %s
+                """,
+                params + [por_pagina, offset],
+            )
+        else:
+            cur.execute(
+                f"""
+                SELECT p.id, p.sku, p.nome, p.formato, p.publicado,
+                       COALESCE(p.unidade, 'UN'),
+                       c.nome AS categoria,
+                       (SELECT COUNT(*) FROM tbl_produto_variante v WHERE v.id_produto = p.id{filtro_var_ativo}),
+                       (SELECT COALESCE(MIN(v.preco), 0) FROM tbl_produto_variante v WHERE v.id_produto = p.id{filtro_var_ativo}),
+                       (SELECT COALESCE(MAX(v.preco), 0) FROM tbl_produto_variante v WHERE v.id_produto = p.id{filtro_var_ativo}),
+                       (SELECT COALESCE(SUM(e2.quantidade), 0) FROM tbl_produto_variante v2
+                        LEFT JOIN tbl_produto_variante_estoque e2 ON e2.id_variante = v2.id
+                        WHERE v2.id_produto = p.id),
+                       COALESCE(vp.imagem_url, p.imagem_url)
+                FROM tbl_produto p
+                LEFT JOIN tbl_categoria c ON c.id = p.id_categoria
+                LEFT JOIN tbl_produto_variante vp ON vp.id = p.id_variante_padrao
+                WHERE {where_sql}
+                ORDER BY p.atualizado_em DESC, p.nome
+                LIMIT %s OFFSET %s
+                """,
+                params + [por_pagina, offset],
+            )
         dados = [
             {
                 "id": r[0],
@@ -1266,6 +1347,8 @@ def catalogos_dados():
                 "preco": float(r[8] or 0),
                 "estoque": int(r[10] or 0),
                 "imagem_url": _imagem_url_resposta(r[11]),
+                "id_armazem_fornecedor": int(r[12]) if eh_az and len(r) > 12 and r[12] else None,
+                "armazem_fornecedor_nome": (r[13] if eh_az and len(r) > 13 else "") or "",
             }
             for r in cur.fetchall()
         ]
@@ -1416,9 +1499,7 @@ def catalogos_apoio():
         r = cur.fetchone()
         if not r:
             return jsonify(success=False, message="Produto não encontrado."), 404
-        return jsonify(
-            success=True,
-            dados={
+        dados = {
                 "id": r[0],
                 "sku": r[1] or "",
                 "nome": r[2],
@@ -1465,8 +1546,45 @@ def catalogos_apoio():
                 "garantia_tempo": (r[42] if len(r) > 42 else "") or "",
                 "video_youtube": (r[43] if len(r) > 43 else "") or "",
                 "status_promocao": r[5] is not None and r[4] and float(r[5]) < float(r[4]),
-            },
-        )
+                "contexto_armazem": False,
+                "id_armazem_fornecedor": None,
+                "armazem_fornecedor_nome": "",
+                "armazem_fornecedores": [],
+        }
+        if _contexto_armazem():
+            dados["contexto_armazem"] = True
+            _garantir_produto_armazem_fornecedor(cur)
+            cur.execute(
+                """
+                SELECT p.id_armazem_fornecedor,
+                       COALESCE(af.nome_fantasia, af.nome, '')
+                FROM tbl_produto p
+                LEFT JOIN tbl_armazem_fornecedor af ON af.id = p.id_armazem_fornecedor
+                WHERE p.id = %s AND p.id_tenant = %s
+                """,
+                (_id, id_tenant),
+            )
+            row_az = cur.fetchone()
+            if row_az:
+                dados["id_armazem_fornecedor"] = int(row_az[0]) if row_az[0] else None
+                dados["armazem_fornecedor_nome"] = row_az[1] or ""
+            cur.execute(
+                """
+                SELECT id, COALESCE(nome_fantasia, nome, '')
+                FROM tbl_armazem_fornecedor
+                WHERE id_tenant_armazem = %s AND ativo = TRUE
+                ORDER BY COALESCE(nome_fantasia, nome)
+                """,
+                (id_tenant,),
+            )
+            dados["armazem_fornecedores"] = [
+                {"id": int(x[0]), "nome": x[1] or f"#{x[0]}"} for x in cur.fetchall()
+            ]
+            try:
+                conn.commit()
+            except Exception:
+                pass
+        return jsonify(success=True, dados=dados)
     finally:
         conn.close()
 
@@ -1749,6 +1867,18 @@ def catalogos_salvar():
                 (id_tenant,) + campos,
             )
             prod_id = cur.fetchone()[0]
+
+        if _contexto_armazem():
+            try:
+                _aplicar_id_armazem_fornecedor(
+                    cur,
+                    id_tenant=int(id_tenant),
+                    id_produto=int(prod_id),
+                    id_forn=_parse_id_armazem_fornecedor(body),
+                )
+            except ValueError as e:
+                conn.rollback()
+                return jsonify(success=False, message=str(e)), 400
 
         if sku:
             exigir_sku_unico_tenant(cur, id_tenant, sku, ignorar_id_produto=prod_id)
