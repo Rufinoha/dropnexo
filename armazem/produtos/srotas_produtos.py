@@ -82,6 +82,7 @@ def pagina():
         cat_desc="Cadastre produtos, preços e estoque — mesmos recursos do catálogo do fornecedor.",
         cat_api_base="/catalogos",
         cat_ocultar_import_export=False,
+        cat_contexto_armazem=True,
     )
 
 

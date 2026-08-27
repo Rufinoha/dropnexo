@@ -2073,6 +2073,69 @@ def catalogos_categoria_associar():
         conn.close()
 
 
+@fn_catalogo_bp.post("/catalogos/armazem-fornecedor/associar")
+@login_obrigatorio()
+@exigir_permissao(codigos=["catalogos.editar", "produtos.editar", "az_produtos.editar"])
+def catalogos_armazem_fornecedor_associar():
+    """Associa (ou limpa) fornecedor local em lote — só no contexto armazém."""
+    if (resp := _exigir_catalogo_escrita()) is not None:
+        return resp
+    if not _contexto_armazem():
+        return jsonify(success=False, message="Disponível apenas no módulo Armazém."), 403
+    body = request.get_json(silent=True) or {}
+    raw = body.get("ids") or []
+    ids = []
+    for x in raw:
+        try:
+            ids.append(int(x))
+        except (TypeError, ValueError):
+            continue
+    ids = list(dict.fromkeys(ids))
+    if not ids:
+        return jsonify(success=False, message="Nenhum produto selecionado."), 400
+
+    limpar = bool(body.get("limpar"))
+    id_forn = None if limpar else _parse_id_armazem_fornecedor(body)
+    if not limpar and id_forn is None:
+        return jsonify(success=False, message="Selecione um fornecedor local."), 400
+
+    id_tenant = session.get("id_tenant")
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        _garantir_produto_armazem_fornecedor(cur)
+        if id_forn is not None:
+            cur.execute(
+                """
+                SELECT 1 FROM tbl_armazem_fornecedor
+                WHERE id = %s AND id_tenant_armazem = %s AND ativo = TRUE
+                """,
+                (id_forn, id_tenant),
+            )
+            if not cur.fetchone():
+                return jsonify(success=False, message="Fornecedor local inválido ou inativo."), 400
+        cur.execute(
+            """
+            UPDATE tbl_produto
+               SET id_armazem_fornecedor = %s, atualizado_em = %s
+             WHERE id_tenant = %s AND id = ANY(%s)
+            """,
+            (id_forn, agora_utc(), id_tenant, ids),
+        )
+        atualizados = int(cur.rowcount or 0)
+        conn.commit()
+        if id_forn is None:
+            msg = f"Fornecedor removido de {atualizados} produto(s)."
+        else:
+            msg = f"Fornecedor associado a {atualizados} produto(s)."
+        return jsonify(success=True, message=msg, atualizados=atualizados)
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)[:300]), 500
+    finally:
+        conn.close()
+
+
 @fn_catalogo_bp.post("/catalogos/rede/publicar")
 @login_obrigatorio()
 @exigir_permissao(codigos=["catalogos.editar", "produtos.editar", "az_produtos.editar"])

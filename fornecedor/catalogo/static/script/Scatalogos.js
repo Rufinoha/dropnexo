@@ -37,6 +37,7 @@
   if (!el.tbody) return;
 
   const BASE = window.CAT_BASE || "/catalogos";
+  const isArmazem = window.CAT_CONTEXTO_ARMAZEM === true || window.CAT_CONTEXTO_ARMAZEM === "true";
 
   function util() {
     return window.Util || { gerarIconeTech: () => "…" };
@@ -174,6 +175,13 @@
       { acao: "etiquetas", icon: "etiquetas", title: "Imprimir etiquetas" },
       { acao: "rede", icon: "rede", title: "Publicar / despublicar na rede" },
     ];
+    if (isArmazem) {
+      acoes.splice(2, 0, {
+        acao: "fornecedor",
+        icon: "vincular_clientes",
+        title: "Associar ao fornecedor local",
+      });
+    }
     acoes.forEach((a) => {
       const btn = document.createElement("button");
       btn.type = "button";
@@ -196,6 +204,7 @@
         if (!ids.length) return;
         if (btn.dataset.bulk === "excluir") await excluirLote(ids);
         else if (btn.dataset.bulk === "categoria") await associarCategoriaLote(ids);
+        else if (btn.dataset.bulk === "fornecedor") await associarFornecedorArmazemLote(ids);
         else if (btn.dataset.bulk === "estoque") await sincronizarEstoqueLote(ids);
         else if (btn.dataset.bulk === "etiquetas") await swalEmDesenvolvimento("Impressão de etiquetas");
         else if (btn.dataset.bulk === "rede") await alternarPublicacaoRedeLote(ids);
@@ -393,6 +402,160 @@
     await Swal.fire({
       icon: "success",
       title: "Categoria associada",
+      text: jj.message,
+      timer: 2200,
+      showConfirmButton: false,
+    });
+    await carregar();
+  }
+
+  function montarHtmlAssociarFornecedor(fornecedores, qtdProdutos) {
+    const n = Number(qtdProdutos) || 0;
+    const limparOpt = `
+      <button type="button" class="CatAssoc__opt" data-id="" data-limpar="1" role="option" aria-selected="false">
+        <span class="CatAssoc__radio" aria-hidden="true"></span>
+        <span class="CatAssoc__name">Sem fornecedor (remover vínculo)</span>
+      </button>`;
+    const itens = (fornecedores || [])
+      .map(
+        (f, i) => `
+      <button type="button" class="CatAssoc__opt${i === 0 ? " is-selected" : ""}" data-id="${f.id}" role="option" aria-selected="${i === 0 ? "true" : "false"}">
+        <span class="CatAssoc__radio" aria-hidden="true"></span>
+        <span class="CatAssoc__name">${escapeHtml(f.nome)}</span>
+      </button>`
+      )
+      .join("");
+    return `
+      <div class="CatAssoc">
+        <div class="CatAssoc__head">
+          <div class="CatAssoc__icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+          </div>
+          <div>
+            <h3 class="CatAssoc__title">Associar fornecedor</h3>
+            <p class="CatAssoc__sub">Aplicar em <strong>${n}</strong> produto${n === 1 ? "" : "s"} selecionado${n === 1 ? "" : "s"}.</p>
+          </div>
+        </div>
+        <div class="CatAssoc__searchWrap">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+          <input type="search" id="fornAssocBusca" class="CatAssoc__search" placeholder="Buscar fornecedor…" autocomplete="off" />
+        </div>
+        <div class="CatAssoc__list${(fornecedores || []).length > 5 ? " is-scrollable" : ""}" id="fornAssocLista" role="listbox">
+          ${itens}${limparOpt}
+        </div>
+        <input type="hidden" id="fornAssocId" value="${fornecedores?.[0]?.id || ""}" />
+        <input type="hidden" id="fornAssocLimpar" value="0" />
+      </div>`;
+  }
+
+  function ligarPickerAssociarFornecedor(popup) {
+    const lista = popup.querySelector("#fornAssocLista");
+    const hidden = popup.querySelector("#fornAssocId");
+    const limpar = popup.querySelector("#fornAssocLimpar");
+    const busca = popup.querySelector("#fornAssocBusca");
+    if (!lista || !hidden) return;
+
+    const marcar = (btn) => {
+      lista.querySelectorAll(".CatAssoc__opt").forEach((elOpt) => {
+        const on = elOpt === btn;
+        elOpt.classList.toggle("is-selected", on);
+        elOpt.setAttribute("aria-selected", on ? "true" : "false");
+      });
+      hidden.value = btn?.dataset?.id || "";
+      if (limpar) limpar.value = btn?.dataset?.limpar === "1" ? "1" : "0";
+    };
+
+    lista.addEventListener("click", (ev) => {
+      const btn = ev.target.closest(".CatAssoc__opt");
+      if (!btn || !lista.contains(btn)) return;
+      marcar(btn);
+    });
+
+    busca?.addEventListener("input", () => {
+      const q = (busca.value || "").trim().toLowerCase();
+      let visiveis = 0;
+      lista.querySelectorAll(".CatAssoc__opt").forEach((btn) => {
+        const nome = (btn.querySelector(".CatAssoc__name")?.textContent || "").toLowerCase();
+        const ok = !q || nome.includes(q) || btn.dataset.limpar === "1";
+        btn.hidden = !ok;
+        if (ok) visiveis += 1;
+      });
+      let empty = lista.querySelector(".CatAssoc__empty");
+      if (!visiveis) {
+        if (!empty) {
+          empty = document.createElement("p");
+          empty.className = "CatAssoc__empty";
+          empty.textContent = "Nenhum fornecedor encontrado.";
+          lista.appendChild(empty);
+        }
+        empty.hidden = false;
+      } else if (empty) {
+        empty.hidden = true;
+      }
+      const sel = lista.querySelector(".CatAssoc__opt.is-selected");
+      if (sel?.hidden) {
+        const primeiro = lista.querySelector(".CatAssoc__opt:not([hidden])");
+        if (primeiro) marcar(primeiro);
+      }
+    });
+
+    setTimeout(() => busca?.focus(), 40);
+  }
+
+  async function associarFornecedorArmazemLote(ids) {
+    const r = await fetch("/armazem/fornecedores/dados", { credentials: "same-origin" });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.success) throw new Error(j.message || "Erro ao carregar fornecedores.");
+    const fornecedores = (j.dados || []).map((d) => ({
+      id: d.id,
+      nome: d.nome_fantasia || d.nome || `#${d.id}`,
+    }));
+    if (!fornecedores.length) {
+      throw new Error("Cadastre fornecedores locais (Armazém → Fornecedores) antes de associar.");
+    }
+    const res = await Swal.fire({
+      html: montarHtmlAssociarFornecedor(fornecedores, ids.length),
+      width: 420,
+      heightAuto: true,
+      showCancelButton: true,
+      confirmButtonText: "Associar",
+      cancelButtonText: "Cancelar",
+      focusConfirm: false,
+      buttonsStyling: false,
+      customClass: {
+        popup: "CatAssocSwal",
+        htmlContainer: "CatAssocSwal__html",
+        actions: "CatAssocSwal__actions",
+        confirmButton: "CatAssocSwal__confirm",
+        cancelButton: "CatAssocSwal__cancel",
+      },
+      didOpen: (popup) => ligarPickerAssociarFornecedor(popup),
+      preConfirm: () => {
+        const limpar = document.getElementById("fornAssocLimpar")?.value === "1";
+        const v = document.getElementById("fornAssocId")?.value;
+        if (!limpar && !v) {
+          Swal.showValidationMessage("Selecione um fornecedor.");
+          return false;
+        }
+        return { limpar, id: v || null };
+      },
+    });
+    if (!res.isConfirmed) return;
+    const payload = { ids };
+    if (res.value.limpar) payload.limpar = true;
+    else payload.id_armazem_fornecedor = res.value.id;
+    const resp = await fetch(`${BASE}/armazem-fornecedor/associar`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const jj = await resp.json().catch(() => ({}));
+    if (!resp.ok || !jj.success) throw new Error(jj.message || "Erro.");
+    selecionados.clear();
+    syncBulkBar();
+    await Swal.fire({
+      icon: "success",
+      title: "Fornecedor atualizado",
       text: jj.message,
       timer: 2200,
       showConfirmButton: false,
@@ -770,14 +933,4 @@
 
   window.addEventListener("message", (ev) => {
     if (ev.data?.grupo === "atualizarTabela") {
-      carregar().catch((e) => Swal.fire("Erro", e.message, "error"));
-    }
-  });
-
-  initBulkActions();
-  syncTheadStickyOffset();
-  window.addEventListener("resize", syncTheadStickyOffset);
-  carregarCategoriasFiltro()
-    .then(() => carregar())
-    .catch((e) => Swal.fire("Erro", e.message, "error"));
-})();
+      carregar().catch((e) => Swal.fire("Erro",

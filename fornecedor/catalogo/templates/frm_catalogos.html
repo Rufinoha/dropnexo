@@ -117,9 +117,10 @@
 <script>
   window.CAT_BASE = {{ (cat_api_base|default('/catalogos'))|tojson }};
   window.CAT_BLING_CONECTADO = {{ 'true' if bling_conectado else 'false' }};
+  window.CAT_CONTEXTO_ARMAZEM = {{ 'true' if (cat_contexto_armazem or session.get('tenant_tipo_negocio') == 'armazem' or session.get('modulo_ativo') == 'armazem') else 'false' }};
 </script>
 {% if not cat_ocultar_import_export %}
 <script defer src="{{ url_for('fn_importacao.static', filename='script/Simportacao.js') }}?v=12"></script>
 {% endif %}
-<script defer src="{{ url_for('fn_catalogo.static', filename='script/Scatalogos.js') }}?v=15"></script>
+<script defer src="{{ url_for('fn_catalogo.static', filename='script/Scatalogos.js') }}?v=16"></script>
 {% endblock %}
