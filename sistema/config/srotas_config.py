@@ -1295,6 +1295,40 @@ def _tenant_payload(cur, id_tenant: int) -> dict | None:
     from sistema.config.servico_manutencao_tenant import slug_protegido
 
     slug = (row[2] or "").strip().lower()
+    email_comercial = (row[11] or "").strip()
+    telefone_comercial = (row[12] or "").strip()
+
+    # Contato do dono (whatsapp/e-mail do cadastro) — fallback útil no suporte.
+    dono_email = ""
+    dono_whatsapp = ""
+    dono_nome = ""
+    try:
+        cur.execute(
+            """
+            SELECT u.nome, u.email, u.whatsapp
+            FROM tbl_usuario_tenant ut
+            JOIN tbl_usuario u ON u.id = ut.id_usuario
+            JOIN tbl_perfil pf ON pf.id = ut.id_perfil
+            WHERE ut.id_tenant = %s
+              AND ut.ativo = TRUE
+              AND COALESCE(u.ativo, TRUE) = TRUE
+              AND LOWER(pf.codigo) = 'dono'
+            ORDER BY ut.id
+            LIMIT 1
+            """,
+            (id_tenant,),
+        )
+        dono = cur.fetchone()
+        if dono:
+            dono_nome = (dono[0] or "").strip()
+            dono_email = (dono[1] or "").strip()
+            dono_whatsapp = (dono[2] or "").strip()
+    except Exception:
+        pass
+
+    email = email_comercial or dono_email
+    whatsapp = dono_whatsapp or telefone_comercial
+
     return {
         "id": int(row[0]),
         "nome": row[1] or "",
@@ -1307,8 +1341,13 @@ def _tenant_payload(cur, id_tenant: int) -> dict | None:
         "nome_completo": row[8] or "",
         "cidade": row[9] or "",
         "uf": row[10] or "",
-        "email_comercial": row[11] or "",
-        "telefone_comercial": row[12] or "",
+        "email_comercial": email_comercial,
+        "telefone_comercial": telefone_comercial,
+        "email": email,
+        "whatsapp": whatsapp,
+        "dono_nome": dono_nome,
+        "dono_email": dono_email,
+        "dono_whatsapp": dono_whatsapp,
         "contagens": contagens,
         "eh_tenant_sessao": int(session.get("id_tenant") or 0) == int(row[0]),
         "protegido": slug_protegido(slug),

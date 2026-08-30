@@ -13,6 +13,55 @@
   gap: 0.35rem 0.75rem;
 }
 
+.CfgMt_Contato {
+  margin-top: 1rem;
+  padding: 0.75rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.65rem 1rem;
+}
+
+.CfgMt_ContatoItem {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.CfgMt_ContatoLbl {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.CfgMt_ContatoLink {
+  color: #021F81;
+  font-weight: 600;
+  font-size: 0.9rem;
+  text-decoration: none;
+  word-break: break-all;
+}
+
+.CfgMt_ContatoLink:hover {
+  text-decoration: underline;
+}
+
+.CfgMt_ContatoVazio {
+  color: #94a3b8;
+  font-size: 0.85rem;
+}
+
+@media (max-width: 520px) {
+  .CfgMt_Contato {
+    grid-template-columns: 1fr;
+  }
+}
+
 .CfgMt_Warn {
   margin-top: 0.75rem;
   padding: 0.65rem 0.75rem;

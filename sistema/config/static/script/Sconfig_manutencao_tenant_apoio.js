@@ -17,6 +17,11 @@
     ativo: document.getElementById("ativo"),
     limparSeg: document.getElementById("limpar_segmentos"),
     wrapLimpar: document.getElementById("wrap_limpar_seg"),
+    contato: document.getElementById("contato"),
+    linkWhatsapp: document.getElementById("link_whatsapp"),
+    whatsappVazio: document.getElementById("whatsapp_vazio"),
+    linkEmail: document.getElementById("link_email"),
+    emailVazio: document.getElementById("email_vazio"),
     counts: document.getElementById("counts"),
     warn: document.getElementById("warn"),
     btnSalvar: document.getElementById("btnSalvar"),
@@ -28,6 +33,59 @@
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
       .replace(/"/g, "&quot;");
+  }
+
+  function soDigitos(s) {
+    return String(s || "").replace(/\D+/g, "");
+  }
+
+  function formatarWhatsappExibicao(raw) {
+    const d = soDigitos(raw);
+    if (!d) return "";
+    if (window.Util?.formatarTelefone) return window.Util.formatarTelefone(d) || d;
+    return d;
+  }
+
+  function linkWhatsapp(raw) {
+    let d = soDigitos(raw);
+    if (!d) return "";
+    if (d.length >= 10 && d.length <= 11) d = "55" + d;
+    return `https://wa.me/${d}`;
+  }
+
+  function preencherContato(t) {
+    if (el.contato) el.contato.hidden = false;
+    const wa = (t.whatsapp || "").trim();
+    const email = (t.email || t.email_comercial || "").trim();
+
+    if (el.linkWhatsapp && el.whatsappVazio) {
+      const href = linkWhatsapp(wa);
+      if (href) {
+        el.linkWhatsapp.hidden = false;
+        el.whatsappVazio.hidden = true;
+        el.linkWhatsapp.href = href;
+        el.linkWhatsapp.textContent = formatarWhatsappExibicao(wa) || wa;
+        el.linkWhatsapp.title = "Abrir WhatsApp";
+      } else {
+        el.linkWhatsapp.hidden = true;
+        el.linkWhatsapp.removeAttribute("href");
+        el.whatsappVazio.hidden = false;
+      }
+    }
+
+    if (el.linkEmail && el.emailVazio) {
+      if (email && email.includes("@")) {
+        el.linkEmail.hidden = false;
+        el.emailVazio.hidden = true;
+        el.linkEmail.href = `mailto:${email}`;
+        el.linkEmail.textContent = email;
+        el.linkEmail.title = "Abrir e-mail";
+      } else {
+        el.linkEmail.hidden = true;
+        el.linkEmail.removeAttribute("href");
+        el.emailVazio.hidden = false;
+      }
+    }
   }
 
   function atualizarLimparSeg() {
@@ -57,6 +115,7 @@
     }
     if (el.documento) el.documento.value = t.documento || "";
     if (el.ativo) el.ativo.checked = !!t.ativo;
+    preencherContato(t);
 
     const c = t.contagens || {};
     if (el.counts) {
