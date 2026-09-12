@@ -5,14 +5,16 @@
   <title>Precificação — Parâmetros</title>
   {% include "partials/marca_favicon.html" %}
   <link rel="stylesheet" href="{{ url_for('static', filename='style/global_utils.css') }}" />
-  <link rel="stylesheet" href="{{ url_for('fn_parametros.static', filename='style/Cfn_parametros.css') }}?v=4" />
+  <link rel="stylesheet" href="{{ url_for('fn_parametros.static', filename='style/Cfn_parametros.css') }}?v=7" />
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </head>
 <body class="FnPar_ApoioBody">
   <div class="Cl_ContainerApoio FnPar_Apoio">
     <p class="FnPar_Intro">
-      O <strong>preço de venda</strong> do produto é sua referência (custo/fornecedor).
-      O <strong>valor Drop</strong> é o preço oferecido aos vendedores na rede, calculado com as regras abaixo.
+      Há <strong>duas informações distintas</strong>:
+      (1) quanto o vendedor <strong>paga</strong> a você (Valor Drop) e
+      (2) quanto ele <strong>pode vender</strong> ao consumidor (sugestão).
+      O preço do produto no catálogo (ex.: Bling) é só a base do cálculo.
     </p>
 
     <div class="FnPar_ModoBar" role="radiogroup" aria-label="Tipo de precificação">
@@ -24,80 +26,174 @@
       </button>
     </div>
 
-    <div class="FnPar_Secao" id="secGlobal">
-      <p class="FnPar_Hint FnPar_Hint--sec">Mesma regra de ajuste, taxa fixa, comissão e margem de revenda para todo o catálogo.</p>
-      <div class="FnPar_GridForm">
-        <div class="Cl_FormCampo">
-          <label for="pctAjusteGlobal">Ajuste sobre o preço (%)</label>
-          <input type="number" id="pctAjusteGlobal" step="0.01" placeholder="Ex: -10 desconto · +15 acréscimo" />
-          <span class="FnPar_Hint">Negativo = desconto · Positivo = acréscimo</span>
-        </div>
-        <div class="Cl_FormCampo">
-          <label for="pctTaxasGlobal">Taxas (R$)</label>
-          <input type="number" id="pctTaxasGlobal" step="0.01" min="0" value="0" placeholder="0,00" />
-          <span class="FnPar_Hint">Valor fixo somado após o ajuste percentual</span>
-        </div>
-        <div class="Cl_FormCampo">
-          <label for="pctComissaoGlobal">Comissão (%)</label>
-          <input type="number" id="pctComissaoGlobal" step="0.01" value="0" />
-        </div>
-        <div class="Cl_FormCampo">
-          <label for="pctMargemRevendaGlobal">Margem de revenda (%)</label>
-          <input type="number" id="pctMargemRevendaGlobal" step="0.01" min="0" value="80" />
-          <span class="FnPar_Hint">Sugerida ao vendedor sobre o valor Drop</span>
-        </div>
-      </div>
-      <div class="FnPar_SecaoActions">
-        <button type="button" class="Cl_BtnSalvar" id="btnSalvarGlobal">Salvar regra global</button>
-      </div>
-    </div>
+    <div class="FnPar_Layout2Col">
+      <div class="FnPar_ColRegras">
+        <div class="FnPar_Secao" id="secGlobal">
+          <p class="FnPar_Hint FnPar_Hint--sec">Mesma regra para todo o catálogo.</p>
 
-    <div class="FnPar_Secao" id="secCategoria" hidden>
-      <p class="FnPar_Hint FnPar_Hint--sec">Configure uma regra para cada categoria. Produtos usam somente a regra da sua categoria.</p>
-      <div class="FnPar_CatAdd">
-        <div class="FnPar_CatGrid">
-          <div class="Cl_FormCampo FnPar_CatSelect">
-            <label for="selCategoria">Categoria</label>
-            <select id="selCategoria"><option value="">Selecione…</option></select>
+          <div class="FnPar_PrecoBlocos">
+            <section class="FnPar_PrecoBloco FnPar_PrecoBloco--drop" aria-labelledby="tituloDropGlobal">
+              <header class="FnPar_PrecoBlocoHead">
+                <span class="FnPar_PrecoBlocoNum" aria-hidden="true">1</span>
+                <div>
+                  <h3 id="tituloDropGlobal">Quanto o drop paga (Valor Drop)</h3>
+                  <p>Preço que o vendedor te paga. Calculado sobre o preço do produto.</p>
+                </div>
+              </header>
+              <div class="FnPar_GridForm FnPar_GridForm--3">
+                <div class="Cl_FormCampo">
+                  <label for="pctAjusteGlobal">Desconto / acréscimo (%)</label>
+                  <input type="number" id="pctAjusteGlobal" step="0.01" placeholder="Ex: -60" />
+                  <span class="FnPar_Hint">Negativo = desconto · Positivo = acréscimo</span>
+                </div>
+                <div class="Cl_FormCampo">
+                  <label for="pctTaxasGlobal">Taxas (R$)</label>
+                  <input type="number" id="pctTaxasGlobal" step="0.01" min="0" value="0" placeholder="0,00" />
+                  <span class="FnPar_Hint">Valor fixo somado após o %</span>
+                </div>
+                <div class="Cl_FormCampo">
+                  <label for="pctComissaoGlobal">Comissão (%)</label>
+                  <input type="number" id="pctComissaoGlobal" step="0.01" value="0" />
+                  <span class="FnPar_Hint">Opcional, sobre o valor já ajustado</span>
+                </div>
+              </div>
+            </section>
+
+            <section class="FnPar_PrecoBloco FnPar_PrecoBloco--sugestao" aria-labelledby="tituloSugestaoGlobal">
+              <header class="FnPar_PrecoBlocoHead">
+                <span class="FnPar_PrecoBlocoNum" aria-hidden="true">2</span>
+                <div>
+                  <h3 id="tituloSugestaoGlobal">Sugestão de venda ao consumidor</h3>
+                  <p>Não altera o que você recebe. Só orienta o preço de venda do vendedor.</p>
+                </div>
+              </header>
+              <div class="FnPar_GridForm FnPar_GridForm--1">
+                <div class="Cl_FormCampo">
+                  <label for="pctMargemRevendaGlobal">Margem sugerida sobre o Drop (%)</label>
+                  <input type="number" id="pctMargemRevendaGlobal" step="0.01" min="0" value="80" />
+                  <span class="FnPar_Hint">Markup do vendedor em cima do Valor Drop</span>
+                </div>
+              </div>
+            </section>
           </div>
-          <div class="Cl_FormCampo">
-            <label for="pctAjusteCat">Ajuste (%)</label>
-            <input type="number" id="pctAjusteCat" step="0.01" />
-          </div>
-          <div class="Cl_FormCampo">
-            <label for="pctTaxasCat">Taxas (R$)</label>
-            <input type="number" id="pctTaxasCat" step="0.01" min="0" value="0" placeholder="0,00" />
-          </div>
-          <div class="Cl_FormCampo">
-            <label for="pctComissaoCat">Comissão (%)</label>
-            <input type="number" id="pctComissaoCat" step="0.01" value="0" />
-          </div>
-          <div class="Cl_FormCampo">
-            <label for="pctMargemRevendaCat">Margem revenda (%)</label>
-            <input type="number" id="pctMargemRevendaCat" step="0.01" min="0" value="80" />
+
+          <div class="FnPar_SecaoActions">
+            <button type="button" class="Cl_BtnSalvar" id="btnSalvarGlobal">Salvar regra global</button>
           </div>
         </div>
-        <div class="FnPar_CatActions">
-          <button type="button" class="Cl_BtnIncluir" id="btnSalvarCategoria">Salvar categoria</button>
+
+        <div class="FnPar_Secao" id="secCategoria" hidden>
+          <p class="FnPar_Hint FnPar_Hint--sec">Configure uma regra para cada categoria. Produtos usam somente a regra da sua categoria.</p>
+          <div class="FnPar_CatAdd">
+            <div class="Cl_FormCampo FnPar_CatSelect">
+              <label for="selCategoria">Categoria</label>
+              <select id="selCategoria"><option value="">Selecione…</option></select>
+            </div>
+
+            <div class="FnPar_PrecoBlocos">
+              <section class="FnPar_PrecoBloco FnPar_PrecoBloco--drop">
+                <header class="FnPar_PrecoBlocoHead">
+                  <span class="FnPar_PrecoBlocoNum" aria-hidden="true">1</span>
+                  <div>
+                    <h3>Quanto o drop paga</h3>
+                    <p>Valor Drop nesta categoria</p>
+                  </div>
+                </header>
+                <div class="FnPar_GridForm FnPar_GridForm--3">
+                  <div class="Cl_FormCampo">
+                    <label for="pctAjusteCat">Desconto / acréscimo (%)</label>
+                    <input type="number" id="pctAjusteCat" step="0.01" />
+                  </div>
+                  <div class="Cl_FormCampo">
+                    <label for="pctTaxasCat">Taxas (R$)</label>
+                    <input type="number" id="pctTaxasCat" step="0.01" min="0" value="0" placeholder="0,00" />
+                  </div>
+                  <div class="Cl_FormCampo">
+                    <label for="pctComissaoCat">Comissão (%)</label>
+                    <input type="number" id="pctComissaoCat" step="0.01" value="0" />
+                  </div>
+                </div>
+              </section>
+
+              <section class="FnPar_PrecoBloco FnPar_PrecoBloco--sugestao">
+                <header class="FnPar_PrecoBlocoHead">
+                  <span class="FnPar_PrecoBlocoNum" aria-hidden="true">2</span>
+                  <div>
+                    <h3>Sugestão de venda</h3>
+                    <p>Preço sugerido ao consumidor</p>
+                  </div>
+                </header>
+                <div class="FnPar_GridForm FnPar_GridForm--1">
+                  <div class="Cl_FormCampo">
+                    <label for="pctMargemRevendaCat">Margem sugerida sobre o Drop (%)</label>
+                    <input type="number" id="pctMargemRevendaCat" step="0.01" min="0" value="80" />
+                  </div>
+                </div>
+              </section>
+            </div>
+
+            <div class="FnPar_CatActions">
+              <button type="button" class="Cl_BtnIncluir" id="btnSalvarCategoria">Salvar categoria</button>
+            </div>
+          </div>
+          <div class="Cl_TabelaPrincipal FnPar_TblWrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Categoria</th>
+                  <th>Drop: desconto %</th>
+                  <th>Drop: taxas R$</th>
+                  <th>Drop: comissão %</th>
+                  <th>Sugestão: margem %</th>
+                </tr>
+              </thead>
+              <tbody id="tblRegras"></tbody>
+            </table>
+          </div>
         </div>
       </div>
-      <div class="Cl_TabelaPrincipal FnPar_TblWrap">
-        <table>
-          <thead>
-            <tr><th>Escopo</th><th>Categoria</th><th>Ajuste %</th><th>Taxas R$</th><th>Comissão %</th><th>Margem rev. %</th></tr>
-          </thead>
-          <tbody id="tblRegras"></tbody>
-        </table>
-      </div>
+
+      <aside class="FnPar_ColSim" aria-labelledby="tituloSimulacao">
+        <section class="FnPar_Simulacao">
+          <header class="FnPar_SimulacaoHead">
+            <h3 id="tituloSimulacao">Simulação</h3>
+            <p>Atualiza ao mudar os parâmetros. Duplo clique no preço base para simular outro valor.</p>
+          </header>
+          <div class="FnPar_SimResultados FnPar_SimResultados--stack">
+            <article class="FnPar_SimCard FnPar_SimCard--base is-editable" id="cardPrecoBase" title="Duplo clique para alterar">
+              <span class="FnPar_SimLbl">Preço base</span>
+              <strong id="simPrecoBase">R$ 100,00</strong>
+              <input type="number" id="precoSimulacao" class="FnPar_SimPrecoEdit" hidden step="0.01" min="0" value="100" />
+              <small>Duplo clique para alterar</small>
+            </article>
+            <article class="FnPar_SimCard FnPar_SimCard--drop">
+              <span class="FnPar_SimLbl">1 · Drop paga</span>
+              <strong id="simValorDrop">R$ 40,00</strong>
+              <small id="simDropDetalhe">desconto aplicado</small>
+            </article>
+            <article class="FnPar_SimCard FnPar_SimCard--sugestao">
+              <span class="FnPar_SimLbl">2 · Sugestão de venda</span>
+              <strong id="simSugestao">R$ 100,00</strong>
+              <small id="simSugestaoDetalhe">margem sobre o Drop</small>
+            </article>
+            <article class="FnPar_SimCard FnPar_SimCard--lucro">
+              <span class="FnPar_SimLbl">Lucro sugerido do vendedor</span>
+              <strong id="simLucro">R$ 60,00</strong>
+              <small id="simLucroDetalhe">sugestão − Drop</small>
+            </article>
+          </div>
+          <p class="FnPar_Hint FnPar_SimNota">Usa as regras da aba ativa. Não grava no catálogo.</p>
+        </section>
+      </aside>
     </div>
 
     <footer class="FnPar_Footer Cl_BotoesApoio">
       <button type="button" class="Cl_BtnSalvar FnPar_BtnAplicar" id="btnAplicarAgora">Aplicar agora</button>
-      <span class="FnPar_Hint">Recalcula valor_drop em todo o catálogo (substitui ajustes manuais) e publica os produtos na rede.</span>
+      <span class="FnPar_Hint">Recalcula o Valor Drop no catálogo (substitui ajustes manuais) e publica os produtos na rede.</span>
     </footer>
   </div>
   <script>window.PAR_API_BASE = {{ (par_api_base|default('/fornecedor/parametros'))|tojson }};</script>
   <script src="{{ url_for('static', filename='script/global_utils.js') }}"></script>
-  <script src="{{ url_for('fn_parametros.static', filename='script/Sfn_parametros_precificacao.js') }}?v=5"></script>
+  <script src="{{ url_for('fn_parametros.static', filename='script/Sfn_parametros_precificacao.js') }}?v=8"></script>
 </body>
 </html>

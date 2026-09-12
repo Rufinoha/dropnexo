@@ -529,6 +529,7 @@ def abrir_chamado(
         "sistema_origem": "dropnexo",
         "id_tenant": int(id_tenant),
         "tenant_nome": (tenant.get("nome") or "").strip() or None,
+        "empresa_nome": (tenant.get("nome") or "").strip() or None,
         "modulo": (modulo or "").strip() or None,
         "tela": (tela or "").strip() or None,
         "url": (url_origem or "").strip() or None,

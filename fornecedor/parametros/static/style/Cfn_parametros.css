@@ -101,12 +101,243 @@
 }
 .FnPar_Secao h3 { margin: 0 0 12px; font-size: 14px; color: #1c2e3c; }
 .FnPar_GridForm { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 12px; }
+.FnPar_GridForm--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.FnPar_GridForm--1 { grid-template-columns: minmax(0, 280px); }
 .FnPar_CatAdd { margin-bottom: 12px; }
+.FnPar_CatSelect { margin-bottom: 12px; max-width: 360px; }
 .FnPar_CatGrid {
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) repeat(3, minmax(0, 1fr));
   gap: 12px;
   margin-bottom: 12px;
+}
+
+.FnPar_PrecoBlocos {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.FnPar_Layout2Col {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(240px, 1fr);
+  gap: 14px;
+  align-items: start;
+  margin-bottom: 8px;
+}
+
+.FnPar_ColRegras,
+.FnPar_ColSim {
+  min-width: 0;
+}
+
+.FnPar_ColSim {
+  position: sticky;
+  top: 8px;
+}
+
+.FnPar_ColRegras .FnPar_Secao {
+  margin-bottom: 0;
+}
+
+.FnPar_PrecoBloco {
+  border: 1px solid rgba(28, 46, 60, 0.12);
+  border-radius: 12px;
+  padding: 12px 14px;
+  background: #f8fafc;
+}
+
+.FnPar_PrecoBloco--drop {
+  border-color: rgba(2, 31, 129, 0.22);
+  background: linear-gradient(180deg, #f4f7ff 0%, #fff 100%);
+}
+
+.FnPar_PrecoBloco--sugestao {
+  border-color: rgba(4, 120, 87, 0.22);
+  background: linear-gradient(180deg, #f3fdf8 0%, #fff 100%);
+}
+
+.FnPar_PrecoBlocoHead {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.FnPar_PrecoBlocoNum {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 800;
+  color: #fff;
+  background: #021f81;
+}
+
+.FnPar_PrecoBloco--sugestao .FnPar_PrecoBlocoNum {
+  background: #047857;
+}
+
+.FnPar_PrecoBlocoHead h3 {
+  margin: 0 0 2px;
+  font-size: 14px;
+  color: #1c2e3c;
+}
+
+.FnPar_PrecoBlocoHead p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #64748b;
+}
+
+.FnPar_PrecoExemplo {
+  margin: 4px 0 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px dashed rgba(28, 46, 60, 0.14);
+  font-size: 12px;
+  color: #475569;
+  line-height: 1.4;
+}
+
+.FnPar_PrecoExemplo strong { color: #0f172a; }
+
+.FnPar_Simulacao {
+  margin: 0;
+  padding: 14px 14px 12px;
+  border: 1px solid rgba(2, 31, 129, 0.18);
+  border-radius: 12px;
+  background: linear-gradient(180deg, #eef3ff 0%, #fff 72%);
+}
+
+.FnPar_SimulacaoHead {
+  margin-bottom: 12px;
+}
+
+.FnPar_SimulacaoHead h3 {
+  margin: 0 0 4px;
+  font-size: 15px;
+  color: #1c2e3c;
+}
+
+.FnPar_SimulacaoHead p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #64748b;
+}
+
+.FnPar_SimPrecoCampo {
+  min-width: 160px;
+  max-width: 200px;
+}
+
+.FnPar_SimResultados {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.FnPar_SimResultados--stack {
+  grid-template-columns: 1fr;
+}
+
+.FnPar_SimCard {
+  background: #fff;
+  border: 1px solid rgba(28, 46, 60, 0.1);
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.FnPar_SimCard.is-editable {
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.FnPar_SimCard.is-editable:hover {
+  border-color: rgba(2, 31, 129, 0.35);
+  box-shadow: 0 0 0 3px rgba(2, 31, 129, 0.08);
+}
+
+.FnPar_SimCard.is-editing {
+  cursor: default;
+  border-color: var(--marca-hover, #021f81);
+  box-shadow: 0 0 0 3px rgba(2, 31, 129, 0.12);
+}
+
+.FnPar_SimPrecoEdit {
+  width: 100%;
+  box-sizing: border-box;
+  height: 36px;
+  border: 1px solid #d1d9e6;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+  background: #fff;
+}
+
+.FnPar_SimLbl {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.FnPar_SimCard strong {
+  font-size: 18px;
+  color: #0f172a;
+  line-height: 1.2;
+}
+
+.FnPar_SimCard small {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.FnPar_SimCard--drop {
+  border-color: rgba(2, 31, 129, 0.25);
+}
+.FnPar_SimCard--drop strong { color: #021f81; }
+
+.FnPar_SimCard--sugestao {
+  border-color: rgba(4, 120, 87, 0.25);
+}
+.FnPar_SimCard--sugestao strong { color: #047857; }
+
+.FnPar_SimCard--lucro strong { color: #b45309; }
+
+.FnPar_SimNota { margin: 10px 0 0; }
+
+@media (max-width: 900px) {
+  .FnPar_Layout2Col {
+    grid-template-columns: 1fr;
+  }
+  .FnPar_ColSim {
+    position: static;
+    order: -1;
+  }
+  .FnPar_SimResultados { grid-template-columns: 1fr 1fr; }
+  .FnPar_SimResultados--stack { grid-template-columns: 1fr 1fr; }
+}
+
+@media (max-width: 560px) {
+  .FnPar_SimResultados,
+  .FnPar_SimResultados--stack { grid-template-columns: 1fr; }
+  .FnPar_SimPrecoCampo { max-width: none; width: 100%; }
 }
 
 /* Campos: label sempre acima do input */
@@ -181,7 +412,10 @@
 .FnPar_BtnAplicar { min-width: 160px; flex-shrink: 0; }
 .FnPar_Hint { font-size: 11px; color: #8a939e; display: block; margin-top: 4px; }
 @media (max-width: 900px) {
-  .FnPar_GridForm, .FnPar_CatGrid { grid-template-columns: 1fr; }
+  .FnPar_GridForm,
+  .FnPar_GridForm--3,
+  .FnPar_GridForm--1,
+  .FnPar_CatGrid { grid-template-columns: 1fr; }
   .mp-req-grid { grid-template-columns: 1fr; }
   .mp-req-taxa { flex-direction: column; align-items: stretch; }
   .mp-req-valor { flex: none; width: 100%; }

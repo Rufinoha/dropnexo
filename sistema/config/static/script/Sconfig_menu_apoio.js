@@ -14,6 +14,7 @@
     tipo_abrir: document.getElementById("tipo_abrir"),
     parent_id: document.getElementById("parent_id"),
     modulo: document.getElementById("modulo"),
+    contexto_modulo: document.getElementById("contexto_modulo"),
     sequencia: document.getElementById("sequencia"),
     statusToggle: document.getElementById("statusToggle"),
     paiToggle: document.getElementById("paiToggle"),
@@ -83,6 +84,16 @@
       o.textContent = m.nome;
       el.modulo.appendChild(o);
     });
+
+    if (el.contexto_modulo && Array.isArray(c.contextos) && c.contextos.length) {
+      el.contexto_modulo.innerHTML = "";
+      c.contextos.forEach((ctx) => {
+        const o = document.createElement("option");
+        o.value = ctx;
+        o.textContent = ctx === "comum" ? "comum (todos)" : ctx;
+        el.contexto_modulo.appendChild(o);
+      });
+    }
   }
 
   async function carregarApoio(id) {
@@ -109,6 +120,7 @@
     el.tipo_abrir.value = d.tipo_abrir || "";
     el.parent_id.value = d.parent_id || "";
     el.modulo.value = d.id_modulo || "";
+    if (el.contexto_modulo) el.contexto_modulo.value = d.contexto_modulo || "comum";
     el.sequencia.value = d.sequencia ?? "";
     el.statusToggle.checked = !!d.status;
     el.paiToggle.checked = !!d.pai;
@@ -126,6 +138,7 @@
       tipo_abrir: el.tipo_abrir.value || "",
       parent_id: el.parent_id.value || null,
       id_modulo: el.modulo.value ? Number(el.modulo.value) : null,
+      contexto_modulo: el.contexto_modulo ? (el.contexto_modulo.value || "comum") : "comum",
       sequencia: el.sequencia.value ? Number(el.sequencia.value) : null,
       status: !!el.statusToggle.checked,
       pai: !!el.paiToggle.checked,

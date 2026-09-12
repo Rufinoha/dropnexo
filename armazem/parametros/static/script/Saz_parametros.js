@@ -122,8 +122,8 @@
       GlobalUtils.abrirJanelaApoioModal({
         rota: "/armazem/parametros/precificacao",
         titulo: "Precificação",
-        largura: 920,
-        altura: 540,
+        largura: 960,
+        altura: 720,
         nivel: 2,
       });
     }

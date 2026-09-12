@@ -492,7 +492,10 @@ def config_menu_dados():
         )
         params.append(menu_pai)
     if id_modulo:
-        where.append("m.id_modulo = %s")
+        # Inclui Dashboard (comum) em qualquer filtro de módulo de negócio
+        where.append(
+            "(m.id_modulo = %s OR (COALESCE(m.contexto_modulo, '') = 'comum' AND COALESCE(m.nav_codigo, '') = 'inicio'))"
+        )
         params.append(int(id_modulo))
 
     where_sql = " AND ".join(where)
@@ -559,7 +562,7 @@ def config_menu_apoio():
         cur.execute(
             """
             SELECT id, nome_menu, descricao, data_page, icone, tipo_abrir, ordem,
-                   parent_id, status, obs, pai, id_modulo, nav_codigo
+                   parent_id, status, obs, pai, id_modulo, nav_codigo, contexto_modulo
             FROM tbl_menu WHERE id = %s
             """,
             (_id,),
@@ -581,9 +584,38 @@ def config_menu_apoio():
             pai=r[10],
             id_modulo=r[11],
             nav_codigo=r[12],
+            contexto_modulo=r[13] or "comum",
         )
     finally:
         conn.close()
+
+
+def _contexto_modulo_de_id(cur, id_modulo, nav_codigo: str | None, data_page: str | None, contexto_informado: str | None) -> str:
+    """Deriva contexto_modulo sem misturar rotas entre módulos."""
+    nav = (nav_codigo or "").strip().lower()
+    page = (data_page or "").strip().lower()
+    if nav == "inicio" or page in ("/index", "index"):
+        return "comum"
+    ctx = (contexto_informado or "").strip().lower()
+    if ctx in ("fornecedor", "vendedor", "armazem", "comum"):
+        return ctx
+    if id_modulo:
+        cur.execute("SELECT modulo FROM tbl_menu_modulo WHERE id = %s", (int(id_modulo),))
+        row = cur.fetchone()
+        nome = (row[0] or "").strip().lower() if row else ""
+        if "armaz" in nome:
+            return "armazem"
+        if "fornecedor" in nome:
+            return "fornecedor"
+        if "vendedor" in nome:
+            return "vendedor"
+    if nav.startswith("fn_") or page.startswith("/fornecedor/") or page == "/catalogos" or nav == "catalogos":
+        return "fornecedor"
+    if nav.startswith("az_") or page.startswith("/armazem/"):
+        return "armazem"
+    if nav.startswith("vd_") or page.startswith("/vendedor/") or page in ("/fornecedores", "/meus-produtos", "/integracoes"):
+        return "vendedor"
+    return "comum"
 
 
 @config_bp.post("/configuracoes/itens-menu/salvar")
@@ -600,10 +632,15 @@ def config_menu_salvar():
     data_page = (b.get("data_page") or "").strip()
     if data_page and not data_page.startswith("/") and "://" not in data_page:
         data_page = "/" + data_page
+    nav_codigo = (b.get("nav_codigo") or "").strip() or None
+    id_modulo = b.get("id_modulo")
 
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
+        contexto = _contexto_modulo_de_id(cur, id_modulo, nav_codigo, data_page, b.get("contexto_modulo"))
+        if contexto == "comum":
+            id_modulo = None
         _id = b.get("id")
         campos = (
             nome_menu,
@@ -616,15 +653,16 @@ def config_menu_salvar():
             normalizar_bool(b.get("status"), True),
             (b.get("obs") or "").strip(),
             normalizar_bool(b.get("pai"), False),
-            b.get("id_modulo"),
-            (b.get("nav_codigo") or "").strip() or None,
+            id_modulo,
+            nav_codigo,
+            contexto,
         )
         if _id:
             cur.execute(
                 """
                 UPDATE tbl_menu SET nome_menu=%s, descricao=%s, data_page=%s, icone=%s,
                     tipo_abrir=%s, ordem=%s, parent_id=%s, status=%s, obs=%s, pai=%s,
-                    id_modulo=%s, nav_codigo=%s
+                    id_modulo=%s, nav_codigo=%s, contexto_modulo=%s
                 WHERE id=%s
                 """,
                 campos + (_id,),
@@ -634,8 +672,8 @@ def config_menu_salvar():
             cur.execute(
                 """
                 INSERT INTO tbl_menu (nome_menu, descricao, data_page, icone, tipo_abrir,
-                    ordem, parent_id, status, obs, pai, id_modulo, nav_codigo)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id
+                    ordem, parent_id, status, obs, pai, id_modulo, nav_codigo, contexto_modulo)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id
                 """,
                 campos,
             )
@@ -681,12 +719,20 @@ def config_menu_combos():
         menus_pai = [r[0] for r in cur.fetchall()]
         cur.execute("SELECT id, nome_menu FROM tbl_menu WHERE pai = TRUE ORDER BY nome_menu")
         pais = [{"id": r[0], "nome_menu": r[1]} for r in cur.fetchall()]
-        cur.execute("SELECT id, modulo FROM tbl_menu_modulo WHERE ativo = TRUE ORDER BY ordem, modulo")
+        cur.execute(
+            """
+            SELECT id, modulo FROM tbl_menu_modulo
+            WHERE ativo = TRUE
+              AND LOWER(TRIM(modulo)) IN ('fornecedor', 'vendedor', 'armazém', 'armazem')
+            ORDER BY ordem, modulo
+            """
+        )
         modulos = [{"id": r[0], "nome": r[1]} for r in cur.fetchall()]
         return jsonify(
             menus_pai=menus_pai,
             pais=pais,
             modulos=modulos,
+            contextos=["comum", "fornecedor", "vendedor", "armazem"],
             tipos_abrir=["Mesma Janela", "Nova Janela"],
             icones_em_uso=["layout-dashboard", "users", "package", "shopping-bag", "plug", "settings"],
         )
@@ -755,6 +801,32 @@ def _reparar_acentos_menu_armazem(cur) -> None:
     )
 
 
+def _garantir_dashboard_primeiro(cur) -> None:
+    """Garante Dashboard (inicio / comum) como primeiro item da sidebar."""
+    cur.execute(
+        """
+        UPDATE tbl_menu
+           SET ordem = 1,
+               status = TRUE,
+               pai = TRUE,
+               parent_id = NULL,
+               contexto_modulo = 'comum',
+               nome_menu = 'Dashboard',
+               data_page = '/index'
+         WHERE COALESCE(nav_codigo, '') = 'inicio'
+            OR COALESCE(data_page, '') IN ('/index', 'index')
+        """
+    )
+
+
+def _dashboard_primeiro_na_lista(itens: list[dict]) -> list[dict]:
+    dash = [i for i in itens if (i.get("nav_codigo") or "").lower() == "inicio"]
+    if not dash:
+        return itens
+    outros = [i for i in itens if (i.get("nav_codigo") or "").lower() != "inicio"]
+    return dash + outros
+
+
 def carregar_menu_sidebar() -> list[dict]:
     from sistema.plataforma.sessao import garantir_modulo_sessao, resolver_url_menu
 
@@ -784,6 +856,14 @@ def carregar_menu_sidebar() -> list[dict]:
                     conn.rollback()
                 except Exception:
                     pass
+        try:
+            _garantir_dashboard_primeiro(cur)
+            conn.commit()
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
 
         if acesso_total_menu:
             cur.execute(
@@ -828,7 +908,7 @@ def carregar_menu_sidebar() -> list[dict]:
                     "pai": pai,
                 }
             )
-        return itens
+        return _dashboard_primeiro_na_lista(itens)
     except Exception:
         return _menu_sidebar_fallback(mod_ativo)
     finally:
@@ -851,7 +931,8 @@ def _menu_sidebar_fallback(mod_ativo: str = "vendedor") -> list[dict]:
         {"nome": "Dashboard", "url": url_for("dashboard.index"), "icone_svg": _ICONES_SVG["layout-dashboard"], "nav_codigo": "inicio"},
     ]
     if mod_ativo == MODULO_FORNECEDOR:
-        return [
+        return comum + [
+            {"nome": "Pedidos", "url": url_for("fn_pedidos.pedidos"), "icone_svg": _ICONES_SVG["shopping-bag"], "nav_codigo": "fn_pedidos"},
             {"nome": "Catálogo", "url": url_for("fn_catalogo.pagina"), "icone_svg": _ICONES_SVG["package"], "nav_codigo": "catalogos"},
         ]
     if mod_ativo == MODULO_ARMAZEM:
@@ -1246,7 +1327,8 @@ def manutencao_tenant_dados():
         cur.execute(
             f"""
             SELECT t.id, t.nome, t.slug, t.tipo_negocio, t.plano, t.ativo, t.documento,
-                   t.cidade, t.uf
+                   t.cidade, t.uf, t.tipo_pessoa,
+                   COALESCE(NULLIF(TRIM(t.razao_social), ''), NULLIF(TRIM(t.nome_completo), ''), '')
             FROM tbl_tenant t
             WHERE {" AND ".join(where)}
             ORDER BY t.id DESC
@@ -1259,6 +1341,15 @@ def manutencao_tenant_dados():
         itens = []
         for r in cur.fetchall():
             slug = r[2] or ""
+            documento = (r[6] or "").strip()
+            digitos = "".join(ch for ch in documento if ch.isdigit())
+            tipo_pessoa = (r[9] or "").strip().upper()
+            if not tipo_pessoa:
+                if len(digitos) == 14:
+                    tipo_pessoa = "J"
+                elif len(digitos) == 11:
+                    tipo_pessoa = "F"
+            razao = (r[10] or "").strip() if tipo_pessoa == "J" else ""
             itens.append(
                 {
                     "id": int(r[0]),
@@ -1267,9 +1358,11 @@ def manutencao_tenant_dados():
                     "tipo_negocio": (r[3] or "vendedor").lower(),
                     "plano": (r[4] or "starter").lower(),
                     "ativo": bool(r[5]),
-                    "documento": r[6] or "",
+                    "documento": documento,
                     "cidade": r[7] or "",
                     "uf": r[8] or "",
+                    "tipo_pessoa": tipo_pessoa,
+                    "razao_social": razao,
                     "eh_tenant_sessao": int(session.get("id_tenant") or 0) == int(r[0]),
                     "protegido": slug_protegido(slug),
                 }

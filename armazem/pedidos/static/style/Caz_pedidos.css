@@ -1,4 +1,4 @@
-/* Pedidos recebidos — fornecedor */
+/* Pedidos — armazém */
 .PdFn_Page {
   --pdfn-navy: #021f81;
   --pdfn-navy-deep: #011456;
@@ -9,9 +9,11 @@
   --pdfn-amber: #d97706;
   --pdfn-teal: #0f766e;
   --pdfn-ok: #047857;
-  max-width: 1180px;
-  margin: 0 auto;
+  max-width: none;
+  width: 100%;
+  margin: 0;
   padding-bottom: 3rem;
+  box-sizing: border-box;
 }
 
 .PdFn_Hero {

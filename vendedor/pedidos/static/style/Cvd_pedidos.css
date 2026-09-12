@@ -1,4 +1,4 @@
-.Pd_Page { max-width: 1200px; margin: 0 auto; padding-bottom: 2rem; }
+.Pd_Page { max-width: none; width: 100%; margin: 0; padding-bottom: 2rem; box-sizing: border-box; }
 
 .Pd_Header {
   display: flex;

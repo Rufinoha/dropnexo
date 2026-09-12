@@ -54,6 +54,8 @@
           <th>ID</th>
           <th>Nome</th>
           <th>Slug</th>
+          <th>CPF / CNPJ</th>
+          <th>Razão social</th>
           <th>Tipo</th>
           <th>Plano</th>
           <th>Ativo</th>
@@ -61,12 +63,12 @@
         </tr>
       </thead>
       <tbody id="ob_listaTenants">
-        <tr><td colspan="7">Carregando…</td></tr>
+        <tr><td colspan="9">Carregando…</td></tr>
       </tbody>
     </table>
   </div>
 </div>
 {% endblock %}
 {% block page_js %}
-<script src="{{ url_for('config.static', filename='script/Sconfig_manutencao_tenant.js') }}?v=3"></script>
+<script src="{{ url_for('config.static', filename='script/Sconfig_manutencao_tenant.js') }}?v=4"></script>
 {% endblock %}

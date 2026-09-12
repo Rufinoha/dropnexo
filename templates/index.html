@@ -3,7 +3,11 @@
 {% set nav_ativo = 'inicio' %}
 {% block topbar_title %}Dashboard{% endblock %}
 {% block head_extra %}
-{% if modulo_ativo in ('vendedor', 'fornecedor') %}
+{% if modulo_ativo == 'vendedor' %}
+<link rel="stylesheet" href="{{ url_for('dashboard.static', filename='style/Cdashboard_vendedor.css') }}?v=2" />
+{% elif modulo_ativo == 'fornecedor' %}
+<link rel="stylesheet" href="{{ url_for('dashboard.static', filename='style/Cdashboard_fornecedor.css') }}?v=1" />
+{% elif modulo_ativo == 'armazem' %}
 <link rel="stylesheet" href="{{ url_for('dashboard.static', filename='style/Cdashboard_vendedor.css') }}?v=2" />
 {% endif %}
 {% endblock %}
@@ -15,11 +19,12 @@
     · tipo
     <strong>
       {%- if tipo_negocio == 'fornecedor' -%}Fornecedor
+      {%- elif tipo_negocio == 'armazem' -%}Armazém
       {%- elif tipo_negocio == 'hibrido' -%}Híbrido
       {%- else -%}Vendedor
       {%- endif -%}
     </strong>
-    {%- if tipo_negocio == 'hibrido' -%}
+    {%- if session.get('eh_desenvolvedor') or tipo_negocio == 'hibrido' -%}
     · módulo ativo <strong>{{ modulo_ativo_rotulo }}</strong>
     {%- endif -%}
     · plano {{ session.get('tenant_plano', 'starter') }}
@@ -60,36 +65,106 @@
 </div>
 
 {% elif modulo_ativo == 'fornecedor' %}
-<div class="Cl_ContainerApoio Cl_PainelPagina DashVd" id="dash_fn" data-loading="1">
-  <p class="DashVd_Loading" id="dash_fn_loading">Carregando painel…</p>
-  <div id="dash_fn_erro" class="DashVd_Erro" hidden></div>
+<div class="Cl_ContainerApoio Cl_PainelPagina DashFn" id="dash_fn" data-loading="1">
+  <p class="DashFn_Loading" id="dash_fn_loading">Montando seu painel…</p>
+  <div id="dash_fn_erro" class="DashFn_Erro" hidden></div>
 
-  <section class="DashVd_Secao" id="dash_fn_alertas_wrap" hidden>
-    <h3 class="DashVd_Titulo">Precisa da sua atenção</h3>
-    <div id="dash_fn_alertas" class="DashVd_Alertas"></div>
-  </section>
+  <div class="DashFn_Body">
+    <section class="DashFn_Kpis" aria-label="Indicadores">
+      <article class="DashFn_Kpi" data-kpi="pedidos_hoje">
+        <div class="DashFn_KpiTop">
+          <span class="DashFn_KpiLbl">Pedidos do dia</span>
+          <span class="DashFn_KpiIcon" data-ico="bag"></span>
+        </div>
+        <div class="DashFn_KpiVal" data-k="pedidos_hoje">—</div>
+        <div class="DashFn_KpiSub">Criados hoje</div>
+      </article>
 
-  <section class="DashVd_Secao" id="dash_fn_ok" hidden>
-    <div class="DashVd_OkCard">Tudo em dia por aqui. Nenhum alerta no momento.</div>
-  </section>
+      <article class="DashFn_Kpi" data-kpi="pedidos_aguardando">
+        <div class="DashFn_KpiTop">
+          <span class="DashFn_KpiLbl">Aguardando aprovação</span>
+          <span class="DashFn_KpiIcon" data-ico="clock"></span>
+        </div>
+        <div class="DashFn_KpiVal" data-k="pedidos_aguardando">—</div>
+        <div class="DashFn_KpiSub">Pagamentos para confirmar</div>
+      </article>
 
-  <section class="DashVd_Secao">
-    <h3 class="DashVd_Titulo">Últimos 7 dias</h3>
-    <div class="DashVd_Kpis" id="dash_fn_kpis">
-      <article class="DashVd_Kpi"><span class="DashVd_KpiVal" data-k="pedidos">—</span><span class="DashVd_KpiLbl">Pedidos</span></article>
-      <article class="DashVd_Kpi"><span class="DashVd_KpiVal" data-k="fat">—</span><span class="DashVd_KpiLbl">Faturamento</span></article>
-      <article class="DashVd_Kpi"><span class="DashVd_KpiVal" data-k="vendedores">—</span><span class="DashVd_KpiLbl">Vendedores ativos</span></article>
-      <article class="DashVd_Kpi"><span class="DashVd_KpiVal" data-k="aguardando">—</span><span class="DashVd_KpiLbl">Aguardando aprovação</span></article>
-    </div>
-  </section>
+      <article class="DashFn_Kpi is-ok" data-kpi="vendedores_ativos">
+        <div class="DashFn_KpiTop">
+          <span class="DashFn_KpiLbl">Vendedores ativos</span>
+          <span class="DashFn_KpiIcon" data-ico="users"></span>
+        </div>
+        <div class="DashFn_KpiVal" data-k="vendedores_ativos">—</div>
+        <div class="DashFn_KpiSub">Rede aprovada</div>
+      </article>
 
-  <section class="DashVd_Secao">
-    <div class="DashVd_SecaoHead">
-      <h3 class="DashVd_Titulo">Pedidos recentes</h3>
-      <a class="Cl_BtnLink" href="{{ url_for('fn_pedidos.pedidos') }}">Ver todos</a>
-    </div>
-    <div id="dash_fn_pedidos" class="DashVd_Pedidos"></div>
-  </section>
+      <article class="DashFn_Kpi" data-kpi="vendedores_aguardando">
+        <div class="DashFn_KpiTop">
+          <span class="DashFn_KpiLbl">Vendedores aguardando</span>
+          <span class="DashFn_KpiIcon" data-ico="userPlus"></span>
+        </div>
+        <div class="DashFn_KpiVal" data-k="vendedores_aguardando">—</div>
+        <div class="DashFn_KpiSub">Solicitações de vínculo</div>
+      </article>
+
+      <article class="DashFn_Kpi is-catalog" data-kpi="catalogo">
+        <div class="DashFn_KpiTop">
+          <span class="DashFn_KpiLbl">Catálogo</span>
+          <span class="DashFn_KpiIcon" data-ico="box"></span>
+        </div>
+        <div class="DashFn_KpiSplit">
+          <strong data-k="produtos_total">—</strong>
+          <span>× <span data-k="produtos_publicados">—</span> publicados</span>
+        </div>
+        <div class="DashFn_BarMini" title="Publicados no total">
+          <i data-bar-produtos></i>
+        </div>
+      </article>
+    </section>
+
+    <section class="DashFn_ChartCard" aria-label="Faturamento mensal">
+      <div class="DashFn_Head">
+        <div>
+          <h3 class="DashFn_Titulo">Faturamento mês a mês</h3>
+          <p class="DashFn_Sub">Últimos 12 meses · passe o mouse nas barras</p>
+        </div>
+        <div class="DashFn_Tot">
+          <span class="DashFn_TotVal" id="dash_fn_fat_12m">—</span>
+          <span class="DashFn_TotLbl">Total 12 meses</span>
+        </div>
+      </div>
+      <div class="DashFn_Chart" id="dash_fn_chart"></div>
+    </section>
+
+    <section class="DashFn_Ranks" aria-label="Rankings">
+      <article class="DashFn_RankCard">
+        <div class="DashFn_Head">
+          <div>
+            <h3 class="DashFn_Titulo">Top 5 vendedores</h3>
+            <p class="DashFn_Sub">Maior faturamento nos últimos 12 meses</p>
+          </div>
+        </div>
+        <div class="DashFn_List" id="dash_fn_top_vendedores"></div>
+      </article>
+
+      <article class="DashFn_RankCard">
+        <div class="DashFn_Head">
+          <div>
+            <h3 class="DashFn_Titulo">Top 5 produtos</h3>
+            <p class="DashFn_Sub">Mais vendidos · quantidade nos últimos 12 meses</p>
+          </div>
+        </div>
+        <div class="DashFn_List" id="dash_fn_top_produtos"></div>
+      </article>
+    </section>
+  </div>
+</div>
+
+{% elif modulo_ativo == 'armazem' %}
+<div class="Cl_ContainerApoio Cl_PainelPagina">
+  <p style="margin:0 0 1rem;color:#5c6570;">
+    Bem-vindo ao módulo <strong>Armazém</strong>. Use o menu ao lado para gerenciar fornecedores, estoque e pedidos.
+  </p>
 </div>
 
 {% else %}
@@ -104,6 +179,6 @@
 {% if modulo_ativo == 'vendedor' %}
 <script src="{{ url_for('dashboard.static', filename='script/Sdashboard_vendedor.js') }}?v=2"></script>
 {% elif modulo_ativo == 'fornecedor' %}
-<script src="{{ url_for('dashboard.static', filename='script/Sdashboard_fornecedor.js') }}?v=1"></script>
+<script src="{{ url_for('dashboard.static', filename='script/Sdashboard_fornecedor.js') }}?v=2"></script>
 {% endif %}
 {% endblock %}

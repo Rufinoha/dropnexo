@@ -22,6 +22,17 @@
     return `<span class="CfgMt_Badge CfgMt_Badge--${esc(x)}">${esc(x)}</span>`;
   }
 
+  function formatarDocumento(doc, tipoPessoa) {
+    const raw = String(doc || "").trim();
+    if (!raw) return "—";
+    const dig = raw.replace(/\D+/g, "");
+    const U = window.Util || {};
+    const ehCnpj = (tipoPessoa || "").toUpperCase() === "J" || dig.length === 14;
+    if (ehCnpj && U.formatarCNPJ) return esc(U.formatarCNPJ(dig) || raw);
+    if (dig.length === 11 && U.formatarCPF) return esc(U.formatarCPF(dig) || raw);
+    return esc(raw);
+  }
+
   function abrirApoio(id) {
     window.GlobalUtils?.abrirJanelaApoioModal({
       rota: `${BASE}/editar`,
@@ -41,14 +52,14 @@
     if (q) qs.set("q", q);
     if (tipo) qs.set("tipo", tipo);
     if (ativo !== "") qs.set("ativo", ativo);
-    el.lista.innerHTML = `<tr><td colspan="7">Carregando…</td></tr>`;
+    el.lista.innerHTML = `<tr><td colspan="9">Carregando…</td></tr>`;
     try {
       const r = await fetch(`${BASE}/dados?${qs}`, { credentials: "same-origin" });
       const j = await r.json();
       if (!r.ok || !j.success) throw new Error(j.message || "Falha ao listar.");
       const itens = j.itens || [];
       if (!itens.length) {
-        el.lista.innerHTML = `<tr><td colspan="7">Nenhum tenant encontrado.</td></tr>`;
+        el.lista.innerHTML = `<tr><td colspan="9">Nenhum tenant encontrado.</td></tr>`;
         return;
       }
       const util = window.Util || { gerarIconeTech: () => "…" };
@@ -63,11 +74,17 @@
             : t.eh_tenant_sessao
               ? "Não exclua o tenant da sessão atual"
               : "Excluir";
+          const ehCnpj =
+            String(t.tipo_pessoa || "").toUpperCase() === "J" ||
+            String(t.documento || "").replace(/\D+/g, "").length === 14;
+          const razao = ehCnpj ? esc(t.razao_social || "") || "—" : "—";
           return `
         <tr data-id="${t.id}">
           <td>${t.id}</td>
           <td><strong>${esc(t.nome)}</strong>${sessao}</td>
           <td>${esc(t.slug)}</td>
+          <td>${formatarDocumento(t.documento, t.tipo_pessoa)}</td>
+          <td>${razao}</td>
           <td>${badgeTipo(t.tipo_negocio)}</td>
           <td>${esc(t.plano)}</td>
           <td>${t.ativo ? "Sim" : "Não"}</td>
@@ -81,7 +98,7 @@
       window.lucide?.createIcons?.();
       window.Util?.gerarIconeTech?.refresh?.();
     } catch (e) {
-      el.lista.innerHTML = `<tr><td colspan="7">${esc(e.message)}</td></tr>`;
+      el.lista.innerHTML = `<tr><td colspan="9">${esc(e.message)}</td></tr>`;
     }
   }
 

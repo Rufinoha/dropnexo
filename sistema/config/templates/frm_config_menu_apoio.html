@@ -58,6 +58,18 @@
         <label for="modulo">Módulo</label>
         <select id="modulo"></select>
       </div>
+      <div class="Cl_FormCampo">
+        <label for="contexto_modulo">Contexto (sidebar)</label>
+        <select id="contexto_modulo">
+          <option value="comum">comum (todos)</option>
+          <option value="fornecedor">fornecedor</option>
+          <option value="vendedor">vendedor</option>
+          <option value="armazem">armazem</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="CfgApoio_Grid CfgApoio_Grid--3">
       <div class="Cl_FormCampo CfgApoio_ColNarrow">
         <label for="sequencia">Sequência</label>
         <input type="number" id="sequencia" />
@@ -89,6 +101,6 @@
   </div>
 
   <script src="{{ url_for('static', filename='script/global_utils.js') }}"></script>
-  <script src="{{ url_for('config.static', filename='script/Sconfig_menu_apoio.js') }}?v=2"></script>
+  <script src="{{ url_for('config.static', filename='script/Sconfig_menu_apoio.js') }}?v=3"></script>
 </body>
 </html>

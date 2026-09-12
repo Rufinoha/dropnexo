@@ -1,13 +1,7 @@
-# sistema/dashboard/servico_dashboard_fornecedor.py — resumo operacional do fornecedor
+# sistema/dashboard/servico_dashboard_fornecedor.py — painel operacional do fornecedor
 from __future__ import annotations
 
-from core.pedidos.notificacoes import STATUS_LABEL
 from core.pedidos.servico import col_status_vendedor
-
-CANAIS_STATUS = (
-    ("tbl_integracao_bling", "Bling", "/integracoes/bling"),
-    ("tbl_integracao_mercadopago", "Mercado Pago", "/integracoes/mercado-pago"),
-)
 
 
 def _fmt_brl(v) -> str:
@@ -18,34 +12,66 @@ def _fmt_brl(v) -> str:
     return f"R$ {n:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
-def _tabela_existe(cur, nome: str) -> bool:
-    cur.execute(
-        """
-        SELECT 1 FROM information_schema.tables
-        WHERE table_schema IN (current_schema(), 'public')
-          AND table_name = %s
-        LIMIT 1
-        """,
-        (nome,),
+def _mes_rotulo(ym: str) -> str:
+    """'2026-03' → 'mar/26'."""
+    meses = (
+        "jan",
+        "fev",
+        "mar",
+        "abr",
+        "mai",
+        "jun",
+        "jul",
+        "ago",
+        "set",
+        "out",
+        "nov",
+        "dez",
     )
-    return bool(cur.fetchone())
+    try:
+        y, m = ym.split("-")
+        return f"{meses[int(m) - 1]}/{y[-2:]}"
+    except Exception:
+        return ym
 
 
 def montar_dashboard_fornecedor(cur, id_fornecedor: int) -> dict:
     cv = col_status_vendedor(cur)
+    excluidos = f"COALESCE({cv}, '') NOT IN ('rascunho', 'importado', 'cancelado')"
 
+    # Pedidos do dia
     cur.execute(
         f"""
-        SELECT COUNT(*)::int, COALESCE(SUM(valor_total), 0)
+        SELECT COUNT(*)::int
         FROM tbl_pedido
         WHERE id_tenant_fornecedor = %s
-          AND criado_em >= NOW() - INTERVAL '7 days'
-          AND COALESCE({cv}, '') NOT IN ('rascunho', 'importado', 'cancelado')
+          AND criado_em >= date_trunc('day', NOW())
+          AND criado_em < date_trunc('day', NOW()) + INTERVAL '1 day'
+          AND {excluidos}
         """,
         (id_fornecedor,),
     )
-    ped_7d, gmv_7d = cur.fetchone()
+    pedidos_hoje = int(cur.fetchone()[0] or 0)
 
+    # Pedidos aguardando aprovação do fornecedor (PIX / confirmação)
+    cur.execute(
+        f"""
+        SELECT COUNT(*)::int
+        FROM tbl_pedido
+        WHERE id_tenant_fornecedor = %s
+          AND (
+            COALESCE({cv}, '') = 'aguardando_confirmacao'
+            OR (
+              COALESCE(status_pagamento, '') = 'comprovante_enviado'
+              AND COALESCE({cv}, '') IN ('aguardando_pagamento', 'aguardando_confirmacao')
+            )
+          )
+        """,
+        (id_fornecedor,),
+    )
+    pedidos_aguardando = int(cur.fetchone()[0] or 0)
+
+    # Vínculos
     cur.execute(
         """
         SELECT status, COUNT(*)::int
@@ -60,159 +86,147 @@ def montar_dashboard_fornecedor(cur, id_fornecedor: int) -> dict:
     for st, qtd in cur.fetchall():
         vinculos[(st or "").strip()] = int(qtd or 0)
 
-    cur.execute(
-        f"""
-        SELECT COUNT(*)::int
-        FROM tbl_pedido
-        WHERE id_tenant_fornecedor = %s
-          AND COALESCE(status_pagamento, '') = 'comprovante_enviado'
-          AND COALESCE({cv}, '') = 'aguardando_pagamento'
-        """,
-        (id_fornecedor,),
-    )
-    pix_validar = int(cur.fetchone()[0] or 0)
-
-    cur.execute(
-        f"""
-        SELECT COUNT(*)::int
-        FROM tbl_pedido
-        WHERE id_tenant_fornecedor = %s
-          AND COALESCE({cv}, '') = 'pago'
-        """,
-        (id_fornecedor,),
-    )
-    pedidos_expedir = int(cur.fetchone()[0] or 0)
-
+    # Catálogo: total × publicados
     cur.execute(
         """
-        SELECT COUNT(*)::int FROM tbl_produto
-        WHERE id_tenant = %s AND publicado = TRUE
+        SELECT COUNT(*)::int,
+               COUNT(*) FILTER (WHERE publicado = TRUE)::int
+        FROM tbl_produto
+        WHERE id_tenant = %s
         """,
         (id_fornecedor,),
     )
-    produtos_ativos = int(cur.fetchone()[0] or 0)
+    row_prod = cur.fetchone() or (0, 0)
+    produtos_total = int(row_prod[0] or 0)
+    produtos_publicados = int(row_prod[1] or 0)
+    pct_pub = round((produtos_publicados / produtos_total) * 100) if produtos_total else 0
 
+    # Faturamento mês a mês (12 meses)
     cur.execute(
         f"""
-        SELECT p.id, p.numero, COALESCE(p.{cv}, '') AS status_v,
-               p.valor_total, p.criado_em, p.origem,
-               COALESCE(NULLIF(TRIM(tv.nome_fantasia), ''), NULLIF(TRIM(tv.nome), ''), 'Vendedor')
-        FROM tbl_pedido p
-        LEFT JOIN tbl_tenant tv ON tv.id = p.id_tenant_vendedor
-        WHERE p.id_tenant_fornecedor = %s
-          AND COALESCE(p.{cv}, '') NOT IN ('rascunho', 'importado')
-        ORDER BY p.criado_em DESC NULLS LAST, p.id DESC
-        LIMIT 8
+        WITH meses AS (
+          SELECT generate_series(
+            date_trunc('month', NOW()) - INTERVAL '11 months',
+            date_trunc('month', NOW()),
+            INTERVAL '1 month'
+          )::date AS mes
+        )
+        SELECT to_char(m.mes, 'YYYY-MM') AS ym,
+               COALESCE(SUM(p.valor_total), 0) AS total
+        FROM meses m
+        LEFT JOIN tbl_pedido p
+          ON p.id_tenant_fornecedor = %s
+         AND date_trunc('month', p.criado_em) = m.mes
+         AND {excluidos}
+        GROUP BY m.mes
+        ORDER BY m.mes
         """,
         (id_fornecedor,),
     )
-    recentes = []
-    for row in cur.fetchall():
-        st = (row[2] or "").strip()
-        recentes.append(
+    faturamento_mensal = []
+    max_fat = 0.0
+    for ym, total in cur.fetchall():
+        val = float(total or 0)
+        max_fat = max(max_fat, val)
+        faturamento_mensal.append(
             {
-                "id": int(row[0]),
-                "numero": (row[1] or str(row[0])).strip(),
-                "status": st,
-                "status_label": STATUS_LABEL.get(st, st or "—"),
-                "valor_total": float(row[3] or 0),
+                "mes": ym,
+                "rotulo": _mes_rotulo(ym),
+                "valor": val,
+                "valor_fmt": _fmt_brl(val),
+            }
+        )
+    for item in faturamento_mensal:
+        item["pct"] = round((item["valor"] / max_fat) * 100) if max_fat > 0 else 0
+
+    # Top 5 vendedores (12 meses)
+    cur.execute(
+        f"""
+        SELECT p.id_tenant_vendedor,
+               COALESCE(NULLIF(TRIM(t.nome_fantasia), ''), NULLIF(TRIM(t.nome), ''), 'Vendedor') AS nome,
+               COUNT(*)::int AS qtd,
+               COALESCE(SUM(p.valor_total), 0) AS total
+        FROM tbl_pedido p
+        LEFT JOIN tbl_tenant t ON t.id = p.id_tenant_vendedor
+        WHERE p.id_tenant_fornecedor = %s
+          AND p.criado_em >= date_trunc('month', NOW()) - INTERVAL '11 months'
+          AND {excluidos}
+          AND p.id_tenant_vendedor IS NOT NULL
+        GROUP BY p.id_tenant_vendedor, t.nome_fantasia, t.nome
+        ORDER BY total DESC, qtd DESC
+        LIMIT 5
+        """,
+        (id_fornecedor,),
+    )
+    top_vendedores = []
+    max_vd = 0.0
+    for i, row in enumerate(cur.fetchall(), start=1):
+        total = float(row[3] or 0)
+        max_vd = max(max_vd, total)
+        top_vendedores.append(
+            {
+                "rank": i,
+                "id": int(row[0]) if row[0] else None,
+                "nome": row[1] or "Vendedor",
+                "pedidos": int(row[2] or 0),
+                "valor": total,
+                "valor_fmt": _fmt_brl(total),
+            }
+        )
+    for item in top_vendedores:
+        item["pct"] = round((item["valor"] / max_vd) * 100) if max_vd > 0 else 0
+
+    # Top 5 produtos (12 meses)
+    cur.execute(
+        f"""
+        SELECT COALESCE(i.id_produto, 0),
+               COALESCE(NULLIF(TRIM(MAX(i.nome_produto)), ''), 'Produto') AS nome,
+               COALESCE(SUM(i.quantidade), 0)::int AS qtd,
+               COALESCE(SUM(i.subtotal_drop), 0) AS total
+        FROM tbl_pedido_item i
+        JOIN tbl_pedido p ON p.id = i.id_pedido
+        WHERE p.id_tenant_fornecedor = %s
+          AND p.criado_em >= date_trunc('month', NOW()) - INTERVAL '11 months'
+          AND {excluidos}
+        GROUP BY COALESCE(i.id_produto, 0)
+        ORDER BY qtd DESC, total DESC
+        LIMIT 5
+        """,
+        (id_fornecedor,),
+    )
+    top_produtos = []
+    max_qtd = 0
+    for i, row in enumerate(cur.fetchall(), start=1):
+        qtd = int(row[2] or 0)
+        max_qtd = max(max_qtd, qtd)
+        top_produtos.append(
+            {
+                "rank": i,
+                "id": int(row[0]) if row[0] else None,
+                "nome": row[1] or "Produto",
+                "quantidade": qtd,
+                "valor": float(row[3] or 0),
                 "valor_fmt": _fmt_brl(row[3]),
-                "criado_em": row[4].isoformat() if row[4] else "",
-                "origem": (row[5] or "manual").strip(),
-                "parceiro": row[6] or "Vendedor",
-                "url": "/fornecedor/pedidos",
             }
         )
+    for item in top_produtos:
+        item["pct"] = round((item["quantidade"] / max_qtd) * 100) if max_qtd > 0 else 0
 
-    alertas = []
-    if vinculos["aguardando"]:
-        alertas.append(
-            {
-                "tipo": "vinculo_aguardando",
-                "nivel": "alta",
-                "titulo": f"{vinculos['aguardando']} solicitação(ões) de vínculo aguardando",
-                "texto": "Vendedores esperando sua aprovação para operar com o catálogo.",
-                "url": "/fornecedor/vendedores",
-                "cta": "Ver vendedores",
-            }
-        )
-    if pix_validar:
-        alertas.append(
-            {
-                "tipo": "pix_comprovante",
-                "nivel": "alta",
-                "titulo": f"{pix_validar} comprovante(s) PIX para validar",
-                "texto": "Confirme ou rejeite o pagamento manual enviado pelo vendedor.",
-                "url": "/fornecedor/pedidos",
-                "cta": "Ver pedidos",
-            }
-        )
-    if pedidos_expedir:
-        alertas.append(
-            {
-                "tipo": "pedido_expedir",
-                "nivel": "alta",
-                "titulo": f"{pedidos_expedir} pedido(s) pagos aguardando expedição",
-                "texto": "Pedidos pagos prontos para separar, emitir NF ou enviar.",
-                "url": "/fornecedor/pedidos",
-                "cta": "Ver pedidos",
-            }
-        )
-    if vinculos["pausado"]:
-        alertas.append(
-            {
-                "tipo": "vinculo_pausado",
-                "nivel": "media",
-                "titulo": f"{vinculos['pausado']} vínculo(s) pausado(s)",
-                "texto": "Operação parcial com esses vendedores até despausar ou encerrar.",
-                "url": "/fornecedor/vendedores",
-                "cta": "Ver vendedores",
-            }
-        )
-
-    for tabela, nome, url in CANAIS_STATUS:
-        try:
-            if not _tabela_existe(cur, tabela):
-                continue
-            cur.execute(
-                f"SELECT status FROM {tabela} WHERE id_tenant = %s LIMIT 1",
-                (id_fornecedor,),
-            )
-            row = cur.fetchone()
-        except Exception:
-            try:
-                cur.connection.rollback()
-            except Exception:
-                pass
-            continue
-        if not row:
-            continue
-        st = (row[0] or "").strip().lower()
-        if st and st != "conectado":
-            alertas.append(
-                {
-                    "tipo": "integracao_desconectada",
-                    "nivel": "alta",
-                    "titulo": f"{nome} desconectado",
-                    "texto": "Reconecte para receber pagamentos ou sincronizar o catálogo.",
-                    "url": url,
-                    "cta": "Abrir integração",
-                }
-            )
-
-    nivel_rank = {"alta": 0, "media": 1, "baixa": 2}
-    alertas.sort(key=lambda a: nivel_rank.get(a.get("nivel"), 9))
+    fat_12m = sum(x["valor"] for x in faturamento_mensal)
 
     return {
-        "periodo_dias": 7,
         "kpis": {
-            "pedidos_7d": int(ped_7d or 0),
-            "faturamento_7d": float(gmv_7d or 0),
-            "faturamento_7d_fmt": _fmt_brl(gmv_7d),
+            "pedidos_hoje": pedidos_hoje,
+            "pedidos_aguardando": pedidos_aguardando,
             "vendedores_ativos": vinculos["ativo"],
-            "aguardando": vinculos["aguardando"],
-            "produtos_ativos": produtos_ativos,
+            "vendedores_aguardando": vinculos["aguardando"],
+            "produtos_total": produtos_total,
+            "produtos_publicados": produtos_publicados,
+            "produtos_pct": pct_pub,
+            "faturamento_12m": fat_12m,
+            "faturamento_12m_fmt": _fmt_brl(fat_12m),
         },
-        "alertas": alertas,
-        "pedidos_recentes": recentes,
+        "faturamento_mensal": faturamento_mensal,
+        "top_vendedores": top_vendedores,
+        "top_produtos": top_produtos,
     }

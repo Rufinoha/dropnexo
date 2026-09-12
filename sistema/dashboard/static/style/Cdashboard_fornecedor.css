@@ -1,0 +1,443 @@
+/* Dashboard Fornecedor — painel operacional */
+
+.DashFn {
+  --fn-ink: #0f172a;
+  --fn-muted: #64748b;
+  --fn-line: rgba(28, 46, 60, 0.1);
+  --fn-brand: #021f81;
+  --fn-brand-soft: #e8efff;
+  --fn-accent: #1d4ed8;
+  --fn-warn: #b45309;
+  --fn-warn-bg: #fff7ed;
+  --fn-ok: #047857;
+  --fn-card: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.DashFn[data-loading="1"] .DashFn_Body {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.DashFn_Loading,
+.DashFn_Erro {
+  margin: 0;
+  color: var(--fn-muted);
+  font-size: 0.95rem;
+}
+
+.DashFn_Erro {
+  color: #b91c1c;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 12px;
+  padding: 0.85rem 1rem;
+}
+
+.DashFn_Kpis {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.DashFn_Kpi {
+  position: relative;
+  background: var(--fn-card);
+  border: 1px solid var(--fn-line);
+  border-radius: 16px;
+  padding: 1rem 1.05rem 1.05rem;
+  overflow: hidden;
+  min-height: 108px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  animation: DashFn_In 0.45s ease both;
+}
+
+.DashFn_Kpi:nth-child(1) { animation-delay: 0.02s; }
+.DashFn_Kpi:nth-child(2) { animation-delay: 0.06s; }
+.DashFn_Kpi:nth-child(3) { animation-delay: 0.1s; }
+.DashFn_Kpi:nth-child(4) { animation-delay: 0.14s; }
+.DashFn_Kpi:nth-child(5) { animation-delay: 0.18s; }
+
+.DashFn_Kpi::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--fn-brand);
+}
+
+.DashFn_Kpi.is-warn::before { background: #f59e0b; }
+.DashFn_Kpi.is-ok::before { background: #10b981; }
+.DashFn_Kpi.is-catalog::before {
+  background: linear-gradient(180deg, var(--fn-brand), #38bdf8);
+}
+
+.DashFn_KpiTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.DashFn_KpiIcon {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  background: var(--fn-brand-soft);
+  color: var(--fn-brand);
+  flex-shrink: 0;
+}
+
+.DashFn_Kpi.is-warn .DashFn_KpiIcon {
+  background: var(--fn-warn-bg);
+  color: var(--fn-warn);
+}
+
+.DashFn_Kpi.is-ok .DashFn_KpiIcon {
+  background: #ecfdf5;
+  color: var(--fn-ok);
+}
+
+.DashFn_KpiIcon svg {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.DashFn_KpiLbl {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--fn-muted);
+  line-height: 1.25;
+}
+
+.DashFn_KpiVal {
+  font-size: 1.55rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: var(--fn-ink);
+  line-height: 1.1;
+}
+
+.DashFn_KpiSub {
+  font-size: 0.75rem;
+  color: var(--fn-muted);
+  font-weight: 600;
+}
+
+.DashFn_KpiSplit {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.DashFn_KpiSplit strong {
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: var(--fn-brand);
+  letter-spacing: -0.02em;
+}
+
+.DashFn_KpiSplit span {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--fn-muted);
+}
+
+.DashFn_BarMini {
+  margin-top: auto;
+  height: 6px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  overflow: hidden;
+}
+
+.DashFn_BarMini > i {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--fn-brand), #38bdf8);
+  transition: width 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.DashFn_ChartCard,
+.DashFn_RankCard {
+  background: var(--fn-card);
+  border: 1px solid var(--fn-line);
+  border-radius: 18px;
+  padding: 1.1rem 1.15rem 1.2rem;
+  animation: DashFn_In 0.5s ease both;
+  animation-delay: 0.22s;
+}
+
+.DashFn_Head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.DashFn_Titulo {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--fn-ink);
+}
+
+.DashFn_Sub {
+  margin: 0.2rem 0 0;
+  font-size: 0.8rem;
+  color: var(--fn-muted);
+  font-weight: 600;
+}
+
+.DashFn_Tot {
+  text-align: right;
+}
+
+.DashFn_TotVal {
+  display: block;
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--fn-brand);
+  letter-spacing: -0.02em;
+}
+
+.DashFn_TotLbl {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--fn-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.DashFn_Chart {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 0.45rem;
+  align-items: end;
+  min-height: 180px;
+  padding: 0.25rem 0 0;
+}
+
+.DashFn_Col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  height: 100%;
+  justify-content: flex-end;
+}
+
+.DashFn_ColBarWrap {
+  width: 100%;
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+  min-height: 140px;
+}
+
+.DashFn_ColBar {
+  width: 100%;
+  max-width: 36px;
+  margin: 0 auto;
+  height: 0;
+  border-radius: 8px 8px 4px 4px;
+  background: linear-gradient(180deg, #4f7cff 0%, var(--fn-brand) 100%);
+  box-shadow: 0 8px 18px rgba(2, 31, 129, 0.12);
+  transition: height 0.75s cubic-bezier(0.22, 1, 0.36, 1);
+  position: relative;
+}
+
+.DashFn_ColBar.is-empty {
+  background: #e2e8f0;
+  box-shadow: none;
+  min-height: 4px;
+  height: 4px !important;
+}
+
+.DashFn_ColBar:hover::after {
+  content: attr(data-tip);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  transform: translateX(-50%);
+  white-space: nowrap;
+  background: #0f172a;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.35rem 0.5rem;
+  border-radius: 8px;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.DashFn_ColLbl {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--fn-muted);
+  text-transform: lowercase;
+}
+
+.DashFn_Ranks {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.85rem;
+  animation: DashFn_In 0.5s ease both;
+  animation-delay: 0.28s;
+}
+
+.DashFn_List {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.DashFn_Row {
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  gap: 0.65rem;
+  align-items: center;
+  padding: 0.65rem 0.7rem;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  background: #f8fafc;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.DashFn_Row:hover {
+  background: #fff;
+  border-color: #c7d7fe;
+}
+
+.DashFn_Rank {
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: var(--fn-brand);
+  background: var(--fn-brand-soft);
+}
+
+.DashFn_Row.is-top .DashFn_Rank {
+  background: linear-gradient(135deg, #fbbf24, #f59e0b);
+  color: #78350f;
+}
+
+.DashFn_RowName {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--fn-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.DashFn_RowMeta {
+  font-size: 0.72rem;
+  color: var(--fn-muted);
+  font-weight: 600;
+  margin-top: 0.1rem;
+}
+
+.DashFn_RowRight {
+  text-align: right;
+}
+
+.DashFn_RowVal {
+  font-size: 0.88rem;
+  font-weight: 800;
+  color: var(--fn-brand);
+}
+
+.DashFn_RowTrack {
+  margin-top: 0.35rem;
+  height: 4px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  overflow: hidden;
+  grid-column: 2 / -1;
+}
+
+.DashFn_RowTrack > i {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: inherit;
+  background: var(--fn-brand);
+  transition: width 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.DashFn_Vazio {
+  margin: 0;
+  padding: 1.25rem 0.5rem;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+@keyframes DashFn_In {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (max-width: 1100px) {
+  .DashFn_Kpis {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .DashFn_Kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .DashFn_Ranks {
+    grid-template-columns: 1fr;
+  }
+
+  .DashFn_Chart {
+    gap: 0.3rem;
+  }
+}
+
+@media (max-width: 560px) {
+  .DashFn_Kpis {
+    grid-template-columns: 1fr;
+  }
+
+  .DashFn_Head {
+    flex-direction: column;
+  }
+
+  .DashFn_Tot {
+    text-align: left;
+  }
+}
