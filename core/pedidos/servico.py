@@ -213,13 +213,14 @@ def registrar_historico(
     )
 
 
-def vinculo_ativo(cur, id_vendedor: int, id_fornecedor: int) -> bool:
+def vinculo_ativo(cur, id_vendedor: int, id_fornecedor: int, id_armazem_fornecedor: int | None = None) -> bool:
     cur.execute(
         """
         SELECT 1 FROM tbl_vinculo_vendedor_fornecedor
         WHERE id_tenant_vendedor = %s AND id_tenant_fornecedor = %s AND status = 'ativo'
+          AND COALESCE(id_armazem_fornecedor, 0) = COALESCE(%s, 0)
         """,
-        (id_vendedor, id_fornecedor),
+        (id_vendedor, id_fornecedor, id_armazem_fornecedor),
     )
     return cur.fetchone() is not None
 
@@ -228,7 +229,8 @@ def _buscar_item_vitrine(cur, id_vendedor: int, id_variante: int) -> dict | None
     cur.execute(
         """
         SELECT pv.id, pv.id_tenant_fornecedor, pv.id_produto, pv.preco_fornecedor, pv.preco_venda,
-               COALESCE(pv.nome_vitrine, p.nome), v.sku, p.id_deposito_expedicao
+               COALESCE(pv.nome_vitrine, p.nome), v.sku, p.id_deposito_expedicao,
+               p.id_armazem_fornecedor
         FROM tbl_produto_vendedor pv
         JOIN tbl_produto_variante v ON v.id = pv.id_variante
         JOIN tbl_produto p ON p.id = pv.id_produto
@@ -249,6 +251,7 @@ def _buscar_item_vitrine(cur, id_vendedor: int, id_variante: int) -> dict | None
         "nome": row[5] or "",
         "sku": row[6] or "",
         "id_deposito": row[7],
+        "id_armazem_fornecedor": int(row[8]) if row[8] else None,
     }
 
 
@@ -1037,7 +1040,7 @@ def salvar_rascunho(
         if not vit:
             raise ValueError(f"Produto variante {id_var} não está ativo em Meus produtos.")
         id_forn = vit["id_fornecedor"]
-        if not vinculo_ativo(cur, id_vendedor, id_forn):
+        if not vinculo_ativo(cur, id_vendedor, id_forn, vit.get("id_armazem_fornecedor")):
             raise ValueError("Fornecedor não está com vínculo ativo.")
         por_fornecedor.setdefault(id_forn, []).append({**vit, "id_variante": id_var, "quantidade": qtd})
 
@@ -1798,7 +1801,8 @@ def _resolver_item_meus_produtos_por_sku(cur, id_vendedor: int, sku: str) -> dic
         """
         SELECT pv.id, pv.id_tenant_fornecedor, pv.id_produto, pv.id_variante,
                pv.preco_fornecedor, pv.preco_venda,
-               COALESCE(pv.nome_vitrine, p.nome), v.sku, p.id_deposito_expedicao
+               COALESCE(pv.nome_vitrine, p.nome), v.sku, p.id_deposito_expedicao,
+               p.id_armazem_fornecedor
         FROM tbl_produto_vendedor pv
         JOIN tbl_produto_variante v ON v.id = pv.id_variante
         JOIN tbl_produto p ON p.id = pv.id_produto
@@ -1820,6 +1824,7 @@ def _resolver_item_meus_produtos_por_sku(cur, id_vendedor: int, sku: str) -> dic
             "nome": vit[6] or sku,
             "sku": vit[7] or sku,
             "id_deposito": vit[8],
+            "id_armazem_fornecedor": int(vit[9]) if vit[9] else None,
             "proprio": False,
         }
 
@@ -1984,7 +1989,7 @@ def importar_pedido_bling(
         if not item:
             raise ValueError(f"SKU {sku} não encontrado em Meus produtos.")
         id_forn = int(item["id_fornecedor"])
-        if not item["proprio"] and not vinculo_ativo(cur, id_vendedor, id_forn):
+        if not item["proprio"] and not vinculo_ativo(cur, id_vendedor, id_forn, item.get("id_armazem_fornecedor")):
             raise ValueError(f"Fornecedor do SKU {sku} sem vínculo ativo.")
         valor_bling = _float(raw.get("valor_bling"))
         preco_canal = valor_bling if valor_bling > 0 else item["preco_venda"]
@@ -2220,7 +2225,7 @@ def importar_pedido_ml(
                 "não encontrado em Meus produtos."
             )
         id_forn = int(item["id_fornecedor"])
-        if not item.get("proprio") and not vinculo_ativo(cur, id_vendedor, id_forn):
+        if not item.get("proprio") and not vinculo_ativo(cur, id_vendedor, id_forn, item.get("id_armazem_fornecedor")):
             raise ValueError(
                 f"Fornecedor do item {item.get('sku') or id_variante} sem vínculo ativo."
             )
@@ -2466,7 +2471,7 @@ def importar_pedido_tiktok(
                 "não encontrado em Meus produtos."
             )
         id_forn = int(item["id_fornecedor"])
-        if not item.get("proprio") and not vinculo_ativo(cur, id_vendedor, id_forn):
+        if not item.get("proprio") and not vinculo_ativo(cur, id_vendedor, id_forn, item.get("id_armazem_fornecedor")):
             raise ValueError(
                 f"Fornecedor do item {item.get('sku') or id_variante} sem vínculo ativo."
             )
@@ -2712,7 +2717,7 @@ def importar_pedido_amazon(
                 "não encontrado em Meus produtos."
             )
         id_forn = int(item["id_fornecedor"])
-        if not item.get("proprio") and not vinculo_ativo(cur, id_vendedor, id_forn):
+        if not item.get("proprio") and not vinculo_ativo(cur, id_vendedor, id_forn, item.get("id_armazem_fornecedor")):
             raise ValueError(
                 f"Fornecedor do item {item.get('sku') or id_variante} sem vínculo ativo."
             )

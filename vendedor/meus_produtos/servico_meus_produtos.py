@@ -928,6 +928,10 @@ def avaliar_pausa_variante(cur, id_tenant_vendedor: int, id_variante: int) -> tu
         LEFT JOIN tbl_vinculo_vendedor_fornecedor vinc
             ON vinc.id_tenant_fornecedor = p.id_tenant
            AND vinc.id_tenant_vendedor = pv.id_tenant_vendedor
+           AND (
+             vinc.id_armazem_fornecedor IS NULL
+             OR vinc.id_armazem_fornecedor = p.id_armazem_fornecedor
+           )
         WHERE pv.id_tenant_vendedor = %s AND pv.id_variante = %s
         """,
         (id_tenant_vendedor, id_variante),

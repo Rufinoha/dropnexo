@@ -4,6 +4,7 @@ from pathlib import Path
 
 from flask import Blueprint, jsonify, render_template, request, session
 
+from core.dominio import SQL_MATCH_VINCULO_PRODUTO
 from fornecedor.catalogo.srotas_catalogo import _sanitizar_descricao_html
 from fornecedor.parametros.precificacao import (
     buscar_regra_fornecedor,
@@ -79,6 +80,7 @@ def _contar_sem_categoria(cur, id_vendedor: int, id_forn: str | None) -> int:
         JOIN tbl_vinculo_vendedor_fornecedor vinc
             ON vinc.id_tenant_fornecedor = p.id_tenant
            AND vinc.id_tenant_vendedor = %s AND vinc.status = 'ativo'
+           AND {SQL_MATCH_VINCULO_PRODUTO}
         WHERE p.publicado = TRUE AND p.id_categoria IS NULL{extra}
         """,
         params,
@@ -105,6 +107,7 @@ def _listar_categorias_combos(cur, id_vendedor: int, id_forn: str | None) -> lis
         JOIN tbl_vinculo_vendedor_fornecedor vinc
             ON vinc.id_tenant_fornecedor = p.id_tenant
            AND vinc.id_tenant_vendedor = %s AND vinc.status = 'ativo'
+           AND {SQL_MATCH_VINCULO_PRODUTO}
         WHERE p.publicado = TRUE
           AND p.id_categoria IS NOT NULL{extra}
         GROUP BY LOWER(TRIM(c.nome))
@@ -143,6 +146,7 @@ def _where_catalogo(
         "p.publicado = TRUE",
         "p.publicado = TRUE",
         "var.ativo = TRUE",
+        SQL_MATCH_VINCULO_PRODUTO,
     ]
     params: list = [id_vendedor]
     if id_forn:
@@ -247,19 +251,37 @@ def combos():
         cur = conn.cursor()
         cur.execute(
             """
-            SELECT t.id, COALESCE(NULLIF(TRIM(t.nome_fantasia), ''), t.nome),
+            SELECT vinc.id_tenant_fornecedor,
+                   vinc.id_armazem_fornecedor,
+                   COALESCE(
+                     NULLIF(TRIM(af.nome_fantasia), ''),
+                     NULLIF(TRIM(af.nome), ''),
+                     NULLIF(TRIM(t.nome_fantasia), ''),
+                     t.nome
+                   ),
                    (SELECT COUNT(DISTINCT p.id)::int
                     FROM tbl_produto p
-                    WHERE p.id_tenant = t.id AND p.publicado = TRUE)
+                    WHERE p.id_tenant = vinc.id_tenant_fornecedor
+                      AND p.publicado = TRUE
+                      AND (
+                        vinc.id_armazem_fornecedor IS NULL
+                        OR p.id_armazem_fornecedor = vinc.id_armazem_fornecedor
+                      ))
             FROM tbl_vinculo_vendedor_fornecedor vinc
             JOIN tbl_tenant t ON t.id = vinc.id_tenant_fornecedor
+            LEFT JOIN tbl_armazem_fornecedor af ON af.id = vinc.id_armazem_fornecedor
             WHERE vinc.id_tenant_vendedor = %s AND vinc.status = 'ativo'
-            ORDER BY 2
+            ORDER BY 3
             """,
             (id_vendedor,),
         )
         fornecedores = [
-            {"id": r[0], "nome": r[1], "qtd_produtos": int(r[2] or 0)}
+            {
+                "id": r[0],
+                "id_armazem_fornecedor": int(r[1]) if r[1] else None,
+                "nome": r[2],
+                "qtd_produtos": int(r[3] or 0),
+            }
             for r in cur.fetchall()
         ]
 
@@ -397,6 +419,7 @@ def produto_detalhe(id_produto: int):
             JOIN tbl_vinculo_vendedor_fornecedor vinc
                 ON vinc.id_tenant_fornecedor = p.id_tenant
                AND vinc.id_tenant_vendedor = %s AND vinc.status = 'ativo'
+               AND """ + SQL_MATCH_VINCULO_PRODUTO + """
             LEFT JOIN tbl_categoria c ON c.id = p.id_categoria AND c.id_tenant = p.id_tenant
             WHERE p.id = %s AND p.publicado = TRUE
             """,
@@ -498,6 +521,7 @@ def ativar_produto():
             JOIN tbl_vinculo_vendedor_fornecedor vinc
                 ON vinc.id_tenant_fornecedor = p.id_tenant
                AND vinc.id_tenant_vendedor = %s AND vinc.status = 'ativo'
+               AND """ + SQL_MATCH_VINCULO_PRODUTO + """
             WHERE p.id = %s AND p.publicado = TRUE AND v.ativo = TRUE
             """,
             (id_vendedor, id_produto),
@@ -574,6 +598,7 @@ def ativar():
             JOIN tbl_vinculo_vendedor_fornecedor vinc
                 ON vinc.id_tenant_fornecedor = p.id_tenant
                AND vinc.id_tenant_vendedor = %s AND vinc.status = 'ativo'
+               AND """ + SQL_MATCH_VINCULO_PRODUTO + """
             WHERE var.id = %s AND p.publicado = TRUE AND var.ativo = TRUE
             """,
             (id_vendedor, id_variante),

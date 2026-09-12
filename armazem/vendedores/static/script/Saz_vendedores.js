@@ -162,6 +162,7 @@
         return `
         <article class="VdParceiros_Card ${st.cls}" data-id="${v.id}" tabindex="0" title="Clique duas vezes para detalhes">
           <h3 class="VdParceiros_CardNome">${esc(v.nome)}</h3>
+          ${v.fornecedor_local_nome ? `<p class="VdParceiros_CardMeta"><strong>Fornecedor:</strong> ${esc(v.fornecedor_local_nome)}</p>` : ""}
           ${resp ? `<p class="VdParceiros_CardMeta">Responsável: ${esc(resp)}</p>` : ""}
           <p class="VdParceiros_CardMeta">${esc(loc)}</p>
           <p class="VdParceiros_CardMeta">Solicitado: ${fmtData(v.solicitado_em)}</p>
@@ -266,6 +267,11 @@
               <span class="VdDet_Meta">Solicitado em ${esc(fmtDataCurta(vin.solicitado_em))}</span>
             </div>
             <h4 class="VdDet_Nome">${esc(nome)}</h4>
+            ${
+              vin.fornecedor_local_nome
+                ? `<p class="VdDet_Loc"><strong>Fornecedor solicitado:</strong> ${esc(vin.fornecedor_local_nome)}</p>`
+                : ""
+            }
             <p class="VdDet_Loc">${esc(loc || "Localização não informada")}${
               v.documento ? ` · <span class="VdDet_Doc">${esc(v.documento)}</span>` : ""
             }</p>

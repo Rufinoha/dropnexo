@@ -380,6 +380,7 @@
           : `Abrir catálogo de ${esc(f.nome)}`;
         return `
         <article class="Forn_Card ${st.cls}" data-id="${f.id}" data-nome="${attrEsc(f.nome)}"
+          data-azf="${f.id_armazem_fornecedor || ""}"
           data-status="${stVin}" data-local="${attrEsc(local)}" data-qtd-vitrine="${qtdVitrine}"
           tabindex="0" role="button" aria-label="${aria}">
           <div class="Forn_CardTop">
@@ -416,13 +417,14 @@
 
   let clickTimer = null;
 
-  function abrirLoja(id, nome) {
+  function abrirLoja(id, nome, azf) {
+    const q = azf ? "?azf=" + encodeURIComponent(String(azf)) : "";
     if (!window.GlobalUtils?.abrirJanelaApoioModal) {
-      window.location.href = "/fornecedores/loja?id=" + id;
+      window.location.href = "/fornecedores/loja" + (q || "?id=" + id);
       return;
     }
     window.GlobalUtils.abrirJanelaApoioModal({
-      rota: "/fornecedores/loja",
+      rota: "/fornecedores/loja" + q,
       id,
       titulo: "Catálogo — " + (nome || "Fornecedor"),
       largura: 1280,
@@ -434,6 +436,8 @@
   async function solicitarVinculoCard(card) {
     const id = Number(card.getAttribute("data-id"));
     const nome = card.getAttribute("data-nome");
+    const azfRaw = card.getAttribute("data-azf");
+    const azf = azfRaw ? Number(azfRaw) : null;
     const st = card.getAttribute("data-status") || "nenhum";
     if (st === "ativo") {
       if (window.Util?.alertar) Util.alertar("Você já está conectado a este fornecedor.", "info");
@@ -448,7 +452,9 @@
       return;
     }
     try {
-      const ok = await VinculoRequisitos.solicitarComRequisitos(id, nome);
+      const ok = await VinculoRequisitos.solicitarComRequisitos(id, nome, {
+        id_armazem_fornecedor: azf || null,
+      });
       if (ok) carregar();
     } catch (e) {
       if (window.Swal) Swal.fire("Erro", e.message, "error");
@@ -502,6 +508,8 @@
   async function acaoVinculo(card, acao) {
     const id = Number(card.getAttribute("data-id"));
     const nome = card.getAttribute("data-nome") || "fornecedor";
+    const azfRaw = card.getAttribute("data-azf");
+    const azf = azfRaw ? Number(azfRaw) : null;
     if (!id) return;
 
     if (acao === "despausar") {
@@ -522,7 +530,11 @@
           method: "POST",
           credentials: "same-origin",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id_fornecedor: id, acao: "despausar" }),
+          body: JSON.stringify({
+            id_fornecedor: id,
+            id_armazem_fornecedor: azf || null,
+            acao: "despausar",
+          }),
         });
         const j = await r.json();
         if (!j.success) throw new Error(j.message || "Falha ao despausar.");
@@ -569,7 +581,12 @@
         method: "POST",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id_fornecedor: id, acao, motivo }),
+        body: JSON.stringify({
+          id_fornecedor: id,
+          id_armazem_fornecedor: azf || null,
+          acao,
+          motivo,
+        }),
       });
       const j = await r.json();
       if (!j.success) throw new Error(j.message || "Falha na operação.");
@@ -609,7 +626,7 @@
         return;
       }
       if (acao === "loja" && id) {
-        abrirLoja(id, nome);
+        abrirLoja(id, nome, card.getAttribute("data-azf") || null);
         return;
       }
     }
@@ -620,7 +637,7 @@
       else {
         const id = card.getAttribute("data-id");
         const nome = card.getAttribute("data-nome");
-        if (id) abrirLoja(id, nome);
+        if (id) abrirLoja(id, nome, card.getAttribute("data-azf") || null);
       }
     }, 260);
   });
@@ -647,7 +664,7 @@
     }
     const id = card.getAttribute("data-id");
     const nome = card.getAttribute("data-nome");
-    if (id) abrirLoja(id, nome);
+    if (id) abrirLoja(id, nome, card.getAttribute("data-azf") || null);
   });
 
   listaSegmentos?.addEventListener("change", (e) => {

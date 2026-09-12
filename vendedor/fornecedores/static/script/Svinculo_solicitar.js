@@ -5,6 +5,7 @@
   "use strict";
 
   let idFornecedor = null;
+  let idArmazemFornecedor = null;
   let temRequisitos = false;
 
   const el = {
@@ -162,6 +163,7 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           id_fornecedor: idFornecedor,
+          id_armazem_fornecedor: idArmazemFornecedor || null,
           aceite_requisitos: temRequisitos,
           aceite_compartilhamento_dados: true,
           aceite_declaracao_apto: true,
@@ -186,6 +188,9 @@
       if (el.intro) el.intro.textContent = "Fornecedor não informado.";
       return;
     }
+    const qs = new URLSearchParams(window.location.search);
+    const azf = Number(qs.get("azf") || qs.get("id_armazem_fornecedor") || 0);
+    idArmazemFornecedor = azf || null;
     carregar(id).catch((e) => {
       if (el.intro) el.intro.textContent = e.message || "Erro ao carregar.";
       if (window.Swal) Swal.fire("Erro", e.message, "error");

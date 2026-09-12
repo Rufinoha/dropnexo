@@ -1,5 +1,6 @@
 (function () {
   let idFornecedor = null;
+  let idArmazemFornecedor = null;
   let paginaAtual = 1;
   let totalPaginas = 1;
   let statusVinculo = "nenhum";
@@ -155,6 +156,7 @@
     const busca = (el.busca?.value || "").trim();
     let url = `/fornecedores/${idFornecedor}/loja/dados?pagina=${paginaAtual}&porPagina=24`;
     if (busca) url += "&busca=" + encodeURIComponent(busca);
+    if (idArmazemFornecedor) url += "&id_armazem_fornecedor=" + encodeURIComponent(String(idArmazemFornecedor));
 
     const r = await fetch(url, { credentials: "same-origin" });
     const j = await r.json();
@@ -186,7 +188,11 @@
       method: "POST",
       credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id_produto: idProduto, id_fornecedor: idFornecedor }),
+      body: JSON.stringify({
+        id_produto: idProduto,
+        id_fornecedor: idFornecedor,
+        id_armazem_fornecedor: idArmazemFornecedor || null,
+      }),
     });
     const j = await r.json();
     if (window.Util?.alertar) Util.alertar(j.message || (j.success ? "OK" : "Erro"), j.success ? "success" : "error");
@@ -197,7 +203,9 @@
   async function solicitarVinculo() {
     if (!window.VinculoRequisitos?.solicitarComRequisitos || !idFornecedor) return;
     try {
-      const ok = await VinculoRequisitos.solicitarComRequisitos(idFornecedor, el.titulo?.textContent);
+      const ok = await VinculoRequisitos.solicitarComRequisitos(idFornecedor, el.titulo?.textContent, {
+        id_armazem_fornecedor: idArmazemFornecedor || null,
+      });
       if (ok) carregar();
     } catch (e) {
       if (window.Swal) Swal.fire("Erro", e.message, "error");
@@ -242,9 +250,11 @@
 
   function iniciar(id) {
     idFornecedor = id ? Number(id) : null;
+    const qs = new URLSearchParams(window.location.search);
+    const azf = Number(qs.get("azf") || qs.get("id_armazem_fornecedor") || 0);
+    idArmazemFornecedor = azf || null;
     if (el.id) el.id.value = idFornecedor ? String(idFornecedor) : "";
     if (!idFornecedor) {
-      const qs = new URLSearchParams(window.location.search);
       idFornecedor = Number(qs.get("id")) || null;
     }
     if (idFornecedor) carregar();

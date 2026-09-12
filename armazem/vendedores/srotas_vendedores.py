@@ -101,6 +101,13 @@ def vendedores_dados():
         if status:
             where.append("v.status = %s")
             params.append(status)
+        from core.dominio import (
+            garantir_coluna_vinculo_armazem_fornecedor,
+            garantir_colunas_vinculo_status,
+        )
+
+        garantir_colunas_vinculo_status(cur)
+        garantir_coluna_vinculo_armazem_fornecedor(cur)
         cur.execute(
             f"""
             SELECT v.id, v.status, v.solicitado_em, v.respondido_em,
@@ -108,9 +115,12 @@ def vendedores_dados():
                    t.email_comercial, t.telefone_comercial,
                    v.snapshot_vendedor, v.mensagem_solicitacao, v.mensagem_resposta,
                    COALESCE(t.razao_social, ''), COALESCE(t.documento, ''),
-                   COALESCE(t.nome_completo, '')
+                   COALESCE(t.nome_completo, ''),
+                   v.id_armazem_fornecedor,
+                   COALESCE(NULLIF(TRIM(af.nome_fantasia), ''), NULLIF(TRIM(af.nome), ''), '')
             FROM tbl_vinculo_vendedor_fornecedor v
             JOIN tbl_tenant t ON t.id = v.id_tenant_vendedor
+            LEFT JOIN tbl_armazem_fornecedor af ON af.id = v.id_armazem_fornecedor
             WHERE {' AND '.join(where)}
             ORDER BY
                 CASE v.status
@@ -148,6 +158,8 @@ def vendedores_dados():
                     "razao_social": (row[12] or snap.get("razao_social") or "").strip(),
                     "documento": (row[13] or snap.get("documento") or "").strip(),
                     "responsavel": responsavel,
+                    "id_armazem_fornecedor": int(row[15]) if row[15] else None,
+                    "fornecedor_local_nome": (row[16] or "").strip(),
                 }
             )
         return jsonify(success=True, dados=dados)
@@ -177,8 +189,10 @@ def vendedores_detalhe(id_vinculo: int):
             SELECT v.id, v.status, v.solicitado_em, v.respondido_em,
                    v.mensagem_solicitacao, v.mensagem_resposta, v.snapshot_vendedor,
                    v.id_tenant_vendedor, v.motivo_status, v.status_alterado_por_lado,
-                   v.status_alterado_por_usuario
+                   v.status_alterado_por_usuario, v.id_armazem_fornecedor,
+                   COALESCE(NULLIF(TRIM(af.nome_fantasia), ''), NULLIF(TRIM(af.nome), ''), '')
             FROM tbl_vinculo_vendedor_fornecedor v
+            LEFT JOIN tbl_armazem_fornecedor af ON af.id = v.id_armazem_fornecedor
             WHERE v.id = %s AND v.id_tenant_fornecedor = %s
             """,
             (id_vinculo, id_forn),
@@ -214,6 +228,8 @@ def vendedores_detalhe(id_vinculo: int):
                 "motivo_status": row[8] or "",
                 "status_alterado_por_lado": row[9] or "",
                 "pode_despausar": pode_despausar,
+                "id_armazem_fornecedor": int(row[11]) if row[11] else None,
+                "fornecedor_local_nome": (row[12] or "").strip(),
             },
             vendedor={
                 "nome": merged.get("nome_fantasia") or merged.get("tenant_nome") or merged.get("nome_completo"),

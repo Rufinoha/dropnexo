@@ -949,21 +949,28 @@ def rede():
         from core.dominio import garantir_colunas_vinculo_status
 
         garantir_colunas_vinculo_status(cur)
+        # Vínculo clássico (sem fornecedor local) — um por tenant fornecedor
         cur.execute(
             f"""
             SELECT t.id, COALESCE(t.nome_fantasia, t.nome), t.cidade, t.uf,
                    t.telefone_comercial, t.email_comercial, COALESCE(t.site, ''),
                    v.id AS id_vinculo, COALESCE(v.status, 'nenhum'),
                    (SELECT COUNT(*)::int FROM tbl_produto p
-                    WHERE p.id_tenant = t.id AND p.publicado = TRUE),
+                    WHERE p.id_tenant = t.id AND p.publicado = TRUE
+                      AND p.id_armazem_fornecedor IS NULL),
                    (SELECT COUNT(DISTINCT pv.id_produto)::int
                     FROM tbl_produto_vendedor pv
-                    WHERE pv.id_tenant_vendedor = %s AND pv.id_tenant_fornecedor = t.id),
+                    JOIN tbl_produto p2 ON p2.id = pv.id_produto
+                    WHERE pv.id_tenant_vendedor = %s AND pv.id_tenant_fornecedor = t.id
+                      AND p2.id_armazem_fornecedor IS NULL),
                    v.mensagem_resposta, v.motivo_status,
-                   v.status_alterado_por_lado, v.status_alterado_por_usuario
+                   v.status_alterado_por_lado, v.status_alterado_por_usuario,
+                   t.tipo_negocio
             FROM tbl_tenant t
             LEFT JOIN tbl_vinculo_vendedor_fornecedor v
-                ON v.id_tenant_fornecedor = t.id AND v.id_tenant_vendedor = %s
+                ON v.id_tenant_fornecedor = t.id
+               AND v.id_tenant_vendedor = %s
+               AND v.id_armazem_fornecedor IS NULL
             WHERE {' AND '.join(where)}
             ORDER BY t.nome
             LIMIT 120
@@ -974,6 +981,7 @@ def rede():
         uid = session.get("id_usuario")
         for row in cur.fetchall():
             tid = row[0]
+            tipo = (row[15] or "").strip().lower()
             cur.execute(
                 """
                 SELECT s.id, s.nome
@@ -998,7 +1006,6 @@ def rede():
             email = (row[5] or "").strip()
             site = (row[6] or "").strip()
             contato = None
-            # Contato do usuário dono do tenant fornecedor (perfil codigo = 'dono').
             if st == "ativo":
                 resp = carregar_contato_responsavel_fornecedor(cur, tid) or {}
                 contato = {
@@ -1008,83 +1015,105 @@ def rede():
                     "telefone": telefone,
                     "site": site,
                 }
-            cards.append(
-                {
-                    "id": tid,
-                    "nome": row[1],
-                    "cidade": row[2] or "",
-                    "uf": row[3] or "",
-                    "telefone": telefone,
-                    "email": email,
-                    "site": site if st == "ativo" else "",
-                    "contato": contato,
-                    "segmentos": segmentos,
-                    "ids_segmentos": ids_seg,
-                    "qtd_produtos": int(row[9] or 0),
-                    "qtd_produtos_vitrine": int(row[10] or 0),
-                    "status_vinculo": st,
-                    "id_vinculo": row[7],
-                    "motivo_recusa": row[11] or "" if st == "recusado" else "",
-                    "motivo_status": row[12] or "",
-                    "pode_despausar": pode_despausar,
-                    "tipo_negocio": None,
-                    "id_armazem_fornecedor": None,
-                }
-            )
-
-        # Modo B: expandir armazéns em cards por fornecedor local (vínculo continua no tenant armazém)
-        expandido: list[dict] = []
-        for card in cards:
-            tid = card["id"]
-            cur.execute(
-                """
-                SELECT tipo_negocio FROM tbl_tenant WHERE id = %s
-                """,
-                (tid,),
-            )
-            tr = cur.fetchone()
-            tipo = (tr[0] or "").strip().lower() if tr else ""
-            card["tipo_negocio"] = tipo
+            base = {
+                "id": tid,
+                "nome": row[1],
+                "cidade": row[2] or "",
+                "uf": row[3] or "",
+                "telefone": telefone,
+                "email": email,
+                "site": site if st == "ativo" else "",
+                "contato": contato,
+                "segmentos": segmentos,
+                "ids_segmentos": ids_seg,
+                "qtd_produtos": int(row[9] or 0),
+                "qtd_produtos_vitrine": int(row[10] or 0),
+                "status_vinculo": st,
+                "id_vinculo": row[7],
+                "motivo_recusa": row[11] or "" if st == "recusado" else "",
+                "motivo_status": row[12] or "",
+                "pode_despausar": pode_despausar,
+                "tipo_negocio": tipo,
+                "id_armazem_fornecedor": None,
+            }
+            # Fornecedor clássico: aparece o tenant
             if tipo != "armazem":
-                expandido.append(card)
+                cards.append(base)
                 continue
+
+            # Armazém: NÃO mostra o tenant — só fornecedores locais
             cur.execute(
                 """
-                SELECT modo_vitrine FROM tbl_armazem_parametros WHERE id_tenant = %s
-                """,
-                (tid,),
-            )
-            pr = cur.fetchone()
-            modo = (pr[0] or "armazem").strip().lower() if pr else "armazem"
-            if modo != "fornecedores":
-                expandido.append(card)
-                continue
-            cur.execute(
-                """
-                SELECT af.id, COALESCE(af.nome_fantasia, af.nome),
+                SELECT af.id,
+                       COALESCE(NULLIF(TRIM(af.nome_fantasia), ''), af.nome),
                        (SELECT COUNT(*)::int FROM tbl_produto p
                         WHERE p.id_tenant = %s AND p.publicado = TRUE
-                          AND p.id_armazem_fornecedor = af.id)
+                          AND p.id_armazem_fornecedor = af.id),
+                       v.id, COALESCE(v.status, 'nenhum'),
+                       v.mensagem_resposta, v.motivo_status,
+                       v.status_alterado_por_lado, v.status_alterado_por_usuario,
+                       (SELECT COUNT(DISTINCT pv.id_produto)::int
+                        FROM tbl_produto_vendedor pv
+                        JOIN tbl_produto p2 ON p2.id = pv.id_produto
+                        WHERE pv.id_tenant_vendedor = %s
+                          AND pv.id_tenant_fornecedor = %s
+                          AND p2.id_armazem_fornecedor = af.id)
                 FROM tbl_armazem_fornecedor af
+                LEFT JOIN tbl_vinculo_vendedor_fornecedor v
+                    ON v.id_tenant_fornecedor = %s
+                   AND v.id_tenant_vendedor = %s
+                   AND v.id_armazem_fornecedor = af.id
                 WHERE af.id_tenant_armazem = %s AND af.ativo = TRUE
                 ORDER BY 2
                 """,
-                (tid, tid),
+                (tid, id_vendedor, tid, tid, id_vendedor, tid),
             )
-            facades = cur.fetchall()
-            if not facades:
-                expandido.append(card)
-                continue
-            for fid, nome_f, qtd in facades:
-                if int(qtd or 0) <= 0:
+            for fr in cur.fetchall():
+                fid, nome_f, qtd, id_vinc, st_v, msg_r, mot, lado, por, qtd_vit = fr
+                qtd_i = int(qtd or 0)
+                if qtd_i <= 0 and (st_v or "nenhum") == "nenhum":
                     continue
-                c2 = dict(card)
-                c2["nome"] = nome_f
-                c2["qtd_produtos"] = int(qtd or 0)
-                c2["id_armazem_fornecedor"] = int(fid)
-                c2["chave"] = f"az:{tid}:f:{fid}"
-                expandido.append(c2)
-        return jsonify(success=True, fornecedores=expandido)
+                st_v = st_v or "nenhum"
+                pode_d = (
+                    st_v == "pausado"
+                    and (lado or "") == "vendedor"
+                    and (por is None or (uid is not None and int(por) == int(uid)))
+                )
+                contato_f = None
+                if st_v == "ativo":
+                    resp = carregar_contato_responsavel_fornecedor(cur, tid) or {}
+                    contato_f = {
+                        "responsavel": (resp.get("nome") or "").strip(),
+                        "email": (resp.get("email") or email or "").strip(),
+                        "whatsapp": (resp.get("whatsapp") or "").strip(),
+                        "telefone": telefone,
+                        "site": site,
+                    }
+                cards.append(
+                    {
+                        "id": tid,
+                        "nome": nome_f,
+                        "cidade": row[2] or "",
+                        "uf": row[3] or "",
+                        "telefone": telefone,
+                        "email": email,
+                        "site": site if st_v == "ativo" else "",
+                        "contato": contato_f,
+                        "segmentos": segmentos,
+                        "ids_segmentos": ids_seg,
+                        "qtd_produtos": qtd_i,
+                        "qtd_produtos_vitrine": int(qtd_vit or 0),
+                        "status_vinculo": st_v,
+                        "id_vinculo": id_vinc,
+                        "motivo_recusa": msg_r or "" if st_v == "recusado" else "",
+                        "motivo_status": mot or "",
+                        "pode_despausar": pode_d,
+                        "tipo_negocio": "armazem",
+                        "id_armazem_fornecedor": int(fid),
+                        "chave": f"az:{tid}:f:{int(fid)}",
+                    }
+                )
+        return jsonify(success=True, fornecedores=cards)
     finally:
         conn.close()
 
@@ -1168,22 +1197,47 @@ def solicitar_vinculo():
         id_forn = int(body.get("id_fornecedor"))
     except (TypeError, ValueError):
         return jsonify(success=False, message="Fornecedor inválido."), 400
+    id_azf = None
+    raw_azf = body.get("id_armazem_fornecedor")
+    if raw_azf not in (None, "", 0, "0"):
+        try:
+            id_azf = int(raw_azf)
+        except (TypeError, ValueError):
+            return jsonify(success=False, message="Fornecedor local inválido."), 400
     if id_forn == id_vendedor:
         return jsonify(success=False, message="Operação inválida."), 400
 
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
+        from core.dominio import garantir_colunas_vinculo_status
+
+        garantir_colunas_vinculo_status(cur)
         cur.execute("SELECT tipo_negocio FROM tbl_tenant WHERE id = %s AND ativo = TRUE", (id_forn,))
         tipo_row = cur.fetchone()
         if not tipo_row:
             return jsonify(success=False, message="Fornecedor não encontrado."), 404
         tipo_forn = (tipo_row[0] or "").strip().lower()
         if tipo_forn == "armazem":
+            if not id_azf:
+                return jsonify(
+                    success=False,
+                    message="Selecione o fornecedor do armazém para solicitar o vínculo.",
+                ), 400
+            cur.execute(
+                """
+                SELECT 1 FROM tbl_armazem_fornecedor
+                WHERE id = %s AND id_tenant_armazem = %s AND ativo = TRUE
+                """,
+                (id_azf, id_forn),
+            )
+            if not cur.fetchone():
+                return jsonify(success=False, message="Fornecedor local não encontrado neste armazém."), 404
             from armazem.parametros.srotas_parametros import sincronizar_requisitos_com_armazem
 
             req = sincronizar_requisitos_com_armazem(cur, id_forn)
         else:
+            id_azf = None
             req = carregar_requisitos(cur, id_forn)
         if requisitos_tem_conteudo(req):
             if not body.get("aceite_requisitos"):
@@ -1214,6 +1268,8 @@ def solicitar_vinculo():
         snap["aceite_compartilhamento_em"] = agora
         snap["aceite_declaracao_apto"] = True
         snap["aceite_declaracao_em"] = agora
+        if id_azf:
+            snap["id_armazem_fornecedor"] = id_azf
 
         from sistema.planos.limites import limites_plano, mensagem_limite_conexoes
 
@@ -1225,9 +1281,12 @@ def solicitar_vinculo():
                 SELECT COUNT(*) FROM tbl_vinculo_vendedor_fornecedor
                 WHERE id_tenant_vendedor = %s
                   AND status IN ('ativo', 'aguardando')
-                  AND id_tenant_fornecedor <> %s
+                  AND NOT (
+                    id_tenant_fornecedor = %s
+                    AND COALESCE(id_armazem_fornecedor, 0) = COALESCE(%s, 0)
+                  )
                 """,
-                (id_vendedor, id_forn),
+                (id_vendedor, id_forn, id_azf),
             )
             usados = int(cur.fetchone()[0] or 0)
             if usados >= int(limite_forn):
@@ -1238,8 +1297,6 @@ def solicitar_vinculo():
 
         auto_aprovar = bool(req.get("aprovacao_automatica"))
         if auto_aprovar:
-            from sistema.planos.limites import limites_plano, mensagem_limite_conexoes
-
             lim_fn = limites_plano(tipo_negocio="fornecedor")
             limite_vd = lim_fn.get("conexoes")
             if limite_vd is not None:
@@ -1269,14 +1326,15 @@ def solicitar_vinculo():
 
         cur.execute(
             """
-            SELECT status FROM tbl_vinculo_vendedor_fornecedor
+            SELECT id, status FROM tbl_vinculo_vendedor_fornecedor
             WHERE id_tenant_vendedor = %s AND id_tenant_fornecedor = %s
+              AND COALESCE(id_armazem_fornecedor, 0) = COALESCE(%s, 0)
             """,
-            (id_vendedor, id_forn),
+            (id_vendedor, id_forn, id_azf),
         )
         row = cur.fetchone()
         if row:
-            st = row[0]
+            st = row[1]
             if st == "ativo":
                 return jsonify(success=False, message="Você já está conectado a este fornecedor."), 409
             if st == "aguardando" and not auto_aprovar:
@@ -1288,8 +1346,9 @@ def solicitar_vinculo():
                     respondido_em = %s,
                     mensagem_resposta = %s,
                     snapshot_vendedor = %s::jsonb,
-                    mensagem_solicitacao = %s
-                WHERE id_tenant_vendedor = %s AND id_tenant_fornecedor = %s
+                    mensagem_solicitacao = %s,
+                    id_armazem_fornecedor = %s
+                WHERE id = %s
                 """,
                 (
                     status_vinculo,
@@ -1297,8 +1356,8 @@ def solicitar_vinculo():
                     msg_resposta,
                     snap_json,
                     msg_solicitacao,
-                    id_vendedor,
-                    id_forn,
+                    id_azf,
+                    row[0],
                 ),
             )
         else:
@@ -1306,8 +1365,8 @@ def solicitar_vinculo():
                 """
                 INSERT INTO tbl_vinculo_vendedor_fornecedor
                     (id_tenant_vendedor, id_tenant_fornecedor, status, snapshot_vendedor,
-                     mensagem_solicitacao, respondido_em, mensagem_resposta)
-                VALUES (%s, %s, %s, %s::jsonb, %s, %s, %s)
+                     mensagem_solicitacao, respondido_em, mensagem_resposta, id_armazem_fornecedor)
+                VALUES (%s, %s, %s, %s::jsonb, %s, %s, %s, %s)
                 """,
                 (
                     id_vendedor,
@@ -1317,6 +1376,7 @@ def solicitar_vinculo():
                     msg_solicitacao,
                     respondido_em,
                     msg_resposta,
+                    id_azf,
                 ),
             )
         conn.commit()
@@ -1358,6 +1418,13 @@ def vinculo_acao():
         id_forn = int(body.get("id_fornecedor"))
     except (TypeError, ValueError):
         return jsonify(success=False, message="Fornecedor inválido."), 400
+    id_azf = None
+    raw_azf = body.get("id_armazem_fornecedor")
+    if raw_azf not in (None, "", 0, "0"):
+        try:
+            id_azf = int(raw_azf)
+        except (TypeError, ValueError):
+            id_azf = None
     acao = (body.get("acao") or "").strip().lower()
     if acao not in ("pausar", "despausar", "encerrar"):
         return jsonify(success=False, message="Ação inválida."), 400
@@ -1376,8 +1443,9 @@ def vinculo_acao():
             SELECT id, status, status_alterado_por_lado, status_alterado_por_usuario
             FROM tbl_vinculo_vendedor_fornecedor
             WHERE id_tenant_vendedor = %s AND id_tenant_fornecedor = %s
+              AND COALESCE(id_armazem_fornecedor, 0) = COALESCE(%s, 0)
             """,
-            (int(id_vendedor), id_forn),
+            (int(id_vendedor), id_forn, id_azf),
         )
         row = cur.fetchone()
         if not row:
@@ -1528,32 +1596,75 @@ def loja_dados(id_fornecedor: int):
     pagina = max(1, int(request.args.get("pagina", 1)))
     por_pagina = min(60, max(12, int(request.args.get("porPagina", 24))))
     offset = (pagina - 1) * por_pagina
+    id_azf = None
+    raw_azf = request.args.get("id_armazem_fornecedor") or request.args.get("azf")
+    if raw_azf not in (None, "", "0"):
+        try:
+            id_azf = int(raw_azf)
+        except (TypeError, ValueError):
+            id_azf = None
 
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
+        from core.dominio import garantir_colunas_vinculo_status
+
+        garantir_colunas_vinculo_status(cur)
         cur.execute(
             """
-            SELECT COALESCE(t.nome_fantasia, t.nome), t.cidade, t.uf,
-                   COALESCE(v.status, 'nenhum')
+            SELECT COALESCE(t.nome_fantasia, t.nome), t.cidade, t.uf, t.tipo_negocio
             FROM tbl_tenant t
-            LEFT JOIN tbl_vinculo_vendedor_fornecedor v
-                ON v.id_tenant_fornecedor = t.id AND v.id_tenant_vendedor = %s
             WHERE t.id = %s AND t.ativo = TRUE
               AND t.tipo_negocio IN ('fornecedor', 'hibrido', 'armazem')
             """,
-            (id_vendedor, id_fornecedor),
+            (id_fornecedor,),
         )
         forn = cur.fetchone()
         if not forn:
             return jsonify(success=False, message="Fornecedor não encontrado."), 404
+        tipo = (forn[3] or "").strip().lower()
+        nome_exibicao = forn[0]
+        if tipo == "armazem":
+            if not id_azf:
+                return jsonify(
+                    success=False,
+                    message="Informe o fornecedor do armazém para ver o catálogo.",
+                ), 400
+            cur.execute(
+                """
+                SELECT COALESCE(NULLIF(TRIM(nome_fantasia), ''), nome)
+                FROM tbl_armazem_fornecedor
+                WHERE id = %s AND id_tenant_armazem = %s AND ativo = TRUE
+                """,
+                (id_azf, id_fornecedor),
+            )
+            af = cur.fetchone()
+            if not af:
+                return jsonify(success=False, message="Fornecedor local não encontrado."), 404
+            nome_exibicao = af[0]
+
+        cur.execute(
+            """
+            SELECT COALESCE(v.status, 'nenhum')
+            FROM tbl_vinculo_vendedor_fornecedor v
+            WHERE v.id_tenant_fornecedor = %s AND v.id_tenant_vendedor = %s
+              AND COALESCE(v.id_armazem_fornecedor, 0) = COALESCE(%s, 0)
+            """,
+            (id_fornecedor, id_vendedor, id_azf),
+        )
+        vr = cur.fetchone()
+        status_vinculo = (vr[0] if vr else "nenhum") or "nenhum"
 
         where_prod = [
             "p.id_tenant = %s",
             "p.publicado = TRUE",
-            "p.publicado = TRUE",
         ]
         params_prod: list = [id_fornecedor]
+        if id_azf:
+            where_prod.append("p.id_armazem_fornecedor = %s")
+            params_prod.append(id_azf)
+        else:
+            where_prod.append("p.id_armazem_fornecedor IS NULL")
         if busca:
             where_prod.append("(p.nome ILIKE %s OR p.descricao ILIKE %s)")
             like = f"%{busca}%"
@@ -1583,7 +1694,6 @@ def loja_dados(id_fornecedor: int):
             params_prod + [por_pagina, offset],
         )
         produtos = []
-        status_vinculo = forn[3] or "nenhum"
         for row in cur.fetchall():
             id_produto = row[0]
             cur.execute(
@@ -1678,10 +1788,12 @@ def loja_dados(id_fornecedor: int):
             success=True,
             fornecedor={
                 "id": id_fornecedor,
-                "nome": forn[0],
+                "nome": nome_exibicao,
                 "cidade": forn[1] or "",
                 "uf": forn[2] or "",
                 "status_vinculo": status_vinculo,
+                "id_armazem_fornecedor": id_azf,
+                "tipo_negocio": tipo,
             },
             produtos=produtos,
             total=total,
@@ -1704,16 +1816,44 @@ def loja_ativar_produto():
         id_fornecedor = int(body.get("id_fornecedor"))
     except (TypeError, ValueError):
         return jsonify(success=False, message="Produto inválido."), 400
+    id_azf = None
+    raw_azf = body.get("id_armazem_fornecedor")
+    if raw_azf not in (None, "", 0, "0"):
+        try:
+            id_azf = int(raw_azf)
+        except (TypeError, ValueError):
+            id_azf = None
 
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
+        from core.dominio import garantir_colunas_vinculo_status
+
+        garantir_colunas_vinculo_status(cur)
+        cur.execute(
+            """
+            SELECT p.id_armazem_fornecedor
+            FROM tbl_produto p
+            WHERE p.id = %s AND p.id_tenant = %s AND p.publicado = TRUE
+            """,
+            (id_produto, id_fornecedor),
+        )
+        prow = cur.fetchone()
+        if not prow:
+            return jsonify(success=False, message="Produto não encontrado."), 404
+        prod_azf = int(prow[0]) if prow[0] else None
+        if id_azf is None:
+            id_azf = prod_azf
+        if prod_azf != id_azf:
+            return jsonify(success=False, message="Produto não pertence a este fornecedor."), 403
+
         cur.execute(
             """
             SELECT status FROM tbl_vinculo_vendedor_fornecedor
             WHERE id_tenant_vendedor = %s AND id_tenant_fornecedor = %s
+              AND COALESCE(id_armazem_fornecedor, 0) = COALESCE(%s, 0)
             """,
-            (id_vendedor, id_fornecedor),
+            (id_vendedor, id_fornecedor, id_azf),
         )
         vinc = cur.fetchone()
         st = (vinc[0] if vinc else "") or ""

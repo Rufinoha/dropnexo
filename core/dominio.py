@@ -178,6 +178,45 @@ def _garantir_check_status_pausado(cur) -> None:
     )
 
 
+def garantir_coluna_vinculo_armazem_fornecedor(cur) -> None:
+    """Garante id_armazem_fornecedor no vínculo (SQL 028)."""
+    cur.execute(
+        """
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'tbl_vinculo_vendedor_fornecedor'
+          AND column_name = 'id_armazem_fornecedor'
+          AND table_schema IN (current_schema(), 'public')
+        LIMIT 1
+        """
+    )
+    if cur.fetchone():
+        return
+    cur.execute(
+        """
+        ALTER TABLE tbl_vinculo_vendedor_fornecedor
+          ADD COLUMN IF NOT EXISTS id_armazem_fornecedor BIGINT
+        """
+    )
+    cur.execute(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_vinculo_vd_fn_azf
+          ON tbl_vinculo_vendedor_fornecedor (
+            id_tenant_vendedor,
+            id_tenant_fornecedor,
+            (COALESCE(id_armazem_fornecedor, 0))
+          )
+        """
+    )
+
+
+# Condição: vínculo clássico (NULL) cobre produtos sem dono local;
+# vínculo por fornecedor local só casa o produto daquele fornecedor.
+SQL_MATCH_VINCULO_PRODUTO = """(
+    vinc.id_armazem_fornecedor IS NULL
+    OR vinc.id_armazem_fornecedor = p.id_armazem_fornecedor
+)"""
+
+
 def garantir_colunas_vinculo_status(cur) -> None:
     """motivo + auditoria + CHECK com 'pausado' (SQL 095)."""
     global _VINCOLO_COLS_OK
@@ -201,6 +240,7 @@ def garantir_colunas_vinculo_status(cur) -> None:
                 "ALTER TABLE tbl_vinculo_vendedor_fornecedor ADD COLUMN IF NOT EXISTS status_alterado_por_lado VARCHAR(20)",
             ):
                 cur.execute(ddl)
+        garantir_coluna_vinculo_armazem_fornecedor(cur)
         _garantir_check_status_pausado(cur)
         _VINCOLO_COLS_OK = True
     except Exception:
