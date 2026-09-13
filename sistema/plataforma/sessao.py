@@ -172,21 +172,20 @@ def ctx_navegacao() -> dict:
         tid = session.get("id_tenant")
         uid = session.get("id_usuario")
         if tid and uid:
-            if session.get("eh_desenvolvedor") or (session.get("perfil_codigo") or "").lower() in (
-                "dono",
-                "admin",
-            ):
-                header_navs = {n[0] for n in MENUS_HEADER_PADRAO}
-            else:
-                conn = Var_ConectarBanco()
-                try:
-                    cur = conn.cursor()
-                    header_navs = navs_header_liberados(
-                        cur, id_usuario=int(uid), id_tenant=int(tid)
-                    )
-                    conn.commit()
-                finally:
-                    conn.close()
+            perfil = (session.get("perfil_codigo") or "").lower()
+            acesso_total = bool(session.get("eh_desenvolvedor")) or perfil in ("dono", "admin")
+            conn = Var_ConectarBanco()
+            try:
+                cur = conn.cursor()
+                header_navs = navs_header_liberados(
+                    cur,
+                    id_usuario=int(uid),
+                    id_tenant=int(tid),
+                    acesso_total=acesso_total,
+                )
+                conn.commit()
+            finally:
+                conn.close()
     except Exception:
         header_navs = {n[0] for n in MENUS_HEADER_PADRAO if _nav_default_ligado(n[0])}
     return {
@@ -362,12 +361,15 @@ def listar_menus_acesso_modulo(cur, *, contexto_modulo: str, id_usuario: int | N
     return base
 
 
-def navs_header_liberados(cur, *, id_usuario: int, id_tenant: int) -> set[str]:
-    """Nav codes hdr_* liberados para o usuário (ou todos se dono/admin sem override)."""
+def navs_header_liberados(
+    cur,
+    *,
+    id_usuario: int,
+    id_tenant: int,
+    acesso_total: bool = False,
+) -> set[str]:
+    """Header = mesmos hdr_* da tbl_menu, só se liberados no nível de acesso do usuário."""
     garantir_menus_header(cur)
-    cod = _perfil_codigo_usuario(cur, id_tenant, id_usuario)
-    if cod in ("dono", "admin"):
-        return {n[0] for n in MENUS_HEADER_PADRAO}
     cur.execute(
         """
         SELECT COUNT(*)::int FROM tbl_usuario_tenant_menu
@@ -375,25 +377,28 @@ def navs_header_liberados(cur, *, id_usuario: int, id_tenant: int) -> set[str]:
         """,
         (id_usuario, id_tenant),
     )
-    tem = int(cur.fetchone()[0] or 0) > 0
-    if not tem:
-        # Sem override: defaults de novo usuário (financeiro/plano off)
-        return {
-            n[0]
-            for n in MENUS_HEADER_PADRAO
-            if _nav_default_ligado(n[0])
-        }
-    cur.execute(
-        """
-        SELECT m.nav_codigo
-        FROM tbl_usuario_tenant_menu um
-        JOIN tbl_menu m ON m.id = um.id_menu
-        WHERE um.id_usuario = %s AND um.id_tenant = %s AND um.exibir = TRUE
-          AND COALESCE(m.nav_codigo, '') LIKE 'hdr_%%'
-        """,
-        (id_usuario, id_tenant),
-    )
-    return {(r[0] or "").strip() for r in cur.fetchall() if r[0]}
+    tem_override = int(cur.fetchone()[0] or 0) > 0
+    if tem_override:
+        cur.execute(
+            """
+            SELECT m.nav_codigo
+            FROM tbl_usuario_tenant_menu um
+            JOIN tbl_menu m ON m.id = um.id_menu
+            WHERE um.id_usuario = %s AND um.id_tenant = %s AND um.exibir = TRUE
+              AND (
+                    COALESCE(m.nav_codigo, '') LIKE 'hdr_%%'
+                 OR COALESCE(m.contexto_modulo, '') = 'header'
+              )
+            """,
+            (id_usuario, id_tenant),
+        )
+        return {(r[0] or "").strip() for r in cur.fetchall() if r[0]}
+
+    if acesso_total:
+        return {n[0] for n in MENUS_HEADER_PADRAO}
+
+    # Sem override e sem acesso total: defaults de novo usuário
+    return {n[0] for n in MENUS_HEADER_PADRAO if _nav_default_ligado(n[0])}
 
 
 def salvar_menus_usuario_tenant(cur, *, id_usuario: int, id_tenant: int, ids_menus: list[int]) -> None:
@@ -434,9 +439,56 @@ NAV_DEFAULT_OFF = frozenset(
     }
 )
 
+NAV_HEADER_EXCLUSIVOS = frozenset(n[0] for n in MENUS_HEADER_PADRAO)
+PAGES_HEADER_EXCLUSIVOS = frozenset(
+    {
+        "/meu-plano",
+        "/financeiro",
+        "/demandas",
+        "/marktplace",
+        "/marketplace",
+    }
+)
+NOMES_HEADER_EXCLUSIVOS = frozenset(
+    {
+        "meu plano",
+        "financeiro",
+        "central de chamados",
+        "marktplace",
+        "marketplace",
+    }
+)
+
+
+def _eh_menu_exclusivo_header(
+    *,
+    nav_codigo: str | None = None,
+    data_page: str | None = None,
+    nome: str | None = None,
+    contexto_modulo: str | None = None,
+    obs: str | None = None,
+) -> bool:
+    """True se o item deve existir só no header (nunca na sidebar)."""
+    nav = (nav_codigo or "").strip().lower()
+    page = (data_page or "").strip().lower().rstrip("/")
+    if page and not page.startswith("/"):
+        page = "/" + page
+    nome_l = (nome or "").strip().lower()
+    ctx = (contexto_modulo or "").strip().lower()
+    obs_l = (obs or "").strip().lower()
+    if ctx == "header" or obs_l == "header":
+        return True
+    if nav.startswith("hdr_") or nav in NAV_HEADER_EXCLUSIVOS:
+        return True
+    if page in PAGES_HEADER_EXCLUSIVOS:
+        return True
+    if nome_l in NOMES_HEADER_EXCLUSIVOS:
+        return True
+    return False
+
 
 def garantir_menus_header(cur) -> None:
-    """Garante itens do menu do header em tbl_menu (contexto comum)."""
+    """Garante itens do menu do header em tbl_menu (contexto 'header', nunca sidebar)."""
     for nav, nome, page, icone in MENUS_HEADER_PADRAO:
         cur.execute(
             """
@@ -444,7 +496,22 @@ def garantir_menus_header(cur) -> None:
             """,
             (nav,),
         )
-        if cur.fetchone():
+        row = cur.fetchone()
+        if row:
+            cur.execute(
+                """
+                UPDATE tbl_menu
+                   SET contexto_modulo = 'header',
+                       obs = 'header',
+                       pai = TRUE,
+                       parent_id = NULL,
+                       status = TRUE,
+                       data_page = COALESCE(NULLIF(data_page, ''), %s),
+                       nome_menu = COALESCE(NULLIF(nome_menu, ''), %s)
+                 WHERE id = %s
+                """,
+                (page, nome, row[0]),
+            )
             continue
         cur.execute(
             """
@@ -453,7 +520,7 @@ def garantir_menus_header(cur) -> None:
               parent_id, pai, status, obs, id_modulo, nav_codigo, contexto_modulo
             )
             VALUES (%s, %s, %s, %s, 'Mesma Janela', 900, NULL, TRUE, TRUE, 'header',
-                    NULL, %s, 'comum')
+                    NULL, %s, 'header')
             """,
             (nome, f"Acesso no menu do header: {nome}", page, icone, nav),
         )
@@ -496,9 +563,14 @@ def listar_menus_do_modulo(cur, *, contexto_modulo: str) -> list[dict]:
              OR COALESCE(m.nav_codigo, '') LIKE %s
              OR COALESCE(m.data_page, '') LIKE %s
              OR COALESCE(m.nav_codigo, '') LIKE 'hdr_%%'
+             OR COALESCE(m.contexto_modulo, '') = 'header'
           )
         ORDER BY
-          CASE WHEN COALESCE(m.nav_codigo, '') LIKE 'hdr_%%' THEN 1 ELSE 0 END,
+          CASE
+            WHEN COALESCE(m.nav_codigo, '') LIKE 'hdr_%%'
+              OR COALESCE(m.contexto_modulo, '') = 'header'
+            THEN 1 ELSE 0
+          END,
           m.ordem NULLS LAST,
           m.nome_menu
         """,
@@ -536,7 +608,9 @@ def listar_menus_do_modulo(cur, *, contexto_modulo: str) -> list[dict]:
                 "nome": r[1],
                 "nav_codigo": nav,
                 "exibir": False,
-                "grupo": "header" if nav.startswith("hdr_") else "sidebar",
+        "grupo": "header"
+                if nav.startswith("hdr_") or _eh_menu_exclusivo_header(nav_codigo=nav, nome=r[1])
+                else "sidebar",
                 "filhos": filhos,
             }
         )

@@ -797,7 +797,20 @@ def _dashboard_primeiro_na_lista(itens: list[dict]) -> list[dict]:
 
 
 def carregar_menu_sidebar() -> list[dict]:
-    from sistema.plataforma.sessao import garantir_modulo_sessao, resolver_url_menu
+    """Sidebar = itens de tbl_menu do módulo, filtrados pelo acesso do usuário.
+
+    Regra:
+      1) Carrega candidatos em tbl_menu (módulo ativo + comum; sem header/config).
+      2) Se o usuário tem override em tbl_usuario_tenant_menu → só os liberados.
+         Senão, se não for dono/admin/dev → tbl_perfil_menu.
+         Senão (dono/admin/dev sem override) → todos os candidatos.
+    """
+    from sistema.plataforma.sessao import (
+        garantir_modulo_sessao,
+        garantir_tabela_usuario_tenant_menu,
+        resolver_url_menu,
+        _eh_menu_exclusivo_header,
+    )
 
     if not session.get("id_usuario"):
         return []
@@ -809,7 +822,9 @@ def carregar_menu_sidebar() -> list[dict]:
     mod_ativo = garantir_modulo_sessao()
     ctx_filtro = ["comum", mod_ativo]
     perfil_codigo = (session.get("perfil_codigo") or session.get("papel") or "").lower()
-    acesso_total_menu = bool(session.get("eh_desenvolvedor")) or perfil_codigo in ("dono", "admin")
+    acesso_total = bool(session.get("eh_desenvolvedor")) or perfil_codigo in ("dono", "admin")
+    id_usuario = session.get("id_usuario")
+    id_tenant = session.get("id_tenant")
 
     conn = None
     cur = None
@@ -825,67 +840,71 @@ def carregar_menu_sidebar() -> list[dict]:
             except Exception:
                 pass
 
-        if acesso_total_menu:
-            cur.execute(
-                """
-                SELECT m.id, m.nome_menu, m.data_page, m.icone, m.nav_codigo, m.parent_id, m.pai
-                FROM tbl_menu m
-                WHERE m.status = TRUE AND m.pai = TRUE AND m.parent_id IS NULL
-                  AND COALESCE(m.contexto_modulo, 'comum') = ANY(%s)
-                  AND COALESCE(m.nav_codigo, '') <> 'config'
-                  AND COALESCE(m.data_page, '') <> '/configuracoes'
-                ORDER BY m.ordem NULLS LAST, m.nome_menu
-                """,
-                (list(ctx_filtro),),
-            )
-        else:
-            from sistema.plataforma.sessao import garantir_tabela_usuario_tenant_menu
+        # 1) Candidatos da sidebar em tbl_menu (nunca header / config).
+        cur.execute(
+            """
+            SELECT m.id, m.nome_menu, m.data_page, m.icone, m.nav_codigo, m.parent_id, m.pai,
+                   COALESCE(m.contexto_modulo, ''), COALESCE(m.obs, '')
+            FROM tbl_menu m
+            WHERE m.status = TRUE
+              AND m.pai = TRUE
+              AND m.parent_id IS NULL
+              AND COALESCE(m.contexto_modulo, 'comum') = ANY(%s)
+              AND COALESCE(m.contexto_modulo, '') <> 'header'
+              AND COALESCE(m.obs, '') <> 'header'
+              AND COALESCE(m.nav_codigo, '') <> 'config'
+              AND COALESCE(m.nav_codigo, '') NOT LIKE 'hdr_%%'
+              AND COALESCE(m.data_page, '') <> '/configuracoes'
+            ORDER BY m.ordem NULLS LAST, m.nome_menu
+            """,
+            (list(ctx_filtro),),
+        )
+        candidatos = cur.fetchall()
 
-            garantir_tabela_usuario_tenant_menu(cur)
-            id_usuario = session.get("id_usuario")
+        # 2) Acesso do usuário.
+        liberados: set[int] | None = None
+        garantir_tabela_usuario_tenant_menu(cur)
+        cur.execute(
+            """
+            SELECT COUNT(*)::int FROM tbl_usuario_tenant_menu
+            WHERE id_usuario = %s AND id_tenant = %s
+            """,
+            (id_usuario, id_tenant),
+        )
+        tem_override = int(cur.fetchone()[0] or 0) > 0
+
+        if tem_override:
             cur.execute(
                 """
-                SELECT COUNT(*)::int FROM tbl_usuario_tenant_menu
+                SELECT id_menu FROM tbl_usuario_tenant_menu
                 WHERE id_usuario = %s AND id_tenant = %s AND exibir = TRUE
                 """,
-                (id_usuario, session.get("id_tenant")),
+                (id_usuario, id_tenant),
             )
-            tem_menus_usuario = int(cur.fetchone()[0] or 0) > 0
-            if tem_menus_usuario:
-                cur.execute(
-                    """
-                    SELECT m.id, m.nome_menu, m.data_page, m.icone, m.nav_codigo, m.parent_id, m.pai
-                    FROM tbl_menu m
-                    JOIN tbl_usuario_tenant_menu um
-                      ON um.id_menu = m.id AND um.exibir = TRUE
-                     AND um.id_usuario = %s AND um.id_tenant = %s
-                    WHERE m.status = TRUE AND m.pai = TRUE AND m.parent_id IS NULL
-                      AND COALESCE(m.contexto_modulo, 'comum') = ANY(%s)
-                      AND COALESCE(m.nav_codigo, '') <> 'config'
-                      AND COALESCE(m.data_page, '') <> '/configuracoes'
-                    ORDER BY m.ordem NULLS LAST, m.nome_menu
-                    """,
-                    (id_usuario, session.get("id_tenant"), list(ctx_filtro)),
-                )
-            else:
-                cur.execute(
-                    """
-                    SELECT m.id, m.nome_menu, m.data_page, m.icone, m.nav_codigo, m.parent_id, m.pai
-                    FROM tbl_menu m
-                    JOIN tbl_perfil_menu pm ON pm.id_menu = m.id AND pm.exibir = TRUE
-                    WHERE pm.id_perfil = %s AND m.status = TRUE
-                      AND m.pai = TRUE AND m.parent_id IS NULL
-                      AND COALESCE(m.contexto_modulo, 'comum') = ANY(%s)
-                      AND COALESCE(m.nav_codigo, '') <> 'config'
-                      AND COALESCE(m.data_page, '') <> '/configuracoes'
-                    ORDER BY m.ordem NULLS LAST, m.nome_menu
-                    """,
-                    (id_perfil, list(ctx_filtro)),
-                )
+            liberados = {int(r[0]) for r in cur.fetchall()}
+        elif not acesso_total and id_perfil:
+            cur.execute(
+                """
+                SELECT id_menu FROM tbl_perfil_menu
+                WHERE id_perfil = %s AND exibir = TRUE
+                """,
+                (id_perfil,),
+            )
+            liberados = {int(r[0]) for r in cur.fetchall()}
 
         itens = []
-        for row in cur.fetchall():
-            mid, nome, data_page, icone, nav_codigo, parent_id, pai = row
+        for row in candidatos:
+            mid, nome, data_page, icone, nav_codigo, parent_id, pai, ctx_mod, obs = row
+            if _eh_menu_exclusivo_header(
+                nav_codigo=nav_codigo,
+                data_page=data_page,
+                nome=nome,
+                contexto_modulo=ctx_mod,
+                obs=obs,
+            ):
+                continue
+            if liberados is not None and int(mid) not in liberados:
+                continue
             itens.append(
                 {
                     "id": mid,

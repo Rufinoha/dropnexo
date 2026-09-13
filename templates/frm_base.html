@@ -164,25 +164,25 @@
                 <span class="fg-menu-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg></span>
                 <span>Meu Perfil</span>
               </a>
-              {% if session.get('eh_desenvolvedor') or session.get('perfil_codigo') in ('dono', 'admin') or 'hdr_meu_plano' in (header_navs or []) %}
+              {% if 'hdr_meu_plano' in (header_navs or []) %}
               <a href="{{ url_for('planos.meu_plano') }}" class="fg-menu-item" role="menuitem">
                 <span class="fg-menu-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg></span>
                 <span>Meu Plano</span>
               </a>
               {% endif %}
-              {% if session.get('eh_desenvolvedor') or session.get('perfil_codigo') in ('dono', 'admin') or 'hdr_financeiro' in (header_navs or []) %}
+              {% if 'hdr_financeiro' in (header_navs or []) %}
               <a href="{{ url_for('financeiro.pagina') }}" class="fg-menu-item" role="menuitem">
                 <span class="fg-menu-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span>
                 <span>Financeiro</span>
               </a>
               {% endif %}
-              {% if session.get('eh_desenvolvedor') or session.get('perfil_codigo') in ('dono', 'admin') or 'hdr_chamados' in (header_navs or []) %}
+              {% if 'hdr_chamados' in (header_navs or []) %}
               <a href="{{ url_for('demandas.demandas_pagina') }}" class="fg-menu-item" role="menuitem">
                 <span class="fg-menu-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
                 <span>Central de Chamados</span>
               </a>
               {% endif %}
-              {% if session.get('eh_desenvolvedor') or session.get('perfil_codigo') in ('dono', 'admin') or 'hdr_marktplace' in (header_navs or []) %}
+              {% if 'hdr_marktplace' in (header_navs or []) %}
               <a href="{{ url_for('marktplace.pagina') }}" class="fg-menu-item" role="menuitem">
                 <span class="fg-menu-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg></span>
                 <span>Marktplace</span>
