@@ -5,7 +5,7 @@
 {% block head_extra %}
 <link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_crud.css') }}" />
 <link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_usuarios.css') }}" />
-<link rel="stylesheet" href="{{ url_for('static', filename='style/Cusuarios_equipe.css') }}?v=3" />
+<link rel="stylesheet" href="{{ url_for('static', filename='style/Cusuarios_equipe.css') }}?v=4" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal UsuEq_Page">
@@ -56,10 +56,10 @@
           <th>Usuário</th>
           <th>E-mail</th>
           <th>Perfil</th>
-          <th>Convite</th>
-          <th>Último acesso</th>
-          <th>Status</th>
-          <th class="col-acoes Cl_TableActions">Ações</th>
+          <th class="UsuEq_ColConvite">Convite</th>
+          <th class="UsuEq_ColAcesso">Último acesso</th>
+          <th class="UsuEq_ColStatus">Status</th>
+          <th class="UsuEq_ColAcoes col-acoes Cl_TableActions">Ações</th>
         </tr>
       </thead>
       <tbody id="ob_listaUsuarios">
@@ -160,5 +160,5 @@
 {% endblock %}
 {% block page_js %}
 <script>window.USU_EQ_BASE = "/armazem/usuarios";</script>
-<script src="{{ url_for('static', filename='script/Susuarios_equipe.js') }}?v=4"></script>
+<script src="{{ url_for('static', filename='script/Susuarios_equipe.js') }}?v=5"></script>
 {% endblock %}

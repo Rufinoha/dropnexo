@@ -31,6 +31,14 @@
     return d.innerHTML;
   }
 
+  function urlParaExibir(url) {
+    const u = String(url || "").trim();
+    if (!u) return "";
+    if (!/^https?:\/\//i.test(u)) return u;
+    // Links externos (Postimages etc.) bloqueiam <img> cross-site.
+    return `/fornecedores/imagens/proxy?url=${encodeURIComponent(u)}`;
+  }
+
   function statusBadge(st) {
     const map = {
       ativo: { cls: "is-ativo", txt: "Conectado — pode integrar produtos" },
@@ -85,7 +93,7 @@
       .map((p) => {
         const variacoesHtml = renderVariacoesResumo(p);
         const img = p.imagem_url
-          ? `<img src="${esc(p.imagem_url)}" alt="" loading="lazy" />`
+          ? `<img src="${esc(urlParaExibir(p.imagem_url))}" alt="" loading="lazy" referrerpolicy="no-referrer" />`
           : '<div class="Loja_CardImgVazio">📦</div>';
 
         let btnHtml;

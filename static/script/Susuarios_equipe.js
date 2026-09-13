@@ -328,10 +328,10 @@
         </td>
         <td>${esc(row.email)}</td>
         <td>${esc(row.perfil_nome)}</td>
-        <td>${badgeConvite(row.convite_status)}</td>
-        <td>${row.dt_ultimo_login ? row.dt_ultimo_login.slice(0, 16).replace("T", " ") : "—"}</td>
-        <td><span class="Cl_Badge ${row.status ? "Cl_Badge--ativo" : "Cl_Badge--inativo"}">${row.status ? "Ativo" : "Inativo"}</span></td>
-        <td class="Cl_TableActions" onclick="event.stopPropagation()">
+        <td class="UsuEq_ColConvite">${badgeConvite(row.convite_status)}</td>
+        <td class="UsuEq_ColAcesso">${row.dt_ultimo_login ? row.dt_ultimo_login.slice(0, 16).replace("T", " ") : "—"}</td>
+        <td class="UsuEq_ColStatus"><span class="Cl_Badge ${row.status ? "Cl_Badge--ativo" : "Cl_Badge--inativo"}">${row.status ? "Ativo" : "Inativo"}</span></td>
+        <td class="UsuEq_ColAcoes" onclick="event.stopPropagation()">
           <button type="button" class="Cl_BtnAcao btnEditar" data-id="${row.id}" title="Editar">${u.gerarIconeTech("editar")}</button>
           <button type="button" class="Cl_BtnAcao btnInativar" data-id="${row.id}" title="${row.cannot_delete ? (dono ? "Dono não pode ser excluído" : "Não permitido") : "Inativar"}" ${row.cannot_delete ? "disabled" : ""}>${u.gerarIconeTech("excluir")}</button>
         </td>

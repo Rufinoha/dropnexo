@@ -11,7 +11,10 @@ from typing import Literal
 
 from global_utils import agora_utc
 from fornecedor.catalogo.srotas_catalogo import exigir_sku_unico_tenant, resolver_sku_unico_tenant
-from fornecedor.catalogo.catalogo import garantir_linhas_estoque_depositos, sincronizar_total_variante
+from fornecedor.catalogo.catalogo import (
+    garantir_linhas_estoque_depositos,
+    sincronizar_total_variante,
+)
 
 AcaoProdutos = Literal["excluir", "converter"]
 
@@ -530,7 +533,7 @@ def desconectar_fornecedor(
 import json
 from pathlib import Path
 
-from flask import Blueprint, jsonify, render_template, request, session
+from flask import Blueprint, Response, jsonify, render_template, request, session, url_for
 
 from fornecedor.parametros.requisitos import (
     carregar_contato_responsavel_fornecedor,
@@ -545,6 +548,7 @@ from fornecedor.parametros.precificacao import (
     pct_margem_revenda_efetiva,
 )
 from vendedor.precificacao.srotas_precificacao import precificar_na_integracao
+from fornecedor.catalogo.catalogo import obter_caminho_imagem_principal_produto
 from global_utils import Var_ConectarBanco, agora_utc, exigir_modulo, login_obrigatorio, exigir_permissao, url_imagem_produto
 from core.dominio import montar_snapshot_vendedor
 from sistema.plataforma.sessao import MODULO_VENDEDOR
@@ -565,6 +569,25 @@ vd_fornecedores_bp = Blueprint(
 def _id_tenant_sessao() -> int | None:
     tid = session.get("id_tenant")
     return int(tid) if tid else None
+
+
+# Produto publicado só entra na rede/loja se tiver ao menos 1 variante ativa.
+_SQL_EXISTE_VARIANTE_ATIVA = """
+EXISTS (
+    SELECT 1 FROM tbl_produto_variante _pv
+    WHERE _pv.id_produto = p.id AND _pv.ativo = TRUE
+)
+"""
+
+
+def _url_imagem_catalogo_vendedor(caminho: str | None) -> str:
+    """URL para <img> na visão do vendedor; links externos passam pelo proxy same-origin."""
+    url = url_imagem_produto(caminho)
+    if not url:
+        return ""
+    if url.lower().startswith(("http://", "https://")):
+        return url_for("vd_fornecedores.imagens_proxy", url=url)
+    return url
 
 
 def _where_rede(id_tenant: int, busca: str, id_fornecedor: str, id_categoria: str) -> tuple[str, list]:
@@ -676,10 +699,11 @@ def combos():
         cur = conn.cursor()
         cur.execute(
             """
-            SELECT t.id, t.nome, COUNT(p.id)::int
+            SELECT t.id, t.nome, COUNT(DISTINCT p.id)::int
             FROM tbl_tenant t
             INNER JOIN tbl_produto p ON p.id_tenant = t.id
                 AND p.publicado = TRUE
+            INNER JOIN tbl_produto_variante v ON v.id_produto = p.id AND v.ativo = TRUE
             WHERE t.id <> %s
               AND t.ativo = TRUE
               AND t.tipo_negocio IN ('fornecedor', 'hibrido', 'armazem')
@@ -786,7 +810,7 @@ def dados():
                 "nome": f"{r[3]} — {r[2]}" if r[2] and r[2] != r[3] else (r[3] or r[2]),
                 "preco": float(r[4] or 0),
                 "preco_promocional": float(r[5]) if r[5] is not None else None,
-                "imagem_url": url_imagem_produto(r[6]),
+                "imagem_url": _url_imagem_catalogo_vendedor(r[6]),
                 "unidade": r[7] or "UN",
                 "categoria": r[8] or "",
                 "estoque": int(r[9] or 0),
@@ -852,7 +876,7 @@ def variante_detalhe(id_variante: int):
                 "descricao": r[4] or "",
                 "preco": float(r[5] or 0),
                 "preco_promocional": float(r[6]) if r[6] is not None else None,
-                "imagem_url": url_imagem_produto(r[7]),
+                "imagem_url": _url_imagem_catalogo_vendedor(r[7]),
                 "unidade": r[8] or "UN",
                 "categoria": r[9] or "",
                 "estoque": int(r[10] or 0),
@@ -957,7 +981,11 @@ def rede():
                    v.id AS id_vinculo, COALESCE(v.status, 'nenhum'),
                    (SELECT COUNT(*)::int FROM tbl_produto p
                     WHERE p.id_tenant = t.id AND p.publicado = TRUE
-                      AND p.id_armazem_fornecedor IS NULL),
+                      AND p.id_armazem_fornecedor IS NULL
+                      AND EXISTS (
+                          SELECT 1 FROM tbl_produto_variante _pv
+                          WHERE _pv.id_produto = p.id AND _pv.ativo = TRUE
+                      )),
                    (SELECT COUNT(DISTINCT pv.id_produto)::int
                     FROM tbl_produto_vendedor pv
                     JOIN tbl_produto p2 ON p2.id = pv.id_produto
@@ -1048,7 +1076,11 @@ def rede():
                        COALESCE(NULLIF(TRIM(af.nome_fantasia), ''), af.nome),
                        (SELECT COUNT(*)::int FROM tbl_produto p
                         WHERE p.id_tenant = %s AND p.publicado = TRUE
-                          AND p.id_armazem_fornecedor = af.id),
+                          AND p.id_armazem_fornecedor = af.id
+                          AND EXISTS (
+                              SELECT 1 FROM tbl_produto_variante _pv
+                              WHERE _pv.id_produto = p.id AND _pv.ativo = TRUE
+                          )),
                        v.id, COALESCE(v.status, 'nenhum'),
                        v.mensagem_resposta, v.motivo_status,
                        v.status_alterado_por_lado, v.status_alterado_por_usuario,
@@ -1124,6 +1156,27 @@ def rede():
 @exigir_permissao(codigo="fornecedores.ver")
 def pagina_loja():
     return render_template("frm_fornecedor_loja.html")
+
+
+@vd_fornecedores_bp.get("/fornecedores/imagens/proxy")
+@login_obrigatorio()
+@exigir_modulo(MODULO_VENDEDOR)
+@exigir_permissao(codigo="fornecedores.ver")
+def imagens_proxy():
+    """Espelha imagem remota (modo link) para o catálogo na rede de fornecedores."""
+    url = (request.args.get("url") or "").strip()
+    if not url:
+        return jsonify(success=False, message="Informe a URL."), 400
+    try:
+        from fornecedor.catalogo.catalogo import proxy_bytes_imagem_remota
+
+        data, ct = proxy_bytes_imagem_remota(url)
+    except ValueError as e:
+        return jsonify(success=False, message=str(e)), 400
+    resp = Response(data, mimetype=ct)
+    resp.headers["Cache-Control"] = "private, max-age=86400"
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    return resp
 
 @vd_fornecedores_bp.get("/fornecedores/solicitar-vinculo/apoio")
 @login_obrigatorio()
@@ -1658,6 +1711,7 @@ def loja_dados(id_fornecedor: int):
         where_prod = [
             "p.id_tenant = %s",
             "p.publicado = TRUE",
+            _SQL_EXISTE_VARIANTE_ATIVA.strip(),
         ]
         params_prod: list = [id_fornecedor]
         if id_azf:
@@ -1738,8 +1792,8 @@ def loja_dados(id_fornecedor: int):
             preco_sug = calcular_preco_sugerido_revenda(preco_forn, pct_revenda)
             lucro = round(preco_sug - preco_forn, 2)
             margem = pct_revenda
-            img_url = url_imagem_produto(row[3])
-            if not img_url:
+            img_caminho = row[3] or obter_caminho_imagem_principal_produto(cur, id_produto)
+            if not img_caminho:
                 cur.execute(
                     """
                     SELECT COALESCE(v.imagem_url, p.imagem_url)
@@ -1753,7 +1807,8 @@ def loja_dados(id_fornecedor: int):
                 )
                 img_row = cur.fetchone()
                 if img_row:
-                    img_url = url_imagem_produto(img_row[0])
+                    img_caminho = img_row[0]
+            img_url = _url_imagem_catalogo_vendedor(img_caminho)
 
             todos_ativados = all(v["ativado"] for v in variantes)
             algum_ativado = any(v["ativado"] for v in variantes)
@@ -1966,7 +2021,7 @@ def catalogo_fornecedor(id_fornecedor: int):
                 "id_variante": r[0],
                 "nome": f"{r[1]} — {r[2]}" if r[2] and r[2] != r[1] else r[1],
                 "preco": float(r[3] or 0),
-                "imagem_url": url_imagem_produto(r[4]),
+                "imagem_url": _url_imagem_catalogo_vendedor(r[4]),
                 "estoque": int(r[5] or 0),
             }
             for r in cur.fetchall()

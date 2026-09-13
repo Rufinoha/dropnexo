@@ -62,6 +62,57 @@
 }
 .UsuEq_TableWrap tbody tr:hover { background: #f1f5f9; }
 
+/* Colunas compactas: Convite, Status, Ações */
+.UsuEq_TableWrap th.UsuEq_ColConvite,
+.UsuEq_TableWrap td.UsuEq_ColConvite,
+.UsuEq_TableWrap th.UsuEq_ColStatus,
+.UsuEq_TableWrap td.UsuEq_ColStatus,
+.UsuEq_TableWrap th.UsuEq_ColAcesso,
+.UsuEq_TableWrap td.UsuEq_ColAcesso,
+.UsuEq_TableWrap th.UsuEq_ColAcoes,
+.UsuEq_TableWrap td.UsuEq_ColAcoes {
+  width: 1%;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.UsuEq_TableWrap th.UsuEq_ColConvite,
+.UsuEq_TableWrap td.UsuEq_ColConvite,
+.UsuEq_TableWrap th.UsuEq_ColStatus,
+.UsuEq_TableWrap td.UsuEq_ColStatus {
+  text-align: center;
+}
+
+.UsuEq_TableWrap th.UsuEq_ColAcesso,
+.UsuEq_TableWrap td.UsuEq_ColAcesso {
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  color: #475569;
+  font-size: 0.86rem;
+}
+
+.UsuEq_TableWrap th.UsuEq_ColAcoes,
+.UsuEq_TableWrap td.UsuEq_ColAcoes {
+  text-align: right;
+  padding-right: 0.75rem;
+}
+
+.UsuEq_TableWrap td.UsuEq_ColAcoes .Cl_BtnAcao {
+  vertical-align: middle;
+}
+
+.UsuEq_TableWrap .Cl_Badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 4.5rem;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.75rem;
+  font-weight: 650;
+  border-radius: 999px;
+  line-height: 1.2;
+}
+
 .UsuEq_NomeCell {
   display: flex;
   align-items: center;
