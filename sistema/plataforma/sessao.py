@@ -287,9 +287,10 @@ def _perfil_codigo_usuario(cur, id_tenant: int, uid: int) -> str | None:
 
 
 def listar_menus_acesso_modulo(cur, *, contexto_modulo: str, id_usuario: int | None, id_tenant: int) -> list[dict]:
-    """Menus do módulo (e comum) com flag de acesso do usuário (ou padrão do perfil)."""
+    """Menus do módulo com flag de acesso (override do usuário ou padrão do perfil)."""
     garantir_tabela_usuario_tenant_menu(cur)
-    ctx = (contexto_modulo or "vendedor").strip().lower()
+    base = listar_menus_do_modulo(cur, contexto_modulo=contexto_modulo)
+
     cur.execute(
         """
         SELECT COUNT(*)::int FROM tbl_usuario_tenant_menu
@@ -302,84 +303,35 @@ def listar_menus_acesso_modulo(cur, *, contexto_modulo: str, id_usuario: int | N
     if tem_override:
         cur.execute(
             """
-            SELECT m.id, m.nome_menu, m.nav_codigo, m.parent_id, m.ordem,
-                   COALESCE(um.exibir, FALSE) AS exibir
-            FROM tbl_menu m
-            LEFT JOIN tbl_usuario_tenant_menu um
-              ON um.id_menu = m.id AND um.id_usuario = %s AND um.id_tenant = %s
-            WHERE m.status = TRUE AND m.pai = TRUE AND m.parent_id IS NULL
-              AND COALESCE(m.contexto_modulo, 'comum') IN ('comum', %s)
-              AND COALESCE(m.nav_codigo, '') <> 'config'
-              AND COALESCE(m.data_page, '') <> '/configuracoes'
-            ORDER BY m.ordem NULLS LAST, m.nome_menu
+            SELECT id_menu FROM tbl_usuario_tenant_menu
+            WHERE id_usuario = %s AND id_tenant = %s AND exibir = TRUE
             """,
-            (id_usuario, id_tenant, ctx),
+            (id_usuario, id_tenant),
         )
+        liberados = {int(r[0]) for r in cur.fetchall()}
     else:
         cur.execute(
             """
-            SELECT m.id, m.nome_menu, m.nav_codigo, m.parent_id, m.ordem,
-                   COALESCE(pm.exibir, FALSE) AS exibir
-            FROM tbl_menu m
-            LEFT JOIN tbl_usuario_tenant ut
-              ON ut.id_usuario = %s AND ut.id_tenant = %s
-            LEFT JOIN tbl_perfil_menu pm
-              ON pm.id_menu = m.id AND pm.id_perfil = ut.id_perfil AND pm.exibir = TRUE
-            WHERE m.status = TRUE AND m.pai = TRUE AND m.parent_id IS NULL
-              AND COALESCE(m.contexto_modulo, 'comum') IN ('comum', %s)
-              AND COALESCE(m.nav_codigo, '') <> 'config'
-              AND COALESCE(m.data_page, '') <> '/configuracoes'
-            ORDER BY m.ordem NULLS LAST, m.nome_menu
+            SELECT pm.id_menu
+            FROM tbl_perfil_menu pm
+            JOIN tbl_usuario_tenant ut ON ut.id_perfil = pm.id_perfil
+            WHERE ut.id_usuario = %s AND ut.id_tenant = %s AND pm.exibir = TRUE
             """,
-            (id_usuario or 0, id_tenant, ctx),
+            (id_usuario or 0, id_tenant),
         )
+        liberados = {int(r[0]) for r in cur.fetchall()}
+        if not liberados:
+            for m in base:
+                m["exibir"] = True
+                for f in m.get("filhos") or []:
+                    f["exibir"] = True
+            return base
 
-    pais = cur.fetchall()
-    out = []
-    for r in pais:
-        mid = r[0]
-        if tem_override:
-            cur.execute(
-                """
-                SELECT m.id, m.nome_menu, m.nav_codigo,
-                       COALESCE(um.exibir, FALSE) AS exibir
-                FROM tbl_menu m
-                LEFT JOIN tbl_usuario_tenant_menu um
-                  ON um.id_menu = m.id AND um.id_usuario = %s AND um.id_tenant = %s
-                WHERE m.status = TRUE AND m.parent_id = %s
-                ORDER BY m.ordem NULLS LAST, m.nome_menu
-                """,
-                (id_usuario, id_tenant, mid),
-            )
-        else:
-            cur.execute(
-                """
-                SELECT m.id, m.nome_menu, m.nav_codigo,
-                       COALESCE(pm.exibir, FALSE) AS exibir
-                FROM tbl_menu m
-                LEFT JOIN tbl_usuario_tenant ut
-                  ON ut.id_usuario = %s AND ut.id_tenant = %s
-                LEFT JOIN tbl_perfil_menu pm
-                  ON pm.id_menu = m.id AND pm.id_perfil = ut.id_perfil AND pm.exibir = TRUE
-                WHERE m.status = TRUE AND m.parent_id = %s
-                ORDER BY m.ordem NULLS LAST, m.nome_menu
-                """,
-                (id_usuario or 0, id_tenant, mid),
-            )
-        filhos = [
-            {"id": f[0], "nome": f[1], "nav_codigo": f[2] or "", "exibir": bool(f[3])}
-            for f in cur.fetchall()
-        ]
-        out.append(
-            {
-                "id": mid,
-                "nome": r[1],
-                "nav_codigo": r[2] or "",
-                "exibir": bool(r[5]),
-                "filhos": filhos,
-            }
-        )
-    return out
+    for m in base:
+        m["exibir"] = m["id"] in liberados
+        for f in m.get("filhos") or []:
+            f["exibir"] = f["id"] in liberados
+    return base
 
 
 def salvar_menus_usuario_tenant(cur, *, id_usuario: int, id_tenant: int, ids_menus: list[int]) -> None:
@@ -400,21 +352,25 @@ def salvar_menus_usuario_tenant(cur, *, id_usuario: int, id_tenant: int, ids_men
         )
 
 
-def menus_padrao_do_perfil(cur, *, id_perfil: int, contexto_modulo: str) -> list[dict]:
+def listar_menus_do_modulo(cur, *, contexto_modulo: str) -> list[dict]:
+    """Todos os menus pai (+ filhos) do módulo, sem depender de perfil_menu."""
     ctx = (contexto_modulo or "vendedor").strip().lower()
+    prefix = {"armazem": "az_%", "vendedor": "vd_%", "fornecedor": "fn_%"}.get(ctx, "x_%")
     cur.execute(
         """
-        SELECT m.id, m.nome_menu, m.nav_codigo, COALESCE(pm.exibir, FALSE) AS exibir
+        SELECT m.id, m.nome_menu, m.nav_codigo
         FROM tbl_menu m
-        LEFT JOIN tbl_perfil_menu pm
-          ON pm.id_menu = m.id AND pm.id_perfil = %s AND pm.exibir = TRUE
         WHERE m.status = TRUE AND m.pai = TRUE AND m.parent_id IS NULL
-          AND COALESCE(m.contexto_modulo, 'comum') IN ('comum', %s)
+          AND (
+                COALESCE(m.contexto_modulo, 'comum') IN ('comum', %s)
+             OR COALESCE(m.nav_codigo, '') LIKE %s
+             OR COALESCE(m.data_page, '') LIKE %s
+          )
           AND COALESCE(m.nav_codigo, '') <> 'config'
           AND COALESCE(m.data_page, '') <> '/configuracoes'
         ORDER BY m.ordem NULLS LAST, m.nome_menu
         """,
-        (id_perfil, ctx),
+        (ctx, prefix, f"/{ctx}/%"),
     )
     pais = cur.fetchall()
     out = []
@@ -422,17 +378,15 @@ def menus_padrao_do_perfil(cur, *, id_perfil: int, contexto_modulo: str) -> list
         mid = r[0]
         cur.execute(
             """
-            SELECT m.id, m.nome_menu, m.nav_codigo, COALESCE(pm.exibir, FALSE)
+            SELECT m.id, m.nome_menu, m.nav_codigo
             FROM tbl_menu m
-            LEFT JOIN tbl_perfil_menu pm
-              ON pm.id_menu = m.id AND pm.id_perfil = %s AND pm.exibir = TRUE
             WHERE m.status = TRUE AND m.parent_id = %s
             ORDER BY m.ordem NULLS LAST, m.nome_menu
             """,
-            (id_perfil, mid),
+            (mid,),
         )
         filhos = [
-            {"id": f[0], "nome": f[1], "nav_codigo": f[2] or "", "exibir": bool(f[3])}
+            {"id": f[0], "nome": f[1], "nav_codigo": f[2] or "", "exibir": False}
             for f in cur.fetchall()
         ]
         out.append(
@@ -440,11 +394,40 @@ def menus_padrao_do_perfil(cur, *, id_perfil: int, contexto_modulo: str) -> list
                 "id": mid,
                 "nome": r[1],
                 "nav_codigo": r[2] or "",
-                "exibir": bool(r[3]),
+                "exibir": False,
                 "filhos": filhos,
             }
         )
     return out
+
+
+def menus_padrao_do_perfil(cur, *, id_perfil: int, contexto_modulo: str) -> list[dict]:
+    base = listar_menus_do_modulo(cur, contexto_modulo=contexto_modulo)
+    if not id_perfil:
+        for m in base:
+            m["exibir"] = True
+            for f in m.get("filhos") or []:
+                f["exibir"] = True
+        return base
+    cur.execute(
+        """
+        SELECT id_menu FROM tbl_perfil_menu
+        WHERE id_perfil = %s AND exibir = TRUE
+        """,
+        (id_perfil,),
+    )
+    liberados = {int(r[0]) for r in cur.fetchall()}
+    if not liberados:
+        for m in base:
+            m["exibir"] = True
+            for f in m.get("filhos") or []:
+                f["exibir"] = True
+        return base
+    for m in base:
+        m["exibir"] = m["id"] in liberados
+        for f in m.get("filhos") or []:
+            f["exibir"] = f["id"] in liberados
+    return base
 
 
 def listar_usuarios_tenant(

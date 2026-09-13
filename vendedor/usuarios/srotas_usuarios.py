@@ -99,8 +99,6 @@ def usuarios_menus_perfil():
     if (r := _exigir_vendedor_tenant()) is not None:
         return r
     id_perfil = int(request.args.get("id_perfil") or 0)
-    if not id_perfil:
-        return jsonify(success=False, message="Perfil inválido."), 400
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()

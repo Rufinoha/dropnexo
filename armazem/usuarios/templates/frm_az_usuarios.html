@@ -5,7 +5,7 @@
 {% block head_extra %}
 <link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_crud.css') }}" />
 <link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_usuarios.css') }}" />
-<link rel="stylesheet" href="{{ url_for('static', filename='style/Cusuarios_equipe.css') }}?v=1" />
+<link rel="stylesheet" href="{{ url_for('static', filename='style/Cusuarios_equipe.css') }}?v=2" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal UsuEq_Page">
@@ -79,78 +79,91 @@
 
 <div id="usuEqDrawer" class="UsuEq_Drawer" hidden aria-hidden="true">
   <div class="UsuEq_DrawerBackdrop" id="usuEqBackdrop"></div>
-  <aside class="UsuEq_DrawerPanel" role="dialog" aria-labelledby="usuEqTitulo">
+  <div class="UsuEq_DrawerPanel" role="dialog" aria-modal="true" aria-labelledby="usuEqTitulo">
     <header class="UsuEq_DrawerHead">
       <div>
         <h3 id="usuEqTitulo">Novo usuário</h3>
-        <p class="UsuEq_DrawerSub" id="usuEqSub">Convite por e-mail com token de ativação.</p>
+        <p class="UsuEq_DrawerSub" id="usuEqSub">Convite por e-mail com token de ativação (24h).</p>
       </div>
       <button type="button" class="UsuEq_Close" id="usuEqBtnFechar" aria-label="Fechar">×</button>
     </header>
 
-    <nav class="UsuEq_Tabs" aria-label="Seções">
-      <button type="button" class="UsuEq_Tab is-on" id="usuEqTabUsuario">Usuário</button>
-      <button type="button" class="UsuEq_Tab" id="usuEqTabAcesso">Nível de acesso</button>
-    </nav>
+    <div class="UsuEq_Shell">
+      <aside class="UsuEq_Side" aria-label="Seções">
+        <p class="UsuEq_SideLabel">Cadastro</p>
+        <button type="button" class="UsuEq_Tab is-on" id="usuEqTabUsuario">
+          Usuário
+          <small>Dados e convite</small>
+        </button>
+        <button type="button" class="UsuEq_Tab" id="usuEqTabAcesso">
+          Nível de acesso
+          <small>Menus da sidebar</small>
+        </button>
+      </aside>
 
-    <div class="UsuEq_DrawerBody">
-      <div id="usuEqBannerDono" class="UsuEq_BannerDono" hidden>
-        Este é o <strong>Dono</strong> do tenant. Não pode ser excluído nem ter o acesso reduzido.
-      </div>
-
-      <section id="usuEqPaneUsuario" class="UsuEq_Pane">
-        <div class="UsuEq_Field">
-          <label for="usuEqEmail">E-mail (login)</label>
-          <input type="email" id="usuEqEmail" placeholder="usuario@empresa.com" autocomplete="off" />
-        </div>
-        <div class="UsuEq_Field">
-          <label for="usuEqNome">Nome</label>
-          <input type="text" id="usuEqNome" autocomplete="off" />
-        </div>
-        <div class="UsuEq_Field">
-          <label for="usuEqWhatsapp">WhatsApp</label>
-          <input type="text" id="usuEqWhatsapp" autocomplete="off" />
-        </div>
-        <div class="UsuEq_Field">
-          <label for="usuEqPerfil">Perfil</label>
-          <select id="usuEqPerfil"></select>
-        </div>
-        <div class="UsuEq_SwitchRow">
-          <label class="Cl_Switch">
-            <input type="checkbox" id="usuEqStatus" checked />
-            <span class="Cl_SwitchSlider"></span>
-            <span>Ativo no tenant</span>
-          </label>
-          <label class="Cl_Switch" id="usuEqWrapConvite">
-            <input type="checkbox" id="usuEqEnviarConvite" checked />
-            <span class="Cl_SwitchSlider"></span>
-            <span>Enviar convite por e-mail</span>
-          </label>
-        </div>
-        <p class="UsuEq_Hint" id="usuEqHint"></p>
-      </section>
-
-      <section id="usuEqPaneAcesso" class="UsuEq_Pane" hidden>
-        <div class="UsuEq_MenusHead">
-          <p id="usuEqMenusHint">Menus da sidebar deste módulo.</p>
-          <div class="UsuEq_MenusTools">
-            <button type="button" class="UsuEq_LinkBtn" id="usuEqMenusTodos">Todos</button>
-            <button type="button" class="UsuEq_LinkBtn" id="usuEqMenusNenhum">Nenhum</button>
+      <div class="UsuEq_Main">
+        <div class="UsuEq_DrawerBody">
+          <div id="usuEqBannerDono" class="UsuEq_BannerDono" hidden>
+            Este é o <strong>Dono</strong> do tenant. Não pode ser excluído nem ter o acesso reduzido.
           </div>
-        </div>
-        <div id="usuEqMenus" class="UsuEq_MenuTree"></div>
-      </section>
-    </div>
 
-    <footer class="UsuEq_DrawerFoot">
-      <button type="button" class="Cl_BtnSalvar" id="usuEqBtnSalvar">Salvar</button>
-      <button type="button" class="Cl_BtnAuxiliar" id="usuEqBtnReenviar" hidden>Reenviar convite</button>
-      <button type="button" class="Cl_BtnCancelar" id="usuEqBtnCancelar">Cancelar</button>
-    </footer>
-  </aside>
+          <section id="usuEqPaneUsuario" class="UsuEq_Pane">
+            <div class="UsuEq_Field">
+              <label for="usuEqEmail">E-mail (login)</label>
+              <input type="email" id="usuEqEmail" placeholder="usuario@empresa.com" autocomplete="off" />
+            </div>
+            <div class="UsuEq_FieldGrid">
+              <div class="UsuEq_Field">
+                <label for="usuEqNome">Nome</label>
+                <input type="text" id="usuEqNome" autocomplete="off" />
+              </div>
+              <div class="UsuEq_Field">
+                <label for="usuEqWhatsapp">WhatsApp</label>
+                <input type="text" id="usuEqWhatsapp" autocomplete="off" />
+              </div>
+            </div>
+            <div class="UsuEq_Field">
+              <label for="usuEqPerfil">Perfil</label>
+              <select id="usuEqPerfil"></select>
+            </div>
+            <div class="UsuEq_SwitchRow">
+              <label class="Cl_Switch">
+                <input type="checkbox" id="usuEqStatus" checked />
+                <span class="Cl_SwitchSlider"></span>
+                <span>Ativo no tenant</span>
+              </label>
+              <label class="Cl_Switch" id="usuEqWrapConvite">
+                <input type="checkbox" id="usuEqEnviarConvite" checked />
+                <span class="Cl_SwitchSlider"></span>
+                <span>Enviar convite por e-mail</span>
+              </label>
+            </div>
+            <p class="UsuEq_Hint" id="usuEqHint"></p>
+          </section>
+
+          <section id="usuEqPaneAcesso" class="UsuEq_Pane" hidden>
+            <div class="UsuEq_MenusHead">
+              <p id="usuEqMenusHint">Menus da sidebar deste módulo.</p>
+              <div class="UsuEq_MenusTools">
+                <button type="button" class="UsuEq_LinkBtn" id="usuEqMenusTodos">Todos</button>
+                <button type="button" class="UsuEq_LinkBtn" id="usuEqMenusNenhum">Nenhum</button>
+              </div>
+            </div>
+            <div id="usuEqMenus" class="UsuEq_MenuTree"></div>
+          </section>
+        </div>
+
+        <footer class="UsuEq_DrawerFoot">
+          <button type="button" class="Cl_BtnSalvar" id="usuEqBtnSalvar">Salvar</button>
+          <button type="button" class="Cl_BtnAuxiliar" id="usuEqBtnReenviar" hidden>Reenviar convite</button>
+          <button type="button" class="Cl_BtnCancelar" id="usuEqBtnCancelar">Cancelar</button>
+        </footer>
+      </div>
+    </div>
+  </div>
 </div>
 {% endblock %}
 {% block page_js %}
 <script>window.USU_EQ_BASE = "/armazem/usuarios";</script>
-<script src="{{ url_for('static', filename='script/Susuarios_equipe.js') }}?v=1"></script>
+<script src="{{ url_for('static', filename='script/Susuarios_equipe.js') }}?v=2"></script>
 {% endblock %}

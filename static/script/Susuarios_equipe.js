@@ -164,11 +164,17 @@
   }
 
   async function carregarMenusPerfil(idPerfil) {
-    if (!idPerfil) return;
-    const r = await fetch(`${BASE}/menus-perfil?id_perfil=${encodeURIComponent(idPerfil)}`);
-    const j = await r.json();
-    if (!r.ok || !j.success) return;
-    renderMenus(j.menus || []);
+    if (!el.menus) return;
+    el.menus.innerHTML = "<p class='UsuEq_Hint'>Carregando menus…</p>";
+    try {
+      const qs = idPerfil ? `?id_perfil=${encodeURIComponent(idPerfil)}` : "";
+      const r = await fetch(`${BASE}/menus-perfil${qs}`);
+      const j = await r.json();
+      if (!r.ok || !j.success) throw new Error(j.message || "Falha ao carregar menus.");
+      renderMenus(j.menus || []);
+    } catch (e) {
+      el.menus.innerHTML = `<p class="UsuEq_Hint is-warn">${esc(e.message || "Não foi possível carregar os menus.")}</p>`;
+    }
   }
 
   function abrirDrawerNovo() {
@@ -197,13 +203,9 @@
       el.menusHint.textContent = "Marque os menus que este usuário poderá ver na sidebar.";
     }
     setTab("usuario");
-    const primeiro = el.perfil.options[0]?.value;
-    if (primeiro) {
-      el.perfil.value = primeiro;
-      carregarMenusPerfil(primeiro);
-    } else {
-      renderMenus([]);
-    }
+    const primeiro = el.perfil.options[0]?.value || "";
+    if (primeiro) el.perfil.value = primeiro;
+    carregarMenusPerfil(primeiro);
     el.drawer.hidden = false;
     el.drawer.setAttribute("aria-hidden", "false");
     document.body.style.overflow = "hidden";

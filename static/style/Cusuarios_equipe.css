@@ -1,4 +1,4 @@
-/* Equipe / usuários — lista + drawer */
+/* Equipe / usuários — lista + modal central com sidebar interna */
 
 .UsuEq_Page {
   --usueq-navy: #021f81;
@@ -86,56 +86,60 @@
 .UsuEq_NomeStrong { display: block; color: var(--usueq-ink); font-weight: 650; }
 .UsuEq_NomeSub { display: block; color: var(--usueq-muted); font-size: 0.8rem; }
 
-/* Drawer */
+/* Modal central com sidebar interna */
 .UsuEq_Drawer {
   position: fixed;
   inset: 0;
   z-index: 1300;
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
 }
 .UsuEq_Drawer[hidden] { display: none !important; }
 .UsuEq_DrawerBackdrop {
   position: absolute;
   inset: 0;
-  background: rgba(15, 23, 42, 0.42);
-  animation: UsuEq_fade 0.22s ease both;
+  background: rgba(15, 23, 42, 0.48);
+  animation: UsuEq_fade 0.2s ease both;
 }
 .UsuEq_DrawerPanel {
   position: relative;
-  width: min(520px, 100%);
-  height: 100%;
+  width: min(920px, 100%);
+  max-height: min(88vh, 760px);
   background: #fff;
-  box-shadow: -18px 0 48px rgba(15, 23, 42, 0.18);
+  border-radius: 18px;
+  box-shadow: 0 28px 80px rgba(15, 23, 42, 0.28);
   display: flex;
   flex-direction: column;
-  animation: UsuEq_slide 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
+  overflow: hidden;
+  animation: UsuEq_pop 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 @keyframes UsuEq_fade { from { opacity: 0; } to { opacity: 1; } }
-@keyframes UsuEq_slide {
-  from { transform: translateX(18px); opacity: 0.6; }
-  to { transform: translateX(0); opacity: 1; }
+@keyframes UsuEq_pop {
+  from { transform: translateY(12px) scale(0.98); opacity: 0.5; }
+  to { transform: none; opacity: 1; }
 }
 
 .UsuEq_DrawerHead {
   display: flex;
   justify-content: space-between;
   gap: 1rem;
-  padding: 1.1rem 1.25rem 0.85rem;
+  padding: 1.15rem 1.35rem 1rem;
   border-bottom: 1px solid var(--usueq-line);
   background:
-    radial-gradient(500px 120px at 0% 0%, rgba(2, 31, 129, 0.1), transparent 60%),
-    #fff;
+    radial-gradient(620px 140px at 0% 0%, rgba(2, 31, 129, 0.12), transparent 55%),
+    linear-gradient(180deg, #fff, #f8fafc);
 }
 .UsuEq_DrawerHead h3 {
   margin: 0;
   color: var(--usueq-navy);
-  font-size: 1.15rem;
+  font-size: 1.2rem;
 }
 .UsuEq_DrawerSub {
-  margin: 0.25rem 0 0;
+  margin: 0.3rem 0 0;
   color: var(--usueq-muted);
-  font-size: 0.86rem;
+  font-size: 0.88rem;
 }
 .UsuEq_Close {
   width: 36px;
@@ -148,46 +152,73 @@
   line-height: 1;
 }
 
-.UsuEq_Tabs {
+.UsuEq_Shell {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.UsuEq_Side {
+  background: #0b1a4a;
+  color: #e2e8f0;
+  padding: 1rem 0.75rem;
   display: flex;
+  flex-direction: column;
   gap: 0.35rem;
-  padding: 0.75rem 1.25rem 0;
-  border-bottom: 1px solid var(--usueq-line);
+}
+.UsuEq_SideLabel {
+  margin: 0 0.55rem 0.55rem;
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(226, 232, 240, 0.55);
+  font-weight: 700;
 }
 .UsuEq_Tab {
   border: 0;
   background: transparent;
-  padding: 0.55rem 0.85rem;
-  border-radius: 10px 10px 0 0;
-  color: var(--usueq-muted);
+  color: rgba(226, 232, 240, 0.78);
+  text-align: left;
+  padding: 0.7rem 0.85rem;
+  border-radius: 10px;
   font-weight: 650;
   cursor: pointer;
-  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  transition: background 0.15s ease, color 0.15s ease;
 }
+.UsuEq_Tab small {
+  font-weight: 500;
+  font-size: 0.72rem;
+  color: rgba(226, 232, 240, 0.45);
+}
+.UsuEq_Tab:hover { background: rgba(255, 255, 255, 0.08); color: #fff; }
 .UsuEq_Tab.is-on {
-  color: var(--usueq-navy);
-  background: #eef2ff;
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  box-shadow: inset 3px 0 0 #93c5fd;
 }
-.UsuEq_Tab.is-on::after {
-  content: "";
-  position: absolute;
-  left: 10px;
-  right: 10px;
-  bottom: -1px;
-  height: 2px;
-  background: var(--usueq-navy);
+.UsuEq_Tab.is-on small { color: rgba(226, 232, 240, 0.7); }
+
+.UsuEq_Main {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  background: #fff;
 }
 
 .UsuEq_DrawerBody {
   flex: 1;
   overflow: auto;
-  padding: 1rem 1.25rem 1.25rem;
+  padding: 1.15rem 1.35rem 1.25rem;
 }
 .UsuEq_Pane[hidden] { display: none !important; }
 
-.UsuEq_Field {
-  margin-bottom: 0.85rem;
-}
+.UsuEq_Field { margin-bottom: 0.9rem; }
 .UsuEq_Field label {
   display: block;
   font-size: 0.78rem;
@@ -200,7 +231,7 @@
 .UsuEq_Field input,
 .UsuEq_Field select {
   width: 100%;
-  padding: 0.6rem 0.75rem;
+  padding: 0.62rem 0.75rem;
   border: 1px solid #cbd5e1;
   border-radius: 10px;
   font: inherit;
@@ -216,20 +247,25 @@
   background: #f1f5f9;
   color: #475569;
 }
+.UsuEq_FieldGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
 
 .UsuEq_SwitchRow {
   display: flex;
   flex-wrap: wrap;
   gap: 1rem;
   align-items: center;
-  margin: 0.5rem 0 0.85rem;
+  margin: 0.35rem 0 0.85rem;
 }
 
 .UsuEq_Hint {
   margin: 0.35rem 0 0;
   font-size: 0.84rem;
   color: var(--usueq-muted);
-  line-height: 1.4;
+  line-height: 1.45;
 }
 .UsuEq_Hint.is-warn { color: #92400e; }
 .UsuEq_Hint.is-ok { color: #166534; }
@@ -256,10 +292,7 @@
   font-size: 0.86rem;
   color: var(--usueq-muted);
 }
-.UsuEq_MenusTools {
-  display: flex;
-  gap: 0.35rem;
-}
+.UsuEq_MenusTools { display: flex; gap: 0.35rem; }
 .UsuEq_LinkBtn {
   border: 1px solid var(--usueq-line);
   background: #fff;
@@ -281,6 +314,11 @@
   border-radius: 12px;
   background: #fff;
   overflow: hidden;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.UsuEq_MenuItem:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.04);
 }
 .UsuEq_MenuItem label.UsuEq_MenuCheck {
   display: flex;
@@ -322,12 +360,22 @@
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
-  padding: 0.9rem 1.25rem;
+  padding: 0.9rem 1.35rem;
   border-top: 1px solid var(--usueq-line);
   background: #fff;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 760px) {
   .UsuEq_Head { flex-direction: column; }
-  .UsuEq_DrawerPanel { width: 100%; }
+  .UsuEq_Shell { grid-template-columns: 1fr; }
+  .UsuEq_Side {
+    flex-direction: row;
+    overflow-x: auto;
+    padding: 0.65rem;
+  }
+  .UsuEq_SideLabel { display: none; }
+  .UsuEq_Tab { white-space: nowrap; }
+  .UsuEq_Tab small { display: none; }
+  .UsuEq_FieldGrid { grid-template-columns: 1fr; }
+  .UsuEq_DrawerPanel { max-height: 94vh; }
 }
