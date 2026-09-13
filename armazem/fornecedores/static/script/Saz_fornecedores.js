@@ -4,7 +4,10 @@
   const modal = document.getElementById("az_forn_modal");
   const form = document.getElementById("az_forn_form");
   const titulo = document.getElementById("az_forn_titulo");
+  const subtitulo = document.getElementById("az_forn_subtitulo");
   const busca = document.getElementById("az_forn_busca");
+  const previewNome = document.getElementById("az_forn_preview_nome");
+  const previewSub = document.getElementById("az_forn_preview_sub");
   const BASE = "/armazem/fornecedores";
 
   const el = {
@@ -34,6 +37,17 @@
       .replace(/"/g, "&quot;");
   }
 
+  function atualizarPreview() {
+    const nome = (el.nome?.value || "").trim();
+    const fantasia = (el.fantasia?.value || "").trim();
+    if (previewNome) previewNome.textContent = fantasia || nome || "Novo fornecedor";
+    if (previewSub) {
+      if (fantasia && nome && fantasia !== nome) previewSub.textContent = nome;
+      else if (nome && !fantasia) previewSub.textContent = "Razão social / nome";
+      else previewSub.textContent = "Sem nome fantasia";
+    }
+  }
+
   function setLogoPreview(url) {
     if (url && el.logoImg) {
       el.logoImg.src = url;
@@ -59,20 +73,30 @@
     el.tel.value = dados?.telefone || "";
     el.wa.value = dados?.whatsapp || "";
     el.obs.value = dados?.observacoes || "";
-    titulo.textContent = dados?.id ? "Editar fornecedor" : "Novo fornecedor";
-    el.btnExcluir.hidden = !dados?.id;
+    const editando = !!dados?.id;
+    titulo.textContent = editando ? "Editar fornecedor" : "Novo fornecedor";
+    if (subtitulo) {
+      subtitulo.textContent = editando
+        ? "Atualize os dados do dono dos produtos neste armazém."
+        : "Dados do dono dos produtos neste armazém.";
+    }
+    el.btnExcluir.hidden = !editando;
     const logoUrl = dados?.logo_url
       ? dados.logo_url + (dados.logo_url.includes("?") ? "&" : "?") + "t=" + Date.now()
       : "";
     setLogoPreview(logoUrl);
+    atualizarPreview();
     modal.hidden = false;
     modal.setAttribute("aria-hidden", "false");
+    document.body.style.overflow = "hidden";
+    setTimeout(() => el.nome?.focus(), 40);
   }
 
   function fecharModal() {
     logoPendente = null;
     modal.hidden = true;
     modal.setAttribute("aria-hidden", "true");
+    document.body.style.overflow = "";
   }
 
   async function uploadLogo(idFornecedor, file) {
@@ -114,7 +138,7 @@
           ? `<img class="AzForn_CardLogo" src="${esc(f.logo_url)}?t=${Date.now()}" alt="" />`
           : `<span class="AzForn_CardLogoPh" aria-hidden="true"></span>`;
         return `
-      <article class="AzForn_Card" data-id="${f.id}">
+      <article class="AzForn_Card" data-id="${f.id}" title="Clique para editar">
         ${logo}
         <div class="AzForn_CardBody">
           <strong>${esc(f.nome_fantasia || f.nome)}</strong>
@@ -126,9 +150,24 @@
       .join("");
   }
 
+  async function abrirPorId(id) {
+    const r = await fetch(`${BASE}/apoio`, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: Number(id) }),
+    });
+    const j = await r.json();
+    if (j.success) abrirModal(j.dados);
+  }
+
   document.getElementById("az_forn_btnIncluir")?.addEventListener("click", () => abrirModal(null));
   document.getElementById("az_forn_btnFechar")?.addEventListener("click", fecharModal);
   document.getElementById("az_forn_btnCancelar")?.addEventListener("click", fecharModal);
+  document.getElementById("az_forn_backdrop")?.addEventListener("click", fecharModal);
+
+  el.nome?.addEventListener("input", atualizarPreview);
+  el.fantasia?.addEventListener("input", atualizarPreview);
 
   el.logoInput?.addEventListener("change", async () => {
     const f = el.logoInput.files?.[0];
@@ -155,17 +194,10 @@
     }
   });
 
-  grid.addEventListener("dblclick", async (e) => {
+  grid.addEventListener("click", (e) => {
     const card = e.target.closest("[data-id]");
     if (!card) return;
-    const r = await fetch(`${BASE}/apoio`, {
-      method: "POST",
-      credentials: "same-origin",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: Number(card.dataset.id) }),
-    });
-    const j = await r.json();
-    if (j.success) abrirModal(j.dados);
+    abrirPorId(card.dataset.id);
   });
 
   form?.addEventListener("submit", async (ev) => {
@@ -237,6 +269,10 @@
       fecharModal();
       carregar();
     }
+  });
+
+  document.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape" && modal && !modal.hidden) fecharModal();
   });
 
   let t = null;

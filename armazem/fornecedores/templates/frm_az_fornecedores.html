@@ -3,7 +3,7 @@
 {% set nav_ativo = 'az_fornecedores' %}
 {% block topbar_title %}Fornecedores do armazém{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('az_fornecedores.static', filename='style/Caz_fornecedores.css') }}?v=2" />
+<link rel="stylesheet" href="{{ url_for('az_fornecedores.static', filename='style/Caz_fornecedores.css') }}?v=4" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal AzForn_Page">
@@ -17,82 +17,111 @@
 
   <div class="AzForn_Filtro">
     <label class="AzForn_Search">
+      <svg class="AzForn_SearchIco" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
       <input type="search" id="az_forn_busca" placeholder="Buscar por nome ou documento…" autocomplete="off" />
     </label>
   </div>
 
   <div id="az_forn_grid" class="AzForn_Grid" aria-live="polite"></div>
   <div id="az_forn_vazio" class="AzForn_Vazio" hidden>
+    <span class="AzForn_VazioIco" aria-hidden="true">
+      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+    </span>
     <strong>Nenhum fornecedor cadastrado</strong>
-    <p>Inclua o primeiro fornecedor para poder vincular produtos ao dono correto.</p>
+    <p>Inclua o primeiro fornecedor para vincular produtos ao dono correto.</p>
   </div>
 </div>
 
-<div id="az_forn_modal" class="AzForn_Modal" hidden aria-hidden="true" role="dialog" aria-labelledby="az_forn_titulo">
+<div id="az_forn_modal" class="AzForn_Modal" hidden aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="az_forn_titulo">
+  <div class="AzForn_ModalBackdrop" id="az_forn_backdrop"></div>
   <div class="AzForn_ModalInner">
-    <header class="AzForn_ModalHead">
-      <div>
-        <h3 id="az_forn_titulo">Novo fornecedor</h3>
-        <p class="AzForn_ModalSub">Dados do dono dos produtos neste armazém.</p>
+    <aside class="AzForn_Side">
+      <p class="AzForn_SideBadge">Cadastro local</p>
+      <label class="AzForn_LogoDrop" for="az_forn_logo_input" id="az_forn_logo_frame" title="Clique para enviar logotipo">
+        <img id="az_forn_logo_img" class="AzForn_LogoImg" alt="Logotipo" hidden />
+        <span id="az_forn_logo_ph" class="AzForn_LogoPh">
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="11" r="1.5"/><path d="M21 16l-5-5-4 4-2-2-5 5"/></svg>
+          <strong>Logotipo</strong>
+          <small>PNG, JPG ou WEBP · até 2 MB</small>
+        </span>
+      </label>
+      <input type="file" id="az_forn_logo_input" accept="image/png,image/jpeg,image/webp" hidden />
+      <div class="AzForn_SidePreview">
+        <p class="AzForn_SidePreviewLabel">Prévia</p>
+        <strong id="az_forn_preview_nome">Novo fornecedor</strong>
+        <span id="az_forn_preview_sub">Sem nome fantasia</span>
       </div>
-      <button type="button" class="AzForn_Close" id="az_forn_btnFechar" aria-label="Fechar">×</button>
-    </header>
-    <form id="az_forn_form" class="AzForn_Form" autocomplete="off">
-      <input type="hidden" id="az_forn_id" value="" />
+      <p class="AzForn_SideHint">Não cria login no DropNexo — só organiza os produtos deste armazém.</p>
+    </aside>
 
-      <div class="AzForn_LogoBlock">
-        <span class="AzForn_LogoLabel">Logotipo</span>
-        <div class="AzForn_LogoFrame" id="az_forn_logo_frame">
-          <img id="az_forn_logo_img" class="AzForn_LogoImg" alt="Logotipo" hidden />
-          <span id="az_forn_logo_ph" class="AzForn_LogoPh">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="11" r="1.5"/><path d="M21 16l-5-5-4 4-2-2-5 5"/></svg>
-            <span>Sem logotipo</span>
-          </span>
+    <div class="AzForn_Main">
+      <header class="AzForn_ModalHead">
+        <div>
+          <h3 id="az_forn_titulo">Novo fornecedor</h3>
+          <p class="AzForn_ModalSub" id="az_forn_subtitulo">Dados do dono dos produtos neste armazém.</p>
         </div>
-        <label for="az_forn_logo_input" class="AzForn_LogoBtn">Escolher imagem</label>
-        <input type="file" id="az_forn_logo_input" accept="image/png,image/jpeg,image/webp" hidden />
-        <p class="AzForn_LogoHint">PNG, JPG ou WEBP · até 2 MB</p>
-      </div>
+        <button type="button" class="AzForn_Close" id="az_forn_btnFechar" aria-label="Fechar">×</button>
+      </header>
 
-      <div class="AzForn_Field">
-        <label for="az_forn_nome">Razão social / nome *</label>
-        <input type="text" id="az_forn_nome" maxlength="200" required />
-      </div>
-      <div class="AzForn_Field">
-        <label for="az_forn_fantasia">Nome fantasia</label>
-        <input type="text" id="az_forn_fantasia" maxlength="200" />
-      </div>
-      <div class="AzForn_FieldGrid">
-        <div class="AzForn_Field">
-          <label for="az_forn_doc">CNPJ / CPF</label>
-          <input type="text" id="az_forn_doc" maxlength="18" />
-        </div>
-        <div class="AzForn_Field">
-          <label for="az_forn_email">E-mail</label>
-          <input type="email" id="az_forn_email" maxlength="200" />
-        </div>
-        <div class="AzForn_Field">
-          <label for="az_forn_tel">Telefone</label>
-          <input type="text" id="az_forn_tel" maxlength="20" />
-        </div>
-        <div class="AzForn_Field">
-          <label for="az_forn_wa">WhatsApp</label>
-          <input type="text" id="az_forn_wa" maxlength="20" />
-        </div>
-      </div>
-      <div class="AzForn_Field">
-        <label for="az_forn_obs">Observações</label>
-        <textarea id="az_forn_obs" rows="3" maxlength="2000"></textarea>
-      </div>
-      <div class="Cl_BotoesApoio AzForn_Foot">
-        <button type="submit" class="Cl_BtnSalvar">Salvar</button>
-        <button type="button" class="Cl_BtnCancelar" id="az_forn_btnCancelar">Cancelar</button>
-        <button type="button" class="Cl_BtnExcluir" id="az_forn_btnExcluir" hidden>Excluir</button>
-      </div>
-    </form>
+      <form id="az_forn_form" class="AzForn_Form" autocomplete="off">
+        <input type="hidden" id="az_forn_id" value="" />
+
+        <section class="AzForn_Section">
+          <h4 class="AzForn_SectionTitle">Identificação</h4>
+          <div class="AzForn_Field">
+            <label for="az_forn_nome">Razão social / nome *</label>
+            <input type="text" id="az_forn_nome" maxlength="200" required placeholder="Como aparece no cadastro fiscal" />
+          </div>
+          <div class="AzForn_FieldGrid">
+            <div class="AzForn_Field">
+              <label for="az_forn_fantasia">Nome fantasia</label>
+              <input type="text" id="az_forn_fantasia" maxlength="200" placeholder="Nome comercial" />
+            </div>
+            <div class="AzForn_Field">
+              <label for="az_forn_doc">CNPJ / CPF</label>
+              <input type="text" id="az_forn_doc" maxlength="18" placeholder="00.000.000/0000-00" />
+            </div>
+          </div>
+        </section>
+
+        <section class="AzForn_Section">
+          <h4 class="AzForn_SectionTitle">Contato</h4>
+          <div class="AzForn_FieldGrid AzForn_FieldGrid--3">
+            <div class="AzForn_Field">
+              <label for="az_forn_email">E-mail</label>
+              <input type="email" id="az_forn_email" maxlength="200" placeholder="contato@empresa.com" />
+            </div>
+            <div class="AzForn_Field">
+              <label for="az_forn_tel">Telefone</label>
+              <input type="text" id="az_forn_tel" maxlength="20" placeholder="(00) 0000-0000" />
+            </div>
+            <div class="AzForn_Field">
+              <label for="az_forn_wa">WhatsApp</label>
+              <input type="text" id="az_forn_wa" maxlength="20" placeholder="(00) 90000-0000" />
+            </div>
+          </div>
+        </section>
+
+        <section class="AzForn_Section">
+          <h4 class="AzForn_SectionTitle">Observações</h4>
+          <div class="AzForn_Field">
+            <label for="az_forn_obs" class="AzForn_SrOnly">Observações</label>
+            <textarea id="az_forn_obs" rows="3" maxlength="2000" placeholder="Notas internas sobre este fornecedor…"></textarea>
+          </div>
+        </section>
+
+        <footer class="AzForn_Foot">
+          <button type="button" class="Cl_BtnExcluir" id="az_forn_btnExcluir" hidden>Excluir</button>
+          <div class="AzForn_FootRight">
+            <button type="button" class="Cl_BtnCancelar" id="az_forn_btnCancelar">Cancelar</button>
+            <button type="submit" class="Cl_BtnSalvar">Salvar</button>
+          </div>
+        </footer>
+      </form>
+    </div>
   </div>
 </div>
 {% endblock %}
 {% block page_js %}
-<script src="{{ url_for('az_fornecedores.static', filename='script/Saz_fornecedores.js') }}?v=3"></script>
+<script src="{{ url_for('az_fornecedores.static', filename='script/Saz_fornecedores.js') }}?v=4"></script>
 {% endblock %}
