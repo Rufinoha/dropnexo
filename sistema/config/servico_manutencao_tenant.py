@@ -58,8 +58,9 @@ def migrar_fornecedor_para_armazem(cur, id_tenant: int) -> dict:
             id_tenant, modo_vitrine, visivel_rede_vendedor,
             aprovacao_automatica, texto_adicional, atualizado_em
         )
-        VALUES (%s, 'armazem', %s, %s, %s, NOW())
+        VALUES (%s, 'fornecedores', %s, %s, %s, NOW())
         ON CONFLICT (id_tenant) DO UPDATE SET
+            modo_vitrine = 'fornecedores',
             visivel_rede_vendedor = EXCLUDED.visivel_rede_vendedor,
             aprovacao_automatica = EXCLUDED.aprovacao_automatica,
             texto_adicional = COALESCE(EXCLUDED.texto_adicional, tbl_armazem_parametros.texto_adicional),

@@ -1,4 +1,5 @@
-# armazem/parametros — visibilidade A/B + mesmos recursos do fornecedor
+# armazem/parametros — visibilidade na rede + mesmos recursos do fornecedor
+# Na rede o vendedor sempre vê fornecedores locais (nunca o tenant armazém).
 from __future__ import annotations
 
 from pathlib import Path
@@ -33,7 +34,7 @@ az_parametros_bp = Blueprint(
     static_url_path="/static/armazem/parametros",
 )
 
-MODO_VITRINE_ARMAZEM = "armazem"
+# Coluna legado; valor fixo — escolha A/B removida da UI.
 MODO_VITRINE_FORNECEDORES = "fornecedores"
 _PAR_API_BASE = "/armazem/parametros"
 
@@ -57,7 +58,7 @@ def garantir_tabela_parametros(cur) -> None:
         """
         CREATE TABLE IF NOT EXISTS tbl_armazem_parametros (
             id_tenant BIGINT PRIMARY KEY REFERENCES tbl_tenant(id) ON DELETE CASCADE,
-            modo_vitrine VARCHAR(20) NOT NULL DEFAULT 'armazem',
+            modo_vitrine VARCHAR(20) NOT NULL DEFAULT 'fornecedores',
             visivel_rede_vendedor BOOLEAN NOT NULL DEFAULT FALSE,
             aprovacao_automatica BOOLEAN NOT NULL DEFAULT FALSE,
             texto_adicional TEXT,
@@ -82,13 +83,14 @@ def carregar_parametros(cur, id_tenant: int) -> dict:
     row = cur.fetchone()
     if not row:
         return {
-            "modo_vitrine": MODO_VITRINE_ARMAZEM,
+            "modo_vitrine": MODO_VITRINE_FORNECEDORES,
             "visivel_rede_vendedor": False,
             "aprovacao_automatica": False,
             "texto_adicional": "",
         }
     return {
-        "modo_vitrine": (row[0] or MODO_VITRINE_ARMAZEM).strip().lower(),
+        # Sempre fornecedores locais — coluna legado mantida por compatibilidade.
+        "modo_vitrine": MODO_VITRINE_FORNECEDORES,
         "visivel_rede_vendedor": bool(row[1]),
         "aprovacao_automatica": bool(row[2]),
         "texto_adicional": row[3] or "",
@@ -122,7 +124,7 @@ def sincronizar_armazem_com_requisitos(cur, id_tenant: int, req: dict) -> None:
         )
         VALUES (
             %s,
-            COALESCE((SELECT modo_vitrine FROM tbl_armazem_parametros WHERE id_tenant = %s), 'armazem'),
+            COALESCE((SELECT modo_vitrine FROM tbl_armazem_parametros WHERE id_tenant = %s), 'fornecedores'),
             COALESCE((SELECT visivel_rede_vendedor FROM tbl_armazem_parametros WHERE id_tenant = %s), FALSE),
             %s, %s, NOW()
         )
@@ -190,10 +192,7 @@ def parametros_salvar():
     try:
         cur = conn.cursor()
         atual = carregar_parametros(cur, id_tenant)
-        modo = (body.get("modo_vitrine") or atual.get("modo_vitrine") or MODO_VITRINE_ARMAZEM)
-        modo = str(modo).strip().lower()
-        if modo not in (MODO_VITRINE_ARMAZEM, MODO_VITRINE_FORNECEDORES):
-            return jsonify(success=False, message="Modo de vitrine inválido."), 400
+        modo = MODO_VITRINE_FORNECEDORES
         visivel = (
             bool(body["visivel_rede_vendedor"])
             if "visivel_rede_vendedor" in body
