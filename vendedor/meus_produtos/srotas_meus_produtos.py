@@ -1767,6 +1767,27 @@ def imagens_lista_vitrine():
         conn.close()
 
 
+@vd_meus_produtos_bp.get("/meus-produtos/imagens/proxy")
+@login_obrigatorio()
+@exigir_permissao(codigo="produtos.ver")
+def imagens_proxy_vitrine():
+    url = (request.args.get("url") or "").strip()
+    if not url:
+        return jsonify(success=False, message="Informe a URL."), 400
+    try:
+        from fornecedor.catalogo.catalogo import proxy_bytes_imagem_remota
+
+        data, ct = proxy_bytes_imagem_remota(url)
+    except ValueError as e:
+        return jsonify(success=False, message=str(e)), 400
+    from flask import Response
+
+    resp = Response(data, mimetype=ct)
+    resp.headers["Cache-Control"] = "private, max-age=3600"
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    return resp
+
+
 @vd_meus_produtos_bp.post("/meus-produtos/imagens/link")
 @login_obrigatorio()
 @exigir_permissao(codigo="produtos.editar")

@@ -628,6 +628,15 @@
     }
   }
 
+  function urlParaExibir(url) {
+    const u = String(url || "").trim();
+    if (!u) return "";
+    if (!/^https?:\/\//i.test(u)) return u;
+    // Hospedeiros externos (Postimages etc.) bloqueiam <img> cross-site;
+    // exibimos via proxy same-origin sem gravar arquivo.
+    return `${apiBase()}/imagens/proxy?url=${encodeURIComponent(u)}`;
+  }
+
   function renderGaleria() {
     if (!el.galeria_imagens) return;
     if (el.imgContador) el.imgContador.textContent = `${galeriaImagens.length} / ${MAX_IMAGENS} imagens`;
@@ -642,7 +651,7 @@
     el.galeria_imagens.innerHTML = galeriaImagens
       .map(
         (img, idx) => {
-          const src = escHtml(img.url || img.caminho || "");
+          const src = escHtml(urlParaExibir(img.url || img.caminho || ""));
           const origemLbl = rotuloOrigem(img.origem);
           const ext = (img.extensao || "").toUpperCase();
           const metaTop =

@@ -295,12 +295,19 @@
     return galeriaPai.filter((i) => i.id && !usados.has(Number(i.id)));
   }
 
+  function urlParaExibir(url) {
+    const u = String(url || "").trim();
+    if (!u) return "";
+    if (!/^https?:\/\//i.test(u)) return u;
+    return `${apiBase()}/imagens/proxy?url=${encodeURIComponent(u)}`;
+  }
+
   function abrirModalImagem(img, idx) {
     if (!img?.url) return;
     const titulo = idx !== undefined && idx !== null ? rotuloOrdem(idx) : "Imagem";
     Swal.fire({
       title: titulo,
-      imageUrl: img.url,
+      imageUrl: urlParaExibir(img.url),
       imageAlt: "Imagem do produto",
       showConfirmButton: false,
       showCloseButton: true,
@@ -315,9 +322,10 @@
       lado === "variante" && idx !== null && idx !== undefined
         ? `<span class="Cat_GaleriaSplitOrdem${idx === 0 ? " is-principal" : ""}">${rotuloOrdem(idx)}</span>`
         : "";
+    const src = urlParaExibir(img.url || "");
     return `<div class="Cat_GaleriaSplitItem" draggable="true" data-lado="${lado}" data-id="${img.id}" data-idx="${idx ?? ""}">
       ${ordem}
-      <img src="${img.url || ""}" alt="" loading="lazy" draggable="false" referrerpolicy="no-referrer" onerror="this.classList.add('is-broken');" />
+      <img src="${src}" alt="" loading="lazy" draggable="false" referrerpolicy="no-referrer" onerror="this.classList.add('is-broken');" />
     </div>`;
   }
 

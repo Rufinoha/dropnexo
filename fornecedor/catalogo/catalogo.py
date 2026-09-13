@@ -514,6 +514,62 @@ def corrigir_caminho_imagem_link_se_pagina(cur, *, id_imagem: int, caminho: str)
     return nova
 
 
+def proxy_bytes_imagem_remota(url: str, *, timeout: float = 20.0, max_bytes: int = 8_000_000) -> tuple[bytes, str]:
+    """
+    Busca bytes de imagem remota para exibição (não grava em disco).
+    Retorna (conteudo, content_type). Levanta ValueError se inválido.
+    """
+    bruto = (url or "").strip()
+    if not bruto.lower().startswith(("http://", "https://")):
+        raise ValueError("URL inválida.")
+    _host_url_seguro(bruto)
+    headers = {
+        "User-Agent": _UA_IMG_LINK,
+        "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+        # Sem Referer: evita bloqueio de hotlink em CDNs (Postimages etc.).
+    }
+    try:
+        with requests.get(
+            bruto,
+            headers=headers,
+            timeout=timeout,
+            stream=True,
+            allow_redirects=True,
+        ) as resp:
+            resp.raise_for_status()
+            final = str(resp.url or bruto)
+            _host_url_seguro(final)
+            ct = (resp.headers.get("Content-Type") or "").split(";", 1)[0].strip() or "application/octet-stream"
+            chunks: list[bytes] = []
+            total = 0
+            for parte in resp.iter_content(chunk_size=16384):
+                if not parte:
+                    continue
+                total += len(parte)
+                if total > max_bytes:
+                    raise ValueError("Imagem remota muito grande.")
+                chunks.append(parte)
+            data = b"".join(chunks)
+    except requests.RequestException as e:
+        raise ValueError("Não foi possível carregar a imagem remota.") from e
+    if not data:
+        raise ValueError("Imagem remota vazia.")
+    if not (_content_type_eh_imagem(ct) or _bytes_parecem_imagem(data)):
+        raise ValueError("A URL remota não devolveu uma imagem.")
+    if not _content_type_eh_imagem(ct):
+        if data.startswith(b"\xff\xd8\xff"):
+            ct = "image/jpeg"
+        elif data.startswith(b"\x89PNG\r\n\x1a\n"):
+            ct = "image/png"
+        elif data.startswith((b"GIF87a", b"GIF89a")):
+            ct = "image/gif"
+        elif len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+            ct = "image/webp"
+        else:
+            ct = "application/octet-stream"
+    return data, ct
+
+
 def obter_imagem_modo(cur, id_produto: int) -> str | None:
     cur.execute("SELECT imagem_modo FROM tbl_produto WHERE id = %s", (id_produto,))
     row = cur.fetchone()

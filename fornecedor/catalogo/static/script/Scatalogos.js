@@ -57,7 +57,11 @@
 
   function thumb(url) {
     if (url) {
-      return `<img class="Cat_Thumb" src="${escapeHtml(url)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.classList.add('is-broken');this.removeAttribute('src');" />`;
+      let src = url;
+      if (/^https?:\/\//i.test(String(url))) {
+        src = `${BASE}/imagens/proxy?url=${encodeURIComponent(url)}`;
+      }
+      return `<img class="Cat_Thumb" src="${escapeHtml(src)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.classList.add('is-broken');this.removeAttribute('src');" />`;
     }
     return '<span class="Cat_Thumb Cat_Thumb--vazio">—</span>';
   }

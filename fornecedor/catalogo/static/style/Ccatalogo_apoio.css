@@ -734,7 +734,7 @@ html:has(.Cat_ApoioBody) body {
 }
 
 .Cat_GaleriaItem:has(img.is-broken)::before {
-  content: "Link inválido ou expirado";
+  content: "Não foi possível carregar";
   position: absolute;
   inset: 0 0 48px 0;
   display: flex;

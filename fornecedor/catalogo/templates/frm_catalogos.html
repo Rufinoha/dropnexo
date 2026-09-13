@@ -7,7 +7,7 @@
 {% block topbar_title %}{{ cat_topbar_title|default('Catálogos') }}{% endblock %}
 
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('fn_catalogo.static', filename='style/Ccatalogos.css') }}?v=16" />
+<link rel="stylesheet" href="{{ url_for('fn_catalogo.static', filename='style/Ccatalogos.css') }}?v=17" />
 <link rel="stylesheet" href="{{ url_for('fn_importacao.static', filename='style/Cimportacao.css') }}?v=9" />
 {% endblock %}
 
@@ -122,5 +122,5 @@
 {% if not cat_ocultar_import_export %}
 <script defer src="{{ url_for('fn_importacao.static', filename='script/Simportacao.js') }}?v=12"></script>
 {% endif %}
-<script defer src="{{ url_for('fn_catalogo.static', filename='script/Scatalogos.js') }}?v=18"></script>
+<script defer src="{{ url_for('fn_catalogo.static', filename='script/Scatalogos.js') }}?v=19"></script>
 {% endblock %}

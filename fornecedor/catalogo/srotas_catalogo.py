@@ -761,6 +761,7 @@ from fornecedor.catalogo.catalogo import (
     listar_imagens_variante_selecionadas,
     listar_regras_atributo_imagem,
     obter_imagem_modo,
+    proxy_bytes_imagem_remota,
     resolver_url_imagem_link,
     salvar_imagens_variante,
     salvar_regra_atributo_imagem,
@@ -2349,6 +2350,24 @@ def catalogos_imagens_lista():
         )
     finally:
         conn.close()
+
+
+@fn_catalogo_bp.get("/catalogos/imagens/proxy")
+@login_obrigatorio()
+@exigir_permissao(codigos=["catalogos.ver", "produtos.ver", "az_produtos.ver"])
+def catalogos_imagens_proxy():
+    """Espelha imagem remota para o navegador (modo link) sem gravar em disco."""
+    url = (request.args.get("url") or "").strip()
+    if not url:
+        return jsonify(success=False, message="Informe a URL."), 400
+    try:
+        data, ct = proxy_bytes_imagem_remota(url)
+    except ValueError as e:
+        return jsonify(success=False, message=str(e)), 400
+    resp = Response(data, mimetype=ct)
+    resp.headers["Cache-Control"] = "private, max-age=3600"
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    return resp
 
 
 @fn_catalogo_bp.post("/catalogos/imagens/link")
