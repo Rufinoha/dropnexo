@@ -33,6 +33,20 @@
     return esc(raw);
   }
 
+  function formatarDataHora(iso) {
+    if (!iso) return "—";
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) {
+      const s = String(iso).replace("T", " ");
+      return esc(s.length >= 16 ? s.slice(0, 16) : s);
+    }
+    const pad = (n) => String(n).padStart(2, "0");
+    return (
+      `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ` +
+      `${pad(d.getHours())}:${pad(d.getMinutes())}`
+    );
+  }
+
   function abrirApoio(id) {
     window.GlobalUtils?.abrirJanelaApoioModal({
       rota: `${BASE}/editar`,
@@ -52,14 +66,14 @@
     if (q) qs.set("q", q);
     if (tipo) qs.set("tipo", tipo);
     if (ativo !== "") qs.set("ativo", ativo);
-    el.lista.innerHTML = `<tr><td colspan="9">Carregando…</td></tr>`;
+    el.lista.innerHTML = `<tr><td colspan="11">Carregando…</td></tr>`;
     try {
       const r = await fetch(`${BASE}/dados?${qs}`, { credentials: "same-origin" });
       const j = await r.json();
       if (!r.ok || !j.success) throw new Error(j.message || "Falha ao listar.");
       const itens = j.itens || [];
       if (!itens.length) {
-        el.lista.innerHTML = `<tr><td colspan="9">Nenhum tenant encontrado.</td></tr>`;
+        el.lista.innerHTML = `<tr><td colspan="11">Nenhum tenant encontrado.</td></tr>`;
         return;
       }
       const util = window.Util || { gerarIconeTech: () => "…" };
@@ -80,15 +94,17 @@
           const razao = ehCnpj ? esc(t.razao_social || "") || "—" : "—";
           return `
         <tr data-id="${t.id}">
-          <td>${t.id}</td>
+          <td class="CfgMt_ColId">${t.id}</td>
           <td><strong>${esc(t.nome)}</strong>${sessao}</td>
           <td>${esc(t.slug)}</td>
           <td>${formatarDocumento(t.documento, t.tipo_pessoa)}</td>
           <td>${razao}</td>
           <td>${badgeTipo(t.tipo_negocio)}</td>
           <td>${esc(t.plano)}</td>
-          <td>${t.ativo ? "Sim" : "Não"}</td>
-          <td class="Cl_TableActions">
+          <td class="CfgMt_ColAtivo">${t.ativo ? "Sim" : "Não"}</td>
+          <td class="CfgMt_ColData">${formatarDataHora(t.criado_em)}</td>
+          <td class="CfgMt_ColData">${formatarDataHora(t.dono_ultimo_acesso)}</td>
+          <td class="Cl_TableActions CfgMt_ColAcoes">
             <button type="button" class="Cl_BtnAcao btnEditar" data-id="${t.id}" title="Editar">${util.gerarIconeTech("editar")}</button>
             <button type="button" class="Cl_BtnAcao btnExcluir" data-id="${t.id}" data-slug="${esc(t.slug)}" data-nome="${esc(t.nome)}" title="${titleExcluir}" ${bloqueado ? "disabled" : ""}>${util.gerarIconeTech("excluir")}</button>
           </td>
@@ -98,10 +114,9 @@
       window.lucide?.createIcons?.();
       window.Util?.gerarIconeTech?.refresh?.();
     } catch (e) {
-      el.lista.innerHTML = `<tr><td colspan="9">${esc(e.message)}</td></tr>`;
+      el.lista.innerHTML = `<tr><td colspan="11">${esc(e.message)}</td></tr>`;
     }
   }
-
   async function excluir(id, slug, nome) {
     if (!id || !slug) return;
     const c1 = await Swal.fire({

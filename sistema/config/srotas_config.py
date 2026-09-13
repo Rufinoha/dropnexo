@@ -1336,7 +1336,17 @@ def manutencao_tenant_dados():
             f"""
             SELECT t.id, t.nome, t.slug, t.tipo_negocio, t.plano, t.ativo, t.documento,
                    t.cidade, t.uf, t.tipo_pessoa,
-                   COALESCE(NULLIF(TRIM(t.razao_social), ''), NULLIF(TRIM(t.nome_completo), ''), '')
+                   COALESCE(NULLIF(TRIM(t.razao_social), ''), NULLIF(TRIM(t.nome_completo), ''), ''),
+                   t.criado_em,
+                   (
+                     SELECT ut.ultimo_acesso_em
+                     FROM tbl_usuario_tenant ut
+                     JOIN tbl_perfil pf ON pf.id = ut.id_perfil
+                     WHERE ut.id_tenant = t.id
+                       AND LOWER(COALESCE(pf.codigo, '')) = 'dono'
+                     ORDER BY ut.ultimo_acesso_em DESC NULLS LAST, ut.id
+                     LIMIT 1
+                   ) AS dono_ultimo_acesso
             FROM tbl_tenant t
             WHERE {" AND ".join(where)}
             ORDER BY t.id DESC
@@ -1358,6 +1368,8 @@ def manutencao_tenant_dados():
                 elif len(digitos) == 11:
                     tipo_pessoa = "F"
             razao = (r[10] or "").strip() if tipo_pessoa == "J" else ""
+            criado = r[11]
+            dono_acesso = r[12]
             itens.append(
                 {
                     "id": int(r[0]),
@@ -1371,6 +1383,8 @@ def manutencao_tenant_dados():
                     "uf": r[8] or "",
                     "tipo_pessoa": tipo_pessoa,
                     "razao_social": razao,
+                    "criado_em": criado.isoformat() if criado else None,
+                    "dono_ultimo_acesso": dono_acesso.isoformat() if dono_acesso else None,
                     "eh_tenant_sessao": int(session.get("id_tenant") or 0) == int(r[0]),
                     "protegido": slug_protegido(slug),
                 }
