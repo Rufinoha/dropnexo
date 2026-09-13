@@ -3,32 +3,15 @@
 {% set nav_ativo = 'fn_categorias' %}
 {% block topbar_title %}Categorias{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('fn_categorias.static', filename='style/Cfn_categorias.css') }}?v=11" />
+<link rel="stylesheet" href="{{ url_for('fn_categorias.static', filename='style/Cfn_categorias.css') }}?v=12" />
 <link rel="stylesheet" href="{{ url_for('fn_categorias.static', filename='style/Cfn_categorias_tree.css') }}?v=11" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal FnCat_Page">
-  <header class="FnCat_Hero">
-    <div class="FnCat_HeroMain">
-      <div class="FnCat_HeroTitleRow">
-        <span class="FnCat_HeroIco" aria-hidden="true">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-        </span>
-        <h2>Categorias</h2>
-      </div>
-      <p class="FnCat_HeroDesc">Organize seus produtos em até 3 níveis para uma navegação mais eficiente.</p>
-      <a class="FnCat_HeroLink" href="{{ url_for('perfil.meu_perfil', aba='empresa') }}">
-        Saiba mais sobre categorias
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-      </a>
-    </div>
-    <div class="FnCat_HeroArt" aria-hidden="true">
-      <div class="FnCat_ArtFolder FnCat_ArtFolder--1"></div>
-      <div class="FnCat_ArtFolder FnCat_ArtFolder--2"></div>
-      <div class="FnCat_ArtTag"></div>
-      <div class="FnCat_ArtPlant"></div>
-    </div>
-  </header>
+  <div class="cl-page-title">
+    <h2>Categorias</h2>
+    <p class="cl-page-desc">Organize seus produtos em até 3 níveis para uma navegação mais eficiente.</p>
+  </div>
 
   <div id="fn_cat_bling_banner" class="FnCat_BlingBanner" hidden>
     <span class="FnCat_BlingSpark" aria-hidden="true">
@@ -140,5 +123,5 @@
 {% endblock %}
 {% block page_js %}
 <script>window.FN_CAT_SEG_INICIAL = {{ id_segmento_inicial|tojson }};</script>
-<script src="{{ url_for('fn_categorias.static', filename='script/Sfn_categorias.js') }}?v=13"></script>
+<script src="{{ url_for('fn_categorias.static', filename='script/Sfn_categorias.js') }}?v=14"></script>
 {% endblock %}

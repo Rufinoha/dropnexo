@@ -236,6 +236,21 @@ def categorias_bling_pendentes():
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
+        cur.execute(
+            "SELECT status FROM tbl_integracao_bling WHERE id_tenant = %s",
+            (id_tenant,),
+        )
+        row = cur.fetchone()
+        bling_conectado = bool(row and row[0] == "conectado")
+        if not bling_conectado:
+            return jsonify(
+                success=True,
+                bling_conectado=False,
+                total=0,
+                categorias=[],
+                segmentos=[],
+                auto_segmento=None,
+            )
         total = contar_categorias_bling_sem_segmento(cur, id_tenant)
         lista = listar_categorias_bling_sem_segmento(cur, id_tenant) if total else []
         cur.execute(
@@ -251,6 +266,7 @@ def categorias_bling_pendentes():
         segmentos = [{"id": r[0], "nome": r[1]} for r in cur.fetchall()]
         return jsonify(
             success=True,
+            bling_conectado=True,
             total=total,
             categorias=lista[:200],
             segmentos=segmentos,

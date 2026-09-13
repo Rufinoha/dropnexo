@@ -279,7 +279,7 @@
       const j = await r.json();
       if (!j.success) return;
       blingPendentes = j;
-      if (j.total > 0) {
+      if (j.bling_conectado && j.total > 0) {
         blingBanner.hidden = false;
         if (blingTitulo) {
           blingTitulo.textContent = "Categorias do Bling aguardando segmento";
