@@ -1095,9 +1095,7 @@ def _catalogo_montar_linhas_pai(
             else int(p.get("estoque") or 0)
         )
 
-        if expandir_variantes and p["formato"] == "E":
-            if not vars_p:
-                continue
+        if expandir_variantes and p["formato"] == "E" and vars_p:
             linhas.append(
                 {
                     "tipo": "pai",
@@ -1163,6 +1161,16 @@ def _catalogo_montar_linhas_pai(
     return linhas
 
 
+def _filtro_publicado_arg(raw: str | None) -> str:
+    """Normaliza filtro de publicação: 'todos' | 'sim' | 'nao'. Padrão: todos."""
+    v = (raw or "todos").strip().lower()
+    if v in ("sim", "1", "true", "publicado", "publicados"):
+        return "sim"
+    if v in ("nao", "não", "0", "false", "nao_publicado", "nao_publicados", "despublicado"):
+        return "nao"
+    return "todos"
+
+
 @fn_catalogo_bp.get("/catalogos/dados")
 @login_obrigatorio()
 @exigir_permissao(codigos=["catalogos.ver", "produtos.ver", "az_produtos.ver"])
@@ -1173,7 +1181,8 @@ def catalogos_dados():
     busca = (request.args.get("busca") or "").strip()
     id_categoria = (request.args.get("id_categoria") or "").strip()
     filtro_tipo = (request.args.get("tipo") or "").strip().lower()
-    somente_ativos = (request.args.get("ativos") or "sim").strip().lower() != "nao"
+    filtro_pub = _filtro_publicado_arg(request.args.get("ativos"))
+    somente_ativos = filtro_pub == "sim"
     offset = (pagina - 1) * por_pagina
 
     conn = Var_ConectarBanco()
@@ -1190,9 +1199,11 @@ def catalogos_dados():
             if id_categoria:
                 where.append("p.id_categoria = %s")
                 params.append(int(id_categoria))
-            if somente_ativos:
+            if filtro_pub == "sim":
                 where.append("p.publicado = TRUE")
                 where.append("v.ativo = TRUE")
+            elif filtro_pub == "nao":
+                where.append("p.publicado = FALSE")
             where_sql = " AND ".join(where)
 
             cur.execute(
@@ -1269,11 +1280,13 @@ def catalogos_dados():
             where.append("p.formato = 'S'")
         elif filtro_tipo == "com_variacoes":
             where.append("p.formato = 'E'")
-        if somente_ativos:
+        if filtro_pub == "sim":
             where.append("p.publicado = TRUE")
+        elif filtro_pub == "nao":
+            where.append("p.publicado = FALSE")
 
         where_sql = " AND ".join(where)
-        filtro_var_ativo = " AND v.ativo" if somente_ativos else ""
+        filtro_var_ativo = " AND v.ativo" if filtro_pub == "sim" else ""
         eh_az = _contexto_armazem()
         if eh_az:
             try:
@@ -2201,7 +2214,8 @@ def catalogos_exportar():
     busca = (request.args.get("busca") or "").strip()
     id_categoria = (request.args.get("id_categoria") or "").strip()
     filtro_tipo = (request.args.get("tipo") or "").strip().lower()
-    somente_publicados = (request.args.get("ativos") or "sim").strip().lower() != "nao"
+    filtro_pub = _filtro_publicado_arg(request.args.get("ativos"))
+    somente_publicados = filtro_pub == "sim"
     id_tenant = session.get("id_tenant")
     conn = Var_ConectarBanco()
     try:
@@ -2213,6 +2227,7 @@ def catalogos_exportar():
             id_categoria=id_categoria,
             filtro_tipo=filtro_tipo,
             somente_publicados=somente_publicados,
+            so_nao_publicados=filtro_pub == "nao",
         )
         colunas = colunas_para_contexto("fornecedor")
         if formato in ("xlsx", "excel"):

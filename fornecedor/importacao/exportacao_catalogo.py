@@ -56,10 +56,13 @@ def listar_linhas_export_fornecedor(
     id_categoria: str = "",
     filtro_tipo: str = "",
     somente_publicados: bool = True,
+    so_nao_publicados: bool = False,
 ) -> list[dict[str, str]]:
     where = ["p.id_tenant = %s"]
     params: list[Any] = [id_tenant]
-    if somente_publicados:
+    if so_nao_publicados:
+        where.append("p.publicado = FALSE")
+    elif somente_publicados:
         where.append("p.publicado = TRUE")
     if busca:
         where.append("(p.nome ILIKE %s OR p.sku ILIKE %s)")

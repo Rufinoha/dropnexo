@@ -13,7 +13,7 @@
     filtroBusca: document.getElementById("ob_filtroBusca"),
     filtroCategoria: document.getElementById("ob_filtroCategoria"),
     filtroTipo: document.getElementById("ob_filtroTipo"),
-    filtroAtivos: document.getElementById("ob_filtroAtivos"),
+    filtroPublicado: document.getElementById("ob_filtroPublicado"),
     filtroResumo: document.getElementById("ob_filtroResumo"),
     btnFiltrar: document.getElementById("ob_btnFiltrar"),
     btnLimpar: document.getElementById("ob_btnLimpar"),
@@ -109,6 +109,18 @@
 
   function badgeInativo(ativo) {
     return ativo === false ? '<span class="Cat_BadgeInativo">Inativo</span>' : "";
+  }
+
+  function valorFiltroPublicado() {
+    const v = (el.filtroPublicado?.value || "todos").trim().toLowerCase();
+    if (v === "sim" || v === "nao") return v;
+    return "todos";
+  }
+
+  function rotuloFiltroPublicado(v) {
+    if (v === "sim") return "somente publicados";
+    if (v === "nao") return "somente não publicados";
+    return "publicados e não publicados";
   }
 
   function badgeNaoPublicado(publicado) {
@@ -237,7 +249,7 @@
       busca: (el.filtroBusca?.value || "").trim(),
       id_categoria: el.filtroCategoria?.value || "",
       tipo: el.filtroTipo?.value || "",
-      ativos: el.filtroAtivos?.checked ? "sim" : "nao",
+      ativos: valorFiltroPublicado(),
     });
     window.location.href = `${BASE}/exportar?${p}`;
   }
@@ -662,7 +674,7 @@
       busca: (el.filtroBusca?.value || "").trim(),
       id_categoria: el.filtroCategoria?.value || "",
       tipo: el.filtroTipo?.value || "",
-      ativos: el.filtroAtivos?.checked ? "sim" : "nao",
+      ativos: valorFiltroPublicado(),
     });
     return `${BASE}/dados?${p}`;
   }
@@ -739,13 +751,9 @@
   function atualizarResumoFiltro(total) {
     const elResumo = el.filtroResumo;
     if (!elResumo) return;
-    const somenteAtivos = !!el.filtroAtivos?.checked;
+    const pub = valorFiltroPublicado();
     const qtd = Number(total || 0);
-    if (somenteAtivos) {
-      elResumo.textContent = `${qtd} produto(s) — somente publicados`;
-    } else {
-      elResumo.textContent = `${qtd} produto(s) — publicados e não publicados`;
-    }
+    elResumo.textContent = `${qtd} produto(s) — ${rotuloFiltroPublicado(pub)}`;
     elResumo.hidden = false;
   }
 
@@ -860,7 +868,7 @@
     el.filtroBusca.value = "";
     el.filtroCategoria.value = "";
     if (el.filtroTipo) el.filtroTipo.value = "";
-    if (el.filtroAtivos) el.filtroAtivos.checked = true;
+    if (el.filtroPublicado) el.filtroPublicado.value = "todos";
     paginaAtual = 1;
     carregar().catch((e) => Swal.fire("Erro", e.message, "error"));
   });

@@ -7,7 +7,7 @@
 {% block topbar_title %}{{ cat_topbar_title|default('Catálogos') }}{% endblock %}
 
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('fn_catalogo.static', filename='style/Ccatalogos.css') }}?v=17" />
+<link rel="stylesheet" href="{{ url_for('fn_catalogo.static', filename='style/Ccatalogos.css') }}?v=18" />
 <link rel="stylesheet" href="{{ url_for('fn_importacao.static', filename='style/Cimportacao.css') }}?v=9" />
 {% endblock %}
 
@@ -48,12 +48,13 @@
           <option value="somente_variacoes">Somente as Variações</option>
         </select>
       </div>
-      <div class="filter-group filter-group--switch">
-        <label class="Cl_Switch Cat_FiltroSwitch" for="ob_filtroAtivos">
-          <span class="filter-group-switch-label">Somente publicados</span>
-          <input type="checkbox" id="ob_filtroAtivos" checked />
-          <span class="Cl_SwitchSlider"></span>
-        </label>
+      <div class="filter-group">
+        <label for="ob_filtroPublicado">Publicação</label>
+        <select id="ob_filtroPublicado">
+          <option value="todos" selected>Todos</option>
+          <option value="sim">Publicado</option>
+          <option value="nao">Não publicado</option>
+        </select>
       </div>
     </div>
     <div class="filter-panel-actions">
@@ -122,5 +123,5 @@
 {% if not cat_ocultar_import_export %}
 <script defer src="{{ url_for('fn_importacao.static', filename='script/Simportacao.js') }}?v=12"></script>
 {% endif %}
-<script defer src="{{ url_for('fn_catalogo.static', filename='script/Scatalogos.js') }}?v=19"></script>
+<script defer src="{{ url_for('fn_catalogo.static', filename='script/Scatalogos.js') }}?v=20"></script>
 {% endblock %}
