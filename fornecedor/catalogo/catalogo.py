@@ -84,6 +84,7 @@ import ipaddress
 import os
 import re
 import socket
+import time
 from datetime import timezone
 from html import unescape
 from pathlib import Path
@@ -274,6 +275,9 @@ _HOSTS_CDN_IMAGEM = (
     "i.ibb.co",
 )
 _EXT_ARQUIVO_IMAGEM = (".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp")
+_PROXY_MEM_CACHE: dict[str, tuple[float, bytes, str]] = {}
+_PROXY_MEM_CACHE_TTL_S = 30 * 60
+_PROXY_MEM_CACHE_MAX = 80
 
 
 def _host_url_seguro(url: str) -> str:
@@ -488,45 +492,25 @@ def resolver_url_imagem_link(url: str, *, timeout: float = 12.0) -> dict:
     }
 
 
-def corrigir_caminho_imagem_link_se_pagina(cur, *, id_imagem: int, caminho: str) -> str:
-    """
-    Se o caminho for URL de página conhecida (ex. postimg.cc), resolve e atualiza no banco.
-    Em falha, devolve o caminho original.
-    """
-    if not caminho_eh_url(caminho):
-        return caminho
-    host = (urlparse(caminho).hostname or "").lower()
-    if host.startswith("i."):
-        return caminho
-    if not any(host == h or host.endswith("." + h) for h in _HOSTS_PAGINA_IMAGEM):
-        return caminho
-    try:
-        res = resolver_url_imagem_link(caminho)
-    except ValueError:
-        return caminho
-    nova = res.get("url") or caminho
-    if not nova or nova == caminho:
-        return caminho
-    cur.execute(
-        "UPDATE tbl_produto_imagem SET caminho = %s WHERE id = %s",
-        (nova, int(id_imagem)),
-    )
-    return nova
-
-
 def proxy_bytes_imagem_remota(url: str, *, timeout: float = 20.0, max_bytes: int = 8_000_000) -> tuple[bytes, str]:
     """
     Busca bytes de imagem remota para exibição (não grava em disco).
+    Usa cache em memória curto para acelerar reabertura da galeria.
     Retorna (conteudo, content_type). Levanta ValueError se inválido.
     """
     bruto = (url or "").strip()
     if not bruto.lower().startswith(("http://", "https://")):
         raise ValueError("URL inválida.")
+
+    agora = time.time()
+    hit = _PROXY_MEM_CACHE.get(bruto)
+    if hit and hit[0] > agora:
+        return hit[1], hit[2]
+
     _host_url_seguro(bruto)
     headers = {
         "User-Agent": _UA_IMG_LINK,
         "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
-        # Sem Referer: evita bloqueio de hotlink em CDNs (Postimages etc.).
     }
     try:
         with requests.get(
@@ -567,6 +551,15 @@ def proxy_bytes_imagem_remota(url: str, *, timeout: float = 20.0, max_bytes: int
             ct = "image/webp"
         else:
             ct = "application/octet-stream"
+
+    # Evict entradas velhas / excesso (só memória, sem disco).
+    vencidos = [k for k, v in _PROXY_MEM_CACHE.items() if v[0] <= agora]
+    for k in vencidos:
+        _PROXY_MEM_CACHE.pop(k, None)
+    if len(_PROXY_MEM_CACHE) >= _PROXY_MEM_CACHE_MAX:
+        mais_antiga = min(_PROXY_MEM_CACHE.items(), key=lambda kv: kv[1][0])[0]
+        _PROXY_MEM_CACHE.pop(mais_antiga, None)
+    _PROXY_MEM_CACHE[bruto] = (agora + _PROXY_MEM_CACHE_TTL_S, data, ct)
     return data, ct
 
 

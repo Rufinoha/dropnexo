@@ -1783,7 +1783,7 @@ def imagens_proxy_vitrine():
     from flask import Response
 
     resp = Response(data, mimetype=ct)
-    resp.headers["Cache-Control"] = "private, max-age=3600"
+    resp.headers["Cache-Control"] = "private, max-age=86400"
     resp.headers["X-Content-Type-Options"] = "nosniff"
     return resp
 

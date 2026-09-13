@@ -755,7 +755,6 @@ from fornecedor.catalogo.catalogo import (
 )
 from fornecedor.catalogo.catalogo import (
     classificar_origem_manual,
-    corrigir_caminho_imagem_link_se_pagina,
     exigir_modo_compativel,
     listar_imagens_galeria_pai,
     listar_imagens_variante_selecionadas,
@@ -2300,20 +2299,7 @@ def catalogos_imagens_lista():
             """,
             (id_produto,),
         )
-        imagens = []
-        alterou = False
-        for r in cur.fetchall():
-            caminho = r[1] or ""
-            id_img = r[0]
-            if id_img and caminho:
-                novo = corrigir_caminho_imagem_link_se_pagina(
-                    cur, id_imagem=int(id_img), caminho=caminho
-                )
-                if novo != caminho:
-                    alterou = True
-                    # atualiza tuple-like via rebuild row list
-                    r = (r[0], novo, r[2], r[3], r[4] if len(r) > 4 else None)
-            imagens.append(_imagem_dict_row(r))
+        imagens = [_imagem_dict_row(r) for r in cur.fetchall()]
         if not imagens:
             cur.execute(
                 "SELECT imagem_url FROM tbl_produto WHERE id = %s",
@@ -2336,9 +2322,6 @@ def catalogos_imagens_lista():
                         "tamanho_bytes": _tamanho_imagem_disco(cam),
                     }
                 )
-        if alterou:
-            _sincronizar_imagem_principal(cur, id_produto)
-            conn.commit()
         return jsonify(
             success=True,
             imagens=imagens,
@@ -2346,7 +2329,6 @@ def catalogos_imagens_lista():
             tipo_galeria=_tipo_galeria_existente(cur, id_produto),
             imagem_modo=obter_imagem_modo(cur, id_produto),
             regras_atributo=listar_regras_atributo_imagem(cur, id_produto),
-            corrigidas=alterou,
         )
     finally:
         conn.close()
@@ -2365,7 +2347,7 @@ def catalogos_imagens_proxy():
     except ValueError as e:
         return jsonify(success=False, message=str(e)), 400
     resp = Response(data, mimetype=ct)
-    resp.headers["Cache-Control"] = "private, max-age=3600"
+    resp.headers["Cache-Control"] = "private, max-age=86400"
     resp.headers["X-Content-Type-Options"] = "nosniff"
     return resp
 

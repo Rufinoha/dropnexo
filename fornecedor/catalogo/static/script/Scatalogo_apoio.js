@@ -757,15 +757,6 @@
       if (radio) radio.checked = true;
     }
     renderGaleria();
-    if (j.corrigidas) {
-      Swal.fire({
-        icon: "success",
-        title: "Links corrigidos",
-        text: "Alguns links de página foram convertidos para o link direto da imagem.",
-        timer: 2500,
-        showConfirmButton: false,
-      });
-    }
   }
 
   function syncAvisoImagens() {
