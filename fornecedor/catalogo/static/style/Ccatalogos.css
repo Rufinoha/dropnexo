@@ -149,7 +149,8 @@
   vertical-align: middle;
 }
 
-.Cat_Thumb--vazio {
+.Cat_Thumb--vazio,
+.Cat_Thumb.is-broken {
   display: inline-flex;
   align-items: center;
   justify-content: center;

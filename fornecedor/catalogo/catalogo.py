@@ -80,11 +80,16 @@ def reagir_estoque_promocao(cur, id_variante: int, total_antes: int, total_depoi
 
 # ── servico_imagens ───────────────────────────────────
 
+import ipaddress
 import os
 import re
+import socket
 from datetime import timezone
+from html import unescape
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urljoin, urlparse
+
+import requests
 
 from global_utils import agora_utc, url_imagem_produto
 
@@ -242,6 +247,271 @@ def obter_bytes_imagens_tenant(cur, id_tenant: int) -> int:
 
 def classificar_origem_manual(caminho: str) -> str:
     return "manual_url" if caminho_eh_url(caminho) else "manual_upload"
+
+
+_UA_IMG_LINK = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+)
+_RE_OG_IMAGE = re.compile(
+    r'<meta[^>]+(?:property|name)=["\'](?:og:image|twitter:image)["\'][^>]+content=["\']([^"\']+)["\']',
+    re.I,
+)
+_RE_OG_IMAGE_ALT = re.compile(
+    r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+(?:property|name)=["\'](?:og:image|twitter:image)["\']',
+    re.I,
+)
+_RE_IPOSTIMG = re.compile(r"https://i\.postimg\.cc/[^\s\"'<>]+", re.I)
+_HOSTS_PAGINA_IMAGEM = (
+    "postimg.cc",
+    "postimages.org",
+    "postimg.org",
+    "ibb.co",
+    "imgbb.com",
+)
+_HOSTS_CDN_IMAGEM = (
+    "i.postimg.cc",
+    "i.ibb.co",
+)
+_EXT_ARQUIVO_IMAGEM = (".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp")
+
+
+def _host_url_seguro(url: str) -> str:
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError("URL inválida. Use http:// ou https://.")
+    host = (parsed.hostname or "").strip().lower()
+    if not host or host in ("localhost",) or host.endswith(".local"):
+        raise ValueError("URL de host local não é permitida.")
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except socket.gaierror as e:
+        raise ValueError("Não foi possível resolver o host da URL.") from e
+    for info in infos:
+        ip_txt = info[4][0]
+        try:
+            ip = ipaddress.ip_address(ip_txt)
+        except ValueError:
+            continue
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_reserved
+            or ip.is_multicast
+        ):
+            raise ValueError("URL de rede privada não é permitida.")
+    return host
+
+
+def _content_type_eh_imagem(ct: str | None) -> bool:
+    if not ct:
+        return False
+    return ct.lower().split(";", 1)[0].strip().startswith("image/")
+
+
+def _url_parece_arquivo_imagem(url: str) -> bool:
+    path = (urlparse(url).path or "").lower()
+    return Path(path.split("?")[0]).suffix in _EXT_ARQUIVO_IMAGEM
+
+
+def _host_cdn_imagem(url: str) -> bool:
+    host = (urlparse(url).hostname or "").lower()
+    return any(host == h or host.endswith("." + h) for h in _HOSTS_CDN_IMAGEM)
+
+
+def _extrair_url_imagem_de_html(html: str, base_url: str) -> str | None:
+    texto = unescape(html or "")
+    for rx in (_RE_OG_IMAGE, _RE_OG_IMAGE_ALT):
+        m = rx.search(texto)
+        if m:
+            cand = (m.group(1) or "").strip()
+            if cand:
+                return urljoin(base_url, cand)
+    m = _RE_IPOSTIMG.search(texto)
+    if m:
+        return m.group(0).rstrip("\\").split("&amp;")[0]
+    return None
+
+
+def _inspecionar_url_remota(url: str, *, timeout: float) -> tuple[str, str | None, bytes]:
+    """Retorna (url_final, content_type, amostra_ou_html)."""
+    headers = {
+        "User-Agent": _UA_IMG_LINK,
+        "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+    }
+    with requests.get(
+        url,
+        headers=headers,
+        timeout=timeout,
+        stream=True,
+        allow_redirects=True,
+    ) as resp:
+        resp.raise_for_status()
+        final = str(resp.url or url)
+        ct = resp.headers.get("Content-Type")
+        chunks: list[bytes] = []
+        total = 0
+        limite = 250_000 if (ct or "").lower().startswith("text/html") else 4096
+        for parte in resp.iter_content(chunk_size=8192):
+            if not parte:
+                continue
+            chunks.append(parte)
+            total += len(parte)
+            if total >= limite:
+                break
+        return final, ct, b"".join(chunks)
+
+
+def _bytes_parecem_imagem(bruto: bytes) -> bool:
+    if not bruto or len(bruto) < 3:
+        return False
+    if bruto.startswith(b"\xff\xd8\xff"):
+        return True
+    if bruto.startswith(b"\x89PNG\r\n\x1a\n"):
+        return True
+    if bruto.startswith((b"GIF87a", b"GIF89a")):
+        return True
+    if len(bruto) >= 12 and bruto[:4] == b"RIFF" and bruto[8:12] == b"WEBP":
+        return True
+    inicio = bruto.lstrip()[:64].lower()
+    if inicio.startswith((b"<!doctype", b"<html", b"<?xml", b"<head")):
+        return False
+    return False
+
+
+def _bytes_parecem_html(bruto: bytes) -> bool:
+    inicio = (bruto or b"").lstrip()[:64].lower()
+    return inicio.startswith((b"<!doctype", b"<html", b"<?xml"))
+
+
+def resolver_url_imagem_link(url: str, *, timeout: float = 12.0) -> dict:
+    """
+    Valida/normaliza URL para modo link (não baixa nem grava arquivo).
+
+    Retorna {"url", "convertida", "aviso"}.
+    Levanta ValueError se não for possível obter um link direto de imagem.
+    """
+    bruto = (url or "").strip()
+    if not bruto.lower().startswith(("http://", "https://")):
+        raise ValueError("URL inválida. Use http:// ou https://.")
+    _host_url_seguro(bruto)
+
+    # Direct link óbvio em CDN conhecido — aceita sem depender de fetch (evita timeout).
+    if _url_parece_arquivo_imagem(bruto) and _host_cdn_imagem(bruto):
+        return {"url": bruto, "convertida": False, "aviso": None}
+
+    final = bruto
+    ct = None
+    sample = b""
+    try:
+        final, ct, sample = _inspecionar_url_remota(bruto, timeout=timeout)
+        _host_url_seguro(final)
+    except requests.RequestException as e:
+        if _url_parece_arquivo_imagem(bruto):
+            return {"url": bruto, "convertida": False, "aviso": None}
+        raise ValueError(
+            "Não foi possível acessar a URL. Confira o link ou tente o Direct link."
+        ) from e
+
+    if _content_type_eh_imagem(ct) or _bytes_parecem_imagem(sample):
+        return {
+            "url": final,
+            "convertida": final.rstrip("/") != bruto.rstrip("/"),
+            "aviso": None,
+        }
+
+    eh_html = (ct or "").lower().startswith("text/html") or _bytes_parecem_html(sample)
+    if not eh_html:
+        raise ValueError(
+            "Este link não aponta para uma imagem. "
+            "Use o Direct link (arquivo .jpg/.png), não o link da página."
+        )
+
+    html = sample.decode("utf-8", errors="ignore")
+    if len(sample) < 2000:
+        # Amostra curta — busca HTML completo
+        try:
+            html_resp = requests.get(
+                final,
+                headers={"User-Agent": _UA_IMG_LINK, "Accept": "text/html,*/*"},
+                timeout=timeout,
+                allow_redirects=True,
+            )
+            html_resp.raise_for_status()
+            html = html_resp.text[:250_000]
+            final = str(html_resp.url or final)
+        except requests.RequestException as e:
+            raise ValueError(
+                "Este parece ser o link de uma página, não da imagem. "
+                "No Postimages use o campo Direct link."
+            ) from e
+
+    extraida = _extrair_url_imagem_de_html(html, final)
+    if not extraida:
+        raise ValueError(
+            "Não encontrei a imagem nesse link de página. "
+            "Cole o Direct link (ex.: i.postimg.cc/...jpg)."
+        )
+    if not extraida.lower().startswith(("http://", "https://")):
+        raise ValueError("Link de imagem inválido na página.")
+    _host_url_seguro(extraida)
+
+    if _url_parece_arquivo_imagem(extraida):
+        return {
+            "url": extraida,
+            "convertida": True,
+            "aviso": "Link da página convertido para o link direto da imagem.",
+        }
+
+    try:
+        final2, ct2, sample2 = _inspecionar_url_remota(extraida, timeout=timeout)
+    except requests.RequestException as e:
+        if _url_parece_arquivo_imagem(extraida):
+            return {
+                "url": extraida,
+                "convertida": True,
+                "aviso": "Link da página convertido para o link direto da imagem.",
+            }
+        raise ValueError("Achei um candidato a imagem, mas ele não abriu.") from e
+
+    if not (_content_type_eh_imagem(ct2) or _bytes_parecem_imagem(sample2)):
+        raise ValueError(
+            "Este link é de página, não de imagem direta. "
+            "Use o Direct link do hospedeiro (Postimages, ImgBB, etc.)."
+        )
+
+    return {
+        "url": final2,
+        "convertida": True,
+        "aviso": "Link da página convertido para o link direto da imagem.",
+    }
+
+
+def corrigir_caminho_imagem_link_se_pagina(cur, *, id_imagem: int, caminho: str) -> str:
+    """
+    Se o caminho for URL de página conhecida (ex. postimg.cc), resolve e atualiza no banco.
+    Em falha, devolve o caminho original.
+    """
+    if not caminho_eh_url(caminho):
+        return caminho
+    host = (urlparse(caminho).hostname or "").lower()
+    if host.startswith("i."):
+        return caminho
+    if not any(host == h or host.endswith("." + h) for h in _HOSTS_PAGINA_IMAGEM):
+        return caminho
+    try:
+        res = resolver_url_imagem_link(caminho)
+    except ValueError:
+        return caminho
+    nova = res.get("url") or caminho
+    if not nova or nova == caminho:
+        return caminho
+    cur.execute(
+        "UPDATE tbl_produto_imagem SET caminho = %s WHERE id = %s",
+        (nova, int(id_imagem)),
+    )
+    return nova
 
 
 def obter_imagem_modo(cur, id_produto: int) -> str | None:

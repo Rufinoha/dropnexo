@@ -57,7 +57,7 @@
 
   function thumb(url) {
     if (url) {
-      return `<img class="Cat_Thumb" src="${escapeHtml(url)}" alt="" loading="lazy" />`;
+      return `<img class="Cat_Thumb" src="${escapeHtml(url)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.classList.add('is-broken');this.removeAttribute('src');" />`;
     }
     return '<span class="Cat_Thumb Cat_Thumb--vazio">—</span>';
   }

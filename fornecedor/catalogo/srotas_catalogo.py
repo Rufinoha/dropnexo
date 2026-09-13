@@ -755,11 +755,13 @@ from fornecedor.catalogo.catalogo import (
 )
 from fornecedor.catalogo.catalogo import (
     classificar_origem_manual,
+    corrigir_caminho_imagem_link_se_pagina,
     exigir_modo_compativel,
     listar_imagens_galeria_pai,
     listar_imagens_variante_selecionadas,
     listar_regras_atributo_imagem,
     obter_imagem_modo,
+    resolver_url_imagem_link,
     salvar_imagens_variante,
     salvar_regra_atributo_imagem,
     sincronizar_cache_variante,
@@ -2297,7 +2299,20 @@ def catalogos_imagens_lista():
             """,
             (id_produto,),
         )
-        imagens = [_imagem_dict_row(r) for r in cur.fetchall()]
+        imagens = []
+        alterou = False
+        for r in cur.fetchall():
+            caminho = r[1] or ""
+            id_img = r[0]
+            if id_img and caminho:
+                novo = corrigir_caminho_imagem_link_se_pagina(
+                    cur, id_imagem=int(id_img), caminho=caminho
+                )
+                if novo != caminho:
+                    alterou = True
+                    # atualiza tuple-like via rebuild row list
+                    r = (r[0], novo, r[2], r[3], r[4] if len(r) > 4 else None)
+            imagens.append(_imagem_dict_row(r))
         if not imagens:
             cur.execute(
                 "SELECT imagem_url FROM tbl_produto WHERE id = %s",
@@ -2320,6 +2335,9 @@ def catalogos_imagens_lista():
                         "tamanho_bytes": _tamanho_imagem_disco(cam),
                     }
                 )
+        if alterou:
+            _sincronizar_imagem_principal(cur, id_produto)
+            conn.commit()
         return jsonify(
             success=True,
             imagens=imagens,
@@ -2327,6 +2345,7 @@ def catalogos_imagens_lista():
             tipo_galeria=_tipo_galeria_existente(cur, id_produto),
             imagem_modo=obter_imagem_modo(cur, id_produto),
             regras_atributo=listar_regras_atributo_imagem(cur, id_produto),
+            corrigidas=alterou,
         )
     finally:
         conn.close()
@@ -2345,6 +2364,11 @@ def catalogos_imagens_link():
         return jsonify(success=False, message="Informe produto e URL."), 400
     if not url.lower().startswith(("http://", "https://")):
         return jsonify(success=False, message="URL inválida."), 400
+    try:
+        resolvida = resolver_url_imagem_link(url)
+        url = resolvida["url"]
+    except ValueError as e:
+        return jsonify(success=False, message=str(e)), 400
     id_tenant = session.get("id_tenant")
     conn = Var_ConectarBanco()
     try:
@@ -2376,7 +2400,15 @@ def catalogos_imagens_link():
         row = cur.fetchone()
         _sincronizar_imagem_principal(cur, id_produto)
         conn.commit()
-        return jsonify(success=True, message="Imagem incluída.", imagem=_imagem_dict_row(row))
+        msg = "Imagem incluída."
+        if resolvida.get("convertida"):
+            msg = resolvida.get("aviso") or "Imagem incluída (link convertido para direto)."
+        return jsonify(
+            success=True,
+            message=msg,
+            imagem=_imagem_dict_row(row),
+            convertida=bool(resolvida.get("convertida")),
+        )
     except ValueError as e:
         conn.rollback()
         return jsonify(success=False, message=str(e)), 400

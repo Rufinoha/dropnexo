@@ -1782,6 +1782,14 @@ def imagens_link_vitrine():
     if not url.lower().startswith(("http://", "https://")):
         return jsonify(success=False, message="URL inválida."), 400
 
+    try:
+        from fornecedor.catalogo.catalogo import resolver_url_imagem_link
+
+        resolvida = resolver_url_imagem_link(url)
+        url = resolvida["url"]
+    except ValueError as e:
+        return jsonify(success=False, message=str(e)), 400
+
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
@@ -1794,7 +1802,15 @@ def imagens_link_vitrine():
             cur, id_tenant, id_produto, caminho=url, origem="vendedor_url"
         )
         conn.commit()
-        return jsonify(success=True, message="Imagem incluída na vitrine.", imagem=img)
+        msg = "Imagem incluída na vitrine."
+        if resolvida.get("convertida"):
+            msg = resolvida.get("aviso") or "Imagem incluída (link convertido para direto)."
+        return jsonify(
+            success=True,
+            message=msg,
+            imagem=img,
+            convertida=bool(resolvida.get("convertida")),
+        )
     except ValueError as e:
         conn.rollback()
         return jsonify(success=False, message=str(e)), 400

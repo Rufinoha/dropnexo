@@ -317,7 +317,7 @@
         : "";
     return `<div class="Cat_GaleriaSplitItem" draggable="true" data-lado="${lado}" data-id="${img.id}" data-idx="${idx ?? ""}">
       ${ordem}
-      <img src="${img.url || ""}" alt="" loading="lazy" draggable="false" />
+      <img src="${img.url || ""}" alt="" loading="lazy" draggable="false" referrerpolicy="no-referrer" onerror="this.classList.add('is-broken');" />
     </div>`;
   }
 

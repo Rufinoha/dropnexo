@@ -641,15 +641,26 @@
     const drag = podeReordenarImagens();
     el.galeria_imagens.innerHTML = galeriaImagens
       .map(
-        (img, idx) => `<div class="Cat_GaleriaItem${drag ? " is-draggable" : ""}" data-idx="${idx}" title="Duplo clique para ver o link" ${drag ? 'draggable="true"' : ""}>
+        (img, idx) => {
+          const src = escHtml(img.url || img.caminho || "");
+          const origemLbl = rotuloOrigem(img.origem);
+          const ext = (img.extensao || "").toUpperCase();
+          const metaTop =
+            origemLbl && ext && ext !== "URL"
+              ? `<strong>${escHtml(ext)}</strong> · ${escHtml(origemLbl)}`
+              : origemLbl
+                ? `<strong>${escHtml(origemLbl)}</strong>`
+                : `<strong>${escHtml(ext || "—")}</strong>`;
+          return `<div class="Cat_GaleriaItem${drag ? " is-draggable" : ""}" data-idx="${idx}" title="Duplo clique para ver o link" ${drag ? 'draggable="true"' : ""}>
         <span class="Cat_GaleriaOrdem" title="Arraste para reordenar">${rotuloOrdemImagem(idx)}</span>
         <button type="button" class="Cat_GaleriaRm" data-id="${img.id ?? ""}" data-idx="${idx}" title="Remover">×</button>
-        <img src="${img.url || ""}" alt="" loading="lazy" draggable="false" />
+        <img src="${src}" alt="" loading="lazy" draggable="false" referrerpolicy="no-referrer" onerror="this.classList.add('is-broken');" />
         <div class="Cat_GaleriaMeta">
-          <div><strong>${(img.extensao || "—").toUpperCase()}</strong>${rotuloOrigem(img.origem) ? ` · ${rotuloOrigem(img.origem)}` : ""}</div>
+          <div>${metaTop}</div>
           <div>${formatarTamanho(img.tamanho_bytes)}</div>
         </div>
-      </div>`
+      </div>`;
+        }
       )
       .join("");
     if (el.avisoImgOrdem) el.avisoImgOrdem.hidden = !drag;
@@ -737,6 +748,15 @@
       if (radio) radio.checked = true;
     }
     renderGaleria();
+    if (j.corrigidas) {
+      Swal.fire({
+        icon: "success",
+        title: "Links corrigidos",
+        text: "Alguns links de página foram convertidos para o link direto da imagem.",
+        timer: 2500,
+        showConfirmButton: false,
+      });
+    }
   }
 
   function syncAvisoImagens() {
@@ -763,6 +783,15 @@
     if (!r.ok || !j.success) throw new Error(j.message || "Erro.");
     if (el.img_link_url) el.img_link_url.value = "";
     await carregarImagens();
+    if (j.convertida || (j.message && /convertido|direto/i.test(j.message))) {
+      await Swal.fire({
+        icon: "success",
+        title: "Link ajustado",
+        text: j.message || "Convertido para o link direto da imagem.",
+        timer: 2200,
+        showConfirmButton: false,
+      });
+    }
   }
 
   async function enviarUpload() {
