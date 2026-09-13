@@ -216,7 +216,7 @@ def status_convite(cur, uid: int) -> str:
 def criar_token_ativacao(cur, uid: int) -> str:
     raw = secrets.token_urlsafe(32)
     token_hash = gerar_hmac_token(raw)
-    horas = int(os.getenv("TOKEN_ATIVACAO_HORAS", "48"))
+    horas = int(os.getenv("TOKEN_ATIVACAO_HORAS", "24"))
     expira = agora_utc() + timedelta(hours=horas)
     cur.execute(
         """
@@ -230,7 +230,7 @@ def criar_token_ativacao(cur, uid: int) -> str:
 
 
 def enviar_email_convite(*, email: str, nome: str, nome_tenant: str, token_bruto: str) -> tuple[bool, str]:
-    horas = int(os.getenv("TOKEN_ATIVACAO_HORAS", "48"))
+    horas = int(os.getenv("TOKEN_ATIVACAO_HORAS", "24"))
     link = f"{obter_base_url()}/definir-senha?token={token_bruto}"
     base = obter_base_url()
     html = render_template(
@@ -246,6 +246,205 @@ def enviar_email_convite(*, email: str, nome: str, nome_tenant: str, token_bruto
         url_dpo=os.getenv("URL_DPO") or f"{base}/dpo",
     )
     return enviar_email([email], "Convite de acesso • DropNexo", html, tag="dropnexo_convite_equipe")
+
+
+def token_ativacao_horas() -> int:
+    return int(os.getenv("TOKEN_ATIVACAO_HORAS", "24"))
+
+
+def garantir_tabela_usuario_tenant_menu(cur) -> None:
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS tbl_usuario_tenant_menu (
+            id_usuario BIGINT NOT NULL REFERENCES tbl_usuario(id) ON DELETE CASCADE,
+            id_tenant BIGINT NOT NULL REFERENCES tbl_tenant(id) ON DELETE CASCADE,
+            id_menu BIGINT NOT NULL REFERENCES tbl_menu(id) ON DELETE CASCADE,
+            exibir BOOLEAN NOT NULL DEFAULT TRUE,
+            PRIMARY KEY (id_usuario, id_tenant, id_menu)
+        )
+        """
+    )
+    cur.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_usuario_tenant_menu_tenant
+          ON tbl_usuario_tenant_menu (id_tenant, id_usuario)
+        """
+    )
+
+
+def _perfil_codigo_usuario(cur, id_tenant: int, uid: int) -> str | None:
+    cur.execute(
+        """
+        SELECT lower(pf.codigo)
+        FROM tbl_usuario_tenant ut
+        JOIN tbl_perfil pf ON pf.id = ut.id_perfil
+        WHERE ut.id_tenant = %s AND ut.id_usuario = %s
+        """,
+        (id_tenant, uid),
+    )
+    row = cur.fetchone()
+    return (row[0] or "").strip().lower() if row else None
+
+
+def listar_menus_acesso_modulo(cur, *, contexto_modulo: str, id_usuario: int | None, id_tenant: int) -> list[dict]:
+    """Menus do módulo (e comum) com flag de acesso do usuário (ou padrão do perfil)."""
+    garantir_tabela_usuario_tenant_menu(cur)
+    ctx = (contexto_modulo or "vendedor").strip().lower()
+    cur.execute(
+        """
+        SELECT COUNT(*)::int FROM tbl_usuario_tenant_menu
+        WHERE id_usuario = %s AND id_tenant = %s
+        """,
+        (id_usuario or 0, id_tenant),
+    )
+    tem_override = bool(id_usuario) and int(cur.fetchone()[0] or 0) > 0
+
+    if tem_override:
+        cur.execute(
+            """
+            SELECT m.id, m.nome_menu, m.nav_codigo, m.parent_id, m.ordem,
+                   COALESCE(um.exibir, FALSE) AS exibir
+            FROM tbl_menu m
+            LEFT JOIN tbl_usuario_tenant_menu um
+              ON um.id_menu = m.id AND um.id_usuario = %s AND um.id_tenant = %s
+            WHERE m.status = TRUE AND m.pai = TRUE AND m.parent_id IS NULL
+              AND COALESCE(m.contexto_modulo, 'comum') IN ('comum', %s)
+              AND COALESCE(m.nav_codigo, '') <> 'config'
+              AND COALESCE(m.data_page, '') <> '/configuracoes'
+            ORDER BY m.ordem NULLS LAST, m.nome_menu
+            """,
+            (id_usuario, id_tenant, ctx),
+        )
+    else:
+        cur.execute(
+            """
+            SELECT m.id, m.nome_menu, m.nav_codigo, m.parent_id, m.ordem,
+                   COALESCE(pm.exibir, FALSE) AS exibir
+            FROM tbl_menu m
+            LEFT JOIN tbl_usuario_tenant ut
+              ON ut.id_usuario = %s AND ut.id_tenant = %s
+            LEFT JOIN tbl_perfil_menu pm
+              ON pm.id_menu = m.id AND pm.id_perfil = ut.id_perfil AND pm.exibir = TRUE
+            WHERE m.status = TRUE AND m.pai = TRUE AND m.parent_id IS NULL
+              AND COALESCE(m.contexto_modulo, 'comum') IN ('comum', %s)
+              AND COALESCE(m.nav_codigo, '') <> 'config'
+              AND COALESCE(m.data_page, '') <> '/configuracoes'
+            ORDER BY m.ordem NULLS LAST, m.nome_menu
+            """,
+            (id_usuario or 0, id_tenant, ctx),
+        )
+
+    pais = cur.fetchall()
+    out = []
+    for r in pais:
+        mid = r[0]
+        if tem_override:
+            cur.execute(
+                """
+                SELECT m.id, m.nome_menu, m.nav_codigo,
+                       COALESCE(um.exibir, FALSE) AS exibir
+                FROM tbl_menu m
+                LEFT JOIN tbl_usuario_tenant_menu um
+                  ON um.id_menu = m.id AND um.id_usuario = %s AND um.id_tenant = %s
+                WHERE m.status = TRUE AND m.parent_id = %s
+                ORDER BY m.ordem NULLS LAST, m.nome_menu
+                """,
+                (id_usuario, id_tenant, mid),
+            )
+        else:
+            cur.execute(
+                """
+                SELECT m.id, m.nome_menu, m.nav_codigo,
+                       COALESCE(pm.exibir, FALSE) AS exibir
+                FROM tbl_menu m
+                LEFT JOIN tbl_usuario_tenant ut
+                  ON ut.id_usuario = %s AND ut.id_tenant = %s
+                LEFT JOIN tbl_perfil_menu pm
+                  ON pm.id_menu = m.id AND pm.id_perfil = ut.id_perfil AND pm.exibir = TRUE
+                WHERE m.status = TRUE AND m.parent_id = %s
+                ORDER BY m.ordem NULLS LAST, m.nome_menu
+                """,
+                (id_usuario or 0, id_tenant, mid),
+            )
+        filhos = [
+            {"id": f[0], "nome": f[1], "nav_codigo": f[2] or "", "exibir": bool(f[3])}
+            for f in cur.fetchall()
+        ]
+        out.append(
+            {
+                "id": mid,
+                "nome": r[1],
+                "nav_codigo": r[2] or "",
+                "exibir": bool(r[5]),
+                "filhos": filhos,
+            }
+        )
+    return out
+
+
+def salvar_menus_usuario_tenant(cur, *, id_usuario: int, id_tenant: int, ids_menus: list[int]) -> None:
+    garantir_tabela_usuario_tenant_menu(cur)
+    ids = sorted({int(x) for x in (ids_menus or []) if int(x) > 0})
+    cur.execute(
+        "DELETE FROM tbl_usuario_tenant_menu WHERE id_usuario = %s AND id_tenant = %s",
+        (id_usuario, id_tenant),
+    )
+    for mid in ids:
+        cur.execute(
+            """
+            INSERT INTO tbl_usuario_tenant_menu (id_usuario, id_tenant, id_menu, exibir)
+            VALUES (%s, %s, %s, TRUE)
+            ON CONFLICT (id_usuario, id_tenant, id_menu) DO UPDATE SET exibir = TRUE
+            """,
+            (id_usuario, id_tenant, mid),
+        )
+
+
+def menus_padrao_do_perfil(cur, *, id_perfil: int, contexto_modulo: str) -> list[dict]:
+    ctx = (contexto_modulo or "vendedor").strip().lower()
+    cur.execute(
+        """
+        SELECT m.id, m.nome_menu, m.nav_codigo, COALESCE(pm.exibir, FALSE) AS exibir
+        FROM tbl_menu m
+        LEFT JOIN tbl_perfil_menu pm
+          ON pm.id_menu = m.id AND pm.id_perfil = %s AND pm.exibir = TRUE
+        WHERE m.status = TRUE AND m.pai = TRUE AND m.parent_id IS NULL
+          AND COALESCE(m.contexto_modulo, 'comum') IN ('comum', %s)
+          AND COALESCE(m.nav_codigo, '') <> 'config'
+          AND COALESCE(m.data_page, '') <> '/configuracoes'
+        ORDER BY m.ordem NULLS LAST, m.nome_menu
+        """,
+        (id_perfil, ctx),
+    )
+    pais = cur.fetchall()
+    out = []
+    for r in pais:
+        mid = r[0]
+        cur.execute(
+            """
+            SELECT m.id, m.nome_menu, m.nav_codigo, COALESCE(pm.exibir, FALSE)
+            FROM tbl_menu m
+            LEFT JOIN tbl_perfil_menu pm
+              ON pm.id_menu = m.id AND pm.id_perfil = %s AND pm.exibir = TRUE
+            WHERE m.status = TRUE AND m.parent_id = %s
+            ORDER BY m.ordem NULLS LAST, m.nome_menu
+            """,
+            (id_perfil, mid),
+        )
+        filhos = [
+            {"id": f[0], "nome": f[1], "nav_codigo": f[2] or "", "exibir": bool(f[3])}
+            for f in cur.fetchall()
+        ]
+        out.append(
+            {
+                "id": mid,
+                "nome": r[1],
+                "nav_codigo": r[2] or "",
+                "exibir": bool(r[3]),
+                "filhos": filhos,
+            }
+        )
+    return out
 
 
 def listar_usuarios_tenant(
@@ -309,6 +508,8 @@ def listar_usuarios_tenant(
             if filtro_convite and convite != filtro_convite:
                 continue
             dt_login = r[7].isoformat() if r[7] else None
+            perfil_cod = (r[5] or "").strip().lower()
+            is_dono = perfil_cod == "dono"
             dados.append(
                 {
                     "id": r[0],
@@ -319,7 +520,8 @@ def listar_usuarios_tenant(
                     "perfil_nome": PERFIL_LABEL.get(r[5], r[6]),
                     "convite_status": convite,
                     "dt_ultimo_login": dt_login,
-                    "cannot_delete": r[0] == id_usuario_sessao,
+                    "is_dono": is_dono,
+                    "cannot_delete": is_dono or r[0] == id_usuario_sessao,
                 }
             )
         total_paginas = max(1, (total + por_pagina - 1) // por_pagina)
@@ -362,15 +564,16 @@ def listar_perfis_combo(*, excluir_codigos: tuple[str, ...] = ("dono",)) -> dict
         conn.close()
 
 
-def carregar_usuario_apoio(*, id_tenant: int, uid: int) -> tuple[dict, int]:
+def carregar_usuario_apoio(*, id_tenant: int, uid: int, contexto_modulo: str | None = None) -> tuple[dict, int]:
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
         cur.execute(
             """
-            SELECT u.id, u.nome, u.email, u.whatsapp, u.ativo, ut.id_perfil, ut.ativo
+            SELECT u.id, u.nome, u.email, u.whatsapp, u.ativo, ut.id_perfil, ut.ativo, pf.codigo, pf.nome
             FROM tbl_usuario u
             JOIN tbl_usuario_tenant ut ON ut.id_usuario = u.id AND ut.id_tenant = %s
+            JOIN tbl_perfil pf ON pf.id = ut.id_perfil
             WHERE u.id = %s AND u.eh_desenvolvedor IS NOT TRUE
             """,
             (id_tenant, uid),
@@ -378,6 +581,11 @@ def carregar_usuario_apoio(*, id_tenant: int, uid: int) -> tuple[dict, int]:
         row = cur.fetchone()
         if not row:
             return {"success": False, "message": "Usuário não encontrado neste tenant."}, 404
+        perfil_cod = (row[7] or "").strip().lower()
+        ctx = (contexto_modulo or session.get("modulo_ativo") or "vendedor").strip().lower()
+        menus = listar_menus_acesso_modulo(
+            cur, contexto_modulo=ctx, id_usuario=int(row[0]), id_tenant=id_tenant
+        )
         return (
             {
                 "success": True,
@@ -388,7 +596,12 @@ def carregar_usuario_apoio(*, id_tenant: int, uid: int) -> tuple[dict, int]:
                     "whatsapp": row[3] or "",
                     "status": bool(row[4]) and bool(row[6]),
                     "id_perfil": row[5],
+                    "perfil_codigo": row[7],
+                    "perfil_nome": PERFIL_LABEL.get(row[7], row[8]),
+                    "is_dono": perfil_cod == "dono",
                     "convite_status": status_convite(cur, row[0]),
+                    "token_horas": token_ativacao_horas(),
+                    "menus": menus,
                 },
             },
             200,
@@ -407,6 +620,8 @@ def salvar_usuario_tenant(
     id_perfil: int,
     status: bool,
     enviar_convite: bool,
+    ids_menus: list[int] | None = None,
+    contexto_modulo: str | None = None,
 ) -> tuple[dict, int]:
     email = (email or "").strip().lower()
     nome = (nome or "").strip()
@@ -426,11 +641,18 @@ def salvar_usuario_tenant(
         row_t = cur.fetchone()
         nome_tenant = row_t[0] if row_t else "DropNexo"
 
+        cur.execute("SELECT lower(codigo) FROM tbl_perfil WHERE id = %s", (int(id_perfil),))
+        perfil_alvo = cur.fetchone()
+        if perfil_alvo and (perfil_alvo[0] or "") == "dono":
+            return {"success": False, "message": "O perfil Dono não pode ser atribuído por esta tela."}, 403
+
         if uid:
             cur.execute(
                 """
-                SELECT u.eh_desenvolvedor FROM tbl_usuario u
+                SELECT u.eh_desenvolvedor, lower(pf.codigo)
+                FROM tbl_usuario u
                 JOIN tbl_usuario_tenant ut ON ut.id_usuario = u.id AND ut.id_tenant = %s
+                JOIN tbl_perfil pf ON pf.id = ut.id_perfil
                 WHERE u.id = %s
                 """,
                 (id_tenant, int(uid)),
@@ -440,6 +662,18 @@ def salvar_usuario_tenant(
                 return {"success": False, "message": "Usuário não encontrado."}, 404
             if alvo[0]:
                 return {"success": False, "message": "Usuário desenvolvedor não pode ser alterado aqui."}, 403
+            if (alvo[1] or "") == "dono":
+                # Dono: só atualiza dados pessoais; perfil/status/menus ficam intactos
+                cur.execute(
+                    "UPDATE tbl_usuario SET nome=%s, whatsapp=%s WHERE id=%s",
+                    (nome, whatsapp, int(uid)),
+                )
+                conn.commit()
+                return {
+                    "success": True,
+                    "message": "Dados do Dono atualizados. Perfil e menus do Dono não podem ser alterados.",
+                    "id": int(uid),
+                }, 200
 
             cur.execute(
                 "UPDATE tbl_usuario SET nome=%s, email=%s, whatsapp=%s, ativo=%s WHERE id=%s",
@@ -452,6 +686,10 @@ def salvar_usuario_tenant(
                 """,
                 (int(id_perfil), status, int(uid), id_tenant),
             )
+            if ids_menus is not None:
+                salvar_menus_usuario_tenant(
+                    cur, id_usuario=int(uid), id_tenant=id_tenant, ids_menus=ids_menus
+                )
             conn.commit()
             return {"success": True, "message": "Usuário atualizado.", "id": int(uid)}, 200
 
@@ -502,6 +740,11 @@ def salvar_usuario_tenant(
             if enviar_convite:
                 token_bruto = criar_token_ativacao(cur, uid_novo)
 
+        if ids_menus is not None:
+            salvar_menus_usuario_tenant(
+                cur, id_usuario=int(uid_novo), id_tenant=id_tenant, ids_menus=ids_menus
+            )
+
         conn.commit()
         msg = "Usuário criado."
         if token_bruto:
@@ -512,6 +755,8 @@ def salvar_usuario_tenant(
                 token_bruto=token_bruto,
             )
             msg = "Usuário criado e convite enviado." if ok else f"Usuário criado, mas falhou o e-mail: {msg_email}"
+        elif enviar_convite:
+            msg = "Usuário criado. Convite não enviado (usuário já possui senha)."
         return {"success": True, "message": msg, "id": uid_novo}, 200
     except Exception as e:
         conn.rollback()
@@ -529,6 +774,13 @@ def inativar_usuario_tenant(*, id_tenant: int, uid: int, id_usuario_sessao: int)
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
+        cod = _perfil_codigo_usuario(cur, id_tenant, uid)
+        if cod == "dono":
+            return {
+                "success": False,
+                "message": "O usuário Dono do tenant não pode ser excluído nem inativado.",
+            }, 403
+
         cur.execute(
             """
             UPDATE tbl_usuario_tenant SET ativo = FALSE

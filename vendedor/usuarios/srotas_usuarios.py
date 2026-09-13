@@ -2,10 +2,20 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from flask import Blueprint, jsonify, render_template, request, session, url_for
-from global_utils import exigir_modulo, exigir_permissao, login_obrigatorio, usuario_tem_permissao
-from sistema.plataforma.sessao import MODULO_VENDEDOR
-from sistema.plataforma.sessao import PERFIS_EQUIPE_VENDEDOR, carregar_usuario_apoio, inativar_usuario_tenant, listar_perfis_combo, listar_usuarios_tenant, normalizar_bool, reenviar_convite_usuario, salvar_usuario_tenant
+from flask import Blueprint, jsonify, render_template, request, session
+from global_utils import Var_ConectarBanco, exigir_modulo, exigir_permissao, login_obrigatorio, usuario_tem_permissao
+from sistema.plataforma.sessao import (
+    MODULO_VENDEDOR,
+    PERFIS_EQUIPE_VENDEDOR,
+    carregar_usuario_apoio,
+    inativar_usuario_tenant,
+    listar_perfis_combo,
+    listar_usuarios_tenant,
+    menus_padrao_do_perfil,
+    normalizar_bool,
+    reenviar_convite_usuario,
+    salvar_usuario_tenant,
+)
 
 
 _MOD = Path(__file__).resolve().parent
@@ -36,7 +46,6 @@ def _exigir_escrita():
     return jsonify(success=False, message="Sem permissão para gerenciar usuários."), 403
 
 
-
 @vd_usuarios_bp.get("/vendedor/usuarios")
 @login_obrigatorio()
 @exigir_modulo(MODULO_VENDEDOR)
@@ -45,6 +54,7 @@ def usuarios():
     if (r := _exigir_vendedor_tenant()) is not None:
         return r
     return render_template("frm_vd_usuarios.html", nav_ativo="vd_usuarios")
+
 
 @vd_usuarios_bp.get("/vendedor/usuarios/dados")
 @login_obrigatorio()
@@ -65,6 +75,7 @@ def usuarios_dados():
         )
     )
 
+
 @vd_usuarios_bp.get("/vendedor/usuarios/combos")
 @login_obrigatorio()
 @exigir_modulo(MODULO_VENDEDOR)
@@ -79,6 +90,26 @@ def usuarios_combos():
     ]
     return jsonify(perfis)
 
+
+@vd_usuarios_bp.get("/vendedor/usuarios/menus-perfil")
+@login_obrigatorio()
+@exigir_modulo(MODULO_VENDEDOR)
+@exigir_permissao(codigo="vd_usuarios.ver")
+def usuarios_menus_perfil():
+    if (r := _exigir_vendedor_tenant()) is not None:
+        return r
+    id_perfil = int(request.args.get("id_perfil") or 0)
+    if not id_perfil:
+        return jsonify(success=False, message="Perfil inválido."), 400
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        menus = menus_padrao_do_perfil(cur, id_perfil=id_perfil, contexto_modulo=MODULO_VENDEDOR)
+        return jsonify(success=True, menus=menus)
+    finally:
+        conn.close()
+
+
 @vd_usuarios_bp.get("/vendedor/usuarios/incluir")
 @login_obrigatorio()
 @exigir_modulo(MODULO_VENDEDOR)
@@ -86,7 +117,8 @@ def usuarios_combos():
 def usuarios_incluir():
     if (r := _exigir_vendedor_tenant()) is not None:
         return r
-    return render_template("frm_vd_usuarios_apoio.html")
+    return render_template("frm_vd_usuarios.html", nav_ativo="vd_usuarios")
+
 
 @vd_usuarios_bp.get("/vendedor/usuarios/editar")
 @login_obrigatorio()
@@ -95,7 +127,8 @@ def usuarios_incluir():
 def usuarios_editar():
     if (r := _exigir_vendedor_tenant()) is not None:
         return r
-    return render_template("frm_vd_usuarios_apoio.html")
+    return render_template("frm_vd_usuarios.html", nav_ativo="vd_usuarios")
+
 
 @vd_usuarios_bp.post("/vendedor/usuarios/apoio")
 @login_obrigatorio()
@@ -107,8 +140,13 @@ def usuarios_apoio():
     uid = int((request.get_json(silent=True) or {}).get("id") or 0)
     if not uid:
         return jsonify(success=False, message="ID inválido."), 400
-    payload, status = carregar_usuario_apoio(id_tenant=int(session["id_tenant"]), uid=uid)
+    payload, status = carregar_usuario_apoio(
+        id_tenant=int(session["id_tenant"]),
+        uid=uid,
+        contexto_modulo=MODULO_VENDEDOR,
+    )
     return jsonify(payload), status
+
 
 @vd_usuarios_bp.post("/vendedor/usuarios/salvar")
 @login_obrigatorio()
@@ -120,6 +158,9 @@ def usuarios_salvar():
     if (resp := _exigir_escrita()) is not None:
         return resp
     body = request.get_json(silent=True) or {}
+    ids_menus = body.get("ids_menus")
+    if ids_menus is not None and not isinstance(ids_menus, list):
+        ids_menus = None
     payload, status = salvar_usuario_tenant(
         id_tenant=int(session["id_tenant"]),
         uid=body.get("id"),
@@ -129,8 +170,11 @@ def usuarios_salvar():
         id_perfil=int(body.get("id_perfil") or 0),
         status=normalizar_bool(body.get("status"), True),
         enviar_convite=normalizar_bool(body.get("enviar_convite"), True),
+        ids_menus=ids_menus,
+        contexto_modulo=MODULO_VENDEDOR,
     )
     return jsonify(payload), status
+
 
 @vd_usuarios_bp.post("/vendedor/usuarios/inativar")
 @login_obrigatorio()
@@ -148,6 +192,7 @@ def usuarios_inativar():
         id_usuario_sessao=int(session.get("id_usuario") or 0),
     )
     return jsonify(payload), status
+
 
 @vd_usuarios_bp.post("/vendedor/usuarios/reenviar-convite")
 @login_obrigatorio()

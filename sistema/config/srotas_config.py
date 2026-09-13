@@ -839,20 +839,49 @@ def carregar_menu_sidebar() -> list[dict]:
                 (list(ctx_filtro),),
             )
         else:
+            from sistema.plataforma.sessao import garantir_tabela_usuario_tenant_menu
+
+            garantir_tabela_usuario_tenant_menu(cur)
+            id_usuario = session.get("id_usuario")
             cur.execute(
                 """
-                SELECT m.id, m.nome_menu, m.data_page, m.icone, m.nav_codigo, m.parent_id, m.pai
-                FROM tbl_menu m
-                JOIN tbl_perfil_menu pm ON pm.id_menu = m.id AND pm.exibir = TRUE
-                WHERE pm.id_perfil = %s AND m.status = TRUE
-                  AND m.pai = TRUE AND m.parent_id IS NULL
-                  AND COALESCE(m.contexto_modulo, 'comum') = ANY(%s)
-                  AND COALESCE(m.nav_codigo, '') <> 'config'
-                  AND COALESCE(m.data_page, '') <> '/configuracoes'
-                ORDER BY m.ordem NULLS LAST, m.nome_menu
+                SELECT COUNT(*)::int FROM tbl_usuario_tenant_menu
+                WHERE id_usuario = %s AND id_tenant = %s AND exibir = TRUE
                 """,
-                (id_perfil, list(ctx_filtro)),
+                (id_usuario, session.get("id_tenant")),
             )
+            tem_menus_usuario = int(cur.fetchone()[0] or 0) > 0
+            if tem_menus_usuario:
+                cur.execute(
+                    """
+                    SELECT m.id, m.nome_menu, m.data_page, m.icone, m.nav_codigo, m.parent_id, m.pai
+                    FROM tbl_menu m
+                    JOIN tbl_usuario_tenant_menu um
+                      ON um.id_menu = m.id AND um.exibir = TRUE
+                     AND um.id_usuario = %s AND um.id_tenant = %s
+                    WHERE m.status = TRUE AND m.pai = TRUE AND m.parent_id IS NULL
+                      AND COALESCE(m.contexto_modulo, 'comum') = ANY(%s)
+                      AND COALESCE(m.nav_codigo, '') <> 'config'
+                      AND COALESCE(m.data_page, '') <> '/configuracoes'
+                    ORDER BY m.ordem NULLS LAST, m.nome_menu
+                    """,
+                    (id_usuario, session.get("id_tenant"), list(ctx_filtro)),
+                )
+            else:
+                cur.execute(
+                    """
+                    SELECT m.id, m.nome_menu, m.data_page, m.icone, m.nav_codigo, m.parent_id, m.pai
+                    FROM tbl_menu m
+                    JOIN tbl_perfil_menu pm ON pm.id_menu = m.id AND pm.exibir = TRUE
+                    WHERE pm.id_perfil = %s AND m.status = TRUE
+                      AND m.pai = TRUE AND m.parent_id IS NULL
+                      AND COALESCE(m.contexto_modulo, 'comum') = ANY(%s)
+                      AND COALESCE(m.nav_codigo, '') <> 'config'
+                      AND COALESCE(m.data_page, '') <> '/configuracoes'
+                    ORDER BY m.ordem NULLS LAST, m.nome_menu
+                    """,
+                    (id_perfil, list(ctx_filtro)),
+                )
 
         itens = []
         for row in cur.fetchall():

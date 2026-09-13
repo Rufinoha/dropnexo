@@ -153,6 +153,8 @@ def _logo_url(fid: int, caminho: str | None) -> str:
 def _row_dict(row) -> dict:
     fid = row[0]
     caminho = row[9] if len(row) > 9 else None
+    qtd_produtos = int(row[10] or 0) if len(row) > 10 else 0
+    qtd_publicados = int(row[11] or 0) if len(row) > 11 else 0
     return {
         "id": fid,
         "nome": row[1] or "",
@@ -165,6 +167,8 @@ def _row_dict(row) -> dict:
         "ativo": bool(row[8]),
         "logo_caminho": caminho or "",
         "logo_url": _logo_url(fid, caminho),
+        "qtd_produtos": qtd_produtos,
+        "qtd_publicados": qtd_publicados,
     }
 
 
@@ -226,19 +230,34 @@ def dados():
         garantir_tabela_fornecedor_armazem(cur)
         conn.commit()
         params: list = [id_tenant]
-        where = "id_tenant_armazem = %s AND ativo = TRUE"
+        where = "af.id_tenant_armazem = %s AND af.ativo = TRUE"
         if busca:
-            where += " AND (nome ILIKE %s OR nome_fantasia ILIKE %s OR documento ILIKE %s)"
+            where += (
+                " AND (af.nome ILIKE %s OR af.nome_fantasia ILIKE %s OR af.documento ILIKE %s)"
+            )
             like = f"%{busca}%"
             params.extend([like, like, like])
+        tem_logo = _tem_coluna_logo(cur)
+        cols = (
+            "af.id, af.nome, af.nome_fantasia, af.documento, af.email, af.telefone, "
+            "af.whatsapp, af.observacoes, af.ativo, "
+            + ("af.logo_caminho" if tem_logo else "NULL::varchar AS logo_caminho")
+        )
         cur.execute(
             f"""
-            SELECT {_cols_select(cur)}
-            FROM tbl_armazem_fornecedor
+            SELECT {cols},
+                   (SELECT COUNT(*)::int FROM tbl_produto p
+                    WHERE p.id_tenant = %s
+                      AND p.id_armazem_fornecedor = af.id) AS qtd_produtos,
+                   (SELECT COUNT(*)::int FROM tbl_produto p
+                    WHERE p.id_tenant = %s
+                      AND p.id_armazem_fornecedor = af.id
+                      AND p.publicado = TRUE) AS qtd_publicados
+            FROM tbl_armazem_fornecedor af
             WHERE {where}
-            ORDER BY COALESCE(NULLIF(nome_fantasia, ''), nome)
+            ORDER BY COALESCE(NULLIF(af.nome_fantasia, ''), af.nome)
             """,
-            params,
+            [id_tenant, id_tenant] + params,
         )
         return jsonify(success=True, dados=[_row_dict(r) for r in cur.fetchall()])
     except Exception as e:

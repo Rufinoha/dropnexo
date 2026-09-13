@@ -2,9 +2,20 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from flask import Blueprint, jsonify, render_template, request, session, url_for
-from global_utils import exigir_modulo, exigir_permissao, login_obrigatorio, usuario_tem_permissao
-from sistema.plataforma.sessao import PERFIS_EQUIPE_FORNECEDOR, carregar_usuario_apoio, inativar_usuario_tenant, listar_perfis_combo, listar_usuarios_tenant, normalizar_bool, reenviar_convite_usuario, salvar_usuario_tenant
+from flask import Blueprint, jsonify, render_template, request, session
+from global_utils import Var_ConectarBanco, exigir_modulo, exigir_permissao, login_obrigatorio, usuario_tem_permissao
+from sistema.plataforma.sessao import (
+    MODULO_FORNECEDOR,
+    PERFIS_EQUIPE_FORNECEDOR,
+    carregar_usuario_apoio,
+    inativar_usuario_tenant,
+    listar_perfis_combo,
+    listar_usuarios_tenant,
+    menus_padrao_do_perfil,
+    normalizar_bool,
+    reenviar_convite_usuario,
+    salvar_usuario_tenant,
+)
 
 
 _MOD = Path(__file__).resolve().parent
@@ -35,19 +46,19 @@ def _exigir_escrita():
     return jsonify(success=False, message="Sem permissão para gerenciar usuários."), 403
 
 
-
 @fn_usuarios_bp.get("/fornecedor/usuarios")
 @login_obrigatorio()
-@exigir_modulo("fornecedor")
+@exigir_modulo(MODULO_FORNECEDOR)
 @exigir_permissao(codigo="fn_usuarios.ver")
 def usuarios():
     if (r := _exigir_fornecedor_tenant()) is not None:
         return r
     return render_template("frm_fn_usuarios.html", nav_ativo="fn_usuarios")
 
+
 @fn_usuarios_bp.get("/fornecedor/usuarios/dados")
 @login_obrigatorio()
-@exigir_modulo("fornecedor")
+@exigir_modulo(MODULO_FORNECEDOR)
 @exigir_permissao(codigo="fn_usuarios.ver")
 def usuarios_dados():
     if (r := _exigir_fornecedor_tenant()) is not None:
@@ -63,9 +74,10 @@ def usuarios_dados():
     )
     return jsonify(resultado)
 
+
 @fn_usuarios_bp.get("/fornecedor/usuarios/combos")
 @login_obrigatorio()
-@exigir_modulo("fornecedor")
+@exigir_modulo(MODULO_FORNECEDOR)
 @exigir_permissao(codigo="fn_usuarios.ver")
 def usuarios_combos():
     if (r := _exigir_fornecedor_tenant()) is not None:
@@ -77,27 +89,49 @@ def usuarios_combos():
     ]
     return jsonify(perfis)
 
+
+@fn_usuarios_bp.get("/fornecedor/usuarios/menus-perfil")
+@login_obrigatorio()
+@exigir_modulo(MODULO_FORNECEDOR)
+@exigir_permissao(codigo="fn_usuarios.ver")
+def usuarios_menus_perfil():
+    if (r := _exigir_fornecedor_tenant()) is not None:
+        return r
+    id_perfil = int(request.args.get("id_perfil") or 0)
+    if not id_perfil:
+        return jsonify(success=False, message="Perfil inválido."), 400
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        menus = menus_padrao_do_perfil(cur, id_perfil=id_perfil, contexto_modulo=MODULO_FORNECEDOR)
+        return jsonify(success=True, menus=menus)
+    finally:
+        conn.close()
+
+
 @fn_usuarios_bp.get("/fornecedor/usuarios/incluir")
 @login_obrigatorio()
-@exigir_modulo("fornecedor")
+@exigir_modulo(MODULO_FORNECEDOR)
 @exigir_permissao(codigo="fn_usuarios.editar")
 def usuarios_incluir():
     if (r := _exigir_fornecedor_tenant()) is not None:
         return r
-    return render_template("frm_fn_usuarios_apoio.html")
+    return render_template("frm_fn_usuarios.html", nav_ativo="fn_usuarios")
+
 
 @fn_usuarios_bp.get("/fornecedor/usuarios/editar")
 @login_obrigatorio()
-@exigir_modulo("fornecedor")
+@exigir_modulo(MODULO_FORNECEDOR)
 @exigir_permissao(codigo="fn_usuarios.editar")
 def usuarios_editar():
     if (r := _exigir_fornecedor_tenant()) is not None:
         return r
-    return render_template("frm_fn_usuarios_apoio.html")
+    return render_template("frm_fn_usuarios.html", nav_ativo="fn_usuarios")
+
 
 @fn_usuarios_bp.post("/fornecedor/usuarios/apoio")
 @login_obrigatorio()
-@exigir_modulo("fornecedor")
+@exigir_modulo(MODULO_FORNECEDOR)
 @exigir_permissao(codigo="fn_usuarios.ver")
 def usuarios_apoio():
     if (r := _exigir_fornecedor_tenant()) is not None:
@@ -105,12 +139,17 @@ def usuarios_apoio():
     uid = int((request.get_json(silent=True) or {}).get("id") or 0)
     if not uid:
         return jsonify(success=False, message="ID inválido."), 400
-    payload, status = carregar_usuario_apoio(id_tenant=int(session["id_tenant"]), uid=uid)
+    payload, status = carregar_usuario_apoio(
+        id_tenant=int(session["id_tenant"]),
+        uid=uid,
+        contexto_modulo=MODULO_FORNECEDOR,
+    )
     return jsonify(payload), status
+
 
 @fn_usuarios_bp.post("/fornecedor/usuarios/salvar")
 @login_obrigatorio()
-@exigir_modulo("fornecedor")
+@exigir_modulo(MODULO_FORNECEDOR)
 @exigir_permissao(codigo="fn_usuarios.editar")
 def usuarios_salvar():
     if (r := _exigir_fornecedor_tenant()) is not None:
@@ -118,6 +157,9 @@ def usuarios_salvar():
     if (resp := _exigir_escrita()) is not None:
         return resp
     body = request.get_json(silent=True) or {}
+    ids_menus = body.get("ids_menus")
+    if ids_menus is not None and not isinstance(ids_menus, list):
+        ids_menus = None
     payload, status = salvar_usuario_tenant(
         id_tenant=int(session["id_tenant"]),
         uid=body.get("id"),
@@ -127,12 +169,15 @@ def usuarios_salvar():
         id_perfil=int(body.get("id_perfil") or 0),
         status=normalizar_bool(body.get("status"), True),
         enviar_convite=normalizar_bool(body.get("enviar_convite"), True),
+        ids_menus=ids_menus,
+        contexto_modulo=MODULO_FORNECEDOR,
     )
     return jsonify(payload), status
 
+
 @fn_usuarios_bp.post("/fornecedor/usuarios/inativar")
 @login_obrigatorio()
-@exigir_modulo("fornecedor")
+@exigir_modulo(MODULO_FORNECEDOR)
 @exigir_permissao(codigo="fn_usuarios.editar")
 def usuarios_inativar():
     if (r := _exigir_fornecedor_tenant()) is not None:
@@ -147,9 +192,10 @@ def usuarios_inativar():
     )
     return jsonify(payload), status
 
+
 @fn_usuarios_bp.post("/fornecedor/usuarios/reenviar-convite")
 @login_obrigatorio()
-@exigir_modulo("fornecedor")
+@exigir_modulo(MODULO_FORNECEDOR)
 @exigir_permissao(codigo="fn_usuarios.editar")
 def usuarios_reenviar_convite():
     if (r := _exigir_fornecedor_tenant()) is not None:

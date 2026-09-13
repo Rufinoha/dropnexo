@@ -933,4 +933,14 @@
 
   window.addEventListener("message", (ev) => {
     if (ev.data?.grupo === "atualizarTabela") {
-      carregar().catch((e) => Swal.fire("Erro",
+      carregar().catch((e) => Swal.fire("Erro", e.message, "error"));
+    }
+  });
+
+  initBulkActions();
+  syncTheadStickyOffset();
+  window.addEventListener("resize", syncTheadStickyOffset);
+  carregarCategoriasFiltro()
+    .then(() => carregar())
+    .catch((e) => Swal.fire("Erro", e.message, "error"));
+})();
