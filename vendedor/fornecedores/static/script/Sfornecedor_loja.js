@@ -34,6 +34,7 @@
   function urlParaExibir(url) {
     const u = String(url || "").trim();
     if (!u) return "";
+    if (/\/imagens\/proxy\?/i.test(u)) return u;
     if (!/^https?:\/\//i.test(u)) return u;
     // Links externos (Postimages etc.) bloqueiam <img> cross-site.
     return `/fornecedores/imagens/proxy?url=${encodeURIComponent(u)}`;

@@ -533,7 +533,7 @@ def desconectar_fornecedor(
 import json
 from pathlib import Path
 
-from flask import Blueprint, Response, jsonify, render_template, request, session, url_for
+from flask import Blueprint, Response, jsonify, render_template, request, session
 
 from fornecedor.parametros.requisitos import (
     carregar_contato_responsavel_fornecedor,
@@ -581,13 +581,8 @@ EXISTS (
 
 
 def _url_imagem_catalogo_vendedor(caminho: str | None) -> str:
-    """URL para <img> na visão do vendedor; links externos passam pelo proxy same-origin."""
-    url = url_imagem_produto(caminho)
-    if not url:
-        return ""
-    if url.lower().startswith(("http://", "https://")):
-        return url_for("vd_fornecedores.imagens_proxy", url=url)
-    return url
+    """URL bruta para a loja; o JS aplica o proxy same-origin em links http(s)."""
+    return url_imagem_produto(caminho) or ""
 
 
 def _where_rede(id_tenant: int, busca: str, id_fornecedor: str, id_categoria: str) -> tuple[str, list]:
@@ -1160,7 +1155,6 @@ def pagina_loja():
 
 @vd_fornecedores_bp.get("/fornecedores/imagens/proxy")
 @login_obrigatorio()
-@exigir_modulo(MODULO_VENDEDOR)
 @exigir_permissao(codigo="fornecedores.ver")
 def imagens_proxy():
     """Espelha imagem remota (modo link) para o catálogo na rede de fornecedores."""

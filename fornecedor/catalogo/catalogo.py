@@ -280,6 +280,33 @@ _PROXY_MEM_CACHE_TTL_S = 30 * 60
 _PROXY_MEM_CACHE_MAX = 80
 
 
+def _referer_para_cdn(url: str) -> str | None:
+    """Alguns CDNs (Postimages, ImgBB) exigem Referer do site da página."""
+    host = (urlparse(url).hostname or "").strip().lower()
+    if not host:
+        return None
+    if host == "i.postimg.cc" or host.endswith(".postimg.cc"):
+        return "https://postimg.cc/"
+    if host in ("postimg.cc", "postimages.org", "postimg.org"):
+        return "https://postimg.cc/"
+    if host == "i.ibb.co" or host.endswith(".ibb.co"):
+        return "https://ibb.co/"
+    if host in ("ibb.co", "imgbb.com"):
+        return "https://ibb.co/"
+    return None
+
+
+def _headers_fetch_imagem(url: str) -> dict[str, str]:
+    headers = {
+        "User-Agent": _UA_IMG_LINK,
+        "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+    }
+    ref = _referer_para_cdn(url)
+    if ref:
+        headers["Referer"] = ref
+    return headers
+
+
 def _host_url_seguro(url: str) -> str:
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https"):
@@ -340,10 +367,7 @@ def _extrair_url_imagem_de_html(html: str, base_url: str) -> str | None:
 
 def _inspecionar_url_remota(url: str, *, timeout: float) -> tuple[str, str | None, bytes]:
     """Retorna (url_final, content_type, amostra_ou_html)."""
-    headers = {
-        "User-Agent": _UA_IMG_LINK,
-        "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
-    }
+    headers = _headers_fetch_imagem(url)
     with requests.get(
         url,
         headers=headers,
@@ -502,16 +526,23 @@ def proxy_bytes_imagem_remota(url: str, *, timeout: float = 20.0, max_bytes: int
     if not bruto.lower().startswith(("http://", "https://")):
         raise ValueError("URL inválida.")
 
+    # Página Postimages/ImgBB → tenta Direct link antes do fetch de bytes.
+    host = (urlparse(bruto).hostname or "").lower()
+    if any(host == h or host.endswith("." + h) for h in _HOSTS_PAGINA_IMAGEM) and not _url_parece_arquivo_imagem(bruto):
+        try:
+            resolvida = resolver_url_imagem_link(bruto, timeout=min(timeout, 15.0))
+            if resolvida.get("url"):
+                bruto = resolvida["url"]
+        except ValueError:
+            pass
+
     agora = time.time()
     hit = _PROXY_MEM_CACHE.get(bruto)
     if hit and hit[0] > agora:
         return hit[1], hit[2]
 
     _host_url_seguro(bruto)
-    headers = {
-        "User-Agent": _UA_IMG_LINK,
-        "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
-    }
+    headers = _headers_fetch_imagem(bruto)
     try:
         with requests.get(
             bruto,
@@ -539,6 +570,15 @@ def proxy_bytes_imagem_remota(url: str, *, timeout: float = 20.0, max_bytes: int
     if not data:
         raise ValueError("Imagem remota vazia.")
     if not (_content_type_eh_imagem(ct) or _bytes_parecem_imagem(data)):
+        # Última chance: HTML de página de hospedagem → extrai Direct link.
+        if (ct or "").lower().startswith("text/html") or _bytes_parecem_html(data[:2000]):
+            try:
+                resolvida = resolver_url_imagem_link(bruto, timeout=min(timeout, 15.0))
+                alt = (resolvida.get("url") or "").strip()
+                if alt and alt != bruto:
+                    return proxy_bytes_imagem_remota(alt, timeout=timeout, max_bytes=max_bytes)
+            except ValueError:
+                pass
         raise ValueError("A URL remota não devolveu uma imagem.")
     if not _content_type_eh_imagem(ct):
         if data.startswith(b"\xff\xd8\xff"):
