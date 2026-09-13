@@ -134,16 +134,32 @@
     if (vazio) vazio.hidden = true;
     grid.innerHTML = lista
       .map((f) => {
+        const titulo = f.nome_fantasia || f.nome || "Fornecedor";
+        const razao =
+          f.nome_fantasia && f.nome && f.nome_fantasia !== f.nome ? f.nome : "";
+        const doc = (f.documento || "").trim();
         const logo = f.logo_url
           ? `<img class="AzForn_CardLogo" src="${esc(f.logo_url)}?t=${Date.now()}" alt="" />`
-          : `<span class="AzForn_CardLogoPh" aria-hidden="true"></span>`;
+          : `<span class="AzForn_CardLogoPh" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="11" r="1.5"/><path d="M21 16l-5-5-4 4-2-2-5 5"/></svg>
+            </span>`;
+        const chips = [
+          doc
+            ? `<span class="AzForn_Chip AzForn_Chip--doc">${esc(doc)}</span>`
+            : `<span class="AzForn_Chip AzForn_Chip--muted">Sem documento</span>`,
+        ];
+        if (f.email) chips.push(`<span class="AzForn_Chip">${esc(f.email)}</span>`);
         return `
       <article class="AzForn_Card" data-id="${f.id}" title="Clique para editar">
-        ${logo}
+        <div class="AzForn_CardMedia">${logo}</div>
         <div class="AzForn_CardBody">
-          <strong>${esc(f.nome_fantasia || f.nome)}</strong>
-          <span>${esc(f.nome_fantasia && f.nome_fantasia !== f.nome ? f.nome : "")}</span>
-          <span class="AzForn_Meta">${esc(f.documento || "Sem documento")}${f.email ? " · " + esc(f.email) : ""}</span>
+          <strong>${esc(titulo)}</strong>
+          <span class="AzForn_CardRazao">${esc(razao) || "&nbsp;"}</span>
+          <div class="AzForn_CardMeta">${chips.join("")}</div>
+        </div>
+        <div class="AzForn_CardFoot">
+          <span>Fornecedor local</span>
+          <span>Editar →</span>
         </div>
       </article>`;
       })

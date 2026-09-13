@@ -9,8 +9,6 @@
     whatsapp: document.getElementById("whatsapp"),
     id_perfil: document.getElementById("id_perfil"),
     status: document.getElementById("status"),
-    enviar_convite: document.getElementById("enviar_convite"),
-    wrapEnviarConvite: document.getElementById("wrapEnviarConvite"),
     conviteHint: document.getElementById("conviteHint"),
     btnSalvar: document.getElementById("btnSalvar"),
     btnReenviar: document.getElementById("btnReenviar"),
@@ -57,9 +55,10 @@
     el.whatsapp.value = d.whatsapp || "";
     el.id_perfil.value = d.id_perfil || "";
     el.status.checked = !!d.status;
-    el.wrapEnviarConvite.style.display = "none";
     el.btnReenviar.style.display =
-      d.convite_status === "PENDENTE" || d.convite_status === "EXPIRADO" ? "inline-block" : "none";
+      d.convite_status === "PENDENTE" || d.convite_status === "EXPIRADO" || d.convite_status === "SEM_CONVITE"
+        ? "inline-block"
+        : "none";
     hintConvite(d.convite_status);
   }
 
@@ -71,7 +70,7 @@
       whatsapp: (el.whatsapp.value || "").trim(),
       id_perfil: el.id_perfil.value ? Number(el.id_perfil.value) : null,
       status: !!el.status.checked,
-      enviar_convite: !!el.enviar_convite?.checked,
+      enviar_convite: !idUsuario,
     };
     const r = await fetch(`${BASE}/salvar`, {
       method: "POST",
@@ -114,9 +113,8 @@
     if (el.id) el.id.value = idUsuario ? String(idUsuario) : "";
     if (!idUsuario) {
       el.email.readOnly = false;
-      el.wrapEnviarConvite.style.display = "";
       el.btnReenviar.style.display = "none";
-      el.conviteHint.textContent = "Um e-mail de convite será enviado para definir a senha.";
+      el.conviteHint.textContent = "Ao salvar, o e-mail de convite será enviado automaticamente.";
       return;
     }
     if (!combosProntos) {

@@ -33,8 +33,8 @@
     whatsapp: document.getElementById("usuEqWhatsapp"),
     perfil: document.getElementById("usuEqPerfil"),
     status: document.getElementById("usuEqStatus"),
-    enviarConvite: document.getElementById("usuEqEnviarConvite"),
-    wrapConvite: document.getElementById("usuEqWrapConvite"),
+    enviarConvite: null,
+    wrapConvite: null,
     hint: document.getElementById("usuEqHint"),
     bannerDono: document.getElementById("usuEqBannerDono"),
     menus: document.getElementById("usuEqMenus"),
@@ -200,15 +200,14 @@
     el.nome.value = "";
     el.whatsapp.value = "";
     el.status.checked = true;
-    if (el.enviarConvite) el.enviarConvite.checked = true;
-    if (el.wrapConvite) el.wrapConvite.hidden = false;
     if (el.btnReenviar) el.btnReenviar.hidden = true;
     if (el.bannerDono) el.bannerDono.hidden = true;
     el.perfil.disabled = false;
     el.status.disabled = false;
     hintConvite("", 24);
     if (el.hint) {
-      el.hint.textContent = "Ao salvar com convite ativo, enviamos um e-mail com link para definir a senha (válido por 24h).";
+      el.hint.textContent =
+        "Ao salvar, enviamos automaticamente um e-mail com link para definir a senha (válido por 24h).";
       el.hint.classList.add("is-warn");
       el.hint.classList.remove("is-ok");
     }
@@ -261,9 +260,9 @@
       el.perfil.value = d.id_perfil || "";
       el.status.checked = !!d.status;
     }
-    if (el.wrapConvite) el.wrapConvite.hidden = true;
     if (el.btnReenviar) {
-      el.btnReenviar.hidden = !(d.convite_status === "PENDENTE" || d.convite_status === "EXPIRADO");
+      const st = d.convite_status || "";
+      el.btnReenviar.hidden = isDono || !(st === "PENDENTE" || st === "EXPIRADO" || st === "SEM_CONVITE");
     }
     if (el.bannerDono) el.bannerDono.hidden = !isDono;
     hintConvite(d.convite_status, d.token_horas);
@@ -383,7 +382,7 @@
       whatsapp: (el.whatsapp.value || "").trim(),
       id_perfil: el.perfil.value ? Number(el.perfil.value) : null,
       status: !!el.status.checked,
-      enviar_convite: idUsuario ? false : !!el.enviarConvite?.checked,
+      enviar_convite: !idUsuario,
       ids_menus: idsMenusSelecionados(),
     };
     if (!body.email || !body.nome || !body.id_perfil) {
