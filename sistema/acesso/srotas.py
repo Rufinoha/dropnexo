@@ -654,7 +654,11 @@ _ROTULO_TIPO_TENANT = {
 
 
 def _listar_tenants_dev(cur, id_tenant_atual: int | None) -> list[dict]:
-    """Todos os tenants ativos — suporte DEV (vendedor, fornecedor, híbrido e armazém)."""
+    """Somente tenants reais (tbl_tenant) para o seletor DEV.
+
+    Fornecedores locais do armazém (tbl_armazem_fornecedor) NÃO entram aqui —
+    não são conta/tenant e não há o que “entrar”. Apenas neste menu de suporte.
+    """
     cur.execute(
         """
         SELECT t.id, t.nome, t.slug, t.plano, t.tipo_negocio, t.cidade, t.uf, t.documento
@@ -688,6 +692,7 @@ def _listar_tenants_dev(cur, id_tenant_atual: int | None) -> list[dict]:
                 "perfil_nome": "Dono da conta",
                 "meta": " · ".join(meta_partes),
                 "is_atual": tid == id_tenant_atual,
+                "eh_tenant": True,
             }
         )
     return itens

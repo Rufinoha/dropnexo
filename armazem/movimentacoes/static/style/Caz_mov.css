@@ -1,4 +1,8 @@
-.AzMov_Page { max-width: 900px; }
+.AzMov_Page {
+  max-width: none;
+  width: 100%;
+  box-sizing: border-box;
+}
 .AzMov_Header { display:flex; justify-content:space-between; gap:1rem; margin-bottom:1rem; }
 .AzMov_Lista { display:grid; gap:0.55rem; }
 .AzMov_Card {

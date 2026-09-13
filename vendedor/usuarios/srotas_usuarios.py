@@ -103,6 +103,7 @@ def usuarios_menus_perfil():
     try:
         cur = conn.cursor()
         menus = menus_padrao_do_perfil(cur, id_perfil=id_perfil, contexto_modulo=MODULO_VENDEDOR)
+        conn.commit()
         return jsonify(success=True, menus=menus)
     finally:
         conn.close()

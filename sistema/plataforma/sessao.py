@@ -163,9 +163,32 @@ def ctx_navegacao() -> dict:
             "modulo_ativo_rotulo": "",
             "exibir_seletor_modulo": False,
             "pode_config_plataforma": False,
+            "header_navs": set(),
         }
     mods = modulos_disponiveis_sessao()
     ativo = garantir_modulo_sessao()
+    header_navs: set[str] = set()
+    try:
+        tid = session.get("id_tenant")
+        uid = session.get("id_usuario")
+        if tid and uid:
+            if session.get("eh_desenvolvedor") or (session.get("perfil_codigo") or "").lower() in (
+                "dono",
+                "admin",
+            ):
+                header_navs = {n[0] for n in MENUS_HEADER_PADRAO}
+            else:
+                conn = Var_ConectarBanco()
+                try:
+                    cur = conn.cursor()
+                    header_navs = navs_header_liberados(
+                        cur, id_usuario=int(uid), id_tenant=int(tid)
+                    )
+                    conn.commit()
+                finally:
+                    conn.close()
+    except Exception:
+        header_navs = {n[0] for n in MENUS_HEADER_PADRAO if _nav_default_ligado(n[0])}
     return {
         "menu_sidebar": [],
         "modulos_nav": [
@@ -176,6 +199,7 @@ def ctx_navegacao() -> dict:
         "modulo_ativo_rotulo": rotulo_modulo(ativo),
         "exibir_seletor_modulo": len(mods) > 1,
         "pode_config_plataforma": bool(session.get("eh_desenvolvedor")),
+        "header_navs": header_navs,
     }
 
 
@@ -321,17 +345,55 @@ def listar_menus_acesso_modulo(cur, *, contexto_modulo: str, id_usuario: int | N
         )
         liberados = {int(r[0]) for r in cur.fetchall()}
         if not liberados:
-            for m in base:
-                m["exibir"] = True
-                for f in m.get("filhos") or []:
-                    f["exibir"] = True
-            return base
+            return aplicar_defaults_novo_usuario(base)
 
     for m in base:
-        m["exibir"] = m["id"] in liberados
+        is_hdr = (m.get("nav_codigo") or "").startswith("hdr_")
+        if is_hdr and not tem_override:
+            m["exibir"] = _nav_default_ligado(m.get("nav_codigo"))
+        else:
+            m["exibir"] = m["id"] in liberados
         for f in m.get("filhos") or []:
-            f["exibir"] = f["id"] in liberados
+            is_hdr_f = (f.get("nav_codigo") or "").startswith("hdr_")
+            if is_hdr_f and not tem_override:
+                f["exibir"] = _nav_default_ligado(f.get("nav_codigo"))
+            else:
+                f["exibir"] = f["id"] in liberados
     return base
+
+
+def navs_header_liberados(cur, *, id_usuario: int, id_tenant: int) -> set[str]:
+    """Nav codes hdr_* liberados para o usuário (ou todos se dono/admin sem override)."""
+    garantir_menus_header(cur)
+    cod = _perfil_codigo_usuario(cur, id_tenant, id_usuario)
+    if cod in ("dono", "admin"):
+        return {n[0] for n in MENUS_HEADER_PADRAO}
+    cur.execute(
+        """
+        SELECT COUNT(*)::int FROM tbl_usuario_tenant_menu
+        WHERE id_usuario = %s AND id_tenant = %s
+        """,
+        (id_usuario, id_tenant),
+    )
+    tem = int(cur.fetchone()[0] or 0) > 0
+    if not tem:
+        # Sem override: defaults de novo usuário (financeiro/plano off)
+        return {
+            n[0]
+            for n in MENUS_HEADER_PADRAO
+            if _nav_default_ligado(n[0])
+        }
+    cur.execute(
+        """
+        SELECT m.nav_codigo
+        FROM tbl_usuario_tenant_menu um
+        JOIN tbl_menu m ON m.id = um.id_menu
+        WHERE um.id_usuario = %s AND um.id_tenant = %s AND um.exibir = TRUE
+          AND COALESCE(m.nav_codigo, '') LIKE 'hdr_%%'
+        """,
+        (id_usuario, id_tenant),
+    )
+    return {(r[0] or "").strip() for r in cur.fetchall() if r[0]}
 
 
 def salvar_menus_usuario_tenant(cur, *, id_usuario: int, id_tenant: int, ids_menus: list[int]) -> None:
@@ -352,23 +414,93 @@ def salvar_menus_usuario_tenant(cur, *, id_usuario: int, id_tenant: int, ids_men
         )
 
 
+# Menus do header (exceto Configurações — exclusivo DEV).
+MENUS_HEADER_PADRAO = (
+    ("hdr_meu_plano", "Meu Plano", "/meu-plano", "credit-card"),
+    ("hdr_financeiro", "Financeiro", "/financeiro", "landmark"),
+    ("hdr_chamados", "Central de Chamados", "/demandas", "message-square"),
+    ("hdr_marktplace", "Marktplace", "/marktplace", "shopping-bag"),
+)
+
+# Ao criar usuário: ligados por padrão, exceto estes.
+NAV_DEFAULT_OFF = frozenset(
+    {
+        "az_usuarios",
+        "vd_usuarios",
+        "fn_usuarios",
+        "usuarios",
+        "hdr_financeiro",
+        "hdr_meu_plano",
+    }
+)
+
+
+def garantir_menus_header(cur) -> None:
+    """Garante itens do menu do header em tbl_menu (contexto comum)."""
+    for nav, nome, page, icone in MENUS_HEADER_PADRAO:
+        cur.execute(
+            """
+            SELECT id FROM tbl_menu WHERE COALESCE(nav_codigo, '') = %s LIMIT 1
+            """,
+            (nav,),
+        )
+        if cur.fetchone():
+            continue
+        cur.execute(
+            """
+            INSERT INTO tbl_menu (
+              nome_menu, descricao, data_page, icone, tipo_abrir, ordem,
+              parent_id, pai, status, obs, id_modulo, nav_codigo, contexto_modulo
+            )
+            VALUES (%s, %s, %s, %s, 'Mesma Janela', 900, NULL, TRUE, TRUE, 'header',
+                    NULL, %s, 'comum')
+            """,
+            (nome, f"Acesso no menu do header: {nome}", page, icone, nav),
+        )
+
+
+def _nav_default_ligado(nav_codigo: str | None) -> bool:
+    nav = (nav_codigo or "").strip().lower()
+    if not nav:
+        return True
+    if nav in NAV_DEFAULT_OFF:
+        return False
+    if nav.endswith("_usuarios") or nav == "usuarios":
+        return False
+    return True
+
+
+def aplicar_defaults_novo_usuario(menus: list[dict]) -> list[dict]:
+    for m in menus:
+        m["exibir"] = _nav_default_ligado(m.get("nav_codigo"))
+        for f in m.get("filhos") or []:
+            f["exibir"] = _nav_default_ligado(f.get("nav_codigo"))
+    return menus
+
+
 def listar_menus_do_modulo(cur, *, contexto_modulo: str) -> list[dict]:
-    """Todos os menus pai (+ filhos) do módulo, sem depender de perfil_menu."""
+    """Menus do módulo + header (sem Configurações)."""
+    garantir_menus_header(cur)
     ctx = (contexto_modulo or "vendedor").strip().lower()
     prefix = {"armazem": "az_%", "vendedor": "vd_%", "fornecedor": "fn_%"}.get(ctx, "x_%")
     cur.execute(
         """
-        SELECT m.id, m.nome_menu, m.nav_codigo
+        SELECT m.id, m.nome_menu, m.nav_codigo, COALESCE(m.obs, '')
         FROM tbl_menu m
         WHERE m.status = TRUE AND m.pai = TRUE AND m.parent_id IS NULL
-          AND (
-                COALESCE(m.contexto_modulo, 'comum') IN ('comum', %s)
-             OR COALESCE(m.nav_codigo, '') LIKE %s
-             OR COALESCE(m.data_page, '') LIKE %s
-          )
           AND COALESCE(m.nav_codigo, '') <> 'config'
           AND COALESCE(m.data_page, '') <> '/configuracoes'
-        ORDER BY m.ordem NULLS LAST, m.nome_menu
+          AND LOWER(COALESCE(m.nome_menu, '')) NOT LIKE 'configura%%'
+          AND (
+                COALESCE(m.contexto_modulo, '') = %s
+             OR COALESCE(m.nav_codigo, '') LIKE %s
+             OR COALESCE(m.data_page, '') LIKE %s
+             OR COALESCE(m.nav_codigo, '') LIKE 'hdr_%%'
+          )
+        ORDER BY
+          CASE WHEN COALESCE(m.nav_codigo, '') LIKE 'hdr_%%' THEN 1 ELSE 0 END,
+          m.ordem NULLS LAST,
+          m.nome_menu
         """,
         (ctx, prefix, f"/{ctx}/%"),
     )
@@ -376,25 +508,35 @@ def listar_menus_do_modulo(cur, *, contexto_modulo: str) -> list[dict]:
     out = []
     for r in pais:
         mid = r[0]
+        nav = r[2] or ""
         cur.execute(
             """
             SELECT m.id, m.nome_menu, m.nav_codigo
             FROM tbl_menu m
             WHERE m.status = TRUE AND m.parent_id = %s
+              AND COALESCE(m.nav_codigo, '') <> 'config'
+              AND COALESCE(m.data_page, '') <> '/configuracoes'
             ORDER BY m.ordem NULLS LAST, m.nome_menu
             """,
             (mid,),
         )
         filhos = [
-            {"id": f[0], "nome": f[1], "nav_codigo": f[2] or "", "exibir": False}
+            {
+                "id": f[0],
+                "nome": f[1],
+                "nav_codigo": f[2] or "",
+                "exibir": False,
+                "grupo": "header" if (f[2] or "").startswith("hdr_") else "sidebar",
+            }
             for f in cur.fetchall()
         ]
         out.append(
             {
                 "id": mid,
                 "nome": r[1],
-                "nav_codigo": r[2] or "",
+                "nav_codigo": nav,
                 "exibir": False,
+                "grupo": "header" if nav.startswith("hdr_") else "sidebar",
                 "filhos": filhos,
             }
         )
@@ -402,32 +544,10 @@ def listar_menus_do_modulo(cur, *, contexto_modulo: str) -> list[dict]:
 
 
 def menus_padrao_do_perfil(cur, *, id_perfil: int, contexto_modulo: str) -> list[dict]:
+    """Defaults ao convidar usuário: tudo ligado, exceto Usuários / Financeiro / Meu Plano."""
+    _ = id_perfil  # mantido por compatibilidade da API
     base = listar_menus_do_modulo(cur, contexto_modulo=contexto_modulo)
-    if not id_perfil:
-        for m in base:
-            m["exibir"] = True
-            for f in m.get("filhos") or []:
-                f["exibir"] = True
-        return base
-    cur.execute(
-        """
-        SELECT id_menu FROM tbl_perfil_menu
-        WHERE id_perfil = %s AND exibir = TRUE
-        """,
-        (id_perfil,),
-    )
-    liberados = {int(r[0]) for r in cur.fetchall()}
-    if not liberados:
-        for m in base:
-            m["exibir"] = True
-            for f in m.get("filhos") or []:
-                f["exibir"] = True
-        return base
-    for m in base:
-        m["exibir"] = m["id"] in liberados
-        for f in m.get("filhos") or []:
-            f["exibir"] = f["id"] in liberados
-    return base
+    return aplicar_defaults_novo_usuario(base)
 
 
 def listar_usuarios_tenant(

@@ -593,12 +593,20 @@ body.fg-app {
 
 .fg-tenant-dropdown-title {
   margin: 0;
-  padding: 0.45rem 0.55rem 0.35rem;
+  padding: 0.45rem 0.55rem 0.2rem;
   font-size: 0.7rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: #94a3b8;
+}
+
+.fg-tenant-dropdown-note {
+  margin: 0;
+  padding: 0 0.55rem 0.55rem;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: #64748b;
 }
 
 .fg-tenant-dropdown-hint {

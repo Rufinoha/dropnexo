@@ -105,7 +105,7 @@
 }
 .UsuEq_DrawerPanel {
   position: relative;
-  width: min(920px, 100%);
+  width: min(1040px, 100%);
   max-height: min(88vh, 760px);
   background: #fff;
   border-radius: 18px;
@@ -307,7 +307,20 @@
 .UsuEq_MenuTree {
   display: flex;
   flex-direction: column;
-  gap: 0.45rem;
+  gap: 1rem;
+}
+.UsuEq_MenuGroupTitle {
+  margin: 0 0 0.55rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--usueq-muted);
+}
+.UsuEq_MenuGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.55rem;
 }
 .UsuEq_MenuItem {
   border: 1px solid var(--usueq-line);
@@ -315,45 +328,47 @@
   background: #fff;
   overflow: hidden;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  min-width: 0;
 }
 .UsuEq_MenuItem:hover {
   border-color: #cbd5e1;
   box-shadow: 0 4px 14px rgba(15, 23, 42, 0.04);
 }
-.UsuEq_MenuItem label.UsuEq_MenuCheck {
-  display: flex;
-  gap: 0.65rem;
-  align-items: flex-start;
-  padding: 0.7rem 0.85rem;
+.UsuEq_MenuSwitch {
+  display: flex !important;
+  width: 100%;
+  gap: 0.55rem;
+  align-items: center;
+  padding: 0.7rem 0.75rem;
   cursor: pointer;
+  box-sizing: border-box;
 }
-.UsuEq_MenuItem label.UsuEq_MenuCheck strong {
-  display: block;
+.UsuEq_MenuSwitch .Cl_SwitchSlider {
+  flex-shrink: 0;
+}
+.UsuEq_MenuNome {
   color: var(--usueq-ink);
-  font-size: 0.92rem;
-}
-.UsuEq_MenuItem label.UsuEq_MenuCheck small {
-  display: block;
-  color: var(--usueq-muted);
-  font-size: 0.75rem;
-  margin-top: 0.1rem;
+  font-size: 0.88rem;
+  font-weight: 650;
+  line-height: 1.25;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .UsuEq_MenuKids {
   border-top: 1px dashed var(--usueq-line);
   background: var(--usueq-soft);
-  padding: 0.35rem 0.85rem 0.55rem 2.1rem;
+  padding: 0.35rem 0.55rem 0.5rem;
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 0.15rem;
 }
-.UsuEq_MenuKids label {
-  display: flex;
-  gap: 0.5rem;
-  align-items: center;
-  font-size: 0.86rem;
+.UsuEq_MenuSwitch--kid {
+  padding: 0.4rem 0.35rem;
+}
+.UsuEq_MenuSwitch--kid .UsuEq_MenuNome {
+  font-size: 0.82rem;
+  font-weight: 550;
   color: #334155;
-  cursor: pointer;
-  padding: 0.25rem 0;
 }
 
 .UsuEq_DrawerFoot {
@@ -365,6 +380,9 @@
   background: #fff;
 }
 
+@media (max-width: 980px) {
+  .UsuEq_MenuGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 @media (max-width: 760px) {
   .UsuEq_Head { flex-direction: column; }
   .UsuEq_Shell { grid-template-columns: 1fr; }
@@ -378,4 +396,5 @@
   .UsuEq_Tab small { display: none; }
   .UsuEq_FieldGrid { grid-template-columns: 1fr; }
   .UsuEq_DrawerPanel { max-height: 94vh; }
+  .UsuEq_MenuGrid { grid-template-columns: 1fr; }
 }

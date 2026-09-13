@@ -112,30 +112,43 @@
       el.menus.innerHTML = "<p class='UsuEq_Hint'>Nenhum menu disponível para este módulo.</p>";
       return;
     }
-    el.menus.innerHTML = lista
-      .map((m) => {
-        const kids = (m.filhos || [])
-          .map(
-            (f) => `
-          <label>
-            <input type="checkbox" class="usu-eq-menu-filho" data-id="${f.id}" data-pai="${m.id}" ${f.exibir ? "checked" : ""} ${isDono ? "disabled" : ""} />
-            <span>${esc(f.nome)}</span>
-          </label>`
-          )
-          .join("");
-        return `
-        <div class="UsuEq_MenuItem" data-pai="${m.id}">
-          <label class="UsuEq_MenuCheck">
-            <input type="checkbox" class="usu-eq-menu-pai" data-id="${m.id}" ${m.exibir ? "checked" : ""} ${isDono ? "disabled" : ""} />
-            <span>
-              <strong>${esc(m.nome)}</strong>
-              ${m.nav_codigo ? `<small>${esc(m.nav_codigo)}</small>` : ""}
-            </span>
-          </label>
-          ${kids ? `<div class="UsuEq_MenuKids">${kids}</div>` : ""}
-        </div>`;
-      })
-      .join("");
+    const sidebar = lista.filter((m) => (m.grupo || "sidebar") !== "header");
+    const header = lista.filter((m) => m.grupo === "header");
+
+    function itemHtml(m) {
+      const kids = (m.filhos || [])
+        .map(
+          (f) => `
+        <label class="Cl_Switch UsuEq_MenuSwitch UsuEq_MenuSwitch--kid">
+          <input type="checkbox" class="usu-eq-menu-filho" data-id="${f.id}" data-pai="${m.id}" ${f.exibir ? "checked" : ""} ${isDono ? "disabled" : ""} />
+          <span class="Cl_SwitchSlider"></span>
+          <span class="UsuEq_MenuNome">${esc(f.nome)}</span>
+        </label>`
+        )
+        .join("");
+      return `
+      <div class="UsuEq_MenuItem" data-pai="${m.id}">
+        <label class="Cl_Switch UsuEq_MenuSwitch">
+          <input type="checkbox" class="usu-eq-menu-pai" data-id="${m.id}" ${m.exibir ? "checked" : ""} ${isDono ? "disabled" : ""} />
+          <span class="Cl_SwitchSlider"></span>
+          <span class="UsuEq_MenuNome">${esc(m.nome)}</span>
+        </label>
+        ${kids ? `<div class="UsuEq_MenuKids">${kids}</div>` : ""}
+      </div>`;
+    }
+
+    const partes = [];
+    if (sidebar.length) {
+      partes.push(`<div class="UsuEq_MenuGrid">${sidebar.map(itemHtml).join("")}</div>`);
+    }
+    if (header.length) {
+      partes.push(`
+        <div class="UsuEq_MenuGroup">
+          <h4 class="UsuEq_MenuGroupTitle">Menu do header</h4>
+          <div class="UsuEq_MenuGrid">${header.map(itemHtml).join("")}</div>
+        </div>`);
+    }
+    el.menus.innerHTML = partes.join("");
   }
 
   function idsMenusSelecionados() {
@@ -200,7 +213,8 @@
       el.hint.classList.remove("is-ok");
     }
     if (el.menusHint) {
-      el.menusHint.textContent = "Marque os menus que este usuário poderá ver na sidebar.";
+      el.menusHint.textContent =
+        "Ligue o que este usuário verá na sidebar e no menu do header. Padrão: tudo ligado, exceto Usuários, Financeiro e Meu Plano.";
     }
     setTab("usuario");
     const primeiro = el.perfil.options[0]?.value || "";
@@ -255,8 +269,8 @@
     hintConvite(d.convite_status, d.token_horas);
     if (el.menusHint) {
       el.menusHint.textContent = isDono
-        ? "O Dono enxerga todos os menus do módulo — não é possível restringir."
-        : "Menus liberados na sidebar deste tenant.";
+        ? "O Dono enxerga todos os menus — não é possível restringir."
+        : "Menus liberados na sidebar e no header deste tenant.";
     }
     renderMenus(d.menus || []);
     if (isDono) marcarMenus(true);
