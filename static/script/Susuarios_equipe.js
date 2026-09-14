@@ -209,7 +209,7 @@
     const r = await fetch(`${BASE}/combos`);
     const j = await r.json();
     if (!r.ok || !j.success) throw new Error(j.message || "Erro ao carregar perfis.");
-    if (!el.perfil) throw new Error("Campo de perfil não encontrado na página.");
+    if (!el.perfil) return;
     const perfis = j.perfis || [];
     el.perfil.innerHTML = "";
     perfis.forEach((p) => {
@@ -220,11 +220,9 @@
       el.perfil.appendChild(o);
     });
     const padrao = escolherPerfilPadrao(perfis);
-    idPerfilPadrao = padrao ? Number(padrao.id) : null;
+    const id = padrao ? Number(padrao.id) : 0;
+    idPerfilPadrao = id > 0 ? id : null;
     if (idPerfilPadrao) el.perfil.value = String(idPerfilPadrao);
-    if (!idPerfilPadrao) {
-      throw new Error("Nenhum perfil de equipe disponível. Recarregue a página ou contate o suporte.");
-    }
   }
 
   async function carregarMenusPerfil(idPerfil) {
@@ -242,6 +240,14 @@
   }
 
   function abrirDrawerNovo() {
+    if (!garantirPerfilSelecionado()) {
+      Swal.fire(
+        "Erro",
+        "Nenhum perfil de equipe disponível para convite. Recarregue a página ou contate o suporte.",
+        "error"
+      );
+      return;
+    }
     idUsuario = null;
     isDono = false;
     el.titulo.textContent = "Novo usuário";

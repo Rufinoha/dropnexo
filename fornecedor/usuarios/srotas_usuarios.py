@@ -8,6 +8,7 @@ from sistema.plataforma.sessao import (
     MODULO_FORNECEDOR,
     PERFIS_EQUIPE_FORNECEDOR,
     carregar_usuario_apoio,
+    filtrar_perfis_equipe,
     inativar_usuario_tenant,
     listar_perfis_combo,
     listar_usuarios_tenant,
@@ -84,9 +85,7 @@ def usuarios_combos():
         return r
     excluir = ("dono", "vendedor")
     perfis = listar_perfis_combo(excluir_codigos=excluir)
-    perfis["perfis"] = [
-        p for p in perfis.get("perfis", []) if p.get("codigo") in PERFIS_EQUIPE_FORNECEDOR
-    ]
+    perfis["perfis"] = filtrar_perfis_equipe(perfis.get("perfis"), PERFIS_EQUIPE_FORNECEDOR)
     return jsonify(perfis)
 
 

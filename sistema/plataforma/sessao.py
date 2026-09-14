@@ -209,6 +209,21 @@ PERFIS_EQUIPE_VENDEDOR = ("admin", "operador", "visualizador", "financeiro")
 PERFIS_EQUIPE_ARMAZEM = ("admin", "operador", "visualizador", "financeiro")
 
 
+def filtrar_perfis_equipe(perfis: list | None, permitidos: tuple[str, ...]) -> list:
+    """Mantém só perfis de equipe; aceita código em qualquer caixa."""
+    lista = list(perfis or [])
+    allow = {str(c).strip().lower() for c in permitidos}
+    out = [p for p in lista if str(p.get("codigo") or "").strip().lower() in allow]
+    if out:
+        return out
+    # Fallback: se o filtro zerar (legado/seed incompleto), não bloqueia a tela.
+    return [
+        p
+        for p in lista
+        if str(p.get("codigo") or "").strip().lower() not in ("dono",)
+    ]
+
+
 def normalizar_bool(valor, padrao=True):
     if valor is None:
         return padrao
