@@ -209,20 +209,30 @@
     const r = await fetch(`${BASE}/combos`);
     const j = await r.json();
     if (!r.ok || !j.success) throw new Error(j.message || "Erro ao carregar perfis.");
-    if (!el.perfil) return;
     const perfis = j.perfis || [];
-    el.perfil.innerHTML = "";
-    perfis.forEach((p) => {
-      const o = document.createElement("option");
-      o.value = p.id;
-      o.textContent = `${p.nome}`;
-      o.dataset.codigo = p.codigo || "";
-      el.perfil.appendChild(o);
-    });
+    const idApi = Number(j.id_perfil_padrao || 0) || null;
+
+    if (el.perfil) {
+      el.perfil.innerHTML = "";
+      perfis.forEach((p) => {
+        const o = document.createElement("option");
+        o.value = p.id;
+        o.textContent = `${p.nome}`;
+        o.dataset.codigo = p.codigo || "";
+        el.perfil.appendChild(o);
+      });
+      if (idApi && ![...el.perfil.options].some((o) => Number(o.value) === idApi)) {
+        const o = document.createElement("option");
+        o.value = String(idApi);
+        o.textContent = "Operador";
+        el.perfil.appendChild(o);
+      }
+    }
+
     const padrao = escolherPerfilPadrao(perfis);
-    const id = padrao ? Number(padrao.id) : 0;
-    idPerfilPadrao = id > 0 ? id : null;
-    if (idPerfilPadrao) el.perfil.value = String(idPerfilPadrao);
+    const idLista = padrao ? Number(padrao.id) : 0;
+    idPerfilPadrao = idApi || (idLista > 0 ? idLista : null);
+    if (el.perfil && idPerfilPadrao) el.perfil.value = String(idPerfilPadrao);
   }
 
   async function carregarMenusPerfil(idPerfil) {
@@ -239,9 +249,19 @@
     }
   }
 
-  function abrirDrawerNovo() {
-    if (!garantirPerfilSelecionado()) {
-      Swal.fire(
+  async function abrirDrawerNovo() {
+    let idPerfil = garantirPerfilSelecionado();
+    if (!idPerfil) {
+      try {
+        await carregarPerfis();
+        idPerfil = garantirPerfilSelecionado();
+      } catch (e) {
+        await Swal.fire("Erro", e.message || "Falha ao carregar perfis.", "error");
+        return;
+      }
+    }
+    if (!idPerfil) {
+      await Swal.fire(
         "Erro",
         "Nenhum perfil de equipe disponível para convite. Recarregue a página ou contate o suporte.",
         "error"
@@ -274,7 +294,6 @@
         "Ligue o que este usuário verá na sidebar e no menu do header. Padrão: tudo ligado, exceto Usuários, Financeiro e Meu Plano.";
     }
     setTab("usuario");
-    const idPerfil = garantirPerfilSelecionado();
     carregarMenusPerfil(idPerfil || "");
     el.drawer.hidden = false;
     el.drawer.setAttribute("aria-hidden", "false");
@@ -525,7 +544,9 @@
     paginaAtual = 1;
     carregar().catch((e) => Swal.fire("Erro", e.message, "error"));
   });
-  el.btnIncluir?.addEventListener("click", () => abrirDrawerNovo());
+  el.btnIncluir?.addEventListener("click", () => {
+    abrirDrawerNovo().catch((e) => Swal.fire("Erro", e.message || "Falha ao abrir.", "error"));
+  });
   el.btnPrimeiro?.addEventListener("click", () => {
     paginaAtual = 1;
     carregar();

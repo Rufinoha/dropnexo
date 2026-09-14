@@ -224,6 +224,39 @@ def filtrar_perfis_equipe(perfis: list | None, permitidos: tuple[str, ...]) -> l
     ]
 
 
+def montar_combos_equipe(
+    *,
+    permitidos: tuple[str, ...],
+    excluir_codigos: tuple[str, ...] = ("dono", "vendedor"),
+) -> dict:
+    """Combo de perfis para convite de equipe + id padrão (operador/admin)."""
+    from global_utils import id_perfil_por_codigo
+
+    base = listar_perfis_combo(excluir_codigos=excluir_codigos)
+    perfis = filtrar_perfis_equipe(base.get("perfis"), permitidos)
+
+    conn = Var_ConectarBanco()
+    try:
+        id_padrao = id_perfil_por_codigo(conn, "operador") or id_perfil_por_codigo(conn, "admin")
+        if id_padrao and not any(int(p.get("id") or 0) == int(id_padrao) for p in perfis):
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT id, codigo, nome FROM tbl_perfil WHERE id = %s AND ativo = TRUE",
+                (int(id_padrao),),
+            )
+            row = cur.fetchone()
+            if row:
+                perfis = [{"id": row[0], "codigo": row[1], "nome": row[2]}, *perfis]
+    finally:
+        conn.close()
+
+    return {
+        "success": True,
+        "perfis": perfis,
+        "id_perfil_padrao": int(id_padrao) if id_padrao else None,
+    }
+
+
 def normalizar_bool(valor, padrao=True):
     if valor is None:
         return padrao
@@ -815,6 +848,8 @@ def salvar_usuario_tenant(
     ids_menus: list[int] | None = None,
     contexto_modulo: str | None = None,
 ) -> tuple[dict, int]:
+    from global_utils import id_perfil_por_codigo
+
     email = (email or "").strip().lower()
     nome = (nome or "").strip()
     whatsapp = (whatsapp or "").strip()
@@ -823,12 +858,15 @@ def salvar_usuario_tenant(
         return {"success": False, "message": "E-mail inválido."}, 400
     if not nome:
         return {"success": False, "message": "Informe o nome."}, 400
-    if not id_perfil:
-        return {"success": False, "message": "Selecione um perfil."}, 400
 
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
+        if not id_perfil:
+            id_perfil = id_perfil_por_codigo(conn, "operador") or id_perfil_por_codigo(conn, "admin")
+        if not id_perfil:
+            return {"success": False, "message": "Selecione um perfil."}, 400
+
         cur.execute("SELECT nome FROM tbl_tenant WHERE id = %s", (id_tenant,))
         row_t = cur.fetchone()
         nome_tenant = row_t[0] if row_t else "DropNexo"

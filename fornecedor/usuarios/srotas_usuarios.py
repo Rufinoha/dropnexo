@@ -8,11 +8,10 @@ from sistema.plataforma.sessao import (
     MODULO_FORNECEDOR,
     PERFIS_EQUIPE_FORNECEDOR,
     carregar_usuario_apoio,
-    filtrar_perfis_equipe,
     inativar_usuario_tenant,
-    listar_perfis_combo,
     listar_usuarios_tenant,
     menus_padrao_do_perfil,
+    montar_combos_equipe,
     normalizar_bool,
     reenviar_convite_usuario,
     salvar_usuario_tenant,
@@ -83,10 +82,7 @@ def usuarios_dados():
 def usuarios_combos():
     if (r := _exigir_fornecedor_tenant()) is not None:
         return r
-    excluir = ("dono", "vendedor")
-    perfis = listar_perfis_combo(excluir_codigos=excluir)
-    perfis["perfis"] = filtrar_perfis_equipe(perfis.get("perfis"), PERFIS_EQUIPE_FORNECEDOR)
-    return jsonify(perfis)
+    return jsonify(montar_combos_equipe(permitidos=PERFIS_EQUIPE_FORNECEDOR))
 
 
 @fn_usuarios_bp.get("/fornecedor/usuarios/menus-perfil")
