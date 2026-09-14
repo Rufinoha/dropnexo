@@ -274,23 +274,12 @@ def token_ativacao_horas() -> int:
 
 
 def garantir_tabela_usuario_tenant_menu(cur) -> None:
-    cur.execute(
-        """
-        CREATE TABLE IF NOT EXISTS tbl_usuario_tenant_menu (
-            id_usuario BIGINT NOT NULL REFERENCES tbl_usuario(id) ON DELETE CASCADE,
-            id_tenant BIGINT NOT NULL REFERENCES tbl_tenant(id) ON DELETE CASCADE,
-            id_menu BIGINT NOT NULL REFERENCES tbl_menu(id) ON DELETE CASCADE,
-            exibir BOOLEAN NOT NULL DEFAULT TRUE,
-            PRIMARY KEY (id_usuario, id_tenant, id_menu)
-        )
-        """
-    )
-    cur.execute(
-        """
-        CREATE INDEX IF NOT EXISTS idx_usuario_tenant_menu_tenant
-          ON tbl_usuario_tenant_menu (id_tenant, id_usuario)
-        """
-    )
+    """No-op em runtime: a tabela vem da migração SQL.
+
+    Antes havia CREATE TABLE/INDEX aqui; isso quebra quando a tabela
+    pertence a outro role (ex.: postgres) e o app é dropnexo_app.
+    """
+    return
 
 
 def _perfil_codigo_usuario(cur, id_tenant: int, uid: int) -> str | None:
