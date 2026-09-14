@@ -10,6 +10,8 @@
   let idUsuario = null;
   let isDono = false;
   let tabAtiva = "usuario";
+  /** Perfil interno padrão da equipe (UI de perfil oculta; menus são o controle real). */
+  let idPerfilPadrao = null;
 
   const el = {
     filtroBusca: document.getElementById("ob_filtroBusca"),
@@ -185,17 +187,44 @@
     });
   }
 
+  function escolherPerfilPadrao(perfis) {
+    const lista = Array.isArray(perfis) ? perfis : [];
+    const porCodigo = (cod) => lista.find((p) => String(p.codigo || "").toLowerCase() === cod);
+    return porCodigo("operador") || porCodigo("admin") || lista[0] || null;
+  }
+
+  function garantirPerfilSelecionado() {
+    if (!el.perfil) return idPerfilPadrao;
+    if (!el.perfil.value && idPerfilPadrao) {
+      el.perfil.value = String(idPerfilPadrao);
+    }
+    if (!el.perfil.value && el.perfil.options.length) {
+      el.perfil.selectedIndex = 0;
+    }
+    const n = Number(el.perfil.value || idPerfilPadrao || 0);
+    return n > 0 ? n : null;
+  }
+
   async function carregarPerfis() {
     const r = await fetch(`${BASE}/combos`);
     const j = await r.json();
     if (!r.ok || !j.success) throw new Error(j.message || "Erro ao carregar perfis.");
+    if (!el.perfil) throw new Error("Campo de perfil não encontrado na página.");
+    const perfis = j.perfis || [];
     el.perfil.innerHTML = "";
-    (j.perfis || []).forEach((p) => {
+    perfis.forEach((p) => {
       const o = document.createElement("option");
       o.value = p.id;
       o.textContent = `${p.nome}`;
+      o.dataset.codigo = p.codigo || "";
       el.perfil.appendChild(o);
     });
+    const padrao = escolherPerfilPadrao(perfis);
+    idPerfilPadrao = padrao ? Number(padrao.id) : null;
+    if (idPerfilPadrao) el.perfil.value = String(idPerfilPadrao);
+    if (!idPerfilPadrao) {
+      throw new Error("Nenhum perfil de equipe disponível. Recarregue a página ou contate o suporte.");
+    }
   }
 
   async function carregarMenusPerfil(idPerfil) {
@@ -239,9 +268,8 @@
         "Ligue o que este usuário verá na sidebar e no menu do header. Padrão: tudo ligado, exceto Usuários, Financeiro e Meu Plano.";
     }
     setTab("usuario");
-    const primeiro = el.perfil.options[0]?.value || "";
-    if (primeiro) el.perfil.value = primeiro;
-    carregarMenusPerfil(primeiro);
+    const idPerfil = garantirPerfilSelecionado();
+    carregarMenusPerfil(idPerfil || "");
     el.drawer.hidden = false;
     el.drawer.setAttribute("aria-hidden", "false");
     document.body.style.overflow = "hidden";
@@ -381,7 +409,7 @@
     const email = (el.email.value || "").trim();
     const nome = (el.nome.value || "").trim();
     const whatsapp = whatsappDigits(el.whatsapp.value);
-    const idPerfil = el.perfil?.value ? Number(el.perfil.value) : null;
+    const idPerfil = garantirPerfilSelecionado();
 
     if (!email || !nome) {
       throw new Error("Preencha e-mail e nome.");
