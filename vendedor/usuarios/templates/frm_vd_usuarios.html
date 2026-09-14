@@ -5,7 +5,7 @@
 {% block head_extra %}
 <link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_crud.css') }}" />
 <link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_usuarios.css') }}" />
-<link rel="stylesheet" href="{{ url_for('static', filename='style/Cusuarios_equipe.css') }}?v=4" />
+<link rel="stylesheet" href="{{ url_for('static', filename='style/Cusuarios_equipe.css') }}?v=5" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal UsuEq_Page">
@@ -53,9 +53,8 @@
     <table>
       <thead>
         <tr>
-          <th>Usuário</th>
-          <th>E-mail</th>
-          <th>Perfil</th>
+          <th class="UsuEq_ColUsuario">Usuário</th>
+          <th class="UsuEq_ColPerfil">Perfil</th>
           <th class="UsuEq_ColConvite">Convite</th>
           <th class="UsuEq_ColAcesso">Último acesso</th>
           <th class="UsuEq_ColStatus">Status</th>
@@ -63,7 +62,7 @@
         </tr>
       </thead>
       <tbody id="ob_listaUsuarios">
-        <tr><td colspan="7">Carregando…</td></tr>
+        <tr><td colspan="6">Carregando…</td></tr>
       </tbody>
     </table>
   </div>
@@ -160,5 +159,5 @@
 {% endblock %}
 {% block page_js %}
 <script>window.USU_EQ_BASE = "/vendedor/usuarios";</script>
-<script src="{{ url_for('static', filename='script/Susuarios_equipe.js') }}?v=5"></script>
+<script src="{{ url_for('static', filename='script/Susuarios_equipe.js') }}?v=6"></script>
 {% endblock %}

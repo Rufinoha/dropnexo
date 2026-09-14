@@ -161,6 +161,8 @@
     const global = (j.regras || []).find((x) => x.escopo === "global");
     regrasCache = j.regras || [];
     defaultsCache = j.defaults || {};
+    if (el.escopo) el.escopo.value = "global";
+    aoMudarEscopo();
     preencherFormulario(global || regraAtiva(), defaultsCache);
     renderAlertas(j.alertas);
   }

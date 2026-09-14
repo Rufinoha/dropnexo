@@ -435,3 +435,12 @@
 .Prec_ResumoItem[hidden] {
   display: none !important;
 }
+
+/* global_utils .filter-group { display:flex } vence o atributo hidden */
+.Prec_Field[hidden],
+.Prec_Bloco[hidden],
+#prec_tabela_wrap[hidden],
+#prec_sem_alertas[hidden],
+#prec_msg[hidden] {
+  display: none !important;
+}

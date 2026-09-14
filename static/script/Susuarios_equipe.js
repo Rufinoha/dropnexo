@@ -307,7 +307,7 @@
 
   function renderTabela(dados) {
     if (!dados?.length) {
-      el.tbody.innerHTML = '<tr><td colspan="7">Nenhum usuário encontrado.</td></tr>';
+      el.tbody.innerHTML = '<tr><td colspan="6">Nenhum usuário encontrado.</td></tr>';
       renderPaginacao();
       return;
     }
@@ -317,7 +317,7 @@
         const dono = !!row.is_dono;
         return `
       <tr data-id="${row.id}">
-        <td>
+        <td class="UsuEq_ColUsuario">
           <div class="UsuEq_NomeCell">
             <span class="UsuEq_Avatar${dono ? " is-dono" : ""}">${esc(iniciais(row.nome))}</span>
             <span>
@@ -326,8 +326,7 @@
             </span>
           </div>
         </td>
-        <td>${esc(row.email)}</td>
-        <td>${esc(row.perfil_nome)}</td>
+        <td class="UsuEq_ColPerfil">${esc(row.perfil_nome)}</td>
         <td class="UsuEq_ColConvite">${badgeConvite(row.convite_status)}</td>
         <td class="UsuEq_ColAcesso">${row.dt_ultimo_login ? row.dt_ultimo_login.slice(0, 16).replace("T", " ") : "—"}</td>
         <td class="UsuEq_ColStatus"><span class="Cl_Badge ${row.status ? "Cl_Badge--ativo" : "Cl_Badge--inativo"}">${row.status ? "Ativo" : "Inativo"}</span></td>
