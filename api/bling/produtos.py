@@ -62,7 +62,37 @@ def _url_de_item_imagem(item) -> str | None:
     return None
 
 
-def _adicionar_itens_imagem(urls: list[str], items, *, ordenar_por: str | None = None) -> None:
+def _anexo_id_de_item(item) -> int | None:
+    if not isinstance(item, dict):
+        return None
+    anexo = item.get("anexo")
+    if isinstance(anexo, dict) and anexo.get("id") is not None:
+        try:
+            return int(anexo["id"])
+        except (TypeError, ValueError):
+            pass
+    for key in ("idAnexo", "id_anexo", "id"):
+        if item.get(key) is not None and key != "id":
+            try:
+                return int(item[key])
+            except (TypeError, ValueError):
+                pass
+        elif key == "id" and item.get("linkMiniatura") and item.get("id") is not None:
+            # só usa id solto se parecer item interno (tem miniatura)
+            try:
+                return int(item["id"])
+            except (TypeError, ValueError):
+                pass
+    return None
+
+
+def _adicionar_midia_itens(
+    dest: list[dict],
+    items,
+    *,
+    tipo: str,
+    ordenar_por: str | None = None,
+) -> None:
     if not items:
         return
     lista = items if isinstance(items, list) else [items]
@@ -73,27 +103,101 @@ def _adicionar_itens_imagem(urls: list[str], items, *, ordenar_por: str | None =
         )
     for item in lista:
         u = _url_de_item_imagem(item)
+        if not u:
+            continue
+        anexo_id = _anexo_id_de_item(item) if tipo == "interna" else None
+        # evita duplicar pela mesma URL ou mesmo anexo
+        if anexo_id and any(d.get("bling_anexo_id") == anexo_id for d in dest):
+            continue
+        if any(d.get("url") == u for d in dest):
+            continue
+        dest.append(
+            {
+                "url": u,
+                "tipo": "interna" if (tipo == "interna" or anexo_id) else "externa",
+                "bling_anexo_id": anexo_id,
+                "ordem": (item.get("ordem") if isinstance(item, dict) else None),
+            }
+        )
+
+
+def _extrair_midia_dict(midia: dict, dest: list[dict]) -> None:
+    imagens = midia.get("imagens")
+    if isinstance(imagens, dict):
+        _adicionar_midia_itens(dest, imagens.get("internas"), tipo="interna", ordenar_por="ordem")
+        _adicionar_midia_itens(dest, imagens.get("externas"), tipo="externa")
+        for chave in ("imagens", "all"):
+            parte = imagens.get(chave)
+            if isinstance(parte, list):
+                _adicionar_midia_itens(dest, parte, tipo="externa")
+    elif isinstance(imagens, list):
+        _adicionar_midia_itens(dest, imagens, tipo="externa")
+
+    imagem = midia.get("imagem")
+    if isinstance(imagem, list):
+        _adicionar_midia_itens(dest, imagem, tipo="externa")
+    elif isinstance(imagem, dict):
+        _adicionar_midia_itens(dest, [imagem], tipo="externa")
+
+
+def extrair_midia_imagens_bling(
+    produto: dict,
+    *,
+    variacoes: list[dict] | None = None,
+) -> list[dict]:
+    """Lista estruturada de imagens do produto Bling (url + tipo + anexo.id)."""
+    dest: list[dict] = []
+
+    for key in ("imagemURL", "imagemUrl"):
+        u = (produto.get(key) or "").strip()
+        if u.startswith(("http://", "https://")):
+            tipo = "interna" if classificar_origem_bling(u) == "bling_interna" else "externa"
+            if not any(d.get("url") == u for d in dest):
+                dest.append({"url": u, "tipo": tipo, "bling_anexo_id": None, "ordem": None})
+
+    midia = produto.get("midia") or {}
+    if isinstance(midia, dict):
+        _extrair_midia_dict(midia, dest)
+
+    for key in ("urlImagensExternas", "imagensExternas", "url_imagens_externas"):
+        raw = produto.get(key)
+        if not isinstance(raw, str) or not raw.strip():
+            continue
+        for parte in raw.split("|"):
+            u = parte.strip()
+            if u.startswith(("http://", "https://")) and not any(d.get("url") == u for d in dest):
+                dest.append({"url": u, "tipo": "externa", "bling_anexo_id": None, "ordem": None})
+
+    for var in variacoes or []:
+        if not isinstance(var, dict):
+            continue
+        for key in ("imagemURL", "imagemUrl"):
+            u = (var.get(key) or "").strip()
+            if u.startswith(("http://", "https://")) and not any(d.get("url") == u for d in dest):
+                tipo = "interna" if classificar_origem_bling(u) == "bling_interna" else "externa"
+                dest.append({"url": u, "tipo": tipo, "bling_anexo_id": None, "ordem": None})
+        var_midia = var.get("midia") or {}
+        if isinstance(var_midia, dict):
+            _extrair_midia_dict(var_midia, dest)
+
+    return dest[:10]
+
+
+def _adicionar_itens_imagem(urls: list[str], items, *, ordenar_por: str | None = None) -> None:
+    """Legado: só URLs (mantido para compatibilidade)."""
+    tmp: list[dict] = []
+    _adicionar_midia_itens(tmp, items, tipo="externa", ordenar_por=ordenar_por)
+    for d in tmp:
+        u = d.get("url")
         if u and u not in urls:
             urls.append(u)
 
 
 def _extrair_urls_midia_dict(midia: dict, urls: list[str]) -> None:
-    imagens = midia.get("imagens")
-    if isinstance(imagens, dict):
-        _adicionar_itens_imagem(urls, imagens.get("internas"), ordenar_por="ordem")
-        _adicionar_itens_imagem(urls, imagens.get("externas"))
-        for chave in ("imagens", "all"):
-            parte = imagens.get(chave)
-            if isinstance(parte, list):
-                _adicionar_itens_imagem(urls, parte)
-    elif isinstance(imagens, list):
-        _adicionar_itens_imagem(urls, imagens)
-
-    imagem = midia.get("imagem")
-    if isinstance(imagem, list):
-        _adicionar_itens_imagem(urls, imagem)
-    elif isinstance(imagem, dict):
-        u = _url_de_item_imagem(imagem)
+    itens: list[dict] = []
+    _extrair_midia_dict(midia, itens)
+    for d in itens:
+        u = d.get("url")
         if u and u not in urls:
             urls.append(u)
 
@@ -103,37 +207,7 @@ def extrair_urls_imagem_bling(
     *,
     variacoes: list[dict] | None = None,
 ) -> list[str]:
-    urls: list[str] = []
-
-    def add(u: str | None) -> None:
-        u = (u or "").strip()
-        if u and u.startswith(("http://", "https://")) and u not in urls:
-            urls.append(u)
-
-    add(produto.get("imagemURL"))
-    add(produto.get("imagemUrl"))
-
-    midia = produto.get("midia") or {}
-    if isinstance(midia, dict):
-        _extrair_urls_midia_dict(midia, urls)
-
-    for key in ("urlImagensExternas", "imagensExternas", "url_imagens_externas"):
-        raw = produto.get(key)
-        if not isinstance(raw, str) or not raw.strip():
-            continue
-        for parte in raw.split("|"):
-            add(parte.strip())
-
-    for var in variacoes or []:
-        if not isinstance(var, dict):
-            continue
-        add(var.get("imagemURL"))
-        add(var.get("imagemUrl"))
-        var_midia = var.get("midia") or {}
-        if isinstance(var_midia, dict):
-            _extrair_urls_midia_dict(var_midia, urls)
-
-    return urls[:10]
+    return [d["url"] for d in extrair_midia_imagens_bling(produto, variacoes=variacoes) if d.get("url")]
 
 
 def _extensao_de_url(url: str) -> str:
@@ -166,22 +240,33 @@ def aplicar_imagens_produto(
     id_tenant: int,
     id_produto: int,
     sku: str,
-    urls: list[str],
-    modo_imagem: str,
+    urls: list[str] | None = None,
+    modo_imagem: str | None = None,
     variacoes_bling: list[dict] | None = None,
+    midia_itens: list[dict] | None = None,
 ) -> str | None:
-    """Popula galeria do pai e vincula imagem padrão às variantes. Retorna caminho principal."""
-    if not urls:
+    """Popula galeria do pai (sempre download local) e vincula variantes. Retorna caminho principal."""
+    itens = midia_itens
+    if itens is None and urls:
+        itens = [
+            {
+                "url": u.strip(),
+                "tipo": "interna" if classificar_origem_bling(u) == "bling_interna" else "externa",
+                "bling_anexo_id": None,
+            }
+            for u in urls
+            if (u or "").strip().startswith(("http://", "https://"))
+        ]
+    if not itens:
         return None
 
-    # baixar_fn disponível; modo link não baixa, hibrido baixa temporárias, download baixa tudo.
     principal, mapa = aplicar_galeria_produto(
         cur,
         id_tenant=id_tenant,
         id_produto=id_produto,
         sku=sku,
-        urls=urls,
-        modo_imagem=modo_imagem,
+        midia_itens=itens,
+        modo_imagem=modo_imagem or "download",
         origem_fn=classificar_origem_bling,
         baixar_fn=baixar_imagem,
         pasta_sku_fn=pasta_imagens_sku,
@@ -221,6 +306,7 @@ def aplicar_imagens_produto(
 # Compatibilidade com imports antigos
 __all__ = [
     "aplicar_imagens_produto",
+    "extrair_midia_imagens_bling",
     "extrair_urls_imagem_bling",
     "limpar_galeria_produto",
     "baixar_imagem",
@@ -996,15 +1082,15 @@ def _processar_item_produto(
         id_importacao_lote=id_importacao_lote if criando else None,
     )
 
-    urls = extrair_urls_imagem_bling(detalhe)
-    if urls:
+    midia = extrair_midia_imagens_bling(detalhe)
+    if midia:
         aplicar_imagens_produto(
             cur,
             id_tenant=id_tenant,
             id_produto=prod_id,
             sku=sku,
-            urls=urls,
-            modo_imagem=cfg.get("modo_imagem") or "hibrido",
+            midia_itens=midia,
+            modo_imagem=cfg.get("modo_imagem") or "download",
         )
 
     _upsert_mapa(
@@ -1095,16 +1181,16 @@ def _processar_grupo_variacoes(
         id_importacao_lote=id_importacao_lote if criando else None,
     )
 
-    urls = extrair_urls_imagem_bling(detalhe_pai, variacoes=variacoes)
+    midia = extrair_midia_imagens_bling(detalhe_pai, variacoes=variacoes)
     sku_mapa = _sku_pai_de_variacoes(detalhe_pai, variacoes)
-    if urls:
+    if midia:
         aplicar_imagens_produto(
             cur,
             id_tenant=id_tenant,
             id_produto=prod_id,
             sku=sku_mapa or f"bling-{id_bling_pai}",
-            urls=urls,
-            modo_imagem=cfg.get("modo_imagem") or "hibrido",
+            midia_itens=midia,
+            modo_imagem=cfg.get("modo_imagem") or "download",
             variacoes_bling=variacoes,
         )
 

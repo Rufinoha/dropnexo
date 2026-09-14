@@ -5,7 +5,7 @@ import time
 from datetime import timedelta
 
 from api.bling.cliente import obter_produto, obter_variacoes_produto
-from api.bling.produtos import aplicar_imagens_produto, extrair_urls_imagem_bling
+from api.bling.produtos import aplicar_imagens_produto, extrair_midia_imagens_bling
 from fornecedor.catalogo.catalogo import (
     id_bling_produto,
     recalcular_bytes_imagens_tenant,
@@ -98,20 +98,21 @@ def revalidar_produto_imagens(
     except Exception:
         variacoes = []
 
-    urls = extrair_urls_imagem_bling(detalhe, variacoes=variacoes or None)
-    if not urls:
+    midia = extrair_midia_imagens_bling(detalhe, variacoes=variacoes or None)
+    if not midia:
         return {"ok": False, "id_produto": id_produto, "erro": "sem_urls"}
 
-    # Em modo link: só persiste URLs (com expires); não baixa.
+    # Mesmo modelo do import: baixa local e sincroniza por anexo.id / url_origem.
     aplicar_imagens_produto(
         cur,
         id_tenant=id_tenant,
         id_produto=id_produto,
         sku=sku,
-        urls=urls,
-        modo_imagem="link",
+        midia_itens=midia,
+        modo_imagem="download",
         variacoes_bling=variacoes or None,
     )
+    urls = [d.get("url") or "" for d in midia]
     temporarias = sum(1 for u in urls if url_imagem_temporaria(u))
     return {
         "ok": True,

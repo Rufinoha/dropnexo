@@ -639,9 +639,10 @@ def listar_usuarios_tenant(
             like = f"%{busca}%"
             params.extend([like, like])
         if filtro_status == "ativo":
-            where.append("u.ativo = TRUE AND ut.ativo = TRUE")
+            # Vínculo ativo no tenant (inclui convite pendente: u.ativo ainda false).
+            where.append("ut.ativo = TRUE")
         elif filtro_status == "inativo":
-            where.append("(u.ativo = FALSE OR ut.ativo = FALSE)")
+            where.append("ut.ativo = FALSE")
 
         where_sql = " AND ".join(where)
         cur.execute(
@@ -680,7 +681,7 @@ def listar_usuarios_tenant(
                     "id": r[0],
                     "nome": r[1],
                     "email": r[2],
-                    "status": bool(r[3]) and bool(r[4]),
+                    "status": bool(r[4]),
                     "perfil_codigo": "dono" if is_dono else "equipe",
                     "perfil_nome": "Dono" if is_dono else "Equipe",
                     "convite_status": convite,

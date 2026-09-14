@@ -129,7 +129,31 @@ def normalizar_modo_imagem_bling(modo: str | None) -> str:
     m = (modo or "").strip().lower()
     if m in MODOS_IMAGEM_BLING:
         return m
-    return "hibrido"
+    return "download"
+
+
+def garantir_colunas_vinculo_imagem(cur) -> None:
+    """Garante colunas de vínculo Bling (idempotente). Falha silenciosa se sem DDL."""
+    try:
+        cur.execute("SAVEPOINT sp_img_vinculo")
+        cur.execute(
+            """
+            ALTER TABLE tbl_produto_imagem
+                ADD COLUMN IF NOT EXISTS bling_anexo_id BIGINT NULL
+            """
+        )
+        cur.execute(
+            """
+            ALTER TABLE tbl_produto_imagem
+                ADD COLUMN IF NOT EXISTS url_origem TEXT NULL
+            """
+        )
+        cur.execute("RELEASE SAVEPOINT sp_img_vinculo")
+    except Exception:
+        try:
+            cur.execute("ROLLBACK TO SAVEPOINT sp_img_vinculo")
+        except Exception:
+            pass
 
 
 def url_imagem_temporaria(url: str | None) -> bool:
@@ -948,110 +972,246 @@ def aplicar_galeria_produto(
     id_tenant: int,
     id_produto: int,
     sku: str,
-    urls: list[str],
-    modo_imagem: str,
+    urls: list[str] | None = None,
+    modo_imagem: str | None = None,
     origem_fn=None,
     baixar_fn=None,
     pasta_sku_fn=None,
     caminho_db_fn=None,
+    midia_itens: list[dict] | None = None,
 ) -> tuple[str | None, dict[str, int]]:
-    """Importa URLs na galeria do pai. Retorna (caminho principal, mapa url→id).
+    """Sincroniza galeria do produto com origem Bling/manual.
 
-    modo_imagem (config Bling):
-      - download: baixa todas
-      - hibrido: baixa só URLs temporárias; externas ficam como link
-      - link: não baixa; grava URL + link_expira_em (job noturno renova)
+    Sempre baixa e grava arquivo local (igual cadastro manual).
+    Sync por vínculo:
+      - interna Bling → bling_anexo_id
+      - externa → url_origem
+    Inclui novas, remove as que sumiram, mantém as que batem o vínculo
+    (não rebaixa só porque a URL temporária do Bling mudou).
+
+    Retorna (caminho principal, mapa url/caminho → id_imagem).
     """
-    if not urls:
+    _ = (modo_imagem, baixar_fn, pasta_sku_fn, caminho_db_fn)  # legado da API Bling
+    garantir_colunas_vinculo_imagem(cur)
+
+    itens: list[dict] = []
+    if midia_itens:
+        for it in midia_itens:
+            if not isinstance(it, dict):
+                continue
+            u = (it.get("url") or "").strip()
+            if not u.startswith(("http://", "https://")):
+                continue
+            itens.append(
+                {
+                    "url": u,
+                    "tipo": (it.get("tipo") or "externa").strip().lower(),
+                    "bling_anexo_id": it.get("bling_anexo_id"),
+                    "ordem": it.get("ordem"),
+                }
+            )
+    else:
+        origem_fn = origem_fn or classificar_origem_bling
+        for u in urls or []:
+            u = (u or "").strip()
+            if not u.startswith(("http://", "https://")):
+                continue
+            origem = origem_fn(u)
+            itens.append(
+                {
+                    "url": u,
+                    "tipo": "interna" if origem == "bling_interna" else "externa",
+                    "bling_anexo_id": None,
+                    "ordem": None,
+                }
+            )
+
+    itens = itens[:MAX_IMAGENS_PRODUTO]
+    if not itens:
+        # Galeria vazia na origem → remove tudo local
+        limpar_galeria_produto(cur, id_produto)
+        sincronizar_imagem_principal_produto(cur, id_produto)
+        try:
+            recalcular_bytes_imagens_tenant(cur, id_tenant)
+        except Exception:
+            pass
         return None, {}
 
-    modo_cfg = normalizar_modo_imagem_bling(modo_imagem)
-    baixar_tudo = modo_cfg == "download"
-    so_link = modo_cfg == "link"
-    # Substitui a galeria inteira — libera troca de modo.
-    limpar_galeria_produto(cur, id_produto)
+    cur.execute(
+        """
+        SELECT id, caminho, bling_anexo_id, url_origem
+        FROM tbl_produto_imagem
+        WHERE id_produto = %s AND id_variante IS NULL
+        ORDER BY ordem ASC, id ASC
+        """,
+        (id_produto,),
+    )
+    existentes = cur.fetchall()
+    por_anexo: dict[int, dict] = {}
+    por_url: dict[str, dict] = {}
+    for row in existentes:
+        rec = {
+            "id": int(row[0]),
+            "caminho": row[1] or "",
+            "bling_anexo_id": int(row[2]) if row[2] is not None else None,
+            "url_origem": (row[3] or "").strip() or None,
+        }
+        if rec["bling_anexo_id"]:
+            por_anexo[rec["bling_anexo_id"]] = rec
+        if rec["url_origem"]:
+            por_url[rec["url_origem"]] = rec
+        # legado: caminho ainda era a URL externa
+        if caminho_eh_url(rec["caminho"]):
+            por_url.setdefault(rec["caminho"].strip(), rec)
 
     mapa: dict[str, int] = {}
+    manter_ids: set[int] = set()
     principal: str | None = None
-    origem_fn = origem_fn or classificar_origem_bling
-    tem_upload = False
-    tem_link = False
-
     ordem = 0
-    for url in urls[:MAX_IMAGENS_PRODUTO]:
-        url_orig = url.strip()
-        if not url_orig:
+
+    for it in itens:
+        url = it["url"]
+        anexo_id = it.get("bling_anexo_id")
+        try:
+            anexo_id = int(anexo_id) if anexo_id is not None else None
+        except (TypeError, ValueError):
+            anexo_id = None
+        tipo = it.get("tipo") or ("interna" if anexo_id else "externa")
+        if tipo == "interna" and not anexo_id:
+            # Sem ID: trata como externa pela URL (melhor esforço)
+            tipo = "externa"
+
+        existente = None
+        if tipo == "interna" and anexo_id and anexo_id in por_anexo:
+            existente = por_anexo[anexo_id]
+        elif tipo == "externa" and url in por_url:
+            existente = por_url[url]
+
+        if existente and existente["id"] in manter_ids:
+            # Duplicata na origem — ignora
             continue
-        caminho_db = url_orig
-        origem = origem_fn(url_orig)
-        link_expira = None
-        tamanho_bytes = None
-        temporaria = url_imagem_temporaria(url_orig)
-        deve_baixar = bool(
-            not so_link
-            and baixar_fn
-            and pasta_sku_fn
-            and caminho_db_fn
-            and (baixar_tudo or temporaria)
-        )
 
-        if deve_baixar:
-            ext = Path(urlparse(url_orig).path).suffix.lower() or ".jpg"
-            if ext not in (".png", ".jpg", ".jpeg", ".webp"):
-                ext = ".jpg"
-            nome = f"{ordem + 1:02d}-principal{ext}" if ordem == 0 else f"{ordem + 1:02d}-img{ext}"
-            pasta = pasta_sku_fn(id_tenant, sku)
-            destino = pasta / nome
-            baixados = baixar_fn(url_orig, destino)
-            try:
-                tamanho_bytes = int(baixados) if baixados is not None else destino.stat().st_size
-            except (TypeError, OSError):
-                tamanho_bytes = None
-            caminho_db = caminho_db_fn(id_tenant, sku, nome)
-            if not origem.startswith("bling_"):
-                origem = "manual_upload"
-            elif origem == "bling_externa":
-                origem = "bling_interna"
-            tem_upload = True
+        if existente:
+            id_img = existente["id"]
+            caminho_db = existente["caminho"]
+            # Se ainda for URL remota (legado), materializa agora
+            if caminho_eh_url(caminho_db):
+                try:
+                    caminho_db, tam = baixar_e_gravar_imagem_tenant(
+                        id_tenant=id_tenant,
+                        id_produto=id_produto,
+                        id_imagem=id_img,
+                        url=url,
+                    )
+                    cur.execute(
+                        """
+                        UPDATE tbl_produto_imagem
+                        SET caminho = %s, tamanho_bytes = %s, link_expira_em = NULL,
+                            origem = %s, bling_anexo_id = %s, url_origem = %s,
+                            ordem = %s, principal = %s
+                        WHERE id = %s
+                        """,
+                        (
+                            caminho_db,
+                            tam,
+                            "bling_interna" if tipo == "interna" else "bling_externa",
+                            anexo_id,
+                            None if tipo == "interna" else url,
+                            ordem,
+                            ordem == 0,
+                            id_img,
+                        ),
+                    )
+                except Exception:
+                    cur.execute(
+                        """
+                        UPDATE tbl_produto_imagem
+                        SET ordem = %s, principal = %s, bling_anexo_id = COALESCE(%s, bling_anexo_id),
+                            url_origem = COALESCE(%s, url_origem)
+                        WHERE id = %s
+                        """,
+                        (ordem, ordem == 0, anexo_id, None if tipo == "interna" else url, id_img),
+                    )
+            else:
+                cur.execute(
+                    """
+                    UPDATE tbl_produto_imagem
+                    SET ordem = %s, principal = %s,
+                        bling_anexo_id = COALESCE(%s, bling_anexo_id),
+                        url_origem = CASE
+                            WHEN %s IS NOT NULL THEN %s
+                            ELSE url_origem
+                        END,
+                        link_expira_em = NULL,
+                        origem = %s
+                    WHERE id = %s
+                    """,
+                    (
+                        ordem,
+                        ordem == 0,
+                        anexo_id,
+                        None if tipo == "interna" else url,
+                        None if tipo == "interna" else url,
+                        "bling_interna" if tipo == "interna" else "bling_externa",
+                        id_img,
+                    ),
+                )
+            manter_ids.add(id_img)
         else:
-            tem_link = True
-            if temporaria or so_link:
-                link_expira = expira_em_de_url(url_orig)
-
-        cur.execute(
-            """
-            INSERT INTO tbl_produto_imagem (
-                id_produto, caminho, ordem, principal, origem, link_expira_em, tamanho_bytes
+            origem = "bling_interna" if tipo == "interna" else "bling_externa"
+            url_origem = None if tipo == "interna" else url
+            cur.execute(
+                """
+                INSERT INTO tbl_produto_imagem (
+                    id_produto, caminho, ordem, principal, origem,
+                    link_expira_em, tamanho_bytes, bling_anexo_id, url_origem
+                )
+                VALUES (%s, %s, %s, %s, %s, NULL, NULL, %s, %s)
+                RETURNING id
+                """,
+                (id_produto, url, ordem, ordem == 0, origem, anexo_id, url_origem),
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
-            RETURNING id
-            """,
-            (
-                id_produto,
-                caminho_db,
-                ordem,
-                ordem == 0,
-                origem,
-                link_expira,
-                tamanho_bytes,
-            ),
-        )
-        id_img = int(cur.fetchone()[0])
+            id_img = int(cur.fetchone()[0])
+            try:
+                caminho_db, tam = baixar_e_gravar_imagem_tenant(
+                    id_tenant=id_tenant,
+                    id_produto=id_produto,
+                    id_imagem=id_img,
+                    url=url,
+                )
+                cur.execute(
+                    """
+                    UPDATE tbl_produto_imagem
+                    SET caminho = %s, tamanho_bytes = %s, link_expira_em = NULL
+                    WHERE id = %s
+                    """,
+                    (caminho_db, tam, id_img),
+                )
+            except Exception:
+                # Mantém URL temporária/externa se o download falhar (não perde o vínculo)
+                caminho_db = url
+            manter_ids.add(id_img)
+
+        mapa[url] = id_img
         mapa[caminho_db] = id_img
-        if url_orig != caminho_db:
-            mapa[url_orig] = id_img
         if principal is None:
             principal = caminho_db
         ordem += 1
 
-    if tem_upload:
-        modo = "upload"
-    elif tem_link:
-        modo = "link"
-    else:
-        modo = "link"
+    # Remove o que sumiu na origem
+    for row in existentes:
+        id_old = int(row[0])
+        if id_old in manter_ids:
+            continue
+        _limpar_arquivo_upload(row[1])
+        cur.execute(
+            "UPDATE tbl_produto_variante SET id_imagem_principal = NULL WHERE id_imagem_principal = %s",
+            (id_old,),
+        )
+        cur.execute("DELETE FROM tbl_produto_atributo_imagem WHERE id_imagem = %s", (id_old,))
+        cur.execute("DELETE FROM tbl_produto_imagem WHERE id = %s", (id_old,))
 
-    definir_imagem_modo(cur, id_produto, modo)
+    definir_imagem_modo(cur, id_produto, "upload")
     sincronizar_imagem_principal_produto(cur, id_produto)
     try:
         recalcular_bytes_imagens_tenant(cur, id_tenant)
