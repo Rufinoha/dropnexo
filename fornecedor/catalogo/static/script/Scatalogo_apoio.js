@@ -506,18 +506,15 @@
   }
 
   function syncModoImagem() {
-    // Na vitrine do vendedor, URL e upload podem coexistir (imagens do FN + próprias).
-    const locked = !(isVendedor && integrado) && galeriaImagens.length > 0;
-    const tipo = tipoGaleria || (galeriaImagens.length ? tipoDaImagem(galeriaImagens[0]) : null);
-    document.querySelectorAll('input[name="img_modo"]').forEach((r) => {
-      const opt = r.closest(".Cat_ImgModoOpt");
-      r.disabled = locked;
-      if (opt) opt.classList.toggle("is-locked", locked);
-      if (locked && tipo && r.value === tipo) r.checked = true;
-    });
-    const modo = document.querySelector('input[name="img_modo"]:checked')?.value || "link";
+    // Link e upload são só formas de incluir — ambos gravam arquivo no DropNexo.
     const cheio = galeriaImagens.length >= MAX_IMAGENS;
     const podeIncluir = !!idProduto && !cheio;
+    document.querySelectorAll('input[name="img_modo"]').forEach((r) => {
+      const opt = r.closest(".Cat_ImgModoOpt");
+      r.disabled = !podeIncluir;
+      if (opt) opt.classList.toggle("is-locked", !podeIncluir);
+    });
+    const modo = document.querySelector('input[name="img_modo"]:checked')?.value || "link";
     if (el.painelImgLink) el.painelImgLink.hidden = !podeIncluir || modo !== "link";
     if (el.painelImgUpload) el.painelImgUpload.hidden = !podeIncluir || modo !== "upload";
   }
@@ -561,7 +558,7 @@
     const map = {
       bling_interna: "Bling",
       bling_externa: "Link ext.",
-      manual_url: "URL",
+      manual_url: "URL→arquivo",
       manual_upload: "Upload",
       fornecedor: "Fornecedor",
       vendedor_upload: "Sua imagem",
@@ -752,10 +749,7 @@
     galeriaImagens = j.imagens || [];
     tipoGaleria = j.imagem_modo || j.tipo_galeria || null;
     regrasAtributo = j.regras_atributo || [];
-    if (tipoGaleria) {
-      const radio = document.querySelector(`input[name="img_modo"][value="${tipoGaleria}"]`);
-      if (radio) radio.checked = true;
-    }
+    // Não força o rádio: link/upload são só forma de incluir (ambos viram arquivo).
     renderGaleria();
   }
 
@@ -783,11 +777,11 @@
     if (!r.ok || !j.success) throw new Error(j.message || "Erro.");
     if (el.img_link_url) el.img_link_url.value = "";
     await carregarImagens();
-    if (j.convertida || (j.message && /convertido|direto/i.test(j.message))) {
+    if (j.convertida || (j.message && /baixada|salva|convertido|direto/i.test(j.message))) {
       await Swal.fire({
         icon: "success",
-        title: "Link ajustado",
-        text: j.message || "Convertido para o link direto da imagem.",
+        title: "Imagem salva",
+        text: j.message || "Arquivo gravado no DropNexo.",
         timer: 2200,
         showConfirmButton: false,
       });

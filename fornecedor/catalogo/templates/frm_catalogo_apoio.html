@@ -192,7 +192,7 @@
           <div class="Cl_FormCampo">
             <label for="img_link_url">URL da imagem</label>
             <input type="url" id="img_link_url" placeholder="https://… (Direct link .jpg/.png)" />
-            <p class="Cat_ImagemHint" style="margin:6px 0 0">Use o link direto do arquivo. Em Postimages: campo <strong>Direct link</strong> (não o link da página).</p>
+            <p class="Cat_ImagemHint" style="margin:6px 0 0">O DropNexo <strong>baixa e guarda</strong> a imagem na sua conta (link interno público). Em Postimages use o <strong>Direct link</strong>.</p>
           </div>
           <button type="button" class="Cl_BtnIncluir" id="btnImgLink">Incluir</button>
         </div>
@@ -353,6 +353,6 @@
   {% endif %}
   <script src="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.js"></script>
   <script src="{{ url_for('fn_catalogo.static', filename='script/Scatalogo_descricao_editor.js') }}?v=1"></script>
-  <script src="{{ url_for('fn_catalogo.static', filename='script/Scatalogo_apoio.js') }}?v=33"></script>
+  <script src="{{ url_for('fn_catalogo.static', filename='script/Scatalogo_apoio.js') }}?v=34"></script>
 </body>
 </html>

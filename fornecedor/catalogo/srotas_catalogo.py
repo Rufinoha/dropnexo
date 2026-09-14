@@ -754,13 +754,17 @@ from fornecedor.catalogo.catalogo import (
     sincronizar_estoque_produtos_bling,
 )
 from fornecedor.catalogo.catalogo import (
+    baixar_e_gravar_imagem_tenant,
     classificar_origem_manual,
     exigir_modo_compativel,
+    limpar_galeria_produto,
     listar_imagens_galeria_pai,
     listar_imagens_variante_selecionadas,
     listar_regras_atributo_imagem,
+    materializar_imagens_remotas_produto,
     obter_imagem_modo,
     proxy_bytes_imagem_remota,
+    recalcular_bytes_imagens_tenant,
     resolver_url_imagem_link,
     salvar_imagens_variante,
     salvar_regra_atributo_imagem,
@@ -768,6 +772,7 @@ from fornecedor.catalogo.catalogo import (
     sincronizar_imagem_principal_produto,
     url_exibicao,
     validar_id_imagem_produto,
+    _limpar_arquivo_upload,
 )
 from fornecedor.catalogo.catalogo import promocao_variante_ativa
 from fornecedor.parametros.precificacao import (
@@ -914,19 +919,30 @@ def _caminho_db_imagem(id_tenant: int, id_produto: int, ext: str) -> str:
 
 
 def _remover_imagem_disco(caminho_db: str | None) -> None:
-    if not caminho_db:
-        return
+    """Remove arquivo local do tenant (imge/… ou upload/…); ignora URLs remotas."""
+    _limpar_arquivo_upload(caminho_db)
+
+
+def _tamanho_imagem_disco(caminho_db: str | None) -> int | None:
+    if not caminho_db or _caminho_eh_url(caminho_db):
+        return None
     rel = (caminho_db or "").replace("\\", "/").strip().lstrip("/")
     if rel.lower().startswith("static/"):
         rel = rel[7:]
-    if ".." in rel.split("/") or not rel.lower().startswith("imge/produtos/"):
-        return
-    p = _RAIZ_PROJETO / "static" / rel.replace("/", os.sep)
+    if ".." in rel.split("/"):
+        return None
+    if rel.lower().startswith("imge/produtos/"):
+        p = _RAIZ_PROJETO / "static" / rel.replace("/", os.sep)
+    elif rel.lower().startswith("upload/"):
+        p = _RAIZ_PROJETO / rel.replace("/", os.sep)
+    else:
+        return None
     if p.is_file():
         try:
-            p.unlink()
+            return p.stat().st_size
         except OSError:
-            pass
+            return None
+    return None
 
 
 def _resolver_categoria(cur, id_tenant: int, nome_cat: str | None) -> int | None:
@@ -962,23 +978,6 @@ def _extensao_de_caminho(caminho: str | None) -> str:
         return ext.lstrip(".") or "url"
     ext = Path(caminho).suffix.lower()
     return ext.lstrip(".") or ""
-
-
-def _tamanho_imagem_disco(caminho_db: str | None) -> int | None:
-    if not caminho_db or _caminho_eh_url(caminho_db):
-        return None
-    rel = (caminho_db or "").replace("\\", "/").strip().lstrip("/")
-    if rel.lower().startswith("static/"):
-        rel = rel[7:]
-    if ".." in rel.split("/") or not rel.lower().startswith("imge/produtos/"):
-        return None
-    p = _RAIZ_PROJETO / "static" / rel.replace("/", os.sep)
-    if p.is_file():
-        try:
-            return p.stat().st_size
-        except OSError:
-            return None
-    return None
 
 
 def _contar_imagens_produto(cur, id_produto: int) -> int:
@@ -1967,19 +1966,21 @@ def catalogos_delete():
     try:
         cur = conn.cursor()
         cur.execute(
-            "SELECT imagem_url FROM tbl_produto WHERE id = %s AND id_tenant = %s",
+            "SELECT id FROM tbl_produto WHERE id = %s AND id_tenant = %s",
             (_id, id_tenant),
         )
-        row_img = cur.fetchone()
+        if not cur.fetchone():
+            return jsonify(success=False, message="Produto não encontrado."), 404
+        limpar_galeria_produto(cur, _id)
         cur.execute(
             "DELETE FROM tbl_produto WHERE id = %s AND id_tenant = %s",
             (_id, id_tenant),
         )
-        conn.commit()
         if cur.rowcount == 0:
+            conn.rollback()
             return jsonify(success=False, message="Produto não encontrado."), 404
-        if row_img and row_img[0] and str(row_img[0]).startswith("imge/produtos/"):
-            _remover_imagem_disco(row_img[0])
+        recalcular_bytes_imagens_tenant(cur, int(id_tenant))
+        conn.commit()
         return jsonify(success=True, message="Produto excluído.")
     finally:
         conn.close()
@@ -2009,18 +2010,19 @@ def catalogos_delete_lote():
         excluidos = 0
         for pid in ids:
             cur.execute(
-                "SELECT imagem_url FROM tbl_produto WHERE id = %s AND id_tenant = %s",
+                "SELECT id FROM tbl_produto WHERE id = %s AND id_tenant = %s",
                 (pid, id_tenant),
             )
-            row_img = cur.fetchone()
+            if not cur.fetchone():
+                continue
+            limpar_galeria_produto(cur, pid)
             cur.execute(
                 "DELETE FROM tbl_produto WHERE id = %s AND id_tenant = %s",
                 (pid, id_tenant),
             )
             if cur.rowcount:
                 excluidos += 1
-                if row_img and row_img[0] and str(row_img[0]).startswith("imge/produtos/"):
-                    _remover_imagem_disco(row_img[0])
+        recalcular_bytes_imagens_tenant(cur, int(id_tenant))
         conn.commit()
         return jsonify(
             success=True,
@@ -2384,6 +2386,7 @@ def catalogos_imagens_proxy():
 @login_obrigatorio()
 @exigir_permissao(codigos=["catalogos.editar", "produtos.editar", "az_produtos.editar"])
 def catalogos_imagens_link():
+    """Inclui imagem por URL: baixa e grava no servidor do tenant (URL pública interna)."""
     if (resp := _exigir_catalogo_escrita()) is not None:
         return resp
     body = request.get_json(silent=True) or {}
@@ -2393,12 +2396,9 @@ def catalogos_imagens_link():
         return jsonify(success=False, message="Informe produto e URL."), 400
     if not url.lower().startswith(("http://", "https://")):
         return jsonify(success=False, message="URL inválida."), 400
-    try:
-        resolvida = resolver_url_imagem_link(url)
-        url = resolvida["url"]
-    except ValueError as e:
-        return jsonify(success=False, message=str(e)), 400
     id_tenant = session.get("id_tenant")
+    if not id_tenant:
+        return jsonify(success=False, message="Sessão inválida."), 403
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
@@ -2408,39 +2408,83 @@ def catalogos_imagens_link():
         )
         if not cur.fetchone():
             return jsonify(success=False, message="Produto não encontrado."), 404
-        _exigir_tipo_imagem_compativel(cur, id_produto, "link")
+
+        # Links antigos (só URL) → materializa para arquivo antes de misturar.
         _migrar_imagem_legada(cur, id_produto)
+        try:
+            materializar_imagens_remotas_produto(
+                cur, int(id_tenant), id_produto, max_bytes=MAX_BYTES_IMAGEM
+            )
+        except ValueError as e:
+            conn.rollback()
+            return jsonify(
+                success=False,
+                message=f"Não foi possível converter imagens antigas por link: {e}",
+            ), 400
+
+        _exigir_tipo_imagem_compativel(cur, id_produto, "upload")
         if _contar_imagens_produto(cur, id_produto) >= MAX_IMAGENS_PRODUTO:
             return jsonify(success=False, message="Máximo de 10 imagens por produto."), 400
+
         cur.execute(
-            "SELECT COALESCE(MAX(ordem), -1) + 1 FROM tbl_produto_imagem WHERE id_produto = %s",
+            """
+            INSERT INTO tbl_produto_imagem (id_produto, caminho, ordem, principal, origem)
+            VALUES (%s, '', 999, FALSE, 'manual_url')
+            RETURNING id
+            """,
             (id_produto,),
+        )
+        id_img = int(cur.fetchone()[0])
+        try:
+            caminho_db, tamanho = baixar_e_gravar_imagem_tenant(
+                id_tenant=int(id_tenant),
+                id_produto=id_produto,
+                id_imagem=id_img,
+                url=url,
+                max_bytes=MAX_BYTES_IMAGEM,
+            )
+        except ValueError as e:
+            cur.execute(
+                "DELETE FROM tbl_produto_imagem WHERE id = %s AND id_produto = %s",
+                (id_img, id_produto),
+            )
+            conn.rollback()
+            return jsonify(success=False, message=str(e)), 400
+
+        cur.execute(
+            "SELECT COALESCE(MAX(ordem), -1) + 1 FROM tbl_produto_imagem WHERE id_produto = %s AND id != %s",
+            (id_produto, id_img),
         )
         ordem = int(cur.fetchone()[0] or 0)
         principal = ordem == 0
         cur.execute(
             """
-            INSERT INTO tbl_produto_imagem (id_produto, caminho, ordem, principal, origem)
-            VALUES (%s, %s, %s, %s, %s)
+            UPDATE tbl_produto_imagem
+            SET caminho = %s, ordem = %s, principal = %s, origem = 'manual_url',
+                tamanho_bytes = %s
+            WHERE id = %s
             RETURNING id, caminho, ordem, principal, origem
             """,
-            (id_produto, url, ordem, principal, "manual_url"),
+            (caminho_db, ordem, principal, tamanho, id_img),
         )
         row = cur.fetchone()
         _sincronizar_imagem_principal(cur, id_produto)
+        recalcular_bytes_imagens_tenant(cur, int(id_tenant))
         conn.commit()
-        msg = "Imagem incluída."
-        if resolvida.get("convertida"):
-            msg = resolvida.get("aviso") or "Imagem incluída (link convertido para direto)."
+        img = _imagem_dict_row(row)
+        img["tamanho_bytes"] = tamanho
         return jsonify(
             success=True,
-            message=msg,
-            imagem=_imagem_dict_row(row),
-            convertida=bool(resolvida.get("convertida")),
+            message="Imagem baixada e salva no DropNexo.",
+            imagem=img,
+            convertida=True,
         )
     except ValueError as e:
         conn.rollback()
         return jsonify(success=False, message=str(e)), 400
+    except Exception:
+        conn.rollback()
+        raise
     finally:
         conn.close()
 
@@ -2492,8 +2536,18 @@ def catalogos_imagens_upload():
         )
         if not cur.fetchone():
             return jsonify(success=False, message="Produto não encontrado."), 404
+        try:
+            _migrar_imagem_legada(cur, id_produto)
+            materializar_imagens_remotas_produto(
+                cur, int(id_tenant), id_produto, max_bytes=MAX_BYTES_IMAGEM
+            )
+        except ValueError as e:
+            conn.rollback()
+            return jsonify(
+                success=False,
+                message=f"Não foi possível converter imagens antigas por link: {e}",
+            ), 400
         _exigir_tipo_imagem_compativel(cur, id_produto, "upload")
-        _migrar_imagem_legada(cur, id_produto)
         if _contar_imagens_produto(cur, id_produto) >= MAX_IMAGENS_PRODUTO:
             return jsonify(success=False, message="Máximo de 10 imagens por produto."), 400
         cur.execute(
@@ -2530,6 +2584,7 @@ def catalogos_imagens_upload():
         )
         row = cur.fetchone()
         _sincronizar_imagem_principal(cur, id_produto)
+        recalcular_bytes_imagens_tenant(cur, int(id_tenant))
         conn.commit()
         img = _imagem_dict_row(row)
         img["tamanho_bytes"] = tamanho
@@ -2668,8 +2723,7 @@ def catalogos_imagens_remover():
             row = cur.fetchone()
             if not row:
                 return jsonify(success=False, message="Imagem não encontrada."), 404
-            if not _caminho_eh_url(row[0]):
-                _remover_imagem_disco(row[0])
+            _remover_imagem_disco(row[0])
             cur.execute(
                 "DELETE FROM tbl_produto_imagem WHERE id = %s AND id_produto = %s",
                 (id_imagem, id_produto),
@@ -2685,17 +2739,19 @@ def catalogos_imagens_remover():
         elif _normalizar_bool(body.get("limpar_principal")):
             cur.execute("SELECT imagem_url FROM tbl_produto WHERE id = %s", (id_produto,))
             row = cur.fetchone()
-            if row and row[0] and not _caminho_eh_url(row[0]):
+            if row and row[0]:
                 _remover_imagem_disco(row[0])
             cur.execute(
                 "UPDATE tbl_produto SET imagem_url = NULL, atualizado_em = %s WHERE id = %s",
                 (agora_utc(), id_produto),
             )
+            recalcular_bytes_imagens_tenant(cur, int(id_tenant))
             conn.commit()
             return jsonify(success=True, message="Imagem removida.")
         else:
             return jsonify(success=False, message="Imagem inválida."), 400
         _sincronizar_imagem_principal(cur, id_produto)
+        recalcular_bytes_imagens_tenant(cur, int(id_tenant))
         conn.commit()
         return jsonify(success=True, message="Imagem removida.")
     finally:

@@ -666,6 +666,127 @@ def _limpar_arquivo_upload(caminho: str | None) -> None:
                 pass
 
 
+def pasta_imagens_tenant(id_tenant: int) -> Path:
+    """Pasta pública por tenant: static/imge/produtos/{id_tenant}/."""
+    pasta = _raiz_projeto() / "static" / "imge" / "produtos" / str(int(id_tenant))
+    pasta.mkdir(parents=True, exist_ok=True)
+    return pasta
+
+
+def caminho_db_imagem_tenant(id_tenant: int, nome_arquivo: str) -> str:
+    return f"imge/produtos/{int(id_tenant)}/{nome_arquivo}"
+
+
+def _ext_de_bytes_ou_url(data: bytes, url: str, content_type: str | None) -> str:
+    if data.startswith(b"\xff\xd8\xff"):
+        return ".jpg"
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return ".png"
+    if data.startswith((b"GIF87a", b"GIF89a")):
+        return ".gif"
+    if len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return ".webp"
+    ct = (content_type or "").split(";", 1)[0].strip().lower()
+    if ct in ("image/jpeg", "image/jpg"):
+        return ".jpg"
+    if ct == "image/png":
+        return ".png"
+    if ct == "image/webp":
+        return ".webp"
+    if ct == "image/gif":
+        return ".gif"
+    path = urlparse(url).path or ""
+    ext = Path(path.split("?")[0]).suffix.lower()
+    if ext in _EXT_ARQUIVO_IMAGEM:
+        return ext if ext != ".jpeg" else ".jpg"
+    return ".jpg"
+
+
+def baixar_e_gravar_imagem_tenant(
+    *,
+    id_tenant: int,
+    id_produto: int,
+    id_imagem: int,
+    url: str,
+    max_bytes: int = 2 * 1024 * 1024,
+) -> tuple[str, int]:
+    """
+    Resolve link (página→direct se preciso), baixa bytes e grava em
+    static/imge/produtos/{tenant}/. Retorna (caminho_db, tamanho_bytes).
+    """
+    resolvida = resolver_url_imagem_link(url)
+    final_url = resolvida["url"]
+    data, ct = proxy_bytes_imagem_remota(final_url)
+    if not data:
+        raise ValueError("Imagem remota vazia.")
+    if len(data) > max_bytes:
+        raise ValueError("Imagem deve ter no máximo 2 MB.")
+
+    try:
+        from api.bling.imagens_export import validar_imagem_upload_bytes
+
+        valid = validar_imagem_upload_bytes(data)
+    except ValueError:
+        raise
+    except Exception:
+        valid = {}
+
+    gravar = data
+    ext = _ext_de_bytes_ou_url(data, final_url, ct)
+    if isinstance(valid, dict) and valid.get("jpg"):
+        gravar = valid["jpg"]
+        ext = ".jpg"
+
+    nome = f"{int(id_produto)}_{int(id_imagem)}{ext}"
+    destino = pasta_imagens_tenant(id_tenant) / nome
+    destino.write_bytes(gravar)
+    caminho_db = caminho_db_imagem_tenant(id_tenant, nome)
+    return caminho_db, len(gravar)
+
+
+def materializar_imagens_remotas_produto(
+    cur,
+    id_tenant: int,
+    id_produto: int,
+    *,
+    max_bytes: int = 2 * 1024 * 1024,
+) -> int:
+    """Converte caminhos http(s) da galeria em arquivos locais. Retorna qtd convertida."""
+    cur.execute(
+        """
+        SELECT id, caminho FROM tbl_produto_imagem
+        WHERE id_produto = %s AND id_variante IS NULL
+        ORDER BY ordem ASC, id ASC
+        """,
+        (id_produto,),
+    )
+    convertidas = 0
+    for id_img, caminho in cur.fetchall():
+        if not caminho_eh_url(caminho):
+            continue
+        novo, tam = baixar_e_gravar_imagem_tenant(
+            id_tenant=id_tenant,
+            id_produto=id_produto,
+            id_imagem=int(id_img),
+            url=str(caminho),
+            max_bytes=max_bytes,
+        )
+        cur.execute(
+            """
+            UPDATE tbl_produto_imagem
+            SET caminho = %s, tamanho_bytes = %s, origem = COALESCE(origem, 'manual_url')
+            WHERE id = %s
+            """,
+            (novo, tam, int(id_img)),
+        )
+        convertidas += 1
+    if convertidas:
+        definir_imagem_modo(cur, id_produto, "upload")
+        sincronizar_imagem_principal_produto(cur, id_produto)
+        recalcular_bytes_imagens_tenant(cur, id_tenant)
+    return convertidas
+
+
 def limpar_galeria_produto(cur, id_produto: int) -> None:
     cur.execute(
         "SELECT caminho FROM tbl_produto_imagem WHERE id_produto = %s AND id_variante IS NULL",
