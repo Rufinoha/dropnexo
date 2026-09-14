@@ -5,7 +5,7 @@
 {% block head_extra %}
 <link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_crud.css') }}" />
 <link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_usuarios.css') }}" />
-<link rel="stylesheet" href="{{ url_for('static', filename='style/Cusuarios_equipe.css') }}?v=6" />
+<link rel="stylesheet" href="{{ url_for('static', filename='style/Cusuarios_equipe.css') }}?v=7" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal UsuEq_Page">
@@ -136,9 +136,9 @@
           <section id="usuEqPaneAcesso" class="UsuEq_Pane" hidden>
             <div class="UsuEq_MenusHead">
               <p id="usuEqMenusHint">Menus da sidebar e do header.</p>
-              <div class="UsuEq_MenusTools">
-                <button type="button" class="UsuEq_LinkBtn" id="usuEqMenusTodos">Todos</button>
-                <button type="button" class="UsuEq_LinkBtn" id="usuEqMenusNenhum">Nenhum</button>
+              <div class="UsuEq_MenusTools" role="group" aria-label="Seleção rápida de menus">
+                <button type="button" class="UsuEq_LinkBtn" id="usuEqMenusTodos" title="Liga todos os menus abaixo">Ligar todos</button>
+                <button type="button" class="UsuEq_LinkBtn UsuEq_LinkBtn--mute" id="usuEqMenusNenhum" title="Desliga todos os menus abaixo">Desligar todos</button>
               </div>
             </div>
             <div id="usuEqMenus" class="UsuEq_MenuTree"></div>

@@ -379,25 +379,43 @@
   display: flex;
   justify-content: space-between;
   gap: 0.75rem;
-  align-items: center;
+  align-items: flex-start;
   margin-bottom: 0.75rem;
 }
 .UsuEq_MenusHead p {
   margin: 0;
   font-size: 0.86rem;
   color: var(--usueq-muted);
+  line-height: 1.45;
+  max-width: 36rem;
 }
-.UsuEq_MenusTools { display: flex; gap: 0.35rem; }
+.UsuEq_MenusTools {
+  display: flex;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
 .UsuEq_LinkBtn {
   border: 1px solid var(--usueq-line);
   background: #fff;
   border-radius: 8px;
-  padding: 0.3rem 0.55rem;
+  padding: 0.4rem 0.7rem;
   font-size: 0.78rem;
+  font-weight: 650;
   cursor: pointer;
-  color: #334155;
+  color: #1e3a8a;
+  white-space: nowrap;
 }
-.UsuEq_LinkBtn:hover { border-color: #94a3b8; }
+.UsuEq_LinkBtn:hover {
+  border-color: #93c5fd;
+  background: #eff6ff;
+}
+.UsuEq_LinkBtn--mute {
+  color: #475569;
+}
+.UsuEq_LinkBtn--mute:hover {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+}
 
 .UsuEq_MenuTree {
   display: flex;
