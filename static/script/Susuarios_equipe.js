@@ -32,6 +32,7 @@
     nome: document.getElementById("usuEqNome"),
     whatsapp: document.getElementById("usuEqWhatsapp"),
     perfil: document.getElementById("usuEqPerfil"),
+    emailErro: document.getElementById("usuEqEmailErro"),
     status: document.getElementById("usuEqStatus"),
     enviarConvite: null,
     wrapConvite: null,
@@ -70,6 +71,27 @@
     if (!p.length) return "?";
     if (p.length === 1) return p[0].slice(0, 2).toUpperCase();
     return (p[0][0] + p[p.length - 1][0]).toUpperCase();
+  }
+
+  function emailValido(email) {
+    const e = String(email || "").trim().toLowerCase();
+    if (!e) return false;
+    return /^[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}$/i.test(e);
+  }
+
+  function marcarEmailInvalido(ok) {
+    el.email?.classList.toggle("is-invalid", !ok);
+    if (el.emailErro) el.emailErro.hidden = ok;
+  }
+
+  function whatsappDigits(valor) {
+    if (window.Util?.limparMascaraTelefone) return Util.limparMascaraTelefone(valor || "");
+    return String(valor || "").replace(/\D/g, "");
+  }
+
+  function formatarWhatsappCampo(valor) {
+    if (window.Util?.formatarTelefone) return Util.formatarTelefone(valor || "");
+    return String(valor || "");
   }
 
   function badgeConvite(status) {
@@ -197,12 +219,13 @@
     el.sub.textContent = "Convide alguém da equipe para este tenant.";
     el.email.value = "";
     el.email.readOnly = false;
+    marcarEmailInvalido(true);
     el.nome.value = "";
     el.whatsapp.value = "";
     el.status.checked = true;
     if (el.btnReenviar) el.btnReenviar.hidden = true;
     if (el.bannerDono) el.bannerDono.hidden = true;
-    el.perfil.disabled = false;
+    if (el.perfil) el.perfil.disabled = false;
     el.status.disabled = false;
     hintConvite("", 24);
     if (el.hint) {
@@ -239,25 +262,30 @@
     el.sub.textContent = d.email || "";
     el.email.value = d.email || "";
     el.email.readOnly = true;
+    marcarEmailInvalido(true);
     el.nome.value = d.nome || "";
-    el.whatsapp.value = d.whatsapp || "";
+    el.whatsapp.value = formatarWhatsappCampo(d.whatsapp || "");
     if (isDono) {
       // Garante opção dono visível mesmo fora do combo
-      let opt = [...el.perfil.options].find((o) => o.value == d.id_perfil);
-      if (!opt) {
+      let opt = [...(el.perfil?.options || [])].find((o) => o.value == d.id_perfil);
+      if (!opt && el.perfil) {
         opt = document.createElement("option");
         opt.value = d.id_perfil;
         opt.textContent = d.perfil_nome || "Dono";
         el.perfil.appendChild(opt);
       }
-      el.perfil.value = d.id_perfil;
-      el.perfil.disabled = true;
+      if (el.perfil) {
+        el.perfil.value = d.id_perfil;
+        el.perfil.disabled = true;
+      }
       el.status.disabled = true;
       el.status.checked = true;
     } else {
-      el.perfil.disabled = false;
+      if (el.perfil) {
+        el.perfil.disabled = false;
+        el.perfil.value = d.id_perfil || "";
+      }
       el.status.disabled = false;
-      el.perfil.value = d.id_perfil || "";
       el.status.checked = !!d.status;
     }
     if (el.btnReenviar) {
@@ -350,13 +378,35 @@
   }
 
   async function salvar() {
+    const email = (el.email.value || "").trim();
+    const nome = (el.nome.value || "").trim();
+    const whatsapp = whatsappDigits(el.whatsapp.value);
+    const idPerfil = el.perfil?.value ? Number(el.perfil.value) : null;
+
+    if (!email || !nome) {
+      throw new Error("Preencha e-mail e nome.");
+    }
+    if (!emailValido(email)) {
+      marcarEmailInvalido(false);
+      el.email?.focus();
+      throw new Error("Informe um e-mail válido.");
+    }
+    marcarEmailInvalido(true);
+    if (whatsapp && !(window.Util?.validarTelefone?.(whatsapp) ?? (whatsapp.length === 10 || whatsapp.length === 11))) {
+      el.whatsapp?.focus();
+      throw new Error("WhatsApp inválido. Use DDD + número (10 ou 11 dígitos).");
+    }
+    if (!isDono && !idPerfil) {
+      throw new Error("Não foi possível definir o acesso padrão. Recarregue a página.");
+    }
+
     if (isDono) {
       const body = {
         id: idUsuario,
-        email: (el.email.value || "").trim(),
-        nome: (el.nome.value || "").trim(),
-        whatsapp: (el.whatsapp.value || "").trim(),
-        id_perfil: el.perfil.value ? Number(el.perfil.value) : null,
+        email,
+        nome,
+        whatsapp,
+        id_perfil: idPerfil,
         status: true,
         enviar_convite: false,
         ids_menus: null,
@@ -376,17 +426,14 @@
 
     const body = {
       id: idUsuario,
-      email: (el.email.value || "").trim(),
-      nome: (el.nome.value || "").trim(),
-      whatsapp: (el.whatsapp.value || "").trim(),
-      id_perfil: el.perfil.value ? Number(el.perfil.value) : null,
+      email,
+      nome,
+      whatsapp,
+      id_perfil: idPerfil,
       status: !!el.status.checked,
       enviar_convite: !idUsuario,
       ids_menus: idsMenusSelecionados(),
     };
-    if (!body.email || !body.nome || !body.id_perfil) {
-      throw new Error("Preencha e-mail, nome e perfil.");
-    }
     const r = await fetch(`${BASE}/salvar`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -502,6 +549,24 @@
   el.perfil?.addEventListener("change", () => {
     if (!idUsuario && !isDono) carregarMenusPerfil(el.perfil.value);
   });
+
+  el.email?.addEventListener("blur", () => {
+    const v = (el.email.value || "").trim();
+    if (!v) {
+      marcarEmailInvalido(true);
+      return;
+    }
+    marcarEmailInvalido(emailValido(v));
+  });
+  el.email?.addEventListener("input", () => {
+    if (el.email.classList.contains("is-invalid")) {
+      marcarEmailInvalido(emailValido(el.email.value));
+    }
+  });
+
+  if (el.whatsapp && window.Util?.aplicarMascaraTelefone) {
+    Util.aplicarMascaraTelefone(el.whatsapp);
+  }
 
   el.menus?.addEventListener("change", (ev) => {
     const pai = ev.target.closest(".usu-eq-menu-pai");

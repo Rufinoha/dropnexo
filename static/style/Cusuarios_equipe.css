@@ -329,11 +329,14 @@
   font: inherit;
   box-sizing: border-box;
 }
-.UsuEq_Field input:focus,
-.UsuEq_Field select:focus {
-  outline: none;
-  border-color: #64748b;
-  box-shadow: 0 0 0 3px rgba(100, 116, 139, 0.16);
+.UsuEq_Field input.is-invalid,
+.UsuEq_Field select.is-invalid {
+  border-color: #dc2626;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.14);
+}
+.UsuEq_Field input.is-invalid:focus {
+  border-color: #dc2626;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.18);
 }
 .UsuEq_Field input[readonly] {
   background: #f1f5f9;
