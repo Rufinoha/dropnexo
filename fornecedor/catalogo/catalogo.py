@@ -314,6 +314,9 @@ def _host_url_seguro(url: str) -> str:
     host = (parsed.hostname or "").strip().lower()
     if not host or host in ("localhost",) or host.endswith(".local"):
         raise ValueError("URL de host local não é permitida.")
+    # CDNs conhecidos: não bloqueia por classificação rara de IP (anycast/CGNAT).
+    if any(host == h or host.endswith("." + h) for h in _HOSTS_CDN_IMAGEM + _HOSTS_PAGINA_IMAGEM):
+        return host
     try:
         infos = socket.getaddrinfo(host, None)
     except socket.gaierror as e:

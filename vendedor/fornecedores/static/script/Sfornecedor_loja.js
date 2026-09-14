@@ -34,10 +34,21 @@
   function urlParaExibir(url) {
     const u = String(url || "").trim();
     if (!u) return "";
-    if (/\/imagens\/proxy\?/i.test(u)) return u;
+    // Já veio proxied (evitar proxy-de-proxy → 400).
+    if (/\/imagens\/proxy\?/i.test(u)) {
+      try {
+        const inner = new URL(u, window.location.origin).searchParams.get("url");
+        if (inner && /^https?:\/\//i.test(inner)) {
+          return `/catalogos/imagens/proxy?url=${encodeURIComponent(inner)}`;
+        }
+      } catch (_) {
+        /* usa u abaixo */
+      }
+      return u;
+    }
     if (!/^https?:\/\//i.test(u)) return u;
-    // Links externos (Postimages etc.) bloqueiam <img> cross-site.
-    return `/fornecedores/imagens/proxy?url=${encodeURIComponent(u)}`;
+    // Mesmo endpoint do catálogo do fornecedor (já validado com Postimages).
+    return `/catalogos/imagens/proxy?url=${encodeURIComponent(u)}`;
   }
 
   function statusBadge(st) {
@@ -94,7 +105,7 @@
       .map((p) => {
         const variacoesHtml = renderVariacoesResumo(p);
         const img = p.imagem_url
-          ? `<img src="${esc(urlParaExibir(p.imagem_url))}" alt="" loading="lazy" referrerpolicy="no-referrer" />`
+          ? `<img src="${esc(urlParaExibir(p.imagem_url))}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.removeAttribute('src');this.parentElement&&this.parentElement.classList.add('is-img-broken');" />`
           : '<div class="Loja_CardImgVazio">📦</div>';
 
         let btnHtml;

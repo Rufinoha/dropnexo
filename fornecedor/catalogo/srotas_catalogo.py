@@ -2351,12 +2351,25 @@ def catalogos_imagens_lista():
 
 @fn_catalogo_bp.get("/catalogos/imagens/proxy")
 @login_obrigatorio()
-@exigir_permissao(codigos=["catalogos.ver", "produtos.ver", "az_produtos.ver"])
+@exigir_permissao(
+    codigos=["catalogos.ver", "produtos.ver", "az_produtos.ver", "fornecedores.ver"]
+)
 def catalogos_imagens_proxy():
     """Espelha imagem remota para o navegador (modo link) sem gravar em disco."""
     url = (request.args.get("url") or "").strip()
     if not url:
         return jsonify(success=False, message="Informe a URL."), 400
+    # Evita proxy-de-proxy se a URL já for do nosso endpoint.
+    if "/imagens/proxy" in url and "url=" in url:
+        try:
+            from urllib.parse import parse_qs, urlsplit
+
+            qs = parse_qs(urlsplit(url).query)
+            inner = (qs.get("url") or [None])[0]
+            if inner:
+                url = inner
+        except Exception:
+            pass
     try:
         data, ct = proxy_bytes_imagem_remota(url)
     except ValueError as e:

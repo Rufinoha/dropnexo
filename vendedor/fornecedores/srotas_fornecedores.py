@@ -1157,10 +1157,20 @@ def pagina_loja():
 @login_obrigatorio()
 @exigir_permissao(codigo="fornecedores.ver")
 def imagens_proxy():
-    """Espelha imagem remota (modo link) para o catálogo na rede de fornecedores."""
+    """Mesmo espelhamento do catálogo do fornecedor (`/catalogos/imagens/proxy`)."""
     url = (request.args.get("url") or "").strip()
     if not url:
         return jsonify(success=False, message="Informe a URL."), 400
+    if "/imagens/proxy" in url and "url=" in url:
+        try:
+            from urllib.parse import parse_qs, urlsplit
+
+            qs = parse_qs(urlsplit(url).query)
+            inner = (qs.get("url") or [None])[0]
+            if inner:
+                url = inner
+        except Exception:
+            pass
     try:
         from fornecedor.catalogo.catalogo import proxy_bytes_imagem_remota
 
