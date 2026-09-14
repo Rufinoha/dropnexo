@@ -835,6 +835,27 @@ def carregar_usuario_apoio(*, id_tenant: int, uid: int, contexto_modulo: str | N
         conn.close()
 
 
+def id_perfil_equipe_padrao(conn) -> int | None:
+    """Perfil técnico interno para membros de equipe (menus controlam o acesso real)."""
+    from global_utils import id_perfil_por_codigo
+
+    for cod in ("operador", "admin", "visualizador", "financeiro"):
+        pid = id_perfil_por_codigo(conn, cod)
+        if pid:
+            return int(pid)
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT id FROM tbl_perfil
+        WHERE ativo = TRUE AND lower(codigo) <> 'dono'
+        ORDER BY id
+        LIMIT 1
+        """
+    )
+    row = cur.fetchone()
+    return int(row[0]) if row else None
+
+
 def salvar_usuario_tenant(
     *,
     id_tenant: int,
@@ -842,14 +863,12 @@ def salvar_usuario_tenant(
     email: str,
     nome: str,
     whatsapp: str,
-    id_perfil: int,
+    id_perfil: int | None = None,
     status: bool,
     enviar_convite: bool,
     ids_menus: list[int] | None = None,
     contexto_modulo: str | None = None,
 ) -> tuple[dict, int]:
-    from global_utils import id_perfil_por_codigo
-
     email = (email or "").strip().lower()
     nome = (nome or "").strip()
     whatsapp = (whatsapp or "").strip()
@@ -862,10 +881,24 @@ def salvar_usuario_tenant(
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
-        if not id_perfil:
-            id_perfil = id_perfil_por_codigo(conn, "operador") or id_perfil_por_codigo(conn, "admin")
-        if not id_perfil:
-            return {"success": False, "message": "Selecione um perfil."}, 400
+
+        # Perfil deixou de ser escolha da UI: resolve no servidor.
+        id_perfil_res = int(id_perfil or 0) if id_perfil else 0
+        if uid and not id_perfil_res:
+            cur.execute(
+                "SELECT id_perfil FROM tbl_usuario_tenant WHERE id_usuario=%s AND id_tenant=%s",
+                (int(uid), id_tenant),
+            )
+            row_pf = cur.fetchone()
+            id_perfil_res = int(row_pf[0]) if row_pf else 0
+        if not id_perfil_res:
+            id_perfil_res = id_perfil_equipe_padrao(conn) or 0
+        if not id_perfil_res:
+            return {
+                "success": False,
+                "message": "Não foi possível criar o usuário (configuração interna incompleta).",
+            }, 500
+        id_perfil = id_perfil_res
 
         cur.execute("SELECT nome FROM tbl_tenant WHERE id = %s", (id_tenant,))
         row_t = cur.fetchone()

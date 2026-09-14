@@ -54,7 +54,7 @@
       <thead>
         <tr>
           <th class="UsuEq_ColUsuario">Usuário</th>
-          <th class="UsuEq_ColPerfil">Perfil</th>
+          <th class="UsuEq_ColPerfil">Tipo</th>
           <th class="UsuEq_ColConvite">Convite</th>
           <th class="UsuEq_ColAcesso">Último acesso</th>
           <th class="UsuEq_ColStatus">Status</th>
@@ -122,7 +122,6 @@
                 <input type="tel" id="usuEqWhatsapp" placeholder="(11) 98765-4321" autocomplete="off" inputmode="numeric" maxlength="15" />
               </div>
             </div>
-            <select id="usuEqPerfil" class="UsuEq_PerfilHidden" aria-hidden="true" tabindex="-1"></select>
             <div class="UsuEq_SwitchRow">
               <label class="Cl_Switch">
                 <input type="checkbox" id="usuEqStatus" checked />
@@ -157,5 +156,5 @@
 {% endblock %}
 {% block page_js %}
 <script>window.USU_EQ_BASE = "/fornecedor/usuarios";</script>
-<script src="{{ url_for('static', filename='script/Susuarios_equipe.js') }}?v=10"></script>
+<script src="{{ url_for('static', filename='script/Susuarios_equipe.js') }}?v=11"></script>
 {% endblock %}

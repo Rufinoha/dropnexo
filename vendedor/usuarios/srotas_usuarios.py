@@ -161,7 +161,7 @@ def usuarios_salvar():
         email=body.get("email") or "",
         nome=body.get("nome") or "",
         whatsapp=body.get("whatsapp") or "",
-        id_perfil=int(body.get("id_perfil") or 0),
+        id_perfil=None,
         status=normalizar_bool(body.get("status"), True),
         enviar_convite=normalizar_bool(body.get("enviar_convite"), True),
         ids_menus=ids_menus,

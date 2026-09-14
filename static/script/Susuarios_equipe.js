@@ -10,8 +10,6 @@
   let idUsuario = null;
   let isDono = false;
   let tabAtiva = "usuario";
-  /** Perfil interno padrão da equipe (UI de perfil oculta; menus são o controle real). */
-  let idPerfilPadrao = null;
 
   const el = {
     filtroBusca: document.getElementById("ob_filtroBusca"),
@@ -33,7 +31,6 @@
     email: document.getElementById("usuEqEmail"),
     nome: document.getElementById("usuEqNome"),
     whatsapp: document.getElementById("usuEqWhatsapp"),
-    perfil: document.getElementById("usuEqPerfil"),
     emailErro: document.getElementById("usuEqEmailErro"),
     status: document.getElementById("usuEqStatus"),
     enviarConvite: null,
@@ -187,60 +184,11 @@
     });
   }
 
-  function escolherPerfilPadrao(perfis) {
-    const lista = Array.isArray(perfis) ? perfis : [];
-    const porCodigo = (cod) => lista.find((p) => String(p.codigo || "").toLowerCase() === cod);
-    return porCodigo("operador") || porCodigo("admin") || lista[0] || null;
-  }
-
-  function garantirPerfilSelecionado() {
-    if (!el.perfil) return idPerfilPadrao;
-    if (!el.perfil.value && idPerfilPadrao) {
-      el.perfil.value = String(idPerfilPadrao);
-    }
-    if (!el.perfil.value && el.perfil.options.length) {
-      el.perfil.selectedIndex = 0;
-    }
-    const n = Number(el.perfil.value || idPerfilPadrao || 0);
-    return n > 0 ? n : null;
-  }
-
-  async function carregarPerfis() {
-    const r = await fetch(`${BASE}/combos`);
-    const j = await r.json();
-    if (!r.ok || !j.success) throw new Error(j.message || "Erro ao carregar perfis.");
-    const perfis = j.perfis || [];
-    const idApi = Number(j.id_perfil_padrao || 0) || null;
-
-    if (el.perfil) {
-      el.perfil.innerHTML = "";
-      perfis.forEach((p) => {
-        const o = document.createElement("option");
-        o.value = p.id;
-        o.textContent = `${p.nome}`;
-        o.dataset.codigo = p.codigo || "";
-        el.perfil.appendChild(o);
-      });
-      if (idApi && ![...el.perfil.options].some((o) => Number(o.value) === idApi)) {
-        const o = document.createElement("option");
-        o.value = String(idApi);
-        o.textContent = "Operador";
-        el.perfil.appendChild(o);
-      }
-    }
-
-    const padrao = escolherPerfilPadrao(perfis);
-    const idLista = padrao ? Number(padrao.id) : 0;
-    idPerfilPadrao = idApi || (idLista > 0 ? idLista : null);
-    if (el.perfil && idPerfilPadrao) el.perfil.value = String(idPerfilPadrao);
-  }
-
-  async function carregarMenusPerfil(idPerfil) {
+  async function carregarMenusPadrao() {
     if (!el.menus) return;
     el.menus.innerHTML = "<p class='UsuEq_Hint'>Carregando menus…</p>";
     try {
-      const qs = idPerfil ? `?id_perfil=${encodeURIComponent(idPerfil)}` : "";
-      const r = await fetch(`${BASE}/menus-perfil${qs}`);
+      const r = await fetch(`${BASE}/menus-perfil`);
       const j = await r.json();
       if (!r.ok || !j.success) throw new Error(j.message || "Falha ao carregar menus.");
       renderMenus(j.menus || []);
@@ -249,25 +197,7 @@
     }
   }
 
-  async function abrirDrawerNovo() {
-    let idPerfil = garantirPerfilSelecionado();
-    if (!idPerfil) {
-      try {
-        await carregarPerfis();
-        idPerfil = garantirPerfilSelecionado();
-      } catch (e) {
-        await Swal.fire("Erro", e.message || "Falha ao carregar perfis.", "error");
-        return;
-      }
-    }
-    if (!idPerfil) {
-      await Swal.fire(
-        "Erro",
-        "Nenhum perfil de equipe disponível para convite. Recarregue a página ou contate o suporte.",
-        "error"
-      );
-      return;
-    }
+  function abrirDrawerNovo() {
     idUsuario = null;
     isDono = false;
     el.titulo.textContent = "Novo usuário";
@@ -280,7 +210,6 @@
     el.status.checked = true;
     if (el.btnReenviar) el.btnReenviar.hidden = true;
     if (el.bannerDono) el.bannerDono.hidden = true;
-    if (el.perfil) el.perfil.disabled = false;
     el.status.disabled = false;
     hintConvite("", 24);
     if (el.hint) {
@@ -294,7 +223,7 @@
         "Ligue o que este usuário verá na sidebar e no menu do header. Padrão: tudo ligado, exceto Usuários, Financeiro e Meu Plano.";
     }
     setTab("usuario");
-    carregarMenusPerfil(idPerfil || "");
+    carregarMenusPadrao();
     el.drawer.hidden = false;
     el.drawer.setAttribute("aria-hidden", "false");
     document.body.style.overflow = "hidden";
@@ -319,25 +248,9 @@
     el.nome.value = d.nome || "";
     el.whatsapp.value = formatarWhatsappCampo(d.whatsapp || "");
     if (isDono) {
-      // Garante opção dono visível mesmo fora do combo
-      let opt = [...(el.perfil?.options || [])].find((o) => o.value == d.id_perfil);
-      if (!opt && el.perfil) {
-        opt = document.createElement("option");
-        opt.value = d.id_perfil;
-        opt.textContent = d.perfil_nome || "Dono";
-        el.perfil.appendChild(opt);
-      }
-      if (el.perfil) {
-        el.perfil.value = d.id_perfil;
-        el.perfil.disabled = true;
-      }
       el.status.disabled = true;
       el.status.checked = true;
     } else {
-      if (el.perfil) {
-        el.perfil.disabled = false;
-        el.perfil.value = d.id_perfil || "";
-      }
       el.status.disabled = false;
       el.status.checked = !!d.status;
     }
@@ -407,7 +320,7 @@
             </span>
           </div>
         </td>
-        <td class="UsuEq_ColPerfil">${esc(row.perfil_nome)}</td>
+        <td class="UsuEq_ColPerfil">${dono ? "Dono" : "Equipe"}</td>
         <td class="UsuEq_ColConvite">${badgeConvite(row.convite_status)}</td>
         <td class="UsuEq_ColAcesso">${row.dt_ultimo_login ? row.dt_ultimo_login.slice(0, 16).replace("T", " ") : "—"}</td>
         <td class="UsuEq_ColStatus"><span class="Cl_Badge ${row.status ? "Cl_Badge--ativo" : "Cl_Badge--inativo"}">${row.status ? "Ativo" : "Inativo"}</span></td>
@@ -434,7 +347,6 @@
     const email = (el.email.value || "").trim();
     const nome = (el.nome.value || "").trim();
     const whatsapp = whatsappDigits(el.whatsapp.value);
-    const idPerfil = garantirPerfilSelecionado();
 
     if (!email || !nome) {
       throw new Error("Preencha e-mail e nome.");
@@ -449,9 +361,6 @@
       el.whatsapp?.focus();
       throw new Error("WhatsApp inválido. Use DDD + número (10 ou 11 dígitos).");
     }
-    if (!isDono && !idPerfil) {
-      throw new Error("Não foi possível definir o acesso padrão. Recarregue a página.");
-    }
 
     if (isDono) {
       const body = {
@@ -459,7 +368,6 @@
         email,
         nome,
         whatsapp,
-        id_perfil: idPerfil,
         status: true,
         enviar_convite: false,
         ids_menus: null,
@@ -482,7 +390,6 @@
       email,
       nome,
       whatsapp,
-      id_perfil: idPerfil,
       status: !!el.status.checked,
       enviar_convite: !idUsuario,
       ids_menus: idsMenusSelecionados(),
@@ -544,9 +451,7 @@
     paginaAtual = 1;
     carregar().catch((e) => Swal.fire("Erro", e.message, "error"));
   });
-  el.btnIncluir?.addEventListener("click", () => {
-    abrirDrawerNovo().catch((e) => Swal.fire("Erro", e.message || "Falha ao abrir.", "error"));
-  });
+  el.btnIncluir?.addEventListener("click", () => abrirDrawerNovo());
   el.btnPrimeiro?.addEventListener("click", () => {
     paginaAtual = 1;
     carregar();
@@ -601,10 +506,6 @@
   el.btnMenusTodos?.addEventListener("click", () => marcarMenus(true));
   el.btnMenusNenhum?.addEventListener("click", () => marcarMenus(false));
 
-  el.perfil?.addEventListener("change", () => {
-    if (!idUsuario && !isDono) carregarMenusPerfil(el.perfil.value);
-  });
-
   el.email?.addEventListener("blur", () => {
     const v = (el.email.value || "").trim();
     if (!v) {
@@ -637,7 +538,5 @@
     if (ev.key === "Escape" && el.drawer && !el.drawer.hidden) fecharDrawer();
   });
 
-  carregarPerfis()
-    .then(() => carregar())
-    .catch((e) => Swal.fire("Erro", e.message, "error"));
+  carregar().catch((e) => Swal.fire("Erro", e.message, "error"));
 })();
