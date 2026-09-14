@@ -800,16 +800,16 @@ def carregar_menu_sidebar() -> list[dict]:
     """Sidebar = itens de tbl_menu do módulo, filtrados pelo acesso do usuário.
 
     Regra:
-      1) Carrega candidatos em tbl_menu (módulo ativo + comum; sem header/config).
-      2) Se o usuário tem override em tbl_usuario_tenant_menu → só os liberados.
-         Senão, se não for dono/admin/dev → tbl_perfil_menu.
-         Senão (dono/admin/dev sem override) → todos os candidatos.
+      - Desenvolvedor / Dono → todos os candidatos do módulo
+      - Equipe → somente menus ligados em tbl_usuario_tenant_menu
+        (sem linhas: aplica padrão dos switches)
     """
     from sistema.plataforma.sessao import (
         garantir_modulo_sessao,
         garantir_tabela_usuario_tenant_menu,
         resolver_url_menu,
         _eh_menu_exclusivo_header,
+        _nav_default_ligado,
     )
 
     if not session.get("id_usuario"):
@@ -822,7 +822,7 @@ def carregar_menu_sidebar() -> list[dict]:
     mod_ativo = garantir_modulo_sessao()
     ctx_filtro = ["comum", mod_ativo]
     perfil_codigo = (session.get("perfil_codigo") or session.get("papel") or "").lower()
-    acesso_total = bool(session.get("eh_desenvolvedor")) or perfil_codigo in ("dono", "admin")
+    acesso_total = bool(session.get("eh_desenvolvedor")) or perfil_codigo == "dono"
     id_usuario = session.get("id_usuario")
     id_tenant = session.get("id_tenant")
 
@@ -863,34 +863,33 @@ def carregar_menu_sidebar() -> list[dict]:
 
         # 2) Acesso do usuário.
         liberados: set[int] | None = None
-        garantir_tabela_usuario_tenant_menu(cur)
-        cur.execute(
-            """
-            SELECT COUNT(*)::int FROM tbl_usuario_tenant_menu
-            WHERE id_usuario = %s AND id_tenant = %s
-            """,
-            (id_usuario, id_tenant),
-        )
-        tem_override = int(cur.fetchone()[0] or 0) > 0
-
-        if tem_override:
+        if not acesso_total:
+            garantir_tabela_usuario_tenant_menu(cur)
             cur.execute(
                 """
-                SELECT id_menu FROM tbl_usuario_tenant_menu
-                WHERE id_usuario = %s AND id_tenant = %s AND exibir = TRUE
+                SELECT COUNT(*)::int FROM tbl_usuario_tenant_menu
+                WHERE id_usuario = %s AND id_tenant = %s
                 """,
                 (id_usuario, id_tenant),
             )
-            liberados = {int(r[0]) for r in cur.fetchall()}
-        elif not acesso_total and id_perfil:
-            cur.execute(
-                """
-                SELECT id_menu FROM tbl_perfil_menu
-                WHERE id_perfil = %s AND exibir = TRUE
-                """,
-                (id_perfil,),
-            )
-            liberados = {int(r[0]) for r in cur.fetchall()}
+            tem_override = int(cur.fetchone()[0] or 0) > 0
+
+            if tem_override:
+                cur.execute(
+                    """
+                    SELECT id_menu FROM tbl_usuario_tenant_menu
+                    WHERE id_usuario = %s AND id_tenant = %s AND exibir = TRUE
+                    """,
+                    (id_usuario, id_tenant),
+                )
+                liberados = {int(r[0]) for r in cur.fetchall()}
+            else:
+                # Sem override: padrão dos switches (não usa tbl_perfil_menu)
+                liberados = {
+                    int(r[0])
+                    for r in candidatos
+                    if _nav_default_ligado(r[4])
+                }
 
         itens = []
         for row in candidatos:

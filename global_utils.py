@@ -331,12 +331,64 @@ CONTATO_EMAIL = os.getenv("DROPNEXO_CONTATO_EMAIL", "contato@dropnexo.com.br")
 
 PERFIL_LABEL = {
     "dono": "Dono da conta",
-    "admin": "Administrador",
-    "financeiro": "Financeiro",
-    "vendedor": "Vendedor",
-    "operador": "Operador",
-    "visualizador": "Visualizador",
+    "equipe": "Equipe",
+    # Legado (não expor na UI; labels só para dados antigos)
+    "admin": "Equipe",
+    "financeiro": "Equipe",
+    "vendedor": "Equipe",
+    "operador": "Equipe",
+    "visualizador": "Equipe",
 }
+
+# Permissão (prefixo antes do ponto) → nav_codigo(s) do menu que liberam a ação.
+# Equipe: se algum desses menus estiver ligado no tenant, a permissão passa.
+_PERMISSAO_PARA_NAVS: dict[str, tuple[str, ...]] = {
+    "dashboard": ("inicio",),
+    "catalogos": ("catalogos", "vd_catalogo", "az_produtos"),
+    "produtos": ("produtos", "az_produtos", "catalogos", "vd_catalogo"),
+    "fornecedores": ("fornecedores", "az_fornecedores"),
+    "integracoes": ("integracoes", "fn_integracoes", "az_integracoes"),
+    "fn_integracoes": ("fn_integracoes", "integracoes", "az_integracoes"),
+    "fn_pedidos": ("fn_pedidos",),
+    "fn_categorias": ("fn_categorias",),
+    "fn_variacoes": ("fn_variacoes",),
+    "fn_parametros": ("fn_parametros",),
+    "fn_segmentos": ("fn_parametros",),
+    "fn_vendedores": ("fn_vendedores", "az_vendedores"),
+    "fn_usuarios": ("fn_usuarios",),
+    "fn_importacao": ("catalogos", "fn_integracoes"),
+    "vd_pedidos": ("vd_pedidos", "az_pedidos"),
+    "vd_catalogo": ("vd_catalogo", "catalogos"),
+    "vd_categorias": ("vd_categorias",),
+    "vd_depositos": ("vd_depositos", "fn_depositos", "az_depositos"),
+    "vd_loja_virtual": ("vd_loja_virtual",),
+    "vd_precificacao": ("vd_precificacao", "precificacao"),
+    "vd_usuarios": ("vd_usuarios",),
+    "precificacao": ("vd_precificacao", "precificacao"),
+    "az_usuarios": ("az_usuarios",),
+    "az_produtos": ("az_produtos", "catalogos"),
+    "az_depositos": ("az_depositos", "fn_depositos", "vd_depositos"),
+    "az_pedidos": ("az_pedidos", "vd_pedidos", "fn_pedidos"),
+    "az_fornecedores": ("az_fornecedores", "fornecedores"),
+    "az_vendedores": ("az_vendedores", "fn_vendedores"),
+    "az_parametros": ("az_parametros",),
+    "az_integracoes": ("az_integracoes", "fn_integracoes", "integracoes"),
+    "az_movimentacoes": ("az_movimentacoes",),
+    "financeiro": ("hdr_financeiro",),
+    "planos": ("hdr_meu_plano",),
+    "usuarios": ("fn_usuarios", "vd_usuarios", "az_usuarios", "usuarios"),
+    # Só dono/dev — equipe nunca
+    "configuracoes": (),
+    "plataforma": (),
+}
+
+
+def navs_para_permissao(codigo: str) -> tuple[str, ...]:
+    base = (codigo or "").strip().lower().split(".", 1)[0]
+    if base in _PERMISSAO_PARA_NAVS:
+        return _PERMISSAO_PARA_NAVS[base]
+    # Fallback: o próprio prefixo costuma ser o nav_codigo
+    return (base,) if base else ()
 
 
 def id_perfil_por_codigo(conn, codigo: str) -> int | None:
@@ -367,8 +419,59 @@ def listar_permissoes_do_perfil(conn, id_perfil: int) -> list[str]:
     return codigos
 
 
+def carregar_menus_liberados_sessao(conn, *, id_usuario: int, id_tenant: int, acesso_total: bool) -> None:
+    """Popula session['menus_liberados'] (nav_codigo). '*' = acesso total."""
+    if acesso_total:
+        session["menus_liberados"] = ["*"]
+        return
+    cur = conn.cursor()
+    try:
+        from sistema.plataforma.sessao import (
+            NAV_DEFAULT_OFF,
+            garantir_tabela_usuario_tenant_menu,
+            _nav_default_ligado,
+        )
+
+        garantir_tabela_usuario_tenant_menu(cur)
+        cur.execute(
+            """
+            SELECT COUNT(*)::int FROM tbl_usuario_tenant_menu
+            WHERE id_usuario = %s AND id_tenant = %s
+            """,
+            (id_usuario, id_tenant),
+        )
+        tem = int(cur.fetchone()[0] or 0) > 0
+        if tem:
+            cur.execute(
+                """
+                SELECT COALESCE(m.nav_codigo, '')
+                FROM tbl_usuario_tenant_menu um
+                JOIN tbl_menu m ON m.id = um.id_menu
+                WHERE um.id_usuario = %s AND um.id_tenant = %s AND um.exibir = TRUE
+                """,
+                (id_usuario, id_tenant),
+            )
+            session["menus_liberados"] = [r[0] for r in cur.fetchall() if r[0]]
+        else:
+            cur.execute(
+                """
+                SELECT COALESCE(nav_codigo, '')
+                FROM tbl_menu
+                WHERE status = TRUE AND pai = TRUE AND parent_id IS NULL
+                  AND COALESCE(nav_codigo, '') <> 'config'
+                """
+            )
+            session["menus_liberados"] = [
+                r[0] for r in cur.fetchall() if r[0] and _nav_default_ligado(r[0])
+            ]
+        # evita import circular de unused
+        _ = NAV_DEFAULT_OFF
+    finally:
+        cur.close()
+
+
 def aplicar_permissoes_na_sessao(conn, *, id_perfil: int, eh_desenvolvedor: bool = False) -> None:
-    """Carrega perfil e permissões na sessão após login ou troca de tenant."""
+    """Carrega perfil e acesso na sessão após login ou troca de tenant."""
     cur = conn.cursor()
     cur.execute(
         "SELECT codigo, nome FROM tbl_perfil WHERE id = %s LIMIT 1",
@@ -376,28 +479,74 @@ def aplicar_permissoes_na_sessao(conn, *, id_perfil: int, eh_desenvolvedor: bool
     )
     row = cur.fetchone()
     cur.close()
+    perfil_cod = (row[0] or "").strip().lower() if row else ""
     if row:
         session["id_perfil"] = id_perfil
-        session["perfil_codigo"] = row[0]
-        session["perfil_nome"] = row[1]
-        session["papel"] = row[0]
+        # Normaliza legados de equipe para o código canônico na sessão
+        if perfil_cod in ("admin", "operador", "visualizador", "financeiro", "vendedor"):
+            session["perfil_codigo"] = "equipe"
+            session["perfil_nome"] = PERFIL_LABEL["equipe"]
+            session["papel"] = "equipe"
+        else:
+            session["perfil_codigo"] = row[0]
+            session["perfil_nome"] = row[1]
+            session["papel"] = row[0]
+
+    acesso_total = bool(eh_desenvolvedor) or perfil_cod == "dono" or session.get("perfil_codigo") == "dono"
     if eh_desenvolvedor:
         session["permissoes"] = ["*"]
+    elif acesso_total:
+        session["permissoes"] = ["*"]
     else:
-        session["permissoes"] = listar_permissoes_do_perfil(conn, id_perfil)
+        # Equipe: RBAC antigo deixa de ser fonte de verdade
+        session["permissoes"] = []
+
+    uid = session.get("id_usuario")
+    tid = session.get("id_tenant")
+    if uid and tid:
+        carregar_menus_liberados_sessao(
+            conn,
+            id_usuario=int(uid),
+            id_tenant=int(tid),
+            acesso_total=acesso_total or bool(eh_desenvolvedor),
+        )
+    elif acesso_total or eh_desenvolvedor:
+        session["menus_liberados"] = ["*"]
+    else:
+        session["menus_liberados"] = []
 
 
-def usuario_tem_permissao(codigo: str) -> bool:
-    """Desenvolvedor (eh_desenvolvedor) ignora RBAC — acesso total."""
+def usuario_tem_menu_liberado(*nav_codigos: str) -> bool:
+    """True se o usuário tem algum dos nav_codigo ligados (ou acesso total)."""
     if session.get("eh_desenvolvedor"):
         return True
     papel = (session.get("perfil_codigo") or session.get("papel") or "").strip().lower()
-    if papel in ("dono", "admin"):
+    if papel == "dono":
+        return True
+    liberados = session.get("menus_liberados") or []
+    if "*" in liberados:
+        return True
+    alvo = {(n or "").strip().lower() for n in nav_codigos if n}
+    if not alvo:
+        return False
+    have = {(n or "").strip().lower() for n in liberados}
+    return bool(alvo & have)
+
+
+def usuario_tem_permissao(codigo: str) -> bool:
+    """Desenvolvedor e Dono: total. Equipe: menu liberado correspondente."""
+    if session.get("eh_desenvolvedor"):
+        return True
+    papel = (session.get("perfil_codigo") or session.get("papel") or "").strip().lower()
+    if papel == "dono":
         return True
     perms = session.get("permissoes") or []
     if "*" in perms:
         return True
-    return (codigo or "").strip() in perms
+    navs = navs_para_permissao(codigo)
+    if not navs:
+        return False
+    return usuario_tem_menu_liberado(*navs)
 
 
 def exigir_permissao(_func=None, *, codigo: str | None = None, codigos: list[str] | None = None):

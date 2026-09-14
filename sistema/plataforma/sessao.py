@@ -173,7 +173,7 @@ def ctx_navegacao() -> dict:
         uid = session.get("id_usuario")
         if tid and uid:
             perfil = (session.get("perfil_codigo") or "").lower()
-            acesso_total = bool(session.get("eh_desenvolvedor")) or perfil in ("dono", "admin")
+            acesso_total = bool(session.get("eh_desenvolvedor")) or perfil == "dono"
             conn = Var_ConectarBanco()
             try:
                 cur = conn.cursor()
@@ -204,57 +204,7 @@ def ctx_navegacao() -> dict:
 
 # ── Usuários por tenant ───────────────────────────────────────────────
 
-PERFIS_EQUIPE_FORNECEDOR = ("admin", "operador", "visualizador", "financeiro")
-PERFIS_EQUIPE_VENDEDOR = ("admin", "operador", "visualizador", "financeiro")
-PERFIS_EQUIPE_ARMAZEM = ("admin", "operador", "visualizador", "financeiro")
-
-
-def filtrar_perfis_equipe(perfis: list | None, permitidos: tuple[str, ...]) -> list:
-    """Mantém só perfis de equipe; aceita código em qualquer caixa."""
-    lista = list(perfis or [])
-    allow = {str(c).strip().lower() for c in permitidos}
-    out = [p for p in lista if str(p.get("codigo") or "").strip().lower() in allow]
-    if out:
-        return out
-    # Fallback: se o filtro zerar (legado/seed incompleto), não bloqueia a tela.
-    return [
-        p
-        for p in lista
-        if str(p.get("codigo") or "").strip().lower() not in ("dono",)
-    ]
-
-
-def montar_combos_equipe(
-    *,
-    permitidos: tuple[str, ...],
-    excluir_codigos: tuple[str, ...] = ("dono", "vendedor"),
-) -> dict:
-    """Combo de perfis para convite de equipe + id padrão (operador/admin)."""
-    from global_utils import id_perfil_por_codigo
-
-    base = listar_perfis_combo(excluir_codigos=excluir_codigos)
-    perfis = filtrar_perfis_equipe(base.get("perfis"), permitidos)
-
-    conn = Var_ConectarBanco()
-    try:
-        id_padrao = id_perfil_por_codigo(conn, "operador") or id_perfil_por_codigo(conn, "admin")
-        if id_padrao and not any(int(p.get("id") or 0) == int(id_padrao) for p in perfis):
-            cur = conn.cursor()
-            cur.execute(
-                "SELECT id, codigo, nome FROM tbl_perfil WHERE id = %s AND ativo = TRUE",
-                (int(id_padrao),),
-            )
-            row = cur.fetchone()
-            if row:
-                perfis = [{"id": row[0], "codigo": row[1], "nome": row[2]}, *perfis]
-    finally:
-        conn.close()
-
-    return {
-        "success": True,
-        "perfis": perfis,
-        "id_perfil_padrao": int(id_padrao) if id_padrao else None,
-    }
+CODIGO_PERFIL_EQUIPE = "equipe"
 
 
 def normalizar_bool(valor, padrao=True):
@@ -358,9 +308,17 @@ def _perfil_codigo_usuario(cur, id_tenant: int, uid: int) -> str | None:
 
 
 def listar_menus_acesso_modulo(cur, *, contexto_modulo: str, id_usuario: int | None, id_tenant: int) -> list[dict]:
-    """Menus do módulo com flag de acesso (override do usuário ou padrão do perfil)."""
+    """Menus do módulo com flag de acesso (override do usuário ou padrão dos switches)."""
     garantir_tabela_usuario_tenant_menu(cur)
     base = listar_menus_do_modulo(cur, contexto_modulo=contexto_modulo)
+
+    cod = _perfil_codigo_usuario(cur, id_tenant, int(id_usuario or 0)) if id_usuario else None
+    if cod == "dono":
+        for m in base:
+            m["exibir"] = True
+            for f in m.get("filhos") or []:
+                f["exibir"] = True
+        return base
 
     cur.execute(
         """
@@ -381,31 +339,12 @@ def listar_menus_acesso_modulo(cur, *, contexto_modulo: str, id_usuario: int | N
         )
         liberados = {int(r[0]) for r in cur.fetchall()}
     else:
-        cur.execute(
-            """
-            SELECT pm.id_menu
-            FROM tbl_perfil_menu pm
-            JOIN tbl_usuario_tenant ut ON ut.id_perfil = pm.id_perfil
-            WHERE ut.id_usuario = %s AND ut.id_tenant = %s AND pm.exibir = TRUE
-            """,
-            (id_usuario or 0, id_tenant),
-        )
-        liberados = {int(r[0]) for r in cur.fetchall()}
-        if not liberados:
-            return aplicar_defaults_novo_usuario(base)
+        return aplicar_defaults_novo_usuario(base)
 
     for m in base:
-        is_hdr = (m.get("nav_codigo") or "").startswith("hdr_")
-        if is_hdr and not tem_override:
-            m["exibir"] = _nav_default_ligado(m.get("nav_codigo"))
-        else:
-            m["exibir"] = m["id"] in liberados
+        m["exibir"] = m["id"] in liberados
         for f in m.get("filhos") or []:
-            is_hdr_f = (f.get("nav_codigo") or "").startswith("hdr_")
-            if is_hdr_f and not tem_override:
-                f["exibir"] = _nav_default_ligado(f.get("nav_codigo"))
-            else:
-                f["exibir"] = f["id"] in liberados
+            f["exibir"] = f["id"] in liberados
     return base
 
 
@@ -667,9 +606,21 @@ def listar_menus_do_modulo(cur, *, contexto_modulo: str) -> list[dict]:
 
 def menus_padrao_do_perfil(cur, *, id_perfil: int, contexto_modulo: str) -> list[dict]:
     """Defaults ao convidar usuário: tudo ligado, exceto Usuários / Financeiro / Meu Plano."""
-    _ = id_perfil  # mantido por compatibilidade da API
+    _ = id_perfil  # legado da API; acesso não depende mais do perfil
     base = listar_menus_do_modulo(cur, contexto_modulo=contexto_modulo)
     return aplicar_defaults_novo_usuario(base)
+
+
+def ids_menus_padrao_novo_usuario(cur, *, contexto_modulo: str) -> list[int]:
+    menus = menus_padrao_do_perfil(cur, id_perfil=0, contexto_modulo=contexto_modulo)
+    ids: list[int] = []
+    for m in menus:
+        if m.get("exibir"):
+            ids.append(int(m["id"]))
+        for f in m.get("filhos") or []:
+            if f.get("exibir"):
+                ids.append(int(f["id"]))
+    return ids
 
 
 def listar_usuarios_tenant(
@@ -741,8 +692,8 @@ def listar_usuarios_tenant(
                     "nome": r[1],
                     "email": r[2],
                     "status": bool(r[3]) and bool(r[4]),
-                    "perfil_codigo": r[5],
-                    "perfil_nome": PERFIL_LABEL.get(r[5], r[6]),
+                    "perfil_codigo": "dono" if is_dono else "equipe",
+                    "perfil_nome": "Dono" if is_dono else "Equipe",
                     "convite_status": convite,
                     "dt_ultimo_login": dt_login,
                     "is_dono": is_dono,
@@ -836,24 +787,10 @@ def carregar_usuario_apoio(*, id_tenant: int, uid: int, contexto_modulo: str | N
 
 
 def id_perfil_equipe_padrao(conn) -> int | None:
-    """Perfil técnico interno para membros de equipe (menus controlam o acesso real)."""
+    """Único perfil técnico para membros (acesso real = switches de menu)."""
     from global_utils import id_perfil_por_codigo
 
-    for cod in ("operador", "admin", "visualizador", "financeiro"):
-        pid = id_perfil_por_codigo(conn, cod)
-        if pid:
-            return int(pid)
-    cur = conn.cursor()
-    cur.execute(
-        """
-        SELECT id FROM tbl_perfil
-        WHERE ativo = TRUE AND lower(codigo) <> 'dono'
-        ORDER BY id
-        LIMIT 1
-        """
-    )
-    row = cur.fetchone()
-    return int(row[0]) if row else None
+    return id_perfil_por_codigo(conn, CODIGO_PERFIL_EQUIPE)
 
 
 def salvar_usuario_tenant(
@@ -882,21 +819,27 @@ def salvar_usuario_tenant(
     try:
         cur = conn.cursor()
 
-        # Perfil deixou de ser escolha da UI: resolve no servidor.
-        id_perfil_res = int(id_perfil or 0) if id_perfil else 0
-        if uid and not id_perfil_res:
+        # Perfil: dono permanece; equipe sempre usa o perfil técnico "equipe".
+        id_perfil_res = 0
+        if uid:
             cur.execute(
-                "SELECT id_perfil FROM tbl_usuario_tenant WHERE id_usuario=%s AND id_tenant=%s",
+                """
+                SELECT ut.id_perfil, lower(pf.codigo)
+                FROM tbl_usuario_tenant ut
+                JOIN tbl_perfil pf ON pf.id = ut.id_perfil
+                WHERE ut.id_usuario=%s AND ut.id_tenant=%s
+                """,
                 (int(uid), id_tenant),
             )
             row_pf = cur.fetchone()
-            id_perfil_res = int(row_pf[0]) if row_pf else 0
+            if row_pf and (row_pf[1] or "") == "dono":
+                id_perfil_res = int(row_pf[0])
         if not id_perfil_res:
             id_perfil_res = id_perfil_equipe_padrao(conn) or 0
         if not id_perfil_res:
             return {
                 "success": False,
-                "message": "Não foi possível criar o usuário (configuração interna incompleta).",
+                "message": "Perfil técnico 'equipe' ausente. Rode a migração SQL 050_acesso_por_menu_equipe.sql.",
             }, 500
         id_perfil = id_perfil_res
 
@@ -953,6 +896,22 @@ def salvar_usuario_tenant(
                 salvar_menus_usuario_tenant(
                     cur, id_usuario=int(uid), id_tenant=id_tenant, ids_menus=ids_menus
                 )
+            elif contexto_modulo:
+                # Garante override se ainda não existir
+                cur.execute(
+                    """
+                    SELECT COUNT(*)::int FROM tbl_usuario_tenant_menu
+                    WHERE id_usuario = %s AND id_tenant = %s
+                    """,
+                    (int(uid), id_tenant),
+                )
+                if int(cur.fetchone()[0] or 0) == 0:
+                    salvar_menus_usuario_tenant(
+                        cur,
+                        id_usuario=int(uid),
+                        id_tenant=id_tenant,
+                        ids_menus=ids_menus_padrao_novo_usuario(cur, contexto_modulo=contexto_modulo),
+                    )
             conn.commit()
             return {"success": True, "message": "Usuário atualizado.", "id": int(uid)}, 200
 
@@ -1003,10 +962,14 @@ def salvar_usuario_tenant(
             if enviar_convite:
                 token_bruto = criar_token_ativacao(cur, uid_novo)
 
-        if ids_menus is not None:
-            salvar_menus_usuario_tenant(
-                cur, id_usuario=int(uid_novo), id_tenant=id_tenant, ids_menus=ids_menus
+        menus_gravar = ids_menus
+        if menus_gravar is None:
+            menus_gravar = ids_menus_padrao_novo_usuario(
+                cur, contexto_modulo=(contexto_modulo or "vendedor")
             )
+        salvar_menus_usuario_tenant(
+            cur, id_usuario=int(uid_novo), id_tenant=id_tenant, ids_menus=menus_gravar
+        )
 
         conn.commit()
         msg = "Usuário criado."

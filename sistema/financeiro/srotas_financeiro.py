@@ -54,10 +54,14 @@ def init_app(app):
 
 
 def _pode_financeiro() -> bool:
+    from global_utils import usuario_tem_menu_liberado
+
     if session.get("eh_desenvolvedor"):
         return True
     perfil = (session.get("perfil_codigo") or "").lower()
-    return perfil in ("dono", "admin", "financeiro")
+    if perfil == "dono":
+        return True
+    return usuario_tem_menu_liberado("hdr_financeiro")
 
 
 def _id_tenant() -> int | None:

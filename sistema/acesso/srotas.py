@@ -234,7 +234,9 @@ def _aplicar_tenant_na_sessao(
     from sistema.plataforma.sessao import modulo_padrao
 
     session["modulo_ativo"] = modulo_padrao(tipo_negocio)
-    session["papel"] = (perfil_codigo or "visualizador").lower()
+    session["papel"] = (perfil_codigo or "equipe").lower()
+    if perfil_codigo and perfil_codigo.lower() in ("admin", "operador", "visualizador", "financeiro", "vendedor"):
+        session["papel"] = "equipe"
     if nome is not None:
         session["nome"] = nome
     if email is not None:

@@ -228,14 +228,17 @@ def _valida_uf(uf: str) -> bool:
 
 
 def _abas_perfil_ctx() -> dict:
+    from global_utils import usuario_tem_menu_liberado
+
     eh_dev = bool(session.get("eh_desenvolvedor"))
     perfil = (session.get("perfil_codigo") or "").lower()
+    eh_dono = eh_dev or perfil == "dono"
     return {
         "perfil": True,
-        "empresa": eh_dev or perfil in ("dono", "admin"),
-        "pagamento": eh_dev or perfil in ("dono", "admin", "financeiro"),
-        "faturas": eh_dev or perfil in ("dono", "admin", "financeiro"),
-        "cancelar": eh_dev or perfil == "dono",
+        "empresa": eh_dono,
+        "pagamento": eh_dono or usuario_tem_menu_liberado("hdr_meu_plano", "hdr_financeiro"),
+        "faturas": eh_dono or usuario_tem_menu_liberado("hdr_meu_plano", "hdr_financeiro"),
+        "cancelar": eh_dono,
     }
 
 

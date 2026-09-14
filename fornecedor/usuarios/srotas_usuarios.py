@@ -6,12 +6,10 @@ from flask import Blueprint, jsonify, render_template, request, session
 from global_utils import Var_ConectarBanco, exigir_modulo, exigir_permissao, login_obrigatorio, usuario_tem_permissao
 from sistema.plataforma.sessao import (
     MODULO_FORNECEDOR,
-    PERFIS_EQUIPE_FORNECEDOR,
     carregar_usuario_apoio,
     inativar_usuario_tenant,
     listar_usuarios_tenant,
     menus_padrao_do_perfil,
-    montar_combos_equipe,
     normalizar_bool,
     reenviar_convite_usuario,
     salvar_usuario_tenant,
@@ -75,16 +73,6 @@ def usuarios_dados():
     return jsonify(resultado)
 
 
-@fn_usuarios_bp.get("/fornecedor/usuarios/combos")
-@login_obrigatorio()
-@exigir_modulo(MODULO_FORNECEDOR)
-@exigir_permissao(codigo="fn_usuarios.ver")
-def usuarios_combos():
-    if (r := _exigir_fornecedor_tenant()) is not None:
-        return r
-    return jsonify(montar_combos_equipe(permitidos=PERFIS_EQUIPE_FORNECEDOR))
-
-
 @fn_usuarios_bp.get("/fornecedor/usuarios/menus-perfil")
 @login_obrigatorio()
 @exigir_modulo(MODULO_FORNECEDOR)
@@ -92,11 +80,10 @@ def usuarios_combos():
 def usuarios_menus_perfil():
     if (r := _exigir_fornecedor_tenant()) is not None:
         return r
-    id_perfil = int(request.args.get("id_perfil") or 0)
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
-        menus = menus_padrao_do_perfil(cur, id_perfil=id_perfil, contexto_modulo=MODULO_FORNECEDOR)
+        menus = menus_padrao_do_perfil(cur, id_perfil=0, contexto_modulo=MODULO_FORNECEDOR)
         conn.commit()
         return jsonify(success=True, menus=menus)
     finally:

@@ -6,12 +6,10 @@ from flask import Blueprint, jsonify, render_template, request, session
 from global_utils import Var_ConectarBanco, exigir_modulo, exigir_permissao, login_obrigatorio, usuario_tem_permissao
 from sistema.plataforma.sessao import (
     MODULO_ARMAZEM,
-    PERFIS_EQUIPE_ARMAZEM,
     carregar_usuario_apoio,
     inativar_usuario_tenant,
     listar_usuarios_tenant,
     menus_padrao_do_perfil,
-    montar_combos_equipe,
     normalizar_bool,
     reenviar_convite_usuario,
     salvar_usuario_tenant,
@@ -75,16 +73,6 @@ def usuarios_dados():
     return jsonify(resultado)
 
 
-@az_usuarios_bp.get("/armazem/usuarios/combos")
-@login_obrigatorio()
-@exigir_modulo(MODULO_ARMAZEM)
-@exigir_permissao(codigo="az_usuarios.ver")
-def usuarios_combos():
-    if (r := _exigir_armazem_tenant()) is not None:
-        return r
-    return jsonify(montar_combos_equipe(permitidos=PERFIS_EQUIPE_ARMAZEM))
-
-
 @az_usuarios_bp.get("/armazem/usuarios/menus-perfil")
 @login_obrigatorio()
 @exigir_modulo(MODULO_ARMAZEM)
@@ -92,11 +80,10 @@ def usuarios_combos():
 def usuarios_menus_perfil():
     if (r := _exigir_armazem_tenant()) is not None:
         return r
-    id_perfil = int(request.args.get("id_perfil") or 0)
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
-        menus = menus_padrao_do_perfil(cur, id_perfil=id_perfil, contexto_modulo=MODULO_ARMAZEM)
+        menus = menus_padrao_do_perfil(cur, id_perfil=0, contexto_modulo=MODULO_ARMAZEM)
         conn.commit()
         return jsonify(success=True, menus=menus)
     finally:
@@ -110,7 +97,7 @@ def usuarios_menus_perfil():
 def usuarios_incluir():
     if (r := _exigir_armazem_tenant()) is not None:
         return r
-    return render_template("frm_az_usuarios.html", nav_ativo="az_usuarios")
+    return jsonify(success=True)
 
 
 @az_usuarios_bp.get("/armazem/usuarios/editar")
@@ -120,7 +107,7 @@ def usuarios_incluir():
 def usuarios_editar():
     if (r := _exigir_armazem_tenant()) is not None:
         return r
-    return render_template("frm_az_usuarios.html", nav_ativo="az_usuarios")
+    return jsonify(success=True)
 
 
 @az_usuarios_bp.post("/armazem/usuarios/apoio")
@@ -131,8 +118,6 @@ def usuarios_apoio():
     if (r := _exigir_armazem_tenant()) is not None:
         return r
     uid = int((request.get_json(silent=True) or {}).get("id") or 0)
-    if not uid:
-        return jsonify(success=False, message="ID inválido."), 400
     payload, status = carregar_usuario_apoio(
         id_tenant=int(session["id_tenant"]),
         uid=uid,
@@ -182,7 +167,7 @@ def usuarios_inativar():
     payload, status = inativar_usuario_tenant(
         id_tenant=int(session["id_tenant"]),
         uid=uid,
-        id_usuario_sessao=int(session.get("id_usuario") or 0),
+        id_usuario_sessao=int(session["id_usuario"]),
     )
     return jsonify(payload), status
 
@@ -191,11 +176,14 @@ def usuarios_inativar():
 @login_obrigatorio()
 @exigir_modulo(MODULO_ARMAZEM)
 @exigir_permissao(codigo="az_usuarios.editar")
-def usuarios_reenviar_convite():
+def usuarios_reenviar():
     if (r := _exigir_armazem_tenant()) is not None:
         return r
     if (resp := _exigir_escrita()) is not None:
         return resp
     uid = int((request.get_json(silent=True) or {}).get("id") or 0)
-    payload, status = reenviar_convite_usuario(id_tenant=int(session["id_tenant"]), uid=uid)
+    payload, status = reenviar_convite_usuario(
+        id_tenant=int(session["id_tenant"]),
+        uid=uid,
+    )
     return jsonify(payload), status

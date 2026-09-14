@@ -450,9 +450,12 @@ def meu_plano():
         "hibrido": "Híbrido",
     }.get(tipo, tipo.title())
 
+    from global_utils import usuario_tem_menu_liberado
+
     pode_pagamento = bool(
         session.get("eh_desenvolvedor")
-        or (session.get("perfil_codigo") or "").lower() in ("dono", "admin", "financeiro")
+        or (session.get("perfil_codigo") or "").lower() == "dono"
+        or usuario_tem_menu_liberado("hdr_meu_plano")
     )
 
     armazenamento = {"bytes_imagens": 0}
