@@ -680,6 +680,27 @@ html:has(.Cat_ApoioBody) body {
 }
 
 .Cat_ImgAddRow .Cl_BtnIncluir {
+  flex-shrink: 0;
+  align-self: flex-end;
+  min-width: 7.5rem;
+}
+.Cat_ImgAddRow .Cl_BtnIncluir.is-busy {
+  opacity: 0.85;
+  cursor: wait;
+}
+.Cat_ImgBusy {
+  margin: 0.35rem 0 0;
+  padding: 0.55rem 0.75rem;
+  border-radius: 8px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1d4ed8;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+.Cat_ImgBusy[hidden] {
+  display: none !important;
+}
   height: 40px;
   align-self: end;
 }

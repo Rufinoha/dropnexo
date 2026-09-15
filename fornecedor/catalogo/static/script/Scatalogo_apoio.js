@@ -8,6 +8,8 @@
   let galeriaImagens = [];
   let imgDragIdx = null;
   let tipoGaleria = null;
+  let imgBusy = false;
+  const IMG_BTN_LABEL = { link: "Incluir", upload: "Enviar" };
 
   const el = {
     id: document.getElementById("id"),
@@ -47,6 +49,7 @@
     arquivo_imagem: document.getElementById("arquivo_imagem"),
     btnImgLink: document.getElementById("btnImgLink"),
     btnImgUpload: document.getElementById("btnImgUpload"),
+    imgProcessandoStatus: document.getElementById("imgProcessandoStatus"),
     painelImgLink: document.getElementById("painelImgLink"),
     painelImgUpload: document.getElementById("painelImgUpload"),
     galeria_imagens: document.getElementById("galeria_imagens"),
@@ -753,53 +756,88 @@
     renderGaleria();
   }
 
+  function setImgBusy(busy, mensagem) {
+    imgBusy = !!busy;
+    const status = el.imgProcessandoStatus;
+    if (status) {
+      status.hidden = !imgBusy;
+      if (mensagem) status.textContent = mensagem;
+    }
+    if (el.img_link_url) el.img_link_url.disabled = imgBusy;
+    if (el.arquivo_imagem) el.arquivo_imagem.disabled = imgBusy;
+    document.querySelectorAll('input[name="img_modo"]').forEach((r) => {
+      r.disabled = imgBusy;
+    });
+    if (el.btnImgLink) {
+      el.btnImgLink.classList.toggle("is-busy", imgBusy);
+      el.btnImgLink.textContent = imgBusy ? "Processando…" : IMG_BTN_LABEL.link;
+    }
+    if (el.btnImgUpload) {
+      el.btnImgUpload.classList.toggle("is-busy", imgBusy);
+      el.btnImgUpload.textContent = imgBusy ? "Processando…" : IMG_BTN_LABEL.upload;
+    }
+    syncAvisoImagens();
+  }
+
   function syncAvisoImagens() {
     if (!el.avisoImgSalvar) return;
     el.avisoImgSalvar.style.display = idProduto ? "none" : "block";
     const modo = document.querySelector('input[name="img_modo"]:checked')?.value || "link";
     const cheio = galeriaImagens.length >= MAX_IMAGENS;
-    const desabilitado = !idProduto || cheio;
+    const desabilitado = !idProduto || cheio || imgBusy;
     if (el.btnImgLink) el.btnImgLink.disabled = desabilitado || modo !== "link";
     if (el.btnImgUpload) el.btnImgUpload.disabled = desabilitado || modo !== "upload";
-    syncModoImagem();
+    if (!imgBusy) syncModoImagem();
   }
 
   async function incluirLink() {
+    if (imgBusy) return;
     if (!idProduto) throw new Error("Salve o produto antes de incluir imagens.");
     const url = (el.img_link_url?.value || "").trim();
     if (!url) throw new Error("Informe a URL da imagem.");
-    const r = await fetch(`${apiBase()}/imagens/link`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id_produto: idProduto, url }),
-    });
-    const j = await r.json();
-    if (!r.ok || !j.success) throw new Error(j.message || "Erro.");
-    if (el.img_link_url) el.img_link_url.value = "";
-    await carregarImagens();
-    if (j.convertida || (j.message && /baixada|salva|convertido|direto/i.test(j.message))) {
-      await Swal.fire({
-        icon: "success",
-        title: "Imagem salva",
-        text: j.message || "Arquivo gravado no DropNexo.",
-        timer: 2200,
-        showConfirmButton: false,
+    setImgBusy(true, "Baixando e salvando a imagem… aguarde (pode levar alguns segundos).");
+    try {
+      const r = await fetch(`${apiBase()}/imagens/link`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id_produto: idProduto, url }),
       });
+      const j = await r.json();
+      if (!r.ok || !j.success) throw new Error(j.message || "Erro.");
+      if (el.img_link_url) el.img_link_url.value = "";
+      await carregarImagens();
+      if (j.convertida || (j.message && /baixada|salva|convertido|direto/i.test(j.message))) {
+        await Swal.fire({
+          icon: "success",
+          title: "Imagem salva",
+          text: j.message || "Arquivo gravado no DropNexo.",
+          timer: 2200,
+          showConfirmButton: false,
+        });
+      }
+    } finally {
+      setImgBusy(false);
     }
   }
 
   async function enviarUpload() {
+    if (imgBusy) return;
     if (!idProduto) throw new Error("Salve o produto antes de enviar imagens.");
     const f = el.arquivo_imagem?.files?.[0];
     if (!f) throw new Error("Selecione um arquivo.");
-    const fd = new FormData();
-    fd.append("id_produto", String(idProduto));
-    fd.append("arquivo", f);
-    const r = await fetch(`${apiBase()}/imagens/upload`, { method: "POST", body: fd });
-    const j = await r.json();
-    if (!r.ok || !j.success) throw new Error(j.message || "Erro ao enviar.");
-    if (el.arquivo_imagem) el.arquivo_imagem.value = "";
-    await carregarImagens();
+    setImgBusy(true, "Enviando e processando a imagem… aguarde.");
+    try {
+      const fd = new FormData();
+      fd.append("id_produto", String(idProduto));
+      fd.append("arquivo", f);
+      const r = await fetch(`${apiBase()}/imagens/upload`, { method: "POST", body: fd });
+      const j = await r.json();
+      if (!r.ok || !j.success) throw new Error(j.message || "Erro ao enviar.");
+      if (el.arquivo_imagem) el.arquivo_imagem.value = "";
+      await carregarImagens();
+    } finally {
+      setImgBusy(false);
+    }
   }
 
   async function removerImagem(idImg, idx) {
