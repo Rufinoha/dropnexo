@@ -266,7 +266,8 @@ def enviar_email_convite(*, email: str, nome: str, nome_tenant: str, token_bruto
         url_politica_interna=os.getenv("URL_POLITICA_INTERNA") or f"{base}/politica-interna",
         url_dpo=os.getenv("URL_DPO") or f"{base}/dpo",
     )
-    return enviar_email([email], "Convite de acesso • DropNexo", html, tag="dropnexo_convite_equipe")
+    ok, msg, _ = enviar_email([email], "Convite de acesso • DropNexo", html, tag="dropnexo_convite_equipe")
+    return ok, msg
 
 
 def token_ativacao_horas() -> int:
