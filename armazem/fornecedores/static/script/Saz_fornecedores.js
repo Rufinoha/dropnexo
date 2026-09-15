@@ -8,6 +8,8 @@
   const busca = document.getElementById("az_forn_busca");
   const previewNome = document.getElementById("az_forn_preview_nome");
   const previewSub = document.getElementById("az_forn_preview_sub");
+  const logoFrame = document.getElementById("az_forn_logo_frame");
+  const logoLblTxt = document.getElementById("az_forn_logo_lbl_txt");
   const BASE = "/armazem/fornecedores";
 
   const el = {
@@ -20,12 +22,14 @@
     wa: document.getElementById("az_forn_wa"),
     obs: document.getElementById("az_forn_obs"),
     btnExcluir: document.getElementById("az_forn_btnExcluir"),
+    btnLogoRemover: document.getElementById("az_forn_btnLogoRemover"),
     logoImg: document.getElementById("az_forn_logo_img"),
     logoPh: document.getElementById("az_forn_logo_ph"),
     logoInput: document.getElementById("az_forn_logo_input"),
   };
 
   let logoPendente = null;
+  let temLogo = false;
 
   if (!grid || !modal) return;
 
@@ -48,18 +52,27 @@
     }
   }
 
+  function syncLogoUi() {
+    if (el.btnLogoRemover) el.btnLogoRemover.hidden = !temLogo;
+    if (logoLblTxt) logoLblTxt.textContent = temLogo ? "Trocar logo" : "Enviar logo";
+    if (logoFrame) logoFrame.classList.toggle("is-filled", temLogo);
+  }
+
   function setLogoPreview(url) {
     if (url && el.logoImg) {
       el.logoImg.src = url;
       el.logoImg.hidden = false;
       if (el.logoPh) el.logoPh.hidden = true;
+      temLogo = true;
     } else {
       if (el.logoImg) {
         el.logoImg.removeAttribute("src");
         el.logoImg.hidden = true;
       }
       if (el.logoPh) el.logoPh.hidden = false;
+      temLogo = false;
     }
+    syncLogoUi();
   }
 
   function abrirModal(dados) {
@@ -106,6 +119,16 @@
       method: "POST",
       credentials: "same-origin",
       body: fd,
+    });
+    return r.json();
+  }
+
+  async function removerLogoApi(idFornecedor) {
+    const r = await fetch(`${BASE}/${idFornecedor}/logo/remover`, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
     });
     return r.json();
   }
@@ -208,6 +231,38 @@
     } else {
       logoPendente = f;
     }
+  });
+
+  el.btnLogoRemover?.addEventListener("click", async () => {
+    if (!temLogo) return;
+    if (!el.id.value) {
+      logoPendente = null;
+      if (el.logoInput) el.logoInput.value = "";
+      setLogoPreview("");
+      return;
+    }
+    const ok = window.Swal
+      ? (
+          await Swal.fire({
+            icon: "question",
+            title: "Remover logotipo?",
+            showCancelButton: true,
+            confirmButtonText: "Remover",
+            confirmButtonColor: "#b91c1c",
+          })
+        ).isConfirmed
+      : confirm("Remover logotipo?");
+    if (!ok) return;
+    const j = await removerLogoApi(Number(el.id.value));
+    if (!j.success) {
+      if (window.Util?.alertar) Util.alertar(j.message || "Erro ao remover logo.", "error");
+      return;
+    }
+    logoPendente = null;
+    if (el.logoInput) el.logoInput.value = "";
+    setLogoPreview("");
+    if (window.Util?.alertar) Util.alertar(j.message || "Logotipo removido.", "success");
+    carregar();
   });
 
   grid.addEventListener("click", (e) => {

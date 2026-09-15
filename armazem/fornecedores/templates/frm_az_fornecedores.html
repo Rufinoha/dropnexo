@@ -3,7 +3,7 @@
 {% set nav_ativo = 'az_fornecedores' %}
 {% block topbar_title %}Fornecedores do armazém{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('az_fornecedores.static', filename='style/Caz_fornecedores.css') }}?v=5" />
+<link rel="stylesheet" href="{{ url_for('az_fornecedores.static', filename='style/Caz_fornecedores.css') }}?v=6" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal AzForn_Page">
@@ -37,15 +37,25 @@
   <div class="AzForn_ModalInner">
     <aside class="AzForn_Side">
       <p class="AzForn_SideBadge">Cadastro local</p>
-      <label class="AzForn_LogoDrop" for="az_forn_logo_input" id="az_forn_logo_frame" title="Clique para enviar logotipo">
-        <img id="az_forn_logo_img" class="AzForn_LogoImg" alt="Logotipo" hidden />
-        <span id="az_forn_logo_ph" class="AzForn_LogoPh">
-          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="11" r="1.5"/><path d="M21 16l-5-5-4 4-2-2-5 5"/></svg>
-          <strong>Logotipo</strong>
-          <small>PNG, JPG ou WEBP · até 2 MB</small>
-        </span>
-      </label>
-      <input type="file" id="az_forn_logo_input" accept="image/png,image/jpeg,image/webp" hidden />
+      <div class="AzForn_LogoBlock">
+        <div class="AzForn_LogoFrame" id="az_forn_logo_frame">
+          <img id="az_forn_logo_img" class="AzForn_LogoImg" alt="Logotipo" hidden />
+          <span id="az_forn_logo_ph" class="AzForn_LogoPh">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="11" r="1.5"/><path d="M21 16l-5-5-4 4-2-2-5 5"/></svg>
+            <strong>Sem logo</strong>
+          </span>
+        </div>
+        <div class="AzForn_LogoActions">
+          <label class="AzForn_LogoBtn AzForn_LogoBtn--prim" for="az_forn_logo_input" id="az_forn_logo_lbl">
+            <span id="az_forn_logo_lbl_txt">Enviar logo</span>
+          </label>
+          <button type="button" class="AzForn_LogoBtn AzForn_LogoBtn--ghost" id="az_forn_btnLogoRemover" hidden>
+            Remover
+          </button>
+        </div>
+        <p class="AzForn_LogoHint">PNG, JPG ou WEBP · até 2 MB</p>
+        <input type="file" id="az_forn_logo_input" accept="image/png,image/jpeg,image/webp" hidden />
+      </div>
       <div class="AzForn_SidePreview">
         <p class="AzForn_SidePreviewLabel">Prévia</p>
         <strong id="az_forn_preview_nome">Novo fornecedor</strong>
@@ -123,5 +133,5 @@
 </div>
 {% endblock %}
 {% block page_js %}
-<script src="{{ url_for('az_fornecedores.static', filename='script/Saz_fornecedores.js') }}?v=5"></script>
+<script src="{{ url_for('az_fornecedores.static', filename='script/Saz_fornecedores.js') }}?v=6"></script>
 {% endblock %}

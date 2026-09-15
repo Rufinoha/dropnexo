@@ -324,7 +324,7 @@
         <td class="UsuEq_ColConvite">${badgeConvite(row.convite_status)}</td>
         <td class="UsuEq_ColAcesso">${row.dt_ultimo_login ? row.dt_ultimo_login.slice(0, 16).replace("T", " ") : "—"}</td>
         <td class="UsuEq_ColStatus"><span class="Cl_Badge ${row.status ? "Cl_Badge--ativo" : "Cl_Badge--inativo"}">${row.status ? "Ativo" : "Inativo"}</span></td>
-        <td class="UsuEq_ColAcoes" onclick="event.stopPropagation()">
+        <td class="UsuEq_ColAcoes">
           <button type="button" class="Cl_BtnAcao btnEditar" data-id="${row.id}" title="Editar">${u.gerarIconeTech("editar")}</button>
           <button type="button" class="Cl_BtnAcao btnInativar" data-id="${row.id}" title="${row.cannot_delete ? (dono ? "Dono não pode ser excluído" : "Não permitido") : "Inativar"}" ${row.cannot_delete ? "disabled" : ""}>${u.gerarIconeTech("excluir")}</button>
         </td>
@@ -474,10 +474,10 @@
   });
 
   el.tbody.addEventListener("click", async (ev) => {
-    const btn = ev.target.closest("button");
+    const btn = ev.target.closest(".btnEditar, .btnInativar, button.Cl_BtnAcao");
     if (btn) {
       if (btn.disabled) return;
-      const id = Number(btn.dataset.id || 0);
+      const id = Number(btn.getAttribute("data-id") || btn.dataset.id || 0);
       if (!id) return;
       try {
         if (btn.classList.contains("btnEditar")) return await abrirDrawerEditar(id);

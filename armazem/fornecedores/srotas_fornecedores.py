@@ -465,6 +465,64 @@ def logo_upload(id_fornecedor: int):
         conn.close()
 
 
+@az_fornecedores_bp.post("/armazem/fornecedores/<int:id_fornecedor>/logo/remover")
+@login_obrigatorio()
+@exigir_modulo(MODULO_ARMAZEM)
+@exigir_permissao(codigo="az_fornecedores.editar")
+def logo_remover(id_fornecedor: int):
+    if (r := _exigir_armazem_tenant()) is not None:
+        return r
+    id_tenant = _id_tenant()
+    if not id_tenant:
+        return jsonify(success=False, message="Sessão inválida."), 403
+
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        garantir_tabela_fornecedor_armazem(cur)
+        if not _tem_coluna_logo(cur):
+            return jsonify(success=False, message="Coluna de logotipo ainda não existe no banco."), 400
+        cur.execute(
+            """
+            SELECT logo_caminho FROM tbl_armazem_fornecedor
+            WHERE id = %s AND id_tenant_armazem = %s
+            """,
+            (id_fornecedor, id_tenant),
+        )
+        row = cur.fetchone()
+        if not row:
+            return jsonify(success=False, message="Fornecedor não encontrado."), 404
+        antigo = _caminho_abs(row[0])
+        if antigo and antigo.is_file():
+            try:
+                antigo.unlink()
+            except OSError:
+                pass
+        pasta = _pasta_logo(id_tenant, id_fornecedor)
+        if pasta.is_dir():
+            for f in pasta.iterdir():
+                if f.is_file():
+                    try:
+                        f.unlink()
+                    except OSError:
+                        pass
+        cur.execute(
+            """
+            UPDATE tbl_armazem_fornecedor
+            SET logo_caminho = NULL, atualizado_em = %s
+            WHERE id = %s AND id_tenant_armazem = %s
+            """,
+            (agora_utc(), id_fornecedor, id_tenant),
+        )
+        conn.commit()
+        return jsonify(success=True, message="Logotipo removido.")
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
 @az_fornecedores_bp.get("/armazem/fornecedores/<int:id_fornecedor>/logo")
 @login_obrigatorio()
 @exigir_modulo(MODULO_ARMAZEM)

@@ -266,49 +266,103 @@
   background: rgba(255, 255, 255, 0.12);
   color: #bfdbfe;
 }
-.AzForn_LogoDrop {
+.AzForn_LogoBlock {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.65rem;
+}
+.AzForn_LogoFrame {
+  position: relative;
+  width: 132px;
+  height: 132px;
+  border-radius: 18px;
+  border: 1.5px dashed rgba(191, 219, 254, 0.45);
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
-  aspect-ratio: 1.35 / 1;
-  width: 100%;
-  border-radius: 16px;
-  border: 1.5px dashed rgba(191, 219, 254, 0.45);
-  background: rgba(255, 255, 255, 0.06);
-  cursor: pointer;
-  overflow: hidden;
-  transition: border-color 0.15s ease, background 0.15s ease, transform 0.18s ease;
+  flex-shrink: 0;
 }
-.AzForn_LogoDrop:hover {
-  border-color: #93c5fd;
-  background: rgba(255, 255, 255, 0.1);
-  transform: translateY(-1px);
+.AzForn_LogoFrame.is-filled {
+  border-style: solid;
+  border-color: rgba(255, 255, 255, 0.35);
+  background: #fff;
 }
 .AzForn_LogoImg {
   width: 100%;
   height: 100%;
   object-fit: contain;
-  background: rgba(255, 255, 255, 0.92);
-  padding: 0.65rem;
+  padding: 0.55rem;
   box-sizing: border-box;
+  background: #fff;
+}
+.AzForn_LogoImg[hidden],
+.AzForn_LogoPh[hidden] {
+  display: none !important;
 }
 .AzForn_LogoPh {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.35rem;
-  padding: 1rem;
+  gap: 0.3rem;
+  padding: 0.75rem;
   text-align: center;
   color: #bfdbfe;
 }
 .AzForn_LogoPh strong {
-  font-size: 0.92rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+}
+.AzForn_LogoActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  width: 100%;
+}
+.AzForn_LogoBtn {
+  appearance: none;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 0.42rem 0.75rem;
+  border-radius: 999px;
+  line-height: 1.2;
+  text-align: center;
+}
+.AzForn_LogoBtn--prim {
+  background: rgba(255, 255, 255, 0.95);
+  color: #021f81;
+}
+.AzForn_LogoBtn--prim:hover {
+  background: #fff;
+}
+.AzForn_LogoBtn--ghost {
+  background: transparent;
+  color: #fecaca;
+  border: 1px solid rgba(252, 165, 165, 0.45);
+}
+.AzForn_LogoBtn--ghost:hover {
+  background: rgba(185, 28, 28, 0.25);
+  border-color: #fca5a5;
   color: #fff;
 }
-.AzForn_LogoPh small {
-  font-size: 0.72rem;
-  color: rgba(226, 232, 240, 0.65);
+.AzForn_LogoBtn[hidden] {
+  display: none !important;
+}
+.AzForn_LogoHint {
+  margin: 0;
+  font-size: 0.68rem;
   line-height: 1.35;
+  color: rgba(226, 232, 240, 0.55);
+  text-align: center;
 }
 .AzForn_SidePreview {
   display: flex;
@@ -479,9 +533,9 @@
     padding: 1rem;
     gap: 0.75rem;
   }
-  .AzForn_LogoDrop {
-    aspect-ratio: 2.4 / 1;
-    max-width: 220px;
+  .AzForn_LogoFrame {
+    width: 112px;
+    height: 112px;
   }
   .AzForn_SideHint { display: none; }
   .AzForn_FieldGrid--3 { grid-template-columns: 1fr; }
