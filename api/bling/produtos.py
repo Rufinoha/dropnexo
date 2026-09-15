@@ -363,19 +363,64 @@ from global_utils import agora_utc
 from api.bling.cliente import listar_produtos, obter_produto, obter_variacoes_produto
 
 _SAVEPOINT_PRODUTO = "bling_sync_produto"
+_SAVEPOINT_ERRO = "bling_sync_log_erro"
+
+
+def _conexao_cursor(cur):
+    return getattr(cur, "connection", None)
 
 
 def _savepoint(cur, nome: str) -> None:
     cur.execute(f"SAVEPOINT {nome}")
 
 
-def _rollback_savepoint(cur, nome: str) -> None:
-    cur.execute(f"ROLLBACK TO SAVEPOINT {nome}")
+def _rollback_savepoint(cur, nome: str) -> bool:
+    """Volta ao savepoint. True se ok; False se precisou (ou falhou) recuperar a conexão."""
+    try:
+        cur.execute(f"ROLLBACK TO SAVEPOINT {nome}")
+        return True
+    except Exception:
+        conn = _conexao_cursor(cur)
+        if conn is not None:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        return False
 
 
 def _release_savepoint(cur, nome: str) -> None:
-    cur.execute(f"RELEASE SAVEPOINT {nome}")
+    try:
+        cur.execute(f"RELEASE SAVEPOINT {nome}")
+    except Exception:
+        pass
 
+
+def _abrir_savepoint_produto(cur, idx: int) -> str:
+    """Abre savepoint exclusivo do item; se a transação estiver abortada, faz rollback total."""
+    nome = f"bling_prod_{int(idx)}"
+    try:
+        _savepoint(cur, nome)
+        return nome
+    except Exception:
+        conn = _conexao_cursor(cur)
+        if conn is not None:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        _savepoint(cur, nome)
+        return nome
+
+
+def _registrar_erro_lote_seguro(cur, **kwargs) -> None:
+    """Grava erro do lote sem envenenar a transação principal."""
+    try:
+        _savepoint(cur, _SAVEPOINT_ERRO)
+        registrar_erro_lote(cur, **kwargs)
+        _release_savepoint(cur, _SAVEPOINT_ERRO)
+    except Exception:
+        _rollback_savepoint(cur, _SAVEPOINT_ERRO)
 
 def _garantir_config(cur, id_tenant: int, contexto: str) -> dict:
     """Config Bling do módulo — usada em importação e exportação."""
@@ -1420,13 +1465,20 @@ def importar_produtos(
     if on_progresso:
         _emitir_progresso(0)
 
+    try:
+        from api.bling.imagens_fila import garantir_tabela_download_fila
+
+        garantir_tabela_download_fila(cur)
+    except Exception:
+        pass
+
     for idx, job in enumerate(jobs, start=1):
         id_bling = str(job.get("id_bling") or "")
         item = job.get("item") or {}
         nome_ref = (item.get("nome") or "").strip()
         sku_ref = (item.get("codigo") or "").strip()
         tipo_job = job.get("tipo") or "simples"
-        _savepoint(cur, _SAVEPOINT_PRODUTO)
+        sp_nome = _abrir_savepoint_produto(cur, idx)
         try:
             if tipo_job == "grupo":
                 resultado, _ = _processar_grupo_variacoes(
@@ -1458,7 +1510,7 @@ def importar_produtos(
                     grupos_concluidos=grupos_concluidos,
                     somente_mapa=somente_mapa,
                 )
-            _release_savepoint(cur, _SAVEPOINT_PRODUTO)
+            _release_savepoint(cur, sp_nome)
             if resultado == "importado":
                 importados += 1
             elif resultado == "atualizado":
@@ -1466,7 +1518,7 @@ def importar_produtos(
             elif resultado in ("ignorado_filtro", "ignorado_categoria"):
                 ignorados += 1
         except Exception as e:
-            _rollback_savepoint(cur, _SAVEPOINT_PRODUTO)
+            _rollback_savepoint(cur, sp_nome)
             if tipo_job == "grupo" and not nome_ref:
                 try:
                     pai = obter_produto(id_tenant, id_bling)
@@ -1507,7 +1559,7 @@ def importar_produtos(
                 tipo="grupo_variacoes" if tipo_job == "grupo" else "produto",
             )
             if id_importacao_lote:
-                registrar_erro_lote(
+                _registrar_erro_lote_seguro(
                     cur,
                     id_tenant=id_tenant,
                     id_lote=id_importacao_lote,

@@ -161,7 +161,12 @@ def garantir_colunas_vinculo_imagem(cur) -> None:
         try:
             cur.execute("ROLLBACK TO SAVEPOINT sp_img_vinculo")
         except Exception:
-            pass
+            conn = getattr(cur, "connection", None)
+            if conn is not None:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
 
 
 def url_imagem_temporaria(url: str | None) -> bool:

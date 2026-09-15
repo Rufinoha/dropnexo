@@ -21,14 +21,19 @@ _tabela_lock = threading.Lock()
 
 
 def garantir_tabela_download_fila(cur) -> bool:
-    """Cria a fila se a migration ainda não rodou. Retorna False se indisponível."""
+    """Cria a fila se a migration ainda não rodou. Retorna False se indisponível.
+
+    Usa SAVEPOINT para não envenenar a transação do import se o DDL falhar.
+    """
     global _tabela_ok
     if _tabela_ok:
         return True
     with _tabela_lock:
         if _tabela_ok:
             return True
+        sp = "sp_img_download_fila"
         try:
+            cur.execute(f"SAVEPOINT {sp}")
             cur.execute(
                 """
                 CREATE TABLE IF NOT EXISTS tbl_produto_imagem_download_fila (
@@ -63,10 +68,20 @@ def garantir_tabela_download_fila(cur) -> bool:
                     WHERE id_importacao_lote IS NOT NULL
                 """
             )
+            cur.execute(f"RELEASE SAVEPOINT {sp}")
             _tabela_ok = True
             return True
         except Exception:
             _log.exception("Não foi possível garantir tbl_produto_imagem_download_fila")
+            try:
+                cur.execute(f"ROLLBACK TO SAVEPOINT {sp}")
+            except Exception:
+                conn = getattr(cur, "connection", None)
+                if conn is not None:
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
             return False
 
 
