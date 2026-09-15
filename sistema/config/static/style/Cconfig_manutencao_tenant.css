@@ -90,12 +90,16 @@
 
 .Cl_TabelaPrincipal.Cat_TabelaScroll {
   max-height: min(70vh, calc(100dvh - 16rem));
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  width: 100%;
 }
 
 .Cl_TabelaPrincipal.Cat_TabelaScroll table {
   width: 100%;
-  table-layout: auto;
+  min-width: 0;
+  table-layout: fixed;
+  border-collapse: collapse;
 }
 
 .Cl_TabelaPrincipal.Cat_TabelaScroll thead th {
@@ -105,10 +109,27 @@
   background: #eef3f6;
 }
 
+.Cl_TabelaPrincipal.Cat_TabelaScroll th,
+.Cl_TabelaPrincipal.Cat_TabelaScroll td {
+  vertical-align: middle;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.CfgMt_ColId { width: 4.5%; }
+.CfgMt_ColNome { width: 22%; }
+.CfgMt_ColRazao { width: 20%; }
+.CfgMt_ColTipo { width: 10%; }
+.CfgMt_ColPlano { width: 9%; }
+.CfgMt_ColAtivo { width: 6%; }
+.CfgMt_ColData { width: 11.5%; }
+.CfgMt_ColAcoes { width: 6%; }
+
 .CfgMt_ColId,
 .CfgMt_ColAtivo,
+.CfgMt_ColTipo,
+.CfgMt_ColPlano,
 .CfgMt_ColAcoes {
-  width: 1%;
   white-space: nowrap;
 }
 .CfgMt_ColId {
@@ -117,6 +138,10 @@
   color: #64748b;
   padding-left: 0.55rem !important;
   padding-right: 0.55rem !important;
+}
+.CfgMt_ColNome,
+.CfgMt_ColRazao {
+  white-space: nowrap;
 }
 .CfgMt_ColAtivo {
   text-align: center;
@@ -131,6 +156,21 @@
 .CfgMt_ColData {
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
-  font-size: 0.86rem;
+  font-size: 0.82rem;
   color: #475569;
+}
+
+@media (max-width: 1100px) {
+  .CfgMt_ColRazao { width: 16%; }
+  .CfgMt_ColNome { width: 20%; }
+  .CfgMt_ColData { font-size: 0.78rem; }
+}
+
+@media (max-width: 900px) {
+  .Cl_TabelaPrincipal.Cat_TabelaScroll {
+    overflow-x: auto;
+  }
+  .Cl_TabelaPrincipal.Cat_TabelaScroll table {
+    min-width: 720px;
+  }
 }

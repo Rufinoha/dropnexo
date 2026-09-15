@@ -4,7 +4,7 @@
 {% block topbar_title %}Manutenção de tenant{% endblock %}
 {% block head_extra %}
 <link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_crud.css') }}?v=3" />
-<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_manutencao_tenant.css') }}?v=5" />
+<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_manutencao_tenant.css') }}?v=6" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ConfigPage">
@@ -52,25 +52,23 @@
       <thead>
         <tr>
           <th class="CfgMt_ColId">ID</th>
-          <th>Nome</th>
-          <th>Slug</th>
-          <th>CPF / CNPJ</th>
-          <th>Razão social</th>
-          <th>Tipo</th>
-          <th>Plano</th>
+          <th class="CfgMt_ColNome">Nome</th>
+          <th class="CfgMt_ColRazao">Razão social</th>
+          <th class="CfgMt_ColTipo">Tipo</th>
+          <th class="CfgMt_ColPlano">Plano</th>
           <th class="CfgMt_ColAtivo">Ativo</th>
           <th class="CfgMt_ColData">Cadastro</th>
-          <th class="CfgMt_ColData">Último acesso dono</th>
+          <th class="CfgMt_ColData">Último acesso</th>
           <th class="Cl_TableActions CfgMt_ColAcoes">Ações</th>
         </tr>
       </thead>
       <tbody id="ob_listaTenants">
-        <tr><td colspan="11">Carregando…</td></tr>
+        <tr><td colspan="9">Carregando…</td></tr>
       </tbody>
     </table>
   </div>
 </div>
 {% endblock %}
 {% block page_js %}
-<script src="{{ url_for('config.static', filename='script/Sconfig_manutencao_tenant.js') }}?v=5"></script>
+<script src="{{ url_for('config.static', filename='script/Sconfig_manutencao_tenant.js') }}?v=6"></script>
 {% endblock %}
