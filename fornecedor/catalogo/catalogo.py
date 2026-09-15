@@ -940,22 +940,23 @@ def materializar_imagens_remotas_produto(
     return convertidas
 
 
-def limpar_galeria_produto(cur, id_produto: int) -> None:
+def limpar_galeria_produto(cur, id_produto: int, *, apagar_arquivos: bool = True) -> list[str]:
+    """Remove galeria no banco. Retorna caminhos locais para limpeza em disco."""
     cur.execute(
-        "SELECT caminho FROM tbl_produto_imagem WHERE id_produto = %s AND id_variante IS NULL",
+        "SELECT caminho FROM tbl_produto_imagem WHERE id_produto = %s",
         (id_produto,),
     )
-    for row in cur.fetchall():
-        _limpar_arquivo_upload(row[0])
+    caminhos = [row[0] for row in cur.fetchall() if row and row[0]]
+    if apagar_arquivos:
+        for caminho in caminhos:
+            _limpar_arquivo_upload(caminho)
     cur.execute(
         "UPDATE tbl_produto_variante SET id_imagem_principal = NULL WHERE id_produto = %s",
         (id_produto,),
     )
     cur.execute("DELETE FROM tbl_produto_atributo_imagem WHERE id_produto = %s", (id_produto,))
-    cur.execute(
-        "DELETE FROM tbl_produto_imagem WHERE id_produto = %s AND id_variante IS NULL",
-        (id_produto,),
-    )
+    cur.execute("DELETE FROM tbl_produto_imagem WHERE id_produto = %s", (id_produto,))
+    return caminhos
 
 
 def sincronizar_imagem_principal_produto(cur, id_produto: int) -> str | None:

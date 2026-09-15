@@ -274,18 +274,30 @@
     });
     if (!c.isConfirmed) return;
 
-    const CHUNK = 15;
     const total = ids.length;
     let excluidos = 0;
     const falhas = [];
+    const mapaLinha = new Map((linhasCompletas || []).map((l) => [Number(l.id), l]));
 
-    const htmlProgresso = (feitos) =>
-      `<p style="margin:0;color:#64748b;font-size:14px;">Excluindo <strong>${feitos}</strong> de <strong>${total}</strong>…</p>
-       <p style="margin:8px 0 0;font-size:12px;color:#94a3b8;">Não feche a página.</p>`;
+    const htmlProgresso = (atual, ok, err) => {
+      const pct = total > 0 ? Math.round((atual / total) * 100) : 0;
+      return `
+        <div style="text-align:left;font-size:14px;line-height:1.45;">
+          <p style="margin:0 0 10px;color:#64748b;">Excluindo <strong>${atual}</strong> de <strong>${total}</strong></p>
+          <div style="height:10px;background:#e2e8f0;border-radius:999px;overflow:hidden;margin-bottom:10px;">
+            <div style="height:100%;width:${pct}%;background:#021F81;transition:width .15s ease;"></div>
+          </div>
+          <p style="margin:0;font-size:12px;color:#64748b;">
+            Excluídos: <strong style="color:#047857">${ok}</strong>
+            · Falhas: <strong style="color:#b91c1c">${err}</strong>
+          </p>
+          <p style="margin:8px 0 0;font-size:12px;color:#94a3b8;">Não feche a página.</p>
+        </div>`;
+    };
 
     Swal.fire({
       title: "Excluindo produtos…",
-      html: htmlProgresso(0),
+      html: htmlProgresso(0, 0, 0),
       allowOutsideClick: false,
       allowEscapeKey: false,
       showConfirmButton: false,
@@ -293,15 +305,15 @@
     });
 
     try {
-      for (let i = 0; i < ids.length; i += CHUNK) {
-        const fatia = ids.slice(i, i + CHUNK);
-        Swal.update({ html: htmlProgresso(Math.min(i + fatia.length, total)) });
+      for (let i = 0; i < ids.length; i++) {
+        const id = ids[i];
+        Swal.update({ html: htmlProgresso(i + 1, excluidos, falhas.length) });
         Swal.showLoading();
 
         const r = await fetch(`${BASE}/delete/lote`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ids: fatia }),
+          body: JSON.stringify({ ids: [id] }),
         });
         let j = {};
         try {
@@ -309,15 +321,31 @@
         } catch {
           j = {};
         }
-        if (!r.ok && !(Number(j.excluidos) > 0)) {
-          const motivo =
-            r.status === 504 || r.status === 502
-              ? "Tempo esgotado no servidor neste lote. Atualize a lista e tente de novo nos que restarem."
-              : j.message || `Erro HTTP ${r.status}.`;
-          throw new Error(motivo);
+
+        const okItem = Number(j.excluidos || 0) > 0;
+        if (okItem) {
+          excluidos += 1;
+        } else {
+          const falhaApi = Array.isArray(j.falhas) && j.falhas[0] ? j.falhas[0] : null;
+          const linha = mapaLinha.get(Number(id));
+          let motivo = falhaApi?.motivo || j.message || "";
+          if (!r.ok && !motivo) {
+            motivo =
+              r.status === 504 || r.status === 502
+                ? "Tempo esgotado no servidor."
+                : `Erro HTTP ${r.status}.`;
+          }
+          if (!motivo) motivo = "Não foi possível excluir.";
+          falhas.push({
+            id,
+            sku: falhaApi?.sku || linha?.sku || "",
+            nome: falhaApi?.nome || linha?.nome || `#${id}`,
+            motivo,
+          });
         }
-        excluidos += Number(j.excluidos || 0);
-        if (Array.isArray(j.falhas)) falhas.push(...j.falhas);
+
+        Swal.update({ html: htmlProgresso(i + 1, excluidos, falhas.length) });
+        Swal.showLoading();
       }
     } catch (e) {
       selecionados.clear();
@@ -326,7 +354,7 @@
         icon: "error",
         title: "Erro ao excluir",
         html: `<p style="text-align:left;margin:0 0 8px;">${escapeHtml(e.message || "Erro ao excluir.")}</p>
-               <p style="text-align:left;margin:0;font-size:13px;color:#64748b;">Já excluídos neste processo: <strong>${excluidos}</strong>. Atualize a página (F5) para conferir.</p>`,
+               <p style="text-align:left;margin:0;font-size:13px;color:#64748b;">Já excluídos neste processo: <strong>${excluidos}</strong>.</p>`,
         confirmButtonColor: "#021F81",
       });
       await carregar();

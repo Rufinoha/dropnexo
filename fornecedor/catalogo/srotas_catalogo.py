@@ -757,6 +757,7 @@ from fornecedor.catalogo.catalogo import (
 from fornecedor.catalogo.catalogo import (
     baixar_e_gravar_imagem_tenant,
     classificar_origem_manual,
+    descartar_arquivos_imagem_locais,
     exigir_modo_compativel,
     gerar_thumb_imagem_local,
     limpar_galeria_produto,
@@ -1979,7 +1980,14 @@ def catalogos_delete():
         )
         if not cur.fetchone():
             return jsonify(success=False, message="Produto não encontrado."), 404
-        limpar_galeria_produto(cur, _id)
+        caminhos = limpar_galeria_produto(cur, _id, apagar_arquivos=False)
+        cur.execute(
+            """
+            DELETE FROM tbl_integracao_map
+            WHERE id_tenant = %s AND entidade = 'produto' AND id_dropnexo = %s
+            """,
+            (id_tenant, _id),
+        )
         cur.execute(
             "DELETE FROM tbl_produto WHERE id = %s AND id_tenant = %s",
             (_id, id_tenant),
@@ -1987,9 +1995,18 @@ def catalogos_delete():
         if cur.rowcount == 0:
             conn.rollback()
             return jsonify(success=False, message="Produto não encontrado."), 404
-        recalcular_bytes_imagens_tenant(cur, int(id_tenant))
         conn.commit()
+        descartar_arquivos_imagem_locais(caminhos)
         return jsonify(success=True, message="Produto excluído.")
+    except Exception as e:
+        conn.rollback()
+        msg = str(e)
+        if "foreign key" in msg.lower() or "violates foreign key" in msg.lower():
+            msg = (
+                "Produto vinculado a outros registros "
+                "(pedido, vitrine, integração, etc.) e não pode ser excluído."
+            )
+        return jsonify(success=False, message=msg[:300]), 400
     finally:
         conn.close()
 
@@ -2028,7 +2045,8 @@ def catalogos_delete_lote():
         cur = conn.cursor()
         excluidos = 0
         falhas: list[dict[str, Any]] = []
-        for i, pid in enumerate(ids):
+        caminhos_lixo: list[str] = []
+        for pid in ids:
             cur.execute(
                 """
                 SELECT id, COALESCE(sku, ''), COALESCE(nome, '')
@@ -2049,16 +2067,21 @@ def catalogos_delete_lote():
                 )
                 continue
             sku, nome = row[1] or "", row[2] or f"#{pid}"
-            sp = f"del_lote_{i}_{pid}"
             try:
-                cur.execute(f"SAVEPOINT {sp}")
-                limpar_galeria_produto(cur, pid)
+                caminhos = limpar_galeria_produto(cur, pid, apagar_arquivos=False)
+                cur.execute(
+                    """
+                    DELETE FROM tbl_integracao_map
+                    WHERE id_tenant = %s AND entidade = 'produto' AND id_dropnexo = %s
+                    """,
+                    (id_tenant, pid),
+                )
                 cur.execute(
                     "DELETE FROM tbl_produto WHERE id = %s AND id_tenant = %s",
                     (pid, id_tenant),
                 )
                 if not cur.rowcount:
-                    cur.execute(f"ROLLBACK TO SAVEPOINT {sp}")
+                    conn.rollback()
                     falhas.append(
                         {
                             "id": pid,
@@ -2068,14 +2091,11 @@ def catalogos_delete_lote():
                         }
                     )
                     continue
-                cur.execute(f"RELEASE SAVEPOINT {sp}")
+                conn.commit()
                 excluidos += 1
+                caminhos_lixo.extend(caminhos)
             except Exception as e:
-                try:
-                    cur.execute(f"ROLLBACK TO SAVEPOINT {sp}")
-                except Exception:
-                    conn.rollback()
-                    cur = conn.cursor()
+                conn.rollback()
                 falhas.append(
                     {
                         "id": pid,
@@ -2085,12 +2105,10 @@ def catalogos_delete_lote():
                     }
                 )
 
-        if excluidos:
-            try:
-                recalcular_bytes_imagens_tenant(cur, int(id_tenant))
-            except Exception:
-                pass
-        conn.commit()
+        try:
+            descartar_arquivos_imagem_locais(caminhos_lixo)
+        except Exception:
+            pass
 
         if excluidos and not falhas:
             msg = f"{excluidos} produto(s) excluído(s)."
