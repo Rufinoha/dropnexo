@@ -28,6 +28,7 @@
   const panePedidos = document.getElementById("bl_pane_pedidos");
   const paneProdutos = document.getElementById("bl_pane_produtos");
   const paneCategorias = document.getElementById("bl_pane_categorias");
+  const paneImagens = document.getElementById("bl_pane_imagens");
   const paneLogs = document.getElementById("bl_pane_logs");
   const chkProdutosExportar = document.getElementById("bl_produtos_exportar");
   const chkEstoqueExportar = document.getElementById("bl_estoque_exportar");
@@ -109,9 +110,11 @@
     definirVisivel(panePedidos, tab === "pedidos");
     definirVisivel(paneProdutos, tab === "produtos");
     definirVisivel(paneCategorias, tab === "categorias");
+    definirVisivel(paneImagens, tab === "imagens");
     definirVisivel(paneLogs, tab === "logs");
     if (tab === "produtos" && BL_PAPEL !== "pedidos") carregarDepositos().catch(() => {});
     if (tab === "categorias") carregarCategorias().catch(() => {});
+    if (tab === "imagens") carregarFilaImagens().catch(() => {});
   }
 
   function aplicarEstoqueTela() {
@@ -1500,6 +1503,113 @@
     await carregarStatus();
   }
 
+  function escapeHtml(s) {
+    return String(s ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  async function carregarFilaImagens() {
+    const filtro = document.getElementById("bl_img_filtro")?.value || "ativos";
+    const meta = document.getElementById("bl_img_fila_meta");
+    const body = document.getElementById("bl_img_fila_body");
+    if (meta) meta.textContent = "Atualizando fila…";
+    const r = await fetch(
+      `/api/integracoes/bling/imagens/fila?status=${encodeURIComponent(filtro)}`
+    );
+    const j = await r.json();
+    if (!r.ok || !j.success) throw new Error(j.message || "Erro ao carregar fila.");
+
+    const c = j.contagem || {};
+    const setN = (id, v) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = String(Number(v) || 0);
+    };
+    setN("bl_img_pendente", c.pendente);
+    setN("bl_img_processando", c.processando);
+    setN("bl_img_ok", c.ok);
+    setN("bl_img_erro", c.erro);
+
+    if (!j.tabela_ok) {
+      if (meta) {
+        meta.textContent =
+          "Tabela da fila indisponível — rode o SQL 052_produto_imagem_download_fila.sql no banco.";
+      }
+    } else if (meta) {
+      const total = Number(c.total) || 0;
+      const pend = (Number(c.pendente) || 0) + (Number(c.processando) || 0);
+      meta.textContent =
+        total === 0
+          ? "Fila vazia — importe produtos do Bling para enfileirar imagens."
+          : `${pend} em andamento · ${Number(c.ok) || 0} ok · ${Number(c.erro) || 0} erro(s) · ${total} no total.`;
+    }
+
+    const itens = Array.isArray(j.itens) ? j.itens : [];
+    if (!body) return;
+    if (!itens.length) {
+      body.innerHTML = `<tr><td colspan="4" class="Bl_Hint">Nenhum item neste filtro.</td></tr>`;
+      return;
+    }
+    const rotuloStatus = {
+      pendente: "Pendente",
+      processando: "Processando",
+      ok: "Ok",
+      erro: "Erro",
+    };
+    body.innerHTML = itens
+      .map((it) => {
+        const nome = escapeHtml([it.sku, it.nome].filter(Boolean).join(" — ") || `#${it.id_produto}`);
+        const st = rotuloStatus[it.status] || it.status || "—";
+        const det = escapeHtml(it.ultimo_erro || (it.url_download ? it.url_download.slice(0, 80) : "—"));
+        return `<tr>
+          <td><strong>${nome}</strong><div class="Bl_Hint">img #${it.id_imagem}</div></td>
+          <td><span class="Bl_ImgStatus Bl_ImgStatus--${escapeHtml(it.status || "")}">${escapeHtml(st)}</span></td>
+          <td>${Number(it.tentativas) || 0}/${Number(it.max_tentativas) || 3}</td>
+          <td class="Bl_ImgFilaDet">${det}</td>
+        </tr>`;
+      })
+      .join("");
+  }
+
+  async function processarFilaImagens() {
+    Swal.fire({
+      title: "Processando fila…",
+      html: "<p style='margin:0;color:#64748b;font-size:14px;'>Baixando imagens pendentes. Aguarde.</p>",
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+      showConfirmButton: false,
+      didOpen: () => Swal.showLoading(),
+    });
+    const r = await fetch("/api/integracoes/bling/imagens/fila/processar", { method: "POST" });
+    const j = await r.json();
+    if (!r.ok || !j.success) throw new Error(j.message || "Falha ao processar fila.");
+    await carregarFilaImagens();
+    await Swal.fire({
+      icon: "success",
+      title: "Fila processada",
+      text: j.message || "Concluído.",
+      confirmButtonColor: "#021F81",
+    });
+  }
+
+  document.getElementById("bl_btn_img_atualizar")?.addEventListener("click", () => {
+    carregarFilaImagens().catch((e) =>
+      Swal.fire({ icon: "error", title: "Erro", text: e.message, confirmButtonColor: "#021F81" })
+    );
+  });
+  document.getElementById("bl_img_filtro")?.addEventListener("change", () => {
+    carregarFilaImagens().catch((e) =>
+      Swal.fire({ icon: "error", title: "Erro", text: e.message, confirmButtonColor: "#021F81" })
+    );
+  });
+  document.getElementById("bl_btn_img_processar")?.addEventListener("click", () => {
+    processarFilaImagens().catch((e) =>
+      Swal.fire({ icon: "error", title: "Erro", text: e.message, confirmButtonColor: "#021F81" })
+    );
+  });
+
   document.getElementById("bl_subtabs")?.addEventListener("click", (ev) => {
     const btn = ev.target.closest(".Bl_SubTab");
     if (!btn) return;
@@ -1718,7 +1828,15 @@
     window.history.replaceState({}, "", location.pathname);
   }
   const aba = params.get("aba");
-  const abaMap = { estoque: "produtos", config: "config", produtos: "produtos", pedidos: "pedidos", categorias: "categorias", logs: "logs" };
+  const abaMap = {
+    estoque: "produtos",
+    config: "config",
+    produtos: "produtos",
+    pedidos: "pedidos",
+    categorias: "categorias",
+    imagens: "imagens",
+    logs: "logs",
+  };
   if (abaMap[aba]) pickTab(abaMap[aba]);
 
   carregarStatus().catch((e) => {

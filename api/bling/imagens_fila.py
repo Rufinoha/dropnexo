@@ -172,6 +172,67 @@ def contar_fila(
     return out
 
 
+def listar_itens_fila(
+    cur,
+    *,
+    id_tenant: int,
+    status: str | None = None,
+    limite: int = 40,
+) -> list[dict[str, Any]]:
+    """Últimos itens da fila (com SKU/nome do produto) para o painel de status."""
+    if not garantir_tabela_download_fila(cur):
+        return []
+    where = ["f.id_tenant = %s"]
+    params: list[Any] = [int(id_tenant)]
+    st = (status or "").strip().lower()
+    if st == "ativos":
+        where.append("f.status IN ('pendente', 'processando', 'erro')")
+    elif st in ("pendente", "processando", "ok", "erro"):
+        where.append("f.status = %s")
+        params.append(st)
+    params.append(max(1, min(int(limite or 40), 100)))
+    cur.execute(
+        f"""
+        SELECT f.id, f.id_produto, f.id_imagem, f.status, f.tentativas, f.max_tentativas,
+               f.ultimo_erro, f.url_download, f.atualizado_em, f.processado_em,
+               COALESCE(p.sku, ''), COALESCE(p.nome, '')
+        FROM tbl_produto_imagem_download_fila f
+        LEFT JOIN tbl_produto p ON p.id = f.id_produto
+        WHERE {' AND '.join(where)}
+        ORDER BY
+          CASE f.status
+            WHEN 'processando' THEN 0
+            WHEN 'pendente' THEN 1
+            WHEN 'erro' THEN 2
+            ELSE 3
+          END,
+          f.atualizado_em DESC NULLS LAST,
+          f.id DESC
+        LIMIT %s
+        """,
+        params,
+    )
+    itens = []
+    for r in cur.fetchall():
+        itens.append(
+            {
+                "id": int(r[0]),
+                "id_produto": int(r[1]),
+                "id_imagem": int(r[2]),
+                "status": (r[3] or "").strip().lower(),
+                "tentativas": int(r[4] or 0),
+                "max_tentativas": int(r[5] or 3),
+                "ultimo_erro": (r[6] or "")[:400] or None,
+                "url_download": (r[7] or "")[:300],
+                "atualizado_em": r[8].isoformat() if r[8] else None,
+                "processado_em": r[9].isoformat() if r[9] else None,
+                "sku": r[10] or "",
+                "nome": r[11] or "",
+            }
+        )
+    return itens
+
+
 def _claim_jobs(
     cur,
     *,

@@ -1305,6 +1305,105 @@ def _pode_ler_imagem_produto_upload(caminho: str, id_tenant_sessao: int | None) 
         conn.close()
 
 
+@bling_bp.get("/api/integracoes/bling/imagens/fila")
+@login_obrigatorio()
+def api_imagens_fila_status():
+    if not _pode_integracoes():
+        return jsonify(success=False, message="Sem permissão."), 403
+    id_tenant = session.get("id_tenant")
+    status_filtro = (request.args.get("status") or "").strip().lower() or None
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        from api.bling.imagens_fila import contar_fila, garantir_tabela_download_fila, listar_itens_fila
+
+        ok_tabela = garantir_tabela_download_fila(cur)
+        if ok_tabela:
+            try:
+                conn.commit()
+            except Exception:
+                conn.rollback()
+        contagem = contar_fila(cur, id_tenant=int(id_tenant))
+        status_q = status_filtro or "ativos"
+        itens = listar_itens_fila(
+            cur,
+            id_tenant=int(id_tenant),
+            status=None if status_q == "todos" else status_q,
+            limite=40,
+        )
+        return jsonify(
+            success=True,
+            tabela_ok=bool(ok_tabela),
+            contagem=contagem,
+            itens=itens,
+        )
+    finally:
+        conn.close()
+
+
+@bling_bp.post("/api/integracoes/bling/imagens/fila/processar")
+@login_obrigatorio()
+def api_imagens_fila_processar():
+    if not _pode_integracoes():
+        return jsonify(success=False, message="Sem permissão."), 403
+    id_tenant = int(session.get("id_tenant") or 0)
+    if not id_tenant:
+        return jsonify(success=False, message="Tenant inválido."), 400
+    from api.bling.imagens_fila import contar_fila, drenar_fila_imagens
+
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        antes = contar_fila(cur, id_tenant=id_tenant)
+    finally:
+        conn.close()
+
+    pend = int(antes.get("pendente") or 0) + int(antes.get("processando") or 0)
+    if pend <= 0 and int(antes.get("erro") or 0) <= 0:
+        return jsonify(
+            success=True,
+            message="Nada pendente na fila.",
+            contagem=antes,
+        )
+
+    # Reabre erros para nova tentativa (mantém ok).
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        from api.bling.imagens_fila import garantir_tabela_download_fila
+
+        if not garantir_tabela_download_fila(cur):
+            return jsonify(
+                success=False,
+                message="Tabela da fila indisponível. Rode o SQL 052_produto_imagem_download_fila.sql.",
+            ), 500
+        cur.execute(
+            """
+            UPDATE tbl_produto_imagem_download_fila
+            SET status = 'pendente', tentativas = 0, ultimo_erro = NULL, atualizado_em = %s
+            WHERE id_tenant = %s AND status = 'erro'
+            """,
+            (agora_utc(), id_tenant),
+        )
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)[:300]), 500
+    finally:
+        conn.close()
+
+    resumo = drenar_fila_imagens(id_tenant=id_tenant, id_importacao_lote=None)
+    return jsonify(
+        success=True,
+        message=(
+            f"Fila processada: {int(resumo.get('ok') or 0)} ok, "
+            f"{int(resumo.get('erro') or 0)} erro(s), "
+            f"{int(resumo.get('pendente') or 0)} pendente(s)."
+        ),
+        contagem=resumo,
+    )
+
+
 @bling_bp.get("/api/produto-imagem/arquivo")
 @login_obrigatorio()
 def api_produto_imagem_arquivo():

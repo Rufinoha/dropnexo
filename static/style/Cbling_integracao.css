@@ -1066,3 +1066,50 @@
   .Bl_SyncGrid { grid-template-columns: 1fr; }
   .Bl_SubTab { font-size: 0.78rem; padding: 0.5rem 0.45rem; }
 }
+
+.Bl_ImgFilaStats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+.Bl_ImgFilaStat {
+  border: 1px solid rgba(28, 46, 60, 0.12);
+  border-radius: 12px;
+  background: #fff;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.Bl_ImgFilaStat span {
+  font-size: 0.75rem;
+  color: #64748b;
+}
+.Bl_ImgFilaStat strong {
+  font-size: 1.25rem;
+  color: #0f172a;
+}
+.Bl_ImgFilaStat--erro strong { color: #b91c1c; }
+.Bl_ImgStatus {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: #334155;
+}
+.Bl_ImgStatus--pendente { background: #fef3c7; color: #92400e; }
+.Bl_ImgStatus--processando { background: #dbeafe; color: #1d4ed8; }
+.Bl_ImgStatus--ok { background: #d1fae5; color: #047857; }
+.Bl_ImgStatus--erro { background: #fee2e2; color: #b91c1c; }
+.Bl_ImgFilaDet {
+  font-size: 0.78rem;
+  color: #64748b;
+  max-width: 320px;
+  word-break: break-word;
+}
+@media (max-width: 900px) {
+  .Bl_ImgFilaStats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

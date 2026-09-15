@@ -3,7 +3,7 @@
 {% block title %}Bling — Integrações — {{ MARCA_NOME }}{% endblock %}
 {% block topbar_title %}Integração Bling{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('static', filename='style/Cbling_integracao.css') }}?v=20" />
+<link rel="stylesheet" href="{{ url_for('static', filename='style/Cbling_integracao.css') }}?v=21" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal Bl_Wrap">
@@ -55,6 +55,7 @@
       <button type="button" class="Bl_SubTab is-active" data-bl-tab="config">Configurações</button>
       <button type="button" class="Bl_SubTab" data-bl-tab="pedidos">Pedidos</button>
       <button type="button" class="Bl_SubTab" data-bl-tab="produtos">Produtos</button>
+      <button type="button" class="Bl_SubTab" data-bl-tab="imagens">Imagens</button>
       <button type="button" class="Bl_SubTab" data-bl-tab="categorias">Categorias</button>
       {% endif %}
       {% if session.get('eh_desenvolvedor') %}
@@ -434,6 +435,50 @@
       </section>
     </div>
 
+    <div id="bl_pane_imagens" hidden>
+      <h3>Fila de download de imagens</h3>
+      <p class="Bl_Hint">
+        Na importação Bling, as imagens entram na fila e são gravadas em
+        <code>static/imge/produtos/{tenant}/</code>. Aqui você acompanha pendentes, erros e pode processar agora.
+      </p>
+
+      <div class="Bl_ImgFilaStats" id="bl_img_fila_stats" aria-live="polite">
+        <div class="Bl_ImgFilaStat"><span>Pendentes</span><strong id="bl_img_pendente">0</strong></div>
+        <div class="Bl_ImgFilaStat"><span>Processando</span><strong id="bl_img_processando">0</strong></div>
+        <div class="Bl_ImgFilaStat"><span>Ok</span><strong id="bl_img_ok">0</strong></div>
+        <div class="Bl_ImgFilaStat Bl_ImgFilaStat--erro"><span>Erros</span><strong id="bl_img_erro">0</strong></div>
+      </div>
+
+      <div class="Bl_Actions Bl_Actions--inline" style="margin:14px 0 12px;">
+        <button type="button" class="Cl_botaoprimario" id="bl_btn_img_processar">Processar fila agora</button>
+        <button type="button" class="Cl_BtnCancelar" id="bl_btn_img_atualizar">Atualizar</button>
+        <select id="bl_img_filtro" class="Bl_CatBulkSel" aria-label="Filtrar status" style="min-width:140px;">
+          <option value="ativos">Pendentes / erros</option>
+          <option value="pendente">Só pendentes</option>
+          <option value="erro">Só erros</option>
+          <option value="ok">Só ok</option>
+          <option value="todos">Todos</option>
+        </select>
+      </div>
+
+      <p class="Bl_Meta" id="bl_img_fila_meta">Carregando fila…</p>
+      <div class="Bl_CatTableWrap">
+        <table class="Bl_CatTable" id="bl_tbl_img_fila">
+          <thead>
+            <tr class="Bl_CatHeadRow">
+              <th>Produto</th>
+              <th>Status</th>
+              <th>Tentativas</th>
+              <th>Detalhe</th>
+            </tr>
+          </thead>
+          <tbody id="bl_img_fila_body">
+            <tr><td colspan="4" class="Bl_Hint">Nenhum item.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
     <div id="bl_pane_logs" {% if not session.get('eh_desenvolvedor') %}hidden{% endif %}>
       <h3>Últimos logs</h3>
       <p class="Bl_Hint">Registro das últimas operações de integração com o Bling.</p>
@@ -443,5 +488,5 @@
 </div>
 {% endblock %}
 {% block page_js %}
-<script src="{{ url_for('static', filename='script/Sbling_integracao.js') }}?v=34"></script>
+<script src="{{ url_for('static', filename='script/Sbling_integracao.js') }}?v=35"></script>
 {% endblock %}
