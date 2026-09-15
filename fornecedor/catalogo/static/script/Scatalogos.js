@@ -274,40 +274,68 @@
     });
     if (!c.isConfirmed) return;
 
+    const CHUNK = 15;
+    const total = ids.length;
+    let excluidos = 0;
+    const falhas = [];
+
+    const htmlProgresso = (feitos) =>
+      `<p style="margin:0;color:#64748b;font-size:14px;">Excluindo <strong>${feitos}</strong> de <strong>${total}</strong>…</p>
+       <p style="margin:8px 0 0;font-size:12px;color:#94a3b8;">Não feche a página.</p>`;
+
     Swal.fire({
       title: "Excluindo produtos…",
-      html: `<p style="margin:0;color:#64748b;font-size:14px;">Processando <strong>${ids.length}</strong> item(ns). Aguarde.</p>`,
+      html: htmlProgresso(0),
       allowOutsideClick: false,
       allowEscapeKey: false,
       showConfirmButton: false,
       didOpen: () => Swal.showLoading(),
     });
 
-    let j = {};
     try {
-      const r = await fetch(`${BASE}/delete/lote`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids }),
-      });
-      try {
-        j = await r.json();
-      } catch {
-        j = {};
-      }
-      if (!r.ok && !(Number(j.excluidos) > 0)) {
-        throw new Error(j.message || "Erro ao excluir.");
+      for (let i = 0; i < ids.length; i += CHUNK) {
+        const fatia = ids.slice(i, i + CHUNK);
+        Swal.update({ html: htmlProgresso(Math.min(i + fatia.length, total)) });
+        Swal.showLoading();
+
+        const r = await fetch(`${BASE}/delete/lote`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ids: fatia }),
+        });
+        let j = {};
+        try {
+          j = await r.json();
+        } catch {
+          j = {};
+        }
+        if (!r.ok && !(Number(j.excluidos) > 0)) {
+          const motivo =
+            r.status === 504 || r.status === 502
+              ? "Tempo esgotado no servidor neste lote. Atualize a lista e tente de novo nos que restarem."
+              : j.message || `Erro HTTP ${r.status}.`;
+          throw new Error(motivo);
+        }
+        excluidos += Number(j.excluidos || 0);
+        if (Array.isArray(j.falhas)) falhas.push(...j.falhas);
       }
     } catch (e) {
-      await Swal.fire("Erro", e.message || "Erro ao excluir.", "error");
+      selecionados.clear();
+      syncBulkBar();
+      await Swal.fire({
+        icon: "error",
+        title: "Erro ao excluir",
+        html: `<p style="text-align:left;margin:0 0 8px;">${escapeHtml(e.message || "Erro ao excluir.")}</p>
+               <p style="text-align:left;margin:0;font-size:13px;color:#64748b;">Já excluídos neste processo: <strong>${excluidos}</strong>. Atualize a página (F5) para conferir.</p>`,
+        confirmButtonColor: "#021F81",
+      });
+      await carregar();
       return;
     }
 
     selecionados.clear();
     syncBulkBar();
 
-    const excluidos = Number(j.excluidos || 0);
-    const falhas = Array.isArray(j.falhas) ? j.falhas : [];
     let html = `<p style="text-align:left;margin:0 0 8px;font-size:14px;">${excluidos} produto(s) excluído(s).</p>`;
     if (falhas.length) {
       html += `<p style="text-align:left;margin:10px 0 6px;color:#b91c1c;font-size:14px;"><strong>${falhas.length} não excluído(s):</strong></p>`;
