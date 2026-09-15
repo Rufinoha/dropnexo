@@ -218,8 +218,8 @@
         if (el && val) el.value = val;
       });
       const modoImgEl = document.getElementById("bl_modo_imagem");
-      if (modoImgEl && cfg.modo_imagem && !["link", "hibrido", "download"].includes(cfg.modo_imagem)) {
-        modoImgEl.value = "hibrido";
+      if (modoImgEl) {
+        modoImgEl.value = "download";
       }
       const armHint = document.getElementById("bl_armazenamento_hint");
       if (armHint) {
@@ -1329,7 +1329,7 @@
     const body = {
       contexto: ctx,
       fonte_principal: document.getElementById("bl_fonte")?.value,
-      modo_imagem: document.getElementById("bl_modo_imagem")?.value,
+      modo_imagem: "download",
       produtos_modo: document.getElementById("bl_produtos_modo")?.value,
       estoque_modo: document.getElementById("bl_estoque_modo")?.value,
     };

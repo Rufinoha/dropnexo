@@ -455,9 +455,8 @@ def salvar_config():
             fonte = (body.get("fonte_principal") or "bling").strip()
             if fonte not in ("bling", "dropnexo"):
                 fonte = "bling"
-            modo_img = (body.get("modo_imagem") or "hibrido").strip().lower()
-            if modo_img not in ("link", "hibrido", "download"):
-                modo_img = "hibrido"
+            # Importação Bling sempre materializa imagens localmente (igual cadastro manual).
+            modo_img = "download"
 
         cur.execute(
             """

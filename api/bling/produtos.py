@@ -391,7 +391,7 @@ def _garantir_config(cur, id_tenant: int, contexto: str) -> dict:
             opcoes = {}
     return {
         "fonte_principal": row[0] or "bling",
-        "modo_imagem": row[1] or "hibrido",
+        "modo_imagem": row[1] or "download",
         "produtos_modo": row[2] or "importar",
         "estoque_modo": row[3] or "atualizar",
         "opcoes": opcoes if isinstance(opcoes, dict) else {},
@@ -1090,9 +1090,10 @@ def _processar_item_produto(
             id_produto=prod_id,
             sku=sku,
             midia_itens=midia,
-            modo_imagem=cfg.get("modo_imagem") or "download",
+            modo_imagem="download",
         )
 
+    urls_mapa = [d.get("url") for d in midia if (d.get("url") or "").strip()]
     _upsert_mapa(
         cur,
         id_tenant,
@@ -1100,7 +1101,7 @@ def _processar_item_produto(
         id_bling,
         prod_id,
         sku,
-        {"nome": detalhe.get("nome"), "urls_imagem": urls, "id_categoria_bling": id_cat_bling},
+        {"nome": detalhe.get("nome"), "urls_imagem": urls_mapa, "id_categoria_bling": id_cat_bling},
     )
     return ("importado" if criando else "atualizado"), prod_id
 
@@ -1190,10 +1191,11 @@ def _processar_grupo_variacoes(
             id_produto=prod_id,
             sku=sku_mapa or f"bling-{id_bling_pai}",
             midia_itens=midia,
-            modo_imagem=cfg.get("modo_imagem") or "download",
+            modo_imagem="download",
             variacoes_bling=variacoes,
         )
 
+    urls_mapa = [d.get("url") for d in midia if (d.get("url") or "").strip()]
     _upsert_mapa(
         cur,
         id_tenant,
@@ -1205,7 +1207,7 @@ def _processar_grupo_variacoes(
             "nome": detalhe_pai.get("nome"),
             "formato": "E",
             "qtd_variacoes": len(variacoes),
-            "urls_imagem": urls,
+            "urls_imagem": urls_mapa,
             "id_categoria_bling": id_cat_bling,
         },
     )

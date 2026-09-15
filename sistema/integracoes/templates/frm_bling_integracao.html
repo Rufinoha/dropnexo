@@ -349,10 +349,9 @@
         <label class="Bl_Field">
           <span>Modo das imagens</span>
           <select id="bl_modo_imagem">
-            <option value="hibrido">Híbrido — baixa só links temporários (recomendado)</option>
-            <option value="link">Somente link — renova na madrugada</option>
-            <option value="download">Baixar todas para o servidor</option>
+            <option value="download" selected>Baixar para o servidor (sempre)</option>
           </select>
+          <span class="Bl_Hint">Na importação, as imagens do Bling são sempre baixadas e gravadas localmente — mesmo modelo do cadastro manual. Opções só-link/híbrido foram descontinuadas.</span>
           <span class="Bl_Hint" id="bl_armazenamento_hint" hidden></span>
         </label>
         <label class="Bl_Field">
