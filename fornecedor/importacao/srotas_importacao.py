@@ -853,6 +853,18 @@ def importacao_bling():
         )
         conn.commit()
 
+        from api.bling.imagens_fila import contar_fila, drenar_fila_imagens
+
+        fila = resultado.get("imagens_fila") or contar_fila(
+            cur, id_tenant=id_tenant, id_importacao_lote=id_lote
+        )
+        pend_img = int(fila.get("pendente") or 0) + int(fila.get("processando") or 0)
+        if pend_img > 0:
+            resultado["imagens_fila"] = drenar_fila_imagens(
+                id_tenant=id_tenant,
+                id_importacao_lote=id_lote,
+            )
+
         status = resultado.get("status") or "ok"
         total_falhas = int(resultado.get("total_falhas") or 0)
         if status == "erro":
@@ -861,6 +873,9 @@ def importacao_bling():
             msg = f"Importação {numero} concluída com {total_falhas} falha(s)."
         else:
             msg = f"Importação {numero} concluída com sucesso."
+        img_erro = int((resultado.get("imagens_fila") or {}).get("erro") or 0)
+        if img_erro:
+            msg += f" {img_erro} imagem(ns) com falha no download."
 
         lote = obter_lote(cur, id_tenant, id_lote)
         erros = listar_erros_lote(cur, id_tenant, id_lote)

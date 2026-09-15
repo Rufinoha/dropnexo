@@ -245,9 +245,12 @@ def aplicar_imagens_produto(
     modo_imagem: str | None = None,
     variacoes_bling: list[dict] | None = None,
     midia_itens: list[dict] | None = None,
+    adiar_download: bool = False,
+    id_importacao_lote: int | None = None,
 ) -> tuple[str | None, list[str]]:
-    """Popula galeria do pai (sempre download local) e vincula variantes.
+    """Popula galeria do pai (download local ou fila) e vincula variantes.
 
+    Com ``adiar_download=True`` (import Bling): só registra mídia e enfileira.
     Retorna (caminho principal, arquivos locais criados nesta chamada).
     Se a transação for desfeita depois, chame ``descartar_arquivos_imagem_locais``.
     """
@@ -276,6 +279,8 @@ def aplicar_imagens_produto(
         baixar_fn=baixar_imagem,
         pasta_sku_fn=pasta_imagens_sku,
         caminho_db_fn=caminho_db_imagem,
+        adiar_download=adiar_download,
+        id_importacao_lote=id_importacao_lote,
     )
 
     try:
@@ -1103,6 +1108,8 @@ def _processar_item_produto(
                 sku=sku,
                 midia_itens=midia,
                 modo_imagem="download",
+                adiar_download=True,
+                id_importacao_lote=id_importacao_lote,
             )
 
         urls_mapa = [d.get("url") for d in midia if (d.get("url") or "").strip()]
@@ -1210,6 +1217,8 @@ def _processar_grupo_variacoes(
                 midia_itens=midia,
                 modo_imagem="download",
                 variacoes_bling=variacoes,
+                adiar_download=True,
+                id_importacao_lote=id_importacao_lote,
             )
 
         urls_mapa = [d.get("url") for d in midia if (d.get("url") or "").strip()]
@@ -1555,6 +1564,13 @@ def importar_produtos(
         )
 
     erros_txt = [f"Bling #{f['id_bling']}: {f['motivo']}" for f in falhas]
+    imagens_fila = {"pendente": 0, "processando": 0, "ok": 0, "erro": 0, "total": 0}
+    try:
+        from api.bling.imagens_fila import contar_fila
+
+        imagens_fila = contar_fila(cur, id_tenant=id_tenant, id_importacao_lote=id_importacao_lote)
+    except Exception:
+        pass
     return {
         "importados": importados,
         "atualizados": atualizados,
@@ -1570,6 +1586,7 @@ def importar_produtos(
         "status": status,
         "resumo": resumo,
         "id_importacao_lote": id_importacao_lote,
+        "imagens_fila": imagens_fila,
     }
 
 

@@ -655,6 +655,19 @@ def sync_produtos():
             modo_categorias="mapeamento",
         )
         conn.commit()
+
+        from api.bling.imagens_fila import contar_fila, drenar_fila_imagens
+
+        fila = resultado.get("imagens_fila") or contar_fila(
+            cur, id_tenant=int(id_tenant), id_importacao_lote=id_lote
+        )
+        pend_img = int(fila.get("pendente") or 0) + int(fila.get("processando") or 0)
+        if pend_img > 0:
+            resultado["imagens_fila"] = drenar_fila_imagens(
+                id_tenant=int(id_tenant),
+                id_importacao_lote=id_lote,
+            )
+
         status = resultado.get("status") or "ok"
         total_falhas = int(resultado.get("total_falhas") or 0)
         if status == "erro":
@@ -663,6 +676,9 @@ def sync_produtos():
             msg = f"Importação {numero}: {total_falhas} produto(s) não importado(s)."
         else:
             msg = f"Importação {numero} concluída."
+        img_erro = int((resultado.get("imagens_fila") or {}).get("erro") or 0)
+        if img_erro:
+            msg += f" {img_erro} imagem(ns) com falha no download."
         resultado["numero"] = numero
         return jsonify(success=True, message=msg, dados=resultado)
     except ValueError as e:

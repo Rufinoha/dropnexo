@@ -133,8 +133,14 @@ def normalizar_modo_imagem_bling(modo: str | None) -> str:
     return "download"
 
 
+_COLS_VINCULO_OK = False
+
+
 def garantir_colunas_vinculo_imagem(cur) -> None:
-    """Garante colunas de vínculo Bling (idempotente). Falha silenciosa se sem DDL."""
+    """Garante colunas de vínculo Bling (idempotente). Uma vez por processo após OK."""
+    global _COLS_VINCULO_OK
+    if _COLS_VINCULO_OK:
+        return
     try:
         cur.execute("SAVEPOINT sp_img_vinculo")
         cur.execute(
@@ -150,6 +156,7 @@ def garantir_colunas_vinculo_imagem(cur) -> None:
             """
         )
         cur.execute("RELEASE SAVEPOINT sp_img_vinculo")
+        _COLS_VINCULO_OK = True
     except Exception:
         try:
             cur.execute("ROLLBACK TO SAVEPOINT sp_img_vinculo")
@@ -740,10 +747,13 @@ def baixar_e_gravar_imagem_tenant(
     id_imagem: int,
     url: str,
     max_bytes: int = 2 * 1024 * 1024,
+    leve: bool = False,
 ) -> tuple[str, int]:
     """
     Resolve link (página→direct se preciso), baixa bytes e grava em
     static/imge/produtos/{tenant}/. Retorna (caminho_db, tamanho_bytes).
+
+    leve=True (fila/import): baixa e grava; só re-encode se não for JPG ok.
     """
     bruto = (url or "").strip()
     # Direct link (.jpg/.png/…) → 1 HTTP. Página (Postimages etc.) → resolve depois baixa.
@@ -767,7 +777,6 @@ def baixar_e_gravar_imagem_tenant(
         )
         from PIL import Image, ImageOps
 
-        # JPEG já ok (tamanho + dimensões) → grava sem re-encode (bem mais rápido).
         gravar = None
         if data.startswith(b"\xff\xd8\xff"):
             im = Image.open(io.BytesIO(data))
@@ -784,10 +793,14 @@ def baixar_e_gravar_imagem_tenant(
                 gravar = data
 
         if gravar is None:
-            valid = validar_imagem_upload_bytes(data)
-            gravar = valid.get("jpg") if isinstance(valid, dict) else None
-            if not gravar:
+            if leve and data.startswith(b"\xff\xd8\xff"):
+                # Import: aceita JPG grande sem re-encode caro; só bloqueia se minúscula.
                 gravar = data
+            else:
+                valid = validar_imagem_upload_bytes(data)
+                gravar = valid.get("jpg") if isinstance(valid, dict) else None
+                if not gravar:
+                    gravar = data
     except ValueError:
         raise
     except Exception:
@@ -1013,10 +1026,14 @@ def aplicar_galeria_produto(
     pasta_sku_fn=None,
     caminho_db_fn=None,
     midia_itens: list[dict] | None = None,
+    adiar_download: bool = False,
+    id_importacao_lote: int | None = None,
 ) -> tuple[str | None, dict[str, int], list[str]]:
     """Sincroniza galeria do produto com origem Bling/manual.
 
-    Ordem: registro no banco → download → atualiza caminho.
+    Ordem padrão: registro no banco → download → atualiza caminho.
+    Com ``adiar_download=True`` (import Bling): só registra + enfileira download.
+
     Arquivos novos gravados nesta chamada são devolvidos em ``arquivos_novos``;
     se a transação/savepoint for desfeita depois, o caller deve chamar
     ``descartar_arquivos_imagem_locais``.
@@ -1062,10 +1079,11 @@ def aplicar_galeria_produto(
     if not itens:
         limpar_galeria_produto(cur, id_produto)
         sincronizar_imagem_principal_produto(cur, id_produto)
-        try:
-            recalcular_bytes_imagens_tenant(cur, id_tenant)
-        except Exception:
-            pass
+        if not adiar_download:
+            try:
+                recalcular_bytes_imagens_tenant(cur, id_tenant)
+            except Exception:
+                pass
         return None, {}, []
 
     cur.execute(
@@ -1099,6 +1117,23 @@ def aplicar_galeria_produto(
     principal: str | None = None
     ordem = 0
     arquivos_novos: list[str] = []
+
+    def _enfileirar(id_img: int, url: str) -> None:
+        if not adiar_download:
+            return
+        try:
+            from api.bling.imagens_fila import enfileirar_download_imagem
+
+            enfileirar_download_imagem(
+                cur,
+                id_tenant=id_tenant,
+                id_produto=id_produto,
+                id_imagem=id_img,
+                url=url,
+                id_importacao_lote=id_importacao_lote,
+            )
+        except Exception:
+            pass
 
     def _materializar(id_img: int, url: str) -> tuple[str, int]:
         caminho_db, tam = baixar_e_gravar_imagem_tenant(
@@ -1135,34 +1170,15 @@ def aplicar_galeria_produto(
                 id_img = existente["id"]
                 caminho_db = existente["caminho"]
                 if caminho_eh_url(caminho_db):
-                    try:
-                        caminho_db, tam = _materializar(id_img, url)
-                        cur.execute(
-                            """
-                            UPDATE tbl_produto_imagem
-                            SET caminho = %s, tamanho_bytes = %s, link_expira_em = NULL,
-                                origem = %s, bling_anexo_id = %s, url_origem = %s,
-                                ordem = %s, principal = %s
-                            WHERE id = %s
-                            """,
-                            (
-                                caminho_db,
-                                tam,
-                                "bling_interna" if tipo == "interna" else "bling_externa",
-                                anexo_id,
-                                None if tipo == "interna" else url,
-                                ordem,
-                                ordem == 0,
-                                id_img,
-                            ),
-                        )
-                    except Exception:
+                    if adiar_download:
+                        _enfileirar(id_img, url)
                         cur.execute(
                             """
                             UPDATE tbl_produto_imagem
                             SET ordem = %s, principal = %s,
                                 bling_anexo_id = COALESCE(%s, bling_anexo_id),
-                                url_origem = COALESCE(%s, url_origem)
+                                url_origem = COALESCE(%s, url_origem),
+                                origem = %s
                             WHERE id = %s
                             """,
                             (
@@ -1170,9 +1186,49 @@ def aplicar_galeria_produto(
                                 ordem == 0,
                                 anexo_id,
                                 None if tipo == "interna" else url,
+                                "bling_interna" if tipo == "interna" else "bling_externa",
                                 id_img,
                             ),
                         )
+                    else:
+                        try:
+                            caminho_db, tam = _materializar(id_img, url)
+                            cur.execute(
+                                """
+                                UPDATE tbl_produto_imagem
+                                SET caminho = %s, tamanho_bytes = %s, link_expira_em = NULL,
+                                    origem = %s, bling_anexo_id = %s, url_origem = %s,
+                                    ordem = %s, principal = %s
+                                WHERE id = %s
+                                """,
+                                (
+                                    caminho_db,
+                                    tam,
+                                    "bling_interna" if tipo == "interna" else "bling_externa",
+                                    anexo_id,
+                                    None if tipo == "interna" else url,
+                                    ordem,
+                                    ordem == 0,
+                                    id_img,
+                                ),
+                            )
+                        except Exception:
+                            cur.execute(
+                                """
+                                UPDATE tbl_produto_imagem
+                                SET ordem = %s, principal = %s,
+                                    bling_anexo_id = COALESCE(%s, bling_anexo_id),
+                                    url_origem = COALESCE(%s, url_origem)
+                                WHERE id = %s
+                                """,
+                                (
+                                    ordem,
+                                    ordem == 0,
+                                    anexo_id,
+                                    None if tipo == "interna" else url,
+                                    id_img,
+                                ),
+                            )
                 else:
                     cur.execute(
                         """
@@ -1201,40 +1257,54 @@ def aplicar_galeria_produto(
             else:
                 origem = "bling_interna" if tipo == "interna" else "bling_externa"
                 url_origem = None if tipo == "interna" else url
-                # 1) reserva id no banco  2) baixa arquivo  3) grava caminho
-                cur.execute(
-                    """
-                    INSERT INTO tbl_produto_imagem (
-                        id_produto, caminho, ordem, principal, origem,
-                        link_expira_em, tamanho_bytes, bling_anexo_id, url_origem
-                    )
-                    VALUES (%s, '', %s, %s, %s, NULL, NULL, %s, %s)
-                    RETURNING id
-                    """,
-                    (id_produto, ordem, ordem == 0, origem, anexo_id, url_origem),
-                )
-                id_img = int(cur.fetchone()[0])
-                try:
-                    caminho_db, tam = _materializar(id_img, url)
+                if adiar_download:
                     cur.execute(
                         """
-                        UPDATE tbl_produto_imagem
-                        SET caminho = %s, tamanho_bytes = %s, link_expira_em = NULL
-                        WHERE id = %s
+                        INSERT INTO tbl_produto_imagem (
+                            id_produto, caminho, ordem, principal, origem,
+                            link_expira_em, tamanho_bytes, bling_anexo_id, url_origem
+                        )
+                        VALUES (%s, %s, %s, %s, %s, NULL, NULL, %s, %s)
+                        RETURNING id
                         """,
-                        (caminho_db, tam, id_img),
+                        (id_produto, url, ordem, ordem == 0, origem, anexo_id, url_origem),
                     )
-                except Exception:
-                    # Sem arquivo local: fica a URL (não gera órfão no disco)
+                    id_img = int(cur.fetchone()[0])
                     caminho_db = url
+                    _enfileirar(id_img, url)
+                else:
                     cur.execute(
                         """
-                        UPDATE tbl_produto_imagem
-                        SET caminho = %s, tamanho_bytes = NULL, link_expira_em = NULL
-                        WHERE id = %s
+                        INSERT INTO tbl_produto_imagem (
+                            id_produto, caminho, ordem, principal, origem,
+                            link_expira_em, tamanho_bytes, bling_anexo_id, url_origem
+                        )
+                        VALUES (%s, '', %s, %s, %s, NULL, NULL, %s, %s)
+                        RETURNING id
                         """,
-                        (caminho_db, id_img),
+                        (id_produto, ordem, ordem == 0, origem, anexo_id, url_origem),
                     )
+                    id_img = int(cur.fetchone()[0])
+                    try:
+                        caminho_db, tam = _materializar(id_img, url)
+                        cur.execute(
+                            """
+                            UPDATE tbl_produto_imagem
+                            SET caminho = %s, tamanho_bytes = %s, link_expira_em = NULL
+                            WHERE id = %s
+                            """,
+                            (caminho_db, tam, id_img),
+                        )
+                    except Exception:
+                        caminho_db = url
+                        cur.execute(
+                            """
+                            UPDATE tbl_produto_imagem
+                            SET caminho = %s, tamanho_bytes = NULL, link_expira_em = NULL
+                            WHERE id = %s
+                            """,
+                            (caminho_db, id_img),
+                        )
                 manter_ids.add(id_img)
 
             mapa[url] = id_img
@@ -1257,10 +1327,11 @@ def aplicar_galeria_produto(
 
         definir_imagem_modo(cur, id_produto, "upload")
         sincronizar_imagem_principal_produto(cur, id_produto)
-        try:
-            recalcular_bytes_imagens_tenant(cur, id_tenant)
-        except Exception:
-            pass
+        if not adiar_download:
+            try:
+                recalcular_bytes_imagens_tenant(cur, id_tenant)
+            except Exception:
+                pass
         return principal, mapa, arquivos_novos
     except Exception:
         descartar_arquivos_imagem_locais(arquivos_novos)

@@ -475,6 +475,11 @@ def progresso_importacao_dict(lote: dict[str, Any], meta: dict[str, Any]) -> dic
         "mensagem": meta.get("mensagem"),
         "erro_fatal": meta.get("erro_fatal"),
         "status_importacao": meta.get("status_importacao"),
+        "imagens_total": int(meta.get("imagens_total") or 0),
+        "imagens_ok": int(meta.get("imagens_ok") or 0),
+        "imagens_erro": int(meta.get("imagens_erro") or 0),
+        "imagens_pendente": int(meta.get("imagens_pendente") or 0),
+        "imagens_processados": int(meta.get("imagens_processados") or 0),
     }
 
 

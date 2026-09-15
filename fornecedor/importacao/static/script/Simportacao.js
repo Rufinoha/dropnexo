@@ -536,20 +536,31 @@
     const proc = Number(p?.processados || 0);
     const pct = Number(p?.percentual ?? (total ? Math.min(100, Math.round((proc / total) * 100)) : 0));
     const fase = p?.fase || "processando";
-    const faseTxt =
+    const imgTotal = Number(p?.imagens_total || 0);
+    const imgDone = Number(p?.imagens_processados || (Number(p?.imagens_ok || 0) + Number(p?.imagens_erro || 0)));
+    const imgPct = imgTotal ? Math.min(100, Math.round((imgDone / imgTotal) * 100)) : 0;
+    let faseTxt =
       fase === "listando" || fase === "iniciando"
         ? "Preparando lista de produtos no Bling…"
-        : fase === "concluido"
-          ? "Finalizando…"
-          : "Importando produtos do Bling…";
+        : fase === "imagens"
+          ? "Produtos salvos — baixando imagens em paralelo…"
+          : fase === "concluido"
+            ? "Finalizando…"
+            : "Importando produtos do Bling…";
+    if (fase === "imagens" && imgTotal) {
+      faseTxt = `Baixando imagens: <strong>${imgDone}</strong> de <strong>${imgTotal}</strong>`;
+    }
+    const barraPct = fase === "imagens" ? imgPct : pct;
+    const contagem =
+      fase === "imagens" && imgTotal
+        ? `<strong>${imgDone}</strong> de <strong>${imgTotal}</strong> imagem(ns)`
+        : `<strong>${proc}</strong>${total ? ` de <strong>${total}</strong>` : ""} produto(s)`;
     return `<div class="imp-swal-progress">
       <p style="margin:0 0 12px;text-align:left;font-size:0.95em">${faseTxt}</p>
       <div style="background:#e2e8f0;border-radius:6px;height:12px;overflow:hidden">
-        <div style="width:${pct}%;background:#021F81;height:100%;transition:width .35s ease"></div>
+        <div style="width:${barraPct}%;background:#021F81;height:100%;transition:width .35s ease"></div>
       </div>
-      <p style="margin:12px 0 0;text-align:center;font-size:1.05em">
-        <strong>${proc}</strong>${total ? ` de <strong>${total}</strong>` : ""} produto(s)
-      </p>
+      <p style="margin:12px 0 0;text-align:center;font-size:1.05em">${contagem}</p>
       <p style="margin:8px 0 0;text-align:center;font-size:0.85em;color:#64748b">
         Inseridos: ${Number(p?.importados || 0)} · Atualizados: ${Number(p?.atualizados || 0)} · Erros: ${Number(p?.erros || 0)}
       </p>

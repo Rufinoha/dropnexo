@@ -3,6 +3,7 @@ from __future__ import annotations
 
 # ── importacao_progresso ──────────────────────────────
 
+import json
 import logging
 import threading
 from typing import Any
@@ -90,6 +91,72 @@ def _worker_importacao(
             atualizados = int(resultado.get("atualizados") or 0)
             total_falhas = int(resultado.get("total_falhas") or 0)
             total_linhas = int(resultado.get("total_jobs") or 0)
+            imagens_fila = resultado.get("imagens_fila") or {}
+            pend_img = int(imagens_fila.get("pendente") or 0) + int(imagens_fila.get("processando") or 0)
+
+            if pend_img > 0:
+                cur.execute(
+                    """
+                    UPDATE tbl_importacao_lote
+                    SET meta = COALESCE(meta, '{}'::jsonb) || %s::jsonb
+                    WHERE id = %s
+                    """,
+                    (
+                        json.dumps(
+                            {
+                                "fase": "imagens",
+                                "imagens_total": int(imagens_fila.get("total") or pend_img),
+                                "imagens_ok": int(imagens_fila.get("ok") or 0),
+                                "imagens_erro": int(imagens_fila.get("erro") or 0),
+                                "imagens_pendente": pend_img,
+                                "mensagem": f"Baixando imagens ({pend_img} pendente(s))…",
+                            }
+                        ),
+                        id_lote,
+                    ),
+                )
+                conn.commit()
+
+                from api.bling.imagens_fila import drenar_fila_imagens
+
+                def _on_img(p: dict[str, int]) -> None:
+                    done = int(p.get("ok") or 0) + int(p.get("erro") or 0)
+                    total_img = int(p.get("total") or 0)
+                    pend = int(p.get("pendente") or 0) + int(p.get("processando") or 0)
+                    conn_p = Var_ConectarBanco()
+                    try:
+                        cur_p = conn_p.cursor()
+                        cur_p.execute(
+                            """
+                            UPDATE tbl_importacao_lote
+                            SET meta = COALESCE(meta, '{}'::jsonb) || %s::jsonb
+                            WHERE id = %s
+                            """,
+                            (
+                                json.dumps(
+                                    {
+                                        "fase": "imagens",
+                                        "imagens_total": total_img,
+                                        "imagens_ok": int(p.get("ok") or 0),
+                                        "imagens_erro": int(p.get("erro") or 0),
+                                        "imagens_pendente": pend,
+                                        "imagens_processados": done,
+                                        "mensagem": f"Baixando imagens: {done}/{total_img}",
+                                    }
+                                ),
+                                id_lote,
+                            ),
+                        )
+                        conn_p.commit()
+                    finally:
+                        conn_p.close()
+
+                resumo_img = drenar_fila_imagens(
+                    id_tenant=id_tenant,
+                    id_importacao_lote=id_lote,
+                    on_progresso=_on_img,
+                )
+                imagens_fila = resumo_img
 
             if status_res == "erro":
                 msg = f"Nenhum produto importado. {total_falhas} com falha."
@@ -97,6 +164,9 @@ def _worker_importacao(
                 msg = f"Concluída com {total_falhas} falha(s)."
             else:
                 msg = "Importação concluída com sucesso."
+            img_erro = int((imagens_fila or {}).get("erro") or 0)
+            if img_erro:
+                msg += f" {img_erro} imagem(ns) com falha no download."
 
             lote_status = STATUS_ERRO if importados + atualizados == 0 and total_falhas else STATUS_CONCLUIDO
             finalizar_lote(
@@ -112,6 +182,10 @@ def _worker_importacao(
                     "mensagem": msg,
                     "status_importacao": status_res,
                     "processados": total_linhas,
+                    "imagens_total": int((imagens_fila or {}).get("total") or 0),
+                    "imagens_ok": int((imagens_fila or {}).get("ok") or 0),
+                    "imagens_erro": img_erro,
+                    "imagens_pendente": 0,
                 },
             )
             conn.commit()
