@@ -153,8 +153,6 @@ def _logo_url(fid: int, caminho: str | None) -> str:
 def _row_dict(row) -> dict:
     fid = row[0]
     caminho = row[9] if len(row) > 9 else None
-    qtd_produtos = int(row[10] or 0) if len(row) > 10 else 0
-    qtd_publicados = int(row[11] or 0) if len(row) > 11 else 0
     return {
         "id": fid,
         "nome": row[1] or "",
@@ -167,8 +165,6 @@ def _row_dict(row) -> dict:
         "ativo": bool(row[8]),
         "logo_caminho": caminho or "",
         "logo_url": _logo_url(fid, caminho),
-        "qtd_produtos": qtd_produtos,
-        "qtd_publicados": qtd_publicados,
     }
 
 
@@ -245,19 +241,12 @@ def dados():
         )
         cur.execute(
             f"""
-            SELECT {cols},
-                   (SELECT COUNT(*)::int FROM tbl_produto p
-                    WHERE p.id_tenant = %s
-                      AND p.id_armazem_fornecedor = af.id) AS qtd_produtos,
-                   (SELECT COUNT(*)::int FROM tbl_produto p
-                    WHERE p.id_tenant = %s
-                      AND p.id_armazem_fornecedor = af.id
-                      AND p.publicado = TRUE) AS qtd_publicados
+            SELECT {cols}
             FROM tbl_armazem_fornecedor af
             WHERE {where}
             ORDER BY COALESCE(NULLIF(af.nome_fantasia, ''), af.nome)
             """,
-            [id_tenant, id_tenant] + params,
+            params,
         )
         return jsonify(success=True, dados=[_row_dict(r) for r in cur.fetchall()])
     except Exception as e:
