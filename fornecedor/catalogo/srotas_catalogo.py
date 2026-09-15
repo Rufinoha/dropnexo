@@ -2435,6 +2435,7 @@ def catalogos_imagens_link():
             (id_produto,),
         )
         id_img = int(cur.fetchone()[0])
+        caminho_db = None
         try:
             caminho_db, tamanho = baixar_e_gravar_imagem_tenant(
                 id_tenant=int(id_tenant),
@@ -2451,26 +2452,32 @@ def catalogos_imagens_link():
             conn.rollback()
             return jsonify(success=False, message=str(e)), 400
 
-        cur.execute(
-            "SELECT COALESCE(MAX(ordem), -1) + 1 FROM tbl_produto_imagem WHERE id_produto = %s AND id != %s",
-            (id_produto, id_img),
-        )
-        ordem = int(cur.fetchone()[0] or 0)
-        principal = ordem == 0
-        cur.execute(
-            """
-            UPDATE tbl_produto_imagem
-            SET caminho = %s, ordem = %s, principal = %s, origem = 'manual_url',
-                tamanho_bytes = %s
-            WHERE id = %s
-            RETURNING id, caminho, ordem, principal, origem
-            """,
-            (caminho_db, ordem, principal, tamanho, id_img),
-        )
-        row = cur.fetchone()
-        _sincronizar_imagem_principal(cur, id_produto)
-        recalcular_bytes_imagens_tenant(cur, int(id_tenant))
-        conn.commit()
+        try:
+            cur.execute(
+                "SELECT COALESCE(MAX(ordem), -1) + 1 FROM tbl_produto_imagem WHERE id_produto = %s AND id != %s",
+                (id_produto, id_img),
+            )
+            ordem = int(cur.fetchone()[0] or 0)
+            principal = ordem == 0
+            cur.execute(
+                """
+                UPDATE tbl_produto_imagem
+                SET caminho = %s, ordem = %s, principal = %s, origem = 'manual_url',
+                    tamanho_bytes = %s
+                WHERE id = %s
+                RETURNING id, caminho, ordem, principal, origem
+                """,
+                (caminho_db, ordem, principal, tamanho, id_img),
+            )
+            row = cur.fetchone()
+            _sincronizar_imagem_principal(cur, id_produto)
+            recalcular_bytes_imagens_tenant(cur, int(id_tenant))
+            conn.commit()
+        except Exception:
+            if caminho_db:
+                _remover_imagem_disco(caminho_db)
+            conn.rollback()
+            raise
         img = _imagem_dict_row(row)
         img["tamanho_bytes"] = tamanho
         return jsonify(
@@ -2561,31 +2568,36 @@ def catalogos_imagens_upload():
         id_img = cur.fetchone()[0]
         pasta = _pasta_imagens_tenant(int(id_tenant))
         destino = pasta / f"{id_produto}_{id_img}{ext}"
-        if gravar_jpg:
-            destino.write_bytes(gravar_jpg)
-        else:
-            destino.write_bytes(bruto)
         caminho_db = f"imge/produtos/{id_tenant}/{id_produto}_{id_img}{ext}"
-        cur.execute(
-            "SELECT COALESCE(MAX(ordem), -1) + 1 FROM tbl_produto_imagem WHERE id_produto = %s AND id != %s",
-            (id_produto, id_img),
-        )
-        ordem = int(cur.fetchone()[0] or 0)
-        principal = ordem == 0
-        cur.execute(
-            """
-            UPDATE tbl_produto_imagem
-            SET caminho = %s, ordem = %s, principal = %s, origem = 'manual_upload',
-                tamanho_bytes = %s
-            WHERE id = %s
-            RETURNING id, caminho, ordem, principal, origem
-            """,
-            (caminho_db, ordem, principal, tamanho, id_img),
-        )
-        row = cur.fetchone()
-        _sincronizar_imagem_principal(cur, id_produto)
-        recalcular_bytes_imagens_tenant(cur, int(id_tenant))
-        conn.commit()
+        try:
+            if gravar_jpg:
+                destino.write_bytes(gravar_jpg)
+            else:
+                destino.write_bytes(bruto)
+            cur.execute(
+                "SELECT COALESCE(MAX(ordem), -1) + 1 FROM tbl_produto_imagem WHERE id_produto = %s AND id != %s",
+                (id_produto, id_img),
+            )
+            ordem = int(cur.fetchone()[0] or 0)
+            principal = ordem == 0
+            cur.execute(
+                """
+                UPDATE tbl_produto_imagem
+                SET caminho = %s, ordem = %s, principal = %s, origem = 'manual_upload',
+                    tamanho_bytes = %s
+                WHERE id = %s
+                RETURNING id, caminho, ordem, principal, origem
+                """,
+                (caminho_db, ordem, principal, tamanho, id_img),
+            )
+            row = cur.fetchone()
+            _sincronizar_imagem_principal(cur, id_produto)
+            recalcular_bytes_imagens_tenant(cur, int(id_tenant))
+            conn.commit()
+        except Exception:
+            _remover_imagem_disco(caminho_db)
+            conn.rollback()
+            raise
         img = _imagem_dict_row(row)
         img["tamanho_bytes"] = tamanho
         msg = "Imagem enviada."

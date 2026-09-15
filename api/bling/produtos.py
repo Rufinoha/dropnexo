@@ -13,6 +13,7 @@ import requests
 from fornecedor.catalogo.catalogo import (
     aplicar_galeria_produto,
     classificar_origem_bling,
+    descartar_arquivos_imagem_locais,
     limpar_galeria_produto,
     sincronizar_cache_variante,
     vincular_imagens_variantes_bling,
@@ -244,8 +245,12 @@ def aplicar_imagens_produto(
     modo_imagem: str | None = None,
     variacoes_bling: list[dict] | None = None,
     midia_itens: list[dict] | None = None,
-) -> str | None:
-    """Popula galeria do pai (sempre download local) e vincula variantes. Retorna caminho principal."""
+) -> tuple[str | None, list[str]]:
+    """Popula galeria do pai (sempre download local) e vincula variantes.
+
+    Retorna (caminho principal, arquivos locais criados nesta chamada).
+    Se a transação for desfeita depois, chame ``descartar_arquivos_imagem_locais``.
+    """
     itens = midia_itens
     if itens is None and urls:
         itens = [
@@ -258,9 +263,9 @@ def aplicar_imagens_produto(
             if (u or "").strip().startswith(("http://", "https://"))
         ]
     if not itens:
-        return None
+        return None, []
 
-    principal, mapa = aplicar_galeria_produto(
+    principal, mapa, arquivos_novos = aplicar_galeria_produto(
         cur,
         id_tenant=id_tenant,
         id_produto=id_produto,
@@ -273,34 +278,38 @@ def aplicar_imagens_produto(
         caminho_db_fn=caminho_db_imagem,
     )
 
-    if variacoes_bling:
-        vincular_imagens_variantes_bling(
-            cur,
-            id_produto=id_produto,
-            mapa_url_id=mapa,
-            variacoes_bling=variacoes_bling,
-            extrair_urls_fn=lambda p: extrair_urls_imagem_bling(p),
-        )
-    else:
-        vincular_variante_padrao_galeria(cur, id_produto)
+    try:
+        if variacoes_bling:
+            vincular_imagens_variantes_bling(
+                cur,
+                id_produto=id_produto,
+                mapa_url_id=mapa,
+                variacoes_bling=variacoes_bling,
+                extrair_urls_fn=lambda p: extrair_urls_imagem_bling(p),
+            )
+        else:
+            vincular_variante_padrao_galeria(cur, id_produto)
 
-    cur.execute(
-        """
-        UPDATE tbl_produto_variante SET imagem_url = %s, atualizado_em = %s
-        WHERE id = (SELECT id_variante_padrao FROM tbl_produto WHERE id = %s)
-          AND herda_pai = TRUE
-        """,
-        (principal, agora_utc(), id_produto),
-    )
-    if principal:
         cur.execute(
-            "SELECT id FROM tbl_produto_variante WHERE id_produto = %s AND herda_pai = TRUE",
-            (id_produto,),
+            """
+            UPDATE tbl_produto_variante SET imagem_url = %s, atualizado_em = %s
+            WHERE id = (SELECT id_variante_padrao FROM tbl_produto WHERE id = %s)
+              AND herda_pai = TRUE
+            """,
+            (principal, agora_utc(), id_produto),
         )
-        for row in cur.fetchall():
-            sincronizar_cache_variante(cur, int(row[0]))
+        if principal:
+            cur.execute(
+                "SELECT id FROM tbl_produto_variante WHERE id_produto = %s AND herda_pai = TRUE",
+                (id_produto,),
+            )
+            for row in cur.fetchall():
+                sincronizar_cache_variante(cur, int(row[0]))
+    except Exception:
+        descartar_arquivos_imagem_locais(arquivos_novos)
+        raise
 
-    return principal
+    return principal, arquivos_novos
 
 
 # Compatibilidade com imports antigos
@@ -310,6 +319,7 @@ __all__ = [
     "extrair_urls_imagem_bling",
     "limpar_galeria_produto",
     "baixar_imagem",
+    "descartar_arquivos_imagem_locais",
 ]
 
 
@@ -1083,26 +1093,31 @@ def _processar_item_produto(
     )
 
     midia = extrair_midia_imagens_bling(detalhe)
-    if midia:
-        aplicar_imagens_produto(
-            cur,
-            id_tenant=id_tenant,
-            id_produto=prod_id,
-            sku=sku,
-            midia_itens=midia,
-            modo_imagem="download",
-        )
+    arquivos_novos: list[str] = []
+    try:
+        if midia:
+            _, arquivos_novos = aplicar_imagens_produto(
+                cur,
+                id_tenant=id_tenant,
+                id_produto=prod_id,
+                sku=sku,
+                midia_itens=midia,
+                modo_imagem="download",
+            )
 
-    urls_mapa = [d.get("url") for d in midia if (d.get("url") or "").strip()]
-    _upsert_mapa(
-        cur,
-        id_tenant,
-        contexto,
-        id_bling,
-        prod_id,
-        sku,
-        {"nome": detalhe.get("nome"), "urls_imagem": urls_mapa, "id_categoria_bling": id_cat_bling},
-    )
+        urls_mapa = [d.get("url") for d in midia if (d.get("url") or "").strip()]
+        _upsert_mapa(
+            cur,
+            id_tenant,
+            contexto,
+            id_bling,
+            prod_id,
+            sku,
+            {"nome": detalhe.get("nome"), "urls_imagem": urls_mapa, "id_categoria_bling": id_cat_bling},
+        )
+    except Exception:
+        descartar_arquivos_imagem_locais(arquivos_novos)
+        raise
     return ("importado" if criando else "atualizado"), prod_id
 
 
@@ -1184,66 +1199,69 @@ def _processar_grupo_variacoes(
 
     midia = extrair_midia_imagens_bling(detalhe_pai, variacoes=variacoes)
     sku_mapa = _sku_pai_de_variacoes(detalhe_pai, variacoes)
-    if midia:
-        aplicar_imagens_produto(
-            cur,
-            id_tenant=id_tenant,
-            id_produto=prod_id,
-            sku=sku_mapa or f"bling-{id_bling_pai}",
-            midia_itens=midia,
-            modo_imagem="download",
-            variacoes_bling=variacoes,
-        )
+    arquivos_novos: list[str] = []
+    try:
+        if midia:
+            _, arquivos_novos = aplicar_imagens_produto(
+                cur,
+                id_tenant=id_tenant,
+                id_produto=prod_id,
+                sku=sku_mapa or f"bling-{id_bling_pai}",
+                midia_itens=midia,
+                modo_imagem="download",
+                variacoes_bling=variacoes,
+            )
 
-    urls_mapa = [d.get("url") for d in midia if (d.get("url") or "").strip()]
-    _upsert_mapa(
-        cur,
-        id_tenant,
-        contexto,
-        id_bling_pai,
-        prod_id,
-        sku_mapa,
-        {
-            "nome": detalhe_pai.get("nome"),
-            "formato": "E",
-            "qtd_variacoes": len(variacoes),
-            "urls_imagem": urls_mapa,
-            "id_categoria_bling": id_cat_bling,
-        },
-    )
-    for var in variacoes:
-        var_id = str(var.get("id") or "")
-        if not var_id:
-            continue
-        var_sku = (var.get("codigo") or "").strip()
+        urls_mapa = [d.get("url") for d in midia if (d.get("url") or "").strip()]
         _upsert_mapa(
             cur,
             id_tenant,
             contexto,
-            var_id,
+            id_bling_pai,
             prod_id,
-            var_sku,
+            sku_mapa,
             {
-                "nome": var.get("nome"),
-                "formato": "V",
-                "id_pai_bling": id_bling_pai,
+                "nome": detalhe_pai.get("nome"),
+                "formato": "E",
+                "qtd_variacoes": len(variacoes),
+                "urls_imagem": urls_mapa,
+                "id_categoria_bling": id_cat_bling,
             },
         )
-        cur.execute(
-            """
-            SELECT id FROM tbl_produto_variante
-            WHERE id_produto = %s AND sku IS NOT DISTINCT FROM %s
-            ORDER BY id DESC LIMIT 1
-            """,
-            (prod_id, var_sku or None),
-        )
-        vrow = cur.fetchone()
-        if vrow:
-            pass
+        for var in variacoes:
+            var_id = str(var.get("id") or "")
+            if not var_id:
+                continue
+            var_sku = (var.get("codigo") or "").strip()
+            _upsert_mapa(
+                cur,
+                id_tenant,
+                contexto,
+                var_id,
+                prod_id,
+                var_sku,
+                {
+                    "nome": var.get("nome"),
+                    "formato": "V",
+                    "id_pai_bling": id_bling_pai,
+                },
+            )
+            cur.execute(
+                """
+                SELECT id FROM tbl_produto_variante
+                WHERE id_produto = %s AND sku IS NOT DISTINCT FROM %s
+                ORDER BY id DESC LIMIT 1
+                """,
+                (prod_id, var_sku or None),
+            )
+            cur.fetchone()
 
-    if id_bling_pai:
-        concluidos.add(id_bling_pai)
-    return ("importado" if criando else "atualizado"), prod_id
+        if id_bling_pai:
+            concluidos.add(id_bling_pai)
+        return ("importado" if criando else "atualizado"), prod_id
+    except Exception:
+        descartar_arquivos_imagem_locais(arquivos_novos)
+        raise
 
 
 def _iterar_listas_produtos(

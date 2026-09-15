@@ -690,6 +690,12 @@ def _limpar_arquivo_upload(caminho: str | None) -> None:
                 pass
 
 
+def descartar_arquivos_imagem_locais(caminhos: list[str] | None) -> None:
+    """Remove arquivos locais criados no disco (não desfaz rollback de SQL)."""
+    for c in caminhos or []:
+        _limpar_arquivo_upload(c)
+
+
 def pasta_imagens_tenant(id_tenant: int) -> Path:
     """Pasta pública por tenant: static/imge/produtos/{id_tenant}/."""
     pasta = _raiz_projeto() / "static" / "imge" / "produtos" / str(int(id_tenant))
@@ -979,19 +985,17 @@ def aplicar_galeria_produto(
     pasta_sku_fn=None,
     caminho_db_fn=None,
     midia_itens: list[dict] | None = None,
-) -> tuple[str | None, dict[str, int]]:
+) -> tuple[str | None, dict[str, int], list[str]]:
     """Sincroniza galeria do produto com origem Bling/manual.
 
-    Sempre baixa e grava arquivo local (igual cadastro manual).
-    Sync por vínculo:
-      - interna Bling → bling_anexo_id
-      - externa → url_origem
-    Inclui novas, remove as que sumiram, mantém as que batem o vínculo
-    (não rebaixa só porque a URL temporária do Bling mudou).
+    Ordem: registro no banco → download → atualiza caminho.
+    Arquivos novos gravados nesta chamada são devolvidos em ``arquivos_novos``;
+    se a transação/savepoint for desfeita depois, o caller deve chamar
+    ``descartar_arquivos_imagem_locais``.
 
-    Retorna (caminho principal, mapa url/caminho → id_imagem).
+    Retorna (caminho principal, mapa url/caminho → id_imagem, arquivos_novos).
     """
-    _ = (modo_imagem, baixar_fn, pasta_sku_fn, caminho_db_fn)  # legado da API Bling
+    _ = (modo_imagem, baixar_fn, pasta_sku_fn, caminho_db_fn, sku)  # legado da API Bling
     garantir_colunas_vinculo_imagem(cur)
 
     itens: list[dict] = []
@@ -1028,14 +1032,13 @@ def aplicar_galeria_produto(
 
     itens = itens[:MAX_IMAGENS_PRODUTO]
     if not itens:
-        # Galeria vazia na origem → remove tudo local
         limpar_galeria_produto(cur, id_produto)
         sincronizar_imagem_principal_produto(cur, id_produto)
         try:
             recalcular_bytes_imagens_tenant(cur, id_tenant)
         except Exception:
             pass
-        return None, {}
+        return None, {}, []
 
     cur.execute(
         """
@@ -1060,7 +1063,6 @@ def aplicar_galeria_produto(
             por_anexo[rec["bling_anexo_id"]] = rec
         if rec["url_origem"]:
             por_url[rec["url_origem"]] = rec
-        # legado: caminho ainda era a URL externa
         if caminho_eh_url(rec["caminho"]):
             por_url.setdefault(rec["caminho"].strip(), rec)
 
@@ -1068,156 +1070,173 @@ def aplicar_galeria_produto(
     manter_ids: set[int] = set()
     principal: str | None = None
     ordem = 0
+    arquivos_novos: list[str] = []
 
-    for it in itens:
-        url = it["url"]
-        anexo_id = it.get("bling_anexo_id")
-        try:
-            anexo_id = int(anexo_id) if anexo_id is not None else None
-        except (TypeError, ValueError):
-            anexo_id = None
-        tipo = it.get("tipo") or ("interna" if anexo_id else "externa")
-        if tipo == "interna" and not anexo_id:
-            # Sem ID: trata como externa pela URL (melhor esforço)
-            tipo = "externa"
+    def _materializar(id_img: int, url: str) -> tuple[str, int]:
+        caminho_db, tam = baixar_e_gravar_imagem_tenant(
+            id_tenant=id_tenant,
+            id_produto=id_produto,
+            id_imagem=id_img,
+            url=url,
+        )
+        arquivos_novos.append(caminho_db)
+        return caminho_db, tam
 
-        existente = None
-        if tipo == "interna" and anexo_id and anexo_id in por_anexo:
-            existente = por_anexo[anexo_id]
-        elif tipo == "externa" and url in por_url:
-            existente = por_url[url]
+    try:
+        for it in itens:
+            url = it["url"]
+            anexo_id = it.get("bling_anexo_id")
+            try:
+                anexo_id = int(anexo_id) if anexo_id is not None else None
+            except (TypeError, ValueError):
+                anexo_id = None
+            tipo = it.get("tipo") or ("interna" if anexo_id else "externa")
+            if tipo == "interna" and not anexo_id:
+                tipo = "externa"
 
-        if existente and existente["id"] in manter_ids:
-            # Duplicata na origem — ignora
-            continue
+            existente = None
+            if tipo == "interna" and anexo_id and anexo_id in por_anexo:
+                existente = por_anexo[anexo_id]
+            elif tipo == "externa" and url in por_url:
+                existente = por_url[url]
 
-        if existente:
-            id_img = existente["id"]
-            caminho_db = existente["caminho"]
-            # Se ainda for URL remota (legado), materializa agora
-            if caminho_eh_url(caminho_db):
-                try:
-                    caminho_db, tam = baixar_e_gravar_imagem_tenant(
-                        id_tenant=id_tenant,
-                        id_produto=id_produto,
-                        id_imagem=id_img,
-                        url=url,
-                    )
+            if existente and existente["id"] in manter_ids:
+                continue
+
+            if existente:
+                id_img = existente["id"]
+                caminho_db = existente["caminho"]
+                if caminho_eh_url(caminho_db):
+                    try:
+                        caminho_db, tam = _materializar(id_img, url)
+                        cur.execute(
+                            """
+                            UPDATE tbl_produto_imagem
+                            SET caminho = %s, tamanho_bytes = %s, link_expira_em = NULL,
+                                origem = %s, bling_anexo_id = %s, url_origem = %s,
+                                ordem = %s, principal = %s
+                            WHERE id = %s
+                            """,
+                            (
+                                caminho_db,
+                                tam,
+                                "bling_interna" if tipo == "interna" else "bling_externa",
+                                anexo_id,
+                                None if tipo == "interna" else url,
+                                ordem,
+                                ordem == 0,
+                                id_img,
+                            ),
+                        )
+                    except Exception:
+                        cur.execute(
+                            """
+                            UPDATE tbl_produto_imagem
+                            SET ordem = %s, principal = %s,
+                                bling_anexo_id = COALESCE(%s, bling_anexo_id),
+                                url_origem = COALESCE(%s, url_origem)
+                            WHERE id = %s
+                            """,
+                            (
+                                ordem,
+                                ordem == 0,
+                                anexo_id,
+                                None if tipo == "interna" else url,
+                                id_img,
+                            ),
+                        )
+                else:
                     cur.execute(
                         """
                         UPDATE tbl_produto_imagem
-                        SET caminho = %s, tamanho_bytes = %s, link_expira_em = NULL,
-                            origem = %s, bling_anexo_id = %s, url_origem = %s,
-                            ordem = %s, principal = %s
+                        SET ordem = %s, principal = %s,
+                            bling_anexo_id = COALESCE(%s, bling_anexo_id),
+                            url_origem = CASE
+                                WHEN %s IS NOT NULL THEN %s
+                                ELSE url_origem
+                            END,
+                            link_expira_em = NULL,
+                            origem = %s
                         WHERE id = %s
                         """,
                         (
-                            caminho_db,
-                            tam,
-                            "bling_interna" if tipo == "interna" else "bling_externa",
-                            anexo_id,
-                            None if tipo == "interna" else url,
                             ordem,
                             ordem == 0,
+                            anexo_id,
+                            None if tipo == "interna" else url,
+                            None if tipo == "interna" else url,
+                            "bling_interna" if tipo == "interna" else "bling_externa",
                             id_img,
                         ),
                     )
-                except Exception:
+                manter_ids.add(id_img)
+            else:
+                origem = "bling_interna" if tipo == "interna" else "bling_externa"
+                url_origem = None if tipo == "interna" else url
+                # 1) reserva id no banco  2) baixa arquivo  3) grava caminho
+                cur.execute(
+                    """
+                    INSERT INTO tbl_produto_imagem (
+                        id_produto, caminho, ordem, principal, origem,
+                        link_expira_em, tamanho_bytes, bling_anexo_id, url_origem
+                    )
+                    VALUES (%s, '', %s, %s, %s, NULL, NULL, %s, %s)
+                    RETURNING id
+                    """,
+                    (id_produto, ordem, ordem == 0, origem, anexo_id, url_origem),
+                )
+                id_img = int(cur.fetchone()[0])
+                try:
+                    caminho_db, tam = _materializar(id_img, url)
                     cur.execute(
                         """
                         UPDATE tbl_produto_imagem
-                        SET ordem = %s, principal = %s, bling_anexo_id = COALESCE(%s, bling_anexo_id),
-                            url_origem = COALESCE(%s, url_origem)
+                        SET caminho = %s, tamanho_bytes = %s, link_expira_em = NULL
                         WHERE id = %s
                         """,
-                        (ordem, ordem == 0, anexo_id, None if tipo == "interna" else url, id_img),
+                        (caminho_db, tam, id_img),
                     )
-            else:
-                cur.execute(
-                    """
-                    UPDATE tbl_produto_imagem
-                    SET ordem = %s, principal = %s,
-                        bling_anexo_id = COALESCE(%s, bling_anexo_id),
-                        url_origem = CASE
-                            WHEN %s IS NOT NULL THEN %s
-                            ELSE url_origem
-                        END,
-                        link_expira_em = NULL,
-                        origem = %s
-                    WHERE id = %s
-                    """,
-                    (
-                        ordem,
-                        ordem == 0,
-                        anexo_id,
-                        None if tipo == "interna" else url,
-                        None if tipo == "interna" else url,
-                        "bling_interna" if tipo == "interna" else "bling_externa",
-                        id_img,
-                    ),
-                )
-            manter_ids.add(id_img)
-        else:
-            origem = "bling_interna" if tipo == "interna" else "bling_externa"
-            url_origem = None if tipo == "interna" else url
+                except Exception:
+                    # Sem arquivo local: fica a URL (não gera órfão no disco)
+                    caminho_db = url
+                    cur.execute(
+                        """
+                        UPDATE tbl_produto_imagem
+                        SET caminho = %s, tamanho_bytes = NULL, link_expira_em = NULL
+                        WHERE id = %s
+                        """,
+                        (caminho_db, id_img),
+                    )
+                manter_ids.add(id_img)
+
+            mapa[url] = id_img
+            mapa[caminho_db] = id_img
+            if principal is None:
+                principal = caminho_db
+            ordem += 1
+
+        for row in existentes:
+            id_old = int(row[0])
+            if id_old in manter_ids:
+                continue
+            _limpar_arquivo_upload(row[1])
             cur.execute(
-                """
-                INSERT INTO tbl_produto_imagem (
-                    id_produto, caminho, ordem, principal, origem,
-                    link_expira_em, tamanho_bytes, bling_anexo_id, url_origem
-                )
-                VALUES (%s, %s, %s, %s, %s, NULL, NULL, %s, %s)
-                RETURNING id
-                """,
-                (id_produto, url, ordem, ordem == 0, origem, anexo_id, url_origem),
+                "UPDATE tbl_produto_variante SET id_imagem_principal = NULL WHERE id_imagem_principal = %s",
+                (id_old,),
             )
-            id_img = int(cur.fetchone()[0])
-            try:
-                caminho_db, tam = baixar_e_gravar_imagem_tenant(
-                    id_tenant=id_tenant,
-                    id_produto=id_produto,
-                    id_imagem=id_img,
-                    url=url,
-                )
-                cur.execute(
-                    """
-                    UPDATE tbl_produto_imagem
-                    SET caminho = %s, tamanho_bytes = %s, link_expira_em = NULL
-                    WHERE id = %s
-                    """,
-                    (caminho_db, tam, id_img),
-                )
-            except Exception:
-                # Mantém URL temporária/externa se o download falhar (não perde o vínculo)
-                caminho_db = url
-            manter_ids.add(id_img)
+            cur.execute("DELETE FROM tbl_produto_atributo_imagem WHERE id_imagem = %s", (id_old,))
+            cur.execute("DELETE FROM tbl_produto_imagem WHERE id = %s", (id_old,))
 
-        mapa[url] = id_img
-        mapa[caminho_db] = id_img
-        if principal is None:
-            principal = caminho_db
-        ordem += 1
-
-    # Remove o que sumiu na origem
-    for row in existentes:
-        id_old = int(row[0])
-        if id_old in manter_ids:
-            continue
-        _limpar_arquivo_upload(row[1])
-        cur.execute(
-            "UPDATE tbl_produto_variante SET id_imagem_principal = NULL WHERE id_imagem_principal = %s",
-            (id_old,),
-        )
-        cur.execute("DELETE FROM tbl_produto_atributo_imagem WHERE id_imagem = %s", (id_old,))
-        cur.execute("DELETE FROM tbl_produto_imagem WHERE id = %s", (id_old,))
-
-    definir_imagem_modo(cur, id_produto, "upload")
-    sincronizar_imagem_principal_produto(cur, id_produto)
-    try:
-        recalcular_bytes_imagens_tenant(cur, id_tenant)
+        definir_imagem_modo(cur, id_produto, "upload")
+        sincronizar_imagem_principal_produto(cur, id_produto)
+        try:
+            recalcular_bytes_imagens_tenant(cur, id_tenant)
+        except Exception:
+            pass
+        return principal, mapa, arquivos_novos
     except Exception:
-        pass
-    return principal, mapa
+        descartar_arquivos_imagem_locais(arquivos_novos)
+        raise
 
 
 def vincular_imagens_variantes_bling(
