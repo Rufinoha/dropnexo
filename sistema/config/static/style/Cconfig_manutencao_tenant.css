@@ -88,6 +88,47 @@
 .CfgMt_Badge--armazem { background: #dcfce7; color: #166534; }
 .CfgMt_Badge--sessao { background: #e0e7ff; color: #3730a3; margin-left: 0.35rem; }
 
+.CfgMt_Tabs {
+  display: flex;
+  gap: 4px;
+  margin: 0 0 1rem;
+  padding: 4px;
+  border-radius: 10px;
+  background: #eef2f7;
+  border: 1px solid #e2e8f0;
+}
+.CfgMt_Tab {
+  flex: 1;
+  border: 0;
+  background: transparent;
+  color: #475569;
+  font-size: 0.88rem;
+  font-weight: 700;
+  padding: 0.55rem 0.75rem;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.CfgMt_Tab.is-active {
+  background: #fff;
+  color: #021F81;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+.CfgMt_Pane[hidden] { display: none !important; }
+.CfgMt_DonoVazio {
+  margin: 0.5rem 0 0;
+  padding: 0.75rem 0.85rem;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  color: #64748b;
+  font-size: 0.88rem;
+}
+#cfg_pane_dono input[readonly] {
+  background: #f8fafc;
+  color: #0f172a;
+  cursor: default;
+}
+
 .Cl_TabelaPrincipal.Cat_TabelaScroll {
   max-height: min(70vh, calc(100dvh - 16rem));
   overflow-x: hidden;

@@ -34,6 +34,7 @@ from api.bling.categorias_bling import (
     salvar_mapeamento_categoria_ui,
     validar_mapeamento_para_importacao,
 )
+from api.bling.estoque import validar_gate_importacao_bling
 from api.bling.produtos import importar_produtos
 from core.tokens import descriptografar_token
 from global_utils import Var_ConectarBanco, agora_utc, login_obrigatorio, obter_url_site_publico, usuario_tem_permissao
@@ -608,9 +609,9 @@ def sync_produtos():
             conn.commit()
             return jsonify(success=True, message=resultado.get("message"), dados=resultado)
 
-        from api.bling.categorias_bling import validar_mapeamento_para_importacao
+        from api.bling.estoque import validar_gate_importacao_bling
 
-        val = validar_mapeamento_para_importacao(
+        val = validar_gate_importacao_bling(
             cur,
             int(id_tenant),
             contexto,
@@ -639,7 +640,7 @@ def sync_produtos():
             id_usuario=int(id_usuario) if id_usuario else None,
             provedor="bling",
             nome_lote=f"Bling — {contexto}",
-            meta={"contexto": contexto},
+            meta={"contexto": contexto, "bootstrap": bool(val.get("bootstrap"))},
         )
         conn.commit()
 
@@ -653,6 +654,7 @@ def sync_produtos():
             id_importacao_lote=id_lote,
             id_usuario=int(id_usuario) if id_usuario else None,
             modo_categorias="mapeamento",
+            bootstrap=bool(val.get("bootstrap")),
         )
         conn.commit()
 
@@ -1044,7 +1046,7 @@ def api_categorias_bling_validar_importacao():
         row = cur.fetchone()
         if not row or row[0] != "conectado":
             return jsonify(success=False, message="Conecte o Bling antes de importar."), 400
-        val = validar_mapeamento_para_importacao(
+        val = validar_gate_importacao_bling(
             cur,
             int(id_tenant),
             contexto,

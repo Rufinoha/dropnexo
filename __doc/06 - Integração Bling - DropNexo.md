@@ -22,18 +22,27 @@ Cada **tenant** conecta sua própria conta Bling. Fornecedor e vendedor usam o m
 
 ## Imagens
 
-| Modo | Comportamento |
-|------|----------------|
-| **link** | URL gravada em `tbl_produto_imagem.caminho` |
-| **download** | Arquivo em `upload/tenant{id}/produtos/{sku}/{ordem}-{nome}.ext` |
+**Contrato atual (import FN/AZ unitário):**
+
+| Etapa | Comportamento |
+|-------|----------------|
+| Fonte | Só **URL direta** de imagem (arquivo `.jpg`/`.png`/… ou CDN Bling). Link de página = erro do produto. |
+| Oficial no DN | Arquivo em `static/imge/produtos/{tenant}/` + thumb `*_t.jpg` |
+| Submit | Download **dentro** do job do produto (não “sucesso sem mídia” se o Bling mandou URL) |
+| Lista / detalhe | Thumb/full **local** via `/static/imge/…` — **sem** proxy S3 pós-import |
+| Cache | `Cache-Control` longo em `/static/imge/` |
+| Sem mídia no Bling | Import OK com galeria vazia |
+| URL falhou download | Job daquele produto = erro |
+
+Legado (fila `tbl_produto_imagem_download_fila`) permanece para drenar pendências antigas; o fluxo novo não enfileira no import.
+
+Export vendedor → Bling usa URL assinada do arquivo local (`imagens_export`).
 
 Regras:
 
-- Máximo **3 MB** por imagem na importação.
+- Máximo **2 MB** por imagem na materialização local (import).
 - **SKU obrigatório** — produto sem SKU não sincroniza.
-- Não misturar link e arquivo no mesmo produto (regra do catálogo).
-- **Dev:** arquivos locais `upload/...` exibem ícone placeholder; links externos exibem normalmente.
-- **Produção:** servir arquivos via rota dedicada (validar depois).
+- Gate: categorias + depósitos mapeados; se estrutura local **vazia**, bootstrap cria/vincula.
 
 ## OAuth Bling
 

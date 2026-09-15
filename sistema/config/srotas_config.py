@@ -1413,32 +1413,90 @@ def _tenant_payload(cur, id_tenant: int) -> dict | None:
     telefone_comercial = (row[12] or "").strip()
 
     # Contato do dono (whatsapp/e-mail do cadastro) — fallback útil no suporte.
-    dono_email = ""
-    dono_whatsapp = ""
-    dono_nome = ""
+    dono = {
+        "id": None,
+        "nome": "",
+        "email": "",
+        "whatsapp": "",
+        "ativo": None,
+        "eh_desenvolvedor": False,
+        "perfil_codigo": "",
+        "perfil_nome": "",
+        "vinculo_ativo": None,
+        "ultimo_acesso_em": None,
+        "criado_em": None,
+    }
     try:
         cur.execute(
             """
-            SELECT u.nome, u.email, u.whatsapp
+            SELECT u.id, u.nome, u.email, u.whatsapp, COALESCE(u.ativo, TRUE),
+                   COALESCE(u.eh_desenvolvedor, FALSE),
+                   LOWER(COALESCE(pf.codigo, '')), COALESCE(pf.nome, ''),
+                   ut.ativo, ut.ultimo_acesso_em, u.criado_em
             FROM tbl_usuario_tenant ut
             JOIN tbl_usuario u ON u.id = ut.id_usuario
             JOIN tbl_perfil pf ON pf.id = ut.id_perfil
             WHERE ut.id_tenant = %s
-              AND ut.ativo = TRUE
-              AND COALESCE(u.ativo, TRUE) = TRUE
               AND LOWER(pf.codigo) = 'dono'
-            ORDER BY ut.id
+            ORDER BY ut.ativo DESC NULLS LAST, ut.id
             LIMIT 1
             """,
             (id_tenant,),
         )
-        dono = cur.fetchone()
-        if dono:
-            dono_nome = (dono[0] or "").strip()
-            dono_email = (dono[1] or "").strip()
-            dono_whatsapp = (dono[2] or "").strip()
+        row_dono = cur.fetchone()
+        if row_dono:
+            dono = {
+                "id": int(row_dono[0]),
+                "nome": (row_dono[1] or "").strip(),
+                "email": (row_dono[2] or "").strip(),
+                "whatsapp": (row_dono[3] or "").strip(),
+                "ativo": bool(row_dono[4]),
+                "eh_desenvolvedor": bool(row_dono[5]),
+                "perfil_codigo": (row_dono[6] or "").strip(),
+                "perfil_nome": (row_dono[7] or "").strip(),
+                "vinculo_ativo": bool(row_dono[8]) if row_dono[8] is not None else None,
+                "ultimo_acesso_em": row_dono[9].isoformat() if row_dono[9] else None,
+                "criado_em": row_dono[10].isoformat() if row_dono[10] else None,
+            }
     except Exception:
-        pass
+        try:
+            cur.execute(
+                """
+                SELECT u.id, u.nome, u.email, u.whatsapp, COALESCE(u.ativo, TRUE),
+                       COALESCE(u.eh_desenvolvedor, FALSE),
+                       LOWER(COALESCE(pf.codigo, '')), COALESCE(pf.nome, ''),
+                       ut.ativo, ut.ultimo_acesso_em
+                FROM tbl_usuario_tenant ut
+                JOIN tbl_usuario u ON u.id = ut.id_usuario
+                JOIN tbl_perfil pf ON pf.id = ut.id_perfil
+                WHERE ut.id_tenant = %s
+                  AND LOWER(pf.codigo) = 'dono'
+                ORDER BY ut.ativo DESC NULLS LAST, ut.id
+                LIMIT 1
+                """,
+                (id_tenant,),
+            )
+            row_dono = cur.fetchone()
+            if row_dono:
+                dono = {
+                    "id": int(row_dono[0]),
+                    "nome": (row_dono[1] or "").strip(),
+                    "email": (row_dono[2] or "").strip(),
+                    "whatsapp": (row_dono[3] or "").strip(),
+                    "ativo": bool(row_dono[4]),
+                    "eh_desenvolvedor": bool(row_dono[5]),
+                    "perfil_codigo": (row_dono[6] or "").strip(),
+                    "perfil_nome": (row_dono[7] or "").strip(),
+                    "vinculo_ativo": bool(row_dono[8]) if row_dono[8] is not None else None,
+                    "ultimo_acesso_em": row_dono[9].isoformat() if row_dono[9] else None,
+                    "criado_em": None,
+                }
+        except Exception:
+            pass
+
+    dono_email = dono.get("email") or ""
+    dono_whatsapp = dono.get("whatsapp") or ""
+    dono_nome = dono.get("nome") or ""
 
     email = email_comercial or dono_email
     whatsapp = dono_whatsapp or telefone_comercial
@@ -1462,6 +1520,7 @@ def _tenant_payload(cur, id_tenant: int) -> dict | None:
         "dono_nome": dono_nome,
         "dono_email": dono_email,
         "dono_whatsapp": dono_whatsapp,
+        "dono": dono,
         "contagens": contagens,
         "eh_tenant_sessao": int(session.get("id_tenant") or 0) == int(row[0]),
         "protegido": slug_protegido(slug),

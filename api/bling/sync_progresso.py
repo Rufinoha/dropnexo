@@ -44,6 +44,7 @@ def _worker_importacao(
     ids_categorias_bling: list[str] | None,
     incluir_subcategorias: bool,
     id_usuario: int | None,
+    bootstrap: bool = False,
 ) -> None:
     with app.app_context():
         conn = Var_ConectarBanco()
@@ -52,10 +53,18 @@ def _worker_importacao(
             cur.execute(
                 """
                 UPDATE tbl_importacao_lote
-                SET meta = COALESCE(meta, '{}'::jsonb) || '{"fase":"listando"}'::jsonb
+                SET meta = COALESCE(meta, '{}'::jsonb) || %s::jsonb
                 WHERE id = %s
                 """,
-                (id_lote,),
+                (
+                    json.dumps(
+                        {
+                            "fase": "listando",
+                            "bootstrap": bool(bootstrap),
+                        }
+                    ),
+                    id_lote,
+                ),
             )
             conn.commit()
 
@@ -81,6 +90,7 @@ def _worker_importacao(
                 id_importacao_lote=id_lote,
                 id_usuario=id_usuario,
                 modo_categorias="mapeamento",
+                bootstrap=bool(bootstrap),
                 on_progresso=_on_progresso,
                 intervalo_progresso=PROGRESSO_COMMIT_CADA,
             )
@@ -212,6 +222,7 @@ def iniciar_importacao_bling_async(
     ids_categorias_bling: list[str] | None,
     incluir_subcategorias: bool,
     id_usuario: int | None,
+    bootstrap: bool = False,
 ) -> dict[str, Any]:
     """Cria lote, dispara thread de importação e retorna id imediatamente."""
     conn = Var_ConectarBanco()
@@ -230,6 +241,7 @@ def iniciar_importacao_bling_async(
                 "fase": "iniciando",
                 "ids_categorias_bling": ids_categorias_bling,
                 "incluir_subcategorias": incluir_subcategorias,
+                "bootstrap": bool(bootstrap),
             },
         )
         conn.commit()
@@ -246,6 +258,7 @@ def iniciar_importacao_bling_async(
             "ids_categorias_bling": ids_categorias_bling,
             "incluir_subcategorias": incluir_subcategorias,
             "id_usuario": id_usuario,
+            "bootstrap": bool(bootstrap),
         },
         daemon=True,
         name=f"bling-import-{id_lote}",

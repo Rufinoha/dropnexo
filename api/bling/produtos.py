@@ -250,7 +250,9 @@ def aplicar_imagens_produto(
 ) -> tuple[str | None, list[str]]:
     """Popula galeria do pai (download local ou fila) e vincula variantes.
 
-    Com ``adiar_download=True`` (import Bling): só registra mídia e enfileira.
+    Com ``adiar_download=True`` (legado/fila): só registra mídia e enfileira.
+    Com ``adiar_download=False`` (submit unitário): baixa + grava local + thumb;
+    falha de download ⇒ erro (não fica URL remota como oficial).
     Retorna (caminho principal, arquivos locais criados nesta chamada).
     Se a transação for desfeita depois, chame ``descartar_arquivos_imagem_locais``.
     """
@@ -1155,7 +1157,7 @@ def _processar_item_produto(
                 sku=sku,
                 midia_itens=midia,
                 modo_imagem="download",
-                adiar_download=True,
+                adiar_download=False,
                 id_importacao_lote=id_importacao_lote,
             )
 
@@ -1169,6 +1171,16 @@ def _processar_item_produto(
             sku,
             {"nome": detalhe.get("nome"), "urls_imagem": urls_mapa, "id_categoria_bling": id_cat_bling},
         )
+        from fornecedor.catalogo.catalogo import sincronizar_estoque_produto_bling
+
+        ok_est, msg_est, _n_est = sincronizar_estoque_produto_bling(
+            cur, id_tenant, prod_id, contexto=contexto
+        )
+        if not ok_est and msg_est in (
+            "Nenhum depósito Bling vinculado.",
+            "Produto sem vínculo no Bling.",
+        ):
+            raise ValueError(msg_est)
     except Exception:
         descartar_arquivos_imagem_locais(arquivos_novos)
         raise
@@ -1264,7 +1276,7 @@ def _processar_grupo_variacoes(
                 midia_itens=midia,
                 modo_imagem="download",
                 variacoes_bling=variacoes,
-                adiar_download=True,
+                adiar_download=False,
                 id_importacao_lote=id_importacao_lote,
             )
 
@@ -1311,6 +1323,17 @@ def _processar_grupo_variacoes(
                 (prod_id, var_sku or None),
             )
             cur.fetchone()
+
+        from fornecedor.catalogo.catalogo import sincronizar_estoque_produto_bling
+
+        ok_est, msg_est, _n_est = sincronizar_estoque_produto_bling(
+            cur, id_tenant, prod_id, contexto=contexto
+        )
+        if not ok_est and msg_est in (
+            "Nenhum depósito Bling vinculado.",
+            "Produto sem vínculo no Bling.",
+        ):
+            raise ValueError(msg_est)
 
         if id_bling_pai:
             concluidos.add(id_bling_pai)
@@ -1362,6 +1385,7 @@ def importar_produtos(
     id_importacao_lote: int | None = None,
     id_usuario: int | None = None,
     modo_categorias: str = "mapeamento",
+    bootstrap: bool = False,
     on_progresso: Callable[[dict[str, int]], None] | None = None,
     intervalo_progresso: int = 3,
 ) -> dict[str, Any]:
@@ -1371,8 +1395,23 @@ def importar_produtos(
         raise ValueError(f"Modo de produtos '{modo}' não permite importação. Altere para Importar ou Atualizar.")
 
     id_segmento_resolvido = resolver_id_segmento_import(cur, id_tenant, id_segmento)
-    resumo_deps = resumo_depositos_bling(cur, id_tenant)
-    somente_mapa = modo_categorias == "mapeamento"
+
+    bootstrap_resumo: dict[str, Any] = {}
+    if bootstrap:
+        from api.bling.estoque import bootstrap_depositos_bling
+
+        bootstrap_resumo = bootstrap_depositos_bling(cur, id_tenant)
+        resumo_deps = {
+            "mapa": bootstrap_resumo.get("mapa", 0),
+            "vinculados": bootstrap_resumo.get("vinculados", 0),
+            "criados": bootstrap_resumo.get("criados", 0),
+            "pendentes": bootstrap_resumo.get("pendentes", 0),
+        }
+        # Estrutura vazia: criar categorias Bling no DropNexo (não só mapear).
+        somente_mapa = False
+    else:
+        resumo_deps = resumo_depositos_bling(cur, id_tenant)
+        somente_mapa = modo_categorias == "mapeamento"
     if modo_categorias == "legado":
         n_cats_arvore = sincronizar_arvore_categorias_bling(
             cur,
@@ -1635,6 +1674,8 @@ def importar_produtos(
         "categorias": cat_n,
         "categorias_arvore": n_cats_arvore,
         "depositos": resumo_deps,
+        "bootstrap": bool(bootstrap),
+        "bootstrap_depositos": bootstrap_resumo,
         "id_segmento": id_segmento_resolvido,
         "erros": erros_txt[:50],
         "status": status,
@@ -1823,12 +1864,14 @@ def _upsert_mapa(
     )
 
 
-def _deposito_bling_padrao(id_tenant: int) -> str | None:
-    deps = listar_depositos_bling(id_tenant)
-    for dep in deps:
-        did = dep.get("id")
-        if did not in (None, ""):
-            return str(did)
+def _deposito_bling_padrao(cur, id_tenant: int) -> str | None:
+    """Preferência: depósito Bling já vinculado no mapa; senão None (exige vínculo)."""
+    from api.bling.estoque import listar_mapa_depositos
+
+    mapa = listar_mapa_depositos(cur, id_tenant)
+    for m in mapa:
+        if m.get("id_deposito_dropnexo") and m.get("id_bling_deposito"):
+            return str(m["id_bling_deposito"])
     return None
 
 
@@ -1842,6 +1885,16 @@ def _exportar_estoque_variante(
 ) -> tuple[bool, str | None]:
     qtd = max(0, int(quantidade))
     try:
+        from api.bling.config import registrar_eco_pendente
+
+        registrar_eco_pendente(
+            cur,
+            id_tenant,
+            id_bling_produto=str(id_bling),
+            id_bling_deposito=str(id_deposito_bling),
+            quantidade_esperada=qtd,
+            origem="export_vendedor",
+        )
         api_request(
             id_tenant,
             "POST",
@@ -1891,9 +1944,11 @@ def exportar_produtos_vendedor(
     if opcoes.get("produtos_exportar") is False:
         raise ValueError("Exportação de produtos está desativada. Ative na aba Produtos.")
 
-    id_dep_bling = _deposito_bling_padrao(id_tenant) if exportar_estoque else None
+    id_dep_bling = _deposito_bling_padrao(cur, id_tenant) if exportar_estoque else None
     if exportar_estoque and not id_dep_bling:
-        raise ValueError("Nenhum depósito encontrado no Bling para sincronizar estoque.")
+        raise ValueError(
+            "Nenhum depósito Bling vinculado. Configure em Integrações › Bling › Depósitos."
+        )
 
     ids_filtro: list[int] = []
     for x in ids_produto or []:

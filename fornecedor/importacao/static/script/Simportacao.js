@@ -655,21 +655,49 @@
       const dados = j.dados || {};
       const val = dados.validacao || {};
       if (!val.importacao_liberada) {
-        const lista = (val.pendentes || [])
-          .slice(0, 10)
-          .map((p) => esc(p.caminho_bling || p.nome_bling))
+        const pendCat = (val.categorias && val.categorias.pendentes) || val.pendentes || [];
+        const pendDep = (val.depositos && val.depositos.pendentes) || [];
+        const listaCat = pendCat
+          .slice(0, 8)
+          .map((p) => esc(p.caminho_bling || p.nome_bling || p.id_bling))
           .join("<br>");
-        const extra = (val.pendentes || []).length > 10 ? "<br>…" : "";
+        const listaDep = pendDep
+          .slice(0, 8)
+          .map((p) => esc(p.nome_bling || p.id_bling))
+          .join("<br>");
+        const bloqueioDep = val.depositos && val.depositos.importacao_liberada === false;
+        const titulo = bloqueioDep && !(val.categorias && val.categorias.importacao_liberada === false)
+          ? "Depósitos não vinculados"
+          : "Mapeamento incompleto";
+        const link = bloqueioDep && !(val.categorias && val.categorias.importacao_liberada === false)
+          ? `<br><br><a href="/integracoes/bling?aba=depositos" style="color:#021F81;font-weight:600">Abrir Integrações › Bling › Depósitos</a>`
+          : `<br><br><a href="/integracoes/bling?aba=categorias" style="color:#021F81;font-weight:600">Abrir Integrações › Bling › Categorias</a>`;
         await Swal.fire({
           icon: "warning",
-          title: "Categorias não mapeadas",
+          title: titulo,
           html:
             `${esc(val.mensagem || "Conclua o mapeamento antes de importar.")}` +
-            (lista ? `<br><br><small>${lista}${extra}</small>` : "") +
-            `<br><br><a href="/integracoes/bling?aba=categorias" style="color:#021F81;font-weight:600">Abrir Integrações › Bling › Categorias</a>`,
+            (listaCat ? `<br><br><small><b>Categorias</b><br>${listaCat}</small>` : "") +
+            (listaDep ? `<br><br><small><b>Depósitos</b><br>${listaDep}</small>` : "") +
+            link,
           confirmButtonColor: "#021F81",
         });
         return;
+      }
+
+      if (val.bootstrap) {
+        const okBoot = await Swal.fire({
+          icon: "info",
+          title: "Bootstrap da estrutura",
+          html:
+            "Não há categorias nem depósitos no DropNexo. " +
+            "A importação criará a estrutura do Bling e já fará o vínculo.",
+          showCancelButton: true,
+          confirmButtonText: "Continuar",
+          cancelButtonText: "Cancelar",
+          confirmButtonColor: "#021F81",
+        });
+        if (!okBoot.isConfirmed) return;
       }
 
       await executarImportacaoBling(body, Number(dados.total_produtos_escopo || 0));

@@ -359,6 +359,214 @@ def resumo_depositos_bling(cur, id_tenant: int) -> dict:
     }
 
 
+def contar_depositos_locais(cur, id_tenant: int) -> int:
+    cur.execute(
+        """
+        SELECT COUNT(*)::int FROM tbl_deposito_expedicao
+        WHERE id_tenant = %s AND ativo = TRUE
+        """,
+        (id_tenant,),
+    )
+    return int(cur.fetchone()[0] or 0)
+
+
+def contar_categorias_locais(cur, id_tenant: int) -> int:
+    cur.execute(
+        """
+        SELECT COUNT(*)::int FROM tbl_categoria
+        WHERE id_tenant = %s AND ativo = TRUE
+        """,
+        (id_tenant,),
+    )
+    return int(cur.fetchone()[0] or 0)
+
+
+def estrutura_local_vazia(cur, id_tenant: int) -> tuple[bool, int, int]:
+    """Retorna (vazia, n_categorias, n_depositos)."""
+    n_cats = contar_categorias_locais(cur, id_tenant)
+    n_deps = contar_depositos_locais(cur, id_tenant)
+    return (n_cats == 0 and n_deps == 0), n_cats, n_deps
+
+
+def bootstrap_depositos_bling(cur, id_tenant: int) -> dict:
+    """Cria depósitos DropNexo espelhando o Bling e já vincula (só para estrutura vazia)."""
+    try:
+        sincronizar_depositos_tenant(cur, id_tenant)
+    except Exception:
+        pass
+    mapa = listar_mapa_depositos(cur, id_tenant)
+    criados = 0
+    vinculados = 0
+    for idx, m in enumerate(mapa):
+        if m.get("id_deposito_dropnexo"):
+            vinculados += 1
+            continue
+        vincular_ou_criar_deposito_bling(
+            cur,
+            id_tenant,
+            id_bling_deposito=str(m["id_bling_deposito"]),
+            nome_bling=m.get("nome_bling"),
+            id_deposito_dropnexo=None,
+            criar_igual=True,
+            padrao_bling=(idx == 0 and vinculados == 0 and criados == 0),
+        )
+        criados += 1
+        vinculados += 1
+    return {
+        "mapa": len(mapa),
+        "criados": criados,
+        "vinculados": vinculados,
+        "pendentes": 0,
+    }
+
+
+def validar_depositos_para_importacao(
+    cur,
+    id_tenant: int,
+    *,
+    bootstrap: bool = False,
+    total_categorias_locais: int | None = None,
+) -> dict:
+    """
+    Gate de depósitos.
+    - Estrutura local vazia + bootstrap → libera (import cria/vincula).
+    - Já há categoria e/ou depósito local → exige vínculo de todos os depósitos Bling no mapa.
+    """
+    n_deps_local = contar_depositos_locais(cur, id_tenant)
+    if total_categorias_locais is None:
+        total_categorias_locais = contar_categorias_locais(cur, id_tenant)
+    estrutura_vazia = total_categorias_locais == 0 and n_deps_local == 0
+
+    try:
+        sincronizar_depositos_tenant(cur, id_tenant)
+    except Exception:
+        pass
+    mapa = listar_mapa_depositos(cur, id_tenant)
+    pendentes = [
+        {
+            "id_bling": m["id_bling_deposito"],
+            "nome_bling": m.get("nome_bling") or m["id_bling_deposito"],
+            "motivo": "nao_vinculado",
+        }
+        for m in mapa
+        if not m.get("id_deposito_dropnexo")
+    ]
+    n_bling = len(mapa)
+
+    if estrutura_vazia:
+        if bootstrap or n_bling == 0:
+            return {
+                "importacao_liberada": True,
+                "bootstrap_permitido": True,
+                "pendentes": [],
+                "total_depositos_bling": n_bling,
+                "total_depositos_locais": 0,
+                "mensagem": (
+                    "Bootstrap de depósitos liberado (estrutura local vazia)."
+                    if n_bling
+                    else "Nenhum depósito Bling no mapa."
+                ),
+            }
+        return {
+            "importacao_liberada": False,
+            "bootstrap_permitido": True,
+            "pendentes": pendentes,
+            "total_depositos_bling": n_bling,
+            "total_depositos_locais": 0,
+            "mensagem": (
+                "Estrutura local vazia: a importação fará bootstrap de depósitos. "
+                "Confirme o início da importação."
+            ),
+        }
+
+    ok = len(pendentes) == 0
+    return {
+        "importacao_liberada": ok,
+        "bootstrap_permitido": False,
+        "pendentes": pendentes,
+        "total_depositos_bling": n_bling,
+        "total_depositos_locais": n_deps_local,
+        "mensagem": (
+            "Importação liberada."
+            if ok
+            else (
+                f"Importação bloqueada: {len(pendentes)} depósito(s) Bling sem vínculo. "
+                "Configure em Integrações › Bling › Depósitos."
+            )
+        ),
+    }
+
+
+def validar_gate_importacao_bling(
+    cur,
+    id_tenant: int,
+    contexto: str,
+    *,
+    ids_categorias_bling: list[str] | None = None,
+    incluir_subcategorias: bool = True,
+) -> dict:
+    """
+    Gate unificado categoria + depósito.
+    Estrutura local vazia → bootstrap automático (cria/vincula no import).
+    Estrutura existente → exige mapas.
+    """
+    from api.bling.categorias_bling import validar_mapeamento_para_importacao
+
+    vazia, n_cats, n_deps = estrutura_local_vazia(cur, id_tenant)
+    bootstrap = vazia
+
+    val_dep = validar_depositos_para_importacao(
+        cur,
+        id_tenant,
+        bootstrap=bootstrap,
+        total_categorias_locais=n_cats,
+    )
+
+    if bootstrap:
+        val_cat = {
+            "importacao_liberada": True,
+            "pendentes": [],
+            "total_categorias_escopo": 0,
+            "mensagem": "Bootstrap de categorias autorizado (estrutura local vazia).",
+            "bootstrap": True,
+        }
+    else:
+        val_cat = validar_mapeamento_para_importacao(
+            cur,
+            id_tenant,
+            contexto,
+            ids_categorias_bling=ids_categorias_bling,
+            incluir_subcategorias=incluir_subcategorias,
+        )
+
+    ok = bool(val_cat.get("importacao_liberada")) and bool(val_dep.get("importacao_liberada"))
+    if not ok:
+        if not val_cat.get("importacao_liberada"):
+            msg = val_cat.get("mensagem") or "Categorias não mapeadas."
+        else:
+            msg = val_dep.get("mensagem") or "Depósitos não vinculados."
+    else:
+        msg = (
+            "Importação liberada com bootstrap (estrutura local vazia)."
+            if bootstrap
+            else "Importação liberada."
+        )
+
+    return {
+        "importacao_liberada": ok,
+        "bootstrap": bootstrap,
+        "categorias": val_cat,
+        "depositos": val_dep,
+        "pendentes": (val_cat.get("pendentes") or []) + (val_dep.get("pendentes") or []),
+        "estrutura_local": {
+            "categorias": n_cats,
+            "depositos": n_deps,
+            "vazia": vazia,
+        },
+        "mensagem": msg,
+    }
+
+
 def _depositos_ui_from_mapa(mapa: list[dict]) -> list[dict]:
     """Fallback quando a API Bling está indisponível — usa nomes já salvos no mapa local."""
     out: list[dict] = []

@@ -26,7 +26,76 @@
     warn: document.getElementById("warn"),
     btnSalvar: document.getElementById("btnSalvar"),
     btnExcluir: document.getElementById("btnExcluir"),
+    tabs: document.getElementById("cfg_mt_tabs"),
+    paneTenant: document.getElementById("cfg_pane_tenant"),
+    paneDono: document.getElementById("cfg_pane_dono"),
+    donoVazio: document.getElementById("dono_vazio"),
+    donoDados: document.getElementById("dono_dados"),
+    donoId: document.getElementById("dono_id"),
+    donoNome: document.getElementById("dono_nome"),
+    donoEmail: document.getElementById("dono_email"),
+    donoWhatsapp: document.getElementById("dono_whatsapp"),
+    donoPerfil: document.getElementById("dono_perfil"),
+    donoAtivo: document.getElementById("dono_ativo"),
+    donoVinculo: document.getElementById("dono_vinculo"),
+    donoDev: document.getElementById("dono_dev"),
+    donoCriado: document.getElementById("dono_criado"),
+    donoAcesso: document.getElementById("dono_acesso"),
   };
+
+  function pickTab(tab) {
+    const t = tab === "dono" ? "dono" : "tenant";
+    el.tabs?.querySelectorAll(".CfgMt_Tab").forEach((b) => {
+      b.classList.toggle("is-active", b.dataset.tab === t);
+    });
+    if (el.paneTenant) el.paneTenant.hidden = t !== "tenant";
+    if (el.paneDono) el.paneDono.hidden = t !== "dono";
+    if (el.btnSalvar) el.btnSalvar.hidden = t !== "tenant";
+  }
+
+  function formatarDataHora(iso) {
+    if (!iso) return "—";
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) {
+      const s = String(iso).replace("T", " ");
+      return s.length >= 16 ? s.slice(0, 16) : s;
+    }
+    const pad = (n) => String(n).padStart(2, "0");
+    return (
+      `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ` +
+      `${pad(d.getHours())}:${pad(d.getMinutes())}`
+    );
+  }
+
+  function simNao(v) {
+    if (v === true) return "Sim";
+    if (v === false) return "Não";
+    return "—";
+  }
+
+  function preencherDono(t) {
+    const d = t?.dono && typeof t.dono === "object" ? t.dono : null;
+    const tem = !!(d && d.id);
+    if (el.donoVazio) el.donoVazio.hidden = tem;
+    if (el.donoDados) el.donoDados.hidden = !tem;
+    if (!tem) return;
+    if (el.donoId) el.donoId.value = String(d.id);
+    if (el.donoNome) el.donoNome.value = d.nome || "";
+    if (el.donoEmail) el.donoEmail.value = d.email || "";
+    if (el.donoWhatsapp) {
+      el.donoWhatsapp.value = formatarWhatsappExibicao(d.whatsapp) || d.whatsapp || "";
+    }
+    if (el.donoPerfil) {
+      const cod = (d.perfil_codigo || "").trim();
+      const nome = (d.perfil_nome || "").trim();
+      el.donoPerfil.value = nome && cod ? `${nome} (${cod})` : nome || cod || "dono";
+    }
+    if (el.donoAtivo) el.donoAtivo.value = simNao(d.ativo);
+    if (el.donoVinculo) el.donoVinculo.value = simNao(d.vinculo_ativo);
+    if (el.donoDev) el.donoDev.value = simNao(!!d.eh_desenvolvedor);
+    if (el.donoCriado) el.donoCriado.value = formatarDataHora(d.criado_em);
+    if (el.donoAcesso) el.donoAcesso.value = formatarDataHora(d.ultimo_acesso_em);
+  }
 
   function esc(s) {
     return String(s ?? "")
@@ -116,6 +185,7 @@
     if (el.documento) el.documento.value = t.documento || "";
     if (el.ativo) el.ativo.checked = !!t.ativo;
     preencherContato(t);
+    preencherDono(t);
 
     const c = t.contagens || {};
     if (el.counts) {
@@ -296,6 +366,11 @@
   }
 
   el.tipo?.addEventListener("change", atualizarLimparSeg);
+  el.tabs?.addEventListener("click", (ev) => {
+    const btn = ev.target.closest(".CfgMt_Tab");
+    if (!btn) return;
+    pickTab(btn.dataset.tab || "tenant");
+  });
   el.btnSalvar?.addEventListener("click", () =>
     salvar().catch((e) => Swal.fire("Erro", e.message, "error"))
   );

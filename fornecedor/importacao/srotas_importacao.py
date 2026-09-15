@@ -12,6 +12,7 @@ from flask import Blueprint, current_app, jsonify, redirect, render_template, re
 from api.bling.sync_progresso import iniciar_importacao_bling_async, obter_progresso_bling
 from api.bling.produtos import importar_produtos
 from api.bling.categorias_bling import aplicar_mapeamento_categorias, pre_analisar_mapeamento_categorias, validar_mapeamento_para_importacao
+from api.bling.estoque import validar_gate_importacao_bling
 from fornecedor.importacao.servico_importacao import montar_payload_erro
 from fornecedor.importacao.servico_importacao import (
     MODULO_CATALOGO,
@@ -675,7 +676,7 @@ def importacao_bling_categorias_pre_analise():
             ids_categorias_bling=ids_categorias_bling,
             incluir_subcategorias=bool(incluir_sub),
         )
-        val = validar_mapeamento_para_importacao(
+        val = validar_gate_importacao_bling(
             cur,
             id_tenant,
             contexto,
@@ -684,6 +685,7 @@ def importacao_bling_categorias_pre_analise():
         )
         dados["validacao"] = val
         dados["importacao_liberada"] = val.get("importacao_liberada", False)
+        dados["bootstrap"] = bool(val.get("bootstrap"))
         return jsonify(success=True, dados=dados)
     except ValueError as e:
         return jsonify(success=False, message=str(e)), 400
@@ -709,13 +711,14 @@ def importacao_bling_iniciar():
 
     id_tenant = int(session.get("id_tenant"))
     id_usuario = session.get("id_usuario")
+    val = {"bootstrap": False}
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
         if not _bling_conectado(cur, id_tenant):
             return jsonify(success=False, message="Conecte o Bling antes de sincronizar."), 400
 
-        val = validar_mapeamento_para_importacao(
+        val = validar_gate_importacao_bling(
             cur,
             id_tenant,
             contexto,
@@ -751,6 +754,7 @@ def importacao_bling_iniciar():
             ids_categorias_bling=ids_categorias_bling,
             incluir_subcategorias=incluir_sub,
             id_usuario=int(id_usuario) if id_usuario else None,
+            bootstrap=bool(val.get("bootstrap")),
         )
         return jsonify(
             success=True,
@@ -804,7 +808,7 @@ def importacao_bling():
         if not _bling_conectado(cur, id_tenant):
             return jsonify(success=False, message="Conecte o Bling antes de sincronizar."), 400
 
-        val = validar_mapeamento_para_importacao(
+        val = validar_gate_importacao_bling(
             cur,
             id_tenant,
             contexto,
@@ -837,7 +841,7 @@ def importacao_bling():
             id_usuario=int(id_usuario) if id_usuario else None,
             provedor="bling",
             nome_lote=f"Bling — {contexto}",
-            meta={"contexto": contexto},
+            meta={"contexto": contexto, "bootstrap": bool(val.get("bootstrap"))},
         )
         conn.commit()
 
@@ -850,6 +854,7 @@ def importacao_bling():
             id_importacao_lote=id_lote,
             id_usuario=int(id_usuario) if id_usuario else None,
             modo_categorias="mapeamento",
+            bootstrap=bool(val.get("bootstrap")),
         )
         conn.commit()
 

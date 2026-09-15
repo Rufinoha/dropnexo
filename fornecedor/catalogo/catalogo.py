@@ -788,10 +788,11 @@ def gerar_thumb_imagem_local(caminho_db: str | None) -> str | None:
 
 
 def url_imagem_lista(caminho: str | None) -> str:
-    """URL para grade/listagem: thumb local se possível; HTTP remoto fica para o proxy do front."""
+    """URL para grade/listagem: thumb local preferencial; HTTP remoto só se ainda não materializado."""
     if not caminho:
         return ""
     if caminho_eh_url(caminho):
+        # Pós-import unitário não deve chegar aqui; se chegar, front ainda pode proxyar.
         return caminho
     thumb = gerar_thumb_imagem_local(caminho)
     return url_imagem_produto(thumb or caminho)
@@ -1274,44 +1275,31 @@ def aplicar_galeria_produto(
                             ),
                         )
                     else:
-                        try:
-                            caminho_db, tam = _materializar(id_img, url)
-                            cur.execute(
-                                """
-                                UPDATE tbl_produto_imagem
-                                SET caminho = %s, tamanho_bytes = %s, link_expira_em = NULL,
-                                    origem = %s, bling_anexo_id = %s, url_origem = %s,
-                                    ordem = %s, principal = %s
-                                WHERE id = %s
-                                """,
-                                (
-                                    caminho_db,
-                                    tam,
-                                    "bling_interna" if tipo == "interna" else "bling_externa",
-                                    anexo_id,
-                                    None if tipo == "interna" else url,
-                                    ordem,
-                                    ordem == 0,
-                                    id_img,
-                                ),
+                        if not (_url_parece_arquivo_imagem(url) or _host_cdn_imagem(url)):
+                            raise ValueError(
+                                "URL de imagem deve ser direta (arquivo .jpg/.png/…); "
+                                f"link de página rejeitado: {url[:96]}"
                             )
-                        except Exception:
-                            cur.execute(
-                                """
-                                UPDATE tbl_produto_imagem
-                                SET ordem = %s, principal = %s,
-                                    bling_anexo_id = COALESCE(%s, bling_anexo_id),
-                                    url_origem = COALESCE(%s, url_origem)
-                                WHERE id = %s
-                                """,
-                                (
-                                    ordem,
-                                    ordem == 0,
-                                    anexo_id,
-                                    None if tipo == "interna" else url,
-                                    id_img,
-                                ),
-                            )
+                        caminho_db, tam = _materializar(id_img, url)
+                        cur.execute(
+                            """
+                            UPDATE tbl_produto_imagem
+                            SET caminho = %s, tamanho_bytes = %s, link_expira_em = NULL,
+                                origem = %s, bling_anexo_id = %s, url_origem = %s,
+                                ordem = %s, principal = %s
+                            WHERE id = %s
+                            """,
+                            (
+                                caminho_db,
+                                tam,
+                                "bling_interna" if tipo == "interna" else "bling_externa",
+                                anexo_id,
+                                None if tipo == "interna" else url,
+                                ordem,
+                                ordem == 0,
+                                id_img,
+                            ),
+                        )
                 else:
                     cur.execute(
                         """
@@ -1356,6 +1344,11 @@ def aplicar_galeria_produto(
                     caminho_db = url
                     _enfileirar(id_img, url)
                 else:
+                    if not (_url_parece_arquivo_imagem(url) or _host_cdn_imagem(url)):
+                        raise ValueError(
+                            "URL de imagem deve ser direta (arquivo .jpg/.png/…); "
+                            f"link de página rejeitado: {url[:96]}"
+                        )
                     cur.execute(
                         """
                         INSERT INTO tbl_produto_imagem (
@@ -1368,26 +1361,15 @@ def aplicar_galeria_produto(
                         (id_produto, ordem, ordem == 0, origem, anexo_id, url_origem),
                     )
                     id_img = int(cur.fetchone()[0])
-                    try:
-                        caminho_db, tam = _materializar(id_img, url)
-                        cur.execute(
-                            """
-                            UPDATE tbl_produto_imagem
-                            SET caminho = %s, tamanho_bytes = %s, link_expira_em = NULL
-                            WHERE id = %s
-                            """,
-                            (caminho_db, tam, id_img),
-                        )
-                    except Exception:
-                        caminho_db = url
-                        cur.execute(
-                            """
-                            UPDATE tbl_produto_imagem
-                            SET caminho = %s, tamanho_bytes = NULL, link_expira_em = NULL
-                            WHERE id = %s
-                            """,
-                            (caminho_db, id_img),
-                        )
+                    caminho_db, tam = _materializar(id_img, url)
+                    cur.execute(
+                        """
+                        UPDATE tbl_produto_imagem
+                        SET caminho = %s, tamanho_bytes = %s, link_expira_em = NULL
+                        WHERE id = %s
+                        """,
+                        (caminho_db, tam, id_img),
+                    )
                 manter_ids.add(id_img)
 
             mapa[url] = id_img
