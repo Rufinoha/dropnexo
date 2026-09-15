@@ -680,8 +680,9 @@ html:has(.Cat_ApoioBody) body {
 }
 
 .Cat_ImgAddRow .Cl_BtnIncluir {
+  height: 40px;
+  align-self: end;
   flex-shrink: 0;
-  align-self: flex-end;
   min-width: 7.5rem;
 }
 .Cat_ImgAddRow .Cl_BtnIncluir.is-busy {
@@ -689,7 +690,7 @@ html:has(.Cat_ApoioBody) body {
   cursor: wait;
 }
 .Cat_ImgBusy {
-  margin: 0.35rem 0 0;
+  margin: 0.35rem 0 0.5rem;
   padding: 0.55rem 0.75rem;
   border-radius: 8px;
   background: #eff6ff;
@@ -700,9 +701,6 @@ html:has(.Cat_ApoioBody) body {
 }
 .Cat_ImgBusy[hidden] {
   display: none !important;
-}
-  height: 40px;
-  align-self: end;
 }
 
 .Cat_Galeria {
