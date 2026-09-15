@@ -4,7 +4,7 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 
 from dotenv import load_dotenv
-from flask import Flask
+from flask import Flask, request
 from flask.json.provider import DefaultJSONProvider
 
 from api.bling.srotas_bling import init_app as api_bling_init
@@ -51,6 +51,15 @@ app.json = DNJSONProvider(app)
 
 app.secret_key = os.getenv("SECRET_KEY", "troque-esta-chave-no-env")
 app.config["SESSION_COOKIE_NAME"] = os.getenv("SESSION_COOKIE_NAME", "dropnexo_session")
+
+
+@app.after_request
+def _cache_static_imge(resp):
+    """Thumbs/full locais: cache longo no browser (lista deixa de rebaixar a cada F5)."""
+    if (request.path or "").startswith("/static/imge/") and resp.status_code == 200:
+        resp.headers["Cache-Control"] = "public, max-age=604800"
+    return resp
+
 
 acesso_init(app)
 global_init(app)

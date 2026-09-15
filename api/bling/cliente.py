@@ -4,6 +4,8 @@ from __future__ import annotations
 import logging
 import os
 import secrets
+import threading
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import urlencode
@@ -19,6 +21,12 @@ BLING_AUTH_BASE = "https://www.bling.com.br/Api/v3"
 BLING_API_BASE = "https://api.bling.com.br/Api/v3"
 # OAuth deve terminar antes do timeout do Gunicorn (default 30s).
 BLING_OAUTH_TIMEOUT = (5, 15)
+# Bling ~3 req/s — intervalo mínimo entre chamadas API + retry em 429.
+BLING_API_INTERVALO_MIN_SEG = 0.35
+BLING_API_MAX_TENTATIVAS_429 = 6
+
+_lock_throttle = threading.Lock()
+_ultima_req_api_monotonic = 0.0
 
 # Endpoints documentados para POST /oauth/revoke (tentamos em ordem).
 # Doc oficial usa Host api.bling.com.br + path /oauth/revoke (sem /Api/v3).
@@ -435,6 +443,24 @@ def obter_access_token_valido(id_tenant: int) -> str:
         conn.close()
 
 
+def _aguardar_throttle_api() -> None:
+    """Garante intervalo mínimo entre requests à API Bling (processo inteiro)."""
+    global _ultima_req_api_monotonic
+    with _lock_throttle:
+        agora = time.monotonic()
+        espera = BLING_API_INTERVALO_MIN_SEG - (agora - _ultima_req_api_monotonic)
+        if espera > 0:
+            time.sleep(espera)
+        _ultima_req_api_monotonic = time.monotonic()
+
+
+def _eh_erro_rate_limit(status_code: int, mensagem: str | None) -> bool:
+    if status_code == 429:
+        return True
+    msg = (mensagem or "").lower()
+    return "429" in msg or "limite" in msg or "too_many" in msg or "rate limit" in msg
+
+
 def api_request(
     id_tenant: int,
     method: str,
@@ -449,24 +475,49 @@ def api_request(
         "Authorization": f"Bearer {token}",
         "Accept": "application/json",
     }
-    r = requests.request(
-        method.upper(),
-        url,
-        headers=headers,
-        params=params,
-        json=json_body,
-        timeout=45,
-    )
-    if r.status_code == 204:
-        return {}
-    try:
-        body = r.json()
-    except Exception:
-        body = {"raw": r.text[:1000]}
-    if r.status_code >= 400:
-        msg = body.get("error", {}).get("message") if isinstance(body.get("error"), dict) else None
-        raise RuntimeError(msg or f"Bling API {r.status_code}: {r.text[:500]}")
-    return body
+    ultimo_erro: Exception | None = None
+    for tentativa in range(BLING_API_MAX_TENTATIVAS_429):
+        _aguardar_throttle_api()
+        r = requests.request(
+            method.upper(),
+            url,
+            headers=headers,
+            params=params,
+            json=json_body,
+            timeout=45,
+        )
+        if r.status_code == 204:
+            return {}
+        try:
+            body = r.json()
+        except Exception:
+            body = {"raw": r.text[:1000]}
+        if r.status_code < 400:
+            return body if isinstance(body, dict) else {"data": body}
+
+        msg = None
+        if isinstance(body, dict) and isinstance(body.get("error"), dict):
+            msg = body.get("error", {}).get("message")
+        ultimo_erro = RuntimeError(msg or f"Bling API {r.status_code}: {r.text[:500]}")
+        if _eh_erro_rate_limit(r.status_code, msg or str(ultimo_erro)):
+            pausa = min(8.0, 1.5 * (tentativa + 1))
+            _log.warning(
+                "Bling 429/limite path=%s tentativa=%s/%s pausa=%.1fs",
+                path,
+                tentativa + 1,
+                BLING_API_MAX_TENTATIVAS_429,
+                pausa,
+            )
+            time.sleep(pausa)
+            # Token pode ter sido renovado em paralelo; recarrega a cada retry.
+            token = obter_access_token_valido(id_tenant)
+            headers["Authorization"] = f"Bearer {token}"
+            continue
+        raise ultimo_erro
+
+    if ultimo_erro:
+        raise ultimo_erro
+    raise RuntimeError("Bling API: falha sem detalhe.")
 
 
 def listar_produtos(

@@ -10,9 +10,9 @@ from global_utils import Var_ConectarBanco, agora_utc
 
 _log = logging.getLogger(__name__)
 
-WORKERS_PADRAO = 5
+WORKERS_PADRAO = 3
 MAX_TENTATIVAS = 3
-BATCH_CLAIM = 10
+BATCH_CLAIM = 6
 
 _workers_tenant: dict[int, threading.Thread] = {}
 _lock_workers = threading.Lock()

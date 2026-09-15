@@ -701,6 +701,15 @@ def _limpar_arquivo_upload(caminho: str | None) -> None:
                 p.unlink()
             except OSError:
                 pass
+        # Remove thumb irmã (*_t.jpg), se existir.
+        thumb_rel = caminho_thumb_db(rel)
+        if thumb_rel:
+            tp = _raiz_projeto() / "static" / thumb_rel.replace("/", os.sep)
+            if tp.is_file():
+                try:
+                    tp.unlink()
+                except OSError:
+                    pass
 
 
 def descartar_arquivos_imagem_locais(caminhos: list[str] | None) -> None:
@@ -719,6 +728,73 @@ def pasta_imagens_tenant(id_tenant: int) -> Path:
 def caminho_db_imagem_tenant(id_tenant: int, nome_arquivo: str) -> str:
     return f"imge/produtos/{int(id_tenant)}/{nome_arquivo}"
 
+
+THUMB_LADO_MAX_PX = 160
+THUMB_JPEG_QUALITY = 72
+
+
+def caminho_thumb_db(caminho_db: str | None) -> str | None:
+    """imge/produtos/{tenant}/arquivo.jpg → …/arquivo_t.jpg"""
+    if not caminho_db or caminho_eh_url(caminho_db):
+        return None
+    rel = str(caminho_db).replace("\\", "/").lstrip("/")
+    if not rel.lower().startswith("imge/produtos/") or ".." in rel:
+        return None
+    if rel.lower().endswith("_t.jpg"):
+        return rel
+    p = Path(rel)
+    return str(p.with_name(f"{p.stem}_t.jpg")).replace("\\", "/")
+
+
+def _abs_static_imge(caminho_db: str) -> Path | None:
+    rel = str(caminho_db).replace("\\", "/").lstrip("/")
+    if not rel.lower().startswith("imge/produtos/") or ".." in rel:
+        return None
+    return _raiz_projeto() / "static" / rel.replace("/", os.sep)
+
+
+def gerar_thumb_imagem_local(caminho_db: str | None) -> str | None:
+    """
+    Gera miniatura JPEG (*_t.jpg) ao lado do arquivo full.
+    Retorna caminho_db do thumb ou None.
+    """
+    thumb_rel = caminho_thumb_db(caminho_db)
+    if not thumb_rel or not caminho_db:
+        return None
+    origem = _abs_static_imge(str(caminho_db).replace("\\", "/").lstrip("/"))
+    destino = _abs_static_imge(thumb_rel)
+    if not origem or not destino or not origem.is_file():
+        return None
+    try:
+        if destino.is_file() and destino.stat().st_mtime >= origem.stat().st_mtime:
+            return thumb_rel
+        from PIL import Image, ImageOps
+
+        with Image.open(origem) as im:
+            im = ImageOps.exif_transpose(im)
+            if im.mode in ("RGBA", "LA") or (im.mode == "P" and "transparency" in im.info):
+                fundo = Image.new("RGB", im.size, (255, 255, 255))
+                rgba = im.convert("RGBA")
+                fundo.paste(rgba, mask=rgba.split()[-1])
+                im = fundo
+            else:
+                im = im.convert("RGB")
+            im.thumbnail((THUMB_LADO_MAX_PX, THUMB_LADO_MAX_PX), Image.Resampling.LANCZOS)
+            destino.parent.mkdir(parents=True, exist_ok=True)
+            im.save(destino, format="JPEG", quality=THUMB_JPEG_QUALITY, optimize=True)
+        return thumb_rel
+    except Exception:
+        return None
+
+
+def url_imagem_lista(caminho: str | None) -> str:
+    """URL para grade/listagem: thumb local se possível; HTTP remoto fica para o proxy do front."""
+    if not caminho:
+        return ""
+    if caminho_eh_url(caminho):
+        return caminho
+    thumb = gerar_thumb_imagem_local(caminho)
+    return url_imagem_produto(thumb or caminho)
 
 def _ext_de_bytes_ou_url(data: bytes, url: str, content_type: str | None) -> str:
     if data.startswith(b"\xff\xd8\xff"):
@@ -817,6 +893,7 @@ def baixar_e_gravar_imagem_tenant(
     destino = pasta_imagens_tenant(id_tenant) / nome
     destino.write_bytes(gravar)
     caminho_db = caminho_db_imagem_tenant(id_tenant, nome)
+    gerar_thumb_imagem_local(caminho_db)
     return caminho_db, len(gravar)
 
 

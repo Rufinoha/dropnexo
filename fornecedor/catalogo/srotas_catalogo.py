@@ -109,7 +109,7 @@ def variante_dict(row, *, incluir_produto: bool = False) -> dict[str, Any]:
         "preco_promocional": float(row[5]) if row[5] is not None else None,
         "preco_custo": float(row[6]) if row[6] is not None else None,
         "atributos": row[7] if isinstance(row[7], dict) else (json.loads(row[7]) if row[7] else {}),
-        "imagem_url": url_exibicao(caminho_img),
+        "imagem_url": url_imagem_lista(caminho_img),
         "imagem_caminho": caminho_img,
         "ativo": bool(row[9]),
         "ordem": int(row[10] or 0),
@@ -208,8 +208,9 @@ def merge_variante_exibicao(variante: dict[str, Any], pai: dict[str, Any]) -> di
     if pai.get("preco_promocional") and out.get("preco_promocional") in (None, ""):
         out["preco_promocional"] = pai.get("preco_promocional")
     if pai.get("imagem_url"):
-        out["imagem_url"] = url_exibicao(pai["imagem_url"])
-        out["imagem_caminho"] = pai["imagem_url"]
+        caminho_pai = pai.get("imagem_caminho") or pai["imagem_url"]
+        out["imagem_url"] = url_imagem_lista(caminho_pai)
+        out["imagem_caminho"] = caminho_pai
     return out
 
 
@@ -757,6 +758,7 @@ from fornecedor.catalogo.catalogo import (
     baixar_e_gravar_imagem_tenant,
     classificar_origem_manual,
     exigir_modo_compativel,
+    gerar_thumb_imagem_local,
     limpar_galeria_produto,
     listar_imagens_galeria_pai,
     listar_imagens_variante_selecionadas,
@@ -771,6 +773,7 @@ from fornecedor.catalogo.catalogo import (
     sincronizar_cache_variante,
     sincronizar_imagem_principal_produto,
     url_exibicao,
+    url_imagem_lista,
     validar_id_imagem_produto,
     _limpar_arquivo_upload,
 )
@@ -963,6 +966,11 @@ def _resolver_categoria(cur, id_tenant: int, nome_cat: str | None) -> int | None
 
 def _imagem_url_resposta(valor: str | None) -> str:
     return url_imagem_produto(valor) if valor else ""
+
+
+def _imagem_url_lista(valor: str | None) -> str:
+    """URL leve para grade (thumb local quando existir)."""
+    return url_imagem_lista(valor) if valor else ""
 
 
 def _caminho_eh_url(caminho: str | None) -> bool:
@@ -1244,7 +1252,7 @@ def catalogos_dados():
                     "preco": float(r[4] or 0),
                     "estoque": int(r[6] or 0),
                     "ativo": bool(r[5]),
-                    "imagem_url": _imagem_url_resposta(r[7]),
+                    "imagem_url": _imagem_url_lista(r[7]),
                 }
                 for r in cur.fetchall()
             ]
@@ -1360,7 +1368,7 @@ def catalogos_dados():
                 "preco_max": float(r[9] or 0),
                 "preco": float(r[8] or 0),
                 "estoque": int(r[10] or 0),
-                "imagem_url": _imagem_url_resposta(r[11]),
+                "imagem_url": _imagem_url_lista(r[11]),
                 "id_armazem_fornecedor": int(r[12]) if eh_az and len(r) > 12 and r[12] else None,
                 "armazem_fornecedor_nome": (r[13] if eh_az and len(r) > 13 else "") or "",
             }
@@ -2574,6 +2582,7 @@ def catalogos_imagens_upload():
                 destino.write_bytes(gravar_jpg)
             else:
                 destino.write_bytes(bruto)
+            gerar_thumb_imagem_local(caminho_db)
             cur.execute(
                 "SELECT COALESCE(MAX(ordem), -1) + 1 FROM tbl_produto_imagem WHERE id_produto = %s AND id != %s",
                 (id_produto, id_img),
@@ -2834,6 +2843,7 @@ def catalogos_imagem_upload():
         destino.write_bytes(bruto)
 
         caminho_db = _caminho_db_imagem(int(id_tenant), id_produto, ext)
+        gerar_thumb_imagem_local(caminho_db)
         cur.execute(
             "UPDATE tbl_produto SET imagem_url = %s, atualizado_em = %s WHERE id = %s AND id_tenant = %s",
             (caminho_db, agora_utc(), id_produto, id_tenant),
