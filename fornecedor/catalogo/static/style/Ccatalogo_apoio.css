@@ -689,19 +689,6 @@ html:has(.Cat_ApoioBody) body {
   opacity: 0.85;
   cursor: wait;
 }
-.Cat_ImgBusy {
-  margin: 0.35rem 0 0.5rem;
-  padding: 0.55rem 0.75rem;
-  border-radius: 8px;
-  background: #eff6ff;
-  border: 1px solid #bfdbfe;
-  color: #1d4ed8;
-  font-size: 0.82rem;
-  font-weight: 600;
-}
-.Cat_ImgBusy[hidden] {
-  display: none !important;
-}
 
 .Cat_Galeria {
   display: grid;

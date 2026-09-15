@@ -81,6 +81,7 @@ def reagir_estoque_promocao(cur, id_variante: int, total_antes: int, total_depoi
 # ── servico_imagens ───────────────────────────────────
 
 import ipaddress
+import io
 import os
 import re
 import socket
@@ -744,8 +745,14 @@ def baixar_e_gravar_imagem_tenant(
     Resolve link (página→direct se preciso), baixa bytes e grava em
     static/imge/produtos/{tenant}/. Retorna (caminho_db, tamanho_bytes).
     """
-    resolvida = resolver_url_imagem_link(url)
-    final_url = resolvida["url"]
+    bruto = (url or "").strip()
+    # Direct link (.jpg/.png/…) → 1 HTTP. Página (Postimages etc.) → resolve depois baixa.
+    if _url_parece_arquivo_imagem(bruto):
+        _host_url_seguro(bruto)
+        final_url = bruto
+    else:
+        resolvida = resolver_url_imagem_link(bruto)
+        final_url = resolvida["url"]
     data, ct = proxy_bytes_imagem_remota(final_url)
     if not data:
         raise ValueError("Imagem remota vazia.")
@@ -753,19 +760,40 @@ def baixar_e_gravar_imagem_tenant(
         raise ValueError("Imagem deve ter no máximo 2 MB.")
 
     try:
-        from api.bling.imagens_export import validar_imagem_upload_bytes
+        from api.bling.imagens_export import (
+            MAX_LADO_PX,
+            MIN_LADO_BLOQUEIO,
+            validar_imagem_upload_bytes,
+        )
+        from PIL import Image, ImageOps
 
-        valid = validar_imagem_upload_bytes(data)
+        # JPEG já ok (tamanho + dimensões) → grava sem re-encode (bem mais rápido).
+        gravar = None
+        if data.startswith(b"\xff\xd8\xff"):
+            im = Image.open(io.BytesIO(data))
+            try:
+                im2 = ImageOps.exif_transpose(im)
+                w, h = (im2 or im).size
+            finally:
+                im.close()
+            if min(w, h) < MIN_LADO_BLOQUEIO:
+                raise ValueError(
+                    f"Imagem muito pequena ({w}×{h}). Mínimo: {MIN_LADO_BLOQUEIO}px no menor lado."
+                )
+            if max(w, h) <= MAX_LADO_PX:
+                gravar = data
+
+        if gravar is None:
+            valid = validar_imagem_upload_bytes(data)
+            gravar = valid.get("jpg") if isinstance(valid, dict) else None
+            if not gravar:
+                gravar = data
     except ValueError:
         raise
     except Exception:
-        valid = {}
+        gravar = data
 
-    gravar = data
-    ext = _ext_de_bytes_ou_url(data, final_url, ct)
-    if isinstance(valid, dict) and valid.get("jpg"):
-        gravar = valid["jpg"]
-        ext = ".jpg"
+    ext = ".jpg" if gravar.startswith(b"\xff\xd8\xff") else _ext_de_bytes_ou_url(gravar, final_url, ct)
 
     nome = f"{int(id_produto)}_{int(id_imagem)}{ext}"
     destino = pasta_imagens_tenant(id_tenant) / nome

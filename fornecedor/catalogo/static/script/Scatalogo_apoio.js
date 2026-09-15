@@ -49,7 +49,6 @@
     arquivo_imagem: document.getElementById("arquivo_imagem"),
     btnImgLink: document.getElementById("btnImgLink"),
     btnImgUpload: document.getElementById("btnImgUpload"),
-    imgProcessandoStatus: document.getElementById("imgProcessandoStatus"),
     painelImgLink: document.getElementById("painelImgLink"),
     painelImgUpload: document.getElementById("painelImgUpload"),
     galeria_imagens: document.getElementById("galeria_imagens"),
@@ -758,11 +757,6 @@
 
   function setImgBusy(busy, mensagem) {
     imgBusy = !!busy;
-    const status = el.imgProcessandoStatus;
-    if (status) {
-      status.hidden = !imgBusy;
-      if (mensagem) status.textContent = mensagem;
-    }
     if (el.img_link_url) el.img_link_url.disabled = imgBusy;
     if (el.arquivo_imagem) el.arquivo_imagem.disabled = imgBusy;
     document.querySelectorAll('input[name="img_modo"]').forEach((r) => {
@@ -775,6 +769,18 @@
     if (el.btnImgUpload) {
       el.btnImgUpload.classList.toggle("is-busy", imgBusy);
       el.btnImgUpload.textContent = imgBusy ? "Processando…" : IMG_BTN_LABEL.upload;
+    }
+    if (imgBusy) {
+      Swal.fire({
+        title: mensagem || "Aguarde…",
+        text: "Pode levar alguns segundos.",
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        showConfirmButton: false,
+        didOpen: () => Swal.showLoading(),
+      });
+    } else if (typeof Swal.isLoading === "function" && Swal.isLoading()) {
+      Swal.close();
     }
     syncAvisoImagens();
   }
@@ -795,7 +801,7 @@
     if (!idProduto) throw new Error("Salve o produto antes de incluir imagens.");
     const url = (el.img_link_url?.value || "").trim();
     if (!url) throw new Error("Informe a URL da imagem.");
-    setImgBusy(true, "Baixando e salvando a imagem… aguarde (pode levar alguns segundos).");
+    setImgBusy(true, "Baixando e salvando a imagem…");
     try {
       const r = await fetch(`${apiBase()}/imagens/link`, {
         method: "POST",
@@ -806,17 +812,17 @@
       if (!r.ok || !j.success) throw new Error(j.message || "Erro.");
       if (el.img_link_url) el.img_link_url.value = "";
       await carregarImagens();
-      if (j.convertida || (j.message && /baixada|salva|convertido|direto/i.test(j.message))) {
-        await Swal.fire({
-          icon: "success",
-          title: "Imagem salva",
-          text: j.message || "Arquivo gravado no DropNexo.",
-          timer: 2200,
-          showConfirmButton: false,
-        });
-      }
-    } finally {
       setImgBusy(false);
+      await Swal.fire({
+        icon: "success",
+        title: "Imagem salva",
+        text: j.message || "Arquivo gravado no DropNexo.",
+        timer: 1600,
+        showConfirmButton: false,
+      });
+    } catch (e) {
+      setImgBusy(false);
+      throw e;
     }
   }
 
@@ -825,7 +831,7 @@
     if (!idProduto) throw new Error("Salve o produto antes de enviar imagens.");
     const f = el.arquivo_imagem?.files?.[0];
     if (!f) throw new Error("Selecione um arquivo.");
-    setImgBusy(true, "Enviando e processando a imagem… aguarde.");
+    setImgBusy(true, "Enviando e processando a imagem…");
     try {
       const fd = new FormData();
       fd.append("id_produto", String(idProduto));
@@ -835,8 +841,17 @@
       if (!r.ok || !j.success) throw new Error(j.message || "Erro ao enviar.");
       if (el.arquivo_imagem) el.arquivo_imagem.value = "";
       await carregarImagens();
-    } finally {
       setImgBusy(false);
+      await Swal.fire({
+        icon: "success",
+        title: "Imagem salva",
+        text: j.message || "Arquivo gravado no DropNexo.",
+        timer: 1600,
+        showConfirmButton: false,
+      });
+    } catch (e) {
+      setImgBusy(false);
+      throw e;
     }
   }
 
