@@ -802,13 +802,14 @@ def _salvar_produto(
                 id_importacao_lote, atualizado_em
             ) VALUES (
                 %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                %s, %s, %s, %s, %s, FALSE, 'S', 'P', %s, %s, %s
+                %s, %s, %s, %s, %s, %s, 'S', 'P', %s, %s, %s
             ) RETURNING id
             """,
             (
                 id_tenant,
                 id_categoria,
                 *vals,
+                bool(campos.get("ativo", True)),
                 ORIGEM_INTEGRACAO if id_importacao_lote else "manual",
                 id_importacao_lote,
                 agora,
@@ -1010,13 +1011,14 @@ def _salvar_produto_grupo_variacoes(
                 id_importacao_lote, atualizado_em
             ) VALUES (
                 %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                %s, %s, %s, %s, %s, FALSE, 'E', 'P', %s, %s, %s
+                %s, %s, %s, %s, %s, %s, 'E', 'P', %s, %s, %s
             ) RETURNING id
             """,
             (
                 id_tenant,
                 id_categoria,
                 *vals,
+                bool(campos.get("ativo", True)),
                 ORIGEM_INTEGRACAO if id_importacao_lote else "manual",
                 id_importacao_lote,
                 agora,

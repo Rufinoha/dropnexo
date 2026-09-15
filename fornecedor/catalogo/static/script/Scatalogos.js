@@ -273,16 +273,68 @@
       confirmButtonColor: "#b91c1c",
     });
     if (!c.isConfirmed) return;
-    const r = await fetch(`${BASE}/delete/lote`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ids }),
+
+    Swal.fire({
+      title: "Excluindo produtos…",
+      html: `<p style="margin:0;color:#64748b;font-size:14px;">Processando <strong>${ids.length}</strong> item(ns). Aguarde.</p>`,
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+      showConfirmButton: false,
+      didOpen: () => Swal.showLoading(),
     });
-    const j = await r.json();
-    if (!r.ok || !j.success) throw new Error(j.message || "Erro.");
+
+    let j = {};
+    try {
+      const r = await fetch(`${BASE}/delete/lote`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      });
+      try {
+        j = await r.json();
+      } catch {
+        j = {};
+      }
+      if (!r.ok && !(Number(j.excluidos) > 0)) {
+        throw new Error(j.message || "Erro ao excluir.");
+      }
+    } catch (e) {
+      await Swal.fire("Erro", e.message || "Erro ao excluir.", "error");
+      return;
+    }
+
     selecionados.clear();
     syncBulkBar();
-    await Swal.fire("Sucesso", j.message, "success");
+
+    const excluidos = Number(j.excluidos || 0);
+    const falhas = Array.isArray(j.falhas) ? j.falhas : [];
+    let html = `<p style="text-align:left;margin:0 0 8px;font-size:14px;">${excluidos} produto(s) excluído(s).</p>`;
+    if (falhas.length) {
+      html += `<p style="text-align:left;margin:10px 0 6px;color:#b91c1c;font-size:14px;"><strong>${falhas.length} não excluído(s):</strong></p>`;
+      html += `<ul style="text-align:left;max-height:240px;overflow:auto;font-size:13px;line-height:1.4;padding-left:18px;margin:0;">`;
+      falhas.slice(0, 40).forEach((f) => {
+        const rotulo = escapeHtml(
+          [f.sku, f.nome].filter(Boolean).join(" — ") || `#${f.id}`
+        );
+        html += `<li style="margin:0 0 8px;"><strong>${rotulo}</strong><br/><span style="color:#64748b;">${escapeHtml(
+          f.motivo || "Não foi possível excluir."
+        )}</span></li>`;
+      });
+      html += `</ul>`;
+      if (falhas.length > 40) {
+        html += `<p style="text-align:left;margin:8px 0 0;font-size:12px;color:#64748b;">… e mais ${
+          falhas.length - 40
+        }</p>`;
+      }
+    }
+
+    await Swal.fire({
+      icon: falhas.length ? (excluidos ? "warning" : "error") : "success",
+      title: falhas.length ? (excluidos ? "Exclusão parcial" : "Nada excluído") : "Sucesso",
+      html,
+      width: falhas.length ? 560 : undefined,
+      confirmButtonColor: "#021F81",
+    });
     await carregar();
   }
 

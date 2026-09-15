@@ -2012,30 +2012,101 @@ def catalogos_delete_lote():
     if not ids:
         return jsonify(success=False, message="Nenhum produto selecionado."), 400
     id_tenant = session.get("id_tenant")
+
+    def _motivo_exclusao(exc: BaseException) -> str:
+        msg = str(exc or "").strip() or "Erro ao excluir."
+        low = msg.lower()
+        if "foreign key" in low or "violates foreign key" in low:
+            return (
+                "Produto vinculado a outros registros "
+                "(pedido, vitrine, integração, etc.) e não pode ser excluído."
+            )
+        return msg[:300]
+
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
         excluidos = 0
-        for pid in ids:
+        falhas: list[dict[str, Any]] = []
+        for i, pid in enumerate(ids):
             cur.execute(
-                "SELECT id FROM tbl_produto WHERE id = %s AND id_tenant = %s",
+                """
+                SELECT id, COALESCE(sku, ''), COALESCE(nome, '')
+                FROM tbl_produto
+                WHERE id = %s AND id_tenant = %s
+                """,
                 (pid, id_tenant),
             )
-            if not cur.fetchone():
+            row = cur.fetchone()
+            if not row:
+                falhas.append(
+                    {
+                        "id": pid,
+                        "sku": "",
+                        "nome": f"#{pid}",
+                        "motivo": "Produto não encontrado.",
+                    }
+                )
                 continue
-            limpar_galeria_produto(cur, pid)
-            cur.execute(
-                "DELETE FROM tbl_produto WHERE id = %s AND id_tenant = %s",
-                (pid, id_tenant),
-            )
-            if cur.rowcount:
+            sku, nome = row[1] or "", row[2] or f"#{pid}"
+            sp = f"del_lote_{i}_{pid}"
+            try:
+                cur.execute(f"SAVEPOINT {sp}")
+                limpar_galeria_produto(cur, pid)
+                cur.execute(
+                    "DELETE FROM tbl_produto WHERE id = %s AND id_tenant = %s",
+                    (pid, id_tenant),
+                )
+                if not cur.rowcount:
+                    cur.execute(f"ROLLBACK TO SAVEPOINT {sp}")
+                    falhas.append(
+                        {
+                            "id": pid,
+                            "sku": sku,
+                            "nome": nome,
+                            "motivo": "Produto não encontrado.",
+                        }
+                    )
+                    continue
+                cur.execute(f"RELEASE SAVEPOINT {sp}")
                 excluidos += 1
-        recalcular_bytes_imagens_tenant(cur, int(id_tenant))
+            except Exception as e:
+                try:
+                    cur.execute(f"ROLLBACK TO SAVEPOINT {sp}")
+                except Exception:
+                    conn.rollback()
+                    cur = conn.cursor()
+                falhas.append(
+                    {
+                        "id": pid,
+                        "sku": sku,
+                        "nome": nome,
+                        "motivo": _motivo_exclusao(e),
+                    }
+                )
+
+        if excluidos:
+            try:
+                recalcular_bytes_imagens_tenant(cur, int(id_tenant))
+            except Exception:
+                pass
         conn.commit()
+
+        if excluidos and not falhas:
+            msg = f"{excluidos} produto(s) excluído(s)."
+        elif excluidos and falhas:
+            msg = f"{excluidos} excluído(s); {len(falhas)} não excluído(s)."
+        elif falhas:
+            msg = f"Nenhum produto excluído. {len(falhas)} com falha."
+        else:
+            msg = "Nenhum produto excluído."
+
         return jsonify(
             success=True,
-            message=f"{excluidos} produto(s) excluído(s).",
+            message=msg,
             excluidos=excluidos,
+            falhas=falhas,
+            total=len(ids),
         )
     except Exception as e:
         conn.rollback()
