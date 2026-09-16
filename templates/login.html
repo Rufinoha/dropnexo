@@ -18,6 +18,7 @@
         <h1>Entrar</h1>
         <p class="muted">Painel do tenant — <a href="{{ url_for('public.home') }}">voltar ao site</a></p>
         <form id="form-login" class="stack">
+          <input type="hidden" id="login-next" value="{{ next_url|e }}" />
           <label>E-mail
             <input type="email" name="email" id="login-email" required autocomplete="username" />
           </label>
@@ -102,7 +103,11 @@
         e.preventDefault();
         mostrarMsg(msgLogin, "", false);
         const fd = new FormData(e.target);
-        const body = { email: fd.get("email"), senha: fd.get("senha") };
+        const body = {
+          email: fd.get("email"),
+          senha: fd.get("senha"),
+          next: (document.getElementById("login-next")?.value || "").trim(),
+        };
         const r = await fetch("{{ url_for('auth.api_login') }}", {
           method: "POST",
           headers: { "Content-Type": "application/json", Accept: "application/json" },

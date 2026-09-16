@@ -56,8 +56,9 @@
 
 .FnDep_CardBadge {
   position: absolute;
-  top: 0.75rem;
+  bottom: 0.7rem;
   right: 0.75rem;
+  top: auto;
   font-size: 0.65rem;
   font-weight: 700;
   text-transform: uppercase;
@@ -66,6 +67,11 @@
   border-radius: 999px;
   background: #d1fae5;
   color: #047857;
+  max-width: calc(100% - 1.5rem);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  z-index: 1;
 }
 
 .FnDep_CardNome {
@@ -73,7 +79,8 @@
   font-size: 1.08rem;
   font-weight: 700;
   color: #0f172a;
-  padding-right: 4.5rem;
+  padding-right: 0;
+  word-break: break-word;
 }
 
 .FnDep_CardCep {
@@ -91,8 +98,10 @@
 
 .FnDep_CardHint {
   margin: 0.65rem 0 0;
+  padding-right: 9.5rem;
   font-size: 0.72rem;
   color: #94a3b8;
+  min-height: 1.1rem;
 }
 
 .FnDep_Vazio {

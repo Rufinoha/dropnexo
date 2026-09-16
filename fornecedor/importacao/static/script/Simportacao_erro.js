@@ -35,6 +35,65 @@
     return `<span class="imp-erro-badge">${c}</span>`;
   }
 
+  function formatarVariacaoLabel(raw) {
+    const s = String(raw || "").trim();
+    if (!s) return "";
+    // "Cor:Preto;Tamanho:M" → "Cor: Preto · Tamanho: M"
+    if (s.includes(":") || s.includes(";")) {
+      return s
+        .split(";")
+        .map((parte) => {
+          const p = parte.trim();
+          if (!p) return "";
+          if (p.includes(":")) {
+            const [k, ...rest] = p.split(":");
+            return `${k.trim()}: ${rest.join(":").trim()}`;
+          }
+          return p;
+        })
+        .filter(Boolean)
+        .join(" · ");
+    }
+    return s;
+  }
+
+  function extrairVariacao(erro) {
+    const pl = erro?.payload || {};
+    const resumo = pl.bling_resumo || {};
+    const candidatos = [
+      pl.variacao_label,
+      resumo.variacao,
+      resumo.variacao_nome,
+      pl.nome_variacao,
+      erro?.nome_variacao,
+    ];
+    for (const c of candidatos) {
+      const fmt = formatarVariacaoLabel(c);
+      if (fmt) return fmt;
+    }
+    return "";
+  }
+
+  function celulaNome(erro) {
+    const nome = (erro.nome || "").trim() || "—";
+    const variacao = extrairVariacao(erro);
+    const varHtml = variacao
+      ? `<span class="imp-erro-variacao">${esc(variacao)}</span>`
+      : "";
+    return `<div class="imp-erro-produto">
+      <span class="imp-erro-nome" title="${esc(nome)}">${esc(nome)}</span>
+      ${varHtml}
+    </div>`;
+  }
+
+  function celulaSku(sku) {
+    const s = String(sku || "").trim();
+    if (!s) {
+      return `<span class="imp-erro-sku imp-erro-sku--vazio" title="Sem SKU">—</span>`;
+    }
+    return `<span class="imp-erro-sku" title="${esc(s)}">${esc(s)}</span>`;
+  }
+
   function abrirDetalhe(erro) {
     if (!erro) return;
     const pl = erro.payload || {};
@@ -42,6 +101,8 @@
     const ref = erro.ref_externa || erro.linha_arquivo || "—";
     const dica = erro.dica || pl.dica || "Corrija o registro na origem e repita a importação.";
     const categoria = erro.categoria || pl.categoria || "Importação";
+    const variacao = extrairVariacao(erro);
+    const sku = String(erro.sku || "").trim();
 
     const blocos = [
       { titulo: "Resumo Bling / linha", dados: pl.bling_resumo || pl.job || null },
@@ -76,10 +137,15 @@
         <div class="imp-erro-detalhe">
           <div class="imp-erro-detalhe-head">
             ${badgeCategoria(categoria)}
-            <span class="imp-erro-ref">Ref. ${esc(ref)}</span>
+            <span class="imp-erro-ref">Ref. Bling ${esc(ref)}</span>
           </div>
           <h4 class="imp-erro-detalhe-nome">${esc(erro.nome || "—")}</h4>
-          <p class="imp-erro-detalhe-sku">SKU: <code>${esc(erro.sku || "—")}</code></p>
+          ${variacao ? `<p class="imp-erro-detalhe-var">${esc(variacao)}</p>` : ""}
+          <p class="imp-erro-detalhe-sku">SKU: ${
+            sku
+              ? `<span class="imp-erro-sku">${esc(sku)}</span>`
+              : `<span class="imp-erro-sku imp-erro-sku--vazio">—</span>`
+          }</p>
 
           <div class="imp-erro-card imp-erro-card--motivo">
             <div class="imp-erro-card-label">O que aconteceu</div>
@@ -113,18 +179,16 @@
     }
 
     if (!erros.length) {
-      tbody.innerHTML = `<tr><td colspan="4">Nenhum erro neste lote.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="3">Nenhum erro neste lote.</td></tr>`;
       return;
     }
 
     tbody.innerHTML = erros
       .map((e, idx) => {
-        const ref = e.linha_arquivo || e.ref_externa || "—";
         const cat = e.categoria || (e.payload && e.payload.categoria) || "";
         return `<tr class="imp-erro-row" data-idx="${idx}" title="Duplo clique para ver detalhes">
-            <td>${esc(ref)}</td>
-            <td>${esc(e.nome || "—")}</td>
-            <td>${esc(e.sku || "—")}</td>
+            <td class="imp-erro-col-nome">${celulaNome(e)}</td>
+            <td class="imp-erro-col-sku">${celulaSku(e.sku)}</td>
             <td class="imp-erro-motivo">
               ${cat ? badgeCategoria(cat) : ""}
               <span class="imp-erro-motivo-txt">${esc(e.mensagem)}</span>
@@ -147,7 +211,7 @@
     const tbody = qs("#impErroTbl");
     if (!idLote) {
       if (intro) intro.textContent = "Lote não informado.";
-      if (tbody) tbody.innerHTML = `<tr><td colspan="4">Informe o lote.</td></tr>`;
+      if (tbody) tbody.innerHTML = `<tr><td colspan="3">Informe o lote.</td></tr>`;
       return;
     }
 
@@ -155,7 +219,7 @@
     const j = await r.json();
     if (!r.ok || !j.success) {
       if (intro) intro.textContent = j.message || "Erro ao carregar.";
-      if (tbody) tbody.innerHTML = `<tr><td colspan="4">—</td></tr>`;
+      if (tbody) tbody.innerHTML = `<tr><td colspan="3">—</td></tr>`;
       return;
     }
 

@@ -339,7 +339,9 @@ def _enviar_email_vinculo(
         link_acao = f"{base}/fornecedores"
         texto_botao = "Ver fornecedores"
     else:
-        link_acao = f"{base}/fornecedor/vendedores"
+        from core.vinculos_email import _path_vendedores
+
+        link_acao = f"{base}{_path_vendedores(cur, id_destinatario_tenant)}"
         texto_botao = "Ver vendedores parceiros"
     try:
         html = render_template(

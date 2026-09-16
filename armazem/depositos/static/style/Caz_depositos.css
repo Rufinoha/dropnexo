@@ -56,8 +56,9 @@
 
 .AzDep_CardBadge {
   position: absolute;
-  top: 0.75rem;
+  bottom: 0.7rem;
   right: 0.75rem;
+  top: auto;
   font-size: 0.65rem;
   font-weight: 700;
   text-transform: uppercase;
@@ -66,6 +67,11 @@
   border-radius: 999px;
   background: #d1fae5;
   color: #047857;
+  max-width: calc(50% - 1rem);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  z-index: 1;
 }
 
 .AzDep_CardBadge--bling {
@@ -77,10 +83,6 @@
 
 .AzDep_Card.is-bling {
   border-color: #93c5fd;
-}
-
-.AzDep_Card.is-principal.is-bling .AzDep_CardBadge:not(.AzDep_CardBadge--bling) {
-  top: 0.75rem;
 }
 
 .AzDep_BlingHint {
@@ -104,7 +106,8 @@
   font-size: 1.08rem;
   font-weight: 700;
   color: #0f172a;
-  padding-right: 4.5rem;
+  padding-right: 0;
+  word-break: break-word;
 }
 
 .AzDep_CardCep {
@@ -122,8 +125,14 @@
 
 .AzDep_CardHint {
   margin: 0.65rem 0 0;
+  padding-right: 7.5rem;
   font-size: 0.72rem;
   color: #94a3b8;
+  min-height: 1.1rem;
+}
+
+.AzDep_Card.is-bling .AzDep_CardHint {
+  padding-left: 4.5rem;
 }
 
 .AzDep_Vazio {

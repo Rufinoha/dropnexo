@@ -824,6 +824,40 @@
   font-size: 12px;
   color: #8a939e;
 }
+.imp-erro-table-wrap {
+  overflow-x: auto;
+}
+.imp-erro-table-wrap table.imp-erro-table,
+.imp-erro-table-wrap table {
+  table-layout: fixed;
+  width: 100%;
+}
+.imp-erro-table-wrap th.imp-erro-col-nome,
+.imp-erro-table-wrap td.imp-erro-col-nome {
+  width: 42%;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+  vertical-align: top;
+}
+.imp-erro-table-wrap th.imp-erro-col-sku,
+.imp-erro-table-wrap td.imp-erro-col-sku {
+  width: 96px;
+  max-width: 110px;
+  white-space: nowrap;
+  overflow: visible;
+  text-overflow: unset;
+  text-align: center;
+  vertical-align: middle;
+}
+.imp-erro-table-wrap th.imp-erro-col-motivo,
+.imp-erro-table-wrap td.imp-erro-motivo {
+  width: auto;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+  vertical-align: top;
+}
 .imp-erro-table-wrap table tbody tr.imp-erro-row {
   cursor: pointer;
   transition: background 0.15s ease;
@@ -831,7 +865,56 @@
 .imp-erro-table-wrap table tbody tr.imp-erro-row:hover {
   background: #eef6ff;
 }
-.imp-erro-motivo { max-width: 340px; }
+.imp-erro-produto {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.imp-erro-nome {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 600;
+  color: #1a2332;
+  line-height: 1.35;
+  white-space: normal;
+}
+.imp-erro-variacao {
+  display: block;
+  font-size: 11px;
+  font-weight: 500;
+  color: #6b7680;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.imp-erro-sku {
+  display: inline-block;
+  max-width: 100%;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-family: ui-monospace, "Cascadia Code", "Segoe UI Mono", Consolas, monospace;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  color: #1a2332;
+  background: #eef2f6;
+  border: 1px solid #d8dee6;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
+.imp-erro-sku--vazio {
+  font-weight: 500;
+  color: #9aa3ad;
+  background: #f4f5f6;
+  border-color: #e5e8ec;
+}
 .imp-erro-motivo-txt { display: block; margin-top: 4px; line-height: 1.35; font-size: 12px; }
 .imp-erro-badge {
   display: inline-block;
@@ -848,7 +931,12 @@
 .imp-erro-detalhe { font-size: 13px; color: #2c333a; }
 .imp-erro-detalhe-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
 .imp-erro-ref { font-size: 12px; color: #6b7680; }
-.imp-erro-detalhe-nome { margin: 0 0 4px; font-size: 16px; font-weight: 600; color: #1a2332; }
+.imp-erro-detalhe-nome { margin: 0 0 2px; font-size: 16px; font-weight: 600; color: #1a2332; }
+.imp-erro-detalhe-var {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: #6b7680;
+}
 .imp-erro-detalhe-sku { margin: 0 0 14px; font-size: 12px; color: #5c6570; }
 .imp-erro-detalhe-sku code { background: #eef1f4; padding: 2px 6px; border-radius: 4px; }
 .imp-erro-card {

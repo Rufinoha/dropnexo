@@ -218,6 +218,7 @@ def vendedores_detalhe(id_vinculo: int):
 
         return jsonify(
             success=True,
+            eh_desenvolvedor=bool(session.get("eh_desenvolvedor")),
             vinculo={
                 "id": row[0],
                 "status": row[1],
@@ -254,6 +255,46 @@ def vendedores_detalhe(id_vinculo: int):
                 "requisitos_aceitos": merged.get("requisitos_aceitos") or {},
             },
         )
+    finally:
+        conn.close()
+
+
+@az_vendedores_bp.post("/armazem/vendedores/notificar-solicitacao")
+@login_obrigatorio()
+@exigir_modulo(MODULO_ARMAZEM)
+def vendedores_notificar_solicitacao():
+    """DEV: reenvia e-mail de solicitação ao dono do armazém."""
+    if not session.get("eh_desenvolvedor"):
+        return jsonify(success=False, message="Acesso restrito a desenvolvedores."), 403
+    if (r := _exigir_armazem_tenant()) is not None:
+        return r
+    id_forn = _id_tenant()
+    body = request.get_json(silent=True) or {}
+    try:
+        id_vinculo = int(body.get("id"))
+    except (TypeError, ValueError):
+        return jsonify(success=False, message="Vínculo inválido."), 400
+
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT id FROM tbl_vinculo_vendedor_fornecedor
+            WHERE id = %s AND id_tenant_fornecedor = %s
+            """,
+            (id_vinculo, id_forn),
+        )
+        if not cur.fetchone():
+            return jsonify(success=False, message="Solicitação não encontrada."), 404
+        from core.vinculos_email import notificar_solicitacao_vinculo
+
+        ok, msg = notificar_solicitacao_vinculo(
+            cur, id_vinculo, criado_por=session.get("id_usuario")
+        )
+        if not ok:
+            return jsonify(success=False, message=msg or "Falha ao enviar."), 400
+        return jsonify(success=True, message=msg)
     finally:
         conn.close()
 
@@ -362,6 +403,13 @@ def vendedores_responder():
         if cur.rowcount == 0:
             return jsonify(success=False, message="Solicitação não encontrada ou já respondida."), 404
         conn.commit()
+        if novo == "ativo":
+            try:
+                from core.vinculos_email import notificar_aprovacao_vinculo
+
+                notificar_aprovacao_vinculo(cur, id_vinculo, criado_por=uid_i)
+            except Exception:
+                pass
         msg = "Vendedor aprovado." if novo == "ativo" else "Solicitação recusada. O vendedor verá o motivo informado."
         return jsonify(success=True, message=msg)
     except ValueError as e:

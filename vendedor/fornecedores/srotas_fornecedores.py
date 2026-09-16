@@ -1436,7 +1436,38 @@ def solicitar_vinculo():
                     id_azf,
                 ),
             )
+        # id do vínculo (insert ou update)
+        cur.execute(
+            """
+            SELECT id FROM tbl_vinculo_vendedor_fornecedor
+            WHERE id_tenant_vendedor = %s AND id_tenant_fornecedor = %s
+              AND COALESCE(id_armazem_fornecedor, 0) = COALESCE(%s, 0)
+            LIMIT 1
+            """,
+            (id_vendedor, id_forn, id_azf),
+        )
+        row_id = cur.fetchone()
+        id_vinculo_novo = int(row_id[0]) if row_id else None
         conn.commit()
+
+        if id_vinculo_novo:
+            try:
+                from core.vinculos_email import (
+                    notificar_aprovacao_vinculo,
+                    notificar_solicitacao_vinculo,
+                )
+
+                if auto_aprovar:
+                    notificar_aprovacao_vinculo(
+                        cur, id_vinculo_novo, criado_por=id_usuario
+                    )
+                else:
+                    notificar_solicitacao_vinculo(
+                        cur, id_vinculo_novo, criado_por=id_usuario
+                    )
+            except Exception:
+                pass
+
         if auto_aprovar:
             return jsonify(
                 success=True,

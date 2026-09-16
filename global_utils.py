@@ -277,12 +277,25 @@ def login_obrigatorio(_func=None, *, exigir_tenant: bool = True):
             if not uid:
                 if _is_ajax_json():
                     return jsonify(success=False, message="Não autenticado."), 401
-                return redirect(url_for("auth.pagina_login"))
+                from flask import request
+
+                nxt = (request.full_path or request.path or "").strip()
+                # full_path inclui ?query e termina com ? se sem query
+                if nxt.endswith("?"):
+                    nxt = nxt[:-1]
+                if not nxt.startswith("/"):
+                    nxt = request.path or "/"
+                return redirect(url_for("auth.pagina_login", next=nxt))
 
             if exigir_tenant and not session.get("id_tenant"):
                 if _is_ajax_json():
                     return jsonify(success=False, message="Sessão sem tenant."), 403
-                return redirect(url_for("auth.pagina_login"))
+                from flask import request
+
+                nxt = (request.full_path or request.path or "").strip()
+                if nxt.endswith("?"):
+                    nxt = nxt[:-1]
+                return redirect(url_for("auth.pagina_login", next=nxt if nxt.startswith("/") else "/"))
 
             return func(*args, **kwargs)
 

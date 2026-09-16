@@ -257,7 +257,7 @@ auth_bp = Blueprint("auth", __name__)
 
 @auth_bp.get("/login")
 def pagina_login():
-    return render_template("login.html")
+    return render_template("login.html", next_url=request.args.get("next") or "")
 
 
 @auth_bp.get("/definir-senha")
@@ -270,6 +270,7 @@ def api_login():
     dados = request.get_json(silent=True) or {}
     email = (dados.get("email") or "").strip().lower()
     senha = dados.get("senha") or ""
+    next_url = _redirect_seguro(dados.get("next") or request.args.get("next"))
 
     if not email or not senha:
         return jsonify(success=False, message="Informe e-mail e senha."), 400
@@ -355,7 +356,7 @@ def api_login():
             (id_vinculo,),
         )
         conn.commit()
-        return jsonify(success=True, redirect=url_for("dashboard.index"))
+        return jsonify(success=True, redirect=next_url)
     except Exception as e:
         _log_auth.exception("api_login falhou")
         if is_modo_producao():

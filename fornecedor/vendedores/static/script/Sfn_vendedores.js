@@ -357,6 +357,9 @@
       </div>`;
 
     if (modalFooter) {
+      const btnNotificar = j.eh_desenvolvedor
+        ? `<button type="button" class="Cl_BtnCancelar" id="vd_btnNotificarForn" title="DEV: reenvia e-mail de solicitação">Notificar Fornecedor</button>`
+        : "";
       if (vin.status === "aguardando") {
         modalFooter.hidden = false;
         modalFooter.innerHTML = `
@@ -365,6 +368,7 @@
             <span>Aprovar libera o catálogo; recusar envia o motivo ao vendedor.</span>
           </div>
           <div class="VdDet_FootBtns">
+            ${btnNotificar}
             <button type="button" class="Cl_BtnSalvar" id="vd_btnAprovar">Aprovar vínculo</button>
             <button type="button" class="Cl_BtnCancelar" id="vd_btnRecusar">Recusar</button>
           </div>
@@ -381,6 +385,7 @@
             <span>Pausar ou encerrar afeta a vitrine deste vendedor.</span>
           </div>
           <div class="VdDet_FootBtns">
+            ${btnNotificar}
             <button type="button" class="Cl_BtnCancelar" id="vd_btnPausar">Pausar vínculo</button>
             <button type="button" class="Cl_BtnExcluir" id="vd_btnInativar">Encerrar vínculo</button>
           </div>`;
@@ -392,6 +397,7 @@
             <span>${vin.pode_despausar ? "Você pode reativar ou encerrar." : "Somente quem pausou pode despausar."}</span>
           </div>
           <div class="VdDet_FootBtns">
+            ${btnNotificar}
             ${
               vin.pode_despausar
                 ? '<button type="button" class="Cl_BtnSalvar" id="vd_btnDespausar">Despausar vínculo</button>'
@@ -473,6 +479,37 @@
   });
 
   modalFooter?.addEventListener("click", async (e) => {
+    if (e.target.id === "vd_btnNotificarForn") {
+      if (!vinculoAtual) return;
+      const ok = window.Swal
+        ? (
+            await Swal.fire({
+              title: "Notificar fornecedor?",
+              text: "Envia o e-mail de solicitação de vínculo ao dono da conta.",
+              icon: "question",
+              showCancelButton: true,
+              confirmButtonText: "Enviar e-mail",
+              cancelButtonText: "Cancelar",
+            })
+          ).isConfirmed
+        : confirm("Enviar e-mail de solicitação ao fornecedor?");
+      if (!ok) return;
+      const r = await fetch("/fornecedor/vendedores/notificar-solicitacao", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: vinculoAtual.id }),
+      });
+      let j = {};
+      try {
+        j = await r.json();
+      } catch (_) {
+        j = { success: false, message: "Erro no servidor." };
+      }
+      if (window.Swal) Swal.fire(j.success ? "OK" : "Erro", j.message || "Falha", j.success ? "success" : "error");
+      else alert(j.message || "Falha");
+      return;
+    }
     if (e.target.id === "vd_btnAprovar") responder("aprovar");
     if (e.target.id === "vd_btnRecusar") {
       const box = document.getElementById("vd_recusaBox");

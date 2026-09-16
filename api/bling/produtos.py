@@ -1585,6 +1585,16 @@ def importar_produtos(
                     for k in ("id", "codigo", "nome", "formato", "situacao", "preco")
                     if item.get(k) is not None
                 }
+                var_bloco = item.get("variacao") if isinstance(item.get("variacao"), dict) else {}
+                var_label = (var_bloco.get("nome") or "").strip()
+                if var_label:
+                    extra["bling_resumo"]["variacao"] = var_label
+                    extra["variacao_label"] = var_label
+                if _eh_variacao_filha(item):
+                    extra["bling_resumo"]["eh_variacao"] = True
+                    id_pai = _id_pai_bling(item)
+                    if id_pai:
+                        extra["bling_resumo"]["id_pai"] = id_pai
             payload_erro = montar_payload_erro(
                 mensagem_tecnica=motivo_tecnico,
                 origem="bling",
