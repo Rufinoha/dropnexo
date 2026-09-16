@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Vídeo — Academia DropNexo</title>
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='imge/icone_dropnexo.png') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style/global_utils.css') }}">
+  <link rel="stylesheet" href="{{ url_for('academia.static', filename='style/Cacademia.css') }}?v=20260916c">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+</head>
+<body class="Acad_ApoioBody">
+  <div class="Cl_Header Cl_ApoioHeader" aria-hidden="true">
+    <div class="Cl_Logo">
+      <img src="{{ url_for('static', filename='imge/logo_dropnexo_nome.png') }}" alt="">
+    </div>
+    <div class="Cl_Titulo"><h1>Vídeo da Academia</h1></div>
+  </div>
+
+  <input type="hidden" id="id" value="">
+
+  <div class="Acad_ApoioShell">
+    <header class="Acad_ApoioHero">
+      <div class="Acad_ApoioHeroText">
+        <span class="Acad_ApoioKicker">Academia DropNexo</span>
+        <h1 id="aca_titulo_pagina">Novo vídeo-aula</h1>
+        <p class="Acad_ApoioHeroDesc">
+          Conteúdo global — visível para todos os clientes. Use categorias claras e títulos objetivos.
+        </p>
+      </div>
+      <div class="Acad_ApoioHeroBadge" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
+          <path d="M6 12v5c3 3 9 3 12 0v-5"/>
+        </svg>
+      </div>
+    </header>
+
+    <div class="Acad_ApoioCard">
+      <section class="Acad_ApoioSection">
+        <div class="Acad_ApoioSectionHead">
+          <strong>Conteúdo</strong>
+          <span>Título e descrição apresentados na listagem e no player</span>
+        </div>
+
+        <div class="Acad_ApoioGrid Acad_ApoioGrid--2">
+          <div class="Cl_FormCampo">
+            <label for="categoria">Categoria *</label>
+            <input type="text" id="categoria" maxlength="120" placeholder="Ex.: Catálogo, Pedidos, Integrações" autocomplete="off">
+          </div>
+          <div class="Cl_FormCampo">
+            <label for="titulo">Título *</label>
+            <input type="text" id="titulo" maxlength="200" placeholder="Ex.: Como importar produtos do Bling" autocomplete="off">
+          </div>
+        </div>
+
+        <div class="Cl_FormCampo">
+          <label for="descricao">Descrição *</label>
+          <textarea id="descricao" rows="4" placeholder="Resumo do que o aluno vai aprender nesta aula…"></textarea>
+        </div>
+      </section>
+
+      <section class="Acad_ApoioSection">
+        <div class="Acad_ApoioSectionHead">
+          <strong>Publicação</strong>
+          <span>Ordem na lista e status de exibição</span>
+        </div>
+
+        <div class="Acad_ApoioGrid Acad_ApoioGrid--3">
+          <div class="Cl_FormCampo">
+            <label for="duracao_txt">Duração</label>
+            <input type="text" id="duracao_txt" placeholder="Ex.: 12 min" autocomplete="off">
+          </div>
+          <div class="Cl_FormCampo">
+            <label for="ordem">Ordem</label>
+            <input type="number" id="ordem" value="0" min="0" step="1">
+          </div>
+          <div class="Cl_FormCampo Acad_ApoioSwitchField">
+            <label>Status</label>
+            <label class="Cl_Switch">
+              <input type="checkbox" id="ativo" checked>
+              <span class="Cl_SwitchSlider"></span>
+              <span>Ativo na Academia</span>
+            </label>
+          </div>
+        </div>
+      </section>
+
+      <section class="Acad_ApoioSection Acad_ApoioSection--last">
+        <div class="Acad_ApoioSectionHead">
+          <strong>Arquivo de vídeo</strong>
+          <span>MP4 · envio em partes (suporta arquivos grandes)</span>
+        </div>
+
+        <label class="Acad_Upload" for="arquivo" id="aca_upload_zone">
+          <input type="file" id="arquivo" accept="video/mp4,.mp4" hidden>
+          <span class="Acad_UploadIcon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M12 16V4"/>
+              <path d="M8 8l4-4 4 4"/>
+              <path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>
+            </svg>
+          </span>
+          <span class="Acad_UploadMain" id="aca_upload_nome">Selecionar arquivo MP4</span>
+          <span class="Acad_UploadHint" id="arquivoHint">Obrigatório ao incluir. Arraste ou clique para escolher.</span>
+        </label>
+      </section>
+    </div>
+
+    <div class="Cl_BotoesApoio Acad_ApoioFoot">
+      <button type="button" class="Cl_BtnExcluir" id="btnExcluir" hidden>Inativar</button>
+      <button type="button" class="Cl_BtnSalvar" id="btnSalvar">Salvar vídeo</button>
+    </div>
+  </div>
+
+  <script src="{{ url_for('static', filename='script/global_utils.js') }}?v=20260528modal"></script>
+  <script src="{{ url_for('academia.static', filename='script/Sacademia_apoio.js') }}?v=20260916c"></script>
+</body>
+</html>

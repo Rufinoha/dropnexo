@@ -403,6 +403,7 @@ MENUS_HEADER_PADRAO = (
     ("hdr_meu_plano", "Meu Plano", "/meu-plano", "credit-card"),
     ("hdr_financeiro", "Financeiro", "/financeiro", "landmark"),
     ("hdr_chamados", "Central de Chamados", "/demandas", "message-square"),
+    ("hdr_academia", "Academia DropNexo", "/academia", "graduation-cap"),
     ("hdr_marktplace", "Marktplace", "/marktplace", "shopping-bag"),
 )
 
@@ -424,6 +425,7 @@ PAGES_HEADER_EXCLUSIVOS = frozenset(
         "/meu-plano",
         "/financeiro",
         "/demandas",
+        "/academia",
         "/marktplace",
         "/marketplace",
     }
@@ -433,6 +435,8 @@ NOMES_HEADER_EXCLUSIVOS = frozenset(
         "meu plano",
         "financeiro",
         "central de chamados",
+        "academia dropnexo",
+        "academia",
         "marktplace",
         "marketplace",
     }

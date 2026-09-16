@@ -182,6 +182,12 @@
                 <span>Central de Chamados</span>
               </a>
               {% endif %}
+              {% if 'hdr_academia' in (header_navs or []) %}
+              <a href="{{ url_for('academia.academia') }}" class="fg-menu-item" role="menuitem">
+                <span class="fg-menu-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg></span>
+                <span>Academia DropNexo</span>
+              </a>
+              {% endif %}
               {% if 'hdr_marktplace' in (header_navs or []) %}
               <a href="{{ url_for('marktplace.pagina') }}" class="fg-menu-item" role="menuitem">
                 <span class="fg-menu-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg></span>

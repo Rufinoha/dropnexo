@@ -17,6 +17,12 @@ build/
 upload/**
 !upload/.gitkeep
 
+# Vídeos da Academia (locais; não versionar)
+storage/academia/**
+!storage/academia/.gitkeep
+!storage/academia/_tmp/
+!storage/academia/_tmp/.gitkeep
+
 # Anexos espelhados de demandas (HubSupport) — dados locais
 static/anexos/
 

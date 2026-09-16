@@ -1,0 +1,47 @@
+{% extends "frm_base.html" %}
+
+{% block title %}Academia DropNexo{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('academia.static', filename='style/Cacademia.css') }}?v=20260916a">
+
+<section class="aca-wrap" data-pode-gerenciar="{{ '1' if pode_gerenciar else '0' }}">
+  <div class="aca-banner">
+    <div class="aca-banner-texto">
+      <div class="aca-banner-t1">Bem-vindo à <span>Academia DropNexo</span></div>
+      <div class="aca-banner-t2">Vídeos de ajuda — disponíveis para todos os clientes</div>
+    </div>
+    {% if pode_gerenciar %}
+    <div class="aca-banner-acoes">
+      <button type="button" class="Cl_BtnIncluir" id="ob_btnIncluir">Incluir vídeo</button>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="aca-grid">
+    <aside class="aca-side">
+      <div class="aca-side-title">CATEGORIAS</div>
+      <div id="ob_listaCategorias" class="aca-side-lista">
+        <div class="aca-side-item ativo" data-cat="__TODOS__">Todos</div>
+      </div>
+    </aside>
+
+    <main class="aca-main">
+      <div class="aca-topbar">
+        <div class="aca-busca">
+          <input id="ob_q" type="text" placeholder="Buscar treinamentos..." autocomplete="off">
+        </div>
+        <button type="button" class="Cl_botaoFiltro" id="ob_btnFiltrar">Filtrar</button>
+      </div>
+
+      <div class="aca-conteudo">
+        <div class="aca-lista" id="ob_listaCards">
+          <div class="aca-carregando">Carregando…</div>
+        </div>
+      </div>
+    </main>
+  </div>
+</section>
+
+<script src="{{ url_for('academia.static', filename='script/Sacademia.js') }}?v=20260916c"></script>
+{% endblock %}
