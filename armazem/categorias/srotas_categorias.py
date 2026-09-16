@@ -1,32 +1,34 @@
+# armazem/categorias — mesma UI/dados do fornecedor; rotas e permissões do armazém
 from __future__ import annotations
 
 from pathlib import Path
 
 from flask import Blueprint, jsonify, render_template, request, session, url_for
+
 from api.bling.categorias_bling import (
     associar_segmento_categorias_bling,
     contar_categorias_bling_sem_segmento,
     listar_categorias_bling_sem_segmento,
 )
-from global_utils import Var_ConectarBanco, exigir_modulo, exigir_permissao, login_obrigatorio
 from core.dominio import MAX_NIVEL_CATEGORIA, flatten_arvore_com_caminho, montar_arvore_categorias
-from sistema.plataforma.sessao import MODULO_FORNECEDOR
-
+from fornecedor.categorias.srotas_categorias import _segmento_ativo
+from global_utils import Var_ConectarBanco, exigir_modulo, exigir_permissao, login_obrigatorio
+from sistema.plataforma.sessao import MODULO_ARMAZEM
 
 _MOD = Path(__file__).resolve().parent
 
-fn_categorias_bp = Blueprint(
-    "fn_categorias",
+az_categorias_bp = Blueprint(
+    "az_categorias",
     __name__,
     root_path=str(_MOD),
     template_folder="templates",
     static_folder="static",
-    static_url_path="/static/fornecedor/categorias",
+    static_url_path="/static/armazem/categorias",
 )
 
 
 def init_app(app):
-    app.register_blueprint(fn_categorias_bp)
+    app.register_blueprint(az_categorias_bp)
 
 
 def _id_tenant() -> int | None:
@@ -34,54 +36,37 @@ def _id_tenant() -> int | None:
     return int(tid) if tid else None
 
 
-def _exigir_fornecedor_tenant():
-    if session.get("tenant_tipo_negocio") in ("fornecedor", "hibrido") or session.get("eh_desenvolvedor"):
+def _exigir_armazem_tenant():
+    if session.get("tenant_tipo_negocio") in ("armazem",) or session.get("eh_desenvolvedor"):
         return None
-    return jsonify(success=False, message="Conta não é fornecedor."), 403
+    return jsonify(success=False, message="Conta não é armazém."), 403
 
 
-def _segmento_ativo(cur, id_tenant: int, id_segmento: int) -> bool:
-    cur.execute(
-        """
-        SELECT 1 FROM tbl_fornecedor_segmento fs
-        JOIN tbl_segmento s ON s.id = fs.id_segmento AND s.ativo = TRUE
-        WHERE fs.id_tenant = %s AND fs.id_segmento = %s
-        """,
-        (id_tenant, id_segmento),
-    )
-    return cur.fetchone() is not None
-
-
-def _nivel_pai(cur, parent_id: int | None) -> int:
-    if not parent_id:
-        return 0
-    cur.execute("SELECT nivel FROM tbl_categoria WHERE id = %s", (parent_id,))
-    row = cur.fetchone()
-    return int(row[0]) if row else 0
-
-
-
-@fn_categorias_bp.get("/fornecedor/categorias")
+@az_categorias_bp.get("/armazem/categorias")
 @login_obrigatorio()
-@exigir_modulo(MODULO_FORNECEDOR)
-@exigir_permissao(codigo="fn_categorias.ver")
+@exigir_modulo(MODULO_ARMAZEM)
+@exigir_permissao(codigos=["az_categorias.ver", "fn_categorias.ver"])
 def categorias():
-    if (r := _exigir_fornecedor_tenant()) is not None:
+    if (r := _exigir_armazem_tenant()) is not None:
         return r
     id_seg = (request.args.get("segmento") or "").strip()
     return render_template(
         "frm_fn_categorias.html",
-        nav_ativo="fn_categorias",
+        nav_ativo="az_categorias",
         id_segmento_inicial=id_seg,
-        cat_api_base="/fornecedor/categorias",
+        cat_api_base="/armazem/categorias",
+        cat_page_title="Categorias",
+        cat_topbar_title="Categorias",
+        cat_page_desc="Organize os produtos do armazém em até 3 níveis.",
         url_segmentos=url_for("perfil.meu_perfil", aba="empresa"),
     )
 
-@fn_categorias_bp.get("/fornecedor/categorias/segmentos")
+
+@az_categorias_bp.get("/armazem/categorias/segmentos")
 @login_obrigatorio()
-@exigir_modulo(MODULO_FORNECEDOR)
+@exigir_modulo(MODULO_ARMAZEM)
 def segmentos_ativos():
-    if (r := _exigir_fornecedor_tenant()) is not None:
+    if (r := _exigir_armazem_tenant()) is not None:
         return r
     id_tenant = _id_tenant()
     conn = Var_ConectarBanco()
@@ -102,11 +87,12 @@ def segmentos_ativos():
     finally:
         conn.close()
 
-@fn_categorias_bp.get("/fornecedor/categorias/arvore")
+
+@az_categorias_bp.get("/armazem/categorias/arvore")
 @login_obrigatorio()
-@exigir_modulo(MODULO_FORNECEDOR)
+@exigir_modulo(MODULO_ARMAZEM)
 def arvore():
-    if (r := _exigir_fornecedor_tenant()) is not None:
+    if (r := _exigir_armazem_tenant()) is not None:
         return r
     id_tenant = _id_tenant()
     try:
@@ -143,12 +129,13 @@ def arvore():
     finally:
         conn.close()
 
-@fn_categorias_bp.post("/fornecedor/categorias/salvar")
+
+@az_categorias_bp.post("/armazem/categorias/salvar")
 @login_obrigatorio()
-@exigir_modulo(MODULO_FORNECEDOR)
-@exigir_permissao(codigo="fn_categorias.editar")
+@exigir_modulo(MODULO_ARMAZEM)
+@exigir_permissao(codigos=["az_categorias.editar", "fn_categorias.editar"])
 def salvar():
-    if (r := _exigir_fornecedor_tenant()) is not None:
+    if (r := _exigir_armazem_tenant()) is not None:
         return r
     id_tenant = _id_tenant()
     body = request.get_json(silent=True) or {}
@@ -226,12 +213,13 @@ def salvar():
     finally:
         conn.close()
 
-@fn_categorias_bp.get("/fornecedor/categorias/bling/pendentes")
+
+@az_categorias_bp.get("/armazem/categorias/bling/pendentes")
 @login_obrigatorio()
-@exigir_modulo(MODULO_FORNECEDOR)
-@exigir_permissao(codigo="fn_categorias.ver")
+@exigir_modulo(MODULO_ARMAZEM)
+@exigir_permissao(codigos=["az_categorias.ver", "fn_categorias.ver"])
 def categorias_bling_pendentes():
-    if (r := _exigir_fornecedor_tenant()) is not None:
+    if (r := _exigir_armazem_tenant()) is not None:
         return r
     id_tenant = _id_tenant()
     conn = Var_ConectarBanco()
@@ -277,12 +265,12 @@ def categorias_bling_pendentes():
         conn.close()
 
 
-@fn_categorias_bp.post("/fornecedor/categorias/bling/associar-segmento")
+@az_categorias_bp.post("/armazem/categorias/bling/associar-segmento")
 @login_obrigatorio()
-@exigir_modulo(MODULO_FORNECEDOR)
-@exigir_permissao(codigo="fn_categorias.editar")
+@exigir_modulo(MODULO_ARMAZEM)
+@exigir_permissao(codigos=["az_categorias.editar", "fn_categorias.editar"])
 def categorias_bling_associar_segmento():
-    if (r := _exigir_fornecedor_tenant()) is not None:
+    if (r := _exigir_armazem_tenant()) is not None:
         return r
     id_tenant = _id_tenant()
     body = request.get_json(silent=True) or {}
@@ -324,12 +312,12 @@ def categorias_bling_associar_segmento():
         conn.close()
 
 
-@fn_categorias_bp.post("/fornecedor/categorias/excluir")
+@az_categorias_bp.post("/armazem/categorias/excluir")
 @login_obrigatorio()
-@exigir_modulo(MODULO_FORNECEDOR)
-@exigir_permissao(codigo="fn_categorias.editar")
+@exigir_modulo(MODULO_ARMAZEM)
+@exigir_permissao(codigos=["az_categorias.editar", "fn_categorias.editar"])
 def excluir():
-    if (r := _exigir_fornecedor_tenant()) is not None:
+    if (r := _exigir_armazem_tenant()) is not None:
         return r
     id_tenant = _id_tenant()
     body = request.get_json(silent=True) or {}

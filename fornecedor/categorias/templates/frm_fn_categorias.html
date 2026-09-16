@@ -1,7 +1,7 @@
 {% extends "frm_base.html" %}
-{% block title %}Categorias — {{ MARCA_NOME }}{% endblock %}
-{% set nav_ativo = 'fn_categorias' %}
-{% block topbar_title %}Categorias{% endblock %}
+{% block title %}{{ cat_page_title|default('Categorias') }} — {{ MARCA_NOME }}{% endblock %}
+{% set nav_ativo = nav_ativo|default('fn_categorias') %}
+{% block topbar_title %}{{ cat_topbar_title|default('Categorias') }}{% endblock %}
 {% block head_extra %}
 <link rel="stylesheet" href="{{ url_for('fn_categorias.static', filename='style/Cfn_categorias.css') }}?v=13" />
 <link rel="stylesheet" href="{{ url_for('fn_categorias.static', filename='style/Cfn_categorias_tree.css') }}?v=11" />
@@ -9,8 +9,8 @@
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal FnCat_Page">
   <div class="cl-page-title">
-    <h2>Categorias</h2>
-    <p class="cl-page-desc">Organize seus produtos em até 3 níveis para uma navegação mais eficiente.</p>
+    <h2>{{ cat_page_title|default('Categorias') }}</h2>
+    <p class="cl-page-desc">{{ cat_page_desc|default('Organize seus produtos em até 3 níveis para uma navegação mais eficiente.') }}</p>
   </div>
 
   <div id="fn_cat_bling_banner" class="FnCat_BlingBanner" hidden>
@@ -122,6 +122,9 @@
 </div>
 {% endblock %}
 {% block page_js %}
-<script>window.FN_CAT_SEG_INICIAL = {{ id_segmento_inicial|tojson }};</script>
-<script src="{{ url_for('fn_categorias.static', filename='script/Sfn_categorias.js') }}?v=15"></script>
+<script>
+  window.FN_CAT_BASE = {{ (cat_api_base or '/fornecedor/categorias')|tojson }};
+  window.FN_CAT_SEG_INICIAL = {{ id_segmento_inicial|tojson }};
+</script>
+<script src="{{ url_for('fn_categorias.static', filename='script/Sfn_categorias.js') }}?v=16"></script>
 {% endblock %}

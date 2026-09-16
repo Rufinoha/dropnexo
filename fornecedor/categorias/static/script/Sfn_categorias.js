@@ -21,7 +21,7 @@
   const blingTitulo = document.getElementById("fn_cat_bling_titulo");
   const btnAssociarBling = document.getElementById("fn_cat_btn_associar_bling");
 
-  const BASE = "/fornecedor/categorias";
+  const BASE = window.FN_CAT_BASE || "/fornecedor/categorias";
   const MAX_NIVEL = 3;
 
   const ICON_BAG =

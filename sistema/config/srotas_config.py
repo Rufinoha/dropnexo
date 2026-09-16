@@ -755,6 +755,7 @@ _ICONES_SVG = {
 # Labels só para fallback de emergência (quando a query da sidebar falha).
 _MENU_NOME_POR_NAV: dict[str, str] = {
     "az_depositos": "Dep\u00f3sitos",
+    "az_categorias": "Categorias",
     "az_movimentacoes": "Movimenta\u00e7\u00f5es",
     "az_parametros": "Par\u00e2metros",
     "az_usuarios": "Usu\u00e1rios",
@@ -946,6 +947,7 @@ def _menu_sidebar_fallback(mod_ativo: str = "vendedor") -> list[dict]:
         return comum + [
             {"nome": _MENU_NOME_POR_NAV["az_fornecedores"], "url": resolver_url_menu("/armazem/fornecedores", "az_fornecedores"), "icone_svg": _ICONES_SVG["users"], "nav_codigo": "az_fornecedores"},
             {"nome": _MENU_NOME_POR_NAV["az_depositos"], "url": resolver_url_menu("/armazem/depositos", "az_depositos"), "icone_svg": _ICONES_SVG["package"], "nav_codigo": "az_depositos"},
+            {"nome": _MENU_NOME_POR_NAV["az_categorias"], "url": resolver_url_menu("/armazem/categorias", "az_categorias"), "icone_svg": _ICONES_SVG["package"], "nav_codigo": "az_categorias"},
             {"nome": _MENU_NOME_POR_NAV["az_produtos"], "url": resolver_url_menu("/armazem/produtos", "az_produtos"), "icone_svg": _ICONES_SVG["package"], "nav_codigo": "az_produtos"},
             {"nome": _MENU_NOME_POR_NAV["az_movimentacoes"], "url": resolver_url_menu("/armazem/movimentacoes", "az_movimentacoes"), "icone_svg": _ICONES_SVG["package"], "nav_codigo": "az_movimentacoes"},
             {"nome": _MENU_NOME_POR_NAV["az_pedidos"], "url": resolver_url_menu("/armazem/pedidos", "az_pedidos"), "icone_svg": _ICONES_SVG["shopping-bag"], "nav_codigo": "az_pedidos"},
