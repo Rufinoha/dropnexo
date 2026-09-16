@@ -68,6 +68,37 @@
   color: #047857;
 }
 
+.AzDep_CardBadge--bling {
+  right: auto;
+  left: 0.75rem;
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.AzDep_Card.is-bling {
+  border-color: #93c5fd;
+}
+
+.AzDep_Card.is-principal.is-bling .AzDep_CardBadge:not(.AzDep_CardBadge--bling) {
+  top: 0.75rem;
+}
+
+.AzDep_BlingHint {
+  margin: 0 0 0.65rem;
+  font-size: 0.85rem;
+  color: #64748b;
+  line-height: 1.4;
+}
+
+.AzDep_Secao--bling select {
+  width: 100%;
+  min-height: 2.4rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 0.4rem 0.6rem;
+  background: #fff;
+}
+
 .AzDep_CardNome {
   margin: 0 0 0.35rem;
   font-size: 1.08rem;

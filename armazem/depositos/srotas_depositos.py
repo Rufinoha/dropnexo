@@ -84,6 +84,11 @@ def depositos_dados():
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
+        from api.bling.estoque import (
+            bling_conectado,
+            obter_vinculo_bling_do_deposito,
+        )
+
         cur.execute(
             f"""
             SELECT {_DEPOSITO_COLS}
@@ -93,8 +98,17 @@ def depositos_dados():
             """,
             (id_tenant,),
         )
-        dados = [_deposito_row_dict(row) for row in cur.fetchall()]
-        return jsonify(success=True, dados=dados)
+        dados = []
+        for row in cur.fetchall():
+            item = _deposito_row_dict(row)
+            vinc = obter_vinculo_bling_do_deposito(cur, id_tenant, int(item["id"]))
+            item["bling_vinculo"] = vinc
+            dados.append(item)
+        return jsonify(
+            success=True,
+            dados=dados,
+            bling_conectado=bling_conectado(cur, id_tenant),
+        )
     finally:
         conn.close()
 
@@ -110,23 +124,34 @@ def depositos_apoio():
     id_tenant = _id_tenant()
     body = request.get_json(silent=True) or {}
     dep_id = body.get("id")
-    if not dep_id:
-        return jsonify(success=True, dados=None)
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
-        cur.execute(
-            f"""
-            SELECT {_DEPOSITO_COLS}
-            FROM tbl_deposito_expedicao
-            WHERE id = %s AND id_tenant = %s
-            """,
-            (int(dep_id), id_tenant),
-        )
-        row = cur.fetchone()
-        if not row:
-            return jsonify(success=False, message="Depósito não encontrado."), 404
-        return jsonify(success=True, dados=_deposito_row_dict(row))
+        from api.bling.estoque import contexto_bling_form_deposito
+
+        dados = None
+        id_dep = None
+        if dep_id:
+            cur.execute(
+                f"""
+                SELECT {_DEPOSITO_COLS}
+                FROM tbl_deposito_expedicao
+                WHERE id = %s AND id_tenant = %s
+                """,
+                (int(dep_id), id_tenant),
+            )
+            row = cur.fetchone()
+            if not row:
+                return jsonify(success=False, message="Depósito não encontrado."), 404
+            dados = _deposito_row_dict(row)
+            id_dep = int(dados["id"])
+            bling_ctx = contexto_bling_form_deposito(cur, id_tenant, id_dep)
+            if bling_ctx.get("vinculo"):
+                dados["id_bling_deposito"] = bling_ctx["vinculo"]["id_bling_deposito"]
+                dados["nome_bling"] = bling_ctx["vinculo"]["nome_bling"]
+        else:
+            bling_ctx = contexto_bling_form_deposito(cur, id_tenant, None)
+        return jsonify(success=True, dados=dados, bling=bling_ctx)
     finally:
         conn.close()
 
@@ -154,6 +179,10 @@ def depositos_salvar():
     uf = (body.get("uf") or "").strip()[:2].upper()
     if not log or not bairro or not cidade or len(uf) != 2:
         return jsonify(success=False, message="Preencha o endereço (use Buscar CEP ou informe manualmente)."), 400
+
+    id_bling_raw = body.get("id_bling_deposito")
+    id_bling = (str(id_bling_raw).strip() if id_bling_raw is not None else "")
+    nome_bling = (body.get("nome_bling") or "").strip() or None
 
     conn = Var_ConectarBanco()
     try:
@@ -205,8 +234,26 @@ def depositos_salvar():
                 (id_tenant,) + campos,
             )
         row = cur.fetchone()
+        id_salvo = int(row[0])
+
+        from api.bling.estoque import aplicar_vinculo_bling_no_deposito, bling_conectado
+
+        msg = "Depósito salvo com sucesso."
+        if bling_conectado(cur, id_tenant) and "id_bling_deposito" in body:
+            vinc = aplicar_vinculo_bling_no_deposito(
+                cur,
+                id_tenant,
+                id_deposito_dropnexo=id_salvo,
+                id_bling_deposito=id_bling or None,
+                nome_bling=nome_bling,
+            )
+            if vinc.get("vinculado"):
+                msg = "Depósito salvo e vinculado ao Bling."
+            elif id_bling == "":
+                msg = "Depósito salvo (vínculo Bling removido)."
+
         conn.commit()
-        return jsonify(success=True, id=row[0], message="Depósito salvo com sucesso.")
+        return jsonify(success=True, id=id_salvo, message=msg)
     except Exception as e:
         conn.rollback()
         if "unique" in str(e).lower():

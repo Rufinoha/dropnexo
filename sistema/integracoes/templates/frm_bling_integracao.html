@@ -55,6 +55,7 @@
       <button type="button" class="Bl_SubTab is-active" data-bl-tab="config">Configurações</button>
       <button type="button" class="Bl_SubTab" data-bl-tab="pedidos">Pedidos</button>
       <button type="button" class="Bl_SubTab" data-bl-tab="produtos">Produtos</button>
+      <button type="button" class="Bl_SubTab" data-bl-tab="depositos">Depósitos</button>
       <button type="button" class="Bl_SubTab" data-bl-tab="imagens">Imagens</button>
       <button type="button" class="Bl_SubTab" data-bl-tab="categorias">Categorias</button>
       {% endif %}
@@ -329,17 +330,28 @@
         </div>
       </section>
 
+      <p class="Bl_Hint">
+        Pareamento de depósitos: use a aba <strong>Depósitos</strong>
+        ou o menu <strong>Depósitos</strong> (duplo clique no cadastro).
+      </p>
+      {% endif %}
+    </div>
+
+    <div id="bl_pane_depositos" hidden>
       <div class="Bl_DepPanel" id="bl_painel_depositos">
-        <h4>Pareamento de depósitos</h4>
-        <p class="Bl_Hint">Vincule cada depósito Bling ao DropNexo com <strong>Salvar</strong>. Se o vínculo mudar, use <strong>Atualizar estoque</strong> para importar os saldos (uma vez por alteração).</p>
+        <h3>Pareamento de depósitos</h3>
+        <p class="Bl_Hint">
+          Vincule cada depósito Bling ao DropNexo com <strong>Salvar</strong>.
+          Também pode vincular no menu <strong>Depósitos</strong> (duplo clique no card).
+          Se o vínculo mudar, use <strong>Atualizar estoque</strong> para importar os saldos.
+        </p>
         <div class="Bl_DepTblWrap">
           <table class="Bl_DepTbl">
             <thead><tr><th>Bling</th><th>DropNexo</th><th>Estoque</th><th></th></tr></thead>
-            <tbody id="bl_tbl_depositos"><tr><td colspan="3">Carregando…</td></tr></tbody>
+            <tbody id="bl_tbl_depositos"><tr><td colspan="4">Carregando…</td></tr></tbody>
           </table>
         </div>
       </div>
-      {% endif %}
     </div>
 
     <div id="bl_pane_config" {% if bling_papel == 'pedidos' %}hidden{% endif %}>
@@ -488,5 +500,5 @@
 </div>
 {% endblock %}
 {% block page_js %}
-<script src="{{ url_for('static', filename='script/Sbling_integracao.js') }}?v=35"></script>
+<script src="{{ url_for('static', filename='script/Sbling_integracao.js') }}?v=36"></script>
 {% endblock %}

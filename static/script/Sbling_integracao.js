@@ -27,6 +27,7 @@
   const paneConfig = document.getElementById("bl_pane_config");
   const panePedidos = document.getElementById("bl_pane_pedidos");
   const paneProdutos = document.getElementById("bl_pane_produtos");
+  const paneDepositos = document.getElementById("bl_pane_depositos");
   const paneCategorias = document.getElementById("bl_pane_categorias");
   const paneImagens = document.getElementById("bl_pane_imagens");
   const paneLogs = document.getElementById("bl_pane_logs");
@@ -109,10 +110,13 @@
     definirVisivel(paneConfig, tab === "config");
     definirVisivel(panePedidos, tab === "pedidos");
     definirVisivel(paneProdutos, tab === "produtos");
+    definirVisivel(paneDepositos, tab === "depositos");
     definirVisivel(paneCategorias, tab === "categorias");
     definirVisivel(paneImagens, tab === "imagens");
     definirVisivel(paneLogs, tab === "logs");
-    if (tab === "produtos" && BL_PAPEL !== "pedidos") carregarDepositos().catch(() => {});
+    if ((tab === "depositos" || tab === "produtos") && BL_PAPEL !== "pedidos") {
+      carregarDepositos().catch(() => {});
+    }
     if (tab === "categorias") carregarCategorias().catch(() => {});
     if (tab === "imagens") carregarFilaImagens().catch(() => {});
   }
@@ -1317,7 +1321,9 @@
         .join("") || '<li class="Bl_LogItem">Nenhum log ainda.</li>';
     }
     aplicarConfigTela();
-    if (on && tabAtiva === "produtos" && BL_PAPEL !== "pedidos") carregarDepositos().catch(() => {});
+    if (on && (tabAtiva === "produtos" || tabAtiva === "depositos") && BL_PAPEL !== "pedidos") {
+      carregarDepositos().catch(() => {});
+    }
   }
 
   async function carregarStatus() {
@@ -1832,6 +1838,7 @@
     estoque: "produtos",
     config: "config",
     produtos: "produtos",
+    depositos: "depositos",
     pedidos: "pedidos",
     categorias: "categorias",
     imagens: "imagens",

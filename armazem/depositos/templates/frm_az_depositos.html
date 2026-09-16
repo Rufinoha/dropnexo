@@ -3,14 +3,14 @@
 {% set nav_ativo = 'az_depositos' %}
 {% block topbar_title %}Depósitos de expedição{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('az_depositos.static', filename='style/Caz_depositos.css') }}" />
+<link rel="stylesheet" href="{{ url_for('az_depositos.static', filename='style/Caz_depositos.css') }}?v=2" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal AzDep_Page">
   <div class="AzDep_Header">
     <div class="cl-page-title AzDep_HeaderText">
       <h2>Filiais de expedição</h2>
-      <p class="cl-page-desc">Cadastre os endereços de onde seus pedidos serão despachados. Comece pelo CEP e dê um nome à filial (ex.: Filial SP).</p>
+      <p class="cl-page-desc">Cadastre os endereços de onde seus pedidos serão despachados. Com o Bling conectado, dê duplo clique no depósito e vincule ao ERP.</p>
     </div>
     <button type="button" class="Cl_BtnIncluir AzDep_BtnIncluir" id="az_dep_btnIncluir">Incluir depósito</button>
   </div>
@@ -85,6 +85,19 @@
         </label>
       </section>
 
+      <section class="AzDep_Secao AzDep_Secao--bling" id="az_dep_secBling" hidden>
+        <h4>3. Bling</h4>
+        <p class="AzDep_BlingHint" id="az_dep_blingHint">
+          Com o Bling conectado, vincule este depósito ao depósito correspondente no ERP.
+        </p>
+        <div class="AzDep_Field">
+          <label for="az_dep_bling">Depósito no Bling</label>
+          <select id="az_dep_bling">
+            <option value="">— Sem vínculo —</option>
+          </select>
+        </div>
+      </section>
+
       <div class="Cl_BotoesApoio AzDep_ModalFoot" id="az_dep_secFoot" hidden>
         <button type="submit" class="Cl_BtnSalvar" id="az_dep_btnSalvar">Salvar depósito</button>
         <button type="button" class="Cl_BtnCancelar" id="az_dep_btnCancelar">Cancelar</button>
@@ -95,5 +108,5 @@
 </div>
 {% endblock %}
 {% block page_js %}
-<script src="{{ url_for('az_depositos.static', filename='script/Saz_depositos.js') }}"></script>
+<script src="{{ url_for('az_depositos.static', filename='script/Saz_depositos.js') }}?v=2"></script>
 {% endblock %}

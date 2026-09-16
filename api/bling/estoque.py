@@ -616,6 +616,145 @@ def garantir_depositos_bling_vinculados(cur, id_tenant: int) -> dict:
     return resumo_depositos_bling(cur, id_tenant)
 
 
+def bling_conectado(cur, id_tenant: int) -> bool:
+    cur.execute(
+        "SELECT status FROM tbl_integracao_bling WHERE id_tenant = %s",
+        (id_tenant,),
+    )
+    row = cur.fetchone()
+    return bool(row and row[0] == "conectado")
+
+
+def obter_vinculo_bling_do_deposito(cur, id_tenant: int, id_deposito: int) -> dict | None:
+    cur.execute(
+        """
+        SELECT id_bling_deposito, COALESCE(nome_bling, '')
+        FROM tbl_integracao_deposito_map
+        WHERE id_tenant = %s AND id_deposito_dropnexo = %s
+        LIMIT 1
+        """,
+        (id_tenant, int(id_deposito)),
+    )
+    row = cur.fetchone()
+    if not row:
+        return None
+    return {"id_bling_deposito": str(row[0]), "nome_bling": row[1] or ""}
+
+
+def listar_opcoes_depositos_bling(cur, id_tenant: int) -> tuple[list[dict], str | None]:
+    """Lista depósitos Bling para select no cadastro DropNexo. Retorna (opcoes, aviso)."""
+    aviso: str | None = None
+    opcoes: list[dict] = []
+    try:
+        from api.bling.cliente import listar_depositos_bling
+
+        bling_deps = listar_depositos_bling(id_tenant)
+        sincronizar_depositos_bling_api(cur, id_tenant, bling_deps)
+        for d in bling_deps:
+            did = d.get("id")
+            if did in (None, ""):
+                continue
+            nome = (d.get("descricao") or d.get("nome") or str(did)).strip()
+            opcoes.append({"id": str(did), "nome": nome})
+    except Exception as exc:
+        aviso = str(exc)[:240]
+        mapa = listar_mapa_depositos(cur, id_tenant)
+        for m in mapa:
+            bid = str(m.get("id_bling_deposito") or "").strip()
+            if not bid:
+                continue
+            opcoes.append(
+                {
+                    "id": bid,
+                    "nome": (m.get("nome_bling") or bid).strip(),
+                }
+            )
+    # dedupe
+    vistos: set[str] = set()
+    uniq: list[dict] = []
+    for o in opcoes:
+        if o["id"] in vistos:
+            continue
+        vistos.add(o["id"])
+        uniq.append(o)
+    return uniq, aviso
+
+
+def contexto_bling_form_deposito(cur, id_tenant: int, id_deposito: int | None = None) -> dict:
+    """Payload para o modal Depósitos: conectado + opções + vínculo atual."""
+    conectado = bling_conectado(cur, id_tenant)
+    if not conectado:
+        return {"conectado": False, "opcoes": [], "aviso": None, "vinculo": None}
+    opcoes, aviso = listar_opcoes_depositos_bling(cur, id_tenant)
+    vinculo = None
+    if id_deposito:
+        vinculo = obter_vinculo_bling_do_deposito(cur, id_tenant, int(id_deposito))
+    return {
+        "conectado": True,
+        "opcoes": opcoes,
+        "aviso": aviso,
+        "vinculo": vinculo,
+    }
+
+
+def aplicar_vinculo_bling_no_deposito(
+    cur,
+    id_tenant: int,
+    *,
+    id_deposito_dropnexo: int,
+    id_bling_deposito: str | None,
+    nome_bling: str | None = None,
+) -> dict:
+    """
+    Associa (ou remove) o vínculo Bling do depósito DropNexo.
+    Se id_bling vazio → desfaz vínculo deste depósito DN.
+    """
+    id_drop = int(id_deposito_dropnexo)
+    id_bling = (id_bling_deposito or "").strip()
+
+    # Libera este depósito DN de qualquer vínculo anterior.
+    cur.execute(
+        """
+        UPDATE tbl_integracao_deposito_map
+        SET id_deposito_dropnexo = NULL,
+            estoque_sync_pendente = FALSE,
+            atualizado_em = %s
+        WHERE id_tenant = %s AND id_deposito_dropnexo = %s
+        """,
+        (agora_utc(), id_tenant, id_drop),
+    )
+
+    if not id_bling:
+        return {"vinculado": False, "id_bling_deposito": None, "alterado": True}
+
+    if not nome_bling:
+        cur.execute(
+            """
+            SELECT nome_bling FROM tbl_integracao_deposito_map
+            WHERE id_tenant = %s AND id_bling_deposito = %s
+            LIMIT 1
+            """,
+            (id_tenant, id_bling),
+        )
+        row = cur.fetchone()
+        nome_bling = (row[0] if row else None) or id_bling
+
+    _rid, _id_drop, _criou, alterado = vincular_ou_criar_deposito_bling(
+        cur,
+        id_tenant,
+        id_bling_deposito=id_bling,
+        nome_bling=nome_bling,
+        id_deposito_dropnexo=id_drop,
+        criar_igual=False,
+    )
+    return {
+        "vinculado": True,
+        "id_bling_deposito": id_bling,
+        "nome_bling": nome_bling,
+        "alterado": alterado,
+    }
+
+
 def marcar_sync_estoque_deposito_concluido(cur, id_tenant: int, id_bling_deposito: str) -> None:
     cur.execute(
         """

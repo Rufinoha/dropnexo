@@ -5,6 +5,7 @@
   const form = document.getElementById("az_dep_form");
   const secEnd = document.getElementById("az_dep_secEndereco");
   const secFoot = document.getElementById("az_dep_secFoot");
+  const secBling = document.getElementById("az_dep_secBling");
   const titulo = document.getElementById("az_dep_modalTitulo");
 
   const el = {
@@ -18,6 +19,8 @@
     cidade: document.getElementById("az_dep_cidade"),
     uf: document.getElementById("az_dep_uf"),
     principal: document.getElementById("az_dep_principal"),
+    bling: document.getElementById("az_dep_bling"),
+    blingHint: document.getElementById("az_dep_blingHint"),
     btnCep: document.getElementById("az_dep_btnCep"),
     btnIncluir: document.getElementById("az_dep_btnIncluir"),
     btnFechar: document.getElementById("az_dep_btnFechar"),
@@ -63,9 +66,33 @@
     });
     if (el.principal) el.principal.checked = false;
     if (el.btnExcluir) el.btnExcluir.hidden = true;
+    if (el.bling) el.bling.innerHTML = '<option value="">— Sem vínculo —</option>';
+    if (secBling) secBling.hidden = true;
     secEnd.hidden = true;
     secFoot.hidden = true;
     titulo.textContent = "Novo depósito";
+  }
+
+  function aplicarBlingNoForm(bling, idSelecionado) {
+    if (!secBling || !el.bling) return;
+    if (!bling || !bling.conectado) {
+      secBling.hidden = true;
+      return;
+    }
+    const opcoes = bling.opcoes || [];
+    el.bling.innerHTML =
+      '<option value="">— Sem vínculo —</option>' +
+      opcoes
+        .map((o) => `<option value="${escapeHtml(o.id)}">${escapeHtml(o.nome || o.id)}</option>`)
+        .join("");
+    const sel = idSelecionado || (bling.vinculo && bling.vinculo.id_bling_deposito) || "";
+    el.bling.value = sel;
+    if (el.blingHint) {
+      el.blingHint.textContent = bling.aviso
+        ? "Lista do Bling parcial: " + bling.aviso
+        : "Vincule este depósito ao depósito correspondente no Bling para liberar a importação de estoque.";
+    }
+    secBling.hidden = false;
   }
 
   function mostrarEndereco() {
@@ -112,13 +139,18 @@
       .map((d) => {
         const end = [d.logradouro, d.numero, d.bairro].filter(Boolean).join(", ");
         const loc = (d.cidade || "") + (d.uf ? " / " + d.uf : "");
+        const vinc = d.bling_vinculo;
+        const badgeBling = vinc
+          ? `<span class="AzDep_CardBadge AzDep_CardBadge--bling" title="Vinculado ao Bling">Bling</span>`
+          : "";
         return `
-        <article class="AzDep_Card${d.principal ? " is-principal" : ""}" tabindex="0" data-id="${d.id}" title="Duplo clique para editar">
+        <article class="AzDep_Card${d.principal ? " is-principal" : ""}${vinc ? " is-bling" : ""}" tabindex="0" data-id="${d.id}" title="Duplo clique para editar / vincular Bling">
           ${d.principal ? '<span class="AzDep_CardBadge">Principal</span>' : ""}
+          ${badgeBling}
           <h3 class="AzDep_CardNome">${escapeHtml(d.nome)}</h3>
           <p class="AzDep_CardCep">CEP ${fmtCep(d.cep)}</p>
           <p class="AzDep_CardEndereco">${escapeHtml(end)}<br>${escapeHtml(loc)}</p>
-          <p class="AzDep_CardHint">Duplo clique para editar</p>
+          <p class="AzDep_CardHint">${vinc ? "Vinculado: " + escapeHtml(vinc.nome_bling || vinc.id_bling_deposito) : "Duplo clique para editar / vincular Bling"}</p>
         </article>`;
       })
       .join("");
@@ -167,12 +199,25 @@
       return;
     }
     preencherEndereco(j.dados);
+    aplicarBlingNoForm(j.bling, j.dados.id_bling_deposito);
     abrirModal();
   }
 
-  function abrirNovo() {
+  async function abrirNovo() {
     limparForm();
     titulo.textContent = "Novo depósito";
+    try {
+      const r = await fetch(BASE + "/apoio", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const j = await r.json();
+      if (j.success) aplicarBlingNoForm(j.bling, "");
+    } catch (_) {
+      /* sem Bling ok */
+    }
     abrirModal();
   }
 
@@ -191,6 +236,11 @@
       principal: el.principal.checked,
       ativo: true,
     };
+    if (secBling && !secBling.hidden && el.bling) {
+      body.id_bling_deposito = el.bling.value || "";
+      const opt = el.bling.options[el.bling.selectedIndex];
+      body.nome_bling = opt && el.bling.value ? opt.textContent : null;
+    }
     if (!body.nome) {
       alertar("Dê um nome ao depósito (ex.: Filial SP).", "warning");
       return;
