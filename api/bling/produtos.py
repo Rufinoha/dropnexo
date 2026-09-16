@@ -218,8 +218,14 @@ def _extensao_de_url(url: str) -> str:
 
 
 def baixar_imagem(url: str, destino: Path) -> int:
-    r = requests.get(url, timeout=30, stream=True)
-    r.raise_for_status()
+    try:
+        r = requests.get(url, timeout=30, stream=True)
+        r.raise_for_status()
+    except requests.RequestException as e:
+        from fornecedor.catalogo.catalogo import _resumo_falha_imagem_remota
+
+        motivo = _resumo_falha_imagem_remota(e)
+        raise ValueError(f"Não foi possível carregar a imagem remota ({motivo}).") from e
     total = 0
     chunks: list[bytes] = []
     for chunk in r.iter_content(chunk_size=8192):

@@ -55,6 +55,13 @@ def traduzir_mensagem_erro(
     if "imagem excede" in msg_low:
         return "Imagem maior que 3 MB — reduza ou altere o modo de importação de imagens."
 
+    if "carregar a imagem remota" in msg_low:
+        # Já traz o motivo entre parênteses (HTTP, timeout, conexão…).
+        return msg
+
+    if "não devolveu uma imagem" in msg_low or "nao devolveu uma imagem" in msg_low:
+        return msg
+
     if "timeout" in msg_low or "timed out" in msg_low:
         return "Tempo esgotado ao comunicar com o Bling. Tente novamente em instantes."
 
@@ -136,6 +143,12 @@ def obter_dica_erro(
 
     if "sku obrigatório" in msg_low or "sku obrigatorio" in msg_low:
         return "No Bling, preencha o campo Código (SKU) do produto e reimporte."
+
+    if "carregar a imagem remota" in msg_low or "não devolveu uma imagem" in msg_low or "nao devolveu uma imagem" in msg_low:
+        return (
+            "Abra a foto do produto no Bling e confira se o link abre no navegador. "
+            "Se estiver quebrada, expirada ou inacessível, troque a imagem e reimporte."
+        )
 
     if origem == "bling" and pl.get("id_bling"):
         return f"Abra o produto #{pl.get('id_bling')} no Bling, corrija os dados e execute a importação de novo."

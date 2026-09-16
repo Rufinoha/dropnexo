@@ -7,7 +7,7 @@
 {% block topbar_title %}{{ cat_topbar_title|default('Catálogos') }}{% endblock %}
 
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('fn_catalogo.static', filename='style/Ccatalogos.css') }}?v=18" />
+<link rel="stylesheet" href="{{ url_for('fn_catalogo.static', filename='style/Ccatalogos.css') }}?v=19" />
 <link rel="stylesheet" href="{{ url_for('fn_importacao.static', filename='style/Cimportacao.css') }}?v=9" />
 {% endblock %}
 
@@ -86,7 +86,13 @@
         {# Depois do cabeçalho: com table-layout:fixed a 1ª linha define as colunas #}
         <tr class="Cat_BulkHeadRow" id="ob_bulkRow" hidden>
           <th colspan="9" class="Cat_BulkHeadCell">
-            <div class="Cat_BulkActions" id="ob_bulkActions" aria-label="Ações em lote"></div>
+            <div class="Cat_BulkBar" id="ob_bulkBar" aria-label="Ações em lote">
+              <div class="Cat_BulkLead">
+                <span class="Cat_BulkCount" id="ob_bulkCount">0 selecionados</span>
+                <button type="button" class="Cat_BulkClear" id="ob_bulkClear">Limpar seleção</button>
+              </div>
+              <div class="Cat_BulkActions" id="ob_bulkActions"></div>
+            </div>
           </th>
         </tr>
       </thead>
@@ -123,5 +129,5 @@
 {% if not cat_ocultar_import_export %}
 <script defer src="{{ url_for('fn_importacao.static', filename='script/Simportacao.js') }}?v=12"></script>
 {% endif %}
-<script defer src="{{ url_for('fn_catalogo.static', filename='script/Scatalogos.js') }}?v=25"></script>
+<script defer src="{{ url_for('fn_catalogo.static', filename='script/Scatalogos.js') }}?v=26"></script>
 {% endblock %}

@@ -556,6 +556,29 @@ def resolver_url_imagem_link(url: str, *, timeout: float = 12.0) -> dict:
     }
 
 
+def _resumo_falha_imagem_remota(exc: BaseException) -> str:
+    """Motivo curto e legível para falha de download HTTP de imagem."""
+    if isinstance(exc, requests.HTTPError):
+        resp = getattr(exc, "response", None)
+        code = getattr(resp, "status_code", None) if resp is not None else None
+        if code:
+            return f"HTTP {code}"
+    if isinstance(exc, requests.Timeout):
+        return "tempo esgotado (timeout)"
+    if isinstance(exc, requests.exceptions.SSLError):
+        return "falha de certificado SSL"
+    if isinstance(exc, requests.ConnectionError):
+        return "falha de conexão com o servidor da imagem"
+    if isinstance(exc, requests.TooManyRedirects):
+        return "muitos redirecionamentos"
+    msg = " ".join(str(exc).strip().split())
+    if not msg:
+        return type(exc).__name__
+    if len(msg) > 140:
+        return msg[:137] + "…"
+    return msg
+
+
 def proxy_bytes_imagem_remota(url: str, *, timeout: float = 20.0, max_bytes: int = 8_000_000) -> tuple[bytes, str]:
     """
     Busca bytes de imagem remota para exibição (não grava em disco).
@@ -606,7 +629,8 @@ def proxy_bytes_imagem_remota(url: str, *, timeout: float = 20.0, max_bytes: int
                 chunks.append(parte)
             data = b"".join(chunks)
     except requests.RequestException as e:
-        raise ValueError("Não foi possível carregar a imagem remota.") from e
+        motivo = _resumo_falha_imagem_remota(e)
+        raise ValueError(f"Não foi possível carregar a imagem remota ({motivo}).") from e
     if not data:
         raise ValueError("Imagem remota vazia.")
     if not (_content_type_eh_imagem(ct) or _bytes_parecem_imagem(data)):
@@ -619,7 +643,10 @@ def proxy_bytes_imagem_remota(url: str, *, timeout: float = 20.0, max_bytes: int
                     return proxy_bytes_imagem_remota(alt, timeout=timeout, max_bytes=max_bytes)
             except ValueError:
                 pass
-        raise ValueError("A URL remota não devolveu uma imagem.")
+        raise ValueError(
+            "A URL remota não devolveu uma imagem "
+            f"(content-type: {(ct or 'desconhecido')[:60]})."
+        )
     if not _content_type_eh_imagem(ct):
         if data.startswith(b"\xff\xd8\xff"):
             ct = "image/jpeg"

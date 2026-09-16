@@ -470,13 +470,13 @@
 }
 
 .Cat_BulkHeadRow th {
-  padding: 0.2rem 0.5rem 0.35rem;
+  padding: 0.45rem 0.65rem;
   border-bottom: none;
   background: transparent;
 }
 
 .Cat_BulkHeadCell {
-  text-align: right;
+  text-align: left;
   vertical-align: middle;
 }
 
@@ -501,7 +501,7 @@
 .Cl_TabelaPrincipal.Cat_TabelaScroll thead tr.Cat_BulkHeadRow th {
   top: var(--cat-thead-h);
   z-index: 3;
-  background: #f8fafc;
+  background: #f1f5f9;
   box-shadow: 0 1px 0 #e2e8f0;
 }
 
@@ -509,41 +509,168 @@
   overflow: visible;
 }
 
-.Cat_BulkActions {
+.Cat_BulkBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.55rem 0.85rem;
+  width: 100%;
+}
+
+.Cat_BulkLead {
   display: inline-flex;
   align-items: center;
+  gap: 0.65rem;
+  min-width: 0;
+}
+
+.Cat_BulkCount {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.Cat_BulkClear {
+  border: none;
+  background: transparent;
+  padding: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.Cat_BulkClear:hover {
+  color: #021f81;
+}
+
+.Cat_BulkActions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
   justify-content: flex-end;
-  gap: 0.15rem;
+  gap: 0.35rem;
 }
 
 .Cat_BulkBtn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 2rem;
-  height: 2rem;
-  padding: 0;
-  border: none;
+  gap: 0.35rem;
+  min-height: 2rem;
+  padding: 0.28rem 0.7rem;
+  border: 1px solid #d0d7e2;
   border-radius: 8px;
-  background: transparent;
-  color: #64748b;
+  background: #ffffff;
+  color: #334155;
+  font-size: 0.78rem;
+  font-weight: 650;
+  line-height: 1;
   cursor: pointer;
-  transition: color 0.15s, background 0.15s;
+  transition: color 0.15s, background 0.15s, border-color 0.15s, box-shadow 0.15s;
+  white-space: nowrap;
 }
 
 .Cat_BulkBtn:hover {
   color: #021f81;
-  background: rgba(2, 31, 129, 0.08);
+  border-color: #9eb0d4;
+  background: #f5f8ff;
 }
 
+.Cat_BulkBtn:focus-visible {
+  outline: 2px solid #2c6bf3;
+  outline-offset: 1px;
+}
+
+.Cat_BulkBtnIco {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: inherit;
+}
+
+.Cat_BulkBtnIco .icon-tech,
 .Cat_BulkBtn .icon-tech {
-  width: 17px;
-  height: 17px;
+  width: 14px;
+  height: 14px;
+}
+
+.Cat_BulkBtnTxt {
+  display: inline-block;
+}
+
+.Cat_BulkBtn--danger {
+  color: #b91c1c;
+  border-color: #f0c4c4;
+  background: #fff7f7;
 }
 
 .Cat_BulkBtn--danger:hover {
-  color: #b91c1c;
-  background: rgba(185, 28, 28, 0.08);
+  color: #991b1b;
+  border-color: #e8a0a0;
+  background: #ffefef;
+}
+
+.Cat_BulkBtn--more {
+  color: #475569;
+}
+
+.Cat_BulkMore {
+  position: relative;
+  display: inline-flex;
+}
+
+.Cat_BulkMore.is-open > .Cat_BulkBtn {
+  color: #021f81;
+  border-color: #9eb0d4;
+  background: #f5f8ff;
+}
+
+.Cat_BulkMoreMenu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 20;
+  min-width: 11.5rem;
+  padding: 0.3rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.16);
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.Cat_BulkMoreMenu[hidden] {
+  display: none !important;
+}
+
+.Cat_BulkMoreItem {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  padding: 0.5rem 0.6rem;
+  text-align: left;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #0f172a;
+  cursor: pointer;
+}
+
+.Cat_BulkMoreItem:hover,
+.Cat_BulkMoreItem:focus-visible {
+  background: #f1f5f9;
+  outline: none;
 }
 
 .Cat_BulkIntWrap {
@@ -629,6 +756,19 @@
 .Cat_BulkIntLink:hover {
   background: rgba(2, 31, 129, 0.06);
   text-decoration: underline;
+}
+
+@media (max-width: 720px) {
+  .Cat_BulkBar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .Cat_BulkActions {
+    justify-content: flex-start;
+  }
+  .Cat_BulkBtnTxt {
+    font-size: 0.74rem;
+  }
 }
 
 .Cat_ColCategoria {

@@ -24,6 +24,8 @@
     btnToggleExpandTodos: document.getElementById("ob_btnToggleExpandTodos"),
     chkTodos: document.getElementById("ob_chkTodos"),
     bulkRow: document.getElementById("ob_bulkRow"),
+    bulkCount: document.getElementById("ob_bulkCount"),
+    bulkClear: document.getElementById("ob_bulkClear"),
     bulkActions: document.getElementById("ob_bulkActions"),
     tbody: document.getElementById("ob_listaProdutos"),
     paginaAtual: document.getElementById("ob_paginaAtual"),
@@ -163,6 +165,9 @@
   function syncBulkBar() {
     const n = selecionados.size;
     if (el.bulkRow) el.bulkRow.hidden = n === 0;
+    if (el.bulkCount) {
+      el.bulkCount.textContent = n === 1 ? "1 selecionado" : `${n} selecionados`;
+    }
     if (n > 0) window.Util?.gerarIconeTech?.refresh?.();
     syncTheadStickyOffset();
     if (!el.chkTodos) return;
@@ -180,37 +185,128 @@
     return `<input type="checkbox" class="Cat_ChkSel Cat_ChkRow" data-produto="${l.id}" ${on ? "checked" : ""} aria-label="Selecionar produto" />`;
   }
 
+  function _bulkBtn({ acao, icon, label, title, danger, more }) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = `Cat_BulkBtn${danger ? " Cat_BulkBtn--danger" : ""}${more ? " Cat_BulkBtn--more" : ""}`;
+    btn.dataset.bulk = acao;
+    btn.title = title || label;
+    btn.setAttribute("aria-label", title || label);
+    const ico = document.createElement("span");
+    ico.className = "Cat_BulkBtnIco";
+    ico.setAttribute("aria-hidden", "true");
+    window.Util?.gerarIconeTech?.({ dest: ico, nome: icon });
+    const txt = document.createElement("span");
+    txt.className = "Cat_BulkBtnTxt";
+    txt.textContent = label;
+    btn.appendChild(ico);
+    btn.appendChild(txt);
+    return btn;
+  }
+
   function initBulkActions() {
     if (!el.bulkActions || el.bulkActions.dataset.ready) return;
     el.bulkActions.dataset.ready = "1";
-    const acoes = [
-      { acao: "excluir", icon: "excluir", title: "Excluir selecionados", danger: true },
-      { acao: "categoria", icon: "categorias", title: "Associar categoria" },
-      { acao: "exportar", icon: "download", title: "Exportar lista" },
-      { acao: "estoque", icon: "estoque", title: "Sincronizar estoque agora" },
-      { acao: "etiquetas", icon: "etiquetas", title: "Imprimir etiquetas" },
-      { acao: "rede", icon: "rede", title: "Publicar / despublicar na rede" },
+
+    const primarias = [
+      { acao: "categoria", icon: "categorias", label: "Categoria", title: "Associar categoria" },
+      { acao: "exportar", icon: "download", label: "Exportar", title: "Exportar lista" },
+      { acao: "rede", icon: "rede", label: "Publicar", title: "Publicar / despublicar na rede" },
     ];
     if (isArmazem) {
-      acoes.splice(2, 0, {
+      primarias.splice(1, 0, {
         acao: "fornecedor",
         icon: "vincular_clientes",
+        label: "Fornecedor",
         title: "Associar ao fornecedor local",
       });
     }
-    acoes.forEach((a) => {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = `Cl_BtnAcao Cat_BulkBtn${a.danger ? " Cat_BulkBtn--danger" : ""}`;
-      btn.dataset.bulk = a.acao;
-      btn.title = a.title;
-      btn.setAttribute("aria-label", a.title);
-      window.Util?.gerarIconeTech?.({ dest: btn, nome: a.icon });
-      el.bulkActions.appendChild(btn);
+    const secundarias = [
+      { acao: "estoque", icon: "estoque", label: "Estoque", title: "Sincronizar estoque agora" },
+      { acao: "etiquetas", icon: "etiquetas", label: "Etiquetas", title: "Imprimir etiquetas" },
+    ];
+
+    primarias.forEach((a) => el.bulkActions.appendChild(_bulkBtn(a)));
+
+    const wrapMore = document.createElement("div");
+    wrapMore.className = "Cat_BulkMore";
+    const btnMore = _bulkBtn({
+      acao: "mais",
+      icon: "seta_baixo",
+      label: "Mais",
+      title: "Mais ações",
+      more: true,
     });
+    btnMore.setAttribute("aria-expanded", "false");
+    btnMore.setAttribute("aria-haspopup", "true");
+    const menu = document.createElement("div");
+    menu.className = "Cat_BulkMoreMenu";
+    menu.hidden = true;
+    menu.setAttribute("role", "menu");
+    secundarias.forEach((a) => {
+      const item = document.createElement("button");
+      item.type = "button";
+      item.className = "Cat_BulkMoreItem";
+      item.dataset.bulk = a.acao;
+      item.setAttribute("role", "menuitem");
+      item.title = a.title;
+      const ico = document.createElement("span");
+      ico.className = "Cat_BulkBtnIco";
+      ico.setAttribute("aria-hidden", "true");
+      window.Util?.gerarIconeTech?.({ dest: ico, nome: a.icon });
+      const txt = document.createElement("span");
+      txt.textContent = a.label;
+      item.appendChild(ico);
+      item.appendChild(txt);
+      menu.appendChild(item);
+    });
+    wrapMore.appendChild(btnMore);
+    wrapMore.appendChild(menu);
+    el.bulkActions.appendChild(wrapMore);
+
+    el.bulkActions.appendChild(
+      _bulkBtn({
+        acao: "excluir",
+        icon: "excluir",
+        label: "Excluir",
+        title: "Excluir selecionados",
+        danger: true,
+      })
+    );
+
+    const fecharMais = () => {
+      menu.hidden = true;
+      btnMore.setAttribute("aria-expanded", "false");
+      wrapMore.classList.remove("is-open");
+    };
+
+    btnMore.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      const open = menu.hidden;
+      if (open) {
+        menu.hidden = false;
+        btnMore.setAttribute("aria-expanded", "true");
+        wrapMore.classList.add("is-open");
+      } else {
+        fecharMais();
+      }
+    });
+    document.addEventListener("click", (ev) => {
+      if (!wrapMore.contains(ev.target)) fecharMais();
+    });
+
+    if (el.bulkClear) {
+      el.bulkClear.addEventListener("click", () => {
+        selecionados.clear();
+        renderTabela();
+        syncBulkBar();
+      });
+    }
+
     el.bulkActions.addEventListener("click", async (ev) => {
       const btn = ev.target.closest("[data-bulk]");
-      if (!btn) return;
+      if (!btn || btn.dataset.bulk === "mais") return;
+      fecharMais();
       try {
         if (btn.dataset.bulk === "exportar") {
           await exportarLista();
