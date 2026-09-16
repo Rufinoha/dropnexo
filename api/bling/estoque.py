@@ -139,10 +139,12 @@ def salvar_vinculo_deposito(
 def sincronizar_depositos_bling_api(cur, id_tenant: int, depositos_bling: list[dict]) -> int:
     """Garante registros no mapa para cada depósito retornado pela API (sem vínculo)."""
     n = 0
+    ids_atuais: set[str] = set()
     for dep in depositos_bling:
         id_b = str(dep.get("id") or "")
         if not id_b:
             continue
+        ids_atuais.add(id_b)
         nome = (dep.get("descricao") or dep.get("nome") or "").strip()
         cur.execute(
             """
@@ -155,6 +157,19 @@ def sincronizar_depositos_bling_api(cur, id_tenant: int, depositos_bling: list[d
             (id_tenant, id_b, nome or None, agora_utc()),
         )
         n += 1
+
+    # Remove órfãos sem vínculo (depósito sumiu do Bling e nunca foi pareado).
+    # Mantém órfãos já vinculados para histórico/estoque.
+    if ids_atuais:
+        cur.execute(
+            """
+            DELETE FROM tbl_integracao_deposito_map
+            WHERE id_tenant = %s
+              AND id_deposito_dropnexo IS NULL
+              AND id_bling_deposito <> ALL(%s)
+            """,
+            (id_tenant, list(ids_atuais)),
+        )
     return n
 
 
@@ -430,28 +445,50 @@ def validar_depositos_para_importacao(
     """
     Gate de depósitos.
     - Estrutura local vazia + bootstrap → libera (import cria/vincula).
-    - Já há categoria e/ou depósito local → exige vínculo de todos os depósitos Bling no mapa.
+    - Já há categoria e/ou depósito local → exige vínculo dos depósitos **atuais** do Bling.
+    - Linhas órfãs no mapa (depósito que não existe mais no Bling) **não** bloqueiam.
     """
+    from api.bling.cliente import listar_depositos_bling
+
     n_deps_local = contar_depositos_locais(cur, id_tenant)
     if total_categorias_locais is None:
         total_categorias_locais = contar_categorias_locais(cur, id_tenant)
     estrutura_vazia = total_categorias_locais == 0 and n_deps_local == 0
 
+    ids_bling_atuais: set[str] = set()
     try:
-        sincronizar_depositos_tenant(cur, id_tenant)
-    except Exception:
-        pass
-    mapa = listar_mapa_depositos(cur, id_tenant)
-    pendentes = [
-        {
-            "id_bling": m["id_bling_deposito"],
-            "nome_bling": m.get("nome_bling") or m["id_bling_deposito"],
-            "motivo": "nao_vinculado",
+        deps_api = listar_depositos_bling(id_tenant)
+        sincronizar_depositos_bling_api(cur, id_tenant, deps_api)
+        ids_bling_atuais = {
+            str(d.get("id") or "").strip()
+            for d in deps_api
+            if d.get("id") not in (None, "")
         }
-        for m in mapa
-        if not m.get("id_deposito_dropnexo")
-    ]
-    n_bling = len(mapa)
+    except Exception:
+        try:
+            sincronizar_depositos_tenant(cur, id_tenant)
+        except Exception:
+            pass
+
+    mapa = listar_mapa_depositos(cur, id_tenant)
+    pendentes = []
+    for m in mapa:
+        bid = str(m.get("id_bling_deposito") or "").strip()
+        if not bid:
+            continue
+        # Só exige vínculo dos depósitos que ainda existem no Bling.
+        if ids_bling_atuais and bid not in ids_bling_atuais:
+            continue
+        if m.get("id_deposito_dropnexo"):
+            continue
+        pendentes.append(
+            {
+                "id_bling": bid,
+                "nome_bling": m.get("nome_bling") or bid,
+                "motivo": "nao_vinculado",
+            }
+        )
+    n_bling = len(ids_bling_atuais) if ids_bling_atuais else len(mapa)
 
     if estrutura_vazia:
         if bootstrap or n_bling == 0:

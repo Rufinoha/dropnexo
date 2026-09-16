@@ -1186,7 +1186,8 @@
     }
     const mapa = {};
     (j.mapa || []).forEach((m) => {
-      mapa[m.id_bling_deposito] = m;
+      const key = String(m.id_bling_deposito || "");
+      if (key) mapa[key] = m;
     });
     tbody.innerHTML = bling
       .map((b) => {
@@ -1202,7 +1203,7 @@
       })
       .join("");
     tbody.querySelectorAll("tr").forEach((tr) => {
-      const idB = tr.dataset.bling;
+      const idB = String(tr.dataset.bling || "");
       const meta = mapa[idB] || {};
       const sel = tr.querySelector(".Bl_DepSelect");
       const saved = meta.id_deposito_dropnexo ? String(meta.id_deposito_dropnexo) : "";
