@@ -1102,6 +1102,30 @@
 
 .Pd_ComprovanteUpload { margin-top: 0.75rem; }
 
+.Pd_ComprovanteLista {
+  margin-top: 0.75rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.Pd_ComprovanteItem {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 0.75rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.Pd_ComprovanteAcoes {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
 .Mp_Logo--pix {
   display: flex;
   align-items: center;

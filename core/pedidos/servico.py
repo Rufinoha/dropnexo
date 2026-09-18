@@ -22,6 +22,64 @@ STATUS_COMPRADOR_PENDENTE = "pendente"
 STATUS_COMPRADOR_PAGO = "pago"
 STATUS_COMPRADOR_CANCELADO = "cancelado"
 
+STATUS_VENDEDOR_VALIDOS = (
+    STATUS_RASCUNHO,
+    STATUS_IMPORTADO,
+    STATUS_AGUARDANDO,
+    STATUS_AGUARDANDO_CONFIRMACAO,
+    STATUS_PAGO,
+    STATUS_EM_EXPEDICAO,
+    STATUS_ENTREGUE,
+    STATUS_CANCELADO,
+)
+
+_CHECK_STATUS_VENDEDOR_OK: bool | None = None
+
+
+def garantir_check_status_vendedor(cur) -> None:
+    """Garante CHECK de status_vendedor com aguardando_confirmacao (PIX comprovante)."""
+    global _CHECK_STATUS_VENDEDOR_OK
+    if _CHECK_STATUS_VENDEDOR_OK:
+        return
+    cur.execute(
+        """
+        SELECT pg_get_constraintdef(oid)
+        FROM pg_constraint
+        WHERE conrelid = 'public.tbl_pedido'::regclass
+          AND conname = 'tbl_pedido_status_vendedor_check'
+        """
+    )
+    row = cur.fetchone()
+    defn = (row[0] or "").lower() if row else ""
+    if "aguardando_confirmacao" in defn:
+        _CHECK_STATUS_VENDEDOR_OK = True
+        return
+    try:
+        cur.execute("SAVEPOINT sp_pedido_status_vendedor_check")
+        cur.execute(
+            "ALTER TABLE tbl_pedido DROP CONSTRAINT IF EXISTS tbl_pedido_status_vendedor_check"
+        )
+        cur.execute(
+            """
+            ALTER TABLE tbl_pedido
+              ADD CONSTRAINT tbl_pedido_status_vendedor_check
+              CHECK (
+                status_vendedor IN (
+                  'rascunho', 'importado', 'aguardando_pagamento', 'aguardando_confirmacao',
+                  'pago', 'em_expedicao', 'entregue', 'cancelado'
+                )
+              )
+            """
+        )
+        cur.execute("RELEASE SAVEPOINT sp_pedido_status_vendedor_check")
+        _CHECK_STATUS_VENDEDOR_OK = True
+    except Exception:
+        try:
+            cur.execute("ROLLBACK TO SAVEPOINT sp_pedido_status_vendedor_check")
+        except Exception:
+            pass
+        _CHECK_STATUS_VENDEDOR_OK = False
+
 
 def status_vendedor_pedido(ped: dict) -> str:
     return (ped.get("status_vendedor") or ped.get("status") or "").strip()

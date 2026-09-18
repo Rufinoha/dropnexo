@@ -360,6 +360,8 @@ def voltar_cobranca_apos_remover_comprovante(
 
 
 def marcar_comprovante_enviado(cur, id_pedido: int, *, id_vendedor: int | None = None) -> None:
+    from core.pedidos.servico import garantir_check_status_vendedor
+
     ped = obter_pedido(cur, id_pedido, id_vendedor=id_vendedor)
     if not ped:
         raise ValueError("Pedido não encontrado.")
@@ -368,6 +370,8 @@ def marcar_comprovante_enviado(cur, id_pedido: int, *, id_vendedor: int | None =
     st = status_vendedor_pedido(ped)
     if st not in (STATUS_AGUARDANDO, STATUS_IMPORTADO, STATUS_AGUARDANDO_CONFIRMACAO):
         raise ValueError("Pedido não está aguardando pagamento.")
+
+    garantir_check_status_vendedor(cur)
 
     set_sv, dup = _sql_set_status_vendedor(cur)
     params = [STATUS_AGUARDANDO_CONFIRMACAO]

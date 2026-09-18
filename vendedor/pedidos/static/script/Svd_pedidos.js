@@ -459,8 +459,22 @@
     }
   }
 
-  async function excluirAnexo(idAnexo) {
-    if (!confirm("Remover este anexo?")) return;
+  async function excluirAnexo(idAnexo, { confirmar = true, silencioso = false } = {}) {
+    if (confirmar) {
+      const ok = window.Swal
+        ? (
+            await Swal.fire({
+              icon: "question",
+              title: "Remover anexo?",
+              confirmButtonText: "Remover",
+              cancelButtonText: "Cancelar",
+              showCancelButton: true,
+              confirmButtonColor: "#b91c1c",
+            })
+          ).isConfirmed
+        : confirm("Remover este anexo?");
+      if (!ok) return false;
+    }
     try {
       const r = await fetch(`/vendedor/pedidos/anexos/${idAnexo}`, {
         method: "DELETE",
@@ -468,9 +482,9 @@
       });
       const j = await parseJsonResp(r);
       if (!j.success) throw new Error(j.message || "Erro ao remover.");
-      const idPed = j.id_pedido || pedidosGrupo.find((p) =>
-        (p.anexos || []).some((a) => a.id === idAnexo)
-      )?.id;
+      const idPed =
+        j.id_pedido ||
+        pedidosGrupo.find((p) => (p.anexos || []).some((a) => a.id === idAnexo))?.id;
       pedidosGrupo.forEach((p) => {
         p.anexos = (p.anexos || []).filter((a) => a.id !== idAnexo);
       });
@@ -478,21 +492,102 @@
         const ped = pedidosGrupo.find((p) => p.id === idPed);
         if (ped) {
           if (j.pedido) Object.assign(ped, j.pedido);
-          else {
+          else if (!silencioso) {
             ped.status_vendedor = "aguardando_pagamento";
             ped.status = "aguardando_pagamento";
             ped.status_pagamento = "pendente";
             ped.pago_em = null;
           }
         }
-        if (painelAtivo === "valores") await renderPayIntegracoes();
+        if (!silencioso && painelAtivo === "valores") await renderPayIntegracoes();
       }
       atualizarNavFrete();
-      if (painelAtivo === "frete") await renderFretePainel();
+      if (!silencioso && painelAtivo === "frete") await renderFretePainel();
+      return true;
     } catch (e) {
       if (window.Swal) {
         Swal.fire({ icon: "error", title: "Anexo", text: e.message, confirmButtonColor: "#021F81" });
       }
+      return false;
+    }
+  }
+
+  async function excluirComprovantePix(idAnexo) {
+    const ok = window.Swal
+      ? (
+          await Swal.fire({
+            icon: "warning",
+            title: "Excluir comprovante?",
+            html: "<p style='text-align:left;margin:0;line-height:1.45'>O pedido volta para <strong>aguardando pagamento</strong>. Você poderá gerar o PIX e anexar outro comprovante.</p>",
+            confirmButtonText: "Excluir e voltar status",
+            cancelButtonText: "Cancelar",
+            showCancelButton: true,
+            confirmButtonColor: "#b91c1c",
+          })
+        ).isConfirmed
+      : confirm("Excluir comprovante e voltar ao status anterior?");
+    if (!ok) return;
+    const done = await excluirAnexo(idAnexo, { confirmar: false });
+    if (done && window.Swal) {
+      Swal.fire({
+        icon: "success",
+        title: "Comprovante removido",
+        text: "Status voltou para aguardando pagamento.",
+        confirmButtonColor: "#021F81",
+        timer: 2200,
+        showConfirmButton: true,
+      });
+    }
+  }
+
+  async function alterarComprovantePix(input) {
+    const idPed = +input.dataset.altUploadComprovante;
+    const idAnexoAntigo = +(input.dataset.replaceAnexo || 0);
+    const file = input.files?.[0];
+    if (!idPed || !file) return;
+    input.disabled = true;
+    try {
+      const fd = new FormData();
+      fd.append("tipo", "comprovante_pix");
+      fd.append("arquivo", file);
+      const r = await fetch(`/vendedor/pedidos/${idPed}/anexos`, {
+        method: "POST",
+        credentials: "same-origin",
+        body: fd,
+      });
+      const j = await parseJsonResp(r);
+      if (!j.success) throw new Error(j.message || "Erro ao enviar comprovante.");
+      const ped = pedidosGrupo.find((p) => p.id === idPed);
+      if (ped) {
+        ped.status_pagamento = "comprovante_enviado";
+        ped.status_vendedor = "aguardando_confirmacao";
+        ped.status = "aguardando_confirmacao";
+        ped.anexos = ped.anexos || [];
+        if (j.anexo) ped.anexos.push(j.anexo);
+      }
+      if (idAnexoAntigo) {
+        await excluirAnexo(idAnexoAntigo, { confirmar: false, silencioso: true });
+        if (ped) {
+          ped.anexos = (ped.anexos || []).filter((a) => a.id !== idAnexoAntigo);
+        }
+      }
+      if (window.Swal) {
+        Swal.fire({
+          icon: "success",
+          title: "Comprovante atualizado",
+          text: "O novo arquivo substituiu o anterior. Aguarde o fornecedor confirmar.",
+          confirmButtonColor: "#021F81",
+        });
+      }
+      await renderPayIntegracoes();
+    } catch (e) {
+      if (window.Swal) {
+        Swal.fire({ icon: "error", title: "Comprovante", text: e.message, confirmButtonColor: "#021F81" });
+      }
+    } finally {
+      input.value = "";
+      input.disabled = false;
+      delete input.dataset.replaceAnexo;
     }
   }
 
@@ -1591,8 +1686,24 @@
       inp.addEventListener("change", () => enviarComprovantePix(inp));
     });
 
+    elPayIntegracoes.querySelectorAll("[data-alterar-comprovante]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const idPed = +btn.dataset.alterarComprovante;
+        const idAnexo = +btn.dataset.anexoId || 0;
+        const inp = document.getElementById(`pd_alt_comp_${idPed}`);
+        if (!inp) return;
+        inp.dataset.replaceAnexo = String(idAnexo || "");
+        inp.value = "";
+        inp.click();
+      });
+    });
+
+    elPayIntegracoes.querySelectorAll("[data-alt-upload-comprovante]").forEach((inp) => {
+      inp.addEventListener("change", () => alterarComprovantePix(inp));
+    });
+
     elPayIntegracoes.querySelectorAll("[data-del-anexo]").forEach((btn) => {
-      btn.addEventListener("click", () => excluirAnexo(+btn.dataset.delAnexo));
+      btn.addEventListener("click", () => excluirComprovantePix(+btn.dataset.delAnexo));
     });
 
     cards.forEach(({ ped }) => {
@@ -1722,6 +1833,8 @@
         }
       </div>`;
 
+    const podeMexerComp =
+      !pagoConfirmadoForn && st !== "entregue" && st !== "cancelado";
     const listaComprovantes = temComprovante
       ? `<div class="Pd_ComprovanteLista">
           ${comprovantes
@@ -1730,13 +1843,22 @@
             <div class="Pd_ComprovanteItem">
               <a href="${anexoHref(a)}" target="_blank" rel="noopener">${esc(a.nome_original || "Comprovante")}</a>
               ${
-                !pagoConfirmadoForn && st !== "entregue" && st !== "cancelado"
-                  ? `<button type="button" class="Pd_BtnLink Pd_BtnLink--danger" data-del-anexo="${a.id}">Excluir comprovante</button>`
+                podeMexerComp
+                  ? `<div class="Pd_ComprovanteAcoes">
+                      <button type="button" class="Pd_BtnLink" data-alterar-comprovante="${idPed}" data-anexo-id="${a.id}">Alterar</button>
+                      <button type="button" class="Pd_BtnLink Pd_BtnLink--danger" data-del-anexo="${a.id}">Excluir</button>
+                    </div>`
                   : ""
               }
             </div>`
             )
             .join("")}
+          ${
+            podeMexerComp
+              ? `<input type="file" id="pd_alt_comp_${idPed}" class="Pd_AnexoInput" accept=".pdf,.png,.jpg,.jpeg,.webp" hidden data-alt-upload-comprovante="${idPed}" />
+                 <p class="Pd_Hint">Errado? <strong>Alterar</strong> troca o arquivo · <strong>Excluir</strong> remove e volta para aguardando pagamento.</p>`
+              : ""
+          }
         </div>`
       : "";
     const mostrarUploadComprovante =
