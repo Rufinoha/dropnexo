@@ -223,6 +223,13 @@
     }
     const secundarias = [
       { acao: "estoque", icon: "estoque", label: "Estoque", title: "Sincronizar estoque agora" },
+      {
+        acao: "atualizar",
+        icon: "baixar",
+        label: "Atualizar",
+        title: "Atualizar selecionados pela integração",
+        submenu: true,
+      },
       { acao: "etiquetas", icon: "etiquetas", label: "Etiquetas", title: "Imprimir etiquetas" },
     ];
 
@@ -243,7 +250,94 @@
     menu.className = "Cat_BulkMoreMenu";
     menu.hidden = true;
     menu.setAttribute("role", "menu");
+
+    const blingConectado =
+      window.CAT_BLING_CONECTADO === true || window.CAT_BLING_CONECTADO === "true";
+    const blingIcon =
+      window.CAT_BLING_ICON || "/static/imge/icone_api/icone_bling.png";
+
     secundarias.forEach((a) => {
+      if (a.submenu) {
+        const wrapInt = document.createElement("div");
+        wrapInt.className = "Cat_BulkIntWrap";
+        const item = document.createElement("button");
+        item.type = "button";
+        item.className = "Cat_BulkMoreItem Cat_BulkMoreItem--sub";
+        item.setAttribute("role", "menuitem");
+        item.setAttribute("aria-haspopup", "true");
+        item.setAttribute("aria-expanded", "false");
+        item.title = a.title;
+        const ico = document.createElement("span");
+        ico.className = "Cat_BulkBtnIco";
+        ico.setAttribute("aria-hidden", "true");
+        window.Util?.gerarIconeTech?.({ dest: ico, nome: a.icon });
+        const txt = document.createElement("span");
+        txt.textContent = a.label;
+        const chev = document.createElement("span");
+        chev.className = "Cat_BulkMoreChev";
+        chev.setAttribute("aria-hidden", "true");
+        chev.textContent = "›";
+        item.appendChild(ico);
+        item.appendChild(txt);
+        item.appendChild(chev);
+
+        const sub = document.createElement("div");
+        sub.className = "Cat_BulkIntMenu";
+        sub.hidden = true;
+        sub.setAttribute("role", "menu");
+        if (blingConectado) {
+          const bi = document.createElement("button");
+          bi.type = "button";
+          bi.className = "Cat_BulkIntItem";
+          bi.dataset.bulk = "atualizar-bling";
+          bi.setAttribute("role", "menuitem");
+          bi.title = "Atualizar selecionados pelo Bling";
+          const img = document.createElement("img");
+          img.src = blingIcon;
+          img.alt = "";
+          img.width = 20;
+          img.height = 20;
+          const lab = document.createElement("span");
+          lab.textContent = "Bling";
+          bi.appendChild(img);
+          bi.appendChild(lab);
+          sub.appendChild(bi);
+        } else {
+          const empty = document.createElement("p");
+          empty.className = "Cat_BulkIntEmpty";
+          empty.textContent = "Nenhuma integração conectada.";
+          const link = document.createElement("a");
+          link.className = "Cat_BulkIntLink";
+          link.href = "/integracoes/bling";
+          link.textContent = "Conectar Bling";
+          sub.appendChild(empty);
+          sub.appendChild(link);
+        }
+
+        const fecharSub = () => {
+          sub.hidden = true;
+          wrapInt.classList.remove("is-open");
+          item.setAttribute("aria-expanded", "false");
+        };
+        const abrirSub = () => {
+          sub.hidden = false;
+          wrapInt.classList.add("is-open");
+          item.setAttribute("aria-expanded", "true");
+        };
+        wrapInt.addEventListener("mouseenter", abrirSub);
+        wrapInt.addEventListener("mouseleave", fecharSub);
+        item.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          if (sub.hidden) abrirSub();
+          else fecharSub();
+        });
+
+        wrapInt.appendChild(item);
+        wrapInt.appendChild(sub);
+        menu.appendChild(wrapInt);
+        return;
+      }
+
       const item = document.createElement("button");
       item.type = "button";
       item.className = "Cat_BulkMoreItem";
@@ -318,6 +412,7 @@
         else if (btn.dataset.bulk === "categoria") await associarCategoriaLote(ids);
         else if (btn.dataset.bulk === "fornecedor") await associarFornecedorArmazemLote(ids);
         else if (btn.dataset.bulk === "estoque") await sincronizarEstoqueLote(ids);
+        else if (btn.dataset.bulk === "atualizar-bling") await atualizarBlingLote(ids);
         else if (btn.dataset.bulk === "etiquetas") await swalEmDesenvolvimento("Impressão de etiquetas");
         else if (btn.dataset.bulk === "rede") await alternarPublicacaoRedeLote(ids);
       } catch (e) {
@@ -801,6 +896,50 @@
     const j = await r.json();
     if (!r.ok || !j.success) throw new Error(j.message || "Erro.");
     await Swal.fire("Concluído", j.message, "success");
+    await carregar();
+  }
+
+  async function atualizarBlingLote(ids) {
+    const c = await Swal.fire({
+      title: "Atualizar pelo Bling?",
+      text: `Buscar no Bling e atualizar ${ids.length} produto(s) selecionado(s) no DropNexo.`,
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonText: "Atualizar",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#021F81",
+    });
+    if (!c.isConfirmed) return;
+    Swal.fire({
+      title: "Atualizando…",
+      text: "Consultando o Bling. Aguarde.",
+      allowOutsideClick: false,
+      didOpen: () => Swal.showLoading(),
+    });
+    const r = await fetch(`${BASE}/atualizar/bling`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.success) {
+      throw new Error(j.message || "Erro ao atualizar pelo Bling.");
+    }
+    const falhas = (j.resumo && j.resumo.falhas) || [];
+    if (falhas.length) {
+      const lista = falhas
+        .slice(0, 8)
+        .map((f) => `• ${f.nome || f.id_produto}: ${f.motivo || "falha"}`)
+        .join("\n");
+      const extra = falhas.length > 8 ? `\n… e mais ${falhas.length - 8}` : "";
+      await Swal.fire({
+        icon: "warning",
+        title: "Atualização parcial",
+        html: `<p>${escapeHtml(j.message || "Concluído com avisos.")}</p><pre style="text-align:left;white-space:pre-wrap;font-size:0.82rem;max-height:14rem;overflow:auto">${escapeHtml(lista + extra)}</pre>`,
+      });
+    } else {
+      await Swal.fire("Concluído", j.message, "success");
+    }
     await carregar();
   }
 

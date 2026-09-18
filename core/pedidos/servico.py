@@ -3392,6 +3392,16 @@ def registrar_anexo_pedido(
         raise ValueError("Pedido não encontrado.")
     if status_vendedor_pedido(ped) == STATUS_CANCELADO:
         raise ValueError("Pedido cancelado não aceita anexos.")
+    from sistema.planos.armazenamento import exigir_capacidade_armazenamento
+
+    exigir_capacidade_armazenamento(
+        cur, int(id_vendedor), bytes_novos=int(tamanho_bytes or 0), papel="vendedor"
+    )
+    id_forn = ped.get("id_tenant_fornecedor")
+    if id_forn:
+        exigir_capacidade_armazenamento(
+            cur, int(id_forn), bytes_novos=int(tamanho_bytes or 0), papel="fornecedor"
+        )
     cur.execute(
         """
         INSERT INTO tbl_pedido_anexo (id_pedido, tipo, nome_original, caminho, tamanho_bytes, id_usuario)

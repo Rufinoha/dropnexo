@@ -374,6 +374,9 @@
           }
           acoesVinculo +=
             '<button type="button" class="Forn_CardBtn Forn_CardBtn--danger" data-acao="encerrar">Encerrar</button>';
+        } else if (stVin === "aguardando") {
+          acoesVinculo =
+            '<button type="button" class="Forn_CardBtn Forn_CardBtn--danger" data-acao="cancelar">Cancelar solicitação</button>';
         }
         const aria = conectado
           ? `Contatar ${esc(f.nome)}`
@@ -548,6 +551,44 @@
       return;
     }
 
+    if (acao === "cancelar") {
+      const ok = window.Swal
+        ? (
+            await Swal.fire({
+              title: "Cancelar solicitação?",
+              html: `<p style="text-align:left;margin:0;line-height:1.45">Retirar o pedido de vínculo com <strong>${esc(nome)}</strong>? Você poderá solicitar de novo depois.</p>`,
+              icon: "question",
+              showCancelButton: true,
+              confirmButtonText: "Cancelar solicitação",
+              cancelButtonText: "Manter",
+              confirmButtonColor: "#b91c1c",
+            })
+          ).isConfirmed
+        : confirm("Cancelar solicitação de vínculo?");
+      if (!ok) return;
+      try {
+        const r = await fetch("/fornecedores/vinculo-acao", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id_fornecedor: id,
+            id_armazem_fornecedor: azf || null,
+            acao: "cancelar",
+          }),
+        });
+        const j = await r.json();
+        if (!j.success) throw new Error(j.message || "Falha ao cancelar.");
+        if (window.Swal) await Swal.fire("OK", j.message, "success");
+        else alert(j.message);
+        carregar();
+      } catch (e) {
+        if (window.Swal) Swal.fire("Erro", e.message, "error");
+        else alert(e.message);
+      }
+      return;
+    }
+
     const configs = {
       pausar: {
         title: "Pausar vínculo?",
@@ -621,7 +662,7 @@
         abrirContatoFornecedor(card);
         return;
       }
-      if (acao === "pausar" || acao === "despausar" || acao === "encerrar") {
+      if (acao === "pausar" || acao === "despausar" || acao === "encerrar" || acao === "cancelar") {
         acaoVinculo(card, acao);
         return;
       }

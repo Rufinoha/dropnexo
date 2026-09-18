@@ -7,7 +7,7 @@
   <meta name="robots" content="noindex, nofollow" />
   {% include "partials/marca_favicon.html" %}
   <link rel="stylesheet" href="{{ url_for('static', filename='style/global_utils.css') }}" />
-  <link rel="stylesheet" href="{{ url_for('static', filename='style/app_shell.css') }}?v=6" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style/app_shell.css') }}?v=7" />
   {% if session.get('id_usuario') %}
   <link rel="stylesheet" href="{{ url_for('static', filename='style/Cnovidades.css') }}" />
   <link rel="stylesheet" href="{{ url_for('static', filename='style/Clancamento.css') }}?v=2" />
@@ -61,18 +61,34 @@
           <button type="button" class="fg-modulo-trigger" id="fg-modulo-trigger" aria-expanded="false" aria-haspopup="listbox">
             <span class="fg-modulo-trigger-ico" aria-hidden="true"></span>
             <span class="fg-modulo-trigger-label" id="fg-modulo-trigger-label">{{ modulo_ativo_rotulo }}</span>
+            {% set _badge_ativo = (menu_badges_modulos or {}).get(modulo_ativo, 0) %}
+            {% if _badge_ativo %}
+            <span class="fg-menu-badge" aria-label="{{ _badge_ativo }} pendência(s)">{{ _badge_ativo if _badge_ativo < 100 else '99+' }}</span>
+            {% endif %}
             <svg class="fg-modulo-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
           </button>
           <ul class="fg-modulo-dropdown" id="fg-modulo-dropdown" role="listbox" hidden>
             {% for m in modulos_nav %}
             <li>
-              <button type="button" role="option" data-modulo="{{ m.codigo }}"{% if m.codigo == modulo_ativo %} aria-selected="true"{% endif %}>{{ m.rotulo }}</button>
+              <button type="button" role="option" data-modulo="{{ m.codigo }}"{% if m.codigo == modulo_ativo %} aria-selected="true"{% endif %}>
+                <span>{{ m.rotulo }}</span>
+                {% set _bm = (menu_badges_modulos or {}).get(m.codigo, 0) %}
+                {% if _bm %}
+                <span class="fg-menu-badge" aria-label="{{ _bm }} pendência(s)">{{ _bm if _bm < 100 else '99+' }}</span>
+                {% endif %}
+              </button>
             </li>
             {% endfor %}
           </ul>
         </div>
         {% else %}
-        <div class="fg-modulo-pill">{{ modulo_ativo_rotulo }}</div>
+        <div class="fg-modulo-pill">
+          <span>{{ modulo_ativo_rotulo }}</span>
+          {% set _badge_ativo = (menu_badges_modulos or {}).get(modulo_ativo, 0) %}
+          {% if _badge_ativo %}
+          <span class="fg-menu-badge" aria-label="{{ _badge_ativo }} pendência(s)">{{ _badge_ativo if _badge_ativo < 100 else '99+' }}</span>
+          {% endif %}
+        </div>
         {% endif %}
       </div>
       {% endif %}
@@ -87,6 +103,10 @@
         <a href="{{ item.url }}" class="fg-nav-item{% if nav_ativo == item.nav_codigo %} is-active{% endif %}">
           <svg class="fg-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">{{ item.icone_svg|safe }}</svg>
           <span class="fg-nav-label">{{ item.nome }}</span>
+          {% set _bn = (menu_badges_nav or {}).get(item.nav_codigo, 0) %}
+          {% if _bn %}
+          <span class="fg-menu-badge" aria-label="{{ _bn }} pendência(s)">{{ _bn if _bn < 100 else '99+' }}</span>
+          {% endif %}
         </a>
         {% else %}
         <a href="{{ url_for('dashboard.index') }}" class="fg-nav-item{% if nav_ativo == 'inicio' %} is-active{% endif %}">

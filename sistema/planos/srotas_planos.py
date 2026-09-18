@@ -93,7 +93,13 @@ def catalogo_planos_home():
             "explorar",
             "Explorar",
             0,
-            [("25", "pedidos/mês"), ("1", "fornecedor"), ("50", "produtos")],
+            [
+                ("25", "pedidos/mês"),
+                ("1", "fornecedor"),
+                ("50", "produtos"),
+                ("1", "usuário"),
+                ("200 MB", "espaço"),
+            ],
             [
                 rec("Rede B2B e catálogo manual", True),
                 rec("Pedidos na plataforma", True),
@@ -109,7 +115,13 @@ def catalogo_planos_home():
             "crescer",
             "Crescer",
             79,
-            [("150", "pedidos/mês"), ("3", "fornecedores"), ("500", "produtos")],
+            [
+                ("150", "pedidos/mês"),
+                ("3", "fornecedores"),
+                ("500", "produtos"),
+                ("3", "usuários"),
+                ("2 GB", "espaço"),
+            ],
             [
                 rec("Tudo do Explorar", True),
                 integ_on,
@@ -125,7 +137,13 @@ def catalogo_planos_home():
             "escalar",
             "Escalar",
             179,
-            [("600", "pedidos/mês"), ("30", "fornecedores"), ("2.000", "produtos")],
+            [
+                ("600", "pedidos/mês"),
+                ("30", "fornecedores"),
+                ("2.000", "produtos"),
+                ("8", "usuários"),
+                ("10 GB", "espaço"),
+            ],
             [
                 rec("Tudo do Crescer", True),
                 rec("Até 8 pessoas na equipe", True),
@@ -136,7 +154,13 @@ def catalogo_planos_home():
             "pro",
             "Pro",
             349,
-            [("2.000", "pedidos/mês"), ("80", "fornecedores"), ("10.000", "produtos")],
+            [
+                ("2.000", "pedidos/mês"),
+                ("80", "fornecedores"),
+                ("10.000", "produtos"),
+                ("Ilimitados", "usuários"),
+                ("40 GB", "espaço"),
+            ],
             [
                 rec("Tudo do Escalar", True),
                 rec("Equipe ampliada", True),
@@ -150,7 +174,14 @@ def catalogo_planos_home():
             "explorar",
             "Explorar",
             0,
-            [("40", "pedidos/mês"), ("5", "vendedores aprovados"), ("150", "produtos")],
+            [
+                ("40", "pedidos/mês"),
+                ("5", "vendedores aprovados"),
+                ("150", "produtos"),
+                ("1", "usuário"),
+                ("1", "depósito"),
+                ("500 MB", "espaço"),
+            ],
             [
                 rec("Catálogo e depósito manual", True, "1 depósito"),
                 rec("Ver todas as solicitações de vendedores", True),
@@ -166,7 +197,14 @@ def catalogo_planos_home():
             "conectar",
             "Conectar",
             99,
-            [("200", "pedidos/mês"), ("20", "vendedores aprovados"), ("800", "produtos")],
+            [
+                ("200", "pedidos/mês"),
+                ("20", "vendedores aprovados"),
+                ("800", "produtos"),
+                ("2", "usuários"),
+                ("2", "depósitos"),
+                ("5 GB", "espaço"),
+            ],
             [
                 rec("Tudo do Explorar", True),
                 integ_on,
@@ -182,7 +220,14 @@ def catalogo_planos_home():
             "expandir",
             "Expandir",
             249,
-            [("800", "pedidos/mês"), ("60", "vendedores aprovados"), ("3.000", "produtos")],
+            [
+                ("800", "pedidos/mês"),
+                ("60", "vendedores aprovados"),
+                ("3.000", "produtos"),
+                ("Ilimitados", "usuários"),
+                ("5", "depósitos"),
+                ("25 GB", "espaço"),
+            ],
             [
                 rec("Tudo do Conectar", True),
                 rec("Até 5 depósitos", True),
@@ -193,7 +238,14 @@ def catalogo_planos_home():
             "hub",
             "Hub",
             499,
-            [("3.000", "pedidos/mês"), ("Ilimitados", "vendedores aprovados"), ("15.000", "produtos")],
+            [
+                ("3.000", "pedidos/mês"),
+                ("Ilimitados", "vendedores aprovados"),
+                ("15.000", "produtos"),
+                ("Ilimitados", "usuários"),
+                ("Ilimitados", "depósitos"),
+                ("100 GB", "espaço"),
+            ],
             [
                 rec("Tudo do Expandir", True),
                 rec("Equipe ampliada", True),
@@ -461,13 +513,15 @@ def meu_plano():
     armazenamento = {"bytes_imagens": 0}
     uso_cotas: list[dict] = []
     try:
-        from fornecedor.catalogo.catalogo import obter_bytes_imagens_tenant
         from sistema.planos.limites import uso_cotas_tenant
 
         conn = Var_ConectarBanco()
         cur = conn.cursor()
-        armazenamento["bytes_imagens"] = obter_bytes_imagens_tenant(cur, int(id_tenant))
         uso_cotas = uso_cotas_tenant(cur, int(id_tenant), tipo)
+        if uso_cotas:
+            arm0 = (uso_cotas[0].get("armazenamento") or {})
+            armazenamento["bytes_imagens"] = int(arm0.get("usado") or 0)
+            armazenamento["detalhe"] = arm0
         conn.commit()
         cur.close()
         conn.close()

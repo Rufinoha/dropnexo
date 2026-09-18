@@ -211,6 +211,109 @@ def extrair_urls_imagem_bling(
     return [d["url"] for d in extrair_midia_imagens_bling(produto, variacoes=variacoes) if d.get("url")]
 
 
+def _midia_somente_externas_importacao(midia: list[dict]) -> list[dict]:
+    """Na importação: só URLs externas. Internas (S3/cache Bling) não entram."""
+    if not midia:
+        return []
+    externas: list[dict] = []
+    so_internas = False
+    for d in midia:
+        url = (d.get("url") or "").strip()
+        tipo = (d.get("tipo") or "").strip().lower()
+        if tipo == "interna" or (url and classificar_origem_bling(url) == "bling_interna"):
+            so_internas = True
+            continue
+        if url:
+            externas.append(d)
+    if not externas and so_internas:
+        raise ValueError(
+            "Este produto só tem imagens internas (temporárias) do Bling. "
+            "Cadastre imagens externas com URL direta no Bling e importe de novo."
+        )
+    return externas
+
+
+def atualizar_produtos_selecionados(
+    cur,
+    id_tenant: int,
+    ids_produto: list[int],
+    *,
+    contexto: str = "fornecedor",
+) -> dict[str, Any]:
+    """Atualiza no DropNexo só os produtos selecionados, buscando cada um no Bling pelo mapa."""
+    from fornecedor.catalogo.catalogo import id_bling_produto
+
+    cfg = _garantir_config(cur, id_tenant, contexto)
+    cache_categorias: dict[str, dict] = {}
+    categorias_sincronizadas: set[str] = set()
+    grupos_concluidos: set[str] = set()
+
+    atualizados = 0
+    sem_vinculo = 0
+    falhas: list[dict[str, str]] = []
+    ids = list(dict.fromkeys(int(x) for x in ids_produto if x is not None))
+
+    for idx, id_produto in enumerate(ids, start=1):
+        id_bling = id_bling_produto(cur, id_tenant, int(id_produto), contexto=contexto)
+        if not id_bling:
+            sem_vinculo += 1
+            continue
+
+        sp_nome = _abrir_savepoint_produto(cur, idx)
+        try:
+            detalhe = obter_produto(id_tenant, id_bling)
+            item = {
+                "id": id_bling,
+                "codigo": (detalhe.get("codigo") or "").strip(),
+                "nome": (detalhe.get("nome") or "").strip(),
+            }
+            if not item["codigo"]:
+                raise ValueError("SKU obrigatório no Bling.")
+            resultado, _ = _processar_item_produto(
+                cur,
+                id_tenant=id_tenant,
+                contexto=contexto,
+                cfg=cfg,
+                item=item,
+                cache_categorias=cache_categorias,
+                categorias_sincronizadas=categorias_sincronizadas,
+                ids_categoria_filtro=None,
+                grupos_concluidos=grupos_concluidos,
+                somente_mapa=True,
+            )
+            _release_savepoint(cur, sp_nome)
+            if resultado in ("importado", "atualizado"):
+                atualizados += 1
+            elif resultado in ("ignorado_filtro", "ignorado_categoria"):
+                falhas.append(
+                    {
+                        "id_produto": str(id_produto),
+                        "id_bling": id_bling,
+                        "sku": item["codigo"],
+                        "nome": item["nome"] or f"#{id_produto}",
+                        "motivo": "Produto ignorado pela configuração de categorias do Bling.",
+                    }
+                )
+        except Exception as e:
+            _rollback_savepoint(cur, sp_nome)
+            falhas.append(
+                {
+                    "id_produto": str(id_produto),
+                    "id_bling": str(id_bling),
+                    "sku": "",
+                    "nome": f"#{id_produto}",
+                    "motivo": str(e),
+                }
+            )
+
+    return {
+        "total": len(ids),
+        "atualizados": atualizados,
+        "sem_vinculo": sem_vinculo,
+        "falhas": falhas,
+    }
+
+
 def _extensao_de_url(url: str) -> str:
     path = urlparse(url).path
     ext = Path(path).suffix.lower()
@@ -1152,7 +1255,7 @@ def _processar_item_produto(
         id_importacao_lote=id_importacao_lote if criando else None,
     )
 
-    midia = extrair_midia_imagens_bling(detalhe)
+    midia = _midia_somente_externas_importacao(extrair_midia_imagens_bling(detalhe))
     arquivos_novos: list[str] = []
     try:
         if midia:
@@ -1269,7 +1372,9 @@ def _processar_grupo_variacoes(
         id_importacao_lote=id_importacao_lote if criando else None,
     )
 
-    midia = extrair_midia_imagens_bling(detalhe_pai, variacoes=variacoes)
+    midia = _midia_somente_externas_importacao(
+        extrair_midia_imagens_bling(detalhe_pai, variacoes=variacoes)
+    )
     sku_mapa = _sku_pai_de_variacoes(detalhe_pai, variacoes)
     arquivos_novos: list[str] = []
     try:

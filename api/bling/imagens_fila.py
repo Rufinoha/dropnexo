@@ -333,6 +333,7 @@ def _processar_job(job: dict[str, Any]) -> dict[str, Any]:
             id_imagem=int(job["id_imagem"]),
             url=str(job["url_download"]),
             leve=True,
+            cur=cur,
         )
         cur.execute(
             """

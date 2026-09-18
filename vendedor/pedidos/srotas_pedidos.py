@@ -300,6 +300,16 @@ def pedido_anexos_upload(id_pedido: int):
         ped = obter_pedido(cur, id_pedido, id_vendedor=id_v)
         if not ped:
             return jsonify(success=False, message="Pedido não encontrado."), 404
+        from sistema.planos.armazenamento import exigir_capacidade_armazenamento
+
+        exigir_capacidade_armazenamento(
+            cur, int(id_v), bytes_novos=int(tamanho), papel="vendedor"
+        )
+        id_forn = ped.get("id_tenant_fornecedor")
+        if id_forn:
+            exigir_capacidade_armazenamento(
+                cur, int(id_forn), bytes_novos=int(tamanho), papel="fornecedor"
+            )
         pasta = _pasta_anexos_tenant(id_v)
         nome_safe = Path(arquivo.filename).name
         destino = pasta / f"{id_pedido}_{tipo}_{int(time.time())}{ext}"

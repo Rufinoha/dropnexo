@@ -967,6 +967,31 @@ def obter_menu_sidebar_ctx() -> dict:
 
     base = ctx_navegacao()
     base["menu_sidebar"] = carregar_menu_sidebar() if session.get("id_usuario") else []
+    base["menu_badges_nav"] = {}
+    base["menu_badges_modulos"] = {}
+
+    tid = session.get("id_tenant")
+    if not tid or not session.get("id_usuario"):
+        return base
+
+    try:
+        from core.menu_badges import contagens_menu_badges
+
+        mods = [m.get("codigo") for m in (base.get("modulos_nav") or []) if m.get("codigo")]
+        if not mods:
+            ativo = (base.get("modulo_ativo") or "").strip()
+            if ativo:
+                mods = [ativo]
+        conn = Var_ConectarBanco()
+        try:
+            cur = conn.cursor()
+            counts = contagens_menu_badges(cur, id_tenant=int(tid), modulos=mods)
+            base["menu_badges_nav"] = counts.get("nav") or {}
+            base["menu_badges_modulos"] = counts.get("modulos") or {}
+        finally:
+            conn.close()
+    except Exception:
+        pass
     return base
 
 # --- segmentos plataforma ---

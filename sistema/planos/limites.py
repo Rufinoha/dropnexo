@@ -10,6 +10,10 @@ from global_utils import plano_slug_banco
 # Banco: starter | professional | scale | enterprise
 
 
+_MB = 1024 * 1024
+_GB = 1024 * _MB
+
+
 def _base(
     *,
     slug_comercial: str,
@@ -22,6 +26,7 @@ def _base(
     integracao: bool,
     importacao_planilha: bool,
     email_pedidos: bool,
+    armazenamento_bytes: int,
     depositos: int | None = None,
 ) -> dict[str, Any]:
     return {
@@ -35,6 +40,7 @@ def _base(
         "integracao": integracao,
         "importacao_planilha": importacao_planilha,
         "email_pedidos": email_pedidos,
+        "armazenamento_bytes": int(armazenamento_bytes),
         "depositos": depositos,
     }
 
@@ -52,6 +58,7 @@ _POR_TIPO_BANCO = {
             integracao=False,
             importacao_planilha=False,
             email_pedidos=False,
+            armazenamento_bytes=200 * _MB,
         ),
         "professional": lambda: _base(
             slug_comercial="crescer",
@@ -64,6 +71,7 @@ _POR_TIPO_BANCO = {
             integracao=True,
             importacao_planilha=True,
             email_pedidos=True,
+            armazenamento_bytes=2 * _GB,
         ),
         "scale": lambda: _base(
             slug_comercial="escalar",
@@ -76,6 +84,7 @@ _POR_TIPO_BANCO = {
             integracao=True,
             importacao_planilha=True,
             email_pedidos=True,
+            armazenamento_bytes=10 * _GB,
         ),
         "enterprise": lambda: _base(
             slug_comercial="pro",
@@ -88,6 +97,7 @@ _POR_TIPO_BANCO = {
             integracao=True,
             importacao_planilha=True,
             email_pedidos=True,
+            armazenamento_bytes=40 * _GB,
         ),
     },
     "fornecedor": {
@@ -103,6 +113,7 @@ _POR_TIPO_BANCO = {
             importacao_planilha=False,
             email_pedidos=False,
             depositos=1,
+            armazenamento_bytes=500 * _MB,
         ),
         "professional": lambda: _base(
             slug_comercial="conectar",
@@ -116,6 +127,7 @@ _POR_TIPO_BANCO = {
             importacao_planilha=True,
             email_pedidos=True,
             depositos=2,
+            armazenamento_bytes=5 * _GB,
         ),
         "scale": lambda: _base(
             slug_comercial="expandir",
@@ -129,6 +141,7 @@ _POR_TIPO_BANCO = {
             importacao_planilha=True,
             email_pedidos=True,
             depositos=5,
+            armazenamento_bytes=25 * _GB,
         ),
         "enterprise": lambda: _base(
             slug_comercial="hub",
@@ -142,6 +155,7 @@ _POR_TIPO_BANCO = {
             importacao_planilha=True,
             email_pedidos=True,
             depositos=None,
+            armazenamento_bytes=100 * _GB,
         ),
     },
 }
@@ -216,6 +230,27 @@ def mensagem_limite_produtos(*, limite: int, usado: int, papel: str = "vendedor"
     return (
         f"Seu plano permite até {limite} {rotulo} ({usado} em uso). "
         "Remova itens ou faça upgrade em Meu plano."
+    )
+
+
+def formatar_bytes(n: int | float | None) -> str:
+    try:
+        b = float(n or 0)
+    except (TypeError, ValueError):
+        b = 0.0
+    if b >= _GB:
+        return f"{b / _GB:.2f} GB".replace(".", ",")
+    if b >= _MB:
+        return f"{b / _MB:.1f} MB".replace(".", ",")
+    if b >= 1024:
+        return f"{b / 1024:.0f} KB"
+    return f"{int(b)} B"
+
+
+def mensagem_limite_armazenamento(*, limite: int, usado: int) -> str:
+    return (
+        f"Espaço do plano esgotado ({formatar_bytes(usado)} de {formatar_bytes(limite)}). "
+        "Remova arquivos ou faça upgrade em Meu plano."
     )
 
 
@@ -409,8 +444,64 @@ def exigir_capacidade_pedido_novo(cur, id_vendedor: int, id_fornecedor: int) -> 
         exigir_limite_pedidos_mes(cur, int(id_fornecedor), "fornecedor", quantidade=1)
 
 
+def contar_usuarios_tenant(cur, id_tenant: int) -> int:
+    cur.execute(
+        """
+        SELECT COUNT(*)::int
+        FROM tbl_usuario_tenant
+        WHERE id_tenant = %s
+        """,
+        (int(id_tenant),),
+    )
+    return int(cur.fetchone()[0] or 0)
+
+
+def contar_conexoes(cur, id_tenant: int, papel: str) -> int:
+    tid = int(id_tenant)
+    if papel == "fornecedor":
+        cur.execute(
+            """
+            SELECT COUNT(*)::int
+            FROM tbl_vinculo_vendedor_fornecedor
+            WHERE id_tenant_fornecedor = %s AND status IN ('ativo', 'pausado')
+            """,
+            (tid,),
+        )
+    else:
+        cur.execute(
+            """
+            SELECT COUNT(*)::int
+            FROM tbl_vinculo_vendedor_fornecedor
+            WHERE id_tenant_vendedor = %s AND status IN ('ativo', 'pausado', 'aguardando')
+            """,
+            (tid,),
+        )
+    return int(cur.fetchone()[0] or 0)
+
+
+def contar_depositos(cur, id_tenant: int) -> int:
+    try:
+        cur.execute(
+            """
+            SELECT COUNT(*)::int
+            FROM tbl_deposito_expedicao
+            WHERE id_tenant = %s AND COALESCE(ativo, TRUE) = TRUE
+            """,
+            (int(id_tenant),),
+        )
+        return int(cur.fetchone()[0] or 0)
+    except Exception:
+        try:
+            cur.connection.rollback()
+        except Exception:
+            pass
+        return 0
+
+
 def uso_cotas_tenant(cur, id_tenant: int, tipo_negocio: str | None = None) -> list[dict[str, Any]]:
     """Resumo de uso para a tela Meu plano (por papel disponível)."""
+    from sistema.planos.armazenamento import uso_armazenamento_vs_plano
+
     cur.execute("SELECT tipo_negocio FROM tbl_tenant WHERE id = %s", (int(id_tenant),))
     row = cur.fetchone()
     tipo = (tipo_negocio or (row[0] if row else None) or "vendedor").strip().lower()
@@ -427,23 +518,55 @@ def uso_cotas_tenant(cur, id_tenant: int, tipo_negocio: str | None = None) -> li
         lim = limites_plano_tenant(cur, id_tenant, papel)
         ped_lim = lim.get("pedidos_mes")
         prod_lim = lim.get("produtos")
+        conn_lim = lim.get("conexoes")
+        usu_lim = lim.get("usuarios")
+        dep_lim = lim.get("depositos")
         ped_uso = contar_pedidos_mes(cur, id_tenant, papel)
         prod_uso = contar_produtos(cur, id_tenant, papel)
-        out.append(
-            {
-                "papel": papel,
-                "papel_rotulo": "Vendedor" if papel == "vendedor" else "Fornecedor",
-                "plano_nome": lim.get("nome") or "",
-                "pedidos": {
-                    "usado": ped_uso,
-                    "limite": ped_lim,
-                    "rotulo": "Pedidos neste mês",
-                },
-                "produtos": {
-                    "usado": prod_uso,
-                    "limite": prod_lim,
-                    "rotulo": "Produtos" if papel == "vendedor" else "Produtos / SKUs",
-                },
+        conn_uso = contar_conexoes(cur, id_tenant, papel)
+        usu_uso = contar_usuarios_tenant(cur, id_tenant)
+        arm = uso_armazenamento_vs_plano(cur, id_tenant, papel)
+
+        bloco: dict[str, Any] = {
+            "papel": papel,
+            "papel_rotulo": "Vendedor" if papel == "vendedor" else "Fornecedor",
+            "plano_nome": lim.get("nome") or "",
+            "pedidos": {
+                "usado": ped_uso,
+                "limite": ped_lim,
+                "rotulo": "Pedidos neste mês",
+            },
+            "produtos": {
+                "usado": prod_uso,
+                "limite": prod_lim,
+                "rotulo": "Produtos" if papel == "vendedor" else "Produtos / SKUs",
+            },
+            "conexoes": {
+                "usado": conn_uso,
+                "limite": conn_lim,
+                "rotulo": "Fornecedores" if papel == "vendedor" else "Vendedores aprovados",
+            },
+            "usuarios": {
+                "usado": usu_uso,
+                "limite": usu_lim,
+                "rotulo": "Usuários da equipe",
+            },
+            "armazenamento": {
+                "usado": arm.get("usado_bytes") or 0,
+                "limite": arm.get("limite_bytes"),
+                "rotulo": "Espaço em disco",
+                "rotulo_usado": arm.get("rotulo_total") or formatar_bytes(0),
+                "rotulo_limite": arm.get("rotulo_limite") or "—",
+                "percentual": arm.get("percentual") or 0,
+                "itens": arm.get("itens") or [],
+                "formatado": True,
+            },
+        }
+        if papel == "fornecedor":
+            bloco["depositos"] = {
+                "usado": contar_depositos(cur, id_tenant),
+                "limite": dep_lim,
+                "rotulo": "Depósitos",
             }
-        )
+        out.append(bloco)
     return out

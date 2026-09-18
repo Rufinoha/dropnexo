@@ -16,6 +16,7 @@
     vazio: document.getElementById("lojaVazio"),
     paginacao: document.getElementById("lojaPaginacao"),
     btnVinculo: document.getElementById("lojaBtnVinculo"),
+    btnCancelarVinculo: document.getElementById("lojaBtnCancelarVinculo"),
   };
 
   if (!el.grid) return;
@@ -67,6 +68,9 @@
     }
     if (el.btnVinculo) {
       el.btnVinculo.hidden = !["nenhum", "recusado", "inativo"].includes(st);
+    }
+    if (el.btnCancelarVinculo) {
+      el.btnCancelarVinculo.hidden = st !== "aguardando";
     }
   }
 
@@ -233,6 +237,45 @@
     }
   }
 
+  async function cancelarSolicitacaoVinculo() {
+    if (!idFornecedor) return;
+    const nome = el.titulo?.textContent || "fornecedor";
+    const ok = window.Swal
+      ? (
+          await Swal.fire({
+            title: "Cancelar solicitação?",
+            html: `<p style="text-align:left;margin:0;line-height:1.45">Retirar o pedido de vínculo com <strong>${esc(nome)}</strong>?</p>`,
+            icon: "question",
+            showCancelButton: true,
+            confirmButtonText: "Cancelar solicitação",
+            cancelButtonText: "Manter",
+            confirmButtonColor: "#b91c1c",
+          })
+        ).isConfirmed
+      : confirm("Cancelar solicitação de vínculo?");
+    if (!ok) return;
+    try {
+      const r = await fetch("/fornecedores/vinculo-acao", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id_fornecedor: idFornecedor,
+          id_armazem_fornecedor: idArmazemFornecedor || null,
+          acao: "cancelar",
+        }),
+      });
+      const j = await r.json();
+      if (!j.success) throw new Error(j.message || "Falha ao cancelar.");
+      if (window.Swal) await Swal.fire("OK", j.message, "success");
+      else alert(j.message);
+      carregar();
+    } catch (e) {
+      if (window.Swal) Swal.fire("Erro", e.message, "error");
+      else alert(e.message);
+    }
+  }
+
   el.grid.addEventListener("click", (e) => {
     const btn = e.target.closest("button[data-acao]");
     if (!btn) return;
@@ -263,6 +306,7 @@
   });
 
   el.btnVinculo?.addEventListener("click", () => solicitarVinculo());
+  el.btnCancelarVinculo?.addEventListener("click", () => cancelarSolicitacaoVinculo());
 
   window.addEventListener("message", (ev) => {
     if (ev.data?.grupo === "vinculoSolicitado") carregar();

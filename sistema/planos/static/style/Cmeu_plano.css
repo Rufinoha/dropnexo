@@ -297,3 +297,73 @@
 .mpl-uso-item.is-limit .mpl-uso-head strong {
   color: #dc2626;
 }
+
+.mpl-uso-grid--full {
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  margin-bottom: 0.25rem;
+}
+
+.mpl-arm-wrap {
+  margin-top: 1.25rem;
+  padding-top: 1.1rem;
+  border-top: 1px solid #e2e8f0;
+}
+
+.mpl-arm-title {
+  margin: 0 0 0.25rem;
+  font-size: 0.95rem;
+  color: #1c2e3b;
+}
+
+.mpl-arm-hint {
+  margin: 0 0 0.75rem;
+  font-size: 0.8rem;
+  color: #64748b;
+}
+
+.mpl-arm-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.86rem;
+}
+
+.mpl-arm-table th,
+.mpl-arm-table td {
+  padding: 0.55rem 0.65rem;
+  text-align: left;
+  border-bottom: 1px solid #e2e8f0;
+  vertical-align: top;
+}
+
+.mpl-arm-table thead th {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #64748b;
+  font-weight: 700;
+  background: #f8fafc;
+}
+
+.mpl-arm-table tfoot th {
+  background: #f1f5f9;
+  color: #1c2e3b;
+  font-weight: 700;
+  border-bottom: none;
+}
+
+.mpl-arm-bytes {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: #334155;
+}
+
+.mpl-arm-desc {
+  color: #64748b;
+}
+
+@media (max-width: 640px) {
+  .mpl-arm-table .mpl-arm-desc {
+    display: none;
+  }
+}

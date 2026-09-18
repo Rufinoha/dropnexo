@@ -857,6 +857,7 @@ def baixar_e_gravar_imagem_tenant(
     url: str,
     max_bytes: int = 2 * 1024 * 1024,
     leve: bool = False,
+    cur=None,
 ) -> tuple[str, int]:
     """
     Resolve link (página→direct se preciso), baixa bytes e grava em
@@ -917,6 +918,13 @@ def baixar_e_gravar_imagem_tenant(
 
     ext = ".jpg" if gravar.startswith(b"\xff\xd8\xff") else _ext_de_bytes_ou_url(gravar, final_url, ct)
 
+    if cur is not None:
+        from sistema.planos.armazenamento import exigir_capacidade_armazenamento
+
+        exigir_capacidade_armazenamento(
+            cur, int(id_tenant), bytes_novos=len(gravar)
+        )
+
     nome = f"{int(id_produto)}_{int(id_imagem)}{ext}"
     destino = pasta_imagens_tenant(id_tenant) / nome
     destino.write_bytes(gravar)
@@ -951,6 +959,7 @@ def materializar_imagens_remotas_produto(
             id_imagem=int(id_img),
             url=str(caminho),
             max_bytes=max_bytes,
+            cur=cur,
         )
         cur.execute(
             """
@@ -1252,6 +1261,7 @@ def aplicar_galeria_produto(
             id_produto=id_produto,
             id_imagem=id_img,
             url=url,
+            cur=cur,
         )
         arquivos_novos.append(caminho_db)
         return caminho_db, tam

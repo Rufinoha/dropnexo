@@ -610,6 +610,57 @@ def encerrar_vinculo(
     return {"status": "inativo", "produtos_zerados": qtd, "motivo": motivo}
 
 
+def cancelar_solicitacao_vinculo(
+    cur,
+    id_vinculo: int,
+    *,
+    id_tenant_vendedor: int,
+    id_usuario: int | None = None,
+) -> dict:
+    """Vendedor cancela solicitação ainda aguardando aprovação do fornecedor."""
+    vinc = _carregar_vinculo(cur, id_vinculo)
+    if not vinc:
+        raise ValueError("Vínculo não encontrado.")
+    if int(vinc["id_tenant_vendedor"]) != int(id_tenant_vendedor):
+        raise ValueError("Vínculo não pertence a este vendedor.")
+    if vinc["status"] != "aguardando":
+        raise ValueError("Só é possível cancelar uma solicitação ainda aguardando aprovação.")
+
+    motivo = "Solicitação cancelada pelo vendedor."
+    cur.execute(
+        """
+        UPDATE tbl_vinculo_vendedor_fornecedor
+        SET status = 'inativo',
+            inativado_em = NOW(),
+            motivo_status = %s,
+            status_alterado_em = NOW(),
+            status_alterado_por_usuario = %s,
+            status_alterado_por_lado = 'vendedor'
+        WHERE id = %s AND status = 'aguardando'
+        """,
+        (motivo, id_usuario, id_vinculo),
+    )
+    if cur.rowcount == 0:
+        raise ValueError("Não foi possível cancelar a solicitação.")
+
+    nome_vd, nome_fn = _nomes_tenants(cur, vinc["id_tenant_vendedor"], vinc["id_tenant_fornecedor"])
+    _enviar_email_vinculo(
+        cur,
+        id_destinatario_tenant=vinc["id_tenant_fornecedor"],
+        destinatario_e_vendedor=False,
+        assunto="Solicitação de vínculo cancelada • DropNexo",
+        status_label="Cancelada",
+        acao_label="cancelou a solicitação de vínculo",
+        acao_sufixo=None,
+        nome_ator=nome_vd,
+        nome_parceiro=nome_fn,
+        detalhes="A solicitação foi retirada pelo vendedor antes da aprovação.",
+        motivo=motivo,
+        tag="dropnexo_vinculo_solicitacao_cancelada",
+    )
+    return {"status": "inativo", "motivo": motivo}
+
+
 def inativar_vinculo(cur, id_vinculo: int, id_fornecedor: int, motivo: str | None = None) -> None:
     """Compat: encerra pelo lado fornecedor."""
     encerrar_vinculo(

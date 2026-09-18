@@ -1490,8 +1490,9 @@ def solicitar_vinculo():
 @exigir_modulo(MODULO_VENDEDOR)
 @exigir_permissao(codigo="fornecedores.ver")
 def vinculo_acao():
-    """Pausar / despausar / encerrar vínculo (lado vendedor)."""
+    """Pausar / despausar / encerrar / cancelar solicitação (lado vendedor)."""
     from core.dominio import (
+        cancelar_solicitacao_vinculo,
         despausar_vinculo,
         encerrar_vinculo,
         garantir_colunas_vinculo_status,
@@ -1514,7 +1515,7 @@ def vinculo_acao():
         except (TypeError, ValueError):
             id_azf = None
     acao = (body.get("acao") or "").strip().lower()
-    if acao not in ("pausar", "despausar", "encerrar"):
+    if acao not in ("pausar", "despausar", "encerrar", "cancelar"):
         return jsonify(success=False, message="Ação inválida."), 400
     motivo = (body.get("motivo") or body.get("mensagem") or "").strip()
     if acao in ("pausar", "encerrar") and len(motivo) < 5:
@@ -1539,7 +1540,15 @@ def vinculo_acao():
         if not row:
             return jsonify(success=False, message="Vínculo não encontrado."), 404
         id_vinculo = int(row[0])
-        if acao == "pausar":
+        if acao == "cancelar":
+            cancelar_solicitacao_vinculo(
+                cur,
+                id_vinculo,
+                id_tenant_vendedor=int(id_vendedor),
+                id_usuario=uid_i,
+            )
+            msg = "Solicitação cancelada. Você pode solicitar o vínculo novamente quando quiser."
+        elif acao == "pausar":
             pausar_vinculo(
                 cur,
                 id_vinculo,

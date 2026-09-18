@@ -72,6 +72,18 @@
   font-size: 0.88rem;
 }
 
+.Loja_BtnVinculoHero--danger {
+  margin-left: 0.5rem;
+  background: #fff;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+}
+
+.Loja_BtnVinculoHero--danger:hover {
+  background: #fef2f2;
+  border-color: #f87171;
+}
+
 .Loja_Toolbar {
   display: flex;
   gap: 8px;

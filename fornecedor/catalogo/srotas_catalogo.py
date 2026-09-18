@@ -2346,6 +2346,66 @@ def catalogos_exportar():
         conn.close()
 
 
+@fn_catalogo_bp.post("/catalogos/atualizar/bling")
+@login_obrigatorio()
+@exigir_permissao(codigos=["catalogos.editar", "produtos.editar", "az_produtos.editar"])
+def catalogos_atualizar_bling():
+    if (resp := _exigir_catalogo_escrita()) is not None:
+        return resp
+    body = request.get_json(silent=True) or {}
+    raw = body.get("ids") or []
+    ids = []
+    for x in raw:
+        try:
+            ids.append(int(x))
+        except (TypeError, ValueError):
+            continue
+    ids = list(dict.fromkeys(ids))
+    if not ids:
+        return jsonify(success=False, message="Nenhum produto selecionado."), 400
+    if len(ids) > 50:
+        return jsonify(
+            success=False,
+            message="Selecione no máximo 50 produtos por vez para atualizar pelo Bling.",
+        ), 400
+
+    id_tenant = session.get("id_tenant")
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT status FROM tbl_integracao_bling WHERE id_tenant = %s",
+            (id_tenant,),
+        )
+        row = cur.fetchone()
+        if not row or row[0] != "conectado":
+            return jsonify(success=False, message="Conecte o Bling antes de atualizar produtos."), 400
+
+        from api.bling.produtos import atualizar_produtos_selecionados
+
+        resumo = atualizar_produtos_selecionados(
+            cur, int(id_tenant), ids, contexto="fornecedor"
+        )
+        conn.commit()
+        n_ok = int(resumo.get("atualizados") or 0)
+        n_falha = len(resumo.get("falhas") or [])
+        n_sem = int(resumo.get("sem_vinculo") or 0)
+        msg = f"Atualizados {n_ok} de {resumo.get('total') or len(ids)} produto(s) pelo Bling."
+        if n_sem:
+            msg += f" {n_sem} sem vínculo."
+        if n_falha:
+            msg += f" {n_falha} com falha."
+        return jsonify(success=True, message=msg, resumo=resumo)
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 400
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
 @fn_catalogo_bp.post("/catalogos/estoque/sincronizar")
 @login_obrigatorio()
 @exigir_permissao(codigos=["catalogos.editar", "produtos.editar", "az_produtos.editar"])
@@ -2540,6 +2600,7 @@ def catalogos_imagens_link():
                 id_imagem=id_img,
                 url=url,
                 max_bytes=MAX_BYTES_IMAGEM,
+                cur=cur,
             )
         except ValueError as e:
             cur.execute(
@@ -2654,6 +2715,9 @@ def catalogos_imagens_upload():
         _exigir_tipo_imagem_compativel(cur, id_produto, "upload")
         if _contar_imagens_produto(cur, id_produto) >= MAX_IMAGENS_PRODUTO:
             return jsonify(success=False, message="Máximo de 10 imagens por produto."), 400
+        from sistema.planos.armazenamento import exigir_capacidade_armazenamento
+
+        exigir_capacidade_armazenamento(cur, int(id_tenant), bytes_novos=int(tamanho))
         cur.execute(
             """
             INSERT INTO tbl_produto_imagem (id_produto, caminho, ordem, principal, origem)
@@ -2920,6 +2984,10 @@ def catalogos_imagem_upload():
 
         if row[0] and str(row[0]).startswith("imge/produtos/"):
             _remover_imagem_disco(row[0])
+
+        from sistema.planos.armazenamento import exigir_capacidade_armazenamento
+
+        exigir_capacidade_armazenamento(cur, int(id_tenant), bytes_novos=len(bruto))
 
         pasta = _pasta_imagens_tenant(int(id_tenant))
         for f in pasta.glob(f"{id_produto}.*"):

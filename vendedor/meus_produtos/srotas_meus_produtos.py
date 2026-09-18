@@ -1893,6 +1893,12 @@ def imagens_upload_vitrine():
         if not ctx["integrado"]:
             return jsonify(success=False, message="Use o cadastro próprio para imagens."), 400
 
+        from sistema.planos.armazenamento import exigir_capacidade_armazenamento
+
+        exigir_capacidade_armazenamento(
+            cur, int(id_tenant), bytes_novos=int(tamanho), papel="vendedor"
+        )
+
         # Placeholder id for filename; real id after insert
         pasta = _pasta_imagens_tenant(int(id_tenant))
         tmp_name = f"vitrine_{id_produto}_{os.urandom(4).hex()}{ext}"

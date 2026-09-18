@@ -4,7 +4,7 @@
 {% block topbar_title %}Meu Plano{% endblock %}
 
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('planos.static', filename='style/Cmeu_plano.css') }}" />
+<link rel="stylesheet" href="{{ url_for('planos.static', filename='style/Cmeu_plano.css') }}?v=8" />
 {% if pode_pagamento %}
 <link rel="stylesheet" href="{{ url_for('static', filename='style/Cefi_cartao.css') }}?v=8" />
 {% endif %}
@@ -14,7 +14,7 @@
 <div class="Cl_ContainerApoio Cl_PainelPagina mpl-page">
   <div class="pt-page-title">
     <h2>Meu plano</h2>
-    <p class="pt-page-desc">Assinatura, limites e opções da sua conta {{ MARCA_NOME }}.</p>
+    <p class="pt-page-desc">Assinatura, limites e uso da sua conta {{ MARCA_NOME }}.</p>
   </div>
 
   <section class="mpl-card mpl-atual">
@@ -42,19 +42,7 @@
       </div>
     </div>
     <dl class="mpl-resumo">
-      <div><dt>Slug interno</dt><dd>{{ plano_atual.slug }}</dd></div>
       <div><dt>Perfil da conta</dt><dd>{{ tipo_rotulo }}</dd></div>
-      <div>
-        <dt>Espaço de imagens</dt>
-        <dd>
-          {% set b = armazenamento.bytes_imagens|default(0) %}
-          {% if b >= 1073741824 %}
-            {{ '%.2f'|format(b / 1073741824) }} GB
-          {% else %}
-            {{ '%.1f'|format(b / 1048576) }} MB
-          {% endif %}
-        </dd>
-      </div>
       {% if plano_atual.email_cobranca %}
       <div><dt>E-mail de cobrança</dt><dd>{{ plano_atual.email_cobranca }}</dd></div>
       {% endif %}
@@ -62,39 +50,80 @@
   </section>
 
   {% if uso_cotas %}
+  {% for u in uso_cotas %}
   <section class="mpl-card mpl-uso">
-    <p class="mpl-kicker">Uso do plano</p>
-    <h3 class="mpl-uso-title">Pedidos do mês e produtos</h3>
-    <div class="mpl-uso-grid">
-      {% for u in uso_cotas %}
-      <div class="mpl-uso-bloco">
-        <p class="mpl-uso-papel">{{ u.papel_rotulo }} · {{ u.plano_nome }}</p>
-        {% for chave in ['pedidos', 'produtos'] %}
-        {% set item = u[chave] %}
-        {% set lim = item.limite %}
-        {% set usado = item.usado %}
-        {% if lim and lim > 0 %}
-          {% set pct = ((usado * 100) // lim) %}
-          {% if pct > 100 %}{% set pct = 100 %}{% endif %}
-        {% else %}
-          {% set pct = 0 %}
-        {% endif %}
-        <div class="mpl-uso-item{% if lim is not none and usado >= lim %} is-limit{% elif lim and pct >= 80 %} is-warn{% endif %}">
-          <div class="mpl-uso-head">
-            <span>{{ item.rotulo }}</span>
-            <strong>
+    <p class="mpl-kicker">Uso do plano · {{ u.papel_rotulo }}</p>
+    <h3 class="mpl-uso-title">{{ u.plano_nome }} — quanto você já usou</h3>
+    <div class="mpl-uso-grid mpl-uso-grid--full">
+      {% set chaves = ['pedidos', 'produtos', 'conexoes', 'usuarios'] %}
+      {% if u.depositos %}{% set chaves = chaves + ['depositos'] %}{% endif %}
+      {% set chaves = chaves + ['armazenamento'] %}
+      {% for chave in chaves %}
+      {% set item = u[chave] %}
+      {% if item %}
+      {% set lim = item.limite %}
+      {% set usado = item.usado %}
+      {% if item.formatado %}
+        {% set pct = item.percentual|default(0) %}
+      {% elif lim and lim > 0 %}
+        {% set pct = ((usado * 100) // lim) %}
+        {% if pct > 100 %}{% set pct = 100 %}{% endif %}
+      {% else %}
+        {% set pct = 0 %}
+      {% endif %}
+      <div class="mpl-uso-item{% if lim is not none and usado >= lim %} is-limit{% elif lim and pct >= 80 %} is-warn{% endif %}">
+        <div class="mpl-uso-head">
+          <span>{{ item.rotulo }}</span>
+          <strong>
+            {% if item.formatado %}
+              {{ item.rotulo_usado }} / {{ item.rotulo_limite }}
+            {% else %}
               {{ usado }}{% if lim is not none %} / {{ lim }}{% else %} / ∞{% endif %}
-            </strong>
-          </div>
-          <div class="mpl-uso-bar" aria-hidden="true">
-            <span style="width: {{ pct }}%;"></span>
-          </div>
+            {% endif %}
+          </strong>
         </div>
-        {% endfor %}
+        <div class="mpl-uso-bar" aria-hidden="true">
+          <span style="width: {{ pct }}%;"></span>
+        </div>
       </div>
+      {% endif %}
       {% endfor %}
     </div>
+
+    {% set arm = u.armazenamento %}
+    {% if arm and arm.itens %}
+    <div class="mpl-arm-wrap">
+      <h4 class="mpl-arm-title">Detalhe do espaço</h4>
+      <p class="mpl-arm-hint">Arquivos em disco + estimativa dos registros no banco.</p>
+      <table class="mpl-arm-table">
+        <thead>
+          <tr>
+            <th>Tipo</th>
+            <th>Uso</th>
+            <th>Sobre</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for it in arm.itens %}
+          <tr>
+            <td>{{ it.rotulo }}</td>
+            <td class="mpl-arm-bytes">{{ it.rotulo_bytes }}</td>
+            <td class="mpl-arm-desc">{{ it.hint }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr>
+            <th>Total</th>
+            <th class="mpl-arm-bytes">{{ arm.rotulo_usado }}</th>
+            <th>Limite do plano: {{ arm.rotulo_limite }}</th>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+    {% endif %}
   </section>
+  {% endfor %}
   {% endif %}
 
   {% if segmentos %}
@@ -159,6 +188,6 @@
   "urlFinanceiro": url_for("financeiro.pagina")
 }|tojson }}</script>
 <script defer src="{{ url_for('static', filename='script/Sefi_cartao.js') }}?v=8"></script>
-<script defer src="{{ url_for('planos.static', filename='script/Smeu_plano.js') }}?v=6"></script>
+<script defer src="{{ url_for('planos.static', filename='script/Smeu_plano.js') }}?v=7"></script>
 {% endif %}
 {% endblock %}
