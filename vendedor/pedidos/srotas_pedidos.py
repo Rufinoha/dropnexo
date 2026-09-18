@@ -285,10 +285,16 @@ def pedido_anexos_upload(id_pedido: int):
         return jsonify(success=False, message="Envie a etiqueta em PDF."), 400
     if tipo in ("nf", "declaracao") and ext not in (".pdf", ".xml"):
         return jsonify(success=False, message="Envie a nota em PDF ou XML."), 400
-    stream = arquivo.stream
-    stream.seek(0, 2)
-    tamanho = stream.tell()
-    stream.seek(0)
+    try:
+        arquivo.stream.seek(0, 2)
+        tamanho = int(arquivo.stream.tell() or 0)
+        arquivo.stream.seek(0)
+    except Exception:
+        data = arquivo.read()
+        tamanho = len(data or b"")
+        from io import BytesIO
+
+        arquivo.stream = BytesIO(data or b"")
     if tamanho <= 0:
         return jsonify(success=False, message="Arquivo vazio."), 400
     if tamanho > MAX_BYTES_ANEXO:
@@ -333,6 +339,17 @@ def pedido_anexos_upload(id_pedido: int):
     except ValueError as e:
         conn.rollback()
         return jsonify(success=False, message=str(e)), 400
+    except Exception as e:
+        conn.rollback()
+        msg = str(e).strip() or "Erro ao enviar anexo."
+        # CHECK antigo no banco: tipicamente "comprovante_pix" / "violates check constraint"
+        low = msg.lower()
+        if "check" in low or "comprovante_pix" in low or "tipo" in low:
+            msg = (
+                "Banco desatualizado para anexos (tipo comprovante). "
+                "Execute o SQL 056_pedido_anexo_tipos.sql e tente novamente."
+            )
+        return jsonify(success=False, message=msg), 500
     finally:
         conn.close()
 

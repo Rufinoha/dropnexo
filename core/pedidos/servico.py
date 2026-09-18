@@ -3321,6 +3321,9 @@ def obter_contexto_pedido_vendedor(cur, id_vendedor: int, id_pedido: int) -> dic
 
 
 _TABELA_ANEXO_OK: bool | None = None
+_CHECK_TIPO_ANEXO_OK: bool | None = None
+
+_TIPOS_ANEXO_VALIDOS = ("nf", "etiqueta", "declaracao", "comprovante_pix")
 
 
 def _tem_tabela_anexo(cur) -> bool:
@@ -3336,6 +3339,48 @@ def _tem_tabela_anexo(cur) -> bool:
     )
     _TABELA_ANEXO_OK = cur.fetchone() is not None
     return _TABELA_ANEXO_OK
+
+
+def _garantir_check_tipo_anexo(cur) -> None:
+    """Garante CHECK de tipo incluindo comprovante_pix e declaracao (evita 500 no upload)."""
+    global _CHECK_TIPO_ANEXO_OK
+    if _CHECK_TIPO_ANEXO_OK:
+        return
+    if not _tem_tabela_anexo(cur):
+        return
+    cur.execute(
+        """
+        SELECT pg_get_constraintdef(oid)
+        FROM pg_constraint
+        WHERE conrelid = 'public.tbl_pedido_anexo'::regclass
+          AND conname = 'tbl_pedido_anexo_tipo_check'
+        """
+    )
+    row = cur.fetchone()
+    defn = (row[0] or "").lower() if row else ""
+    if "comprovante_pix" in defn and "declaracao" in defn:
+        _CHECK_TIPO_ANEXO_OK = True
+        return
+    try:
+        cur.execute("SAVEPOINT sp_anexo_tipo_check")
+        cur.execute(
+            "ALTER TABLE tbl_pedido_anexo DROP CONSTRAINT IF EXISTS tbl_pedido_anexo_tipo_check"
+        )
+        cur.execute(
+            """
+            ALTER TABLE tbl_pedido_anexo
+              ADD CONSTRAINT tbl_pedido_anexo_tipo_check
+              CHECK (tipo IN ('nf', 'etiqueta', 'declaracao', 'comprovante_pix'))
+            """
+        )
+        cur.execute("RELEASE SAVEPOINT sp_anexo_tipo_check")
+        _CHECK_TIPO_ANEXO_OK = True
+    except Exception:
+        try:
+            cur.execute("ROLLBACK TO SAVEPOINT sp_anexo_tipo_check")
+        except Exception:
+            pass
+        _CHECK_TIPO_ANEXO_OK = False
 
 
 def listar_anexos_pedido(
@@ -3384,8 +3429,9 @@ def registrar_anexo_pedido(
 ) -> dict:
     if not _tem_tabela_anexo(cur):
         raise ValueError("Anexos ainda não disponíveis. Execute a migração SQL 063_pedido_anexo.")
+    _garantir_check_tipo_anexo(cur)
     tipo = (tipo or "").strip().lower()
-    if tipo not in ("nf", "etiqueta", "declaracao", "comprovante_pix"):
+    if tipo not in _TIPOS_ANEXO_VALIDOS:
         raise ValueError("Tipo de anexo inválido.")
     ped = obter_pedido(cur, id_pedido, id_vendedor=id_vendedor)
     if not ped:
