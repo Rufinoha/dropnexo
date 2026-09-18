@@ -27,6 +27,10 @@
     valorLbl: document.getElementById("valor_lbl"),
     periodo: document.getElementById("periodo"),
     publico: document.getElementById("publico_alvo"),
+    ciclos: document.getElementById("ciclos_beneficio"),
+    ciclosLbl: document.getElementById("ciclos_lbl"),
+    ciclosHint: document.getElementById("ciclos_hint"),
+    vitalicio: document.getElementById("beneficio_vitalicio"),
     valido: document.getElementById("valido_ate"),
     usos: document.getElementById("usos_max"),
     tenantId: document.getElementById("tenant_id"),
@@ -50,6 +54,27 @@
   function syncValorLabel() {
     if (!el.valorLbl) return;
     el.valorLbl.textContent = el.tipo?.value === "fixo" ? "Valor (R$)" : "Valor (%)";
+  }
+
+  function syncCiclosUi() {
+    const p = el.periodo?.value || "mensal";
+    const labels = {
+      mensal: { lbl: "Meses de desconto *", hint: "Quantas cobranças mensais recebem o desconto após ativar" },
+      semestral: {
+        lbl: "Semestres de desconto *",
+        hint: "Quantas cobranças semestrais recebem o desconto após ativar",
+      },
+      anual: { lbl: "Anos de desconto *", hint: "Quantas cobranças anuais recebem o desconto após ativar" },
+    };
+    const m = labels[p] || labels.mensal;
+    if (el.ciclosLbl) el.ciclosLbl.textContent = m.lbl;
+    if (el.ciclosHint) el.ciclosHint.textContent = m.hint;
+    const vit = !!el.vitalicio?.checked;
+    if (el.ciclos) {
+      el.ciclos.disabled = vit;
+      if (vit) el.ciclos.value = "";
+      else if (!el.ciclos.value) el.ciclos.value = "1";
+    }
   }
 
   function ativarAba(tab) {
@@ -199,6 +224,11 @@
     if (el.valor) el.valor.value = "10";
     if (el.periodo) el.periodo.value = "mensal";
     if (el.publico) el.publico.value = "";
+    if (el.vitalicio) el.vitalicio.checked = false;
+    if (el.ciclos) {
+      el.ciclos.value = "1";
+      el.ciclos.disabled = false;
+    }
     if (el.valido) el.valido.value = "";
     if (el.usos) el.usos.value = "";
     tenantsSel.clear();
@@ -207,6 +237,7 @@
     renderTenants();
     renderPlanos();
     syncValorLabel();
+    syncCiclosUi();
     ativarAba("geral");
   }
 
@@ -219,6 +250,10 @@
     if (el.valor) el.valor.value = d.valor_desconto ?? 0;
     if (el.periodo) el.periodo.value = d.periodo || "mensal";
     if (el.publico) el.publico.value = d.publico_alvo || "";
+    if (el.vitalicio) el.vitalicio.checked = !!d.beneficio_vitalicio;
+    if (el.ciclos) {
+      el.ciclos.value = d.beneficio_vitalicio ? "" : d.ciclos_beneficio != null ? d.ciclos_beneficio : 1;
+    }
     if (el.valido) el.valido.value = d.valido_ate || "";
     if (el.usos) el.usos.value = d.usos_max == null ? "" : d.usos_max;
 
@@ -244,6 +279,7 @@
     renderTenants();
     renderPlanos();
     syncValorLabel();
+    syncCiclosUi();
   }
 
   async function carregarCombos() {
@@ -281,6 +317,8 @@
       tipo_desconto: el.tipo?.value || "percentual",
       valor_desconto: el.valor?.value,
       periodo: el.periodo?.value || "mensal",
+      beneficio_vitalicio: !!el.vitalicio?.checked,
+      ciclos_beneficio: el.vitalicio?.checked ? null : el.ciclos?.value || 1,
       publico_alvo: el.publico?.value || "",
       ids_tenants: Array.from(tenantsSel.keys()),
       planos_slug: Array.from(planosSel.keys()),
@@ -325,6 +363,8 @@
   }
 
   el.tipo?.addEventListener("change", syncValorLabel);
+  el.periodo?.addEventListener("change", syncCiclosUi);
+  el.vitalicio?.addEventListener("change", syncCiclosUi);
   el.btnAddTenant?.addEventListener("click", incluirTenantSelecionado);
   el.btnAddPlano?.addEventListener("click", function () {
     const key = (el.planoCombo?.value || "").trim();

@@ -595,8 +595,11 @@ def emitir_fatura(
 ) -> dict:
     """Emite fatura do plano (assinatura ou renovação)."""
     from sistema.financeiro.cupom import (
+        ativar_beneficio_cupom_tenant,
         calcular_preco,
+        consumir_beneficio_cupom_tenant,
         normalizar_periodo,
+        obter_cupom_beneficio_renovacao,
         registrar_uso_cupom,
         validar_cupom_para_periodo,
     )
@@ -614,6 +617,7 @@ def emitir_fatura(
         raise ValueError("Plano gratuito não gera cobrança.")
 
     cupom = None
+    cupom_novo = False
     if cupom_codigo and str(cupom_codigo).strip():
         cupom = validar_cupom_para_periodo(
             cur,
@@ -621,6 +625,11 @@ def emitir_fatura(
             periodo,
             id_tenant=int(id_tenant),
             plano_slug=plano_slug,
+        )
+        cupom_novo = True
+    else:
+        cupom = obter_cupom_beneficio_renovacao(
+            cur, int(id_tenant), periodo, plano_slug=plano_slug
         )
 
     preco = calcular_preco(int(plano["valor_centavos"]), periodo, cupom=cupom)
@@ -737,14 +746,19 @@ def emitir_fatura(
     )
 
     if cupom and int(preco["desconto_cupom_centavos"] or 0) >= 0:
-        registrar_uso_cupom(
-            cur,
-            id_cupom=int(cupom["id"]),
-            id_tenant=id_tenant,
-            id_fatura=fid,
-            codigo=cupom["codigo"],
-            desconto_centavos=int(preco["desconto_cupom_centavos"]),
-        )
+        if cupom_novo:
+            registrar_uso_cupom(
+                cur,
+                id_cupom=int(cupom["id"]),
+                id_tenant=id_tenant,
+                id_fatura=fid,
+                codigo=cupom["codigo"],
+                desconto_centavos=int(preco["desconto_cupom_centavos"]),
+            )
+            ativar_beneficio_cupom_tenant(cur, int(id_tenant), cupom)
+        else:
+            # Renovação: não consome usos_max do cupom; só decrementa ciclos restantes
+            consumir_beneficio_cupom_tenant(cur, int(id_tenant))
 
     cur.execute(
         """

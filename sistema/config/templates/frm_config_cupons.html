@@ -10,8 +10,8 @@
   <div class="cl-page-title">
     <h2>Cupom de Desconto</h2>
     <p class="cl-page-desc">
-      Gerencie cupons por ciclo, público, tenants e planos. Cadastro e edição abrem em janela de apoio.
-      Campos de escopo vazios = válido para qualquer um.
+      Gerencie cupons por tipo de cobrança, duração do benefício, público, tenants e planos.
+      Cadastro e edição abrem em janela de apoio. Campos de escopo vazios = válido para qualquer um.
     </p>
   </div>
   <p class="CfgCup_Aviso">
@@ -29,9 +29,10 @@
           <tr>
             <th>Código</th>
             <th>Desconto</th>
-            <th>Período</th>
+            <th>Cobrança</th>
+            <th>Benefício</th>
             <th>Escopo</th>
-            <th>Validade</th>
+            <th>Válido até</th>
             <th>Usos</th>
               <th>Status</th>
               <th class="Cl_TableActions">Ações</th>
@@ -53,5 +54,5 @@
   "rotaIncluir": url_for("config.cupons_desconto_incluir"),
   "rotaEditar": url_for("config.cupons_desconto_editar")
 }|tojson }}</script>
-<script defer src="{{ url_for('config.static', filename='script/Sconfig_cupons.js') }}?v=6"></script>
+<script defer src="{{ url_for('config.static', filename='script/Sconfig_cupons.js') }}?v=7"></script>
 {% endblock %}

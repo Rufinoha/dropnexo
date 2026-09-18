@@ -51,12 +51,13 @@
               <input type="number" id="valor_desconto" min="0" step="0.01" value="10" />
             </div>
             <div class="form-campo">
-              <label for="periodo">Válido somente para ciclo</label>
+              <label for="periodo">Tipo de cobrança *</label>
               <select id="periodo">
                 <option value="mensal">Mensal</option>
                 <option value="semestral">Semestral (−10% no ciclo)</option>
                 <option value="anual">Anual (−20% no ciclo)</option>
               </select>
+              <small>O cupom só vale para este tipo de assinatura</small>
             </div>
             <div class="form-campo">
               <label for="publico_alvo">Público (tipo de conta)</label>
@@ -68,18 +69,32 @@
               <small>Vazio = vendedor e fornecedor</small>
             </div>
             <div class="form-campo">
-              <label for="valido_ate">Validade até</label>
+              <label for="ciclos_beneficio" id="ciclos_lbl">Meses de desconto *</label>
+              <input type="number" id="ciclos_beneficio" min="1" max="120" step="1" value="1" />
+              <small id="ciclos_hint">Quantas cobranças mensais recebem o desconto após ativar</small>
+            </div>
+            <div class="form-campo Cup_VitalicioCampo">
+              <label class="Cl_Switch">
+                <input type="checkbox" id="beneficio_vitalicio" />
+                <span class="Cl_SwitchSlider"></span>
+                <span>Vitalício neste tipo de cobrança</span>
+              </label>
+              <small>Desconto em todas as renovações do mesmo tipo (mensal/semestral/anual)</small>
+            </div>
+            <div class="form-campo">
+              <label for="valido_ate">Válido até</label>
               <input type="date" id="valido_ate" />
-              <small>Vazio = sem data limite</small>
+              <small>Prazo para <strong>ativar</strong> o código. Vazio = sem limite</small>
             </div>
             <div class="form-campo">
               <label for="usos_max">Limite de usos</label>
               <input type="number" id="usos_max" min="1" step="1" placeholder="Ilimitado" />
-              <small>Vazio = ilimitado</small>
+              <small>Quantas contas podem ativar. Vazio = ilimitado</small>
             </div>
           </div>
           <p class="Cup_Hint">
             O desconto do cupom é aplicado <strong>depois</strong> do desconto do ciclo (semestral/anual).
+            Depois de ativado, o benefício segue nas renovações conforme os meses/ciclos (ou vitalício).
           </p>
         </section>
 
@@ -139,6 +154,6 @@
     "apiSalvar": url_for("config.cupons_desconto_salvar")
   }|tojson }}</script>
   <script src="{{ url_for('static', filename='script/global_utils.js') }}"></script>
-  <script src="{{ url_for('config.static', filename='script/Sconfig_cupons_apoio.js') }}?v=3"></script>
+  <script src="{{ url_for('config.static', filename='script/Sconfig_cupons_apoio.js') }}?v=4"></script>
 </body>
 </html>

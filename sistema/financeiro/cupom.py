@@ -6,12 +6,25 @@ from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
 
 PERIODOS = {
-    "mensal": {"meses": 1, "desconto_pct": 0, "rotulo": "Mensal"},
-    "semestral": {"meses": 6, "desconto_pct": 10, "rotulo": "Semestral (−10%)"},
-    "anual": {"meses": 12, "desconto_pct": 20, "rotulo": "Anual (−20%)"},
+    "mensal": {"meses": 1, "desconto_pct": 0, "rotulo": "Mensal", "unidade": "mês", "unidade_plural": "meses"},
+    "semestral": {
+        "meses": 6,
+        "desconto_pct": 10,
+        "rotulo": "Semestral (−10%)",
+        "unidade": "semestre",
+        "unidade_plural": "semestres",
+    },
+    "anual": {
+        "meses": 12,
+        "desconto_pct": 20,
+        "rotulo": "Anual (−20%)",
+        "unidade": "ano",
+        "unidade_plural": "anos",
+    },
 }
 
 _CUPOM_ESCOPO_OK: bool | None = None
+_CUPOM_CICLOS_OK: bool | None = None
 
 
 def normalizar_periodo(periodo: str | None) -> str:
@@ -19,6 +32,44 @@ def normalizar_periodo(periodo: str | None) -> str:
     if p not in PERIODOS:
         raise ValueError("Periodicidade inválida. Use mensal, semestral ou anual.")
     return p
+
+
+def normalizar_ciclos_beneficio(dados: dict) -> tuple[bool, int]:
+    """Retorna (vitalicio, ciclos). ciclos >= 1; se vitalicio, ciclos=1 só por consistência."""
+    vitalicio = bool(dados.get("beneficio_vitalicio") or dados.get("vitalicio"))
+    if vitalicio:
+        return True, 1
+    raw = dados.get("ciclos_beneficio", dados.get("meses_beneficio"))
+    if raw in (None, "", "null"):
+        return False, 1
+    if str(raw).strip().lower() in ("vitalicio", "vitalício", "inf", "ilimitado", "∞"):
+        return True, 1
+    try:
+        n = int(raw)
+    except (TypeError, ValueError) as e:
+        raise ValueError("Meses/ciclos de desconto inválidos.") from e
+    if n < 1:
+        raise ValueError("Informe ao menos 1 ciclo de desconto, ou marque vitalício.")
+    if n > 120:
+        raise ValueError("Máximo de 120 ciclos de desconto.")
+    return False, n
+
+
+def rotulo_ciclos_beneficio(
+    periodo: str | None,
+    *,
+    vitalicio: bool = False,
+    ciclos: int | None = 1,
+) -> str:
+    """Ex.: '3 meses', 'vitalício (mensal)'."""
+    p = normalizar_periodo(periodo) if periodo else "mensal"
+    meta = PERIODOS[p]
+    tipo = meta["rotulo"].split("(")[0].strip().lower()
+    if vitalicio:
+        return f"vitalício ({tipo})"
+    n = max(1, int(ciclos or 1))
+    und = meta["unidade"] if n == 1 else meta["unidade_plural"]
+    return f"{n} {und}"
 
 
 def normalizar_codigo(codigo: str | None) -> str:
@@ -111,6 +162,94 @@ def garantir_escopo_cupom(cur) -> bool:
             _rollback_cur(cur)
 
     _CUPOM_ESCOPO_OK = False
+    return False
+
+
+def _ciclos_beneficio_existe(cur) -> bool:
+    cur.execute(
+        """
+        SELECT
+          EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'tbl_cupom_desconto'
+              AND column_name = 'ciclos_beneficio'
+              AND table_schema IN (current_schema(), 'public')
+          )
+          AND EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'tbl_cupom_desconto'
+              AND column_name = 'beneficio_vitalicio'
+              AND table_schema IN (current_schema(), 'public')
+          )
+        """
+    )
+    row = cur.fetchone()
+    return bool(row and row[0])
+
+
+def _beneficio_cobranca_existe(cur) -> bool:
+    cur.execute(
+        """
+        SELECT
+          EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'tbl_tenant_cobranca'
+              AND column_name = 'id_cupom_beneficio'
+              AND table_schema IN (current_schema(), 'public')
+          )
+        """
+    )
+    return bool(cur.fetchone())
+
+
+def garantir_ciclos_beneficio(cur) -> bool:
+    """Colunas de duração do benefício (SQL 055)."""
+    global _CUPOM_CICLOS_OK
+    if _CUPOM_CICLOS_OK is True:
+        return True
+    try:
+        if _ciclos_beneficio_existe(cur):
+            _CUPOM_CICLOS_OK = True
+            return True
+    except Exception:
+        _rollback_cur(cur)
+    try:
+        cur.execute(
+            """
+            ALTER TABLE tbl_cupom_desconto
+                ADD COLUMN IF NOT EXISTS beneficio_vitalicio BOOLEAN NOT NULL DEFAULT FALSE
+            """
+        )
+        cur.execute(
+            """
+            ALTER TABLE tbl_cupom_desconto
+                ADD COLUMN IF NOT EXISTS ciclos_beneficio INTEGER NOT NULL DEFAULT 1
+            """
+        )
+        cur.execute(
+            """
+            ALTER TABLE tbl_tenant_cobranca
+                ADD COLUMN IF NOT EXISTS id_cupom_beneficio INTEGER
+            """
+        )
+        cur.execute(
+            """
+            ALTER TABLE tbl_tenant_cobranca
+                ADD COLUMN IF NOT EXISTS cupom_ciclos_restantes INTEGER
+            """
+        )
+        if _ciclos_beneficio_existe(cur):
+            _CUPOM_CICLOS_OK = True
+            return True
+    except Exception:
+        _rollback_cur(cur)
+        try:
+            if _ciclos_beneficio_existe(cur):
+                _CUPOM_CICLOS_OK = True
+                return True
+        except Exception:
+            _rollback_cur(cur)
+    _CUPOM_CICLOS_OK = False
     return False
 
 
@@ -318,47 +457,65 @@ def cupom_dict(
     *,
     ids_tenants: list[int] | None = None,
     planos_slug: list[str] | None = None,
+    tem_ciclos: bool = False,
+    tem_escopo: bool = False,
 ) -> dict:
-    # id, codigo, descricao, tipo, valor, periodo, valido_ate, usos_max, usos_count, ativo, criado[, publico]
+    # Ordem base: id..criado_em (0..10)
+    # + publico_alvo (se escopo)
+    # + beneficio_vitalicio, ciclos_beneficio (se ciclos)
     publico = None
-    if len(row) > 11 and row[11]:
-        publico = str(row[11]).strip().lower() or None
-    ids = list(ids_tenants or [])
-    planos = list(planos_slug or [])
+    vitalicio = False
+    ciclos = 1
+    i = 11
+    if tem_escopo and len(row) > i:
+        publico = (str(row[i]).strip().lower() or None) if row[i] else None
+        i += 1
+    if tem_ciclos and len(row) > i:
+        vitalicio = bool(row[i])
+        ciclos = int(row[i + 1] or 1) if len(row) > i + 1 else 1
+
+    periodo = row[5]
     return {
         "id": row[0],
         "codigo": row[1],
         "descricao": row[2] or "",
         "tipo_desconto": row[3],
         "valor_desconto": float(row[4] or 0),
-        "periodo": row[5],
+        "periodo": periodo,
         "valido_ate": row[6].isoformat() if row[6] else None,
         "usos_max": row[7],
         "usos_count": int(row[8] or 0),
         "ativo": bool(row[9]),
         "criado_em": row[10].isoformat() if len(row) > 10 and row[10] else None,
         "publico_alvo": publico,
-        "ids_tenants": ids,
-        "planos_slug": planos,
+        "ids_tenants": list(ids_tenants or []),
+        "planos_slug": list(planos_slug or []),
         "ilimitado": row[7] is None,
         "esgotado": row[7] is not None and int(row[8] or 0) >= int(row[7]),
+        "beneficio_vitalicio": bool(vitalicio),
+        "ciclos_beneficio": max(1, int(ciclos or 1)),
+        "beneficio_rotulo": rotulo_ciclos_beneficio(
+            periodo, vitalicio=bool(vitalicio), ciclos=ciclos
+        ),
     }
 
 
-def _cupom_cols(cur) -> str:
-    if garantir_escopo_cupom(cur):
-        return """
-            id, codigo, descricao, tipo_desconto, valor_desconto, periodo,
-            valido_ate, usos_max, usos_count, ativo, criado_em, publico_alvo
-        """
-    return """
+def _cupom_cols(cur) -> tuple[str, bool, bool]:
+    tem_escopo = garantir_escopo_cupom(cur)
+    tem_ciclos = garantir_ciclos_beneficio(cur)
+    cols = """
         id, codigo, descricao, tipo_desconto, valor_desconto, periodo,
         valido_ate, usos_max, usos_count, ativo, criado_em
     """
+    if tem_escopo:
+        cols += ", publico_alvo"
+    if tem_ciclos:
+        cols += ", beneficio_vitalicio, ciclos_beneficio"
+    return cols, tem_ciclos, tem_escopo
 
 
 def listar_cupons(cur, *, incluir_inativos: bool = True) -> list[dict]:
-    cols = _cupom_cols(cur)
+    cols, tem_ciclos, tem_escopo = _cupom_cols(cur)
     sql = f"SELECT {cols} FROM tbl_cupom_desconto"
     if not incluir_inativos:
         sql += " WHERE ativo = TRUE"
@@ -373,6 +530,8 @@ def listar_cupons(cur, *, incluir_inativos: bool = True) -> list[dict]:
             r,
             ids_tenants=mapa_t.get(int(r[0]), []),
             planos_slug=mapa_p.get(int(r[0]), []),
+            tem_ciclos=tem_ciclos,
+            tem_escopo=tem_escopo,
         )
         for r in rows
     ]
@@ -382,7 +541,7 @@ def obter_cupom_por_codigo(cur, codigo: str) -> dict | None:
     cod = normalizar_codigo(codigo)
     if not cod:
         return None
-    cols = _cupom_cols(cur)
+    cols, tem_ciclos, tem_escopo = _cupom_cols(cur)
     cur.execute(
         f"SELECT {cols} FROM tbl_cupom_desconto WHERE upper(codigo) = %s LIMIT 1",
         (cod,),
@@ -397,11 +556,13 @@ def obter_cupom_por_codigo(cur, codigo: str) -> dict | None:
         row,
         ids_tenants=mapa_t.get(cid, []),
         planos_slug=mapa_p.get(cid, []),
+        tem_ciclos=tem_ciclos,
+        tem_escopo=tem_escopo,
     )
 
 
 def obter_cupom_por_id(cur, id_cupom: int) -> dict | None:
-    cols = _cupom_cols(cur)
+    cols, tem_ciclos, tem_escopo = _cupom_cols(cur)
     cur.execute(f"SELECT {cols} FROM tbl_cupom_desconto WHERE id = %s", (id_cupom,))
     row = cur.fetchone()
     if not row:
@@ -413,6 +574,8 @@ def obter_cupom_por_id(cur, id_cupom: int) -> dict | None:
         row,
         ids_tenants=mapa_t.get(cid, []),
         planos_slug=mapa_p.get(cid, []),
+        tem_ciclos=tem_ciclos,
+        tem_escopo=tem_escopo,
     )
 
 
@@ -519,6 +682,7 @@ def salvar_cupom(cur, dados: dict, *, id_cupom: int | None = None) -> dict:
 
     descricao = (dados.get("descricao") or "").strip()[:255] or None
     ativo = bool(dados.get("ativo", True))
+    vitalicio, ciclos_beneficio = normalizar_ciclos_beneficio(dados)
     publico_alvo = _normalizar_publico_alvo(dados.get("publico_alvo"))
     ids_tenants = _normalizar_ids_tenants(
         dados.get("ids_tenants") if "ids_tenants" in dados else dados.get("tenants")
@@ -551,46 +715,62 @@ def salvar_cupom(cur, dados: dict, *, id_cupom: int | None = None) -> dict:
             raise ValueError(f"Plano(s) inválido(s): {', '.join(faltando_p)}.")
 
     tem_escopo = garantir_escopo_cupom(cur)
+    tem_ciclos = garantir_ciclos_beneficio(cur)
     if (publico_alvo or ids_tenants or planos_slug) and not tem_escopo:
         raise ValueError(
             "Escopo de cupom indisponível. Aplique os SQL 092/093 no banco."
         )
+    if (vitalicio or ciclos_beneficio != 1) and not tem_ciclos:
+        raise ValueError(
+            "Duração do benefício indisponível. Aplique o SQL 055_cupom_ciclos_beneficio.sql no banco."
+        )
+
+    def _update(extra_set: str, extra_vals: tuple) -> None:
+        cur.execute(
+            f"""
+            UPDATE tbl_cupom_desconto SET
+              codigo = %s, descricao = %s, tipo_desconto = %s, valor_desconto = %s,
+              periodo = %s, valido_ate = %s, usos_max = %s, ativo = %s{extra_set},
+              atualizado_em = NOW()
+            WHERE id = %s
+            RETURNING id
+            """,
+            (codigo, descricao, tipo, valor, periodo, valido_ate, usos_max, ativo)
+            + extra_vals
+            + (id_cupom,),
+        )
+
+    def _insert(extra_cols: str, extra_ph: str, extra_vals: tuple) -> int:
+        cur.execute(
+            f"""
+            INSERT INTO tbl_cupom_desconto (
+              codigo, descricao, tipo_desconto, valor_desconto, periodo,
+              valido_ate, usos_max, ativo{extra_cols}
+            ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s{extra_ph})
+            RETURNING id
+            """,
+            (codigo, descricao, tipo, valor, periodo, valido_ate, usos_max, ativo)
+            + extra_vals,
+        )
+        return int(cur.fetchone()[0])
+
+    extras_set = ""
+    extras_vals: list[Any] = []
+    extras_cols = ""
+    extras_ph = ""
+    if tem_escopo:
+        extras_set += ", publico_alvo = %s"
+        extras_vals.append(publico_alvo)
+        extras_cols += ", publico_alvo"
+        extras_ph += ",%s"
+    if tem_ciclos:
+        extras_set += ", beneficio_vitalicio = %s, ciclos_beneficio = %s"
+        extras_vals.extend([vitalicio, ciclos_beneficio])
+        extras_cols += ", beneficio_vitalicio, ciclos_beneficio"
+        extras_ph += ",%s,%s"
 
     if id_cupom:
-        if tem_escopo:
-            cur.execute(
-                """
-                UPDATE tbl_cupom_desconto SET
-                  codigo = %s, descricao = %s, tipo_desconto = %s, valor_desconto = %s,
-                  periodo = %s, valido_ate = %s, usos_max = %s, ativo = %s,
-                  publico_alvo = %s, atualizado_em = NOW()
-                WHERE id = %s
-                RETURNING id
-                """,
-                (
-                    codigo,
-                    descricao,
-                    tipo,
-                    valor,
-                    periodo,
-                    valido_ate,
-                    usos_max,
-                    ativo,
-                    publico_alvo,
-                    id_cupom,
-                ),
-            )
-        else:
-            cur.execute(
-                """
-                UPDATE tbl_cupom_desconto SET
-                  codigo = %s, descricao = %s, tipo_desconto = %s, valor_desconto = %s,
-                  periodo = %s, valido_ate = %s, usos_max = %s, ativo = %s, atualizado_em = NOW()
-                WHERE id = %s
-                RETURNING id
-                """,
-                (codigo, descricao, tipo, valor, periodo, valido_ate, usos_max, ativo, id_cupom),
-            )
+        _update(extras_set, tuple(extras_vals))
         if not cur.fetchone():
             raise ValueError("Cupom não encontrado.")
         _sincronizar_tenants_cupom(cur, id_cupom, ids_tenants)
@@ -604,42 +784,125 @@ def salvar_cupom(cur, dados: dict, *, id_cupom: int | None = None) -> dict:
     if cur.fetchone():
         raise ValueError("Já existe um cupom com este código.")
 
-    if tem_escopo:
+    new_id = _insert(extras_cols, extras_ph, tuple(extras_vals))
+    _sincronizar_tenants_cupom(cur, new_id, ids_tenants)
+    _sincronizar_planos_cupom(cur, new_id, planos_slug)
+    return obter_cupom_por_id(cur, new_id) or {}
+
+
+def ativar_beneficio_cupom_tenant(cur, id_tenant: int, cupom: dict) -> None:
+    """Grava o benefício nas renovações (após 1ª fatura com o código)."""
+    if not garantir_ciclos_beneficio(cur) or not _beneficio_cobranca_existe(cur):
+        return
+    vitalicio = bool(cupom.get("beneficio_vitalicio"))
+    ciclos = max(1, int(cupom.get("ciclos_beneficio") or 1))
+    restantes = None if vitalicio else max(0, ciclos - 1)
+    cur.execute(
+        """
+        UPDATE tbl_tenant_cobranca
+        SET id_cupom_beneficio = %s,
+            cupom_ciclos_restantes = %s,
+            atualizado_em = NOW()
+        WHERE id_tenant = %s
+        """,
+        (int(cupom["id"]), restantes, int(id_tenant)),
+    )
+
+
+def consumir_beneficio_cupom_tenant(cur, id_tenant: int) -> None:
+    """Decrementa ciclos restantes após uma renovação com desconto."""
+    if not garantir_ciclos_beneficio(cur) or not _beneficio_cobranca_existe(cur):
+        return
+    cur.execute(
+        """
+        SELECT cupom_ciclos_restantes
+        FROM tbl_tenant_cobranca
+        WHERE id_tenant = %s
+        """,
+        (int(id_tenant),),
+    )
+    row = cur.fetchone()
+    if not row:
+        return
+    restantes = row[0]
+    if restantes is None:
+        # vitalício — mantém
+        return
+    novos = int(restantes or 0) - 1
+    if novos <= 0:
         cur.execute(
             """
-            INSERT INTO tbl_cupom_desconto (
-              codigo, descricao, tipo_desconto, valor_desconto, periodo,
-              valido_ate, usos_max, ativo, publico_alvo
-            ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
-            RETURNING id
+            UPDATE tbl_tenant_cobranca
+            SET id_cupom_beneficio = NULL,
+                cupom_ciclos_restantes = NULL,
+                atualizado_em = NOW()
+            WHERE id_tenant = %s
             """,
-            (
-                codigo,
-                descricao,
-                tipo,
-                valor,
-                periodo,
-                valido_ate,
-                usos_max,
-                ativo,
-                publico_alvo,
-            ),
+            (int(id_tenant),),
         )
     else:
         cur.execute(
             """
-            INSERT INTO tbl_cupom_desconto (
-              codigo, descricao, tipo_desconto, valor_desconto, periodo,
-              valido_ate, usos_max, ativo
-            ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
-            RETURNING id
+            UPDATE tbl_tenant_cobranca
+            SET cupom_ciclos_restantes = %s, atualizado_em = NOW()
+            WHERE id_tenant = %s
             """,
-            (codigo, descricao, tipo, valor, periodo, valido_ate, usos_max, ativo),
+            (novos, int(id_tenant)),
         )
-    new_id = int(cur.fetchone()[0])
-    _sincronizar_tenants_cupom(cur, new_id, ids_tenants)
-    _sincronizar_planos_cupom(cur, new_id, planos_slug)
-    return obter_cupom_por_id(cur, new_id) or {}
+
+
+def obter_cupom_beneficio_renovacao(
+    cur,
+    id_tenant: int,
+    periodo: str,
+    *,
+    plano_slug: str | None = None,
+) -> dict | None:
+    """Cupom ainda válido para renovação (ignora valido_ate / usos_max da ativação)."""
+    if not garantir_ciclos_beneficio(cur) or not _beneficio_cobranca_existe(cur):
+        return None
+    p = normalizar_periodo(periodo)
+    cur.execute(
+        """
+        SELECT id_cupom_beneficio, cupom_ciclos_restantes
+        FROM tbl_tenant_cobranca
+        WHERE id_tenant = %s
+        """,
+        (int(id_tenant),),
+    )
+    row = cur.fetchone()
+    if not row or not row[0]:
+        return None
+    restantes = row[1]
+    if restantes is not None and int(restantes) <= 0:
+        cur.execute(
+            """
+            UPDATE tbl_tenant_cobranca
+            SET id_cupom_beneficio = NULL, cupom_ciclos_restantes = NULL, atualizado_em = NOW()
+            WHERE id_tenant = %s
+            """,
+            (int(id_tenant),),
+        )
+        return None
+    cupom = obter_cupom_por_id(cur, int(row[0]))
+    if not cupom or not cupom.get("ativo"):
+        return None
+    if cupom.get("periodo") != p:
+        return None
+    # Escopo de plano ainda deve bater na renovação
+    planos_ok = list(cupom.get("planos_slug") or [])
+    if planos_ok and plano_slug:
+        slug = (plano_slug or "").strip().lower()
+        tipo_conta = _tipo_negocio_tenant(cur, int(id_tenant))
+        candidatos = {slug}
+        if tipo_conta in ("vendedor", "fornecedor"):
+            candidatos.add(_chave_plano_cupom(slug, tipo_conta))
+        elif tipo_conta == "hibrido":
+            candidatos.add(_chave_plano_cupom(slug, "vendedor"))
+            candidatos.add(_chave_plano_cupom(slug, "fornecedor"))
+        if not candidatos.intersection(planos_ok):
+            return None
+    return cupom
 
 
 def registrar_uso_cupom(

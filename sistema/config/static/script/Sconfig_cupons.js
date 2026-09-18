@@ -158,7 +158,7 @@
       if (!j.success) throw new Error(j.message || "Erro");
       const lista = j.cupons || [];
       if (!lista.length) {
-        tbody.innerHTML = '<tr><td colspan="8" class="CfgCup_Hint">Nenhum cupom ainda.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" class="CfgCup_Hint">Nenhum cupom ainda.</td></tr>';
         return;
       }
       const u = util();
@@ -208,6 +208,9 @@
             esc(c.periodo) +
             "</td>" +
             "<td>" +
+            esc(c.beneficio_rotulo || (c.beneficio_vitalicio ? "vitalício" : c.ciclos_beneficio + " ciclo(s)")) +
+            "</td>" +
+            "<td>" +
             esc(fmtEscopo(c)) +
             "</td>" +
             "<td>" +
@@ -226,7 +229,7 @@
         .join("");
       window.lucide?.createIcons?.();
     } catch (e) {
-      tbody.innerHTML = '<tr><td colspan="8" class="CfgCup_Hint">' + esc(e.message) + "</td></tr>";
+      tbody.innerHTML = '<tr><td colspan="9" class="CfgCup_Hint">' + esc(e.message) + "</td></tr>";
     }
   }
 
