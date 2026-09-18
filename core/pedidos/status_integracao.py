@@ -16,7 +16,8 @@ from core.pedidos.servico import (
     status_vendedor_pedido,
 )
 
-# Origens de marketplace: pedido fica no DropNexo; não auto-exporta ao ERP do fornecedor.
+# Origens de marketplace (canais externos do vendedor).
+# Continuam passando pelo hub DropNexo e podem ser exportadas ao ERP do fornecedor.
 ORIGENS_MARKETPLACE = frozenset({"mercado_livre", "tiktok", "amazon"})
 
 # Ordem operacional (maior = mais avançado). cancelado é terminal especial.

@@ -356,7 +356,12 @@ def receber_webhook_http(app: Flask, request: Request) -> tuple[dict, int]:
 import logging
 from typing import Any
 
-from api.bling.pedidos import importar_pedido_bling_por_id, pedidos_importacao_auto_ativa
+from api.bling.pedidos import (
+    _resolver_pedido_dn_por_id_bling,
+    importar_pedido_bling_por_id,
+    pedidos_importacao_auto_ativa,
+    sincronizar_status_pedido_bling_inbound,
+)
 from api.bling.webhooks import _blocos_aninhados, _resolver_tenant_webhook
 from global_utils import agora_utc
 
@@ -466,17 +471,6 @@ def processar_webhook_pedido_fila(
         )
         return {"ok": False, "motivo": "tenant_nao_encontrado"}
 
-    if not pedidos_importacao_auto_ativa(cur, int(id_tenant)):
-        cur.execute(
-            """
-            UPDATE tbl_integracao_bling_webhook_fila
-            SET id_tenant = %s, status = 'ignorado', processado_em = %s, erro = %s
-            WHERE id = %s
-            """,
-            (id_tenant, agora_utc(), "importacao_auto_desligada", fila_id),
-        )
-        return {"ok": True, "ignorado": True, "motivo": "importacao_auto_desligada"}
-
     id_bling = extrair_id_pedido_bling(envelope)
     if not id_bling:
         cur.execute(
@@ -488,6 +482,61 @@ def processar_webhook_pedido_fila(
             (id_tenant, agora_utc(), f"sem_id_pedido:{recurso}", fila_id),
         )
         return {"ok": True, "ignorado": True, "motivo": "sem_id_pedido"}
+
+    # Pedido já conhecido no DropNexo (importado no vendedor OU exportado ao fornecedor):
+    # sincroniza status sem depender de "importação automática".
+    conhecido = _resolver_pedido_dn_por_id_bling(cur, int(id_tenant), id_bling)
+    if conhecido:
+        cur.execute(
+            "UPDATE tbl_integracao_bling_webhook_fila SET status = 'processando' WHERE id = %s",
+            (fila_id,),
+        )
+        try:
+            alterou = sincronizar_status_pedido_bling_inbound(
+                cur, int(id_tenant), id_bling
+            )
+            cur.execute(
+                """
+                UPDATE tbl_integracao_bling_webhook_fila
+                SET id_tenant = %s, status = 'ok', processado_em = %s, erro = %s
+                WHERE id = %s
+                """,
+                (
+                    id_tenant,
+                    agora_utc(),
+                    None if alterou else "status_sem_avanco",
+                    fila_id,
+                ),
+            )
+            return {
+                "ok": True,
+                "sincronizado_status": True,
+                "alterou": bool(alterou),
+                "lado": conhecido[1],
+                "id_pedido": conhecido[0],
+            }
+        except Exception as e:
+            _log.exception("Webhook status Bling fila=%s id=%s", fila_id, id_bling)
+            cur.execute(
+                """
+                UPDATE tbl_integracao_bling_webhook_fila
+                SET id_tenant = %s, status = 'erro', processado_em = %s, erro = %s
+                WHERE id = %s
+                """,
+                (id_tenant, agora_utc(), str(e)[:500], fila_id),
+            )
+            raise
+
+    if not pedidos_importacao_auto_ativa(cur, int(id_tenant)):
+        cur.execute(
+            """
+            UPDATE tbl_integracao_bling_webhook_fila
+            SET id_tenant = %s, status = 'ignorado', processado_em = %s, erro = %s
+            WHERE id = %s
+            """,
+            (id_tenant, agora_utc(), "importacao_auto_desligada", fila_id),
+        )
+        return {"ok": True, "ignorado": True, "motivo": "importacao_auto_desligada"}
 
     cur.execute(
         "UPDATE tbl_integracao_bling_webhook_fila SET status = 'processando' WHERE id = %s",

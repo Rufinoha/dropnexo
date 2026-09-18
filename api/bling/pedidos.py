@@ -505,23 +505,18 @@ def exportar_status_pedido_bling(
         return False
 
 
-def sincronizar_status_pedido_bling_inbound(
-    cur,
-    id_tenant: int,
-    id_bling_pedido: str,
-    *,
-    id_usuario: int | None = None,
-) -> bool:
-    """Puxa situação do Bling e avança status no DropNexo se for mais avançado."""
-    from api.bling.campos import extrair_situacao_pedido
-    from core.pedidos.status_integracao import (
-        aplicar_status_avancado,
-        mapear_situacao_bling_para_dn,
-    )
+def _resolver_pedido_dn_por_id_bling(
+    cur, id_tenant: int, id_bling_pedido: str
+) -> tuple[int, str] | None:
+    """Localiza pedido DropNexo pelo ID Bling.
 
+    Retorna (id_pedido, lado) com lado em ('vendedor', 'fornecedor'):
+    - vendedor: pedido importado do Bling do vendedor (origem=bling)
+    - fornecedor: pedido exportado do DropNexo para o Bling do fornecedor
+    """
     id_bling = str(id_bling_pedido or "").strip()
     if not id_bling:
-        return False
+        return None
     cur.execute(
         """
         SELECT id FROM tbl_pedido
@@ -531,24 +526,148 @@ def sincronizar_status_pedido_bling_inbound(
         (int(id_tenant), id_bling),
     )
     row = cur.fetchone()
-    if not row:
+    if row:
+        return int(row[0]), "vendedor"
+
+    cur.execute(
+        """
+        SELECT id_dropnexo FROM tbl_integracao_map
+        WHERE id_tenant = %s AND provedor = 'bling' AND contexto = 'fornecedor'
+          AND entidade = 'pedido' AND id_bling = %s
+        LIMIT 1
+        """,
+        (int(id_tenant), id_bling),
+    )
+    m = cur.fetchone()
+    if m and m[0]:
+        return int(m[0]), "fornecedor"
+    return None
+
+
+def _propagar_status_para_origem_vendedor(cur, id_pedido: int, evento: str) -> None:
+    """Empurra status na origem do vendedor (nunca de volta ao Bling do fornecedor)."""
+    from core.pedidos.servico import obter_pedido
+
+    evento_l = (evento or "").strip().lower()
+    if not evento_l:
+        return
+    ped = obter_pedido(cur, int(id_pedido))
+    if not ped:
+        return
+    origem = (ped.get("origem") or "").strip().lower()
+
+    # Bling do vendedor: PATCH direto na conta do vendedor (evita loop com o map do fornecedor).
+    if origem == "bling":
+        id_bling_vend = str(ped.get("id_bling_pedido") or "").strip()
+        id_vendedor = int(ped.get("id_tenant_vendedor") or 0)
+        if id_bling_vend and id_vendedor:
+            try:
+                cur.execute(
+                    "SELECT status FROM tbl_integracao_bling WHERE id_tenant = %s",
+                    (id_vendedor,),
+                )
+                row = cur.fetchone()
+                if row and row[0] == "conectado":
+                    cfg = _carregar_config_vendedor(cur, id_vendedor)
+                    opcoes = cfg.get("opcoes") or {}
+                    if opcoes.get("pedidos_exportar_status") is not False:
+                        id_situacao = _resolver_situacao_id(id_vendedor, evento_l, opcoes)
+                        if id_situacao:
+                            api_request(
+                                id_vendedor,
+                                "PATCH",
+                                f"/pedidos/vendas/{id_bling_vend}/situacoes/{id_situacao}",
+                            )
+            except Exception as e:
+                _log.warning(
+                    "Propagar status Bling vendedor pedido %s: %s", id_pedido, e
+                )
+    elif origem == "mercado_livre":
+        try:
+            from api.mercado_livre.pedidos_ml import exportar_status_pedido_ml
+
+            exportar_status_pedido_ml(cur, id_pedido, evento=evento_l)
+        except Exception:
+            pass
+    elif origem == "tiktok":
+        try:
+            from api.tiktok.pedidos_tiktok import exportar_status_pedido_tiktok
+
+            exportar_status_pedido_tiktok(cur, id_pedido, evento=evento_l)
+        except Exception:
+            pass
+    elif origem == "amazon":
+        try:
+            from api.amazon.pedidos_amazon import exportar_status_pedido_amazon
+
+            exportar_status_pedido_amazon(cur, id_pedido, evento=evento_l)
+        except Exception:
+            pass
+
+
+def sincronizar_status_pedido_bling_inbound(
+    cur,
+    id_tenant: int,
+    id_bling_pedido: str,
+    *,
+    id_usuario: int | None = None,
+) -> bool:
+    """Puxa situação do Bling e avança status no DropNexo se for mais avançado.
+
+    Cobre:
+    - Bling do vendedor → DropNexo (pedido importado)
+    - Bling do fornecedor → DropNexo (pedido exportado) → origem do vendedor
+    """
+    from api.bling.campos import extrair_situacao_pedido
+    from core.pedidos.status_integracao import (
+        aplicar_status_avancado,
+        mapear_situacao_bling_para_dn,
+    )
+
+    id_bling = str(id_bling_pedido or "").strip()
+    if not id_bling:
         return False
+    resolved = _resolver_pedido_dn_por_id_bling(cur, int(id_tenant), id_bling)
+    if not resolved:
+        return False
+    id_pedido, lado = resolved
     try:
-        det = obter_pedido_bling(id_tenant, id_bling)
+        det = obter_pedido_bling(int(id_tenant), id_bling)
     except Exception:
         return False
-    nome, _ = extrair_situacao_pedido(det, id_tenant=id_tenant)
+    nome, _ = extrair_situacao_pedido(det, id_tenant=int(id_tenant))
     novo = mapear_situacao_bling_para_dn(nome)
     if not novo:
         return False
-    return aplicar_status_avancado(
+    alterou = aplicar_status_avancado(
         cur,
-        int(row[0]),
+        int(id_pedido),
         novo,
         id_usuario=id_usuario,
         origem_evento="bling",
         detalhe=f"Status sincronizado do Bling ({nome or novo}).",
     )
+    # Status veio do Bling do fornecedor → devolve à origem do vendedor (Bling/ML/…).
+    if alterou and lado == "fornecedor":
+        evento = None
+        from core.pedidos.servico import (
+            STATUS_CANCELADO,
+            STATUS_EM_EXPEDICAO,
+            STATUS_ENTREGUE,
+            STATUS_PAGO,
+        )
+
+        if novo == STATUS_CANCELADO:
+            evento = "cancelado"
+        elif novo == STATUS_ENTREGUE:
+            evento = "entregue"
+        elif novo == STATUS_EM_EXPEDICAO:
+            evento = "expedido"
+        elif novo == STATUS_PAGO:
+            evento = "pago"
+        if evento:
+            _propagar_status_para_origem_vendedor(cur, int(id_pedido), evento)
+    return alterou
 
 
 # ── export_pedidos ────────────────────────────────────
@@ -785,17 +904,9 @@ def exportar_pedido_fornecedor_bling(
     if opcoes.get("pedidos_exportar") is False:
         raise ValueError("Exportação de pedidos está desativada.")
 
-    origem = (ped.get("origem") or "").strip().lower()
-    if origem == "bling":
-        raise ValueError("Pedidos importados do Bling (vendedor) não são reexportados.")
-    if not forcar:
-        from core.pedidos.status_integracao import ORIGENS_MARKETPLACE
-
-        if origem in ORIGENS_MARKETPLACE:
-            raise ValueError(
-                "Pedidos de marketplace ficam só no DropNexo. "
-                "Use exportação manual com confirmação se quiser enviar ao Bling."
-            )
+    # Qualquer origem (manual, Bling, marketplace, arquivo…) pode ir ao Bling do fornecedor.
+    # O DropNexo é o hub: origem do vendedor → DN → Bling do fornecedor.
+    _ = forcar  # mantido por compatibilidade da assinatura
 
     if status_vendedor_pedido(ped) != STATUS_PAGO:
         raise ValueError("Somente pedidos pagos podem ser exportados ao Bling.")
@@ -923,8 +1034,6 @@ def exportar_pedidos_pendentes_fornecedor(
         FROM tbl_pedido p
         WHERE p.id_tenant_fornecedor = %s
           AND p.{cv} = %s
-          AND COALESCE(p.origem, '') <> 'bling'
-          AND COALESCE(p.origem, '') NOT IN ('mercado_livre', 'tiktok', 'amazon')
           AND COALESCE(p.pago_em, p.confirmado_em, p.criado_em) >= %s
           AND NOT EXISTS (
               SELECT 1 FROM tbl_integracao_map m
