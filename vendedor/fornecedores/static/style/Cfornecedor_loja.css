@@ -20,7 +20,87 @@
 }
 
 .Loja_Hero {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
   padding: 20px 4px 16px;
+}
+
+.Loja_HeroBrand {
+  flex-shrink: 0;
+}
+
+.Loja_HeroLogo {
+  --logo-hue: 220;
+  position: relative;
+  width: 84px;
+  height: 84px;
+  border-radius: 20px;
+  overflow: hidden;
+  background:
+    radial-gradient(120% 120% at 12% 8%, hsla(0, 0%, 100%, 0.55), transparent 42%),
+    linear-gradient(
+      145deg,
+      hsl(var(--logo-hue), 62%, 94%) 0%,
+      hsl(calc(var(--logo-hue) + 28), 55%, 86%) 55%,
+      hsl(calc(var(--logo-hue) + 48), 48%, 78%) 100%
+    );
+  border: 1px solid hsla(var(--logo-hue), 40%, 55%, 0.22);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.75) inset,
+    0 10px 22px hsla(var(--logo-hue), 45%, 40%, 0.16);
+}
+
+.Loja_HeroLogoImg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  padding: 10px;
+  background: #fff;
+  z-index: 2;
+}
+
+.Loja_HeroMonogram {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  z-index: 1;
+}
+
+.Loja_HeroMonogram[hidden] {
+  display: none !important;
+}
+
+.Loja_HeroMonogramRing {
+  position: absolute;
+  inset: 9px;
+  border-radius: 999px;
+  border: 1.5px solid hsla(var(--logo-hue), 45%, 38%, 0.28);
+  background:
+    repeating-conic-gradient(
+      from 12deg,
+      hsla(var(--logo-hue), 40%, 35%, 0.05) 0deg 8deg,
+      transparent 8deg 16deg
+    );
+}
+
+.Loja_HeroMonogramMark {
+  position: relative;
+  z-index: 1;
+  font-family: "Segoe UI Semibold", "Segoe UI", Georgia, serif;
+  font-size: 1.35rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: hsl(var(--logo-hue), 48%, 28%);
+  text-shadow: 0 1px 0 hsla(0, 0%, 100%, 0.55);
+}
+
+.Loja_HeroText {
+  min-width: 0;
+  flex: 1;
 }
 
 .Loja_Kicker {
@@ -43,6 +123,23 @@
   margin: 0 0 8px;
   font-size: 0.9rem;
   color: #64748b;
+}
+
+.Loja_Segmentos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0 0 0.65rem;
+}
+
+.Loja_SegChip {
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.22rem 0.55rem;
+  border-radius: 999px;
+  background: var(--marca-light, #e8f0ff);
+  color: var(--marca-primary, #021f81);
+  border: 1px solid rgba(2, 31, 129, 0.08);
 }
 
 .Loja_StatusBadge {

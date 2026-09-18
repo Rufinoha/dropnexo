@@ -65,6 +65,32 @@
     return (p[0][0] + p[p.length - 1][0]).toUpperCase();
   }
 
+  function hueDoNome(nome) {
+    let h = 0;
+    const s = String(nome || "");
+    for (let i = 0; i < s.length; i++) h = (h * 33 + s.charCodeAt(i)) >>> 0;
+    return h % 360;
+  }
+
+  function htmlLogoCard(f) {
+    const iniciais = iniciaisNome(f.nome);
+    const hue = hueDoNome(f.nome);
+    const logo = String(f.logo_url || "").trim();
+    const img = logo
+      ? `<img class="Forn_CardLogoImg" src="${esc(logo)}" alt="" loading="lazy" decoding="async"
+           onerror="var p=this.parentElement;this.remove();var m=p&&p.querySelector('.Forn_CardMonogram');if(m)m.hidden=false;" />`
+      : "";
+    return `
+      <div class="Forn_CardLogo" style="--logo-hue:${hue}" aria-hidden="true">
+        ${img}
+        <div class="Forn_CardMonogram"${logo ? " hidden" : ""}>
+          <span class="Forn_CardMonogramRing"></span>
+          <span class="Forn_CardMonogramGlow"></span>
+          <span class="Forn_CardMonogramMark">${esc(iniciais)}</span>
+        </div>
+      </div>`;
+  }
+
   function svgIcon(tipo) {
     const common = 'xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"';
     if (tipo === "mail") {
@@ -345,17 +371,7 @@
         const st = statusLabel[f.status_vinculo] || statusLabel.nenhum;
         const stVin = f.status_vinculo || "nenhum";
         const podeVinculo = !["ativo", "aguardando", "pausado"].includes(stVin);
-        const chips = (f.segmentos || [])
-          .map((s) => `<span class="Forn_Chip">${esc(s)}</span>`)
-          .join("");
         const local = [f.cidade, f.uf].filter(Boolean).join(" / ") || "Local não informado";
-        const iniciais = String(f.nome || "?")
-          .split(/\s+/)
-          .filter(Boolean)
-          .slice(0, 2)
-          .map((w) => w[0])
-          .join("")
-          .toUpperCase();
         const qtd = Number(f.qtd_produtos) || 0;
         const qtdVitrine = Number(f.qtd_produtos_vitrine) || 0;
         const conectado = stVin === "ativo";
@@ -388,14 +404,13 @@
           tabindex="0" role="button" aria-label="${aria}">
           <div class="Forn_CardTop">
             <div class="Forn_CardBrand">
-              <span class="Forn_CardAvatar" aria-hidden="true">${esc(iniciais || "?")}</span>
+              ${htmlLogoCard(f)}
               <div class="Forn_CardBrandText">
                 <h3 class="Forn_CardNome">${esc(f.nome)}</h3>
                 <p class="Forn_CardLocal">${esc(local)}</p>
               </div>
             </div>
           </div>
-          <div class="Forn_CardChips">${chips || '<span class="Forn_Chip Forn_Chip--muted">Sem segmento</span>'}</div>
           ${f.motivo_recusa ? `<p class="Forn_CardRecusa" title="${attrEsc(f.motivo_recusa)}">Motivo: ${esc(f.motivo_recusa)}</p>` : ""}
           ${f.motivo_status && (pausado || stVin === "inativo") ? `<p class="Forn_CardRecusa" title="${attrEsc(f.motivo_status)}">Motivo: ${esc(f.motivo_status)}</p>` : ""}
           <div class="Forn_CardMetaRow">

@@ -531,9 +531,11 @@ def desconectar_fornecedor(
 # ── srotas_fornecedores ───────────────────────────────
 
 import json
+import mimetypes
+import os
 from pathlib import Path
 
-from flask import Blueprint, Response, jsonify, render_template, request, session
+from flask import Blueprint, Response, jsonify, render_template, request, send_file, session, url_for
 
 from fornecedor.parametros.requisitos import (
     carregar_contato_responsavel_fornecedor,
@@ -554,6 +556,44 @@ from core.dominio import montar_snapshot_vendedor
 from sistema.plataforma.sessao import MODULO_VENDEDOR
 
 _MOD_DIR = Path(__file__).resolve().parent
+_RAIZ_PROJETO = _MOD_DIR.parent.parent
+
+
+def _caminho_abs_logo_rede(caminho_db: str | None) -> Path | None:
+    if not caminho_db:
+        return None
+    rel = str(caminho_db).replace("\\", "/").strip().lstrip("/")
+    if ".." in rel.split("/"):
+        return None
+    if not rel.lower().startswith("upload/"):
+        return None
+    return _RAIZ_PROJETO / rel.replace("/", os.sep)
+
+
+def _url_logo_rede(
+    id_fornecedor: int, caminho: str | None, id_azf: int | None = None
+) -> str:
+    if not caminho:
+        return ""
+    kwargs = {"id_fornecedor": id_fornecedor, "_external": False}
+    if id_azf:
+        kwargs["azf"] = int(id_azf)
+    return url_for("vd_fornecedores.logo_fornecedor", **kwargs)
+
+
+def _af_tem_coluna_logo(cur) -> bool:
+    cur.execute(
+        """
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'tbl_armazem_fornecedor'
+          AND column_name = 'logo_caminho'
+        LIMIT 1
+        """
+    )
+    return cur.fetchone() is not None
+
 
 vd_fornecedores_bp = Blueprint(
     "vd_fornecedores",
@@ -988,7 +1028,7 @@ def rede():
                       AND p2.id_armazem_fornecedor IS NULL),
                    v.mensagem_resposta, v.motivo_status,
                    v.status_alterado_por_lado, v.status_alterado_por_usuario,
-                   t.tipo_negocio
+                   t.tipo_negocio, t.logo_caminho
             FROM tbl_tenant t
             LEFT JOIN tbl_vinculo_vendedor_fornecedor v
                 ON v.id_tenant_fornecedor = t.id
@@ -1005,6 +1045,7 @@ def rede():
         for row in cur.fetchall():
             tid = row[0]
             tipo = (row[15] or "").strip().lower()
+            logo_tenant = (row[16] or "").strip() if len(row) > 16 else ""
             cur.execute(
                 """
                 SELECT s.id, s.nome
@@ -1058,6 +1099,7 @@ def rede():
                 "pode_despausar": pode_despausar,
                 "tipo_negocio": tipo,
                 "id_armazem_fornecedor": None,
+                "logo_url": _url_logo_rede(tid, logo_tenant),
             }
             # Fornecedor clássico: aparece o tenant
             if tipo != "armazem":
@@ -1065,8 +1107,9 @@ def rede():
                 continue
 
             # Armazém: NÃO mostra o tenant — só fornecedores locais
+            col_logo_af = "af.logo_caminho" if _af_tem_coluna_logo(cur) else "NULL::varchar"
             cur.execute(
-                """
+                f"""
                 SELECT af.id,
                        COALESCE(NULLIF(TRIM(af.nome_fantasia), ''), af.nome),
                        (SELECT COUNT(*)::int FROM tbl_produto p
@@ -1084,7 +1127,8 @@ def rede():
                         JOIN tbl_produto p2 ON p2.id = pv.id_produto
                         WHERE pv.id_tenant_vendedor = %s
                           AND pv.id_tenant_fornecedor = %s
-                          AND p2.id_armazem_fornecedor = af.id)
+                          AND p2.id_armazem_fornecedor = af.id),
+                       {col_logo_af}
                 FROM tbl_armazem_fornecedor af
                 LEFT JOIN tbl_vinculo_vendedor_fornecedor v
                     ON v.id_tenant_fornecedor = %s
@@ -1096,7 +1140,19 @@ def rede():
                 (tid, id_vendedor, tid, tid, id_vendedor, tid),
             )
             for fr in cur.fetchall():
-                fid, nome_f, qtd, id_vinc, st_v, msg_r, mot, lado, por, qtd_vit = fr
+                fid, nome_f, qtd, id_vinc, st_v, msg_r, mot, lado, por, qtd_vit, logo_af = (
+                    fr[0],
+                    fr[1],
+                    fr[2],
+                    fr[3],
+                    fr[4],
+                    fr[5],
+                    fr[6],
+                    fr[7],
+                    fr[8],
+                    fr[9],
+                    (fr[10] if len(fr) > 10 else None),
+                )
                 qtd_i = int(qtd or 0)
                 if qtd_i <= 0 and (st_v or "nenhum") == "nenhum":
                     continue
@@ -1138,6 +1194,7 @@ def rede():
                         "tipo_negocio": "armazem",
                         "id_armazem_fornecedor": int(fid),
                         "chave": f"az:{tid}:f:{int(fid)}",
+                        "logo_url": _url_logo_rede(tid, (logo_af or "").strip(), int(fid)),
                     }
                 )
         return jsonify(success=True, fornecedores=cards)
@@ -1151,6 +1208,64 @@ def rede():
 @exigir_permissao(codigo="fornecedores.ver")
 def pagina_loja():
     return render_template("frm_fornecedor_loja.html")
+
+
+@vd_fornecedores_bp.get("/fornecedores/<int:id_fornecedor>/logo")
+@login_obrigatorio()
+@exigir_modulo(MODULO_VENDEDOR)
+@exigir_permissao(codigo="fornecedores.ver")
+def logo_fornecedor(id_fornecedor: int):
+    """Serve o logotipo do fornecedor (tenant) ou do fornecedor local do armazém."""
+    id_azf = None
+    raw_azf = request.args.get("azf") or request.args.get("id_armazem_fornecedor")
+    if raw_azf not in (None, "", "0"):
+        try:
+            id_azf = int(raw_azf)
+        except (TypeError, ValueError):
+            id_azf = None
+
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT ativo, tipo_negocio FROM tbl_tenant
+            WHERE id = %s
+            """,
+            (id_fornecedor,),
+        )
+        row = cur.fetchone()
+        if not row or not row[0]:
+            return jsonify(success=False, message="Fornecedor não encontrado."), 404
+        tipo = (row[1] or "").strip().lower()
+        caminho_db = None
+        if id_azf:
+            if tipo != "armazem":
+                return jsonify(success=False, message="Fornecedor local inválido."), 404
+            if not _af_tem_coluna_logo(cur):
+                return jsonify(success=False, message="Sem logotipo."), 404
+            cur.execute(
+                """
+                SELECT logo_caminho FROM tbl_armazem_fornecedor
+                WHERE id = %s AND id_tenant_armazem = %s AND ativo = TRUE
+                """,
+                (id_azf, id_fornecedor),
+            )
+            r = cur.fetchone()
+            if not r:
+                return jsonify(success=False, message="Fornecedor local não encontrado."), 404
+            caminho_db = r[0]
+        else:
+            cur.execute("SELECT logo_caminho FROM tbl_tenant WHERE id = %s", (id_fornecedor,))
+            r = cur.fetchone()
+            caminho_db = r[0] if r else None
+        caminho = _caminho_abs_logo_rede(caminho_db)
+        if not caminho or not caminho.is_file():
+            return jsonify(success=False, message="Sem logotipo."), 404
+        mime, _ = mimetypes.guess_type(str(caminho))
+        return send_file(caminho, mimetype=mime or "image/png", max_age=3600)
+    finally:
+        conn.close()
 
 
 @vd_fornecedores_bp.get("/fornecedores/imagens/proxy")
@@ -1709,7 +1824,7 @@ def loja_dados(id_fornecedor: int):
         garantir_colunas_vinculo_status(cur)
         cur.execute(
             """
-            SELECT COALESCE(t.nome_fantasia, t.nome), t.cidade, t.uf, t.tipo_negocio
+            SELECT COALESCE(t.nome_fantasia, t.nome), t.cidade, t.uf, t.tipo_negocio, t.logo_caminho
             FROM tbl_tenant t
             WHERE t.id = %s AND t.ativo = TRUE
               AND t.tipo_negocio IN ('fornecedor', 'hibrido', 'armazem')
@@ -1721,6 +1836,8 @@ def loja_dados(id_fornecedor: int):
             return jsonify(success=False, message="Fornecedor não encontrado."), 404
         tipo = (forn[3] or "").strip().lower()
         nome_exibicao = forn[0]
+        logo_caminho = (forn[4] or "").strip() if len(forn) > 4 else ""
+        id_azf_logo = None
         if tipo == "armazem":
             if not id_azf:
                 return jsonify(
@@ -1728,8 +1845,9 @@ def loja_dados(id_fornecedor: int):
                     message="Informe o fornecedor do armazém para ver o catálogo.",
                 ), 400
             cur.execute(
-                """
-                SELECT COALESCE(NULLIF(TRIM(nome_fantasia), ''), nome)
+                f"""
+                SELECT COALESCE(NULLIF(TRIM(nome_fantasia), ''), nome),
+                       {"logo_caminho" if _af_tem_coluna_logo(cur) else "NULL::varchar"}
                 FROM tbl_armazem_fornecedor
                 WHERE id = %s AND id_tenant_armazem = %s AND ativo = TRUE
                 """,
@@ -1739,6 +1857,20 @@ def loja_dados(id_fornecedor: int):
             if not af:
                 return jsonify(success=False, message="Fornecedor local não encontrado."), 404
             nome_exibicao = af[0]
+            logo_caminho = (af[1] or "").strip() if len(af) > 1 else ""
+            id_azf_logo = id_azf
+
+        cur.execute(
+            """
+            SELECT s.nome
+            FROM tbl_fornecedor_segmento fs
+            JOIN tbl_segmento s ON s.id = fs.id_segmento AND s.ativo = TRUE
+            WHERE fs.id_tenant = %s
+            ORDER BY s.nome
+            """,
+            (id_fornecedor,),
+        )
+        segmentos = [r[0] for r in cur.fetchall()]
 
         cur.execute(
             """
@@ -1893,6 +2025,8 @@ def loja_dados(id_fornecedor: int):
                 "status_vinculo": status_vinculo,
                 "id_armazem_fornecedor": id_azf,
                 "tipo_negocio": tipo,
+                "segmentos": segmentos,
+                "logo_url": _url_logo_rede(id_fornecedor, logo_caminho, id_azf_logo),
             },
             produtos=produtos,
             total=total,

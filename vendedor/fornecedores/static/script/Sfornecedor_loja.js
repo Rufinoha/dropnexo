@@ -9,6 +9,7 @@
     id: document.getElementById("id_fornecedor"),
     titulo: document.getElementById("lojaTitulo"),
     subtitulo: document.getElementById("lojaSubtitulo"),
+    segmentos: document.getElementById("lojaSegmentos"),
     status: document.getElementById("lojaStatus"),
     busca: document.getElementById("lojaBusca"),
     btnBuscar: document.getElementById("lojaBtnBuscar"),
@@ -17,6 +18,10 @@
     paginacao: document.getElementById("lojaPaginacao"),
     btnVinculo: document.getElementById("lojaBtnVinculo"),
     btnCancelarVinculo: document.getElementById("lojaBtnCancelarVinculo"),
+    logoWrap: document.getElementById("lojaLogoWrap"),
+    logoImg: document.getElementById("lojaLogoImg"),
+    monogram: document.getElementById("lojaMonogram"),
+    monogramMark: document.getElementById("lojaMonogramMark"),
   };
 
   if (!el.grid) return;
@@ -30,6 +35,70 @@
     const d = document.createElement("div");
     d.textContent = s == null ? "" : String(s);
     return d.innerHTML;
+  }
+
+  function iniciaisNome(nome) {
+    const p = String(nome || "")
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+    if (!p.length) return "?";
+    if (p.length === 1) return p[0].slice(0, 2).toUpperCase();
+    return (p[0][0] + p[p.length - 1][0]).toUpperCase();
+  }
+
+  function hueDoNome(nome) {
+    let h = 0;
+    const s = String(nome || "");
+    for (let i = 0; i < s.length; i++) h = (h * 33 + s.charCodeAt(i)) >>> 0;
+    return h % 360;
+  }
+
+  function mostrarMonograma(nome) {
+    const hue = hueDoNome(nome);
+    if (el.logoWrap) el.logoWrap.style.setProperty("--logo-hue", String(hue));
+    if (el.monogramMark) el.monogramMark.textContent = iniciaisNome(nome);
+    if (el.monogram) el.monogram.hidden = false;
+    if (el.logoImg) {
+      el.logoImg.hidden = true;
+      el.logoImg.removeAttribute("src");
+    }
+  }
+
+  function aplicarLogoHero(forn) {
+    const nome = forn.nome || "Fornecedor";
+    const logo = String(forn.logo_url || "").trim();
+    if (!logo) {
+      mostrarMonograma(nome);
+      return;
+    }
+    if (!el.logoImg) {
+      mostrarMonograma(nome);
+      return;
+    }
+    const hue = hueDoNome(nome);
+    if (el.logoWrap) el.logoWrap.style.setProperty("--logo-hue", String(hue));
+    if (el.monogramMark) el.monogramMark.textContent = iniciaisNome(nome);
+    el.logoImg.onload = () => {
+      el.logoImg.hidden = false;
+      if (el.monogram) el.monogram.hidden = true;
+    };
+    el.logoImg.onerror = () => mostrarMonograma(nome);
+    el.logoImg.src = logo;
+  }
+
+  function renderSegmentos(lista) {
+    if (!el.segmentos) return;
+    const segs = Array.isArray(lista) ? lista.filter(Boolean) : [];
+    if (!segs.length) {
+      el.segmentos.hidden = true;
+      el.segmentos.innerHTML = "";
+      return;
+    }
+    el.segmentos.hidden = false;
+    el.segmentos.innerHTML = segs
+      .map((s) => `<span class="Loja_SegChip">${esc(s)}</span>`)
+      .join("");
   }
 
   function urlParaExibir(url) {
@@ -200,6 +269,8 @@
       const loc = [forn.cidade, forn.uf].filter(Boolean).join(" / ");
       el.subtitulo.textContent = loc || "";
     }
+    aplicarLogoHero(forn);
+    renderSegmentos(forn.segmentos || []);
     statusBadge(statusVinculo);
 
     totalPaginas = j.total_paginas || 1;

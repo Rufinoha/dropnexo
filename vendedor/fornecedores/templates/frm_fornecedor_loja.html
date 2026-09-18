@@ -6,7 +6,7 @@
   <title>Catálogo do fornecedor — {{ MARCA_NOME }}</title>
   {% include "partials/marca_favicon.html" %}
   <link rel="stylesheet" href="{{ url_for('static', filename='style/global_utils.css') }}" />
-  <link rel="stylesheet" href="{{ url_for('vd_fornecedores.static', filename='style/Cfornecedor_loja.css') }}?v=3" />
+  <link rel="stylesheet" href="{{ url_for('vd_fornecedores.static', filename='style/Cfornecedor_loja.css') }}?v=4" />
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </head>
 <body class="Loja_ApoioBody FnPar_ApoioBody">
@@ -19,10 +19,20 @@
 
   <div class="Loja_Shell">
     <header class="Loja_Hero" id="lojaHero">
+      <div class="Loja_HeroBrand" id="lojaBrand" aria-hidden="true">
+        <div class="Loja_HeroLogo" id="lojaLogoWrap">
+          <img id="lojaLogoImg" class="Loja_HeroLogoImg" alt="" hidden />
+          <div class="Loja_HeroMonogram" id="lojaMonogram">
+            <span class="Loja_HeroMonogramRing"></span>
+            <span class="Loja_HeroMonogramMark" id="lojaMonogramMark">?</span>
+          </div>
+        </div>
+      </div>
       <div class="Loja_HeroText">
         <span class="Loja_Kicker">Catálogo do fornecedor</span>
         <h1 id="lojaTitulo">Carregando…</h1>
         <p id="lojaSubtitulo" class="Loja_Subtitulo"></p>
+        <div id="lojaSegmentos" class="Loja_Segmentos" hidden></div>
         <span id="lojaStatus" class="Loja_StatusBadge"></span>
         <button type="button" class="Loja_BtnVinculoHero Cl_BtnSalvar" id="lojaBtnVinculo" hidden>Solicitar vínculo</button>
         <button type="button" class="Loja_BtnVinculoHero Loja_BtnVinculoHero--danger" id="lojaBtnCancelarVinculo" hidden>Cancelar solicitação</button>
@@ -43,6 +53,6 @@
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <script src="{{ url_for('static', filename='script/global_utils.js') }}"></script>
   <script src="{{ url_for('vd_fornecedores.static', filename='script/Svinculo_requisitos.js') }}?v=3"></script>
-  <script src="{{ url_for('vd_fornecedores.static', filename='script/Sfornecedor_loja.js') }}?v=9"></script>
+  <script src="{{ url_for('vd_fornecedores.static', filename='script/Sfornecedor_loja.js') }}?v=10"></script>
 </body>
 </html>
