@@ -395,6 +395,12 @@ def marcar_comprovante_enviado(cur, id_pedido: int, *, id_vendedor: int | None =
         notificar_evento_pedido(cur, id_pedido, "comprovante_enviado")
     except Exception:
         pass
+    try:
+        from api.bling.pedidos import tentar_exportar_pedido_fornecedor_apos_comprovante
+
+        tentar_exportar_pedido_fornecedor_apos_comprovante(cur, id_pedido)
+    except Exception:
+        pass
 
 
 def confirmar_pix_manual(

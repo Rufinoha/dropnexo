@@ -371,9 +371,9 @@ def vendedores_responder():
             return jsonify(success=True, message="Vínculo retomado (despausado).")
 
         if acao == "aprovar":
-            from sistema.planos.limites import limites_plano, mensagem_limite_conexoes
+            from sistema.planos.limites import limites_plano_tenant, mensagem_limite_conexoes
 
-            lim = limites_plano(tipo_negocio="fornecedor")
+            lim = limites_plano_tenant(cur, int(id_forn), "fornecedor")
             limite_vd = lim.get("conexoes")
             if limite_vd is not None:
                 cur.execute(

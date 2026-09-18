@@ -679,7 +679,16 @@ from typing import Any
 from api.bling.cliente import api_request
 from fornecedor.catalogo.catalogo import id_bling_produto
 from global_utils import agora_utc
-from core.pedidos.servico import STATUS_PAGO, listar_itens_pedido, obter_pedido, status_vendedor_pedido
+from core.pedidos.servico import (
+    STATUS_AGUARDANDO_CONFIRMACAO,
+    STATUS_PAGO,
+    listar_itens_pedido,
+    obter_pedido,
+    status_vendedor_pedido,
+)
+
+# Exporta ao Bling do fornecedor a partir do comprovante (aguardando aprovação) ou já pago.
+_STATUS_EXPORTAVEIS_BLING = frozenset({STATUS_AGUARDANDO_CONFIRMACAO, STATUS_PAGO})
 
 
 def _registrar_log(
@@ -908,8 +917,12 @@ def exportar_pedido_fornecedor_bling(
     # O DropNexo é o hub: origem do vendedor → DN → Bling do fornecedor.
     _ = forcar  # mantido por compatibilidade da assinatura
 
-    if status_vendedor_pedido(ped) != STATUS_PAGO:
-        raise ValueError("Somente pedidos pagos podem ser exportados ao Bling.")
+    st = status_vendedor_pedido(ped)
+    if st not in _STATUS_EXPORTAVEIS_BLING:
+        raise ValueError(
+            "Somente pedidos com comprovante enviado (aguardando aprovação) "
+            "ou pagos podem ser exportados ao Bling."
+        )
 
     if _pedido_ja_exportado(cur, id_forn, id_pedido):
         return {"exportados": 0, "ignorado": True, "message": "Pedido já exportado ao Bling."}
@@ -925,6 +938,8 @@ def exportar_pedido_fornecedor_bling(
         data_str = datetime.now(timezone.utc).date().isoformat()
 
     obs_partes = [f"DropNexo #{ped.get('numero') or id_pedido}"]
+    if st == STATUS_AGUARDANDO_CONFIRMACAO:
+        obs_partes.append("Aguardando confirmação do pagamento (comprovante anexado).")
     if ped.get("observacoes"):
         obs_partes.append(str(ped["observacoes"])[:500])
 
@@ -985,6 +1000,7 @@ def pedidos_exportacao_auto_ativa(cur, id_tenant: int) -> bool:
 
 
 def tentar_exportar_pedido_fornecedor_apos_pagamento(cur, id_pedido: int) -> bool:
+    """Tenta exportar ao Bling (auto). Usado após comprovante ou após pagamento confirmado."""
     ped = obter_pedido(cur, id_pedido)
     if not ped:
         return False
@@ -1000,6 +1016,10 @@ def tentar_exportar_pedido_fornecedor_apos_pagamento(cur, id_pedido: int) -> boo
         _registrar_log(cur, id_forn, "fornecedor", "aviso", f"Pedido #{id_pedido}", str(e)[:500])
         return False
 
+
+def tentar_exportar_pedido_fornecedor_apos_comprovante(cur, id_pedido: int) -> bool:
+    """Atalho semântico: exporta ao anexar comprovante (aguardando aprovação)."""
+    return tentar_exportar_pedido_fornecedor_apos_pagamento(cur, id_pedido)
 
 def exportar_pedidos_pendentes_fornecedor(
     cur,
@@ -1033,7 +1053,7 @@ def exportar_pedidos_pendentes_fornecedor(
         SELECT p.id
         FROM tbl_pedido p
         WHERE p.id_tenant_fornecedor = %s
-          AND p.{cv} = %s
+          AND p.{cv} IN (%s, %s)
           AND COALESCE(p.pago_em, p.confirmado_em, p.criado_em) >= %s
           AND NOT EXISTS (
               SELECT 1 FROM tbl_integracao_map m
@@ -1042,7 +1062,13 @@ def exportar_pedidos_pendentes_fornecedor(
           )
         ORDER BY p.id
         """,
-        (id_tenant, STATUS_PAGO, limite, id_tenant),
+        (
+            id_tenant,
+            STATUS_AGUARDANDO_CONFIRMACAO,
+            STATUS_PAGO,
+            limite,
+            id_tenant,
+        ),
     )
     ids = [int(r[0]) for r in cur.fetchall()]
 

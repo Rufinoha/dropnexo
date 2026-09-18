@@ -1443,7 +1443,7 @@ def solicitar_vinculo():
         if id_azf:
             snap["id_armazem_fornecedor"] = id_azf
 
-        from sistema.planos.limites import limites_plano, mensagem_limite_conexoes
+        from sistema.planos.limites import limites_plano, limites_plano_tenant, mensagem_limite_conexoes
 
         lim = limites_plano(tipo_negocio="vendedor")
         limite_forn = lim.get("conexoes")
@@ -1467,9 +1467,11 @@ def solicitar_vinculo():
                     message=mensagem_limite_conexoes(tipo="vendedor", limite=int(limite_forn)),
                 ), 403
 
+        # Aprovação automática só se o FORNECEDOR ainda tiver vaga no plano dele.
+        # Sem vaga: solicitação segue como "aguardando" (vendedor nunca é bloqueado por isso).
         auto_aprovar = bool(req.get("aprovacao_automatica"))
         if auto_aprovar:
-            lim_fn = limites_plano(tipo_negocio="fornecedor")
+            lim_fn = limites_plano_tenant(cur, int(id_forn), "fornecedor")
             limite_vd = lim_fn.get("conexoes")
             if limite_vd is not None:
                 cur.execute(
@@ -1483,12 +1485,7 @@ def solicitar_vinculo():
                 )
                 aprovados = int(cur.fetchone()[0] or 0)
                 if aprovados >= int(limite_vd):
-                    return jsonify(
-                        success=False,
-                        message=mensagem_limite_conexoes(
-                            tipo="fornecedor", limite=int(limite_vd)
-                        ),
-                    ), 403
+                    auto_aprovar = False
 
         status_vinculo = "ativo" if auto_aprovar else "aguardando"
         respondido_em = agora_utc() if auto_aprovar else None
