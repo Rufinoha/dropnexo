@@ -341,13 +341,20 @@ def pedido_anexos_upload(id_pedido: int):
         return jsonify(success=False, message=str(e)), 400
     except Exception as e:
         conn.rollback()
+        import logging
+
+        logging.getLogger(__name__).exception(
+            "Falha upload anexo pedido=%s tipo=%s", id_pedido, tipo
+        )
         msg = str(e).strip() or "Erro ao enviar anexo."
-        # CHECK antigo no banco: tipicamente "comprovante_pix" / "violates check constraint"
+        # Mensagem amigável só para violação real do CHECK de tipo
         low = msg.lower()
-        if "check" in low or "comprovante_pix" in low or "tipo" in low:
+        if "tbl_pedido_anexo_tipo_check" in low or (
+            "check constraint" in low and "comprovante_pix" in low
+        ):
             msg = (
-                "Banco desatualizado para anexos (tipo comprovante). "
-                "Execute o SQL 056_pedido_anexo_tipos.sql e tente novamente."
+                "Banco ainda rejeita o tipo comprovante_pix. "
+                "Confirme o SQL 056 no mesmo banco do site (produção) e reinicie a aplicação."
             )
         return jsonify(success=False, message=msg), 500
     finally:

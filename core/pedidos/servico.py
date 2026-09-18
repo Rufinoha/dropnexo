@@ -3342,7 +3342,7 @@ def _tem_tabela_anexo(cur) -> bool:
 
 
 def _garantir_check_tipo_anexo(cur) -> None:
-    """Garante CHECK de tipo incluindo comprovante_pix e declaracao (evita 500 no upload)."""
+    """Garante CHECK de tipo incluindo comprovante_pix (evita 500 no upload)."""
     global _CHECK_TIPO_ANEXO_OK
     if _CHECK_TIPO_ANEXO_OK:
         return
@@ -3358,7 +3358,8 @@ def _garantir_check_tipo_anexo(cur) -> None:
     )
     row = cur.fetchone()
     defn = (row[0] or "").lower() if row else ""
-    if "comprovante_pix" in defn and "declaracao" in defn:
+    # Se já aceita comprovante, não mexe (evita DROP sem permissão / efeito colateral).
+    if "comprovante_pix" in defn:
         _CHECK_TIPO_ANEXO_OK = True
         return
     try:
