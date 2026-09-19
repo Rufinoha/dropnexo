@@ -3,15 +3,14 @@
 {% set nav_ativo = 'fn_pedidos' %}
 {% block topbar_title %}Pedidos recebidos{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('fn_pedidos.static', filename='style/Cfn_pedidos.css') }}?v=12" />
+<link rel="stylesheet" href="{{ url_for('fn_pedidos.static', filename='style/Cfn_pedidos.css') }}?v=13" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal PdFn_Page">
-  <header class="PdFn_Hero">
-    <div class="PdFn_HeroCopy">
-      <p class="PdFn_Eyebrow">Mesa de expedição</p>
+  <div class="cl-page-title PdFn_PageHead">
+    <div class="PdFn_PageHeadText">
       <h2>Pedidos recebidos</h2>
-      <p class="PdFn_HeroDesc">Valide o PIX, confira etiqueta e NF, separe e expede — tudo no mesmo fluxo.</p>
+      <p class="cl-page-desc">Valide o PIX, confira etiqueta e NF, separe e expede — tudo no mesmo fluxo.</p>
     </div>
     <div class="PdFn_Stats" id="pd_fn_stats" aria-live="polite">
       <div class="PdFn_Stat" data-stat="aguardando_pagamento">
@@ -27,7 +26,7 @@
         <span class="PdFn_StatLbl">Prontos p/ separar</span>
       </div>
     </div>
-  </header>
+  </div>
 
   <div class="PdFn_Toolbar">
     <div class="PdFn_Chips" id="pd_fn_chips" role="tablist" aria-label="Filtrar por situação">
@@ -69,5 +68,5 @@
 {% endblock %}
 {% block page_js %}
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-<script src="{{ url_for('fn_pedidos.static', filename='script/Sfn_pedidos.js') }}?v=12"></script>
+<script src="{{ url_for('fn_pedidos.static', filename='script/Sfn_pedidos.js') }}?v=13"></script>
 {% endblock %}

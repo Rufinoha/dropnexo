@@ -58,23 +58,18 @@
   function thumbsHtml(p) {
     const preview = p.itens_preview || p.itens || [];
     if (!preview.length) {
-      return `<div class="PdFn_Thumbs"><span class="PdFn_Thumb PdFn_Thumb--empty">SEM FOTO</span></div>`;
+      return `<div class="PdFn_Thumbs"><span class="PdFn_Thumb PdFn_Thumb--empty">—</span></div>`;
     }
-    const shown = preview.slice(0, 3);
-    const extra = Math.max(0, (p.itens_preview || p.itens || []).length - shown.length);
-    const imgs = shown
-      .map((i, idx) => {
-        const url = i.imagem_url || "";
-        if (url) {
-          return `<img class="PdFn_Thumb" src="${esc(url)}" alt="" loading="lazy" style="z-index:${3 - idx}" />`;
-        }
-        return `<span class="PdFn_Thumb PdFn_Thumb--empty" style="z-index:${3 - idx}">PROD</span>`;
-      })
-      .join("");
+    const first = preview[0];
+    const extra = Math.max(0, preview.length - 1);
+    const url = first.imagem_url || "";
+    const img = url
+      ? `<img class="PdFn_Thumb" src="${esc(url)}" alt="" loading="lazy" />`
+      : `<span class="PdFn_Thumb PdFn_Thumb--empty">PROD</span>`;
     const more = extra
-      ? `<span class="PdFn_Thumb PdFn_Thumb--more" style="z-index:0">+${extra}</span>`
+      ? `<span class="PdFn_Thumb PdFn_Thumb--more">+${extra}</span>`
       : "";
-    return `<div class="PdFn_Thumbs">${imgs}${more}</div>`;
+    return `<div class="PdFn_Thumbs">${img}${more}</div>`;
   }
 
   function produtoResumo(p) {
@@ -145,7 +140,7 @@
     }
     if (vazio) vazio.hidden = true;
     listaEl.innerHTML = rows
-      .map((p, idx) => {
+      .map((p) => {
         const st = stV(p);
         const urgent = st === "aguardando_confirmacao";
         const ready = st === "pago";
@@ -164,7 +159,7 @@
           .filter(Boolean)
           .join(" ");
         return `
-      <button type="button" class="${cardCls}" data-id="${p.id}" style="animation-delay:${Math.min(idx, 8) * 0.04}s">
+      <button type="button" class="${cardCls}" data-id="${p.id}">
         ${thumbsHtml(p)}
         <div class="PdFn_CardMain">
           <div class="PdFn_CardTop">
