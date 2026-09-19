@@ -3,15 +3,15 @@
 {% set nav_ativo = 'fn_pedidos' %}
 {% block topbar_title %}Pedidos recebidos{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('fn_pedidos.static', filename='style/Cfn_pedidos.css') }}?v=11" />
+<link rel="stylesheet" href="{{ url_for('fn_pedidos.static', filename='style/Cfn_pedidos.css') }}?v=12" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal PdFn_Page">
   <header class="PdFn_Hero">
     <div class="PdFn_HeroCopy">
-      <p class="PdFn_Eyebrow">Operação</p>
+      <p class="PdFn_Eyebrow">Mesa de expedição</p>
       <h2>Pedidos recebidos</h2>
-      <p class="PdFn_HeroDesc">Acompanhe pagamento, aprove comprovantes e prepare a expedição — com foto do produto em cada pedido.</p>
+      <p class="PdFn_HeroDesc">Valide o PIX, confira etiqueta e NF, separe e expede — tudo no mesmo fluxo.</p>
     </div>
     <div class="PdFn_Stats" id="pd_fn_stats" aria-live="polite">
       <div class="PdFn_Stat" data-stat="aguardando_pagamento">
@@ -24,7 +24,7 @@
       </div>
       <div class="PdFn_Stat" data-stat="pago">
         <span class="PdFn_StatVal">0</span>
-        <span class="PdFn_StatLbl">Pagos</span>
+        <span class="PdFn_StatLbl">Prontos p/ separar</span>
       </div>
     </div>
   </header>
@@ -55,9 +55,10 @@
 <div id="pd_fn_modal" class="PdFn_Modal" hidden>
   <div class="PdFn_ModalInner" role="dialog" aria-modal="true" aria-labelledby="pd_fn_titulo">
     <header class="PdFn_ModalHead">
-      <div>
+      <div class="PdFn_ModalHeadMain">
         <p class="PdFn_ModalKicker" id="pd_fn_kicker">Pedido</p>
         <h3 id="pd_fn_titulo">Pedido</h3>
+        <div class="PdFn_HeadMeta" id="pd_fn_head_meta"></div>
       </div>
       <button type="button" class="PdFn_Close" id="pd_fn_fechar" aria-label="Fechar">×</button>
     </header>
@@ -68,5 +69,5 @@
 {% endblock %}
 {% block page_js %}
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-<script src="{{ url_for('fn_pedidos.static', filename='script/Sfn_pedidos.js') }}?v=11"></script>
+<script src="{{ url_for('fn_pedidos.static', filename='script/Sfn_pedidos.js') }}?v=12"></script>
 {% endblock %}

@@ -1,4 +1,5 @@
 (function () {
+  const API = "/armazem/pedidos";
   const LABEL = {
     importado: "Aguardando pagamento",
     aguardando_pagamento: "Aguardando pagamento",
@@ -23,6 +24,7 @@
   const body = document.getElementById("pd_fn_body");
   const titulo = document.getElementById("pd_fn_titulo");
   const kicker = document.getElementById("pd_fn_kicker");
+  const headMeta = document.getElementById("pd_fn_head_meta");
   const foot = document.getElementById("pd_fn_foot");
   const buscaEl = document.getElementById("pd_fn_busca");
 
@@ -37,6 +39,7 @@
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
       .replace(/"/g, "&quot;");
+  const int = (n) => Number(n || 0);
 
   function badge(st) {
     return `<span class="PdFn_Badge PdFn_Badge--${esc(st)}">${esc(LABEL[st] || st)}</span>`;
@@ -44,6 +47,12 @@
 
   function origemLabel(origem) {
     return ORIGEM[origem] || (origem ? String(origem) : "");
+  }
+
+  function setModalOpen(open) {
+    if (!modal) return;
+    modal.hidden = !open;
+    document.body.classList.toggle("PdFn_ModalOpen", !!open);
   }
 
   function thumbsHtml(p) {
@@ -75,6 +84,13 @@
     const qtd = p.qtd_itens || itens.reduce((s, i) => s + (i.quantidade || 0), 0);
     if (itens.length === 1) return `${primeiro} · ${qtd} un.`;
     return `${primeiro} +${itens.length - 1} · ${qtd} un.`;
+  }
+
+  function ctaLista(st) {
+    if (st === "aguardando_confirmacao") return "Validar PIX";
+    if (st === "pago") return "Separar";
+    if (st === "em_expedicao") return "Acompanhar";
+    return "Abrir";
   }
 
   function atualizarStats(rows) {
@@ -132,6 +148,7 @@
       .map((p, idx) => {
         const st = stV(p);
         const urgent = st === "aguardando_confirmacao";
+        const ready = st === "pago";
         const data = p.criado_em
           ? new Date(p.criado_em).toLocaleDateString("pt-BR", {
               day: "2-digit",
@@ -139,8 +156,15 @@
             })
           : "—";
         const orig = origemLabel(p.origem);
+        const cardCls = [
+          "PdFn_Card",
+          urgent ? "PdFn_Card--urgent" : "",
+          ready ? "PdFn_Card--ready" : "",
+        ]
+          .filter(Boolean)
+          .join(" ");
         return `
-      <button type="button" class="PdFn_Card${urgent ? " PdFn_Card--urgent" : ""}" data-id="${p.id}" style="animation-delay:${Math.min(idx, 8) * 0.04}s">
+      <button type="button" class="${cardCls}" data-id="${p.id}" style="animation-delay:${Math.min(idx, 8) * 0.04}s">
         ${thumbsHtml(p)}
         <div class="PdFn_CardMain">
           <div class="PdFn_CardTop">
@@ -153,7 +177,7 @@
         </div>
         <div class="PdFn_CardSide">
           <span class="PdFn_CardTotal">${fmt(p.valor_total)}</span>
-          <span class="PdFn_CardCta">${urgent ? "Validar PIX →" : "Abrir →"}</span>
+          <span class="PdFn_CardCta">${esc(ctaLista(st))} →</span>
         </div>
       </button>`;
       })
@@ -165,7 +189,7 @@
   }
 
   async function carregar() {
-    const r = await fetch("/armazem/pedidos/dados", { credentials: "same-origin" });
+    const r = await fetch(`${API}/dados`, { credentials: "same-origin" });
     const j = await r.json();
     if (!j.success) return;
     todosPedidos = j.pedidos || [];
@@ -173,10 +197,160 @@
     renderLista();
   }
 
+  function docsInfo(p) {
+    const anexos = p.anexos || [];
+    const etq = anexos.find((a) => a.tipo === "etiqueta") || null;
+    const fiscal =
+      anexos.find((a) => a.tipo === "nf") ||
+      anexos.find((a) => a.tipo === "declaracao") ||
+      null;
+    const comprovantes = anexos.filter((a) => a.tipo === "comprovante_pix");
+    return {
+      etq,
+      fiscal,
+      comprovantes,
+      ok: !!(etq && fiscal),
+    };
+  }
+
+  function anexoHref(a) {
+    return `${API}/anexos/arquivo?caminho=${encodeURIComponent(a.caminho)}`;
+  }
+
+  function stepRail(st) {
+    const payDone = !["aguardando_pagamento", "importado", "aguardando_confirmacao"].includes(st);
+    const payActive = ["aguardando_pagamento", "importado", "aguardando_confirmacao"].includes(st);
+    const packDone = ["em_expedicao", "entregue"].includes(st);
+    const packActive = st === "pago";
+    const shipDone = st === "entregue";
+    const shipActive = st === "em_expedicao";
+
+    const cls = (done, active) =>
+      `PdFn_Step${done ? " is-done" : ""}${active ? " is-active" : ""}`;
+
+    return `
+      <ol class="PdFn_Rail" aria-label="Etapas do pedido">
+        <li class="${cls(payDone, payActive)}"><span>1</span><em>Pagamento</em></li>
+        <li class="${cls(packDone, packActive)}"><span>2</span><em>Separar</em></li>
+        <li class="${cls(shipDone, shipActive)}"><span>3</span><em>Expedir</em></li>
+      </ol>`;
+  }
+
+  function checkItem(ok, label, detail, href) {
+    if (ok && href) {
+      return `
+        <a class="PdFn_Check PdFn_Check--ok" href="${href}" target="_blank" rel="noopener">
+          <span class="PdFn_CheckMark" aria-hidden="true">✓</span>
+          <div>
+            <strong>${esc(label)}</strong>
+            <p>${esc(detail || "Abrir arquivo")}</p>
+          </div>
+          <span class="PdFn_CheckGo">Abrir</span>
+        </a>`;
+    }
+    if (ok) {
+      return `
+        <div class="PdFn_Check PdFn_Check--ok">
+          <span class="PdFn_CheckMark" aria-hidden="true">✓</span>
+          <div>
+            <strong>${esc(label)}</strong>
+            <p>${esc(detail || "Pronto")}</p>
+          </div>
+        </div>`;
+    }
+    return `
+      <div class="PdFn_Check PdFn_Check--miss">
+        <span class="PdFn_CheckMark" aria-hidden="true">!</span>
+        <div>
+          <strong>${esc(label)}</strong>
+          <p>${esc(detail || "Ainda não anexado")}</p>
+        </div>
+      </div>`;
+  }
+
+  function docsChecklistHtml(p) {
+    const { etq, fiscal, comprovantes, ok } = docsInfo(p);
+    const fiscalTitulo = fiscal?.tipo === "declaracao" ? "Declaração" : "Nota fiscal";
+    const st = stV(p);
+    const pixNeeded = ["aguardando_confirmacao", "aguardando_pagamento", "importado"].includes(st);
+
+    let html = `
+      <div class="PdFn_Checks">
+        ${checkItem(!!etq, "Etiqueta de frete", etq?.nome_original || "Aguardando etiqueta", etq ? anexoHref(etq) : null)}
+        ${checkItem(!!fiscal, fiscalTitulo, fiscal?.nome_original || "Aguardando NF ou declaração", fiscal ? anexoHref(fiscal) : null)}`;
+
+    if (comprovantes.length || pixNeeded) {
+      const c = comprovantes[0];
+      html += checkItem(
+        !!c,
+        "Comprovante PIX",
+        c?.nome_original || "Sem comprovante anexado",
+        c ? anexoHref(c) : null
+      );
+    }
+
+    html += `</div>
+      <p class="PdFn_DocsHint ${ok ? "is-ok" : ""}">${
+        ok
+          ? "Documentos prontos — liberado para expedição."
+          : "Falta etiqueta e/ou NF. O vendedor anexa; você só precisa conferir."
+      }</p>`;
+    return html;
+  }
+
+  function itemLinha(i) {
+    const img = i.imagem_url
+      ? `<img class="PdFn_ItemImg" src="${esc(i.imagem_url)}" alt="" loading="lazy" />`
+      : `<div class="PdFn_ItemImg PdFn_ItemImg--ph">SEM FOTO</div>`;
+    const qtd = int(i.quantidade);
+    return `
+      <article class="PdFn_Item">
+        <div class="PdFn_ItemQtdBig" title="Quantidade">${qtd}<small>un</small></div>
+        ${img}
+        <div class="PdFn_ItemInfo">
+          <p class="PdFn_ItemName">${esc(i.nome_produto || "Produto")}</p>
+          <p class="PdFn_ItemSku">SKU ${esc(i.sku || "—")}</p>
+        </div>
+        <div class="PdFn_ItemRight">
+          <span class="PdFn_ItemVal">${fmt(i.subtotal_drop)}</span>
+        </div>
+      </article>`;
+  }
+
+  function enderecoTexto(p) {
+    return [
+      p.entrega_logradouro,
+      p.entrega_numero,
+      p.entrega_complemento,
+      p.entrega_bairro,
+      p.entrega_cidade && p.entrega_uf ? `${p.entrega_cidade}/${p.entrega_uf}` : p.entrega_cidade || p.entrega_uf,
+      p.entrega_cep ? `CEP ${p.entrega_cep}` : "",
+    ]
+      .filter(Boolean)
+      .join(", ");
+  }
+
+  async function copiarTexto(texto, btn) {
+    try {
+      await navigator.clipboard.writeText(texto);
+      if (btn) {
+        const prev = btn.textContent;
+        btn.textContent = "Copiado!";
+        btn.classList.add("is-copied");
+        setTimeout(() => {
+          btn.textContent = prev;
+          btn.classList.remove("is-copied");
+        }, 1400);
+      }
+    } catch (_) {
+      if (window.Swal) Swal.fire("Atenção", "Não foi possível copiar.", "info");
+    }
+  }
+
   function renderAcoes(p) {
     if (!foot) return;
     foot.innerHTML = "";
-    const comprovantes = (p.anexos || []).filter((a) => a.tipo === "comprovante_pix");
+    const { comprovantes, ok: docsOk } = docsInfo(p);
     const temComprovante = comprovantes.length > 0;
     const st = stV(p);
     const meio = String(p.meio_pagamento || "").toLowerCase();
@@ -192,7 +366,7 @@
       const links = comprovantes
         .map(
           (a) =>
-            `<li><a href="/armazem/pedidos/anexos/arquivo?caminho=${encodeURIComponent(a.caminho)}" target="_blank" rel="noopener">${esc(a.nome_original)}</a></li>`
+            `<li><a href="${anexoHref(a)}" target="_blank" rel="noopener">${esc(a.nome_original)}</a></li>`
         )
         .join("");
       const avisoSemComp = temComprovante
@@ -226,9 +400,52 @@
 
     if (st === "pago") {
       foot.innerHTML = `
+        <div class="PdFn_ShipBar">
+          <div class="PdFn_ShipFields">
+            <label>
+              <span>Rastreio <em>(opcional)</em></span>
+              <input type="text" id="pd_fn_rastreio" placeholder="Código de rastreio" autocomplete="off" value="${esc(p.codigo_rastreio || "")}" />
+            </label>
+            <label>
+              <span>Transportadora <em>(opcional)</em></span>
+              <input type="text" id="pd_fn_transp" placeholder="Ex.: Correios, Jadlog…" autocomplete="off" value="${esc(p.transportadora || "")}" />
+            </label>
+          </div>
+          <div class="PdFn_ShipActions">
+            <p class="PdFn_ShipHint">${
+              docsOk
+                ? "Documentos ok. Ao expedir, o estoque é baixado."
+                : "Ainda faltam documentos — a expedição só libera com etiqueta + NF."
+            }</p>
+            <button type="button" class="Cl_botaoprimario" id="pd_fn_btn_expedir" ${docsOk ? "" : "disabled"}>Marcar em expedição</button>
+          </div>
+        </div>`;
+      document.getElementById("pd_fn_btn_expedir")?.addEventListener("click", () => expedir(p.id));
+      return;
+    }
+
+    if (st === "em_expedicao") {
+      foot.innerHTML = `
+        <div class="PdFn_PayValid is-ok PdFn_ShipDone">
+          <div>
+            <strong>Em expedição</strong>
+            <p>${
+              p.codigo_rastreio
+                ? `Rastreio: <strong>${esc(p.codigo_rastreio)}</strong>`
+                : "Pedido separado e estoque baixado."
+            }</p>
+          </div>
+          <button type="button" class="Cl_botaoprimario" id="pd_fn_btn_entregue">Marcar entregue</button>
+        </div>`;
+      document.getElementById("pd_fn_btn_entregue")?.addEventListener("click", () => marcarEntregue(p.id));
+      return;
+    }
+
+    if (st === "entregue") {
+      foot.innerHTML = `
         <div class="PdFn_PayValid is-ok">
-          <strong>Pagamento confirmado</strong>
-          <p>Pedido liberado. Pronto para seguir com a expedição quando os documentos estiverem ok.</p>
+          <strong>Pedido entregue</strong>
+          <p>Fluxo concluído neste pedido.</p>
         </div>`;
     }
   }
@@ -252,7 +469,7 @@
       : { isConfirmed: confirm("Confirmar pagamento?") };
     if (!conf.isConfirmed) return;
 
-    const r = await fetch(`/armazem/pedidos/${id}/pagamento/confirmar`, {
+    const r = await fetch(`${API}/${id}/pagamento/confirmar`, {
       method: "POST",
       credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
@@ -261,8 +478,8 @@
     const j = await r.json();
     if (window.Swal) await Swal.fire(j.success ? "Pago" : "Erro", j.message, j.success ? "success" : "error");
     if (j.success) {
-      modal.hidden = true;
-      carregar();
+      await carregar();
+      await abrir(id);
     }
   }
 
@@ -317,7 +534,7 @@
       }
     }
 
-    const resp = await fetch(`/armazem/pedidos/${id}/pagamento/rejeitar`, {
+    const resp = await fetch(`${API}/${id}/pagamento/rejeitar`, {
       method: "POST",
       credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
@@ -328,155 +545,140 @@
     if (j.success) abrir(id);
   }
 
-  function itemLinha(i) {
-    const img = i.imagem_url
-      ? `<img class="PdFn_ItemImg" src="${esc(i.imagem_url)}" alt="" loading="lazy" />`
-      : `<div class="PdFn_ItemImg PdFn_ItemImg--ph">SEM FOTO</div>`;
-    return `
-      <article class="PdFn_Item">
-        ${img}
-        <div>
-          <p class="PdFn_ItemName">${esc(i.nome_produto || "Produto")}</p>
-          <p class="PdFn_ItemSku">${esc(i.sku || "—")}</p>
-        </div>
-        <div class="PdFn_ItemRight">
-          <span class="PdFn_ItemQtd">${int(i.quantidade)} un.</span>
-          <span class="PdFn_ItemVal">${fmt(i.subtotal_drop)}</span>
-        </div>
-      </article>`;
-  }
-
-  function int(n) {
-    return Number(n || 0);
-  }
-
-  function anexoHref(a) {
-    return `/armazem/pedidos/anexos/arquivo?caminho=${encodeURIComponent(a.caminho)}`;
-  }
-
-  function docCard({ tipo, titulo, sub, anexo, highlight, emptyHint }) {
-    const mark =
-      tipo === "etiqueta" ? "ETQ" : tipo === "comprovante_pix" ? "PIX" : tipo === "declaracao" ? "DEC" : "NF";
-    if (!anexo) {
-      return `
-        <div class="PdFn_DocCard PdFn_DocCard--empty">
-          <span class="PdFn_DocMark PdFn_DocMark--muted" aria-hidden="true">${mark}</span>
-          <div class="PdFn_DocBody">
-            <strong>${esc(titulo)}</strong>
-            <p>${esc(emptyHint || "Ainda não anexado")}</p>
-          </div>
-        </div>`;
-    }
-    const cls = highlight ? "PdFn_DocCard PdFn_DocCard--pix" : "PdFn_DocCard";
-    return `
-      <a class="${cls}" href="${anexoHref(anexo)}" target="_blank" rel="noopener">
-        <span class="PdFn_DocMark${highlight ? " PdFn_DocMark--pix" : ""}" aria-hidden="true">${mark}</span>
-        <div class="PdFn_DocBody">
-          <strong>${esc(titulo)}</strong>
-          <p>${esc(sub || anexo.nome_original || "Abrir arquivo")}</p>
-          ${highlight ? `<span class="PdFn_DocTag">Comprovante · validar</span>` : `<span class="PdFn_DocLink">Abrir PDF →</span>`}
-        </div>
-      </a>`;
-  }
-
-  function docsCardsHtml(p) {
-    const anexos = p.anexos || [];
-    const etq = anexos.find((a) => a.tipo === "etiqueta") || null;
-    const fiscal =
-      anexos.find((a) => a.tipo === "nf") ||
-      anexos.find((a) => a.tipo === "declaracao") ||
-      null;
-    const comprovante = anexos.find((a) => a.tipo === "comprovante_pix") || null;
-    const fiscalTitulo = fiscal?.tipo === "declaracao" ? "Declaração" : "Nota fiscal";
-
-    const cards = [
-      docCard({
-        tipo: "etiqueta",
-        titulo: "Etiqueta",
-        sub: etq?.nome_original,
-        anexo: etq,
-        emptyHint: "Aguardando etiqueta de frete",
-      }),
-      docCard({
-        tipo: fiscal?.tipo || "nf",
-        titulo: fiscalTitulo,
-        sub: fiscal?.nome_original,
-        anexo: fiscal,
-        emptyHint: "Aguardando NF ou declaração",
-      }),
-    ];
-
-    if (comprovante) {
-      cards.push(
-        docCard({
-          tipo: "comprovante_pix",
-          titulo: "Comprovante PIX",
-          sub: comprovante.nome_original,
-          anexo: comprovante,
-          highlight: true,
+  async function expedir(id) {
+    const rastreio = (document.getElementById("pd_fn_rastreio")?.value || "").trim();
+    const transp = (document.getElementById("pd_fn_transp")?.value || "").trim();
+    const conf = window.Swal
+      ? await Swal.fire({
+          icon: "question",
+          title: "Marcar em expedição?",
+          html: "Isso <strong>baixa o estoque</strong> e avança o pedido para <strong>Em expedição</strong>.",
+          showCancelButton: true,
+          confirmButtonText: "Sim, expedir",
+          cancelButtonText: "Cancelar",
+          confirmButtonColor: "#021F81",
         })
-      );
-    }
+      : { isConfirmed: confirm("Marcar em expedição? Estoque será baixado.") };
+    if (!conf.isConfirmed) return;
 
-    return `<div class="PdFn_DocGrid">${cards.join("")}</div>`;
+    const r = await fetch(`${API}/${id}/expedir`, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        codigo_rastreio: rastreio || null,
+        transportadora: transp || null,
+      }),
+    });
+    const j = await r.json();
+    if (window.Swal) await Swal.fire(j.success ? "Expedido" : "Erro", j.message, j.success ? "success" : "error");
+    if (j.success) {
+      await carregar();
+      await abrir(id);
+    }
+  }
+
+  async function marcarEntregue(id) {
+    const conf = window.Swal
+      ? await Swal.fire({
+          icon: "question",
+          title: "Marcar como entregue?",
+          showCancelButton: true,
+          confirmButtonText: "Sim, entregue",
+          cancelButtonText: "Cancelar",
+          confirmButtonColor: "#021F81",
+        })
+      : { isConfirmed: confirm("Marcar como entregue?") };
+    if (!conf.isConfirmed) return;
+
+    const r = await fetch(`${API}/${id}/entregue`, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+    const j = await r.json();
+    if (window.Swal) await Swal.fire(j.success ? "Entregue" : "Erro", j.message, j.success ? "success" : "error");
+    if (j.success) {
+      await carregar();
+      await abrir(id);
+    }
   }
 
   async function abrir(id) {
-    const r = await fetch(`/armazem/pedidos/${id}`, { credentials: "same-origin" });
+    const r = await fetch(`${API}/${id}`, { credentials: "same-origin" });
     const j = await r.json();
     if (!j.success) return;
     const p = j.pedido;
     pedidoAtual = p;
+    const st = stV(p);
+    const orig = origemLabel(p.origem);
+
     if (titulo) titulo.textContent = p.numero || `Pedido #${id}`;
-    if (kicker) {
-      const orig = origemLabel(p.origem);
-      kicker.textContent = orig ? `Pedido · ${orig}` : "Pedido";
+    if (kicker) kicker.textContent = orig ? `Pedido · ${orig}` : "Pedido recebido";
+    if (headMeta) {
+      headMeta.innerHTML = `${badge(st)} <span class="PdFn_HeadTotal">${fmt(p.valor_total)}</span>`;
     }
 
-    const end = [
-      p.entrega_logradouro,
-      p.entrega_numero,
-      p.entrega_bairro,
-      p.entrega_cidade && p.entrega_uf ? `${p.entrega_cidade}/${p.entrega_uf}` : p.entrega_cidade || p.entrega_uf,
-      p.entrega_cep,
-    ]
-      .filter(Boolean)
-      .join(", ");
-
-    const temComprovante = (p.anexos || []).some((a) => a.tipo === "comprovante_pix");
+    const end = enderecoTexto(p);
+    const tel = p.cliente_telefone ? String(p.cliente_telefone) : "";
 
     body.innerHTML = `
-      <div class="PdFn_Grid">
-        <div class="PdFn_Panel">
-          <p class="PdFn_PanelTitle">Situação</p>
-          <p>${badge(stV(p))}</p>
-          <p style="margin-top:0.55rem"><strong>Total</strong> ${fmt(p.valor_total)}${
-            p.valor_taxa_pedido > 0 ? ` <span class="PdFn_Hint">(taxa ${fmt(p.valor_taxa_pedido)})</span>` : ""
-          }</p>
-        </div>
-        <div class="PdFn_Panel">
-          <p class="PdFn_PanelTitle">Rede</p>
-          <p><strong>Vendedor</strong><br>${esc(p.vendedor_nome || "—")}</p>
-          <p style="margin-top:0.45rem"><strong>Cliente</strong><br>${esc(p.cliente_nome || "—")}${
-            p.cliente_telefone ? ` · ${esc(p.cliente_telefone)}` : ""
-          }</p>
-        </div>
-        <div class="PdFn_Panel PdFn_Panel--wide">
-          <p class="PdFn_PanelTitle">Entrega</p>
-          <p>${esc(end || "Endereço não informado")}</p>
-          ${p.codigo_rastreio ? `<p style="margin-top:0.4rem"><strong>Rastreio:</strong> ${esc(p.codigo_rastreio)}</p>` : ""}
-        </div>
-        <div class="PdFn_Panel PdFn_Panel--wide">
-          <p class="PdFn_PanelTitle">Produtos</p>
-          <div class="PdFn_Itens">${(p.itens || []).map(itemLinha).join("") || '<p class="PdFn_Hint">Sem itens.</p>'}</div>
-        </div>
-        <div class="PdFn_Panel PdFn_Panel--wide">
-          <p class="PdFn_PanelTitle">Anexos${temComprovante ? " · frete + comprovante" : " · frete"}</p>
-          ${docsCardsHtml(p)}
-        </div>
+      ${stepRail(st)}
+      <div class="PdFn_Ops">
+        <section class="PdFn_OpsMain">
+          <div class="PdFn_Block">
+            <div class="PdFn_BlockHead">
+              <p class="PdFn_PanelTitle">Separar</p>
+              <span class="PdFn_BlockCount">${int(p.qtd_itens || (p.itens || []).reduce((s, i) => s + int(i.quantidade), 0))} un.</span>
+            </div>
+            <div class="PdFn_Itens">${(p.itens || []).map(itemLinha).join("") || '<p class="PdFn_Hint">Sem itens.</p>'}</div>
+          </div>
+
+          <div class="PdFn_Block">
+            <div class="PdFn_BlockHead">
+              <p class="PdFn_PanelTitle">Entrega</p>
+              <button type="button" class="PdFn_CopyBtn" id="pd_fn_copy_end" ${end ? "" : "disabled"}>Copiar endereço</button>
+            </div>
+            <div class="PdFn_Addr">
+              <p class="PdFn_AddrName">${esc(p.cliente_nome || "Cliente")}${
+                tel ? ` · <a href="tel:${esc(tel.replace(/\s/g, ""))}">${esc(tel)}</a>` : ""
+              }</p>
+              <p class="PdFn_AddrLine">${esc(end || "Endereço não informado")}</p>
+              ${
+                p.codigo_rastreio
+                  ? `<p class="PdFn_AddrTrack"><strong>Rastreio</strong> ${esc(p.codigo_rastreio)}</p>`
+                  : ""
+              }
+            </div>
+          </div>
+        </section>
+
+        <aside class="PdFn_OpsSide">
+          <div class="PdFn_Block">
+            <p class="PdFn_PanelTitle">Rede</p>
+            <dl class="PdFn_Meta">
+              <div><dt>Vendedor</dt><dd>${esc(p.vendedor_nome || "—")}</dd></div>
+              <div><dt>Total</dt><dd>${fmt(p.valor_total)}${
+                p.valor_taxa_pedido > 0
+                  ? ` <span class="PdFn_Hint">(taxa ${fmt(p.valor_taxa_pedido)})</span>`
+                  : ""
+              }</dd></div>
+            </dl>
+          </div>
+          <div class="PdFn_Block">
+            <p class="PdFn_PanelTitle">Documentos</p>
+            ${docsChecklistHtml(p)}
+          </div>
+        </aside>
       </div>`;
+
+    document.getElementById("pd_fn_copy_end")?.addEventListener("click", (e) => {
+      copiarTexto(end, e.currentTarget);
+    });
+
     renderAcoes(p);
-    modal.hidden = false;
+    setModalOpen(true);
   }
 
   document.getElementById("pd_fn_chips")?.addEventListener("click", (e) => {
@@ -497,14 +699,12 @@
     buscaTimer = setTimeout(renderLista, 160);
   });
 
-  document.getElementById("pd_fn_fechar")?.addEventListener("click", () => {
-    modal.hidden = true;
-  });
+  document.getElementById("pd_fn_fechar")?.addEventListener("click", () => setModalOpen(false));
   modal?.addEventListener("click", (e) => {
-    if (e.target === modal) modal.hidden = true;
+    if (e.target === modal) setModalOpen(false);
   });
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && modal && !modal.hidden) modal.hidden = true;
+    if (e.key === "Escape" && modal && !modal.hidden) setModalOpen(false);
   });
 
   carregar();
