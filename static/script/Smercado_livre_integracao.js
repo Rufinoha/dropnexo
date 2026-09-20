@@ -3,6 +3,8 @@
     pedidos: document.getElementById("ml_pane_pedidos"),
     produtos: document.getElementById("ml_pane_produtos"),
     estoque: document.getElementById("ml_pane_estoque"),
+    categorias: document.getElementById("ml_pane_categorias"),
+    status: document.getElementById("ml_pane_status"),
   };
 
   const el = {
@@ -14,7 +16,6 @@
     btnDesconectar: document.getElementById("ml_btn_desconectar"),
     btnConectar: document.getElementById("ml_btn_conectar"),
     btnSync: document.getElementById("ml_btn_sync"),
-    btnMapearCategorias: document.getElementById("ml_btn_mapear_categorias"),
     btnSyncEstoque: document.getElementById("ml_btn_sync_estoque"),
     pedidosAuto: document.getElementById("ml_pedidos_auto"),
     produtosAuto: document.getElementById("ml_produtos_auto"),
@@ -23,14 +24,11 @@
     garantiaTipo: document.getElementById("ml_garantia_tipo"),
     garantiaTempo: document.getElementById("ml_garantia_tempo"),
     msg: document.getElementById("ml_msg"),
-    msgModal: document.getElementById("ml_msg_modal"),
+    msgCat: document.getElementById("ml_msg_cat"),
     subtabs: document.getElementById("ml_subtabs"),
-    modalCat: document.getElementById("ml_modal_categorias"),
     tbodyCat: document.getElementById("ml_tbody_categorias"),
-    btnModalCatSalvar: document.getElementById("ml_modal_cat_salvar"),
-    btnModalCatSugerirTodas: document.getElementById("ml_modal_cat_sugerir_todas"),
-    btnModalCatFechar: document.getElementById("ml_modal_cat_fechar"),
-    btnModalCatCancelar: document.getElementById("ml_modal_cat_cancelar"),
+    btnCatSalvar: document.getElementById("ml_cat_salvar"),
+    btnCatSugerirTodas: document.getElementById("ml_cat_sugerir_todas"),
     avisoGratis: document.getElementById("ml_aviso_gratis"),
     pickerModal: document.getElementById("ml_modal_picker_cat"),
     pickerBusca: document.getElementById("ml_picker_busca"),
@@ -38,12 +36,16 @@
     pickerHint: document.getElementById("ml_picker_hint"),
     btnPickerFechar: document.getElementById("ml_picker_fechar"),
     btnPickerCancelar: document.getElementById("ml_picker_cancelar"),
+    statusMap: document.getElementById("ml_status_map"),
+    statusHint: document.getElementById("ml_status_hint"),
   };
 
   let categoriasMap = [];
+  let categoriasCarregadas = false;
+  let statusCarregado = false;
   let salvando = false;
   let cfgAtual = {};
-  /** Cache temporário das sugestões ML enquanto o modal está aberto. */
+  /** Cache temporário das sugestões ML enquanto a aba Categorias está aberta. */
   const sugestoesCache = new Map();
   const sugestoesInflight = new Map();
   let prefetchSeq = 0;
@@ -60,6 +62,14 @@
       localStorage.setItem("ml_integracao_aba", id);
     } catch {
       /* ignore */
+    }
+    if (id === "categorias") {
+      carregarAbaCategorias().catch((e) => feedbackCat(e.message, true));
+    }
+    if (id === "status") {
+      carregarAbaStatus().catch((e) => {
+        if (el.statusHint) el.statusHint.textContent = e.message || "Falha ao carregar status.";
+      });
     }
   }
 
@@ -101,23 +111,22 @@
     el.msg.classList.toggle("is-erro", !!erro);
   }
 
-  function modalAberto() {
-    return !!(el.modalCat && el.modalCat.open);
-  }
-
-  function mostrarMsgModal(t, erro) {
-    if (!el.msgModal) {
+  function mostrarMsgCat(t, erro) {
+    if (!el.msgCat) {
       if (t) mostrarMsg(t, erro);
       return;
     }
-    el.msgModal.textContent = t || "";
-    el.msgModal.hidden = !t;
-    el.msgModal.classList.toggle("is-erro", !!erro);
+    el.msgCat.textContent = t || "";
+    el.msgCat.hidden = !t;
+    el.msgCat.classList.toggle("is-erro", !!erro);
   }
 
   function feedbackCat(t, erro) {
-    if (modalAberto()) mostrarMsgModal(t, erro);
-    else mostrarMsg(t, erro);
+    mostrarMsgCat(t, erro);
+  }
+
+  function abaCategoriasAtiva() {
+    return !!(PANES.categorias && !PANES.categorias.hidden);
   }
 
   function renderConta(cfg) {
@@ -547,7 +556,7 @@
       feedbackCat("Todas as linhas já têm categoria ML. Nada a sugerir.", false);
       return;
     }
-    const btn = el.btnModalCatSugerirTodas;
+    const btn = el.btnCatSugerirTodas;
     if (btn) {
       btn.disabled = true;
       btn.classList.add("is-loading");
@@ -557,7 +566,7 @@
     const nomesFalha = [];
     try {
       for (let i = 0; i < pendentes.length; i++) {
-        if (!modalAberto()) break;
+        if (!abaCategoriasAtiva()) break;
         const tr = pendentes[i];
         const nome = tr.querySelector("td")?.textContent?.trim() || "";
         const idCategoria = parseInt(tr.dataset.catId, 10) || null;
@@ -598,33 +607,28 @@
     }
   }
 
-  async function abrirModalCategorias() {
-    if (!el.modalCat) return;
+  async function carregarAbaCategorias(forcar) {
+    if (categoriasCarregadas && !forcar) return;
     limparCacheSugestoes();
-    el.modalCat.showModal();
-    mostrarMsgModal("Carregando categorias…", false);
+    feedbackCat("Carregando categorias…", false);
     try {
       await carregarMapeamentoCategorias();
-      mostrarMsgModal("", false);
+      categoriasCarregadas = true;
+      feedbackCat("", false);
     } catch (e) {
-      mostrarMsgModal(e.message, true);
+      feedbackCat(e.message, true);
+      throw e;
     }
   }
 
-  function fecharModalCategorias() {
-    limparCacheSugestoes();
-    mostrarMsgModal("", false);
-    el.modalCat?.close();
-  }
-
   async function salvarMapeamentoCategorias() {
-    if (!el.btnModalCatSalvar) return;
+    if (!el.btnCatSalvar) return;
     const itens = coletarItensMapeamento();
     if (!itens.length) {
       feedbackCat("Escolha ao menos uma categoria Mercado Livre.", true);
       return;
     }
-    el.btnModalCatSalvar.disabled = true;
+    el.btnCatSalvar.disabled = true;
     try {
       const r = await fetch("/api/integracoes/mercado-livre/categorias-mapeamento/salvar", {
         method: "POST",
@@ -634,13 +638,59 @@
       });
       const j = await r.json();
       if (!r.ok || !j.success) throw new Error(j.message || "Falha ao salvar.");
-      fecharModalCategorias();
-      mostrarMsg(j.message || "Mapeamento salvo.", false);
+      categoriasCarregadas = false;
+      await carregarAbaCategorias(true);
+      feedbackCat(j.message || "Mapeamento salvo.", false);
     } catch (e) {
       feedbackCat(e.message, true);
     } finally {
-      el.btnModalCatSalvar.disabled = false;
+      el.btnCatSalvar.disabled = false;
     }
+  }
+
+  function renderStatusMapPadrao(linhas) {
+    if (!el.statusMap) return;
+    if (!linhas || !linhas.length) {
+      el.statusMap.innerHTML = '<p class="Mp_StatusEmpty">Nenhum mapeamento padrão cadastrado.</p>';
+      if (el.statusHint) el.statusHint.textContent = "Nenhum mapeamento padrão para Mercado Livre.";
+      return;
+    }
+    el.statusMap.innerHTML = linhas
+      .map((row) => {
+        const aliases = (row.aliases || []).filter(Boolean);
+        const mlExtra = aliases.length
+          ? ` <span class="Mp_StatusAliases">(+ ${esc(aliases.join(", "))})</span>`
+          : "";
+        return `
+        <div class="Mp_StatusRow" role="row">
+          <div class="Mp_StatusDn">
+            <strong>${esc(row.status_dn_label || row.status_dn)}</strong>
+          </div>
+          <div class="Mp_StatusMl">
+            <strong>${esc(row.status_externo || "—")}</strong>${mlExtra}
+          </div>
+          <div class="Mp_StatusDesc">${esc(row.descricao || "")}</div>
+        </div>`;
+      })
+      .join("");
+    if (el.statusHint) {
+      el.statusHint.textContent =
+        "Amarração padrão da plataforma (somente leitura). Mantida em Configurações → Status de integração.";
+    }
+  }
+
+  async function carregarAbaStatus(forcar) {
+    if (statusCarregado && !forcar) return;
+    if (el.statusHint) el.statusHint.textContent = "Carregando mapeamento padrão…";
+    const r = await fetch("/api/integracoes/mercado-livre/status-padrao", {
+      credentials: "same-origin",
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.success) {
+      throw new Error(j.message || `Erro HTTP ${r.status} ao carregar mapeamento.`);
+    }
+    renderStatusMapPadrao(j.linhas || []);
+    statusCarregado = true;
   }
 
   async function apiBuscarCategoriasMl(termo, idCategoria, signal) {
@@ -759,20 +809,13 @@
     setTimeout(() => el.pickerBusca?.focus(), 50);
   }
 
-  el.btnMapearCategorias?.addEventListener("click", () => abrirModalCategorias());
-  el.btnModalCatSugerirTodas?.addEventListener("click", (ev) => {
+  el.btnCatSugerirTodas?.addEventListener("click", (ev) => {
     ev.preventDefault();
     sugerirTodasNaoMapeadas();
   });
-  el.btnModalCatSalvar?.addEventListener("click", (ev) => {
+  el.btnCatSalvar?.addEventListener("click", (ev) => {
     ev.preventDefault();
     salvarMapeamentoCategorias();
-  });
-  el.btnModalCatFechar?.addEventListener("click", () => fecharModalCategorias());
-  el.btnModalCatCancelar?.addEventListener("click", () => fecharModalCategorias());
-  el.modalCat?.addEventListener("close", () => {
-    limparCacheSugestoes();
-    mostrarMsgModal("", false);
   });
   el.tbodyCat?.addEventListener("click", (ev) => {
     const btn = ev.target.closest(".ml-btn-escolher");

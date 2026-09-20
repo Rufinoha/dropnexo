@@ -232,3 +232,187 @@ def excluir_tenant_completo(cur, id_tenant: int) -> dict:
         "log": log[-80:],  # últimas entradas
         "tabelas_alvo": len(targets),
     }
+
+
+_TIPOS_METRICAS = ("vendedor", "fornecedor", "armazem")
+
+
+def _classificar_pessoa(tipo_pessoa: str | None, documento: str | None) -> str:
+    tp = (tipo_pessoa or "").strip().upper()
+    digitos = "".join(ch for ch in (documento or "") if ch.isdigit())
+    if tp == "J" or len(digitos) == 14:
+        return "cnpj"
+    if tp == "F" or len(digitos) == 11:
+        return "pf"
+    return "indefinido"
+
+
+def _slot_tipo() -> dict:
+    return {
+        "total": 0,
+        "ativos": 0,
+        "inativos": 0,
+        "pf": 0,
+        "cnpj": 0,
+        "indefinido": 0,
+        "encerramentos_solicitados": 0,
+        "encerramentos_concluidos": 0,
+    }
+
+
+def metricas_tenants(cur) -> dict:
+    """Agrega panorama de tenants para o dashboard DEV."""
+    from datetime import date, datetime, timedelta, timezone
+
+    por_tipo = {t: _slot_tipo() for t in _TIPOS_METRICAS}
+    pessoa = {"pf": 0, "cnpj": 0, "indefinido": 0}
+    ativos = inativos = 0
+
+    cur.execute(
+        """
+        SELECT
+          LOWER(COALESCE(NULLIF(TRIM(tipo_negocio), ''), 'vendedor')),
+          COALESCE(ativo, FALSE),
+          COALESCE(tipo_pessoa, ''),
+          COALESCE(documento, '')
+        FROM tbl_tenant
+        """
+    )
+    for tipo_raw, ativo, tipo_pessoa, documento in cur.fetchall():
+        tipo = tipo_raw if tipo_raw in por_tipo else "vendedor"
+        slot = por_tipo[tipo]
+        slot["total"] += 1
+        if ativo:
+            slot["ativos"] += 1
+            ativos += 1
+        else:
+            slot["inativos"] += 1
+            inativos += 1
+        pessoa_cls = _classificar_pessoa(tipo_pessoa, documento)
+        slot[pessoa_cls] += 1
+        pessoa[pessoa_cls] += 1
+
+    total = ativos + inativos
+    enc = {
+        "solicitados": 0,
+        "em_andamento": 0,
+        "concluidos": 0,
+        "por_tipo": {t: 0 for t in _TIPOS_METRICAS},
+        "concluidos_por_tipo": {t: 0 for t in _TIPOS_METRICAS},
+    }
+
+    tem_cancel = False
+    try:
+        cur.execute("SELECT to_regclass('public.tbl_cancelamento_conta')")
+        tem_cancel = bool(cur.fetchone()[0])
+    except Exception:
+        tem_cancel = False
+
+    if tem_cancel:
+        cur.execute(
+            """
+            SELECT
+              LOWER(COALESCE(NULLIF(TRIM(t.tipo_negocio), ''), 'vendedor')),
+              COALESCE(c.etapa, 1),
+              (c.concluido_em IS NOT NULL)
+            FROM tbl_cancelamento_conta c
+            JOIN tbl_tenant t ON t.id = c.id_tenant
+            """
+        )
+        for tipo_raw, etapa, concluido in cur.fetchall():
+            tipo = tipo_raw if tipo_raw in por_tipo else "vendedor"
+            enc["solicitados"] += 1
+            enc["por_tipo"][tipo] = enc["por_tipo"].get(tipo, 0) + 1
+            por_tipo[tipo]["encerramentos_solicitados"] += 1
+            if concluido or int(etapa or 0) >= 3:
+                enc["concluidos"] += 1
+                enc["concluidos_por_tipo"][tipo] = enc["concluidos_por_tipo"].get(tipo, 0) + 1
+                por_tipo[tipo]["encerramentos_concluidos"] += 1
+            else:
+                enc["em_andamento"] += 1
+
+    hoje = datetime.now(timezone.utc).date()
+    inicio = hoje - timedelta(days=6)
+    dias = [(inicio + timedelta(days=i)).isoformat() for i in range(7)]
+    idx = {d: i for i, d in enumerate(dias)}
+
+    cadastros = [0] * 7
+    descadastros = [0] * 7
+    cad_tipo = {t: [0] * 7 for t in _TIPOS_METRICAS}
+    des_tipo = {t: [0] * 7 for t in _TIPOS_METRICAS}
+
+    cur.execute(
+        """
+        SELECT
+          criado_em::date AS dia,
+          LOWER(COALESCE(NULLIF(TRIM(tipo_negocio), ''), 'vendedor')) AS tipo,
+          COUNT(*)::int
+        FROM tbl_tenant
+        WHERE criado_em IS NOT NULL
+          AND criado_em::date >= %s
+          AND criado_em::date <= %s
+        GROUP BY 1, 2
+        """,
+        (inicio, hoje),
+    )
+    for dia, tipo_raw, qtd in cur.fetchall():
+        key = dia.isoformat() if isinstance(dia, date) else str(dia)
+        i = idx.get(key)
+        if i is None:
+            continue
+        tipo = tipo_raw if tipo_raw in por_tipo else "vendedor"
+        n = int(qtd or 0)
+        cadastros[i] += n
+        cad_tipo[tipo][i] += n
+
+    if tem_cancel:
+        cur.execute(
+            """
+            SELECT
+              c.concluido_em::date AS dia,
+              LOWER(COALESCE(NULLIF(TRIM(t.tipo_negocio), ''), 'vendedor')) AS tipo,
+              COUNT(*)::int
+            FROM tbl_cancelamento_conta c
+            JOIN tbl_tenant t ON t.id = c.id_tenant
+            WHERE c.concluido_em IS NOT NULL
+              AND c.concluido_em::date >= %s
+              AND c.concluido_em::date <= %s
+            GROUP BY 1, 2
+            """,
+            (inicio, hoje),
+        )
+        for dia, tipo_raw, qtd in cur.fetchall():
+            key = dia.isoformat() if isinstance(dia, date) else str(dia)
+            i = idx.get(key)
+            if i is None:
+                continue
+            tipo = tipo_raw if tipo_raw in por_tipo else "vendedor"
+            n = int(qtd or 0)
+            descadastros[i] += n
+            des_tipo[tipo][i] += n
+
+    def _soma(mapa: dict[str, list[int]]) -> dict[str, int]:
+        return {k: int(sum(v)) for k, v in mapa.items()}
+
+    return {
+        "total": total,
+        "ativos": ativos,
+        "inativos": inativos,
+        "pessoa": pessoa,
+        "encerramentos": enc,
+        "por_tipo": por_tipo,
+        "ultimos_7_dias": {
+            "dias": dias,
+            "cadastros": cadastros,
+            "descadastros": descadastros,
+            "cadastros_por_tipo": cad_tipo,
+            "descadastros_por_tipo": des_tipo,
+            "resumo": {
+                "cadastros": int(sum(cadastros)),
+                "descadastros": int(sum(descadastros)),
+                "cadastros_por_tipo": _soma(cad_tipo),
+                "descadastros_por_tipo": _soma(des_tipo),
+            },
+        },
+        "gerado_em": datetime.now(timezone.utc).isoformat(),
+    }

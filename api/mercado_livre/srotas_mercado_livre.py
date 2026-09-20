@@ -185,6 +185,28 @@ def status():
         conn.close()
 
 
+@ml_bp.get("/api/integracoes/mercado-livre/status-padrao")
+@login_obrigatorio()
+def status_padrao_listar():
+    """Mapeamento oficial DropNexo ↔ Mercado Livre (somente leitura)."""
+    if not _pode_integracoes():
+        return jsonify(success=False, message="Sem permissão."), 403
+    from core.integracoes.status_padrao import listar_status_padrao, seed_ml_se_vazio
+
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        seed_ml_se_vazio(cur)
+        conn.commit()
+        linhas = listar_status_padrao(cur, aplicacao="mercado_livre", contexto="vendedor")
+        return jsonify(success=True, linhas=linhas)
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)[:300]), 500
+    finally:
+        conn.close()
+
+
 @ml_bp.post("/api/integracoes/mercado-livre/config/salvar")
 @login_obrigatorio()
 def config_salvar():

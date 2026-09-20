@@ -241,6 +241,81 @@ def seed_bling_se_vazio(cur) -> None:
         )
 
 
+def seed_ml_se_vazio(cur) -> None:
+    garantir_tabela(cur)
+    cur.execute(
+        "SELECT COUNT(*) FROM tbl_integracao_status_padrao WHERE aplicacao = 'mercado_livre'"
+    )
+    if int(cur.fetchone()[0] or 0) > 0:
+        return
+    rows = [
+        (
+            "mercado_livre",
+            "vendedor",
+            "aguardando_pagamento",
+            "Aguardando pagamento",
+            "importar",
+            "paid",
+            '["confirmed"]',
+            "inbound",
+            "Pedido pago no Mercado Livre entra no DropNexo (comprador já pagou o marketplace).",
+            10,
+        ),
+        (
+            "mercado_livre",
+            "vendedor",
+            "em_expedicao",
+            "Expedido",
+            "expedido",
+            "shipped",
+            '["ready_to_ship","handling"]',
+            "ambos",
+            "Envio em andamento no ML / etiqueta — espelha no DropNexo e vice-versa quando possível.",
+            30,
+        ),
+        (
+            "mercado_livre",
+            "vendedor",
+            "entregue",
+            "Entregue",
+            "entregue",
+            "delivered",
+            "[]",
+            "ambos",
+            "Entregue ao destinatário final.",
+            40,
+        ),
+        (
+            "mercado_livre",
+            "vendedor",
+            "cancelado",
+            "Cancelado",
+            "cancelado",
+            "cancelled",
+            '["canceled"]',
+            "ambos",
+            "Cancelamento no ML cancela no DropNexo (e estorna estoque se aplicável).",
+            50,
+        ),
+    ]
+    for r in rows:
+        cur.execute(
+            """
+            INSERT INTO tbl_integracao_status_padrao (
+              aplicacao, contexto, status_dn, status_dn_label, evento,
+              status_externo, aliases, direcao, descricao, ordem
+            ) VALUES (%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s,%s)
+            ON CONFLICT (aplicacao, contexto, evento) DO NOTHING
+            """,
+            r,
+        )
+
+
+def seed_padrao_se_vazio(cur) -> None:
+    seed_bling_se_vazio(cur)
+    seed_ml_se_vazio(cur)
+
+
 def listar_status_padrao(
     cur,
     *,
@@ -248,7 +323,7 @@ def listar_status_padrao(
     contexto: str | None = None,
     apenas_ativos: bool = True,
 ) -> list[dict[str, Any]]:
-    seed_bling_se_vazio(cur)
+    seed_padrao_se_vazio(cur)
     clauses = ["1=1"]
     params: list[Any] = []
     if aplicacao:
@@ -272,7 +347,7 @@ def listar_status_padrao(
 
 
 def obter_status_padrao(cur, id_row: int) -> dict[str, Any] | None:
-    seed_bling_se_vazio(cur)
+    seed_padrao_se_vazio(cur)
     cur.execute(
         f"SELECT {_COLS} FROM tbl_integracao_status_padrao WHERE id = %s",
         (int(id_row),),
@@ -288,7 +363,7 @@ def nomes_externos_para_evento(
     evento: str,
 ) -> list[str]:
     """Lista de nomes (principal + aliases) para resolver ID na conta externa."""
-    seed_bling_se_vazio(cur)
+    seed_padrao_se_vazio(cur)
     ev = (evento or "").strip().lower()
     app = (aplicacao or "").strip().lower()
     ctx = (contexto or "").strip().lower()
@@ -347,7 +422,7 @@ def mapear_externo_para_dn(
 
 
 def salvar_status_padrao(cur, dados: dict[str, Any]) -> int:
-    seed_bling_se_vazio(cur)
+    seed_padrao_se_vazio(cur)
     aplicacao = (dados.get("aplicacao") or "").strip().lower()
     contexto = (dados.get("contexto") or "ambos").strip().lower()
     status_dn = (dados.get("status_dn") or "").strip().lower()
@@ -433,7 +508,7 @@ def salvar_status_padrao(cur, dados: dict[str, Any]) -> int:
 
 
 def excluir_status_padrao(cur, id_row: int) -> None:
-    seed_bling_se_vazio(cur)
+    seed_padrao_se_vazio(cur)
     cur.execute("DELETE FROM tbl_integracao_status_padrao WHERE id = %s", (int(id_row),))
 
 

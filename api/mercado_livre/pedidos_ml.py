@@ -559,14 +559,51 @@ def _importar_um_pedido_ml(cur, id_tenant: int, id_ml_pedido: str) -> dict[str, 
         if ship_id:
             for pid in ids_locais:
                 salvar_id_ml_shipment(cur, int(pid), ship_id)
+
+        # Pedido já existia: ainda assim avança status se o shipment já mudou
+        # (evita depender só do webhook de shipments).
+        status_avancados = 0
+        st_ship = ""
+        if ids_locais and isinstance(shipment, dict):
+            st_ship = (shipment.get("status") or "").lower()
+            if st_ship in ("cancelled", "canceled"):
+                return sincronizar_cancelamento_pedido_ml(
+                    cur,
+                    id_tenant,
+                    id_ml,
+                    motivo="Envio cancelado no Mercado Livre.",
+                )
+            from core.pedidos.status_integracao import (
+                aplicar_status_avancado,
+                mapear_status_ml_para_dn,
+            )
+
+            novo = mapear_status_ml_para_dn(None, shipping_status=st_ship)
+            if novo:
+                for pid in ids_locais:
+                    if aplicar_status_avancado(
+                        cur,
+                        int(pid),
+                        novo,
+                        origem_evento="mercado_livre",
+                        detalhe=f"Status sincronizado do envio ML no re-sync ({st_ship}).",
+                    ):
+                        status_avancados += 1
+
         return {
             "importado": False,
-            "atualizado": bool(fill.get("atualizado")),
-            "motivo": "dados_atualizados" if fill.get("atualizado") else "ja_importado",
+            "atualizado": bool(fill.get("atualizado")) or status_avancados > 0,
+            "motivo": (
+                "status_avancado"
+                if status_avancados
+                else ("dados_atualizados" if fill.get("atualizado") else "ja_importado")
+            ),
             "id_ml_pedido": id_ml,
             "id_ml_shipment": ship_id,
             "ids_pedido": ids_locais,
             "campos_atualizados": fill.get("campos") or [],
+            "status_avancados": status_avancados,
+            "shipment_status": st_ship or None,
             "cliente_ml": dados_cliente.get("cliente") or {},
         }
 
@@ -601,6 +638,25 @@ def _importar_um_pedido_ml(cur, id_tenant: int, id_ml_pedido: str) -> dict[str, 
 
         for pid in ids:
             salvar_id_ml_shipment(cur, int(pid), ship_id)
+
+    # Se o shipment já está avançado no momento da importação, espelha no DN.
+    if ids and isinstance(shipment, dict):
+        st_ship = (shipment.get("status") or "").lower()
+        from core.pedidos.status_integracao import (
+            aplicar_status_avancado,
+            mapear_status_ml_para_dn,
+        )
+
+        novo = mapear_status_ml_para_dn(None, shipping_status=st_ship)
+        if novo:
+            for pid in ids:
+                aplicar_status_avancado(
+                    cur,
+                    int(pid),
+                    novo,
+                    origem_evento="mercado_livre",
+                    detalhe=f"Status inicial do envio ML na importação ({st_ship}).",
+                )
 
     cur.execute(
         """
@@ -1258,12 +1314,29 @@ def exportar_status_pedido_ml(cur, id_pedido: int, *, evento: str) -> bool:
     except RuntimeError as e:
         # ME2 frequentemente rejeita seller_notifications — não quebra o fluxo local.
         _log.warning(
-            "ML export status pedido %s (evento=%s, mode=%s): %s",
+            "ML export status NÃO espelhado no marketplace | pedido=%s evento=%s "
+            "shipment=%s mode=%s erro=%s",
             id_pedido,
             evento_l,
-            mode,
+            ship_id,
+            mode or "?",
             e,
         )
+        try:
+            cur.execute(
+                """
+                INSERT INTO tbl_integracao_log (
+                    id_tenant, provedor, contexto, entidade, direcao, status, resumo, detalhe
+                ) VALUES (%s, 'mercado_livre', 'vendedor', 'pedido', 'exportar', 'aviso', %s, %s)
+                """,
+                (
+                    id_tenant,
+                    f"Status DN→ML não espelhado (pedido #{id_pedido}, {evento_l}).",
+                    f"shipment={ship_id} mode={mode or '?'} erro={str(e)[:400]}",
+                ),
+            )
+        except Exception:
+            pass
         return False
 
 

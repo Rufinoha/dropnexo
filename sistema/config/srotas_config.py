@@ -1420,6 +1420,24 @@ def manutencao_tenant_dados():
         conn.close()
 
 
+@config_bp.get(f"{MANUTENCAO_TENANT_PREFIX}/metricas")
+@login_obrigatorio()
+def manutencao_tenant_metricas():
+    if (r := _exigir_dev()) is not None:
+        return r
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        from sistema.config.servico_manutencao_tenant import metricas_tenants
+
+        return jsonify(success=True, metricas=metricas_tenants(cur))
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)[:400]), 500
+    finally:
+        conn.close()
+
+
 def _tenant_payload(cur, id_tenant: int) -> dict | None:
     cur.execute(
         """
@@ -2856,9 +2874,9 @@ def integracao_status_padrao_dados():
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
-        from core.integracoes.status_padrao import seed_bling_se_vazio, _row_to_dict, _COLS
+        from core.integracoes.status_padrao import seed_padrao_se_vazio, _row_to_dict, _COLS
 
-        seed_bling_se_vazio(cur)
+        seed_padrao_se_vazio(cur)
         clauses = ["1=1"]
         params: list = []
         if aplicacao:

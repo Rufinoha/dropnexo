@@ -92,7 +92,12 @@ def mapear_situacao_bling_para_dn(nome_situacao: str | None) -> str | None:
 
 
 def mapear_status_ml_para_dn(status_ml: str | None, *, shipping_status: str | None = None) -> str | None:
-    """Converte status de pedido/shipment ML → status_vendedor DropNexo."""
+    """Converte status de pedido/shipment ML → status_vendedor DropNexo.
+
+    `paid`/`confirmed` no ML = comprador pagou o marketplace — NÃO é `pago` DN
+    (pagamento vendedor→fornecedor). A entrada no DN já trata isso em
+    `importar_pedido_ml` (importado / aguardando_pagamento).
+    """
     o = (status_ml or "").strip().lower()
     s = (shipping_status or "").strip().lower()
     if o in ("cancelled", "canceled") or s in ("cancelled", "canceled"):
@@ -101,10 +106,9 @@ def mapear_status_ml_para_dn(status_ml: str | None, *, shipping_status: str | No
         return STATUS_ENTREGUE
     if s in ("shipped", "ready_to_ship", "handling") or o in ("shipped",):
         return STATUS_EM_EXPEDICAO
-    if o in ("paid", "confirmed"):
-        return STATUS_PAGO
-    if o in ("payment_required", "pending"):
-        return STATUS_AGUARDANDO
+    # paid/confirmed: não avançar status_vendedor — entrada é outro fluxo
+    if o in ("paid", "confirmed", "payment_required", "pending"):
+        return None
     return None
 
 

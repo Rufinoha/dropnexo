@@ -3,7 +3,7 @@
 {% block title %}Mercado Livre — Integrações — {{ MARCA_NOME }}{% endblock %}
 {% block topbar_title %}Mercado Livre{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('static', filename='style/Cmercadopago_integracao.css') }}?v=15" />
+<link rel="stylesheet" href="{{ url_for('static', filename='style/Cmercadopago_integracao.css') }}?v=16" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal Mp_Wrap">
@@ -47,6 +47,8 @@
       <button type="button" class="Mp_SubTab is-active" data-ml-tab="pedidos">Pedidos</button>
       <button type="button" class="Mp_SubTab" data-ml-tab="produtos">Produtos</button>
       <button type="button" class="Mp_SubTab" data-ml-tab="estoque">Estoque</button>
+      <button type="button" class="Mp_SubTab" data-ml-tab="categorias">Categorias</button>
+      <button type="button" class="Mp_SubTab" data-ml-tab="status">Status</button>
     </nav>
 
     <div id="ml_pane_pedidos">
@@ -164,12 +166,11 @@
       <p class="Mp_Hint">Usado ao publicar quando o produto não tiver garantia própria no catálogo. Variações (cor/tamanho) saem dos atributos da variante; no Brasil (User Products) cada variação vira um anúncio com a mesma família.</p>
       <p class="Mp_Hint Mp_Hint--note">Origem de expedição: o ML usa o endereço e depósitos da sua conta de vendedor. Vincular depósitos do DropNexo ao ML será habilitado em breve.</p>
       <div class="Mp_Actions" style="margin-top:0.85rem">
-        <button type="button" class="Cl_botaoprimario" id="ml_btn_mapear_categorias">Mapear categorias</button>
         <a href="{{ url_for('vd_meus_produtos.pagina') }}" class="Cl_botaoFiltro">Ir para Meus produtos</a>
       </div>
       <ol class="Mp_Hint Mp_ListaPassos" style="margin-top:1rem">
         <li>Associe cada produto a uma categoria sua em Meus produtos.</li>
-        <li>Em <strong>Mapear categorias</strong>, vincule cada categoria à categoria do Mercado Livre pelo nome.</li>
+        <li>Na aba <strong>Categorias</strong>, vincule cada categoria à categoria do Mercado Livre pelo nome.</li>
         <li>Selecione os produtos em Meus produtos e use o ícone de integração.</li>
       </ol>
     </div>
@@ -195,36 +196,42 @@
       <p class="Mp_Hint Mp_Hint--note">Recomendado: vincule os produtos na aba <strong>Produtos</strong> antes de ativar o estoque.</p>
     </div>
 
-    <p id="ml_msg" class="Mp_Msg" hidden></p>
+    <div id="ml_pane_categorias" class="Mp_CatPane" hidden>
+      <h3>Mapear categorias — Mercado Livre</h3>
+      <p class="Mp_Hint">Associe cada categoria do DropNexo a uma categoria do Mercado Livre (pelo <strong>nome</strong>). Use <strong>Sugerir não mapeadas</strong> ou clique em <strong>Escolher</strong> para buscar no catálogo.</p>
+      <p id="ml_msg_cat" class="Mp_Msg" hidden role="status"></p>
+      <div class="Mp_CatMapWrap">
+        <table class="Mp_CatMapTable" id="ml_tabela_categorias">
+          <thead>
+            <tr>
+              <th>Sua categoria</th>
+              <th>Categoria Mercado Livre</th>
+            </tr>
+          </thead>
+          <tbody id="ml_tbody_categorias"></tbody>
+        </table>
+      </div>
+      <div class="Mp_CatPaneActions">
+        <button type="button" class="Cl_botaoprimario" id="ml_cat_sugerir_todas">Sugerir não mapeadas</button>
+        <button type="button" class="Cl_botaoprimario" id="ml_cat_salvar">Salvar mapeamento</button>
+      </div>
+    </div>
 
-    <dialog class="Mp_Modal" id="ml_modal_categorias" aria-labelledby="ml_modal_cat_titulo">
-      <form method="dialog" class="Mp_ModalInner" id="ml_form_categorias">
-        <header class="Mp_ModalHead">
-          <h3 id="ml_modal_cat_titulo">Mapear categorias — Mercado Livre</h3>
-          <button type="button" class="Mp_ModalClose" id="ml_modal_cat_fechar" aria-label="Fechar">&times;</button>
-        </header>
-        <p class="Mp_Hint">Associe cada categoria do DropNexo a uma categoria do Mercado Livre (pelo <strong>nome</strong>). Use <strong>Sugerir não mapeadas</strong> ou clique em <strong>Escolher</strong> para buscar no catálogo.</p>
-        <p id="ml_msg_modal" class="Mp_Msg Mp_Msg--modal" hidden role="status"></p>
-        <div class="Mp_CatMapWrap">
-          <table class="Mp_CatMapTable" id="ml_tabela_categorias">
-            <thead>
-              <tr>
-                <th>Sua categoria</th>
-                <th>Categoria Mercado Livre</th>
-              </tr>
-            </thead>
-            <tbody id="ml_tbody_categorias"></tbody>
-          </table>
-        </div>
-        <footer class="Mp_ModalFoot Mp_ModalFoot--cat">
-          <button type="button" class="Cl_botaoprimario" id="ml_modal_cat_sugerir_todas">Sugerir não mapeadas</button>
-          <div class="Mp_ModalFootActions">
-            <button type="button" class="Cl_BtnCancelar" id="ml_modal_cat_cancelar">Cancelar</button>
-            <button type="button" class="Cl_botaoprimario" id="ml_modal_cat_salvar">Salvar mapeamento</button>
-          </div>
-        </footer>
-      </form>
-    </dialog>
+    <div id="ml_pane_status" hidden>
+      <h3>Relacionamento de status</h3>
+      <p class="Mp_StatusIntro">
+        Amarração padrão DropNexo ↔ status do Mercado Livre (plataforma). Somente leitura — explica o que cada status significa na sincronização de pedidos.
+      </p>
+      <div class="Mp_StatusMapHead" aria-hidden="true">
+        <span>DropNexo</span>
+        <span>Mercado Livre</span>
+        <span>Para que serve</span>
+      </div>
+      <div class="Mp_StatusMap" id="ml_status_map" role="table" aria-label="Relacionamento de status"></div>
+      <p class="Mp_Hint" id="ml_status_hint">Carregando mapeamento padrão…</p>
+    </div>
+
+    <p id="ml_msg" class="Mp_Msg" hidden></p>
 
     <dialog class="Mp_Modal Mp_Modal--picker" id="ml_modal_picker_cat" aria-labelledby="ml_picker_titulo">
       <div class="Mp_ModalInner">
@@ -251,5 +258,5 @@
 </div>
 {% endblock %}
 {% block page_js %}
-<script src="{{ url_for('static', filename='script/Smercado_livre_integracao.js') }}?v=25"></script>
+<script src="{{ url_for('static', filename='script/Smercado_livre_integracao.js') }}?v=26"></script>
 {% endblock %}
