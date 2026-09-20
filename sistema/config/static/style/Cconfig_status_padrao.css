@@ -1,0 +1,14 @@
+/* Status de integração — lista principal */
+.CfgIsp_Wrap { max-width: 1200px; }
+.CfgIsp_Aviso { margin: 0 0 1rem; }
+.CfgIsp_Card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 0.75rem;
+}
+.CfgIsp_TabelaWrap { overflow-x: auto; }
+.CfgIsp_Tabela { width: 100%; }
+.CfgIsp_Hint { color: #64748b; padding: 1rem; text-align: center; }
+.CfgIsp_Off { color: #b45309; font-weight: 700; }
+.CfgIsp_On { color: #047857; font-weight: 700; }

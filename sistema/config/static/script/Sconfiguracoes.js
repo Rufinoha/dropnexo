@@ -4,6 +4,12 @@
 
   const cards = [
     {
+      titulo: "Status de integração",
+      texto: "Amarração padrão DropNexo ↔ Bling / ML / … (tabela global). Manutenção só desenvolvedor.",
+      rota: "/configuracoes/integracao-status-padrao",
+      iconeTech: "checklist",
+    },
+    {
       titulo: "Manutenção de tenant",
       texto: "Corrigir tipo (vendedor / fornecedor / híbrido), plano, ativo e dados básicos — só desenvolvedor.",
       rota: "/configuracoes/manutencao-tenant",

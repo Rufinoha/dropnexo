@@ -2817,6 +2817,161 @@ def tarefas_secundarias_job_cron():
         conn.close()
 
 
+# --- Status de integração (padrão global) ---
+ISP_PREFIX = "/configuracoes/integracao-status-padrao"
+
+
+@config_bp.get(ISP_PREFIX)
+@login_obrigatorio()
+def integracao_status_padrao_pagina():
+    if not session.get("eh_desenvolvedor"):
+        return redirect(url_for("dashboard.index"))
+    return render_template("frm_config_status_padrao.html", nav_ativo="config")
+
+
+@config_bp.get(f"{ISP_PREFIX}/incluir")
+@login_obrigatorio()
+def integracao_status_padrao_incluir():
+    if not session.get("eh_desenvolvedor"):
+        return redirect(url_for("dashboard.index"))
+    return render_template("frm_config_status_padrao_apoio.html")
+
+
+@config_bp.get(f"{ISP_PREFIX}/editar")
+@login_obrigatorio()
+def integracao_status_padrao_editar():
+    if not session.get("eh_desenvolvedor"):
+        return redirect(url_for("dashboard.index"))
+    return render_template("frm_config_status_padrao_apoio.html")
+
+
+@config_bp.get(f"{ISP_PREFIX}/dados")
+@login_obrigatorio()
+def integracao_status_padrao_dados():
+    if (r := _exigir_dev()) is not None:
+        return r
+    aplicacao = (request.args.get("aplicacao") or "").strip().lower() or None
+    contexto = (request.args.get("contexto") or "").strip().lower() or None
+    apenas_ativos = request.args.get("todos") not in ("1", "true", "sim")
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        from core.integracoes.status_padrao import seed_bling_se_vazio, _row_to_dict, _COLS
+
+        seed_bling_se_vazio(cur)
+        clauses = ["1=1"]
+        params: list = []
+        if aplicacao:
+            clauses.append("aplicacao = %s")
+            params.append(aplicacao)
+        if contexto:
+            clauses.append("contexto = %s")
+            params.append(contexto)
+        if apenas_ativos:
+            clauses.append("ativo = TRUE")
+        cur.execute(
+            f"""
+            SELECT {_COLS}
+            FROM tbl_integracao_status_padrao
+            WHERE {' AND '.join(clauses)}
+            ORDER BY aplicacao, contexto, ordem, id
+            """,
+            params,
+        )
+        linhas = [_row_to_dict(r) for r in cur.fetchall()]
+        conn.commit()
+        return jsonify(success=True, linhas=linhas)
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
+@config_bp.post(f"{ISP_PREFIX}/apoio")
+@login_obrigatorio()
+def integracao_status_padrao_apoio():
+    if (r := _exigir_dev()) is not None:
+        return r
+    body = request.get_json(silent=True) or {}
+    try:
+        sid = int(body.get("id") or 0)
+    except (TypeError, ValueError):
+        sid = 0
+    if sid <= 0:
+        return jsonify(success=False, message="ID inválido."), 400
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        from core.integracoes.status_padrao import obter_status_padrao
+
+        dados = obter_status_padrao(cur, sid)
+        if not dados:
+            return jsonify(success=False, message="Registro não encontrado."), 404
+        conn.commit()
+        return jsonify(success=True, dados=dados)
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
+@config_bp.post(f"{ISP_PREFIX}/salvar")
+@login_obrigatorio()
+def integracao_status_padrao_salvar():
+    if (r := _exigir_dev()) is not None:
+        return r
+    body = request.get_json(silent=True) or {}
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        from core.integracoes.status_padrao import salvar_status_padrao
+
+        new_id = salvar_status_padrao(cur, body)
+        conn.commit()
+        return jsonify(success=True, id=new_id, message="Salvo.")
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 400
+    except Exception as e:
+        conn.rollback()
+        msg = str(e)
+        if "uq_isp" in msg.lower() or "unique" in msg.lower():
+            return jsonify(
+                success=False,
+                message="Já existe mapeamento para esta aplicação/contexto/evento.",
+            ), 409
+        return jsonify(success=False, message=msg), 500
+    finally:
+        conn.close()
+
+
+@config_bp.post(f"{ISP_PREFIX}/excluir")
+@login_obrigatorio()
+def integracao_status_padrao_excluir():
+    if (r := _exigir_dev()) is not None:
+        return r
+    body = request.get_json(silent=True) or {}
+    try:
+        sid = int(body.get("id"))
+    except (TypeError, ValueError):
+        return jsonify(success=False, message="ID inválido."), 400
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        from core.integracoes.status_padrao import excluir_status_padrao
+
+        excluir_status_padrao(cur, sid)
+        conn.commit()
+        return jsonify(success=True, message="Removido.")
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
 def init_app(app):
     app.register_blueprint(config_bp)
 

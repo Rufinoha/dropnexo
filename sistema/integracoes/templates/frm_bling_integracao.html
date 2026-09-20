@@ -3,7 +3,7 @@
 {% block title %}Bling — Integrações — {{ MARCA_NOME }}{% endblock %}
 {% block topbar_title %}Integração Bling{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('static', filename='style/Cbling_integracao.css') }}?v=23" />
+<link rel="stylesheet" href="{{ url_for('static', filename='style/Cbling_integracao.css') }}?v=24" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal Bl_Wrap">
@@ -207,13 +207,11 @@
       <h3 class="Bl_EstoqueBlockTitle">Relacionamento de status</h3>
       {% if bling_papel == 'pedidos' %}
       <p class="Bl_Hint">
-        Vendedor: pareamento automático entre o DropNexo e as situações da sua conta Bling.
-        Somente leitura — o sistema relaciona pelos nomes padrão.
+        Vendedor: amarração padrão DropNexo ↔ situações Bling (plataforma). Somente leitura.
       </p>
       {% else %}
       <p class="Bl_Hint">
-        Fornecedor: pareamento automático ao criar/atualizar pedidos no seu Bling a partir do DropNexo.
-        Somente leitura — o sistema relaciona pelos nomes padrão.
+        Fornecedor: amarração padrão ao criar/atualizar pedidos no seu Bling. Somente leitura.
       </p>
       {% endif %}
       <div class="Bl_StatusMapHead" aria-hidden="true">
@@ -222,7 +220,15 @@
         <span>Para que serve</span>
       </div>
       <div class="Bl_StatusMap" id="bl_status_map" role="table" aria-label="Relacionamento de status"></div>
-      <p class="Bl_Meta" id="bl_status_hint">Carregando situações da conta Bling…</p>
+      <div class="Bl_StatusMigrate" id="bl_status_migrate" hidden>
+        <button type="button" class="Cl_botaoprimario" id="bl_btn_migrar_status">
+          Atualizar para o mapeamento padrão
+        </button>
+        <p class="Bl_Meta">
+          Sua conta ainda usa configuração antiga de status. Clique para passar a usar a amarração padrão da plataforma.
+        </p>
+      </div>
+      <p class="Bl_Meta" id="bl_status_hint">Carregando mapeamento padrão…</p>
     </div>
 
     <div id="bl_pane_produtos" hidden>
@@ -524,5 +530,5 @@
 </div>
 {% endblock %}
 {% block page_js %}
-<script src="{{ url_for('static', filename='script/Sbling_integracao.js') }}?v=39"></script>
+<script src="{{ url_for('static', filename='script/Sbling_integracao.js') }}?v=41"></script>
 {% endblock %}

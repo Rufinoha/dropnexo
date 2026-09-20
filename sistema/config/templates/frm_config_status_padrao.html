@@ -1,0 +1,79 @@
+{% extends "frm_base.html" %}
+{% block title %}Status de integração — {{ MARCA_NOME }}{% endblock %}
+{% set nav_ativo = 'config' %}
+{% block topbar_title %}Status de integração{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_crud.css') }}?v=2" />
+<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_status_padrao.css') }}?v=1" />
+{% endblock %}
+{% block content %}
+<div class="Cl_ContainerApoio cl-page-principal CfgIsp_Wrap">
+  <div class="cl-page-title">
+    <h2>Status de integração (padrão)</h2>
+    <p class="cl-page-desc">
+      Amarração global DropNexo ↔ status externos (Bling, Mercado Livre…). Não é por tenant.
+      Cadastro e edição abrem em janela de apoio.
+    </p>
+  </div>
+  <p class="CfgIsp_Aviso">
+    <a class="Cl_BtnLink" href="{{ url_for('config.configuracoes') }}">← Voltar às Configurações</a>
+  </p>
+
+  <div class="Cl_ConfigToolbar">
+    <div class="Cl_FormCampo">
+      <label for="cfg_isp_filtro_app">Aplicação</label>
+      <select id="cfg_isp_filtro_app">
+        <option value="">Todas</option>
+        <option value="bling">Bling</option>
+        <option value="mercado_livre">Mercado Livre</option>
+        <option value="tiktok">TikTok</option>
+        <option value="amazon">Amazon</option>
+      </select>
+    </div>
+    <div class="Cl_FormCampo">
+      <label for="cfg_isp_filtro_ctx">Contexto</label>
+      <select id="cfg_isp_filtro_ctx">
+        <option value="">Todos</option>
+        <option value="vendedor">Vendedor</option>
+        <option value="fornecedor">Fornecedor</option>
+        <option value="ambos">Ambos</option>
+      </select>
+    </div>
+    <div class="Cl_ConfigActions">
+      <button type="button" class="Cl_botaoprimario" id="cfg_isp_novo">Novo</button>
+    </div>
+  </div>
+
+  <section class="CfgIsp_Card">
+    <div class="CfgIsp_TabelaWrap">
+      <table class="Cl_TabelaPrincipal CfgIsp_Tabela">
+        <thead>
+          <tr>
+            <th>Aplicação</th>
+            <th>Contexto</th>
+            <th>DropNexo</th>
+            <th>Evento</th>
+            <th>Externo</th>
+            <th>Direção</th>
+            <th>Ordem</th>
+            <th>Status</th>
+            <th class="Cl_TableActions">Ações</th>
+          </tr>
+        </thead>
+        <tbody id="cfg_isp_tbody">
+          <tr><td colspan="9" class="CfgIsp_Hint">Carregando…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+{% endblock %}
+{% block page_js %}
+<script id="cfg_isp_cfg" type="application/json">{{ {
+  "apiDados": url_for("config.integracao_status_padrao_dados"),
+  "apiExcluir": url_for("config.integracao_status_padrao_excluir"),
+  "rotaIncluir": url_for("config.integracao_status_padrao_incluir"),
+  "rotaEditar": url_for("config.integracao_status_padrao_editar")
+}|tojson }}</script>
+<script defer src="{{ url_for('config.static', filename='script/Sconfig_status_padrao.js') }}?v=1"></script>
+{% endblock %}

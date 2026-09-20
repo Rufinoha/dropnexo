@@ -432,19 +432,99 @@ def listar_situacoes_pedidos_api():
     if not id_tenant:
         return jsonify(success=False, message="Sessão inválida."), 403
     try:
-        from api.bling.pedidos import _listar_situacoes_venda
+        from api.bling.pedidos import listar_situacoes_venda_para_ui
 
-        dados = _listar_situacoes_venda(int(id_tenant))
-        out = []
-        for s in dados or []:
-            sid = s.get("id")
-            nome = (s.get("nome") or s.get("descricao") or s.get("valor") or "").strip()
-            if sid is None:
-                continue
-            out.append({"id": int(sid), "nome": nome})
-        return jsonify(success=True, situacoes=out)
+        situacoes, aviso = listar_situacoes_venda_para_ui(int(id_tenant))
+        return jsonify(success=True, situacoes=situacoes, aviso=aviso)
     except Exception as e:
         return jsonify(success=False, message=str(e)[:300]), 400
+
+
+@bling_bp.get("/api/integracoes/bling/status-padrao")
+@login_obrigatorio()
+def api_status_padrao_bling():
+    """Exibe o mapeamento padrão (tabela global) + se o tenant ainda precisa migrar."""
+    if not _pode_integracoes():
+        return jsonify(success=False, message="Sem permissão."), 403
+    id_tenant = session.get("id_tenant")
+    if not id_tenant:
+        return jsonify(success=False, message="Sessão inválida."), 403
+    contexto = (request.args.get("contexto") or "").strip()
+    if contexto not in ("vendedor", "fornecedor"):
+        papel = (request.args.get("papel") or "").strip()
+        if papel == "pedidos":
+            contexto = "vendedor"
+        elif papel in ("catalogo", "fornecedor"):
+            contexto = "fornecedor"
+        else:
+            mod = (garantir_modulo_sessao() or "").strip()
+            contexto = "vendedor" if mod == "vendedor" else "fornecedor"
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        from core.integracoes.status_padrao import (
+            listar_status_padrao,
+            tenant_precisa_migrar_bling,
+        )
+
+        linhas = listar_status_padrao(cur, aplicacao="bling", contexto=contexto)
+        cur.execute(
+            """
+            SELECT opcoes FROM tbl_integracao_bling_config
+            WHERE id_tenant = %s AND contexto = %s
+            """,
+            (int(id_tenant), contexto),
+        )
+        row = cur.fetchone()
+        opcoes = row[0] if row else {}
+        if isinstance(opcoes, str):
+            try:
+                opcoes = json.loads(opcoes)
+            except json.JSONDecodeError:
+                opcoes = {}
+        if not isinstance(opcoes, dict):
+            opcoes = {}
+        precisa = tenant_precisa_migrar_bling(opcoes)
+        conn.commit()
+        return jsonify(
+            success=True,
+            contexto=contexto,
+            linhas=linhas,
+            precisa_migrar=precisa,
+        )
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)[:300]), 400
+    finally:
+        conn.close()
+
+
+@bling_bp.post("/api/integracoes/bling/status-padrao/migrar")
+@login_obrigatorio()
+def api_migrar_status_padrao_bling():
+    """Remove IDs legados do tenant e passa a usar a tabela global."""
+    if not _pode_integracoes():
+        return jsonify(success=False, message="Sem permissão."), 403
+    id_tenant = session.get("id_tenant")
+    if not id_tenant:
+        return jsonify(success=False, message="Sessão inválida."), 403
+    body = request.get_json(silent=True) or {}
+    contexto = (body.get("contexto") or garantir_modulo_sessao() or "").strip()
+    if contexto not in ("vendedor", "fornecedor"):
+        return jsonify(success=False, message="Contexto inválido."), 400
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        from core.integracoes.status_padrao import migrar_tenant_bling_status_padrao
+
+        result = migrar_tenant_bling_status_padrao(cur, int(id_tenant), contexto)
+        conn.commit()
+        return jsonify(success=True, **result, message="Mapeamento atualizado para o padrão.")
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)[:300]), 400
+    finally:
+        conn.close()
 
 
 @bling_bp.post("/api/integracoes/bling/config/salvar")

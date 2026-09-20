@@ -25,15 +25,18 @@ DEFAULTS_CONEXAO = {
 
 def aplicar_defaults_conexao(cur, id_tenant: int, contexto: str) -> None:
     """Aplica configuração padronizada do módulo ativo (fornecedor ou vendedor)."""
+    import json
+
     ctx = contexto if contexto in DEFAULTS_CONEXAO else "fornecedor"
     cfg = DEFAULTS_CONEXAO[ctx]
     agora = agora_utc()
+    opcoes_novas = json.dumps({"status_padrao_v2": True}, ensure_ascii=False)
     cur.execute(
         """
         INSERT INTO tbl_integracao_bling_config (
             id_tenant, contexto, fonte_principal, modo_imagem,
-            produtos_modo, estoque_modo, pedidos_modo, atualizado_em
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            produtos_modo, estoque_modo, pedidos_modo, opcoes, atualizado_em
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s)
         ON CONFLICT (id_tenant, contexto) DO UPDATE SET
             fonte_principal = EXCLUDED.fonte_principal,
             modo_imagem = EXCLUDED.modo_imagem,
@@ -50,6 +53,7 @@ def aplicar_defaults_conexao(cur, id_tenant: int, contexto: str) -> None:
             cfg["produtos_modo"],
             cfg["estoque_modo"],
             cfg["pedidos_modo"],
+            opcoes_novas,
             agora,
         ),
     )
@@ -57,6 +61,8 @@ def aplicar_defaults_conexao(cur, id_tenant: int, contexto: str) -> None:
 
 def garantir_config_contexto(cur, id_tenant: int, contexto: str) -> None:
     """Cria linha de config do módulo ativo se ainda não existir (sem sobrescrever)."""
+    import json
+
     ctx = contexto if contexto in DEFAULTS_CONEXAO else "fornecedor"
     cur.execute(
         "SELECT 1 FROM tbl_integracao_bling_config WHERE id_tenant = %s AND contexto = %s",
@@ -70,8 +76,8 @@ def garantir_config_contexto(cur, id_tenant: int, contexto: str) -> None:
         """
         INSERT INTO tbl_integracao_bling_config (
             id_tenant, contexto, fonte_principal, modo_imagem,
-            produtos_modo, estoque_modo, pedidos_modo, atualizado_em
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            produtos_modo, estoque_modo, pedidos_modo, opcoes, atualizado_em
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s)
         """,
         (
             id_tenant,
@@ -81,6 +87,7 @@ def garantir_config_contexto(cur, id_tenant: int, contexto: str) -> None:
             cfg["produtos_modo"],
             cfg["estoque_modo"],
             cfg["pedidos_modo"],
+            json.dumps({"status_padrao_v2": True}, ensure_ascii=False),
             agora,
         ),
     )

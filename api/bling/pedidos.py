@@ -324,10 +324,161 @@ _EVENTO_SITUACAO_NOMES: dict[str, tuple[str, ...]] = {
 
 _MODULO_PEDIDOS_ID: int | None = None
 _SITUACOES_CACHE: dict[int, list[dict[str, Any]]] = {}
+_SITUACOES_CACHE_TENANT: dict[int, list[dict[str, Any]]] = {}
 
 
 def _normalizar(txt: str) -> str:
     return re.sub(r"\s+", " ", (txt or "").strip().lower())
+
+
+def _extrair_lista_data(body: Any) -> list:
+    if isinstance(body, list):
+        return body
+    if isinstance(body, dict):
+        dados = body.get("data")
+        if isinstance(dados, list):
+            return dados
+        if isinstance(dados, dict):
+            for k in ("situacoes", "modulos", "items", "retorno"):
+                if isinstance(dados.get(k), list):
+                    return dados[k]
+    return []
+
+
+def _modulo_id(mod: dict) -> int | None:
+    raw = mod.get("id") if mod.get("id") is not None else mod.get("idModuloSistema")
+    try:
+        return int(raw) if raw is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _modulo_parece_pedidos_venda(mod: dict) -> int:
+    """Score: quanto o módulo parece ser Pedidos de Venda (maior = melhor)."""
+    nome = _normalizar(str(mod.get("nome") or ""))
+    desc = _normalizar(str(mod.get("descricao") or ""))
+    blob = f"{nome} {desc}".strip()
+    if not blob:
+        return 0
+    if ("pedido" in blob and "venda" in blob) or "pedidos de venda" in blob:
+        return 100
+    if nome in ("vendas", "venda") or blob == "vendas":
+        return 80
+    if "venda" in blob and "compra" not in blob:
+        return 40
+    return 0
+
+
+def _situacoes_parecem_venda(lista: list) -> bool:
+    nomes = {_normalizar(str(s.get("nome") or s.get("descricao") or "")) for s in lista or []}
+    marcadores = {"atendido", "em aberto", "cancelado", "em atendimento"}
+    return len(nomes & marcadores) >= 2
+
+
+def _listar_situacoes_do_modulo(id_tenant: int, id_mod: int) -> list[dict[str, Any]]:
+    if id_mod in _SITUACOES_CACHE and _SITUACOES_CACHE[id_mod]:
+        return _SITUACOES_CACHE[id_mod]
+    body = api_request(id_tenant, "GET", f"/situacoes/modulos/{id_mod}")
+    dados = _extrair_lista_data(body)
+    if dados:
+        _SITUACOES_CACHE[id_mod] = dados
+    return dados
+
+
+def _id_modulo_pedidos_venda(id_tenant: int) -> int | None:
+    global _MODULO_PEDIDOS_ID
+    try:
+        body = api_request(id_tenant, "GET", "/situacoes/modulos")
+        modulos = _extrair_lista_data(body)
+        if not modulos:
+            _log.warning("Bling /situacoes/modulos retornou vazio (tenant=%s)", id_tenant)
+            return _MODULO_PEDIDOS_ID
+
+        ranqueados = sorted(
+            (( _modulo_parece_pedidos_venda(m), _modulo_id(m), m) for m in modulos),
+            key=lambda t: t[0],
+            reverse=True,
+        )
+        for score, mid, _ in ranqueados:
+            if score >= 40 and mid:
+                _MODULO_PEDIDOS_ID = mid
+                return mid
+
+        # Fallback: módulo cujas situações incluem Atendido / Em aberto / Cancelado
+        for _, mid, mod in ranqueados:
+            if not mid:
+                continue
+            try:
+                sits = _listar_situacoes_do_modulo(id_tenant, mid)
+            except Exception as e:
+                _log.warning("Bling situações módulo %s: %s", mid, e)
+                continue
+            if _situacoes_parecem_venda(sits):
+                _log.info(
+                    "Bling módulo pedidos venda detectado por situações: id=%s nome=%s",
+                    mid,
+                    mod.get("nome"),
+                )
+                _MODULO_PEDIDOS_ID = mid
+                return mid
+
+        nomes = [
+            str(m.get("nome") or m.get("descricao") or _modulo_id(m) or "?")
+            for m in modulos
+        ]
+        _log.warning(
+            "Bling: nenhum módulo de Pedidos de Venda reconhecido (tenant=%s). Módulos: %s",
+            id_tenant,
+            ", ".join(nomes[:20]),
+        )
+    except Exception as e:
+        _log.warning("Bling módulo situações pedidos: %s", e)
+    return _MODULO_PEDIDOS_ID
+
+
+def _listar_situacoes_venda(id_tenant: int) -> list[dict[str, Any]]:
+    tid = int(id_tenant)
+    cached = _SITUACOES_CACHE_TENANT.get(tid)
+    if cached:
+        return cached
+    id_mod = _id_modulo_pedidos_venda(tid)
+    if not id_mod:
+        return []
+    try:
+        dados = _listar_situacoes_do_modulo(tid, id_mod)
+        if dados:
+            _SITUACOES_CACHE_TENANT[tid] = dados
+        return dados
+    except Exception as e:
+        _log.warning("Bling listar situações: %s", e)
+        return []
+
+
+def listar_situacoes_venda_para_ui(id_tenant: int) -> tuple[list[dict[str, Any]], str | None]:
+    """Lista situações para a aba Status. Retorna (lista, aviso_se_vazio)."""
+    try:
+        dados = _listar_situacoes_venda(int(id_tenant))
+    except Exception as e:
+        return [], f"Falha ao consultar situações no Bling: {str(e)[:200]}"
+    if dados:
+        out = []
+        for s in dados:
+            sid = s.get("id")
+            nome = (s.get("nome") or s.get("descricao") or s.get("valor") or "").strip()
+            if sid is None:
+                continue
+            try:
+                out.append({"id": int(sid), "nome": nome})
+            except (TypeError, ValueError):
+                continue
+        if out:
+            return out, None
+        return [], "A API do Bling respondeu, mas sem situações utilizáveis."
+    return (
+        [],
+        "Não foi possível listar as situações de Pedidos de Venda na sua conta Bling. "
+        "Confira se o app tem permissão de Situações e tente reconectar.",
+    )
 
 
 def _carregar_config_vendedor(cur, id_tenant: int) -> dict:
@@ -357,7 +508,7 @@ _CACHE_SIT_IMPORTAR: dict[int, int | None] = {}
 
 
 def id_situacao_importar_vendedor(id_tenant: int) -> int | None:
-    """ID Bling configurado na aba Status para entrada (Atendido). Cache curto em memória."""
+    """ID Bling da situação de entrada (Atendido / padrão da tabela). Cache curto."""
     if id_tenant in _CACHE_SIT_IMPORTAR:
         return _CACHE_SIT_IMPORTAR[id_tenant]
     from global_utils import Var_ConectarBanco
@@ -367,9 +518,10 @@ def id_situacao_importar_vendedor(id_tenant: int) -> int | None:
     try:
         cur = conn.cursor()
         cfg = _carregar_config_vendedor(cur, int(id_tenant))
-        raw = (cfg.get("opcoes") or {}).get("bling_situacao_importar")
-        if raw not in (None, ""):
-            mid = int(raw)
+        opcoes = cfg.get("opcoes") or {}
+        mid = _resolver_situacao_id(
+            cur, int(id_tenant), "importar", opcoes, contexto="vendedor"
+        )
     except Exception:
         mid = None
     finally:
@@ -387,63 +539,39 @@ def _bling_conectado(cur, id_tenant: int) -> bool:
     return bool(row and row[0] == "conectado")
 
 
-def _id_modulo_pedidos_venda(id_tenant: int) -> int | None:
-    global _MODULO_PEDIDOS_ID
-    if _MODULO_PEDIDOS_ID:
-        return _MODULO_PEDIDOS_ID
-    try:
-        body = api_request(id_tenant, "GET", "/situacoes/modulos")
-        modulos = body.get("data") if isinstance(body, dict) else body
-        if not isinstance(modulos, list):
-            return None
-        for mod in modulos:
-            nome = _normalizar(str(mod.get("nome") or mod.get("descricao") or ""))
-            if "pedido" in nome and "venda" in nome:
-                _MODULO_PEDIDOS_ID = int(mod["id"])
-                return _MODULO_PEDIDOS_ID
-        for mod in modulos:
-            nome = _normalizar(str(mod.get("nome") or ""))
-            if nome == "vendas" or "pedidos de venda" in nome:
-                _MODULO_PEDIDOS_ID = int(mod["id"])
-                return _MODULO_PEDIDOS_ID
-    except Exception as e:
-        _log.warning("Bling módulo situações pedidos: %s", e)
-    return None
+def _resolver_situacao_id(
+    cur,
+    id_tenant: int,
+    evento: str,
+    opcoes: dict,
+    *,
+    contexto: str = "vendedor",
+) -> int | None:
+    from core.integracoes.status_padrao import (
+        nomes_externos_para_evento,
+        tenant_precisa_migrar_bling,
+    )
 
+    # Legado: IDs salvos por tenant só enquanto não migrou para o padrão.
+    if tenant_precisa_migrar_bling(opcoes):
+        chave = f"bling_situacao_{evento}"
+        manual = opcoes.get(chave)
+        if manual not in (None, ""):
+            try:
+                return int(manual)
+            except (TypeError, ValueError):
+                pass
 
-def _listar_situacoes_venda(id_tenant: int) -> list[dict[str, Any]]:
-    id_mod = _id_modulo_pedidos_venda(id_tenant)
-    if not id_mod:
-        return []
-    if id_mod in _SITUACOES_CACHE:
-        return _SITUACOES_CACHE[id_mod]
-    try:
-        body = api_request(id_tenant, "GET", f"/situacoes/modulos/{id_mod}")
-        dados = body.get("data") if isinstance(body, dict) else body
-        if not isinstance(dados, list):
-            return []
-        _SITUACOES_CACHE[id_mod] = dados
-        return dados
-    except Exception as e:
-        _log.warning("Bling listar situações: %s", e)
-        return []
-
-
-def _resolver_situacao_id(id_tenant: int, evento: str, opcoes: dict) -> int | None:
-    chave = f"bling_situacao_{evento}"
-    manual = opcoes.get(chave)
-    if manual not in (None, ""):
-        try:
-            return int(manual)
-        except (TypeError, ValueError):
-            pass
-    nomes = _EVENTO_SITUACAO_NOMES.get(evento, ())
+    nomes = nomes_externos_para_evento(cur, "bling", contexto, evento)
+    if not nomes:
+        nomes = list(_EVENTO_SITUACAO_NOMES.get(evento, ()))
+    alvos = [_normalizar(n) for n in nomes if n]
     for sit in _listar_situacoes_venda(id_tenant):
         sid = sit.get("id")
         nome = _normalizar(str(sit.get("nome") or sit.get("descricao") or ""))
-        if sid is None:
+        if sid is None or not nome:
             continue
-        if any(n in nome for n in nomes):
+        if any(nome == a or a in nome for a in alvos):
             return int(sid)
     return None
 
@@ -514,7 +642,9 @@ def exportar_status_pedido_bling(
         if modo not in ("exportar", "atualizar"):
             return False
 
-    id_situacao = _resolver_situacao_id(id_tenant_bling, evento, opcoes)
+    id_situacao = _resolver_situacao_id(
+        cur, id_tenant_bling, evento, opcoes, contexto=contexto
+    )
     if not id_situacao:
         _log.info("Bling: situação não mapeada para evento %s (pedido %s)", evento, id_pedido)
         return False
@@ -597,7 +727,9 @@ def _propagar_status_para_origem_vendedor(cur, id_pedido: int, evento: str) -> N
                     cfg = _carregar_config_vendedor(cur, id_vendedor)
                     opcoes = cfg.get("opcoes") or {}
                     if opcoes.get("pedidos_exportar_status") is not False:
-                        id_situacao = _resolver_situacao_id(id_vendedor, evento_l, opcoes)
+                        id_situacao = _resolver_situacao_id(
+                            cur, id_vendedor, evento_l, opcoes, contexto="vendedor"
+                        )
                         if id_situacao:
                             api_request(
                                 id_vendedor,
@@ -1033,6 +1165,21 @@ def exportar_pedido_fornecedor_bling(
 
     numero = str(ped.get("numero") or id_pedido)
     _upsert_mapa_pedido(cur, id_forn, id_pedido, str(id_bling_ped), numero)
+
+    id_sit_criar = _resolver_situacao_id(
+        cur, id_forn, "criar", opcoes, contexto="fornecedor"
+    )
+    if id_sit_criar:
+        try:
+            api_request(
+                id_forn,
+                "PATCH",
+                f"/pedidos/vendas/{id_bling_ped}/situacoes/{id_sit_criar}",
+            )
+        except Exception as e:
+            _log.warning(
+                "Bling situação ao criar pedido %s: %s", id_bling_ped, e
+            )
 
     agora = agora_utc()
     cur.execute(
