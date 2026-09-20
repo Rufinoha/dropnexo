@@ -33,8 +33,16 @@
     weekPills: document.getElementById("cfgmt_week_pills"),
     weekBreakdown: document.getElementById("cfgmt_week_breakdown"),
     matrix: document.getElementById("cfgmt_matrix"),
+    tabs: document.getElementById("cfgmt_tabs"),
+    paneDash: document.getElementById("cfgmt_pane_dashboard"),
+    paneTenants: document.getElementById("cfgmt_pane_tenants"),
   };
   if (!el.lista) return;
+
+  let tenantsCarregados = false;
+  let metricasCarregadas = false;
+  let onlineCache = { janela_minutos: 30, total: 0, por_tipo: {}, itens: [] };
+  let pendenteCache = { total: 0, por_tipo: {}, itens: [] };
 
   const charts = {
     ativo: null,
@@ -42,6 +50,32 @@
     pessoa: null,
     semana: null,
   };
+
+  if (window.Chart && window.ChartDataLabels) {
+    Chart.register(ChartDataLabels);
+  }
+
+  function ativarAba(tab) {
+    const id = tab === "tenants" ? "tenants" : "dashboard";
+    el.tabs?.querySelectorAll(".CfgMt_Tab").forEach((b) => {
+      b.classList.toggle("is-active", b.dataset.cfgmtTab === id);
+    });
+    if (el.paneDash) el.paneDash.hidden = id !== "dashboard";
+    if (el.paneTenants) el.paneTenants.hidden = id !== "tenants";
+    try {
+      localStorage.setItem("cfgmt_aba", id);
+    } catch {
+      /* ignore */
+    }
+    if (id === "dashboard") {
+      if (!metricasCarregadas) carregarMetricas();
+      else {
+        // Chart.js precisa redimensionar ao voltar a aba visível
+        Object.values(charts).forEach((c) => c?.resize?.());
+      }
+    }
+    if (id === "tenants" && !tenantsCarregados) carregar();
+  }
 
   function esc(s) {
     return String(s ?? "")
@@ -108,6 +142,176 @@
     Chart.defaults.plugins.legend.labels.usePointStyle = true;
   }
 
+  function labelsBarra() {
+    return {
+      datalabels: {
+        anchor: "end",
+        align: "top",
+        clamp: true,
+        color: "#0f172a",
+        font: { weight: "700", size: 11 },
+        formatter: (v) => (v ? v : ""),
+      },
+    };
+  }
+
+  function labelsLinha() {
+    return {
+      datalabels: {
+        align: "top",
+        anchor: "end",
+        offset: 2,
+        color: "#334155",
+        font: { weight: "700", size: 10 },
+        formatter: (v) => (v ? v : ""),
+      },
+    };
+  }
+
+  function labelsRosca() {
+    return {
+      datalabels: {
+        color: "#fff",
+        font: { weight: "800", size: 13 },
+        formatter: (v) => (v ? v : ""),
+      },
+    };
+  }
+
+  function linkWhatsapp(fone) {
+    const d = String(fone || "").replace(/\D+/g, "");
+    if (!d || d.length < 10) return null;
+    const full = d.startsWith("55") ? d : `55${d}`;
+    return `https://wa.me/${full}`;
+  }
+
+  function renderOnline(m) {
+    onlineCache = m.online || { janela_minutos: 30, total: 0, por_tipo: {}, itens: [] };
+    const por = onlineCache.por_tipo || {};
+    const set = (k, v) => {
+      const n = document.querySelector(`[data-online-kpi="${k}"]`);
+      animarNumero(n, v || 0);
+    };
+    set("total", onlineCache.total || 0);
+    TIPOS.forEach((t) => set(t, por[t] || 0));
+    const hint = document.querySelector("[data-online-hint]");
+    if (hint) {
+      hint.textContent = `últimos ${onlineCache.janela_minutos || 30} min · clique para ver quem`;
+    }
+  }
+
+  function abrirPendenteModal() {
+    abrirListaModal({
+      titulo: "Não ativaram",
+      intro: `<p style="margin:0 0 0.5rem;font-size:0.82rem;color:#64748b;text-align:left">
+        Preencheram o cadastro e receberam o e-mail, mas <strong>não criaram a senha</strong>.
+        Clique no nome para abrir o WhatsApp.
+      </p>`,
+      itens: pendenteCache.itens || [],
+      dataPrefix: "cadastro",
+    });
+  }
+
+  function abrirOnlineModal(tipoFiltro) {
+    const tipo = (tipoFiltro || "").trim().toLowerCase();
+    const itens = (onlineCache.itens || []).filter((x) => !tipo || x.tipo_negocio === tipo);
+    const titulo = tipo ? `${TIPO_LABEL[tipo] || tipo} online` : "Online agora";
+    const janela = onlineCache.janela_minutos || 30;
+    abrirListaModal({
+      titulo,
+      intro: `<p style="margin:0 0 0.5rem;font-size:0.82rem;color:#64748b;text-align:left">
+        Atividade nos últimos <strong>${janela} min</strong>. Clique no nome para WhatsApp.
+      </p>`,
+      itens,
+      dataKey: "ultimo_acesso_em",
+      dataPrefix: "visto",
+    });
+  }
+
+  const FILTRO_LABEL = {
+    total: "Total",
+    ativos: "Ativos",
+    inativos: "Inativos",
+    pf: "Pessoa física",
+    cnpj: "CNPJ",
+    encerr_solicitados: "Encerramentos solicitados",
+    encerr_concluidos: "Encerramentos concluídos",
+    ativacao_pendente: "Não ativaram",
+  };
+
+  function renderListaHtml(itens, { dataKey = "criado_em", dataPrefix = "cadastro" } = {}) {
+    return `<ul class="CfgMt_OnlineList">${itens
+      .map((x) => {
+        const wa = linkWhatsapp(x.whatsapp);
+        const nome = esc(x.tenant_nome || "Tenant");
+        const user = esc(x.usuario_nome || "—");
+        const email = esc(x.email || "");
+        const quando = formatarDataHora(x[dataKey] || x.criado_em || x.ultimo_acesso_em);
+        const badge = TIPO_LABEL[x.tipo_negocio] || x.tipo_negocio;
+        const nomeHtml = wa
+          ? `<a class="CfgMt_OnlineName" href="${esc(wa)}" target="_blank" rel="noopener">${nome}</a>`
+          : `<span class="CfgMt_OnlineName is-disabled" title="Sem WhatsApp">${nome}</span>`;
+        return `<li class="CfgMt_OnlineItem">
+          <div>
+            ${nomeHtml}
+            <div class="CfgMt_OnlineMeta">${user}${email ? ` · ${email}` : ""}</div>
+            <div class="CfgMt_OnlineMeta">#${x.id_tenant} · ${esc(dataPrefix)} ${quando}</div>
+            <div class="CfgMt_OnlineMeta">${x.whatsapp ? esc(x.whatsapp) : "Sem WhatsApp"}</div>
+          </div>
+          <span class="CfgMt_OnlineBadge CfgMt_Badge CfgMt_Badge--${esc(x.tipo_negocio)}">${esc(badge)}</span>
+        </li>`;
+      })
+      .join("")}</ul>`;
+  }
+
+  function abrirListaModal({ titulo, intro, itens, dataKey, dataPrefix }) {
+    if (!itens || !itens.length) {
+      Swal.fire({
+        icon: "info",
+        title: titulo,
+        html: `<p class="CfgMt_OnlineEmpty">Nenhum registro neste filtro.</p>`,
+        confirmButtonColor: "#021F81",
+      });
+      return;
+    }
+    Swal.fire({
+      title: `${titulo} (${itens.length})`,
+      html: `${intro || ""}${renderListaHtml(itens, { dataKey, dataPrefix })}`,
+      width: 640,
+      confirmButtonText: "Fechar",
+      confirmButtonColor: "#021F81",
+    });
+  }
+
+  async function abrirListaFiltro(tipo, filtro) {
+    const tipoLabel = tipo ? TIPO_LABEL[tipo] || tipo : "Todos";
+    const filtroLabel = FILTRO_LABEL[filtro] || filtro;
+    const titulo = `${filtroLabel} · ${tipoLabel}`;
+    Swal.fire({
+      title: titulo,
+      html: `<p class="CfgMt_OnlineEmpty">Carregando…</p>`,
+      showConfirmButton: false,
+      allowOutsideClick: false,
+      didOpen: () => Swal.showLoading(),
+    });
+    try {
+      const qs = new URLSearchParams();
+      if (tipo) qs.set("tipo", tipo);
+      qs.set("filtro", filtro || "total");
+      const r = await fetch(`${BASE}/metricas/lista?${qs}`, { credentials: "same-origin" });
+      const j = await r.json();
+      if (!r.ok || !j.success) throw new Error(j.message || "Falha ao listar.");
+      abrirListaModal({
+        titulo,
+        intro: `<p style="margin:0 0 0.5rem;font-size:0.82rem;color:#64748b;text-align:left">Clique no nome para abrir o WhatsApp.</p>`,
+        itens: j.itens || [],
+        dataPrefix: "cadastro",
+      });
+    } catch (e) {
+      Swal.fire({ icon: "error", title: "Erro", text: e.message, confirmButtonColor: "#021F81" });
+    }
+  }
+
   function renderKpis(m) {
     const set = (key, val) => {
       const node = document.querySelector(`[data-kpi="${key}"]`);
@@ -116,28 +320,20 @@
     set("total", m.total);
     set("ativos", m.ativos);
     set("inativos", m.inativos);
+    set("ativacao_pendente", m.ativacao_pendente?.total || 0);
+    pendenteCache = m.ativacao_pendente || { total: 0, por_tipo: {}, itens: [] };
     set("encerramentos", m.encerramentos?.solicitados || 0);
     set("pf", m.pessoa?.pf || 0);
     set("cnpj", m.pessoa?.cnpj || 0);
 
-    const hint = (k, txt) => {
-      const n = document.querySelector(`[data-kpi-hint="${k}"]`);
-      if (n) n.textContent = txt;
-    };
-    hint("ativos_pct", pct(m.ativos, m.total) + " da base");
-    hint("inativos_pct", pct(m.inativos, m.total) + " da base");
-    const enc = m.encerramentos || {};
-    hint(
-      "encerramentos",
-      `${enc.em_andamento || 0} em andamento · ${enc.concluidos || 0} concluídos`
-    );
-
     if (el.lead) {
+      const enc = m.encerramentos || {};
+      const pend = m.ativacao_pendente?.total || 0;
       const semana = m.ultimos_7_dias?.resumo || {};
+      const online = m.online?.total || 0;
       el.lead.textContent =
-        `${m.total} tenants · ${m.ativos} ativos · ${m.inativos} inativos · ` +
-        `${enc.solicitados || 0} pediram encerramento · ` +
-        `7 dias: +${semana.cadastros || 0} / −${semana.descadastros || 0}`;
+        `${online} online · ${m.ativos} ativos · ${pend} sem ativar · ` +
+        `${enc.solicitados || 0} encerr. · 7d +${semana.cadastros || 0}/−${semana.descadastros || 0}`;
     }
   }
 
@@ -145,26 +341,29 @@
     if (!el.matrix) return;
     const por = m.por_tipo || {};
     const rows = [
-      ["Total", (s) => s.total, "tenants"],
-      ["Ativos", (s) => s.ativos, "ativos"],
-      ["Inativos", (s) => s.inativos, "inativos"],
-      ["PF", (s) => s.pf, "CPF"],
-      ["CNPJ", (s) => s.cnpj, "CNPJ"],
-      ["Encerr. solicitados", (s) => s.encerramentos_solicitados, "pedidos"],
-      ["Encerr. concluídos", (s) => s.encerramentos_concluidos, "ok"],
+      ["Total", "total", (s) => s.total],
+      ["Ativos", "ativos", (s) => s.ativos],
+      ["Inativos", "inativos", (s) => s.inativos],
+      ["PF", "pf", (s) => s.pf],
+      ["CNPJ", "cnpj", (s) => s.cnpj],
+      ["Encerr. ped.", "encerr_solicitados", (s) => s.encerramentos_solicitados],
+      ["Encerr. ok", "encerr_concluidos", (s) => s.encerramentos_concluidos],
     ];
     let html = `<div class="CfgMt_MatrixHead"></div>`;
     TIPOS.forEach((t) => {
       html += `<div class="CfgMt_MatrixHead">${esc(TIPO_LABEL[t])}</div>`;
     });
-    rows.forEach(([label, getter, hint]) => {
+    rows.forEach(([label, filtro, getter]) => {
       html += `<div class="CfgMt_MatrixLabel">${esc(label)}</div>`;
       TIPOS.forEach((t) => {
         const slot = por[t] || {};
-        html += `<div class="CfgMt_MatrixCell CfgMt_MatrixCell--${t}">
-          <strong>${getter(slot) || 0}</strong>
-          <span>${esc(hint)}</span>
-        </div>`;
+        const n = getter(slot) || 0;
+        const zero = n ? "" : " is-zero";
+        html += `<button type="button" class="CfgMt_MatrixCell CfgMt_MatrixCell--${t}${zero}"
+          data-lista-tipo="${t}" data-lista-filtro="${filtro}" ${n ? "" : "disabled"}>
+          <strong>${n}</strong>
+          <span>ver lista</span>
+        </button>`;
       });
     });
     el.matrix.innerHTML = html;
@@ -197,6 +396,7 @@
     if (!window.Chart) return;
     chartDefaults();
     const por = m.por_tipo || {};
+    const temLabels = !!(window.ChartDataLabels);
 
     destruirChart("ativo");
     charts.ativo = new Chart(document.getElementById("cfgmt_chart_ativo"), {
@@ -215,9 +415,24 @@
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        cutout: "68%",
+        cutout: "62%",
         plugins: {
-          legend: { position: "bottom" },
+          legend: {
+            position: "bottom",
+            labels: {
+              generateLabels: (chart) => {
+                const ds = chart.data.datasets[0];
+                return chart.data.labels.map((label, i) => ({
+                  text: `${label}: ${ds.data[i] || 0}`,
+                  fillStyle: ds.backgroundColor[i],
+                  strokeStyle: ds.backgroundColor[i],
+                  hidden: false,
+                  index: i,
+                }));
+              },
+            },
+          },
+          ...(temLabels ? labelsRosca() : { datalabels: { display: false } }),
           tooltip: {
             callbacks: {
               label: (ctx) => {
@@ -255,11 +470,25 @@
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        layout: { padding: { top: 18 } },
         scales: {
           x: { stacked: true, grid: { display: false } },
           y: { stacked: true, beginAtZero: true, ticks: { precision: 0 } },
         },
-        plugins: { legend: { position: "bottom" } },
+        plugins: {
+          legend: { position: "bottom" },
+          ...(temLabels
+            ? {
+                datalabels: {
+                  anchor: "center",
+                  align: "center",
+                  color: "#fff",
+                  font: { weight: "800", size: 11 },
+                  formatter: (v) => (v ? v : ""),
+                },
+              }
+            : { datalabels: { display: false } }),
+        },
       },
     });
 
@@ -288,18 +517,22 @@
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        layout: { padding: { top: 18 } },
         scales: {
           x: { grid: { display: false } },
           y: { beginAtZero: true, ticks: { precision: 0 } },
         },
-        plugins: { legend: { position: "bottom" } },
+        plugins: {
+          legend: { position: "bottom" },
+          ...(temLabels ? labelsBarra() : { datalabels: { display: false } }),
+        },
       },
     });
 
     const semana = m.ultimos_7_dias || {};
     const labels = (semana.dias || []).map((d) => {
-      const [y, mo, da] = String(d).split("-");
-      return `${da}/${mo}`;
+      const parts = String(d).split("-");
+      return `${parts[2]}/${parts[1]}`;
     });
 
     destruirChart("semana");
@@ -317,6 +550,15 @@
             tension: 0.35,
             pointRadius: 4,
             pointHoverRadius: 6,
+            datalabels: temLabels
+              ? {
+                  align: "top",
+                  anchor: "end",
+                  color: CORES.up,
+                  font: { weight: "700", size: 10 },
+                  formatter: (v) => (v ? v : ""),
+                }
+              : { display: false },
           },
           {
             label: "Descadastros",
@@ -327,6 +569,15 @@
             tension: 0.35,
             pointRadius: 4,
             pointHoverRadius: 6,
+            datalabels: temLabels
+              ? {
+                  align: "bottom",
+                  anchor: "start",
+                  color: CORES.down,
+                  font: { weight: "700", size: 10 },
+                  formatter: (v) => (v ? v : ""),
+                }
+              : { display: false },
           },
           ...TIPOS.map((t) => ({
             label: `Cad. ${TIPO_LABEL[t]}`,
@@ -337,12 +588,14 @@
             pointRadius: 0,
             borderWidth: 1.5,
             hidden: true,
+            datalabels: { display: false },
           })),
         ],
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        layout: { padding: { top: 12, bottom: 8 } },
         interaction: { mode: "index", intersect: false },
         scales: {
           x: { grid: { display: false } },
@@ -350,6 +603,7 @@
         },
         plugins: {
           legend: { position: "bottom" },
+          datalabels: temLabels ? undefined : { display: false },
           tooltip: {
             callbacks: {
               afterBody: (items) => {
@@ -379,9 +633,11 @@
       if (!r.ok || !j.success) throw new Error(j.message || "Falha ao carregar métricas.");
       const m = j.metricas || {};
       renderKpis(m);
+      renderOnline(m);
       renderMatrix(m);
       renderWeekMeta(m);
       renderCharts(m);
+      metricasCarregadas = true;
     } catch (e) {
       el.dash.classList.add("is-error");
       if (el.lead) el.lead.textContent = e.message || "Não foi possível carregar o panorama.";
@@ -454,6 +710,7 @@
         .join("");
       window.lucide?.createIcons?.();
       window.Util?.gerarIconeTech?.refresh?.();
+      tenantsCarregados = true;
     } catch (e) {
       el.lista.innerHTML = `<tr><td colspan="9">${esc(e.message)}</td></tr>`;
     }
@@ -517,6 +774,8 @@
       text: j.message || "Concluído.",
       confirmButtonColor: "#021F81",
     });
+    tenantsCarregados = false;
+    metricasCarregadas = false;
     await Promise.all([carregar(), carregarMetricas()]);
   }
 
@@ -533,7 +792,37 @@
       carregar();
     }
   });
-  el.btnRefresh?.addEventListener("click", () => carregarMetricas());
+  el.btnRefresh?.addEventListener("click", () => {
+    metricasCarregadas = false;
+    carregarMetricas();
+  });
+  document.getElementById("cfgmt_kpi_pendente")?.addEventListener("click", () => {
+    abrirPendenteModal();
+  });
+  document.getElementById("cfgmt_kpis")?.addEventListener("click", (ev) => {
+    const btn = ev.target.closest("[data-lista-filtro]");
+    if (!btn || btn.id === "cfgmt_kpi_pendente") return;
+    const filtro = btn.getAttribute("data-lista-filtro") || "total";
+    const tipo = btn.getAttribute("data-lista-tipo") || "";
+    abrirListaFiltro(tipo, filtro);
+  });
+  el.matrix?.addEventListener("click", (ev) => {
+    const btn = ev.target.closest("[data-lista-filtro]");
+    if (!btn || btn.disabled) return;
+    const filtro = btn.getAttribute("data-lista-filtro") || "total";
+    const tipo = btn.getAttribute("data-lista-tipo") || "";
+    abrirListaFiltro(tipo, filtro);
+  });
+  document.getElementById("cfgmt_online_row")?.addEventListener("click", (ev) => {
+    const card = ev.target.closest("[data-online-tipo]");
+    if (!card) return;
+    abrirOnlineModal(card.getAttribute("data-online-tipo") || "");
+  });
+  el.tabs?.addEventListener("click", (ev) => {
+    const btn = ev.target.closest(".CfgMt_Tab");
+    if (!btn?.dataset.cfgmtTab) return;
+    ativarAba(btn.dataset.cfgmtTab);
+  });
   el.lista.addEventListener("click", async (ev) => {
     const btn = ev.target.closest("button");
     if (!btn) return;
@@ -551,12 +840,20 @@
 
   window.addEventListener("message", (event) => {
     if (event.data?.grupo === "atualizarTabela") {
-      Promise.all([carregar(), carregarMetricas()]).catch((e) =>
-        Swal.fire("Erro", e.message, "error")
-      );
+      tenantsCarregados = false;
+      metricasCarregadas = false;
+      Promise.all([
+        el.paneTenants && !el.paneTenants.hidden ? carregar() : Promise.resolve(),
+        el.paneDash && !el.paneDash.hidden ? carregarMetricas() : Promise.resolve(),
+      ]).catch((e) => Swal.fire("Erro", e.message, "error"));
     }
   });
 
-  carregarMetricas();
-  carregar();
+  let abaInicial = "dashboard";
+  try {
+    abaInicial = localStorage.getItem("cfgmt_aba") || "dashboard";
+  } catch {
+    /* ignore */
+  }
+  ativarAba(abaInicial);
 })();

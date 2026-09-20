@@ -1438,6 +1438,29 @@ def manutencao_tenant_metricas():
         conn.close()
 
 
+@config_bp.get(f"{MANUTENCAO_TENANT_PREFIX}/metricas/lista")
+@login_obrigatorio()
+def manutencao_tenant_metricas_lista():
+    if (r := _exigir_dev()) is not None:
+        return r
+    tipo = (request.args.get("tipo") or "").strip().lower()
+    filtro = (request.args.get("filtro") or "total").strip().lower()
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        from sistema.config.servico_manutencao_tenant import listar_tenants_metricas
+
+        payload = listar_tenants_metricas(cur, tipo=tipo or None, filtro=filtro)
+        return jsonify(success=True, **payload)
+    except ValueError as e:
+        return jsonify(success=False, message=str(e)), 400
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)[:400]), 500
+    finally:
+        conn.close()
+
+
 def _tenant_payload(cur, id_tenant: int) -> dict | None:
     cur.execute(
         """

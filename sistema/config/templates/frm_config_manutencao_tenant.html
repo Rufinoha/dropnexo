@@ -4,7 +4,7 @@
 {% block topbar_title %}Manutenção de tenant{% endblock %}
 {% block head_extra %}
 <link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_crud.css') }}?v=3" />
-<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_manutencao_tenant.css') }}?v=8" />
+<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_manutencao_tenant.css') }}?v=13" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ConfigPage CfgMt_Page">
@@ -12,163 +12,197 @@
     <h2>Manutenção de tenant</h2>
     <a class="Cl_BtnLink" href="{{ url_for('config.configuracoes') }}">Voltar às Configurações</a>
   </div>
-  <p class="Cl_ConfigSub">
-    Panorama da base + correção de tipo/plano ou exclusão de tenants de teste (somente desenvolvedor).
-  </p>
 
-  <section class="CfgMt_Dash" id="cfgmt_dash" aria-label="Panorama de tenants">
-    <header class="CfgMt_DashHero">
-      <div class="CfgMt_DashHeroText">
-        <p class="CfgMt_DashEyebrow">Radar da plataforma</p>
-        <h3 class="CfgMt_DashTitle">Quem está na base — agora</h3>
-        <p class="CfgMt_DashLead" id="cfgmt_dash_lead">Carregando métricas…</p>
+  <nav class="CfgMt_Tabs" id="cfgmt_tabs" aria-label="Seções">
+    <button type="button" class="CfgMt_Tab is-active" data-cfgmt-tab="dashboard">Dashboard</button>
+    <button type="button" class="CfgMt_Tab" data-cfgmt-tab="tenants">Tenants</button>
+  </nav>
+
+  <div id="cfgmt_pane_dashboard" class="CfgMt_Pane">
+    <section class="CfgMt_Dash" id="cfgmt_dash" aria-label="Panorama de tenants">
+      <header class="CfgMt_DashTop">
+        <div>
+          <p class="CfgMt_DashEyebrow">Radar ao vivo</p>
+          <h3 class="CfgMt_DashTitle">Base em um olhar</h3>
+        </div>
+        <div class="CfgMt_DashTopRight">
+          <p class="CfgMt_DashLead" id="cfgmt_dash_lead">Carregando…</p>
+          <button type="button" class="CfgMt_DashRefresh" id="cfgmt_btnRefresh">Atualizar</button>
+        </div>
+      </header>
+
+      <!-- 1) Online = o que importa agora -->
+      <div class="CfgMt_Pulse" id="cfgmt_online_row">
+        <button type="button" class="CfgMt_PulseMain" data-online-tipo="">
+          <span class="CfgMt_OnlineDot" aria-hidden="true"></span>
+          <div>
+            <span class="CfgMt_PulseLabel">Online agora</span>
+            <strong class="CfgMt_PulseValue" data-online-kpi="total">—</strong>
+          </div>
+          <span class="CfgMt_PulseHint" data-online-hint>30 min · ver quem</span>
+        </button>
+        <button type="button" class="CfgMt_PulseChip CfgMt_PulseChip--vendedor" data-online-tipo="vendedor">
+          <span>Vendedores</span>
+          <strong data-online-kpi="vendedor">—</strong>
+        </button>
+        <button type="button" class="CfgMt_PulseChip CfgMt_PulseChip--fornecedor" data-online-tipo="fornecedor">
+          <span>Fornecedores</span>
+          <strong data-online-kpi="fornecedor">—</strong>
+        </button>
+        <button type="button" class="CfgMt_PulseChip CfgMt_PulseChip--armazem" data-online-tipo="armazem">
+          <span>Armazéns</span>
+          <strong data-online-kpi="armazem">—</strong>
+        </button>
       </div>
-      <button type="button" class="CfgMt_DashRefresh" id="cfgmt_btnRefresh" title="Atualizar métricas">
-        Atualizar
-      </button>
-    </header>
 
-    <div class="CfgMt_KpiGrid" id="cfgmt_kpis">
-      <article class="CfgMt_Kpi CfgMt_Kpi--total">
-        <span class="CfgMt_KpiLabel">Tenants</span>
-        <strong class="CfgMt_KpiValue" data-kpi="total">—</strong>
-        <span class="CfgMt_KpiHint">base completa</span>
-      </article>
-      <article class="CfgMt_Kpi CfgMt_Kpi--on">
-        <span class="CfgMt_KpiLabel">Ativos</span>
-        <strong class="CfgMt_KpiValue" data-kpi="ativos">—</strong>
-        <span class="CfgMt_KpiHint" data-kpi-hint="ativos_pct">—</span>
-      </article>
-      <article class="CfgMt_Kpi CfgMt_Kpi--off">
-        <span class="CfgMt_KpiLabel">Inativos</span>
-        <strong class="CfgMt_KpiValue" data-kpi="inativos">—</strong>
-        <span class="CfgMt_KpiHint" data-kpi-hint="inativos_pct">—</span>
-      </article>
-      <article class="CfgMt_Kpi CfgMt_Kpi--cancel">
-        <span class="CfgMt_KpiLabel">Pediram encerramento</span>
-        <strong class="CfgMt_KpiValue" data-kpi="encerramentos">—</strong>
-        <span class="CfgMt_KpiHint" data-kpi-hint="encerramentos">—</span>
-      </article>
-      <article class="CfgMt_Kpi CfgMt_Kpi--pf">
-        <span class="CfgMt_KpiLabel">Pessoa física</span>
-        <strong class="CfgMt_KpiValue" data-kpi="pf">—</strong>
-        <span class="CfgMt_KpiHint">CPF</span>
-      </article>
-      <article class="CfgMt_Kpi CfgMt_Kpi--pj">
-        <span class="CfgMt_KpiLabel">CNPJ</span>
-        <strong class="CfgMt_KpiValue" data-kpi="cnpj">—</strong>
-        <span class="CfgMt_KpiHint">pessoa jurídica</span>
-      </article>
-    </div>
+      <!-- 2) KPIs compactos -->
+      <div class="CfgMt_KpiStrip" id="cfgmt_kpis">
+        <article class="CfgMt_KpiMini">
+          <span>Tenants</span>
+          <strong data-kpi="total">—</strong>
+        </article>
+        <article class="CfgMt_KpiMini CfgMt_KpiMini--on">
+          <span>Ativos</span>
+          <strong data-kpi="ativos">—</strong>
+        </article>
+        <button type="button" class="CfgMt_KpiMini CfgMt_KpiMini--off" data-lista-filtro="inativos" data-lista-tipo="" title="Ver inativos">
+          <span>Inativos</span>
+          <strong data-kpi="inativos">—</strong>
+        </button>
+        <button type="button" class="CfgMt_KpiMini CfgMt_KpiMini--pending" id="cfgmt_kpi_pendente" title="Cadastrou e não ativou">
+          <span>Não ativaram</span>
+          <strong data-kpi="ativacao_pendente">—</strong>
+        </button>
+        <button type="button" class="CfgMt_KpiMini CfgMt_KpiMini--cancel" data-lista-filtro="encerr_solicitados" data-lista-tipo="" title="Pedidos de encerramento">
+          <span>Encerramentos</span>
+          <strong data-kpi="encerramentos">—</strong>
+        </button>
+        <button type="button" class="CfgMt_KpiMini CfgMt_KpiMini--pf" data-lista-filtro="pf" data-lista-tipo="" title="Pessoa física">
+          <span>PF</span>
+          <strong data-kpi="pf">—</strong>
+        </button>
+        <button type="button" class="CfgMt_KpiMini CfgMt_KpiMini--pj" data-lista-filtro="cnpj" data-lista-tipo="" title="CNPJ">
+          <span>CNPJ</span>
+          <strong data-kpi="cnpj">—</strong>
+        </button>
+      </div>
 
-    <div class="CfgMt_ChartGrid">
-      <article class="CfgMt_ChartCard">
-        <header class="CfgMt_ChartHead">
-          <h4>Ativos × inativos</h4>
-          <p>Saúde da base</p>
-        </header>
-        <div class="CfgMt_ChartBody CfgMt_ChartBody--sm">
-          <canvas id="cfgmt_chart_ativo" aria-label="Gráfico ativos e inativos"></canvas>
+      <!-- 3) Matriz + gráficos lado a lado -->
+      <div class="CfgMt_MainGrid">
+        <div class="CfgMt_MatrixWrap">
+          <header class="CfgMt_ChartHead">
+            <div>
+              <h4>Matriz por tipo</h4>
+              <p>Clique em qualquer número para ver quem é</p>
+            </div>
+          </header>
+          <div class="CfgMt_Matrix" id="cfgmt_matrix" role="table" aria-label="Matriz por tipo"></div>
         </div>
-      </article>
 
-      <article class="CfgMt_ChartCard">
-        <header class="CfgMt_ChartHead">
-          <h4>Por tipo de negócio</h4>
-          <p>Vendedor · Fornecedor · Armazém</p>
-        </header>
-        <div class="CfgMt_ChartBody">
-          <canvas id="cfgmt_chart_tipo" aria-label="Gráfico por tipo"></canvas>
+        <div class="CfgMt_ChartsCol">
+          <article class="CfgMt_ChartCard">
+            <header class="CfgMt_ChartHead">
+              <h4>Saúde</h4>
+              <p>Ativos × inativos</p>
+            </header>
+            <div class="CfgMt_ChartBody CfgMt_ChartBody--sm">
+              <canvas id="cfgmt_chart_ativo"></canvas>
+            </div>
+          </article>
+          <article class="CfgMt_ChartCard">
+            <header class="CfgMt_ChartHead">
+              <h4>Tipos</h4>
+              <p>Ativos / inativos</p>
+            </header>
+            <div class="CfgMt_ChartBody CfgMt_ChartBody--sm">
+              <canvas id="cfgmt_chart_tipo"></canvas>
+            </div>
+          </article>
+          <article class="CfgMt_ChartCard">
+            <header class="CfgMt_ChartHead">
+              <h4>PF × CNPJ</h4>
+              <p>Por tipo</p>
+            </header>
+            <div class="CfgMt_ChartBody CfgMt_ChartBody--sm">
+              <canvas id="cfgmt_chart_pessoa"></canvas>
+            </div>
+          </article>
         </div>
-      </article>
+      </div>
 
-      <article class="CfgMt_ChartCard">
-        <header class="CfgMt_ChartHead">
-          <h4>PF × CNPJ por tipo</h4>
-          <p>Perfil cadastral</p>
-        </header>
-        <div class="CfgMt_ChartBody">
-          <canvas id="cfgmt_chart_pessoa" aria-label="Gráfico PF e CNPJ por tipo"></canvas>
-        </div>
-      </article>
-
-      <article class="CfgMt_ChartCard CfgMt_ChartCard--wide">
+      <!-- 4) Semana -->
+      <article class="CfgMt_ChartCard CfgMt_ChartCard--week">
         <header class="CfgMt_ChartHead">
           <div>
             <h4>Últimos 7 dias</h4>
-            <p>Cadastros × descadastros (encerramentos concluídos)</p>
+            <p>Cadastros × descadastros</p>
           </div>
           <div class="CfgMt_WeekPills" id="cfgmt_week_pills"></div>
         </header>
-        <div class="CfgMt_ChartBody CfgMt_ChartBody--lg">
-          <canvas id="cfgmt_chart_semana" aria-label="Gráfico dos últimos 7 dias"></canvas>
+        <div class="CfgMt_ChartBody CfgMt_ChartBody--md">
+          <canvas id="cfgmt_chart_semana"></canvas>
         </div>
         <div class="CfgMt_WeekBreakdown" id="cfgmt_week_breakdown"></div>
       </article>
-    </div>
-
-    <div class="CfgMt_MatrixWrap">
-      <header class="CfgMt_ChartHead">
-        <h4>Matriz por tipo</h4>
-        <p>Totais, status, pessoa e encerramentos lado a lado</p>
-      </header>
-      <div class="CfgMt_Matrix" id="cfgmt_matrix" role="table" aria-label="Matriz por tipo"></div>
-    </div>
-  </section>
-
-  <div class="filter-panel">
-    <div class="filter-panel-fields">
-      <div class="filter-group">
-        <label for="ob_filtroBusca">Busca</label>
-        <input type="search" id="ob_filtroBusca" placeholder="ID, nome, slug ou documento" />
-      </div>
-      <div class="filter-group">
-        <label for="ob_filtroTipo">Tipo</label>
-        <select id="ob_filtroTipo">
-          <option value="">Todos</option>
-          <option value="vendedor">Vendedor</option>
-          <option value="fornecedor">Fornecedor</option>
-          <option value="armazem">Armazém</option>
-        </select>
-      </div>
-      <div class="filter-group">
-        <label for="ob_filtroAtivo">Ativo</label>
-        <select id="ob_filtroAtivo">
-          <option value="">Todos</option>
-          <option value="1">Sim</option>
-          <option value="0">Não</option>
-        </select>
-      </div>
-    </div>
-    <div class="filter-panel-actions">
-      <button type="button" class="Cl_botaoFiltro" id="ob_btnFiltrar">Filtrar</button>
-      <button type="button" class="Cl_BtnCancelar" id="ob_btnLimpar">Limpar</button>
-    </div>
+    </section>
   </div>
 
-  <div class="Cl_TabelaPrincipal Cat_TabelaScroll" id="content-area-Principal">
-    <table>
-      <thead>
-        <tr>
-          <th class="CfgMt_ColId">ID</th>
-          <th class="CfgMt_ColNome">Nome</th>
-          <th class="CfgMt_ColRazao">Razão social</th>
-          <th class="CfgMt_ColTipo">Tipo</th>
-          <th class="CfgMt_ColPlano">Plano</th>
-          <th class="CfgMt_ColAtivo">Ativo</th>
-          <th class="CfgMt_ColData">Cadastro</th>
-          <th class="CfgMt_ColData">Último acesso</th>
-          <th class="Cl_TableActions CfgMt_ColAcoes">Ações</th>
-        </tr>
-      </thead>
-      <tbody id="ob_listaTenants">
-        <tr><td colspan="9">Carregando…</td></tr>
-      </tbody>
-    </table>
+  <div id="cfgmt_pane_tenants" class="CfgMt_Pane" hidden>
+    <div class="filter-panel">
+      <div class="filter-panel-fields">
+        <div class="filter-group">
+          <label for="ob_filtroBusca">Busca</label>
+          <input type="search" id="ob_filtroBusca" placeholder="ID, nome, slug ou documento" />
+        </div>
+        <div class="filter-group">
+          <label for="ob_filtroTipo">Tipo</label>
+          <select id="ob_filtroTipo">
+            <option value="">Todos</option>
+            <option value="vendedor">Vendedor</option>
+            <option value="fornecedor">Fornecedor</option>
+            <option value="armazem">Armazém</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label for="ob_filtroAtivo">Ativo</label>
+          <select id="ob_filtroAtivo">
+            <option value="">Todos</option>
+            <option value="1">Sim</option>
+            <option value="0">Não</option>
+          </select>
+        </div>
+      </div>
+      <div class="filter-panel-actions">
+        <button type="button" class="Cl_botaoFiltro" id="ob_btnFiltrar">Filtrar</button>
+        <button type="button" class="Cl_BtnCancelar" id="ob_btnLimpar">Limpar</button>
+      </div>
+    </div>
+
+    <div class="Cl_TabelaPrincipal Cat_TabelaScroll" id="content-area-Principal">
+      <table>
+        <thead>
+          <tr>
+            <th class="CfgMt_ColId">ID</th>
+            <th class="CfgMt_ColNome">Nome</th>
+            <th class="CfgMt_ColRazao">Razão social</th>
+            <th class="CfgMt_ColTipo">Tipo</th>
+            <th class="CfgMt_ColPlano">Plano</th>
+            <th class="CfgMt_ColAtivo">Ativo</th>
+            <th class="CfgMt_ColData">Cadastro</th>
+            <th class="CfgMt_ColData">Último acesso</th>
+            <th class="Cl_TableActions CfgMt_ColAcoes">Ações</th>
+          </tr>
+        </thead>
+        <tbody id="ob_listaTenants">
+          <tr><td colspan="9">Carregando…</td></tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 </div>
 {% endblock %}
 {% block page_js %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
-<script src="{{ url_for('config.static', filename='script/Sconfig_manutencao_tenant.js') }}?v=8"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+<script src="{{ url_for('config.static', filename='script/Sconfig_manutencao_tenant.js') }}?v=13"></script>
 {% endblock %}

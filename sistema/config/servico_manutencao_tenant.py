@@ -300,6 +300,14 @@ def metricas_tenants(cur) -> dict:
         "por_tipo": {t: 0 for t in _TIPOS_METRICAS},
         "concluidos_por_tipo": {t: 0 for t in _TIPOS_METRICAS},
     }
+    inativos_via_encerramento = 0
+    encerramentos_ainda_ativos = 0
+    ativacao_pendente = {
+        "total": 0,
+        "por_tipo": {t: 0 for t in _TIPOS_METRICAS},
+        "itens": [],
+    }
+    inativos_outros = 0
 
     tem_cancel = False
     try:
@@ -314,22 +322,90 @@ def metricas_tenants(cur) -> dict:
             SELECT
               LOWER(COALESCE(NULLIF(TRIM(t.tipo_negocio), ''), 'vendedor')),
               COALESCE(c.etapa, 1),
-              (c.concluido_em IS NOT NULL)
+              (c.concluido_em IS NOT NULL OR COALESCE(c.etapa, 1) >= 3) AS concluido,
+              COALESCE(t.ativo, FALSE) AS tenant_ativo
             FROM tbl_cancelamento_conta c
             JOIN tbl_tenant t ON t.id = c.id_tenant
             """
         )
-        for tipo_raw, etapa, concluido in cur.fetchall():
+        for tipo_raw, etapa, concluido, tenant_ativo in cur.fetchall():
             tipo = tipo_raw if tipo_raw in por_tipo else "vendedor"
             enc["solicitados"] += 1
             enc["por_tipo"][tipo] = enc["por_tipo"].get(tipo, 0) + 1
             por_tipo[tipo]["encerramentos_solicitados"] += 1
-            if concluido or int(etapa or 0) >= 3:
+            if concluido:
                 enc["concluidos"] += 1
                 enc["concluidos_por_tipo"][tipo] = enc["concluidos_por_tipo"].get(tipo, 0) + 1
                 por_tipo[tipo]["encerramentos_concluidos"] += 1
+                if not tenant_ativo:
+                    inativos_via_encerramento += 1
             else:
                 enc["em_andamento"] += 1
+                if tenant_ativo:
+                    encerramentos_ainda_ativos += 1
+
+    # Cadastros que preencheram o formulário, receberam e-mail, mas não criaram senha.
+    try:
+        filtro_cancel = ""
+        if tem_cancel:
+            filtro_cancel = """
+              AND NOT EXISTS (
+                SELECT 1
+                FROM tbl_cancelamento_conta c
+                WHERE c.id_tenant = t.id
+                  AND (c.concluido_em IS NOT NULL OR COALESCE(c.etapa, 1) >= 3)
+              )
+            """
+        cur.execute(
+            f"""
+            SELECT DISTINCT ON (t.id)
+              t.id,
+              COALESCE(NULLIF(TRIM(t.nome), ''), t.slug, 'Tenant') AS tenant_nome,
+              LOWER(COALESCE(NULLIF(TRIM(t.tipo_negocio), ''), 'vendedor')) AS tipo,
+              COALESCE(u.nome, '') AS usuario_nome,
+              COALESCE(u.email, '') AS email,
+              COALESCE(NULLIF(TRIM(u.whatsapp), ''), NULLIF(TRIM(t.telefone_comercial), ''), '') AS whatsapp,
+              t.criado_em
+            FROM tbl_tenant t
+            JOIN tbl_usuario_tenant ut ON ut.id_tenant = t.id AND COALESCE(ut.ativo, TRUE) = TRUE
+            JOIN tbl_perfil pf ON pf.id = ut.id_perfil AND LOWER(COALESCE(pf.codigo, '')) = 'dono'
+            JOIN tbl_usuario u ON u.id = ut.id_usuario
+            WHERE COALESCE(t.ativo, FALSE) = FALSE
+              AND (
+                u.senha_hash IS NULL
+                OR NULLIF(TRIM(COALESCE(u.token_ativacao, '')), '') IS NOT NULL
+              )
+              {filtro_cancel}
+            ORDER BY t.id, ut.id
+            """
+        )
+        for row in cur.fetchall():
+            tipo = row[2] if row[2] in ativacao_pendente["por_tipo"] else "vendedor"
+            ativacao_pendente["por_tipo"][tipo] = ativacao_pendente["por_tipo"].get(tipo, 0) + 1
+            ativacao_pendente["total"] += 1
+            criado = row[6]
+            ativacao_pendente["itens"].append(
+                {
+                    "id_tenant": int(row[0]),
+                    "tenant_nome": row[1] or "",
+                    "tipo_negocio": tipo,
+                    "usuario_nome": row[3] or "",
+                    "email": row[4] or "",
+                    "whatsapp": row[5] or "",
+                    "criado_em": criado.isoformat() if criado else None,
+                }
+            )
+        ativacao_pendente["itens"].sort(
+            key=lambda x: x.get("criado_em") or "",
+            reverse=True,
+        )
+    except Exception:
+        _log.exception("metricas_tenants: falha ao contar ativação pendente")
+
+    inativos_outros = max(
+        0,
+        inativos - inativos_via_encerramento - int(ativacao_pendente["total"] or 0),
+    )
 
     hoje = datetime.now(timezone.utc).date()
     inicio = hoje - timedelta(days=6)
@@ -394,13 +470,71 @@ def metricas_tenants(cur) -> dict:
     def _soma(mapa: dict[str, list[int]]) -> dict[str, int]:
         return {k: int(sum(v)) for k, v in mapa.items()}
 
+    # "Online" aproximado: último acesso recente (não há heartbeat contínuo).
+    janela_min = 30
+    online = {
+        "janela_minutos": janela_min,
+        "total": 0,
+        "por_tipo": {t: 0 for t in _TIPOS_METRICAS},
+        "itens": [],
+    }
+    try:
+        cur.execute(
+            """
+            SELECT DISTINCT ON (t.id)
+              t.id,
+              COALESCE(NULLIF(TRIM(t.nome), ''), t.slug, 'Tenant') AS tenant_nome,
+              LOWER(COALESCE(NULLIF(TRIM(t.tipo_negocio), ''), 'vendedor')) AS tipo,
+              COALESCE(u.nome, '') AS usuario_nome,
+              COALESCE(u.email, '') AS email,
+              COALESCE(NULLIF(TRIM(u.whatsapp), ''), NULLIF(TRIM(t.telefone_comercial), ''), '') AS whatsapp,
+              ut.ultimo_acesso_em
+            FROM tbl_usuario_tenant ut
+            JOIN tbl_tenant t ON t.id = ut.id_tenant
+            JOIN tbl_usuario u ON u.id = ut.id_usuario
+            WHERE COALESCE(t.ativo, FALSE) = TRUE
+              AND COALESCE(ut.ativo, TRUE) = TRUE
+              AND ut.ultimo_acesso_em IS NOT NULL
+              AND ut.ultimo_acesso_em >= (NOW() - (%s * INTERVAL '1 minute'))
+            ORDER BY t.id, ut.ultimo_acesso_em DESC NULLS LAST
+            """,
+            (int(janela_min),),
+        )
+        for row in cur.fetchall():
+            tipo = row[2] if row[2] in online["por_tipo"] else "vendedor"
+            online["por_tipo"][tipo] = online["por_tipo"].get(tipo, 0) + 1
+            online["total"] += 1
+            acesso = row[6]
+            online["itens"].append(
+                {
+                    "id_tenant": int(row[0]),
+                    "tenant_nome": row[1] or "",
+                    "tipo_negocio": tipo,
+                    "usuario_nome": row[3] or "",
+                    "email": row[4] or "",
+                    "whatsapp": row[5] or "",
+                    "ultimo_acesso_em": acesso.isoformat() if acesso else None,
+                }
+            )
+        online["itens"].sort(
+            key=lambda x: x.get("ultimo_acesso_em") or "",
+            reverse=True,
+        )
+    except Exception:
+        _log.exception("metricas_tenants: falha ao listar online")
+
     return {
         "total": total,
         "ativos": ativos,
         "inativos": inativos,
+        "inativos_via_encerramento": inativos_via_encerramento,
+        "inativos_outros": inativos_outros,
+        "ativacao_pendente": ativacao_pendente,
+        "encerramentos_ainda_ativos": encerramentos_ainda_ativos,
         "pessoa": pessoa,
         "encerramentos": enc,
         "por_tipo": por_tipo,
+        "online": online,
         "ultimos_7_dias": {
             "dias": dias,
             "cadastros": cadastros,
@@ -415,4 +549,136 @@ def metricas_tenants(cur) -> dict:
             },
         },
         "gerado_em": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+_FILTROS_LISTA = frozenset(
+    {
+        "total",
+        "ativos",
+        "inativos",
+        "pf",
+        "cnpj",
+        "encerr_solicitados",
+        "encerr_concluidos",
+        "ativacao_pendente",
+    }
+)
+
+
+def listar_tenants_metricas(cur, *, tipo: str | None = None, filtro: str = "total") -> dict:
+    """Lista tenants para drill-down do dashboard (matriz / KPIs)."""
+    tipo_n = (tipo or "").strip().lower()
+    if tipo_n and tipo_n not in _TIPOS_METRICAS:
+        raise ValueError("Tipo inválido.")
+    filtro_n = (filtro or "total").strip().lower()
+    if filtro_n not in _FILTROS_LISTA:
+        raise ValueError("Filtro inválido.")
+
+    tem_cancel = False
+    try:
+        cur.execute("SELECT to_regclass('public.tbl_cancelamento_conta')")
+        tem_cancel = bool(cur.fetchone()[0])
+    except Exception:
+        tem_cancel = False
+
+    where = ["TRUE"]
+    params: list = []
+    if tipo_n:
+        where.append("LOWER(COALESCE(NULLIF(TRIM(t.tipo_negocio), ''), 'vendedor')) = %s")
+        params.append(tipo_n)
+
+    joins = """
+      FROM tbl_tenant t
+      LEFT JOIN LATERAL (
+        SELECT u.nome, u.email, u.whatsapp, u.senha_hash, u.token_ativacao
+        FROM tbl_usuario_tenant ut
+        JOIN tbl_perfil pf ON pf.id = ut.id_perfil AND LOWER(COALESCE(pf.codigo, '')) = 'dono'
+        JOIN tbl_usuario u ON u.id = ut.id_usuario
+        WHERE ut.id_tenant = t.id
+        ORDER BY ut.ativo DESC NULLS LAST, ut.id
+        LIMIT 1
+      ) dono ON TRUE
+    """
+
+    if filtro_n == "ativos":
+        where.append("COALESCE(t.ativo, FALSE) = TRUE")
+    elif filtro_n == "inativos":
+        where.append("COALESCE(t.ativo, FALSE) = FALSE")
+    elif filtro_n == "pf":
+        where.append(
+            """(
+              UPPER(COALESCE(t.tipo_pessoa, '')) = 'F'
+              OR length(regexp_replace(COALESCE(t.documento, ''), '\\D', '', 'g')) = 11
+            )"""
+        )
+    elif filtro_n == "cnpj":
+        where.append(
+            """(
+              UPPER(COALESCE(t.tipo_pessoa, '')) = 'J'
+              OR length(regexp_replace(COALESCE(t.documento, ''), '\\D', '', 'g')) = 14
+            )"""
+        )
+    elif filtro_n == "ativacao_pendente":
+        where.append("COALESCE(t.ativo, FALSE) = FALSE")
+        where.append(
+            """(
+              dono.senha_hash IS NULL
+              OR NULLIF(TRIM(COALESCE(dono.token_ativacao, '')), '') IS NOT NULL
+            )"""
+        )
+        if tem_cancel:
+            where.append(
+                """NOT EXISTS (
+                  SELECT 1 FROM tbl_cancelamento_conta c
+                  WHERE c.id_tenant = t.id
+                    AND (c.concluido_em IS NOT NULL OR COALESCE(c.etapa, 1) >= 3)
+                )"""
+            )
+    elif filtro_n in ("encerr_solicitados", "encerr_concluidos"):
+        if not tem_cancel:
+            return {"tipo": tipo_n or "", "filtro": filtro_n, "itens": [], "total": 0}
+        joins += """
+          JOIN tbl_cancelamento_conta c ON c.id_tenant = t.id
+        """
+        if filtro_n == "encerr_concluidos":
+            where.append("(c.concluido_em IS NOT NULL OR COALESCE(c.etapa, 1) >= 3)")
+
+    cur.execute(
+        f"""
+        SELECT
+          t.id,
+          COALESCE(NULLIF(TRIM(t.nome), ''), t.slug, 'Tenant'),
+          LOWER(COALESCE(NULLIF(TRIM(t.tipo_negocio), ''), 'vendedor')),
+          COALESCE(t.ativo, FALSE),
+          COALESCE(dono.nome, ''),
+          COALESCE(dono.email, ''),
+          COALESCE(NULLIF(TRIM(dono.whatsapp), ''), NULLIF(TRIM(t.telefone_comercial), ''), ''),
+          t.criado_em
+        {joins}
+        WHERE {" AND ".join(where)}
+        ORDER BY t.criado_em DESC NULLS LAST, t.id DESC
+        LIMIT 400
+        """,
+        params,
+    )
+    itens = []
+    for row in cur.fetchall():
+        itens.append(
+            {
+                "id_tenant": int(row[0]),
+                "tenant_nome": row[1] or "",
+                "tipo_negocio": row[2] or "vendedor",
+                "ativo": bool(row[3]),
+                "usuario_nome": row[4] or "",
+                "email": row[5] or "",
+                "whatsapp": row[6] or "",
+                "criado_em": row[7].isoformat() if row[7] else None,
+            }
+        )
+    return {
+        "tipo": tipo_n or "",
+        "filtro": filtro_n,
+        "itens": itens,
+        "total": len(itens),
     }
