@@ -18,20 +18,23 @@
     ordem: document.getElementById("ordem"),
     ativo: document.getElementById("ativo"),
     descricao: document.getElementById("descricao"),
-    btnSalvar: document.getElementById("btnSalvar"),
     btnExcluir: document.getElementById("btnExcluir"),
-    btnCancelar: document.getElementById("btnCancelar"),
-    modo: document.getElementById("isp_modo"),
-    titulo: document.getElementById("isp_titulo"),
   };
 
-  function setModo(editando) {
-    if (el.modo) el.modo.textContent = editando ? "Edição" : "Novo mapeamento";
-    if (el.titulo) {
-      el.titulo.textContent = editando ? "Editar status padrão" : "Novo status padrão";
-    }
-    if (el.btnExcluir) el.btnExcluir.style.display = editando ? "" : "none";
+  function ativarAba(tab) {
+    document.querySelectorAll(".Isp_SideTab").forEach((btn) => {
+      btn.classList.toggle("is-active", btn.dataset.tab === tab);
+    });
+    document.querySelectorAll(".Isp_Panel").forEach((panel) => {
+      const on = panel.dataset.panel === tab;
+      panel.classList.toggle("is-active", on);
+      panel.hidden = !on;
+    });
   }
+
+  document.querySelectorAll(".Isp_SideTab").forEach((btn) => {
+    btn.addEventListener("click", () => ativarAba(btn.dataset.tab));
+  });
 
   function prepararInclusao() {
     idRegistro = 0;
@@ -47,7 +50,8 @@
     if (el.ordem) el.ordem.value = "10";
     if (el.ativo) el.ativo.checked = true;
     if (el.descricao) el.descricao.value = "";
-    setModo(false);
+    if (el.btnExcluir) el.btnExcluir.style.display = "none";
+    ativarAba("geral");
   }
 
   function preencher(d) {
@@ -64,7 +68,8 @@
     if (el.ordem) el.ordem.value = String(d.ordem ?? 10);
     if (el.ativo) el.ativo.checked = d.ativo !== false;
     if (el.descricao) el.descricao.value = d.descricao || "";
-    setModo(true);
+    if (el.btnExcluir) el.btnExcluir.style.display = "";
+    ativarAba("geral");
   }
 
   async function carregarDadosEdicao() {
@@ -83,8 +88,13 @@
     const status_dn_label = (el.status_dn_label?.value || "").trim();
     const evento = (el.evento?.value || "").trim();
     const status_externo = (el.status_externo?.value || "").trim();
-    if (!status_dn || !status_dn_label || !evento || !status_externo) {
-      Swal.fire("Atenção", "Preencha DropNexo, código DN, evento e status externo.", "warning");
+    if (!status_dn_label || !status_externo) {
+      Swal.fire("Atenção", "Informe DropNexo e status externo (topo).", "warning");
+      return;
+    }
+    if (!status_dn || !evento) {
+      ativarAba("amarracao");
+      Swal.fire("Atenção", "Na aba Amarração, preencha código DN e evento.", "warning");
       return;
     }
     try {
@@ -150,7 +160,6 @@
     window.parent.GlobalUtils?.fecharJanelaApoio(nivelModal);
   });
 
-  // Fonte da verdade (doc 04): GlobalUtils.receberDadosApoio
   if (window.GlobalUtils && typeof GlobalUtils.receberDadosApoio === "function") {
     GlobalUtils.receberDadosApoio((id, nivel) => {
       nivelModal = Number(nivel || 1) || 1;

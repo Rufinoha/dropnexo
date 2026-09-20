@@ -1,119 +1,183 @@
-/* Apoio — Status de integração (compacto, sem header duplicado) */
-.IspApoio_Body {
-  margin: 0;
-  background: #f1f5f9;
-  min-height: 100%;
+/* Apoio Status padrão — mesmo shell do cupom (header + sidebar + painéis) */
+
+html:has(.Isp_ApoioBody),
+html:has(.Isp_ApoioBody) body {
+  height: 100%;
+  overflow: hidden;
 }
 
-.IspApoio_Shell {
-  padding: 14px 16px 8px;
+.Isp_ApoioBody {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: #f0f3f9;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   box-sizing: border-box;
 }
 
-.IspApoio_Top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
-  padding: 0 2px;
-}
-
-.IspApoio_Eyebrow {
-  margin: 0 0 2px;
-  font-size: 0.7rem;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: #64748b;
-}
-
-.IspApoio_Title {
+.Isp_ApoioWrap.Cl_ContainerApoio {
   margin: 0;
-  font-size: 1.15rem;
-  font-weight: 800;
-  color: #021f81;
-  line-height: 1.2;
+  padding: 16px 18px 8px;
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  box-sizing: border-box;
 }
 
-.IspApoio_Ativo {
-  flex-shrink: 0;
+.Isp_ApoioWrap .form-campo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  min-width: 0;
+}
+
+.Isp_ApoioWrap .form-campo > label {
+  font-weight: 600;
+  margin-bottom: 0;
+  font-size: 13px;
+  color: #334155;
+}
+
+.Isp_ApoioWrap .form-campo input,
+.Isp_ApoioWrap .form-campo select,
+.Isp_ApoioWrap .form-campo textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #d1d9e6;
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 14px;
   background: #fff;
-  border: 1px solid #e2e8f0;
-  border-radius: 999px;
-  padding: 6px 12px;
 }
 
-.IspApoio_Grid {
-  display: grid;
-  grid-template-columns: 1fr 1.2fr;
-  gap: 12px;
+.Isp_ApoioWrap .form-campo input,
+.Isp_ApoioWrap .form-campo select {
+  height: 40px;
 }
 
-.IspApoio_Card {
-  background: #fff;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  padding: 12px 14px 14px;
-  border-left: 3px solid #021f81;
+.Isp_ApoioWrap .form-campo textarea {
+  min-height: 120px;
+  resize: vertical;
+  line-height: 1.45;
 }
 
-.IspApoio_Card--wide {
-  grid-column: 1 / -1;
-  border-left-color: #64748b;
-}
-
-.IspApoio_CardTitle {
-  margin: 0 0 10px;
-  font-size: 0.72rem;
-  font-weight: 800;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+.Isp_ApoioWrap .form-campo small {
   color: #64748b;
+  font-size: 12px;
+  font-weight: 400;
 }
 
-.IspApoio_Mapa {
+.Isp_Head {
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  gap: 10px;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 12px;
   align-items: end;
+  flex: 0 0 auto;
   margin-bottom: 12px;
 }
 
-.IspApoio_Seta {
+.Isp_HeadAtivo {
   display: flex;
   align-items: center;
-  justify-content: center;
-  height: 40px;
-  width: 28px;
-  font-size: 1.25rem;
-  font-weight: 800;
-  color: #021f81;
-  opacity: 0.7;
+  gap: 8px;
+  padding-bottom: 6px;
+  white-space: nowrap;
 }
 
-.IspApoio_Body .CfgApoio_Grid {
-  margin-bottom: 10px;
+.Isp_Shell {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  gap: 0;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff;
 }
 
-.IspApoio_Body .CfgApoio_Grid:last-child {
-  margin-bottom: 0;
+.Isp_SideNav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 8px;
+  background: #f3f4f6;
+  border-right: 1px solid #e5e7eb;
 }
 
-.IspApoio_Body .Cl_BotoesApoio {
-  margin: 8px 16px 14px;
-  padding-top: 4px;
+.Isp_SideTab {
+  border: none;
+  background: transparent;
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 13px;
+  color: #64748b;
+  cursor: pointer;
+}
+
+.Isp_SideTab.is-active {
+  background: #fff;
+  color: #1c2e3b;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+
+.Isp_Panels {
+  min-height: 0;
+  overflow: auto;
+  padding: 16px 18px;
+}
+
+.Isp_Panel[hidden] {
+  display: none !important;
+}
+
+.Isp_Grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px 16px;
+}
+
+.Isp_GridFull {
+  grid-column: 1 / -1;
+}
+
+.Isp_Hint {
+  margin: 14px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #64748b;
+}
+
+.Isp_ApoioBody .Cl_BotoesApoio {
+  flex: 0 0 auto;
+  margin: 8px 18px 14px;
 }
 
 @media (max-width: 720px) {
-  .IspApoio_Grid {
+  .Isp_Head {
     grid-template-columns: 1fr;
   }
-  .IspApoio_Mapa {
+  .Isp_Shell {
     grid-template-columns: 1fr;
   }
-  .IspApoio_Seta {
-    height: 20px;
-    transform: rotate(90deg);
+  .Isp_SideNav {
+    flex-direction: row;
+    flex-wrap: wrap;
+    border-right: none;
+    border-bottom: 1px solid #e5e7eb;
+  }
+  .Isp_Grid2 {
+    grid-template-columns: 1fr;
   }
 }
