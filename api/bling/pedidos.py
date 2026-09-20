@@ -315,9 +315,10 @@ from api.bling.cliente import api_request
 _log = logging.getLogger(__name__)
 
 _EVENTO_SITUACAO_NOMES: dict[str, tuple[str, ...]] = {
-    "pago": ("pago", "aprovado", "confirmado", "em aberto"),
+    "importar": ("atendido",),
+    "pago": ("pago", "aprovado", "confirmado", "verificado"),
     "expedido": ("enviado", "em transporte", "despachado", "expedido", "postado"),
-    "entregue": ("entregue", "atendido", "concluído", "concluido", "finalizado"),
+    "entregue": ("entregue", "concluído", "concluido", "finalizado"),
     "cancelado": ("cancelado", "cancelada"),
 }
 
@@ -350,6 +351,31 @@ def _carregar_config_vendedor(cur, id_tenant: int) -> dict:
     if not isinstance(opcoes, dict):
         opcoes = {}
     return {"pedidos_modo": row[0] or "importar", "opcoes": opcoes}
+
+
+_CACHE_SIT_IMPORTAR: dict[int, int | None] = {}
+
+
+def id_situacao_importar_vendedor(id_tenant: int) -> int | None:
+    """ID Bling configurado na aba Status para entrada (Atendido). Cache curto em memória."""
+    if id_tenant in _CACHE_SIT_IMPORTAR:
+        return _CACHE_SIT_IMPORTAR[id_tenant]
+    from global_utils import Var_ConectarBanco
+
+    mid = None
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        cfg = _carregar_config_vendedor(cur, int(id_tenant))
+        raw = (cfg.get("opcoes") or {}).get("bling_situacao_importar")
+        if raw not in (None, ""):
+            mid = int(raw)
+    except Exception:
+        mid = None
+    finally:
+        conn.close()
+    _CACHE_SIT_IMPORTAR[int(id_tenant)] = mid
+    return mid
 
 
 def _bling_conectado(cur, id_tenant: int) -> bool:
@@ -639,6 +665,37 @@ def sincronizar_status_pedido_bling_inbound(
     novo = mapear_situacao_bling_para_dn(nome)
     if not novo:
         return False
+
+    # Cancelamento urgente do Bling → DN + estorno de estoque
+    from core.pedidos.servico import (
+        STATUS_CANCELADO,
+        cancelar_pedido,
+        obter_pedido,
+        status_vendedor_pedido,
+    )
+
+    ped = obter_pedido(cur, int(id_pedido))
+    if not ped:
+        return False
+    if novo == STATUS_CANCELADO:
+        st = status_vendedor_pedido(ped)
+        if st == STATUS_CANCELADO:
+            return False
+        try:
+            cancelar_pedido(
+                cur,
+                int(id_pedido),
+                id_usuario=id_usuario,
+                motivo=f"Cancelado no Bling ({nome or 'cancelado'}).",
+                forcar_canal=True,
+            )
+            if lado == "fornecedor":
+                _propagar_status_para_origem_vendedor(cur, int(id_pedido), "cancelado")
+            return True
+        except Exception as e:
+            _log.warning("Cancelamento Bling→DN pedido %s: %s", id_pedido, e)
+            return False
+
     alterou = aplicar_status_avancado(
         cur,
         int(id_pedido),
@@ -680,6 +737,7 @@ from api.bling.cliente import api_request
 from fornecedor.catalogo.catalogo import id_bling_produto
 from global_utils import agora_utc
 from core.pedidos.servico import (
+    STATUS_AGUARDANDO,
     STATUS_AGUARDANDO_CONFIRMACAO,
     STATUS_PAGO,
     listar_itens_pedido,
@@ -688,7 +746,9 @@ from core.pedidos.servico import (
 )
 
 # Exporta ao Bling do fornecedor a partir do comprovante (aguardando aprovação) ou já pago.
-_STATUS_EXPORTAVEIS_BLING = frozenset({STATUS_AGUARDANDO_CONFIRMACAO, STATUS_PAGO})
+_STATUS_EXPORTAVEIS_BLING = frozenset(
+    {STATUS_AGUARDANDO, STATUS_AGUARDANDO_CONFIRMACAO, STATUS_PAGO}
+)
 
 
 def _registrar_log(
@@ -920,8 +980,7 @@ def exportar_pedido_fornecedor_bling(
     st = status_vendedor_pedido(ped)
     if st not in _STATUS_EXPORTAVEIS_BLING:
         raise ValueError(
-            "Somente pedidos com comprovante enviado (aguardando aprovação) "
-            "ou pagos podem ser exportados ao Bling."
+            "Somente pedidos aguardando pagamento ou pagos podem ser exportados ao Bling."
         )
 
     if _pedido_ja_exportado(cur, id_forn, id_pedido):
@@ -938,8 +997,8 @@ def exportar_pedido_fornecedor_bling(
         data_str = datetime.now(timezone.utc).date().isoformat()
 
     obs_partes = [f"DropNexo #{ped.get('numero') or id_pedido}"]
-    if st == STATUS_AGUARDANDO_CONFIRMACAO:
-        obs_partes.append("Aguardando confirmação do pagamento (comprovante anexado).")
+    if st == STATUS_AGUARDANDO:
+        obs_partes.append("Aguardando pagamento do vendedor ao fornecedor.")
     if ped.get("observacoes"):
         obs_partes.append(str(ped["observacoes"])[:500])
 
@@ -1000,14 +1059,39 @@ def pedidos_exportacao_auto_ativa(cur, id_tenant: int) -> bool:
 
 
 def tentar_exportar_pedido_fornecedor_apos_pagamento(cur, id_pedido: int) -> bool:
-    """Tenta exportar ao Bling (auto). Usado após comprovante ou após pagamento confirmado."""
+    """Tenta exportar ao Bling (auto). Usado após pagamento confirmado."""
+    return tentar_exportar_pedido_fornecedor_ao_disponibilizar(cur, id_pedido, exigir_auto=True)
+
+
+def tentar_exportar_pedido_fornecedor_apos_comprovante(cur, id_pedido: int) -> bool:
+    """Compat: comprovante agora marca pago e disponibiliza."""
+    return tentar_exportar_pedido_fornecedor_ao_disponibilizar(cur, id_pedido, exigir_auto=False)
+
+
+def tentar_exportar_pedido_fornecedor_ao_disponibilizar(
+    cur, id_pedido: int, *, exigir_auto: bool = False
+) -> bool:
+    """Quando o pedido aparece para o fornecedor: exporta ao Bling se conectado.
+
+    exigir_auto=False → exporta se conexão + exportação ligada (entrada canal / pago manual).
+    exigir_auto=True → também exige pedidos_exportar_auto.
+    """
     ped = obter_pedido(cur, id_pedido)
     if not ped:
         return False
     id_forn = int(ped["id_tenant_fornecedor"])
     if not _bling_conectado(cur, id_forn):
         return False
-    if not pedidos_exportacao_auto_ativa(cur, id_forn):
+    cfg = _carregar_config_fornecedor(cur, id_forn)
+    modo = (cfg.get("pedidos_modo") or "exportar").strip()
+    if modo not in ("exportar", "atualizar"):
+        return False
+    opcoes = cfg.get("opcoes") or {}
+    if opcoes.get("pedidos_exportar") is False:
+        return False
+    if exigir_auto and not (
+        opcoes.get("pedidos_exportar_auto") is True and opcoes.get("pedidos_exportar") is not False
+    ):
         return False
     try:
         res = exportar_pedido_fornecedor_bling(cur, id_pedido)
@@ -1016,10 +1100,6 @@ def tentar_exportar_pedido_fornecedor_apos_pagamento(cur, id_pedido: int) -> boo
         _registrar_log(cur, id_forn, "fornecedor", "aviso", f"Pedido #{id_pedido}", str(e)[:500])
         return False
 
-
-def tentar_exportar_pedido_fornecedor_apos_comprovante(cur, id_pedido: int) -> bool:
-    """Atalho semântico: exporta ao anexar comprovante (aguardando aprovação)."""
-    return tentar_exportar_pedido_fornecedor_apos_pagamento(cur, id_pedido)
 
 def exportar_pedidos_pendentes_fornecedor(
     cur,

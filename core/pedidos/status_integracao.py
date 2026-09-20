@@ -54,7 +54,11 @@ def status_mais_avancado(atual: str | None, novo: str | None) -> str | None:
 
 
 def mapear_situacao_bling_para_dn(nome_situacao: str | None) -> str | None:
-    """Converte rótulo de situação Bling → status_vendedor DropNexo (best-effort)."""
+    """Converte rótulo de situação Bling → status_vendedor DropNexo (best-effort).
+
+    Atendido = cliente pagou no Bling do vendedor (entrada no DN), NÃO é o
+    pagamento vendedor→fornecedor (`pago` no DropNexo).
+    """
     n = (nome_situacao or "").strip().lower()
     if not n:
         return None
@@ -73,12 +77,16 @@ def mapear_situacao_bling_para_dn(nome_situacao: str | None) -> str | None:
             "em separação",
             "em separacao",
             "separado",
+            "postado",
         )
     ):
         return STATUS_EM_EXPEDICAO
-    if any(x in n for x in ("pago", "aprovad", "atendid", "faturad", "verificado")):
+    # Atendido / Verificado / Em aberto = situação de venda no Bling, sem avançar DN
+    if any(x in n for x in ("atendid", "verificado", "em aberto", "em digit")):
+        return None
+    if any(x in n for x in ("pago", "aprovad", "faturad")):
         return STATUS_PAGO
-    if "aguardando pagamento" in n or n == "em aberto":
+    if "aguardando pagamento" in n:
         return STATUS_AGUARDANDO
     return None
 

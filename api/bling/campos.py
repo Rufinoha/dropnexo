@@ -427,14 +427,27 @@ def _situacao_bloqueada(nome: str) -> bool:
 
 
 def pedido_bling_importavel(pedido: dict, *, id_tenant: int | None = None) -> bool:
-    """True se o pedido no Bling está pago/confirmado o suficiente para importar."""
+    """True se situação = Atendido (padrão) ou ID igual a bling_situacao_importar (opcoes)."""
     if not pedido:
         return False
     nome, sid = extrair_situacao_pedido(pedido, id_tenant=id_tenant)
-    if nome:
-        if _situacao_bloqueada(nome):
-            return False
-    elif sid is None:
+    if not nome and sid is None:
+        return False
+    if _situacao_bloqueada(nome or ""):
+        return False
+
+    n = (nome or "").strip().lower()
+    ok_nome = n == "atendido" or "atendido" in n
+    if not ok_nome and sid is not None and id_tenant is not None:
+        try:
+            from api.bling.pedidos import id_situacao_importar_vendedor
+
+            mid = id_situacao_importar_vendedor(int(id_tenant))
+            if mid is not None and int(mid) == int(sid):
+                ok_nome = True
+        except Exception:
+            pass
+    if not ok_nome:
         return False
     itens = pedido.get("itens") or []
     return bool(itens)

@@ -3,14 +3,14 @@
 {% set nav_ativo = 'az_pedidos' %}
 {% block topbar_title %}Pedidos recebidos{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('az_pedidos.static', filename='style/Caz_pedidos.css') }}?v=13" />
+<link rel="stylesheet" href="{{ url_for('az_pedidos.static', filename='style/Caz_pedidos.css') }}?v=14" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal PdFn_Page">
   <div class="cl-page-title PdFn_PageHead">
     <div class="PdFn_PageHeadText">
       <h2>Pedidos recebidos</h2>
-      <p class="cl-page-desc">Valide o PIX, confira etiqueta e NF, separe e expede — tudo no mesmo fluxo.</p>
+      <p class="cl-page-desc">Valide o PIX, confira etiqueta e NF e expede — tudo no mesmo fluxo.</p>
     </div>
     <div class="PdFn_Stats" id="pd_fn_stats" aria-live="polite">
       <div class="PdFn_Stat" data-stat="aguardando_pagamento">
@@ -42,6 +42,20 @@
     </label>
   </div>
 
+  <div class="PdFn_Bulk" id="pd_fn_bulk" hidden>
+    <label class="PdFn_BulkAll">
+      <input type="checkbox" id="pd_fn_check_all" />
+      <span id="pd_fn_bulk_count">0 selecionados</span>
+    </label>
+    <div class="PdFn_BulkActions">
+      <button type="button" class="Cl_botaoFiltro" data-lote="expedir">Em expedição</button>
+      <button type="button" class="Cl_botaoFiltro" data-lote="entregue">Entregue</button>
+      <button type="button" class="Cl_botaoprimario" data-lote="pdf_etq">Imprimir etiquetas</button>
+      <button type="button" class="Cl_botaoprimario" data-lote="pdf_docs">Etiquetas + notas</button>
+      <button type="button" class="PdFn_BulkClear" id="pd_fn_bulk_clear">Limpar</button>
+    </div>
+  </div>
+
   <div id="pd_fn_lista" class="PdFn_Lista" aria-live="polite"></div>
   <div id="pd_fn_vazio" class="PdFn_Vazio" hidden>
     <div class="PdFn_VazioCard">
@@ -68,5 +82,5 @@
 {% endblock %}
 {% block page_js %}
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-<script src="{{ url_for('az_pedidos.static', filename='script/Saz_pedidos.js') }}?v=13"></script>
+<script src="{{ url_for('az_pedidos.static', filename='script/Saz_pedidos.js') }}?v=14"></script>
 {% endblock %}

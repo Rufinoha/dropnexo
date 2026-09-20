@@ -31,6 +31,8 @@
   const paneCategorias = document.getElementById("bl_pane_categorias");
   const paneImagens = document.getElementById("bl_pane_imagens");
   const paneLogs = document.getElementById("bl_pane_logs");
+  const paneStatus = document.getElementById("bl_pane_status");
+  let situacoesBling = [];
   const chkProdutosExportar = document.getElementById("bl_produtos_exportar");
   const chkEstoqueExportar = document.getElementById("bl_estoque_exportar");
   const chkPedidosExportar = document.getElementById("bl_pedidos_exportar");
@@ -109,11 +111,13 @@
     });
     definirVisivel(paneConfig, tab === "config");
     definirVisivel(panePedidos, tab === "pedidos");
+    definirVisivel(paneStatus, tab === "status");
     definirVisivel(paneProdutos, tab === "produtos");
     definirVisivel(paneDepositos, tab === "depositos");
     definirVisivel(paneCategorias, tab === "categorias");
     definirVisivel(paneImagens, tab === "imagens");
     definirVisivel(paneLogs, tab === "logs");
+    if (tab === "status") carregarAbaStatus().catch(() => {});
     if ((tab === "depositos" || tab === "produtos") && BL_PAPEL !== "pedidos") {
       carregarDepositos().catch(() => {});
     }
@@ -1354,6 +1358,126 @@
     await carregarStatus();
   }
 
+  function sugerirSituacaoId(nomeAlvo, lista) {
+    const alvos = (Array.isArray(nomeAlvo) ? nomeAlvo : [nomeAlvo]).map((n) =>
+      String(n || "").toLowerCase()
+    );
+    for (const s of lista || []) {
+      const nome = String(s.nome || "").toLowerCase();
+      if (alvos.some((a) => nome === a || nome.includes(a))) return String(s.id);
+    }
+    return "";
+  }
+
+  function preencherSelectSituacao(sel, lista, valorAtual, sugestoes) {
+    if (!sel) return;
+    const cur = valorAtual != null && valorAtual !== "" ? String(valorAtual) : "";
+    const sugerido = cur || sugerirSituacaoId(sugestoes, lista);
+    const opts = ['<option value="">— selecionar —</option>'].concat(
+      (lista || []).map((s) => {
+        const id = String(s.id);
+        const selAttr = id === String(sugerido) ? " selected" : "";
+        return `<option value="${id}"${selAttr}>${escapeHtml(s.nome || id)}</option>`;
+      })
+    );
+    sel.innerHTML = opts.join("");
+  }
+
+  async function carregarAbaStatus() {
+    const r = await fetch("/api/integracoes/bling/situacoes-pedidos", { credentials: "include" });
+    const j = await r.json();
+    if (!j.success) throw new Error(j.message || "Não foi possível listar situações.");
+    situacoesBling = j.situacoes || [];
+    const cfg =
+      (estado.configs || []).find((c) => c.contexto === (estado.contexto_modulo || "vendedor")) ||
+      {};
+    const op = cfg.opcoes || {};
+
+    if (BL_PAPEL === "pedidos") {
+      preencherSelectSituacao(
+        document.getElementById("bl_sit_importar"),
+        situacoesBling,
+        op.bling_situacao_importar,
+        ["atendido"]
+      );
+      preencherSelectSituacao(
+        document.getElementById("bl_sit_pago"),
+        situacoesBling,
+        op.bling_situacao_pago,
+        ["verificado", "pago"]
+      );
+      preencherSelectSituacao(
+        document.getElementById("bl_sit_expedido"),
+        situacoesBling,
+        op.bling_situacao_expedido,
+        ["em transporte", "enviado", "despachado", "expedido"]
+      );
+      preencherSelectSituacao(
+        document.getElementById("bl_sit_entregue"),
+        situacoesBling,
+        op.bling_situacao_entregue,
+        ["entregue"]
+      );
+      preencherSelectSituacao(
+        document.getElementById("bl_sit_cancelado"),
+        situacoesBling,
+        op.bling_situacao_cancelado,
+        ["cancelado"]
+      );
+    } else {
+      preencherSelectSituacao(
+        document.getElementById("bl_sit_criar"),
+        situacoesBling,
+        op.bling_situacao_criar,
+        ["em aberto", "atendido"]
+      );
+      preencherSelectSituacao(
+        document.getElementById("bl_sit_pago_fn"),
+        situacoesBling,
+        op.bling_situacao_pago,
+        ["verificado", "atendido", "pago"]
+      );
+      preencherSelectSituacao(
+        document.getElementById("bl_sit_expedido_fn"),
+        situacoesBling,
+        op.bling_situacao_expedido,
+        ["em transporte", "enviado", "despachado"]
+      );
+      preencherSelectSituacao(
+        document.getElementById("bl_sit_entregue_fn"),
+        situacoesBling,
+        op.bling_situacao_entregue,
+        ["entregue", "atendido"]
+      );
+      preencherSelectSituacao(
+        document.getElementById("bl_sit_cancelado_fn"),
+        situacoesBling,
+        op.bling_situacao_cancelado,
+        ["cancelado"]
+      );
+    }
+  }
+
+  async function salvarStatusMap() {
+    const ctx = estado.contexto_modulo || (BL_PAPEL === "pedidos" ? "vendedor" : "fornecedor");
+    const opcoes = {};
+    document.querySelectorAll("#bl_pane_status [data-sit-key]").forEach((el) => {
+      const key = el.getAttribute("data-sit-key");
+      const val = (el.value || "").trim();
+      if (key) opcoes[key] = val || null;
+    });
+    const body = { contexto: ctx, opcoes };
+    const r = await fetch("/api/integracoes/bling/config/salvar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const j = await r.json();
+    if (!j.success) throw new Error(j.message || "Erro ao salvar status.");
+    await Swal.fire({ icon: "success", title: "Status salvos", timer: 1400, showConfirmButton: false });
+    await carregarStatus();
+  }
+
   async function salvarPedidos() {
     const ctx = BL_PAPEL === "pedidos" ? "vendedor" : "fornecedor";
     let body;
@@ -1650,6 +1774,13 @@
   btnSalvarPedidos?.addEventListener("click", async () => {
     try {
       await salvarPedidos();
+    } catch (e) {
+      Swal.fire({ icon: "error", title: "Erro", text: e.message, confirmButtonColor: "#021F81" });
+    }
+  });
+  document.getElementById("bl_btn_salvar_status")?.addEventListener("click", async () => {
+    try {
+      await salvarStatusMap();
     } catch (e) {
       Swal.fire({ icon: "error", title: "Erro", text: e.message, confirmButtonColor: "#021F81" });
     }

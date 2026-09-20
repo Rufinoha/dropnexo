@@ -31,6 +31,7 @@
   let todosPedidos = [];
   let filtroStatus = "";
   let pedidoAtual = null;
+  let selecionados = new Set();
 
   const fmt = (v) =>
     Number(v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -88,6 +89,30 @@
     return "Abrir";
   }
 
+  function atualizarBulkBar() {
+    const bar = document.getElementById("pd_fn_bulk");
+    const countEl = document.getElementById("pd_fn_bulk_count");
+    const checkAll = document.getElementById("pd_fn_check_all");
+    const n = selecionados.size;
+    if (bar) bar.hidden = n === 0;
+    if (countEl) countEl.textContent = n === 1 ? "1 selecionado" : `${n} selecionados`;
+    if (checkAll) {
+      const visiveis = pedidosFiltrados().map((p) => p.id);
+      const todosMarcados = visiveis.length > 0 && visiveis.every((id) => selecionados.has(id));
+      checkAll.checked = todosMarcados;
+      checkAll.indeterminate = n > 0 && !todosMarcados;
+    }
+  }
+
+  function limparSelecao() {
+    selecionados.clear();
+    atualizarBulkBar();
+    listaEl?.querySelectorAll(".PdFn_RowCheck").forEach((c) => {
+      c.checked = false;
+    });
+    listaEl?.querySelectorAll(".PdFn_Card").forEach((c) => c.classList.remove("is-selected"));
+  }
+
   function atualizarStats(rows) {
     const counts = {
       aguardando_pagamento: 0,
@@ -133,9 +158,14 @@
   function renderLista() {
     if (!listaEl) return;
     const rows = pedidosFiltrados();
+    const idsVisiveis = new Set(rows.map((p) => p.id));
+    [...selecionados].forEach((id) => {
+      if (!idsVisiveis.has(id)) selecionados.delete(id);
+    });
     if (!rows.length) {
       listaEl.innerHTML = "";
       if (vazio) vazio.hidden = false;
+      atualizarBulkBar();
       return;
     }
     if (vazio) vazio.hidden = true;
@@ -144,6 +174,7 @@
         const st = stV(p);
         const urgent = st === "aguardando_confirmacao";
         const ready = st === "pago";
+        const on = selecionados.has(p.id);
         const data = p.criado_em
           ? new Date(p.criado_em).toLocaleDateString("pt-BR", {
               day: "2-digit",
@@ -155,32 +186,49 @@
           "PdFn_Card",
           urgent ? "PdFn_Card--urgent" : "",
           ready ? "PdFn_Card--ready" : "",
+          on ? "is-selected" : "",
         ]
           .filter(Boolean)
           .join(" ");
         return `
-      <button type="button" class="${cardCls}" data-id="${p.id}">
-        ${thumbsHtml(p)}
-        <div class="PdFn_CardMain">
-          <div class="PdFn_CardTop">
-            <span class="PdFn_CardNum">${esc(p.numero)}</span>
-            ${orig ? `<span class="PdFn_Origem">${esc(orig)}</span>` : ""}
-            ${badge(st)}
+      <div class="${cardCls}" data-row-id="${p.id}">
+        <label class="PdFn_RowCheckWrap" title="Selecionar">
+          <input type="checkbox" class="PdFn_RowCheck" data-check-id="${p.id}" ${on ? "checked" : ""} />
+        </label>
+        <button type="button" class="PdFn_CardHit" data-id="${p.id}">
+          ${thumbsHtml(p)}
+          <div class="PdFn_CardMain">
+            <div class="PdFn_CardTop">
+              <span class="PdFn_CardNum">${esc(p.numero)}</span>
+              ${orig ? `<span class="PdFn_Origem">${esc(orig)}</span>` : ""}
+              ${badge(st)}
+            </div>
+            <p class="PdFn_CardMeta"><strong>${esc(p.vendedor_nome || "Vendedor")}</strong> · ${esc(p.cliente_nome || "Cliente")} · ${esc(data)}</p>
           </div>
-          <p class="PdFn_CardMeta"><strong>${esc(p.vendedor_nome || "Vendedor")}</strong> · ${esc(p.cliente_nome || "Cliente")} · ${esc(data)}</p>
-          <p class="PdFn_CardProd">${esc(produtoResumo(p))}</p>
-        </div>
-        <div class="PdFn_CardSide">
-          <span class="PdFn_CardTotal">${fmt(p.valor_total)}</span>
-          <span class="PdFn_CardCta">${esc(ctaLista(st))} →</span>
-        </div>
-      </button>`;
+          <div class="PdFn_CardSide">
+            <span class="PdFn_CardTotal">${fmt(p.valor_total)}</span>
+            <span class="PdFn_CardCta">${esc(ctaLista(st))} →</span>
+          </div>
+        </button>
+      </div>`;
       })
       .join("");
 
-    listaEl.querySelectorAll("[data-id]").forEach((b) => {
+    listaEl.querySelectorAll(".PdFn_CardHit[data-id]").forEach((b) => {
       b.addEventListener("click", () => abrir(+b.dataset.id));
     });
+    listaEl.querySelectorAll(".PdFn_RowCheck").forEach((c) => {
+      c.addEventListener("click", (e) => e.stopPropagation());
+      c.addEventListener("change", () => {
+        const id = +c.getAttribute("data-check-id");
+        if (c.checked) selecionados.add(id);
+        else selecionados.delete(id);
+        const row = listaEl.querySelector(`[data-row-id="${id}"]`);
+        row?.classList.toggle("is-selected", c.checked);
+        atualizarBulkBar();
+      });
+    });
+    atualizarBulkBar();
   }
 
   async function carregar() {
@@ -190,6 +238,115 @@
     todosPedidos = j.pedidos || [];
     atualizarStats(todosPedidos);
     renderLista();
+  }
+
+  async function loteAcao(tipo) {
+    const ids = [...selecionados];
+    if (!ids.length) return;
+
+    if (tipo === "pdf_etq" || tipo === "pdf_docs") {
+      const modo = tipo === "pdf_docs" ? "etiquetas_nf" : "etiquetas";
+      const r = await fetch(`${API}/lote/pdf`, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids, modo }),
+      });
+      const ct = (r.headers.get("content-type") || "").toLowerCase();
+      if (!r.ok || !ct.includes("pdf")) {
+        let msg = "Não foi possível gerar o PDF.";
+        try {
+          const j = await r.json();
+          if (j.message) msg = j.message;
+        } catch (_) {}
+        if (window.Swal) await Swal.fire("Atenção", msg, "warning");
+        else alert(msg);
+        return;
+      }
+      const blob = await r.blob();
+      const url = URL.createObjectURL(blob);
+      const w = window.open(url, "_blank");
+      if (!w) {
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = modo === "etiquetas_nf" ? "etiquetas_e_notas.pdf" : "etiquetas.pdf";
+        a.click();
+      } else {
+        setTimeout(() => {
+          try {
+            w.focus();
+            w.print();
+          } catch (_) {}
+        }, 600);
+      }
+      // Imprimiu etiqueta → Expedido automático
+      try {
+        const re = await fetch(`${API}/lote/expedir`, {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ids }),
+        });
+        const je = await re.json();
+        if (window.Swal) {
+          await Swal.fire(
+            je.success ? "Expedido" : "Atenção",
+            je.message || (je.success ? "Pedidos marcados em expedição." : "Alguns pedidos não puderam ser expedidos."),
+            je.success ? "success" : "warning"
+          );
+        }
+      } catch (_) {}
+      limparSelecao();
+      await carregar();
+      return;
+    }
+
+    const labels = {
+      expedir: {
+        title: "Marcar em expedição?",
+        html: "Os pedidos <strong>pagos</strong> com etiqueta e NF serão marcados como <strong>Em expedição</strong>.",
+        ok: "Sim, expedir",
+        url: `${API}/lote/expedir`,
+      },
+      entregue: {
+        title: "Marcar como entregue?",
+        html: "Pedidos pagos ou em expedição serão marcados como <strong>entregue</strong>.",
+        ok: "Sim, entregue",
+        url: `${API}/lote/entregue`,
+      },
+    };
+    const cfg = labels[tipo];
+    if (!cfg) return;
+
+    const conf = window.Swal
+      ? await Swal.fire({
+          icon: "question",
+          title: cfg.title,
+          html: `${cfg.html}<br><br><strong>${ids.length}</strong> pedido(s) selecionado(s).`,
+          showCancelButton: true,
+          confirmButtonText: cfg.ok,
+          cancelButtonText: "Cancelar",
+          confirmButtonColor: "#021F81",
+        })
+      : { isConfirmed: confirm(cfg.title) };
+    if (!conf.isConfirmed) return;
+
+    const r = await fetch(cfg.url, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids }),
+    });
+    const j = await r.json();
+    if (window.Swal) {
+      await Swal.fire(
+        j.success ? "Pronto" : "Atenção",
+        j.message || (j.success ? "Atualizado." : "Falha."),
+        j.success ? "success" : "warning"
+      );
+    }
+    limparSelecao();
+    await carregar();
   }
 
   function docsInfo(p) {
@@ -692,6 +849,22 @@
   buscaEl?.addEventListener("input", () => {
     clearTimeout(buscaTimer);
     buscaTimer = setTimeout(renderLista, 160);
+  });
+
+  document.getElementById("pd_fn_check_all")?.addEventListener("change", (e) => {
+    const on = !!e.target.checked;
+    const rows = pedidosFiltrados();
+    rows.forEach((p) => {
+      if (on) selecionados.add(p.id);
+      else selecionados.delete(p.id);
+    });
+    renderLista();
+  });
+  document.getElementById("pd_fn_bulk_clear")?.addEventListener("click", limparSelecao);
+  document.getElementById("pd_fn_bulk")?.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-lote]");
+    if (!btn) return;
+    loteAcao(btn.getAttribute("data-lote"));
   });
 
   document.getElementById("pd_fn_fechar")?.addEventListener("click", () => setModalOpen(false));

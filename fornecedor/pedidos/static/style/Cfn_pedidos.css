@@ -341,6 +341,83 @@
 }
 .PdFn_VazioCard p { margin: 0; font-size: 0.9rem; }
 
+.PdFn_Bulk {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+  padding: 0.65rem 0.85rem;
+  background: #eef2ff;
+  border: 1px solid rgba(2, 31, 129, 0.18);
+  border-radius: 12px;
+  position: sticky;
+  top: 0.5rem;
+  z-index: 5;
+}
+.PdFn_Bulk[hidden] { display: none !important; }
+.PdFn_BulkAll {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: var(--pdfn-navy);
+  cursor: pointer;
+}
+.PdFn_BulkActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+}
+.PdFn_BulkClear {
+  border: none;
+  background: transparent;
+  color: #64748b;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 650;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0.35rem 0.4rem;
+}
+.PdFn_RowCheckWrap {
+  display: grid;
+  place-items: center;
+  padding: 0 0.15rem;
+  cursor: pointer;
+}
+.PdFn_RowCheck {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--pdfn-navy);
+  cursor: pointer;
+}
+.PdFn_CardHit {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 0.65rem;
+  align-items: center;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.PdFn_Card {
+  grid-template-columns: auto 1fr;
+}
+.PdFn_Card.is-selected {
+  border-color: rgba(2, 31, 129, 0.45);
+  box-shadow: 0 0 0 2px rgba(2, 31, 129, 0.1);
+}
+
 /* Modal — centrado, mesa de expedição */
 body.PdFn_ModalOpen { overflow: hidden; }
 

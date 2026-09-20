@@ -12,6 +12,7 @@ from core.pedidos.servico import (
     marcar_entregue,
     obter_pedido,
 )
+from core.pedidos.lote import lote_entregue, lote_expedir, montar_pdf_lote, parse_ids_body
 from api.pix_manual.pix_manual import confirmar_pix_manual, rejeitar_comprovante_pix
 from sistema.plataforma.sessao import MODULO_FORNECEDOR
 
@@ -85,6 +86,92 @@ def pedido_entregue(id_pedido: int):
         return jsonify(success=True, message="Pedido marcado como entregue.")
     except ValueError as e:
         return jsonify(success=False, message=str(e)), 400
+    finally:
+        conn.close()
+
+
+@fn_pedidos_bp.post("/fornecedor/pedidos/lote/expedir")
+@login_obrigatorio()
+@exigir_modulo(MODULO_FORNECEDOR)
+@exigir_permissao(codigo="fn_pedidos.editar")
+def pedidos_lote_expedir():
+    id_f = _id_fornecedor()
+    if not id_f:
+        return jsonify(success=False, message="Sessão inválida."), 403
+    ids = parse_ids_body(request.get_json(silent=True))
+    if not ids:
+        return jsonify(success=False, message="Selecione ao menos um pedido."), 400
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        res = lote_expedir(cur, ids, id_fornecedor=id_f, id_usuario=_id_usuario())
+        conn.commit()
+        msg = f"{res['qtd_ok']} pedido(s) em expedição."
+        if res["qtd_erro"]:
+            msg += f" {res['qtd_erro']} com erro."
+        return jsonify(success=res["qtd_ok"] > 0, message=msg, **res)
+    finally:
+        conn.close()
+
+
+@fn_pedidos_bp.post("/fornecedor/pedidos/lote/entregue")
+@login_obrigatorio()
+@exigir_modulo(MODULO_FORNECEDOR)
+@exigir_permissao(codigo="fn_pedidos.editar")
+def pedidos_lote_entregue():
+    id_f = _id_fornecedor()
+    if not id_f:
+        return jsonify(success=False, message="Sessão inválida."), 403
+    ids = parse_ids_body(request.get_json(silent=True))
+    if not ids:
+        return jsonify(success=False, message="Selecione ao menos um pedido."), 400
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        res = lote_entregue(cur, ids, id_fornecedor=id_f, id_usuario=_id_usuario())
+        conn.commit()
+        msg = f"{res['qtd_ok']} pedido(s) marcado(s) como entregue."
+        if res["qtd_erro"]:
+            msg += f" {res['qtd_erro']} com erro."
+        return jsonify(success=res["qtd_ok"] > 0, message=msg, **res)
+    finally:
+        conn.close()
+
+
+@fn_pedidos_bp.post("/fornecedor/pedidos/lote/pdf")
+@login_obrigatorio()
+@exigir_modulo(MODULO_FORNECEDOR)
+@exigir_permissao(codigo="fn_pedidos.ver")
+def pedidos_lote_pdf():
+    import io as _io
+
+    id_f = _id_fornecedor()
+    if not id_f:
+        return jsonify(success=False, message="Sessão inválida."), 403
+    body = request.get_json(silent=True) or {}
+    ids = parse_ids_body(body)
+    if not ids:
+        return jsonify(success=False, message="Selecione ao menos um pedido."), 400
+    modo = (body.get("modo") or "etiquetas").strip().lower()
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        try:
+            data, nome, avisos = montar_pdf_lote(
+                cur, ids, id_fornecedor=id_f, raiz=_RAIZ, modo=modo
+            )
+        except ValueError as e:
+            return jsonify(success=False, message=str(e)), 400
+        resp = send_file(
+            _io.BytesIO(data),
+            mimetype="application/pdf",
+            as_attachment=False,
+            download_name=nome,
+            max_age=0,
+        )
+        if avisos:
+            resp.headers["X-DropNexo-Avisos"] = str(len(avisos))
+        return resp
     finally:
         conn.close()
 

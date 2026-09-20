@@ -422,6 +422,31 @@ def desconectar():
         conn.close()
 
 
+@bling_bp.get("/api/integracoes/bling/situacoes-pedidos")
+@login_obrigatorio()
+def listar_situacoes_pedidos_api():
+    """Lista situações do módulo Pedidos de Venda da conta Bling do tenant."""
+    if not _pode_integracoes():
+        return jsonify(success=False, message="Sem permissão."), 403
+    id_tenant = session.get("id_tenant")
+    if not id_tenant:
+        return jsonify(success=False, message="Sessão inválida."), 403
+    try:
+        from api.bling.pedidos import _listar_situacoes_venda
+
+        dados = _listar_situacoes_venda(int(id_tenant))
+        out = []
+        for s in dados or []:
+            sid = s.get("id")
+            nome = (s.get("nome") or s.get("descricao") or s.get("valor") or "").strip()
+            if sid is None:
+                continue
+            out.append({"id": int(sid), "nome": nome})
+        return jsonify(success=True, situacoes=out)
+    except Exception as e:
+        return jsonify(success=False, message=str(e)[:300]), 400
+
+
 @bling_bp.post("/api/integracoes/bling/config/salvar")
 @login_obrigatorio()
 def salvar_config():

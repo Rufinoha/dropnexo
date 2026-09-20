@@ -824,7 +824,17 @@ def listar_pedidos_fornecedor(cur, id_fornecedor: int, status: str | None = None
     # Rascunho não aparece; importado → aguardando_pagamento (visível pro fornecedor)
     _promover_importado_para_aguardando_pagamento(cur, id_fornecedor)
 
-    where = [f"p.id_tenant_fornecedor = %s", f"p.{cv} <> %s"]
+    where = [
+        f"p.id_tenant_fornecedor = %s",
+        f"p.{cv} <> %s",
+        # Manual só aparece ao fornecedor após pago (estoque/baixa nesse momento)
+        f"""NOT (
+              COALESCE(p.origem, '') = 'manual'
+              AND COALESCE(p.{cv}, '') IN (
+                'rascunho', 'importado', 'aguardando_pagamento', 'aguardando_confirmacao'
+              )
+            )""",
+    ]
     params: list[Any] = [id_fornecedor, STATUS_RASCUNHO]
     if status:
         # filtro da tela: "aguardando_pagamento" também pega legado importado (já promovido)
@@ -1366,8 +1376,7 @@ def confirmar_pedido(
             int(ped.get("id_tenant_fornecedor") or 0),
         )
 
-    itens_reserva = [(i["id_variante"], i["quantidade"]) for i in ped["itens"]]
-    reservar_itens_pedido(cur, itens_reserva)
+    # Manual: sem reserva/baixa aqui — baixa só no pagamento ao fornecedor.
 
     agora = agora_utc()
     set_sv, dup = _sql_set_status_vendedor(cur)
@@ -1417,30 +1426,20 @@ def cancelar_pedido(
     st = status_vendedor_pedido(ped)
     if st == STATUS_CANCELADO:
         return
-    if st == STATUS_PAGO and not forcar_canal:
-        raise ValueError("Pedido pago não pode ser cancelado por aqui.")
-    if st == STATUS_ENTREGUE and not forcar_canal:
-        raise ValueError("Pedido entregue não pode ser cancelado por aqui.")
-    if st == STATUS_EM_EXPEDICAO and not forcar_canal:
-        raise ValueError("Pedido em expedição não pode ser cancelado por aqui.")
+    # Cancelamento forçado (canal/Bling) ou estados ainda canceláveis pelo usuário
+    if not forcar_canal:
+        if st == STATUS_PAGO:
+            raise ValueError("Pedido pago não pode ser cancelado por aqui.")
+        if st == STATUS_ENTREGUE:
+            raise ValueError("Pedido entregue não pode ser cancelado por aqui.")
+        if st == STATUS_EM_EXPEDICAO:
+            raise ValueError("Pedido em expedição não pode ser cancelado por aqui.")
 
-    if st in (STATUS_AGUARDANDO, STATUS_AGUARDANDO_CONFIRMACAO, STATUS_IMPORTADO, STATUS_PAGO):
-        itens = [(i["id_variante"], i["quantidade"]) for i in ped["itens"]]
-        try:
-            liberar_itens_pedido(cur, itens)
-        except Exception:
-            pass
-    elif st == STATUS_EM_EXPEDICAO and forcar_canal:
-        # Estoque físico já baixado — devolve quantidade.
-        for item in ped["itens"]:
-            cur.execute(
-                """
-                UPDATE tbl_produto_variante_estoque
-                SET quantidade = quantidade + %s, atualizado_em = NOW()
-                WHERE id_variante = %s
-                """,
-                (int(item["quantidade"]), int(item["id_variante"])),
-            )
+    # Estorna baixa física ou libera reserva legada
+    try:
+        estornar_estoque_do_pedido(cur, id_pedido, ped=ped)
+    except Exception:
+        pass
 
     agora = agora_utc()
     cols = _pedido_colunas(cur)
@@ -1711,6 +1710,11 @@ def marcar_pedido_pago(
         detalhe or "Pagamento confirmado via Mercado Pago.",
         id_usuario,
     )
+    # Manual / ainda sem baixa: baixa agora. Canais (Bling/ML/…) já baixaram na importação.
+    try:
+        baixar_estoque_do_pedido(cur, id_pedido)
+    except Exception:
+        pass
     try:
         from api.melhor_envio.melhor_envio import tentar_contratar_etiqueta_apos_pagamento
 
@@ -1720,11 +1724,11 @@ def marcar_pedido_pago(
     try:
         from api.bling.pedidos import (
             exportar_status_pedido_bling,
-            tentar_exportar_pedido_fornecedor_apos_pagamento,
+            tentar_exportar_pedido_fornecedor_ao_disponibilizar,
         )
 
         exportar_status_pedido_bling(cur, id_pedido, evento="pago")
-        tentar_exportar_pedido_fornecedor_apos_pagamento(cur, id_pedido)
+        tentar_exportar_pedido_fornecedor_ao_disponibilizar(cur, id_pedido)
     except Exception:
         pass
     try:
@@ -2117,7 +2121,7 @@ def importar_pedido_bling(
                     numero,
                     id_vendedor,
                     id_forn,
-                    STATUS_IMPORTADO,
+                    STATUS_AGUARDANDO,
                     STATUS_COMPRADOR_PAGO,
                     cliente.get("nome") or "Cliente Bling",
                     cliente.get("email"),
@@ -2211,12 +2215,21 @@ def importar_pedido_bling(
                 ),
             )
 
-        itens_reserva = [(i["id_variante"], i["quantidade"]) for i in itens]
+        itens_baixa = [
+            (i["id_variante"], i["quantidade"], i.get("id_deposito")) for i in itens
+        ]
         try:
-            reservar_itens_pedido(cur, itens_reserva)
-            hist_estoque = "Estoque reservado."
+            # Garante flag e baixa física (sem reserva)
+            garantir_col_estoque_baixado(cur)
+            baixar_itens_pedido(cur, itens_baixa)
+            if "estoque_baixado" in _pedido_colunas(cur):
+                cur.execute(
+                    "UPDATE tbl_pedido SET estoque_baixado = TRUE WHERE id = %s",
+                    (id_pedido,),
+                )
+            hist_estoque = "Estoque baixado."
         except ValueError as e:
-            hist_estoque = f"Importado sem reserva de estoque ({e})."
+            hist_estoque = f"Importado sem baixa de estoque ({e})."
 
         cur.execute(
             """
@@ -2241,6 +2254,12 @@ def importar_pedido_bling(
             f"Pedido importado do Bling (#{numero_bling}). {hist_estoque}",
             id_usuario,
         )
+        try:
+            from api.bling.pedidos import tentar_exportar_pedido_fornecedor_ao_disponibilizar
+
+            tentar_exportar_pedido_fornecedor_ao_disponibilizar(cur, id_pedido)
+        except Exception:
+            pass
         ids_criados.append(id_pedido)
 
     return ids_criados
@@ -2455,12 +2474,20 @@ def importar_pedido_ml(
                 ),
             )
 
-        itens_reserva = [(i["id_variante"], i["quantidade"]) for i in itens]
+        itens_baixa = [
+            (i["id_variante"], i["quantidade"], i.get("id_deposito")) for i in itens
+        ]
         try:
-            reservar_itens_pedido(cur, itens_reserva)
-            hist_estoque = "Estoque reservado."
+            garantir_col_estoque_baixado(cur)
+            baixar_itens_pedido(cur, itens_baixa)
+            if "estoque_baixado" in _pedido_colunas(cur):
+                cur.execute(
+                    "UPDATE tbl_pedido SET estoque_baixado = TRUE WHERE id = %s",
+                    (id_pedido,),
+                )
+            hist_estoque = "Estoque baixado."
         except ValueError as e:
-            hist_estoque = f"Importado sem reserva de estoque ({e})."
+            hist_estoque = f"Importado sem baixa de estoque ({e})."
 
         cur.execute(
             """
@@ -2488,6 +2515,12 @@ def importar_pedido_ml(
             f"Pedido importado do Mercado Livre (#{numero_ml}). {hist_estoque}",
             id_usuario,
         )
+        try:
+            from api.bling.pedidos import tentar_exportar_pedido_fornecedor_ao_disponibilizar
+
+            tentar_exportar_pedido_fornecedor_ao_disponibilizar(cur, id_pedido)
+        except Exception:
+            pass
         ids_criados.append(id_pedido)
 
     return ids_criados
@@ -2701,12 +2734,20 @@ def importar_pedido_tiktok(
                 ),
             )
 
-        itens_reserva = [(i["id_variante"], i["quantidade"]) for i in itens]
+        itens_baixa = [
+            (i["id_variante"], i["quantidade"], i.get("id_deposito")) for i in itens
+        ]
         try:
-            reservar_itens_pedido(cur, itens_reserva)
-            hist_estoque = "Estoque reservado."
+            garantir_col_estoque_baixado(cur)
+            baixar_itens_pedido(cur, itens_baixa)
+            if "estoque_baixado" in _pedido_colunas(cur):
+                cur.execute(
+                    "UPDATE tbl_pedido SET estoque_baixado = TRUE WHERE id = %s",
+                    (id_pedido,),
+                )
+            hist_estoque = "Estoque baixado."
         except ValueError as e:
-            hist_estoque = f"Importado sem reserva de estoque ({e})."
+            hist_estoque = f"Importado sem baixa de estoque ({e})."
 
         cur.execute(
             """
@@ -2734,6 +2775,12 @@ def importar_pedido_tiktok(
             f"Pedido importado do TikTok Shop (#{numero_tt}). {hist_estoque}",
             id_usuario,
         )
+        try:
+            from api.bling.pedidos import tentar_exportar_pedido_fornecedor_ao_disponibilizar
+
+            tentar_exportar_pedido_fornecedor_ao_disponibilizar(cur, id_pedido)
+        except Exception:
+            pass
         ids_criados.append(id_pedido)
 
     return ids_criados
@@ -2947,12 +2994,20 @@ def importar_pedido_amazon(
                 ),
             )
 
-        itens_reserva = [(i["id_variante"], i["quantidade"]) for i in itens]
+        itens_baixa = [
+            (i["id_variante"], i["quantidade"], i.get("id_deposito")) for i in itens
+        ]
         try:
-            reservar_itens_pedido(cur, itens_reserva)
-            hist_estoque = "Estoque reservado."
+            garantir_col_estoque_baixado(cur)
+            baixar_itens_pedido(cur, itens_baixa)
+            if "estoque_baixado" in _pedido_colunas(cur):
+                cur.execute(
+                    "UPDATE tbl_pedido SET estoque_baixado = TRUE WHERE id = %s",
+                    (id_pedido,),
+                )
+            hist_estoque = "Estoque baixado."
         except ValueError as e:
-            hist_estoque = f"Importado sem reserva de estoque ({e})."
+            hist_estoque = f"Importado sem baixa de estoque ({e})."
 
         cur.execute(
             """
@@ -2980,6 +3035,12 @@ def importar_pedido_amazon(
             f"Pedido importado da Amazon (#{numero_amz}). {hist_estoque}",
             id_usuario,
         )
+        try:
+            from api.bling.pedidos import tentar_exportar_pedido_fornecedor_ao_disponibilizar
+
+            tentar_exportar_pedido_fornecedor_ao_disponibilizar(cur, id_pedido)
+        except Exception:
+            pass
         ids_criados.append(id_pedido)
 
     return ids_criados
@@ -3024,8 +3085,16 @@ def marcar_em_expedicao(
     ped = obter_pedido(cur, id_pedido, id_fornecedor=id_fornecedor)
     if not ped:
         raise ValueError("Pedido não encontrado.")
-    if status_vendedor_pedido(ped) != STATUS_PAGO:
-        raise ValueError("Somente pedidos pagos podem ser expedidos.")
+    st = status_vendedor_pedido(ped)
+    # Canal: pode expedir sem "pago" (impressão de etiqueta implica acerto).
+    # Manual: preferencialmente pago; ainda permite aguardando se docs ok.
+    if st not in (
+        STATUS_PAGO,
+        STATUS_AGUARDANDO,
+        STATUS_AGUARDANDO_CONFIRMACAO,
+        STATUS_IMPORTADO,
+    ):
+        raise ValueError("Pedido não pode ser expedido neste status.")
 
     docs = pedido_docs_frete_ok(cur, id_pedido)
     if not docs.get("ok"):
@@ -3034,22 +3103,7 @@ def marcar_em_expedicao(
             or "Anexe a etiqueta de frete e a NF ou declaração de conteúdo antes de expedir."
         )
 
-    itens_baixa: list[tuple[int, int, int | None]] = []
-    for item in ped["itens"]:
-        id_dep = None
-        cur.execute(
-            """
-            SELECT id_deposito_fornecedor FROM tbl_pedido_item
-            WHERE id_pedido = %s AND id_variante = %s LIMIT 1
-            """,
-            (id_pedido, item["id_variante"]),
-        )
-        dep_row = cur.fetchone()
-        if dep_row and dep_row[0]:
-            id_dep = int(dep_row[0])
-        itens_baixa.append((item["id_variante"], item["quantidade"], id_dep))
-
-    baixar_itens_pedido(cur, itens_baixa)
+    # Estoque já foi baixado na entrada (canal) ou no pagamento (manual) — não baixa de novo.
 
     agora = agora_utc()
     cv = col_status_vendedor(cur)
@@ -3704,6 +3758,149 @@ def baixar_itens_pedido(cur, itens: list[tuple[int, int, int | None]]) -> None:
     """itens: (id_variante, quantidade, id_deposito opcional)."""
     for id_var, qtd, id_dep in itens:
         baixar_estoque_expedicao(cur, int(id_var), int(qtd), id_deposito=id_dep)
+
+
+def garantir_col_estoque_baixado(cur) -> None:
+    """Flag: estoque físico já foi baixado neste pedido (não só reservado)."""
+    global _PEDIDO_COL_CACHE
+    cols = _pedido_colunas(cur)
+    if "estoque_baixado" in cols:
+        return
+    try:
+        cur.execute(
+            """
+            ALTER TABLE tbl_pedido
+              ADD COLUMN IF NOT EXISTS estoque_baixado BOOLEAN NOT NULL DEFAULT FALSE
+            """
+        )
+    except Exception:
+        return
+    _PEDIDO_COL_CACHE = None
+
+
+def pedido_tem_estoque_baixado(cur, id_pedido: int) -> bool:
+    garantir_col_estoque_baixado(cur)
+    if "estoque_baixado" not in _pedido_colunas(cur):
+        return False
+    cur.execute(
+        "SELECT COALESCE(estoque_baixado, FALSE) FROM tbl_pedido WHERE id = %s",
+        (int(id_pedido),),
+    )
+    row = cur.fetchone()
+    return bool(row and row[0])
+
+
+def _itens_baixa_do_pedido(cur, ped: dict) -> list[tuple[int, int, int | None]]:
+    out: list[tuple[int, int, int | None]] = []
+    for item in ped.get("itens") or listar_itens_pedido(cur, int(ped["id"])):
+        id_var = int(item.get("id_variante") or 0)
+        qtd = int(item.get("quantidade") or 0)
+        if id_var <= 0 or qtd <= 0:
+            continue
+        id_dep = item.get("id_deposito_fornecedor") or item.get("id_deposito")
+        try:
+            id_dep_i = int(id_dep) if id_dep else None
+        except (TypeError, ValueError):
+            id_dep_i = None
+        if id_dep_i is None:
+            cur.execute(
+                """
+                SELECT id_deposito_fornecedor FROM tbl_pedido_item
+                WHERE id_pedido = %s AND id_variante = %s LIMIT 1
+                """,
+                (int(ped["id"]), id_var),
+            )
+            dep_row = cur.fetchone()
+            if dep_row and dep_row[0]:
+                id_dep_i = int(dep_row[0])
+        out.append((id_var, qtd, id_dep_i))
+    return out
+
+
+def baixar_estoque_do_pedido(cur, id_pedido: int, *, ped: dict | None = None) -> bool:
+    """Baixa física imediata (sem reserva). Idempotente via estoque_baixado."""
+    garantir_col_estoque_baixado(cur)
+    if pedido_tem_estoque_baixado(cur, id_pedido):
+        return False
+    ped = ped or obter_pedido(cur, int(id_pedido))
+    if not ped:
+        raise ValueError("Pedido não encontrado.")
+    itens = _itens_baixa_do_pedido(cur, ped)
+    if not itens:
+        return False
+    baixar_itens_pedido(cur, itens)
+    if "estoque_baixado" in _pedido_colunas(cur):
+        cur.execute(
+            "UPDATE tbl_pedido SET estoque_baixado = TRUE, atualizado_em = %s WHERE id = %s",
+            (agora_utc(), int(id_pedido)),
+        )
+    registrar_historico(cur, int(id_pedido), "estoque_baixado", "Estoque baixado.", None)
+    return True
+
+
+def estornar_estoque_do_pedido(cur, id_pedido: int, *, ped: dict | None = None) -> bool:
+    """Devolve quantidade baixada (ou libera reserva legada)."""
+    garantir_col_estoque_baixado(cur)
+    ped = ped or obter_pedido(cur, int(id_pedido))
+    if not ped:
+        return False
+    itens_qtd = [(int(i["id_variante"]), int(i["quantidade"])) for i in (ped.get("itens") or [])]
+    if not itens_qtd and ped.get("id"):
+        itens_qtd = [
+            (int(i["id_variante"]), int(i["quantidade"]))
+            for i in listar_itens_pedido(cur, int(ped["id"]))
+        ]
+
+    baixou = pedido_tem_estoque_baixado(cur, id_pedido)
+    if baixou:
+        for id_var, qtd in itens_qtd:
+            if qtd <= 0:
+                continue
+            cur.execute(
+                """
+                UPDATE tbl_produto_variante_estoque
+                SET quantidade = quantidade + %s, atualizado_em = NOW()
+                WHERE id_variante = %s
+                """,
+                (qtd, id_var),
+            )
+            cur.execute(
+                """
+                SELECT id_deposito_fornecedor FROM tbl_pedido_item
+                WHERE id_pedido = %s AND id_variante = %s LIMIT 1
+                """,
+                (int(id_pedido), id_var),
+            )
+            dep = cur.fetchone()
+            if dep and dep[0]:
+                cur.execute(
+                    """
+                    UPDATE tbl_produto_estoque_deposito
+                    SET quantidade = quantidade + %s, atualizado_em = NOW()
+                    WHERE id_variante = %s AND id_deposito = %s
+                    """,
+                    (qtd, id_var, int(dep[0])),
+                )
+                try:
+                    from fornecedor.catalogo.catalogo import sincronizar_total_variante
+
+                    sincronizar_total_variante(cur, id_var)
+                except Exception:
+                    pass
+        if "estoque_baixado" in _pedido_colunas(cur):
+            cur.execute(
+                "UPDATE tbl_pedido SET estoque_baixado = FALSE, atualizado_em = %s WHERE id = %s",
+                (agora_utc(), int(id_pedido)),
+            )
+        registrar_historico(cur, int(id_pedido), "estoque_estornado", "Estoque estornado.", None)
+        return True
+
+    # Legado: só reserva
+    try:
+        liberar_itens_pedido(cur, itens_qtd)
+        return True
+    except Exception:
+        return False
 
 
 # ── meios_pagamento ───────────────────────────────────

@@ -560,8 +560,9 @@
       const ped = pedidosGrupo.find((p) => p.id === idPed);
       if (ped) {
         ped.status_pagamento = "comprovante_enviado";
-        ped.status_vendedor = "aguardando_confirmacao";
-        ped.status = "aguardando_confirmacao";
+        ped.status_vendedor = "pago";
+        ped.status = "pago";
+        ped.status_pagamento = "pago";
         ped.anexos = ped.anexos || [];
         if (j.anexo) ped.anexos.push(j.anexo);
       }
@@ -1974,8 +1975,9 @@
       const ped = pedidosGrupo.find((p) => p.id === idPed);
       if (ped) {
         ped.status_pagamento = "comprovante_enviado";
-        ped.status_vendedor = "aguardando_confirmacao";
-        ped.status = "aguardando_confirmacao";
+        ped.status_vendedor = "pago";
+        ped.status = "pago";
+        ped.status_pagamento = "pago";
         ped.anexos = ped.anexos || [];
         if (j.anexo) ped.anexos.push(j.anexo);
       }

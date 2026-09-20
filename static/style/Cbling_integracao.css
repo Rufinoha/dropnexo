@@ -1113,3 +1113,20 @@
 @media (max-width: 900px) {
   .Bl_ImgFilaStats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+.Bl_StatusMap { display: flex; flex-direction: column; gap: 0.75rem; margin: 1rem 0; }
+.Bl_StatusRow {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 1rem;
+  align-items: center;
+  padding: 0.85rem 1rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+}
+.Bl_StatusRow strong { display: block; color: #0f172a; margin-bottom: 0.2rem; }
+.Bl_StatusRow small { color: #64748b; font-size: 0.8rem; line-height: 1.35; }
+@media (max-width: 720px) {
+  .Bl_StatusRow { grid-template-columns: 1fr; }
+}
