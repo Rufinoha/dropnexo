@@ -1358,32 +1358,168 @@
     await carregarStatus();
   }
 
-  function sugerirSituacaoId(nomeAlvo, lista) {
+  function sugerirSituacao(nomeAlvo, lista) {
     const alvos = (Array.isArray(nomeAlvo) ? nomeAlvo : [nomeAlvo]).map((n) =>
       String(n || "").toLowerCase()
     );
     for (const s of lista || []) {
       const nome = String(s.nome || "").toLowerCase();
-      if (alvos.some((a) => nome === a || nome.includes(a))) return String(s.id);
+      if (alvos.some((a) => nome === a)) return s;
     }
-    return "";
+    for (const s of lista || []) {
+      const nome = String(s.nome || "").toLowerCase();
+      if (alvos.some((a) => nome.includes(a))) return s;
+    }
+    return null;
   }
 
-  function preencherSelectSituacao(sel, lista, valorAtual, sugestoes) {
-    if (!sel) return;
-    const cur = valorAtual != null && valorAtual !== "" ? String(valorAtual) : "";
-    const sugerido = cur || sugerirSituacaoId(sugestoes, lista);
-    const opts = ['<option value="">— selecionar —</option>'].concat(
-      (lista || []).map((s) => {
-        const id = String(s.id);
-        const selAttr = id === String(sugerido) ? " selected" : "";
-        return `<option value="${id}"${selAttr}>${escapeHtml(s.nome || id)}</option>`;
+  function resolverMapaStatus(lista, op) {
+    const rows =
+      BL_PAPEL === "pedidos"
+        ? [
+            {
+              key: "bling_situacao_importar",
+              dn: "Aguardando pagamento",
+              desc: "Pedido Atendido no Bling entra no DropNexo (cliente já pagou o vendedor).",
+              tips: ["atendido"],
+            },
+            {
+              key: "bling_situacao_pago",
+              dn: "Pago",
+              desc: "Vendedor pagou o fornecedor e anexou comprovante (espelha no Bling se houver situação).",
+              tips: ["verificado", "pago"],
+            },
+            {
+              key: "bling_situacao_expedido",
+              dn: "Expedido",
+              desc: "Pedido em expedição / etiqueta impressa.",
+              tips: ["em transporte", "enviado", "despachado", "expedido", "postado"],
+            },
+            {
+              key: "bling_situacao_entregue",
+              dn: "Entregue",
+              desc: "Entregue ao destinatário final.",
+              tips: ["entregue"],
+            },
+            {
+              key: "bling_situacao_cancelado",
+              dn: "Cancelado",
+              desc: "Cancelamento no Bling cancela no DropNexo e estorna estoque.",
+              tips: ["cancelado"],
+            },
+          ]
+        : [
+            {
+              key: "bling_situacao_criar",
+              dn: "Aguardando pagamento",
+              desc: "Pedido canal chegou — cria o pedido de venda no seu Bling.",
+              tips: ["em aberto", "atendido"],
+            },
+            {
+              key: "bling_situacao_pago",
+              dn: "Pago",
+              desc: "Vendedor quitou com você (comprovante anexado).",
+              tips: ["verificado", "atendido", "pago"],
+            },
+            {
+              key: "bling_situacao_expedido",
+              dn: "Expedido",
+              desc: "Você imprimiu a etiqueta no DropNexo.",
+              tips: ["em transporte", "enviado", "despachado", "expedido", "postado"],
+            },
+            {
+              key: "bling_situacao_entregue",
+              dn: "Entregue",
+              desc: "Entregue ao destinatário final.",
+              tips: ["entregue", "atendido"],
+            },
+            {
+              key: "bling_situacao_cancelado",
+              dn: "Cancelado",
+              desc: "Pedido cancelado — espelha no Bling e estorna estoque no DropNexo.",
+              tips: ["cancelado"],
+            },
+          ];
+
+    return rows.map((row) => {
+      const saved = op[row.key];
+      let match = null;
+      if (saved != null && saved !== "") {
+        match = (lista || []).find((s) => String(s.id) === String(saved)) || null;
+      }
+      if (!match) match = sugerirSituacao(row.tips, lista);
+      return {
+        ...row,
+        id: match ? match.id : null,
+        blingNome: match ? match.nome : null,
+      };
+    });
+  }
+
+  function renderStatusMap(mapa) {
+    const el = document.getElementById("bl_status_map");
+    const hint = document.getElementById("bl_status_hint");
+    if (!el) return;
+    el.innerHTML = mapa
+      .map((row) => {
+        const ok = !!row.blingNome;
+        const blingTxt = ok
+          ? `<strong class="Bl_StatusBlingOk">${escapeHtml(row.blingNome)}</strong>`
+          : `<strong class="Bl_StatusBlingMiss">Não encontrada na conta</strong>`;
+        return `
+        <div class="Bl_StatusRow${ok ? "" : " is-miss"}" role="row">
+          <div class="Bl_StatusDn">
+            <strong>${escapeHtml(row.dn)}</strong>
+          </div>
+          <div class="Bl_StatusBling">${blingTxt}</div>
+          <div class="Bl_StatusDesc">${escapeHtml(row.desc)}</div>
+        </div>`;
       })
-    );
-    sel.innerHTML = opts.join("");
+      .join("");
+    if (hint) {
+      const miss = mapa.filter((r) => !r.blingNome).length;
+      hint.textContent = miss
+        ? `${miss} situação(ões) não existem na sua conta Bling — o sistema usa o nome padrão quando possível.`
+        : "Pareamento automático com as situações da sua conta Bling (somente leitura).";
+    }
+  }
+
+  async function persistirMapaStatusSePreciso(mapa, op) {
+    const opcoes = {};
+    let mudou = false;
+    mapa.forEach((row) => {
+      if (row.id == null) return;
+      const atual = op[row.key];
+      if (atual == null || atual === "" || String(atual) !== String(row.id)) {
+        opcoes[row.key] = String(row.id);
+        mudou = true;
+      }
+    });
+    if (!mudou) return;
+    const ctx = estado.contexto_modulo || (BL_PAPEL === "pedidos" ? "vendedor" : "fornecedor");
+    const cfg =
+      (estado.configs || []).find((c) => c.contexto === ctx) || {};
+    try {
+      await fetch("/api/integracoes/bling/config/salvar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          contexto: ctx,
+          opcoes,
+          produtos_modo: cfg.produtos_modo,
+          estoque_modo: cfg.estoque_modo,
+          pedidos_modo: cfg.pedidos_modo,
+          fonte_principal: cfg.fonte_principal,
+        }),
+      });
+      await carregarStatus();
+    } catch (_) {}
   }
 
   async function carregarAbaStatus() {
+    const hint = document.getElementById("bl_status_hint");
+    if (hint) hint.textContent = "Carregando situações da conta Bling…";
     const r = await fetch("/api/integracoes/bling/situacoes-pedidos", { credentials: "include" });
     const j = await r.json();
     if (!j.success) throw new Error(j.message || "Não foi possível listar situações.");
@@ -1392,90 +1528,9 @@
       (estado.configs || []).find((c) => c.contexto === (estado.contexto_modulo || "vendedor")) ||
       {};
     const op = cfg.opcoes || {};
-
-    if (BL_PAPEL === "pedidos") {
-      preencherSelectSituacao(
-        document.getElementById("bl_sit_importar"),
-        situacoesBling,
-        op.bling_situacao_importar,
-        ["atendido"]
-      );
-      preencherSelectSituacao(
-        document.getElementById("bl_sit_pago"),
-        situacoesBling,
-        op.bling_situacao_pago,
-        ["verificado", "pago"]
-      );
-      preencherSelectSituacao(
-        document.getElementById("bl_sit_expedido"),
-        situacoesBling,
-        op.bling_situacao_expedido,
-        ["em transporte", "enviado", "despachado", "expedido"]
-      );
-      preencherSelectSituacao(
-        document.getElementById("bl_sit_entregue"),
-        situacoesBling,
-        op.bling_situacao_entregue,
-        ["entregue"]
-      );
-      preencherSelectSituacao(
-        document.getElementById("bl_sit_cancelado"),
-        situacoesBling,
-        op.bling_situacao_cancelado,
-        ["cancelado"]
-      );
-    } else {
-      preencherSelectSituacao(
-        document.getElementById("bl_sit_criar"),
-        situacoesBling,
-        op.bling_situacao_criar,
-        ["em aberto", "atendido"]
-      );
-      preencherSelectSituacao(
-        document.getElementById("bl_sit_pago_fn"),
-        situacoesBling,
-        op.bling_situacao_pago,
-        ["verificado", "atendido", "pago"]
-      );
-      preencherSelectSituacao(
-        document.getElementById("bl_sit_expedido_fn"),
-        situacoesBling,
-        op.bling_situacao_expedido,
-        ["em transporte", "enviado", "despachado"]
-      );
-      preencherSelectSituacao(
-        document.getElementById("bl_sit_entregue_fn"),
-        situacoesBling,
-        op.bling_situacao_entregue,
-        ["entregue", "atendido"]
-      );
-      preencherSelectSituacao(
-        document.getElementById("bl_sit_cancelado_fn"),
-        situacoesBling,
-        op.bling_situacao_cancelado,
-        ["cancelado"]
-      );
-    }
-  }
-
-  async function salvarStatusMap() {
-    const ctx = estado.contexto_modulo || (BL_PAPEL === "pedidos" ? "vendedor" : "fornecedor");
-    const opcoes = {};
-    document.querySelectorAll("#bl_pane_status [data-sit-key]").forEach((el) => {
-      const key = el.getAttribute("data-sit-key");
-      const val = (el.value || "").trim();
-      if (key) opcoes[key] = val || null;
-    });
-    const body = { contexto: ctx, opcoes };
-    const r = await fetch("/api/integracoes/bling/config/salvar", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    const j = await r.json();
-    if (!j.success) throw new Error(j.message || "Erro ao salvar status.");
-    await Swal.fire({ icon: "success", title: "Status salvos", timer: 1400, showConfirmButton: false });
-    await carregarStatus();
+    const mapa = resolverMapaStatus(situacoesBling, op);
+    renderStatusMap(mapa);
+    await persistirMapaStatusSePreciso(mapa, op);
   }
 
   async function salvarPedidos() {
@@ -1774,13 +1829,6 @@
   btnSalvarPedidos?.addEventListener("click", async () => {
     try {
       await salvarPedidos();
-    } catch (e) {
-      Swal.fire({ icon: "error", title: "Erro", text: e.message, confirmButtonColor: "#021F81" });
-    }
-  });
-  document.getElementById("bl_btn_salvar_status")?.addEventListener("click", async () => {
-    try {
-      await salvarStatusMap();
     } catch (e) {
       Swal.fire({ icon: "error", title: "Erro", text: e.message, confirmButtonColor: "#021F81" });
     }

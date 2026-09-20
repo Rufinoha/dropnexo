@@ -3,7 +3,7 @@
 {% block title %}Bling — Integrações — {{ MARCA_NOME }}{% endblock %}
 {% block topbar_title %}Integração Bling{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('static', filename='style/Cbling_integracao.css') }}?v=22" />
+<link rel="stylesheet" href="{{ url_for('static', filename='style/Cbling_integracao.css') }}?v=23" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal Bl_Wrap">
@@ -207,121 +207,22 @@
       <h3 class="Bl_EstoqueBlockTitle">Relacionamento de status</h3>
       {% if bling_papel == 'pedidos' %}
       <p class="Bl_Hint">
-        Vendedor: define quando o pedido <strong>entra</strong> no DropNexo e como devolver expedição/entrega/cancelamento ao Bling.
+        Vendedor: pareamento automático entre o DropNexo e as situações da sua conta Bling.
+        Somente leitura — o sistema relaciona pelos nomes padrão.
       </p>
-      <div class="Bl_StatusMap" id="bl_status_map_vd">
-        <div class="Bl_StatusRow">
-          <div>
-            <strong>Aguardando pagamento</strong>
-            <small>Pedido Atendido no Bling entra no DropNexo (cliente já pagou o vendedor).</small>
-          </div>
-          <label class="Bl_Field">
-            <span>Situação Bling (entrada)</span>
-            <select id="bl_sit_importar" data-sit-key="bling_situacao_importar"></select>
-          </label>
-        </div>
-        <div class="Bl_StatusRow">
-          <div>
-            <strong>Pago</strong>
-            <small>Vendedor pagou o fornecedor e anexou comprovante (opcional espelhar no Bling).</small>
-          </div>
-          <label class="Bl_Field">
-            <span>Situação Bling</span>
-            <select id="bl_sit_pago" data-sit-key="bling_situacao_pago"><option value="">— não alterar —</option></select>
-          </label>
-        </div>
-        <div class="Bl_StatusRow">
-          <div>
-            <strong>Expedido</strong>
-            <small>Fornecedor imprimiu etiqueta / pedido em expedição.</small>
-          </div>
-          <label class="Bl_Field">
-            <span>Situação Bling</span>
-            <select id="bl_sit_expedido" data-sit-key="bling_situacao_expedido"></select>
-          </label>
-        </div>
-        <div class="Bl_StatusRow">
-          <div>
-            <strong>Entregue</strong>
-            <small>Pedido entregue ao destinatário final.</small>
-          </div>
-          <label class="Bl_Field">
-            <span>Situação Bling</span>
-            <select id="bl_sit_entregue" data-sit-key="bling_situacao_entregue"></select>
-          </label>
-        </div>
-        <div class="Bl_StatusRow">
-          <div>
-            <strong>Cancelado</strong>
-            <small>Cancelamento no Bling cancela no DropNexo e estorna estoque (urgente).</small>
-          </div>
-          <label class="Bl_Field">
-            <span>Situação Bling</span>
-            <select id="bl_sit_cancelado" data-sit-key="bling_situacao_cancelado"></select>
-          </label>
-        </div>
-      </div>
       {% else %}
       <p class="Bl_Hint">
-        Fornecedor: status usados ao <strong>criar/atualizar</strong> o pedido de venda no seu Bling a partir do DropNexo.
+        Fornecedor: pareamento automático ao criar/atualizar pedidos no seu Bling a partir do DropNexo.
+        Somente leitura — o sistema relaciona pelos nomes padrão.
       </p>
-      <div class="Bl_StatusMap" id="bl_status_map_fn">
-        <div class="Bl_StatusRow">
-          <div>
-            <strong>Aguardando pagamento</strong>
-            <small>Pedido canal (ex.: Atendido do vendedor) chegou — cria no seu Bling.</small>
-          </div>
-          <label class="Bl_Field">
-            <span>Situação ao criar</span>
-            <select id="bl_sit_criar" data-sit-key="bling_situacao_criar"></select>
-          </label>
-        </div>
-        <div class="Bl_StatusRow">
-          <div>
-            <strong>Pago</strong>
-            <small>Vendedor quitou com você (comprovante anexado).</small>
-          </div>
-          <label class="Bl_Field">
-            <span>Situação Bling</span>
-            <select id="bl_sit_pago_fn" data-sit-key="bling_situacao_pago"></select>
-          </label>
-        </div>
-        <div class="Bl_StatusRow">
-          <div>
-            <strong>Expedido</strong>
-            <small>Você imprimiu a etiqueta no DropNexo.</small>
-          </div>
-          <label class="Bl_Field">
-            <span>Situação Bling</span>
-            <select id="bl_sit_expedido_fn" data-sit-key="bling_situacao_expedido"></select>
-          </label>
-        </div>
-        <div class="Bl_StatusRow">
-          <div>
-            <strong>Entregue</strong>
-            <small>Entregue ao destinatário final.</small>
-          </div>
-          <label class="Bl_Field">
-            <span>Situação Bling</span>
-            <select id="bl_sit_entregue_fn" data-sit-key="bling_situacao_entregue"></select>
-          </label>
-        </div>
-        <div class="Bl_StatusRow">
-          <div>
-            <strong>Cancelado</strong>
-            <small>Pedido cancelado — espelha no Bling e estorna estoque no DropNexo.</small>
-          </div>
-          <label class="Bl_Field">
-            <span>Situação Bling</span>
-            <select id="bl_sit_cancelado_fn" data-sit-key="bling_situacao_cancelado"></select>
-          </label>
-        </div>
-      </div>
       {% endif %}
-      <div class="Bl_Actions Bl_Actions--config">
-        <button type="button" class="Cl_BtnSalvar" id="bl_btn_salvar_status">Salvar status</button>
+      <div class="Bl_StatusMapHead" aria-hidden="true">
+        <span>DropNexo</span>
+        <span>Bling</span>
+        <span>Para que serve</span>
       </div>
-      <p class="Bl_Meta" id="bl_status_hint">As opções vêm da sua conta Bling. Na primeira vez sugerimos o pareamento automático.</p>
+      <div class="Bl_StatusMap" id="bl_status_map" role="table" aria-label="Relacionamento de status"></div>
+      <p class="Bl_Meta" id="bl_status_hint">Carregando situações da conta Bling…</p>
     </div>
 
     <div id="bl_pane_produtos" hidden>
@@ -623,5 +524,5 @@
 </div>
 {% endblock %}
 {% block page_js %}
-<script src="{{ url_for('static', filename='script/Sbling_integracao.js') }}?v=38"></script>
+<script src="{{ url_for('static', filename='script/Sbling_integracao.js') }}?v=39"></script>
 {% endblock %}
