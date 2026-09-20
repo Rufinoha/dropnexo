@@ -67,10 +67,13 @@ def _row_to_dict(row: tuple) -> dict[str, Any]:
 
 
 def garantir_tabela(cur) -> None:
-    """Cria tabela se ainda não existir (dev / ambientes sem SQL aplicado)."""
+    """Garante que a tabela existe. Não tenta DDL se já existir (evita 'must be owner')."""
+    cur.execute("SELECT to_regclass('public.tbl_integracao_status_padrao')")
+    if cur.fetchone()[0]:
+        return
     cur.execute(
         """
-        CREATE TABLE IF NOT EXISTS tbl_integracao_status_padrao (
+        CREATE TABLE tbl_integracao_status_padrao (
           id              SERIAL PRIMARY KEY,
           aplicacao       VARCHAR(40)  NOT NULL,
           contexto        VARCHAR(20)  NOT NULL DEFAULT 'ambos',
@@ -85,8 +88,8 @@ def garantir_tabela(cur) -> None:
           ordem           INTEGER      NOT NULL DEFAULT 0,
           criado_em       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
           atualizado_em   TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-          CONSTRAINT chk_isp_contexto CHECK (contexto IN ('vendedor', 'fornecedor', 'ambos')),
-          CONSTRAINT chk_isp_direcao CHECK (direcao IN ('inbound', 'outbound', 'ambos'))
+          CHECK (contexto IN ('vendedor', 'fornecedor', 'ambos')),
+          CHECK (direcao IN ('inbound', 'outbound', 'ambos'))
         )
         """
     )
@@ -232,7 +235,7 @@ def seed_bling_se_vazio(cur) -> None:
               aplicacao, contexto, status_dn, status_dn_label, evento,
               status_externo, aliases, direcao, descricao, ordem
             ) VALUES (%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s,%s)
-            ON CONFLICT DO NOTHING
+            ON CONFLICT (aplicacao, contexto, evento) DO NOTHING
             """,
             r,
         )

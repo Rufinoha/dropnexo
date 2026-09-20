@@ -441,6 +441,7 @@ def listar_situacoes_pedidos_api():
 
 
 @bling_bp.get("/api/integracoes/bling/status-padrao")
+@bling_bp.get("/api/integracoes/bling/status_padrao")
 @login_obrigatorio()
 def api_status_padrao_bling():
     """Exibe o mapeamento padrão (tabela global) + se o tenant ainda precisa migrar."""
@@ -467,7 +468,22 @@ def api_status_padrao_bling():
             tenant_precisa_migrar_bling,
         )
 
-        linhas = listar_status_padrao(cur, aplicacao="bling", contexto=contexto)
+        try:
+            linhas = listar_status_padrao(cur, aplicacao="bling", contexto=contexto)
+        except Exception as e_tab:
+            conn.rollback()
+            cur = conn.cursor()
+            _log = __import__("logging").getLogger(__name__)
+            _log.exception("status-padrao listar falhou")
+            return jsonify(
+                success=False,
+                message=(
+                    "Falha ao ler tbl_integracao_status_padrao. "
+                    "Confirme se o SQL 059 foi aplicado. "
+                    f"Detalhe: {str(e_tab)[:220]}"
+                ),
+            ), 400
+
         cur.execute(
             """
             SELECT opcoes FROM tbl_integracao_bling_config
@@ -500,6 +516,7 @@ def api_status_padrao_bling():
 
 
 @bling_bp.post("/api/integracoes/bling/status-padrao/migrar")
+@bling_bp.post("/api/integracoes/bling/status_padrao/migrar")
 @login_obrigatorio()
 def api_migrar_status_padrao_bling():
     """Remove IDs legados do tenant e passa a usar a tabela global."""

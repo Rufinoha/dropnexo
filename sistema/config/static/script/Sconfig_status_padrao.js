@@ -8,6 +8,10 @@
     cfg = {};
   }
 
+  function util() {
+    return window.Util || { gerarIconeTech: () => "…" };
+  }
+
   function esc(s) {
     return String(s ?? "")
       .replace(/&/g, "&amp;")
@@ -24,8 +28,8 @@
       rota: id ? cfg.rotaEditar : cfg.rotaIncluir,
       id: id || null,
       titulo: id ? "Editar status padrão" : "Novo status padrão",
-      largura: 820,
-      altura: 620,
+      largura: 860,
+      altura: 640,
       nivel: 1,
     });
   }
@@ -68,11 +72,17 @@
       tbody.innerHTML = `<tr><td colspan="9" class="CfgIsp_Hint">Nenhum registro.</td></tr>`;
       return;
     }
+    const u = util();
     tbody.innerHTML = lista
       .map((row) => {
         const st = row.ativo
           ? `<span class="CfgIsp_On">Ativo</span>`
           : `<span class="CfgIsp_Off">Inativo</span>`;
+        const acoes =
+          `<td class="Cl_TableActions">` +
+          `<button type="button" class="Cl_BtnAcao btnEditar" data-id="${row.id}" title="Editar">${u.gerarIconeTech("editar")}</button>` +
+          `<button type="button" class="Cl_BtnAcao btnExcluir" data-id="${row.id}" title="Excluir">${u.gerarIconeTech("excluir")}</button>` +
+          `</td>`;
         return `<tr>
           <td>${esc(row.aplicacao)}</td>
           <td>${esc(row.contexto)}</td>
@@ -82,22 +92,20 @@
           <td>${esc(row.direcao)}</td>
           <td>${esc(row.ordem)}</td>
           <td>${st}</td>
-          <td class="Cl_TableActions">
-            <button type="button" class="Cl_BtnLink cfg-isp-editar" data-id="${row.id}">Editar</button>
-            <button type="button" class="Cl_BtnLink cfg-isp-excluir" data-id="${row.id}">Excluir</button>
-          </td>
+          ${acoes}
         </tr>`;
       })
       .join("");
 
-    tbody.querySelectorAll(".cfg-isp-editar").forEach((btn) => {
+    tbody.querySelectorAll(".btnEditar").forEach((btn) => {
       btn.addEventListener("click", () => abrirApoio(Number(btn.dataset.id)));
     });
-    tbody.querySelectorAll(".cfg-isp-excluir").forEach((btn) => {
+    tbody.querySelectorAll(".btnExcluir").forEach((btn) => {
       btn.addEventListener("click", () =>
         excluir(Number(btn.dataset.id)).catch((e) => Swal.fire("Erro", e.message, "error"))
       );
     });
+    window.Util?.gerarIconeTech?.refresh?.();
   }
 
   document.getElementById("cfg_isp_novo")?.addEventListener("click", () => abrirApoio(null));

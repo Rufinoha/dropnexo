@@ -1402,14 +1402,22 @@
     const hint = document.getElementById("bl_status_hint");
     if (hint) hint.textContent = "Carregando mapeamento padrão…";
     const ctx = BL_PAPEL === "pedidos" ? "vendedor" : "fornecedor";
-    const r = await fetch(
-      `/api/integracoes/bling/status-padrao?contexto=${encodeURIComponent(ctx)}&papel=${encodeURIComponent(BL_PAPEL || "")}`,
-      { credentials: "include" }
-    );
-    const j = await r.json();
-    if (!j.success) throw new Error(j.message || "Não foi possível carregar o mapeamento.");
-    renderStatusMapPadrao(j.linhas || []);
-    atualizarBotaoMigrar(!!j.precisa_migrar);
+    try {
+      const r = await fetch(
+        `/api/integracoes/bling/status-padrao?contexto=${encodeURIComponent(ctx)}&papel=${encodeURIComponent(BL_PAPEL || "")}`,
+        { credentials: "include" }
+      );
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.success) {
+        throw new Error(j.message || `Erro HTTP ${r.status} ao carregar mapeamento.`);
+      }
+      renderStatusMapPadrao(j.linhas || []);
+      atualizarBotaoMigrar(!!j.precisa_migrar);
+    } catch (e) {
+      if (hint) hint.textContent = e.message || "Falha ao carregar mapeamento padrão.";
+      atualizarBotaoMigrar(false);
+      throw e;
+    }
   }
 
   async function migrarStatusPadrao() {

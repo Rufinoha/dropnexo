@@ -21,7 +21,7 @@
   <div class="Cl_ContainerApoio CfgApoio_Form">
     <div class="CfgApoio_Grid CfgApoio_Grid--3">
       <div class="Cl_FormCampo">
-        <label for="aplicacao">Aplicação *</label>
+        <label for="aplicacao">Aplicação</label>
         <select id="aplicacao">
           <option value="bling">Bling</option>
           <option value="mercado_livre">Mercado Livre</option>
@@ -30,7 +30,7 @@
         </select>
       </div>
       <div class="Cl_FormCampo">
-        <label for="contexto">Contexto *</label>
+        <label for="contexto">Contexto</label>
         <select id="contexto">
           <option value="vendedor">Vendedor</option>
           <option value="fornecedor">Fornecedor</option>
@@ -38,7 +38,7 @@
         </select>
       </div>
       <div class="Cl_FormCampo">
-        <label for="direcao">Direção *</label>
+        <label for="direcao">Direção</label>
         <select id="direcao">
           <option value="ambos">Ambos</option>
           <option value="inbound">Inbound (externo → DN)</option>
@@ -49,22 +49,22 @@
 
     <div class="CfgApoio_Grid CfgApoio_Grid--3">
       <div class="Cl_FormCampo">
-        <label for="status_dn">Status DN (código) *</label>
+        <label for="status_dn">Status DN (código)</label>
         <input type="text" id="status_dn" placeholder="aguardando_pagamento" />
       </div>
       <div class="Cl_FormCampo">
-        <label for="status_dn_label">Label DropNexo *</label>
+        <label for="status_dn_label">Label DropNexo</label>
         <input type="text" id="status_dn_label" placeholder="Aguardando pagamento" />
       </div>
       <div class="Cl_FormCampo">
-        <label for="evento">Evento *</label>
-        <input type="text" id="evento" placeholder="importar / criar / pago / expedido…" />
+        <label for="evento">Evento</label>
+        <input type="text" id="evento" placeholder="importar / criar / pago…" />
       </div>
     </div>
 
     <div class="CfgApoio_Grid CfgApoio_Grid--2">
       <div class="Cl_FormCampo">
-        <label for="status_externo">Status externo *</label>
+        <label for="status_externo">Status externo</label>
         <input type="text" id="status_externo" placeholder="Atendido" />
       </div>
       <div class="Cl_FormCampo">
@@ -73,31 +73,33 @@
       </div>
     </div>
 
-    <div class="CfgApoio_Grid CfgApoio_Grid--2">
-      <div class="Cl_FormCampo">
+    <div class="CfgApoio_Grid CfgApoio_Grid--3">
+      <div class="Cl_FormCampo CfgApoio_ColNarrow">
         <label for="ordem">Ordem</label>
         <input type="number" id="ordem" value="0" />
       </div>
-      <div class="Cl_FormCampo" style="display:flex;align-items:flex-end;padding-bottom:6px;">
-        <label class="Cl_Switch">
-          <input type="checkbox" id="ativo" checked />
-          <span class="Cl_SwitchSlider"></span>
-          <span>Ativo</span>
-        </label>
-      </div>
+    </div>
+
+    <div class="CfgApoio_Switches">
+      <label class="Cl_Switch">
+        <input type="checkbox" id="ativo" checked />
+        <span class="Cl_SwitchSlider"></span>
+        <span>Ativo</span>
+      </label>
     </div>
 
     <div class="Cl_FormCampo">
       <label for="descricao">Descrição / quando aplica</label>
       <textarea id="descricao" rows="3" placeholder="Ex.: Pedido chega no DropNexo já pago pelo cliente do vendedor"></textarea>
     </div>
-
-    <div class="CfgApoio_Actions">
-      <button type="button" class="Cl_BtnSalvar" id="btnSalvar">Salvar</button>
-      <button type="button" class="Cl_BtnExcluir" id="btnExcluir">Excluir</button>
-    </div>
   </div>
 
-  <script src="{{ url_for('config.static', filename='script/Sconfig_status_padrao_apoio.js') }}?v=1"></script>
+  <div class="Cl_BotoesApoio">
+    <button type="button" class="Cl_BtnSalvar" id="btnSalvar">Salvar</button>
+    <button type="button" class="Cl_BtnExcluir" id="btnExcluir">Excluir</button>
+  </div>
+
+  <script src="{{ url_for('static', filename='script/global_utils.js') }}"></script>
+  <script src="{{ url_for('config.static', filename='script/Sconfig_status_padrao_apoio.js') }}?v=2"></script>
 </body>
 </html>

@@ -40,7 +40,7 @@
       </select>
     </div>
     <div class="Cl_ConfigActions">
-      <button type="button" class="Cl_botaoprimario" id="cfg_isp_novo">Novo</button>
+      <button type="button" class="Cl_BtnIncluir" id="cfg_isp_novo">Novo</button>
     </div>
   </div>
 
@@ -75,5 +75,5 @@
   "rotaIncluir": url_for("config.integracao_status_padrao_incluir"),
   "rotaEditar": url_for("config.integracao_status_padrao_editar")
 }|tojson }}</script>
-<script defer src="{{ url_for('config.static', filename='script/Sconfig_status_padrao.js') }}?v=1"></script>
+<script defer src="{{ url_for('config.static', filename='script/Sconfig_status_padrao.js') }}?v=2"></script>
 {% endblock %}
