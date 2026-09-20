@@ -2,8 +2,8 @@
   "use strict";
 
   const BASE = "/configuracoes/integracao-status-padrao";
-  let idRow = null;
   let nivelModal = 1;
+  let idRegistro = 0;
 
   const el = {
     id: document.getElementById("id"),
@@ -20,10 +20,21 @@
     descricao: document.getElementById("descricao"),
     btnSalvar: document.getElementById("btnSalvar"),
     btnExcluir: document.getElementById("btnExcluir"),
+    btnCancelar: document.getElementById("btnCancelar"),
+    modo: document.getElementById("isp_modo"),
+    titulo: document.getElementById("isp_titulo"),
   };
 
-  function limpar() {
-    idRow = null;
+  function setModo(editando) {
+    if (el.modo) el.modo.textContent = editando ? "Edição" : "Novo mapeamento";
+    if (el.titulo) {
+      el.titulo.textContent = editando ? "Editar status padrão" : "Novo status padrão";
+    }
+    if (el.btnExcluir) el.btnExcluir.style.display = editando ? "" : "none";
+  }
+
+  function prepararInclusao() {
+    idRegistro = 0;
     if (el.id) el.id.value = "";
     if (el.aplicacao) el.aplicacao.value = "bling";
     if (el.contexto) el.contexto.value = "vendedor";
@@ -33,14 +44,15 @@
     if (el.evento) el.evento.value = "";
     if (el.status_externo) el.status_externo.value = "";
     if (el.aliases) el.aliases.value = "";
-    if (el.ordem) el.ordem.value = "0";
+    if (el.ordem) el.ordem.value = "10";
     if (el.ativo) el.ativo.checked = true;
     if (el.descricao) el.descricao.value = "";
+    setModo(false);
   }
 
   function preencher(d) {
-    idRow = d.id;
-    if (el.id) el.id.value = String(d.id);
+    idRegistro = Number(d.id) || 0;
+    if (el.id) el.id.value = String(idRegistro);
     if (el.aplicacao) el.aplicacao.value = d.aplicacao || "bling";
     if (el.contexto) el.contexto.value = d.contexto || "vendedor";
     if (el.direcao) el.direcao.value = d.direcao || "ambos";
@@ -49,63 +61,65 @@
     if (el.evento) el.evento.value = d.evento || "";
     if (el.status_externo) el.status_externo.value = d.status_externo || "";
     if (el.aliases) el.aliases.value = (d.aliases || []).join(", ");
-    if (el.ordem) el.ordem.value = String(d.ordem ?? 0);
+    if (el.ordem) el.ordem.value = String(d.ordem ?? 10);
     if (el.ativo) el.ativo.checked = d.ativo !== false;
     if (el.descricao) el.descricao.value = d.descricao || "";
+    setModo(true);
   }
 
-  async function carregarApoio(id) {
+  async function carregarDadosEdicao() {
     const r = await fetch(`${BASE}/apoio`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
+      body: JSON.stringify({ id: idRegistro }),
     });
     const j = await r.json();
     if (!r.ok || !j.success) throw new Error(j.message || "Erro ao carregar.");
     preencher(j.dados);
   }
 
-  async function salvar() {
-    const body = {
-      id: idRow || null,
-      aplicacao: el.aplicacao?.value,
-      contexto: el.contexto?.value,
-      direcao: el.direcao?.value,
-      status_dn: el.status_dn?.value,
-      status_dn_label: el.status_dn_label?.value,
-      evento: el.evento?.value,
-      status_externo: el.status_externo?.value,
-      aliases: el.aliases?.value || "",
-      ordem: el.ordem?.value,
-      ativo: !!el.ativo?.checked,
-      descricao: el.descricao?.value,
-    };
-    const r = await fetch(`${BASE}/salvar`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    const j = await r.json();
-    if (!r.ok || !j.success) throw new Error(j.message || "Erro ao salvar.");
-    const q = await Swal.fire({
-      title: "Salvo!",
-      text: "Deseja cadastrar outro?",
-      icon: "success",
-      showCancelButton: true,
-      confirmButtonText: "Sim",
-      cancelButtonText: "Não",
-    });
-    window.parent.postMessage({ grupo: "atualizarTabela" }, "*");
-    if (q.isConfirmed) {
-      limpar();
+  document.querySelector("#btnSalvar")?.addEventListener("click", async () => {
+    const status_dn = (el.status_dn?.value || "").trim();
+    const status_dn_label = (el.status_dn_label?.value || "").trim();
+    const evento = (el.evento?.value || "").trim();
+    const status_externo = (el.status_externo?.value || "").trim();
+    if (!status_dn || !status_dn_label || !evento || !status_externo) {
+      Swal.fire("Atenção", "Preencha DropNexo, código DN, evento e status externo.", "warning");
       return;
     }
-    window.GlobalUtils?.fecharJanelaApoio(nivelModal);
-  }
+    try {
+      const body = {
+        id: idRegistro > 0 ? idRegistro : null,
+        aplicacao: el.aplicacao?.value,
+        contexto: el.contexto?.value,
+        direcao: el.direcao?.value,
+        status_dn,
+        status_dn_label,
+        evento,
+        status_externo,
+        aliases: el.aliases?.value || "",
+        ordem: el.ordem?.value,
+        ativo: !!el.ativo?.checked,
+        descricao: el.descricao?.value,
+      };
+      const r = await fetch(`${BASE}/salvar`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const j = await r.json();
+      if (!r.ok || !j.success) throw new Error(j.message || "Erro ao salvar.");
+      window.parent.postMessage({ grupo: "atualizarTabela", nivel: nivelModal }, "*");
+      await Swal.fire({ icon: "success", title: "Salvo", timer: 1200, showConfirmButton: false });
+      window.parent.GlobalUtils?.fecharJanelaApoio(nivelModal);
+    } catch (err) {
+      Swal.fire("Erro", err.message, "error");
+    }
+  });
 
-  async function excluir() {
-    if (!idRow) {
-      await Swal.fire("Atenção", "Nada para excluir.", "info");
+  document.querySelector("#btnExcluir")?.addEventListener("click", async () => {
+    if (!(idRegistro > 0)) {
+      Swal.fire("Atenção", "Nada para excluir.", "info");
       return;
     }
     const c = await Swal.fire({
@@ -116,34 +130,42 @@
       cancelButtonText: "Cancelar",
     });
     if (!c.isConfirmed) return;
-    const r = await fetch(`${BASE}/excluir`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: idRow }),
-    });
-    const j = await r.json();
-    if (!r.ok || !j.success) throw new Error(j.message || "Erro ao excluir.");
-    await Swal.fire("Sucesso", "Removido.", "success");
-    window.parent.postMessage({ grupo: "atualizarTabela" }, "*");
-    window.GlobalUtils?.fecharJanelaApoio(nivelModal);
-  }
-
-  el.btnSalvar?.addEventListener("click", () =>
-    salvar().catch((e) => Swal.fire("Erro", e.message, "error"))
-  );
-  el.btnExcluir?.addEventListener("click", () =>
-    excluir().catch((e) => Swal.fire("Erro", e.message, "error"))
-  );
-
-  window.addEventListener("message", (ev) => {
-    const d = ev?.data;
-    if (!d || d.grupo !== "receberDadosModal") return;
-    nivelModal = d.nivel || 1;
-    const id = d.id != null && d.id !== "" ? Number(d.id) : null;
-    if (!id) {
-      limpar();
-      return;
+    try {
+      const r = await fetch(`${BASE}/excluir`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: idRegistro }),
+      });
+      const j = await r.json();
+      if (!r.ok || !j.success) throw new Error(j.message || "Erro ao excluir.");
+      window.parent.postMessage({ grupo: "atualizarTabela", nivel: nivelModal }, "*");
+      await Swal.fire("Sucesso", "Removido.", "success");
+      window.parent.GlobalUtils?.fecharJanelaApoio(nivelModal);
+    } catch (err) {
+      Swal.fire("Erro", err.message, "error");
     }
-    carregarApoio(id).catch((e) => Swal.fire("Erro", e.message, "error"));
   });
+
+  document.querySelector("#btnCancelar")?.addEventListener("click", () => {
+    window.parent.GlobalUtils?.fecharJanelaApoio(nivelModal);
+  });
+
+  // Fonte da verdade (doc 04): GlobalUtils.receberDadosApoio
+  if (window.GlobalUtils && typeof GlobalUtils.receberDadosApoio === "function") {
+    GlobalUtils.receberDadosApoio((id, nivel) => {
+      nivelModal = Number(nivel || 1) || 1;
+      idRegistro = Number(id || 0) || 0;
+      if (idRegistro > 0) {
+        carregarDadosEdicao().catch((e) => Swal.fire("Erro", e.message, "error"));
+      } else {
+        prepararInclusao();
+      }
+    });
+  } else {
+    const params = new URLSearchParams(window.location.search);
+    idRegistro = Number(params.get("id") || 0) || 0;
+    nivelModal = Number(params.get("nivel") || 1) || 1;
+    if (idRegistro > 0) carregarDadosEdicao().catch((e) => Swal.fire("Erro", e.message, "error"));
+    else prepararInclusao();
+  }
 })();

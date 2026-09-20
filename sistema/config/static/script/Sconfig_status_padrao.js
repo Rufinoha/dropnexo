@@ -28,8 +28,8 @@
       rota: id ? cfg.rotaEditar : cfg.rotaIncluir,
       id: id || null,
       titulo: id ? "Editar status padrão" : "Novo status padrão",
-      largura: 860,
-      altura: 640,
+      largura: 920,
+      altura: 620,
       nivel: 1,
     });
   }

@@ -1,0 +1,119 @@
+/* Apoio — Status de integração (compacto, sem header duplicado) */
+.IspApoio_Body {
+  margin: 0;
+  background: #f1f5f9;
+  min-height: 100%;
+}
+
+.IspApoio_Shell {
+  padding: 14px 16px 8px;
+  box-sizing: border-box;
+}
+
+.IspApoio_Top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 0 2px;
+}
+
+.IspApoio_Eyebrow {
+  margin: 0 0 2px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.IspApoio_Title {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #021f81;
+  line-height: 1.2;
+}
+
+.IspApoio_Ativo {
+  flex-shrink: 0;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  padding: 6px 12px;
+}
+
+.IspApoio_Grid {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr;
+  gap: 12px;
+}
+
+.IspApoio_Card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 12px 14px 14px;
+  border-left: 3px solid #021f81;
+}
+
+.IspApoio_Card--wide {
+  grid-column: 1 / -1;
+  border-left-color: #64748b;
+}
+
+.IspApoio_CardTitle {
+  margin: 0 0 10px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.IspApoio_Mapa {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 10px;
+  align-items: end;
+  margin-bottom: 12px;
+}
+
+.IspApoio_Seta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 40px;
+  width: 28px;
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: #021f81;
+  opacity: 0.7;
+}
+
+.IspApoio_Body .CfgApoio_Grid {
+  margin-bottom: 10px;
+}
+
+.IspApoio_Body .CfgApoio_Grid:last-child {
+  margin-bottom: 0;
+}
+
+.IspApoio_Body .Cl_BotoesApoio {
+  margin: 8px 16px 14px;
+  padding-top: 4px;
+}
+
+@media (max-width: 720px) {
+  .IspApoio_Grid {
+    grid-template-columns: 1fr;
+  }
+  .IspApoio_Mapa {
+    grid-template-columns: 1fr;
+  }
+  .IspApoio_Seta {
+    height: 20px;
+    transform: rotate(90deg);
+  }
+}

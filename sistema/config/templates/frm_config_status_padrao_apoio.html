@@ -6,100 +6,107 @@
   {% include "partials/marca_favicon.html" %}
   <link rel="stylesheet" href="{{ url_for('static', filename='style/global_utils.css') }}" />
   <link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_crud.css') }}?v=2" />
+  <link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_status_padrao_apoio.css') }}?v=1" />
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </head>
-<body class="CfgApoio_Body">
-  <div class="Cl_Header Cl_ApoioHeader">
-    <div class="Cl_Logo">
-      <img src="{{ marca_logo_nome_url }}" alt="{{ MARCA_NOME }}" />
-    </div>
-    <div class="Cl_Titulo"><h1>Status de integração</h1></div>
-  </div>
-
+<body class="CfgApoio_Body IspApoio_Body">
   <input type="hidden" id="id" value="" />
 
-  <div class="Cl_ContainerApoio CfgApoio_Form">
-    <div class="CfgApoio_Grid CfgApoio_Grid--3">
-      <div class="Cl_FormCampo">
-        <label for="aplicacao">Aplicação</label>
-        <select id="aplicacao">
-          <option value="bling">Bling</option>
-          <option value="mercado_livre">Mercado Livre</option>
-          <option value="tiktok">TikTok</option>
-          <option value="amazon">Amazon</option>
-        </select>
+  <div class="IspApoio_Shell">
+    <header class="IspApoio_Top">
+      <div>
+        <p class="IspApoio_Eyebrow" id="isp_modo">Novo mapeamento</p>
+        <h1 class="IspApoio_Title" id="isp_titulo">Status de integração</h1>
       </div>
-      <div class="Cl_FormCampo">
-        <label for="contexto">Contexto</label>
-        <select id="contexto">
-          <option value="vendedor">Vendedor</option>
-          <option value="fornecedor">Fornecedor</option>
-          <option value="ambos">Ambos</option>
-        </select>
-      </div>
-      <div class="Cl_FormCampo">
-        <label for="direcao">Direção</label>
-        <select id="direcao">
-          <option value="ambos">Ambos</option>
-          <option value="inbound">Inbound (externo → DN)</option>
-          <option value="outbound">Outbound (DN → externo)</option>
-        </select>
-      </div>
-    </div>
-
-    <div class="CfgApoio_Grid CfgApoio_Grid--3">
-      <div class="Cl_FormCampo">
-        <label for="status_dn">Status DN (código)</label>
-        <input type="text" id="status_dn" placeholder="aguardando_pagamento" />
-      </div>
-      <div class="Cl_FormCampo">
-        <label for="status_dn_label">Label DropNexo</label>
-        <input type="text" id="status_dn_label" placeholder="Aguardando pagamento" />
-      </div>
-      <div class="Cl_FormCampo">
-        <label for="evento">Evento</label>
-        <input type="text" id="evento" placeholder="importar / criar / pago…" />
-      </div>
-    </div>
-
-    <div class="CfgApoio_Grid CfgApoio_Grid--2">
-      <div class="Cl_FormCampo">
-        <label for="status_externo">Status externo</label>
-        <input type="text" id="status_externo" placeholder="Atendido" />
-      </div>
-      <div class="Cl_FormCampo">
-        <label for="aliases">Aliases (vírgula)</label>
-        <input type="text" id="aliases" placeholder="Pago, Verificado" />
-      </div>
-    </div>
-
-    <div class="CfgApoio_Grid CfgApoio_Grid--3">
-      <div class="Cl_FormCampo CfgApoio_ColNarrow">
-        <label for="ordem">Ordem</label>
-        <input type="number" id="ordem" value="0" />
-      </div>
-    </div>
-
-    <div class="CfgApoio_Switches">
-      <label class="Cl_Switch">
+      <label class="Cl_Switch IspApoio_Ativo">
         <input type="checkbox" id="ativo" checked />
         <span class="Cl_SwitchSlider"></span>
         <span>Ativo</span>
       </label>
-    </div>
+    </header>
 
-    <div class="Cl_FormCampo">
-      <label for="descricao">Descrição / quando aplica</label>
-      <textarea id="descricao" rows="3" placeholder="Ex.: Pedido chega no DropNexo já pago pelo cliente do vendedor"></textarea>
+    <div class="IspApoio_Grid">
+      <section class="IspApoio_Card">
+        <h2 class="IspApoio_CardTitle">Onde aplica</h2>
+        <div class="CfgApoio_Grid CfgApoio_Grid--3">
+          <div class="Cl_FormCampo">
+            <label for="aplicacao">Aplicação</label>
+            <select id="aplicacao">
+              <option value="bling">Bling</option>
+              <option value="mercado_livre">Mercado Livre</option>
+              <option value="tiktok">TikTok</option>
+              <option value="amazon">Amazon</option>
+            </select>
+          </div>
+          <div class="Cl_FormCampo">
+            <label for="contexto">Contexto</label>
+            <select id="contexto">
+              <option value="vendedor">Vendedor</option>
+              <option value="fornecedor">Fornecedor</option>
+              <option value="ambos">Ambos</option>
+            </select>
+          </div>
+          <div class="Cl_FormCampo">
+            <label for="direcao">Direção</label>
+            <select id="direcao">
+              <option value="ambos">Ambos</option>
+              <option value="inbound">Inbound</option>
+              <option value="outbound">Outbound</option>
+            </select>
+          </div>
+        </div>
+      </section>
+
+      <section class="IspApoio_Card">
+        <h2 class="IspApoio_CardTitle">Amarração</h2>
+        <div class="IspApoio_Mapa">
+          <div class="Cl_FormCampo">
+            <label for="status_dn_label">DropNexo</label>
+            <input type="text" id="status_dn_label" placeholder="Aguardando pagamento" />
+          </div>
+          <div class="IspApoio_Seta" aria-hidden="true">→</div>
+          <div class="Cl_FormCampo">
+            <label for="status_externo">Externo</label>
+            <input type="text" id="status_externo" placeholder="Atendido" />
+          </div>
+        </div>
+        <div class="CfgApoio_Grid CfgApoio_Grid--3">
+          <div class="Cl_FormCampo">
+            <label for="status_dn">Código DN</label>
+            <input type="text" id="status_dn" placeholder="aguardando_pagamento" />
+          </div>
+          <div class="Cl_FormCampo">
+            <label for="evento">Evento</label>
+            <input type="text" id="evento" placeholder="importar / criar / pago…" />
+          </div>
+          <div class="Cl_FormCampo">
+            <label for="ordem">Ordem</label>
+            <input type="number" id="ordem" value="10" />
+          </div>
+        </div>
+        <div class="Cl_FormCampo">
+          <label for="aliases">Aliases (vírgula)</label>
+          <input type="text" id="aliases" placeholder="Pago, Verificado" />
+        </div>
+      </section>
+
+      <section class="IspApoio_Card IspApoio_Card--wide">
+        <h2 class="IspApoio_CardTitle">Para que serve</h2>
+        <div class="Cl_FormCampo">
+          <label for="descricao">Descrição</label>
+          <textarea id="descricao" rows="3" placeholder="Quando este status entra no fluxo…"></textarea>
+        </div>
+      </section>
     </div>
   </div>
 
   <div class="Cl_BotoesApoio">
     <button type="button" class="Cl_BtnSalvar" id="btnSalvar">Salvar</button>
     <button type="button" class="Cl_BtnExcluir" id="btnExcluir">Excluir</button>
+    <button type="button" class="Cl_BtnCancelar" id="btnCancelar">Cancelar</button>
   </div>
 
   <script src="{{ url_for('static', filename='script/global_utils.js') }}"></script>
-  <script src="{{ url_for('config.static', filename='script/Sconfig_status_padrao_apoio.js') }}?v=2"></script>
+  <script src="{{ url_for('config.static', filename='script/Sconfig_status_padrao_apoio.js') }}?v=3"></script>
 </body>
 </html>
