@@ -400,15 +400,18 @@
           ? `Contatar ${esc(f.nome)}`
           : `Abrir catálogo de ${esc(f.nome)}`;
         return `
-        <article class="Forn_Card ${st.cls}" data-id="${f.id}" data-nome="${attrEsc(f.nome)}"
+        <article class="Forn_Card ${st.cls}${f.eh_fornecedor_fundador && f.fornecedor_fundador_ativo ? " is-fundador" : ""}" data-id="${f.id}" data-nome="${attrEsc(f.nome)}"
           data-azf="${f.id_armazem_fornecedor || ""}"
           data-status="${stVin}" data-local="${attrEsc(local)}" data-qtd-vitrine="${qtdVitrine}"
           tabindex="0" role="button" aria-label="${aria}">
+          ${f.eh_fornecedor_fundador && f.fornecedor_fundador_ativo
+            ? '<img class="Forn_SeloFundador" src="/static/imge/selo_fornecedor_fundador.png" alt="Fornecedor Fundador" width="96" height="96" />'
+            : ""}
           <div class="Forn_CardTop">
             <div class="Forn_CardBrand">
               ${htmlLogoCard(f)}
               <div class="Forn_CardBrandText">
-                <h3 class="Forn_CardNome">${esc(f.nome)}${f.eh_fornecedor_fundador && f.fornecedor_fundador_ativo ? ' <span class="Forn_BadgeFundador">Fundador</span>' : ""}</h3>
+                <h3 class="Forn_CardNome">${esc(f.nome)}</h3>
                 <p class="Forn_CardLocal">${esc(local)}</p>
               </div>
             </div>

@@ -20,8 +20,13 @@
       <a class="pub-nav__login" href="{{ url_login }}">Entrar</a>
       {% endif %}
       <a class="pub-nav__cta pub-nav__cta--solid" href="#comecar">Criar conta grátis</a>
-      {% elif url_login is defined %}
-      <a class="pub-nav__cta" href="{{ url_login }}">Entrar</a>
+      {% else %}
+      {% if url_login is defined %}
+      <a class="pub-nav__login" href="{{ url_login }}">Entrar</a>
+      {% endif %}
+      {% if cta_fundador_url is defined and cta_fundador_url %}
+      <a class="pub-nav__cta pub-nav__cta--solid pub-nav__cta--fundador" href="{{ cta_fundador_url }}">{{ cta_fundador_label|default('Quero ser Fundador') }}</a>
+      {% endif %}
       {% endif %}
     </nav>
   </div>

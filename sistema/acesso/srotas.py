@@ -53,21 +53,68 @@ def para_vendedores():
 
 @public_bp.get("/para-fornecedores")
 def para_fornecedores():
+    """Landing focada na oportunidade Fornecedor Fundador (não vitrine de planos)."""
     planos_home = catalogo_planos_home()
+    programa = planos_home.get("programa_fundador") or {
+        "vagas_max": 10,
+        "vagas_usadas": 0,
+        "vagas_restantes": 10,
+        "aberto": True,
+    }
+    faq = [
+        (
+            "Isso é um plano pago?",
+            "Não para o Fornecedor Fundador. Você recebe acesso completo sem mensalidade "
+            "enquanto permanecer ativo no programa. Não precisa cartão.",
+        ),
+        (
+            "A DropNexo cobra comissão sobre minhas vendas?",
+            "Não. Nunca percentual sobre faturamento. A relação comercial com o vendedor é sua.",
+        ),
+        (
+            "O que acontece quando as 10 vagas acabarem?",
+            "O programa desta rodada fecha. Quem já é Fundador mantém o benefício. "
+            "Novos interessados entram na lista de espera.",
+        ),
+        (
+            "Preciso integrar meu ERP para participar?",
+            "Não é obrigatório no dia 1. Bling já está disponível; no cadastro perguntamos "
+            "qual sistema você usa para priorizar integrações. Dá para operar na plataforma.",
+        ),
+        (
+            "Posso perder o benefício Fundador?",
+            "Sim, se a conta ficar parada (sem uso real / catálogo inativo). "
+            "A equipe avalia e pode liberar a vaga — com transparência.",
+        ),
+        (
+            "Como os vendedores me encontram?",
+            "Na rede do DropNexo, com selo de Fornecedor Fundador. "
+            "Eles solicitam vínculo; você aprova quem pode revender.",
+        ),
+    ]
+    cta_url = (
+        url_for("cadastro.pagina_cadastro", tipo="fornecedor")
+        if programa.get("aberto")
+        else (planos_home.get("url_espera_fundador") or "/lista-espera-fundador")
+    )
+    cta_label = "Quero ser Fundador" if programa.get("aberto") else "Lista de espera"
     return render_template(
-        "landing_perfil.html",
-        landing=landing_perfil("fornecedor"),
-        planos=planos_home["fornecedor"],
-        programa_fundador=planos_home.get("programa_fundador"),
-        modo_fornecedor=planos_home.get("modo_fornecedor"),
-        url_espera=planos_home.get("url_espera_fundador"),
+        "landing_fornecedor_fundador.html",
+        page_title="Fornecedor Fundador — DropNexo | até 10 vagas",
+        meta_description=(
+            "Seja um dos 10 Fornecedores Fundadores da DropNexo: acesso completo vitalício, "
+            "selo na rede, voz no produto e suporte direto. Sem cartão. Sem comissão sobre vendas."
+        ),
+        programa=programa,
+        faq=faq,
         url_home=url_for("public.home"),
         url_login=url_for("auth.pagina_login"),
         url_cadastro=url_for("cadastro.pagina_cadastro", tipo="fornecedor"),
+        url_espera=planos_home.get("url_espera_fundador") or "/lista-espera-fundador",
+        cta_fundador_url=cta_url,
+        cta_fundador_label=cta_label,
         url_para_vendedores=url_for("public.para_vendedores"),
         url_para_fornecedores=url_for("public.para_fornecedores"),
-        url_outro_perfil=url_for("public.para_vendedores"),
-        outro_perfil_label="Para vendedores",
         canonical_url=f"{obter_base_url().rstrip('/')}/para-fornecedores",
     )
 

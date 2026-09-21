@@ -1133,16 +1133,29 @@
 }
 
 .Forn_BadgeFundador {
-  display: inline-block;
-  margin-left: 0.35rem;
-  padding: 0.1rem 0.45rem;
-  font-size: 0.65rem;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: #92400e;
-  background: #fef3c7;
-  border: 1px solid #fcd34d;
-  border-radius: 999px;
-  vertical-align: middle;
+  display: none; /* legado: selo visual é .Forn_SeloFundador */
+}
+.Forn_Card.is-fundador {
+  overflow: visible;
+}
+.Forn_SeloFundador {
+  position: absolute;
+  top: -0.45rem;
+  right: -0.4rem;
+  width: 78px;
+  height: 78px;
+  object-fit: contain;
+  z-index: 3;
+  pointer-events: none;
+  transform: rotate(7deg);
+  filter: drop-shadow(0 8px 14px rgba(0, 0, 0, 0.28));
+}
+.Forn_Card.is-fundador .Forn_CardTop {
+  padding-right: 4.2rem;
+}
+@media (max-width: 520px) {
+  .Forn_SeloFundador {
+    width: 64px;
+    height: 64px;
+  }
 }

@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="{{ meta_description }}" />
+  <title>{{ page_title }}</title>
+  <link rel="canonical" href="{{ canonical_url }}" />
+  {% include "partials/marca_favicon.html" %}
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style/public.css') }}?v=17" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style/Clanding_fundador.css') }}?v=9" />
+  {% include "partials/gtag_analytics.html" %}
+</head>
+<body class="public-site FfLand">
+  {% include "partials/public_header.html" %}
+
+  <main>
+    {# —— HERO (acima da dobra: o que é + benefícios + CTA) —— #}
+    <section class="FfHero" aria-labelledby="ff-hero-title">
+      <div class="FfHero__media" aria-hidden="true">
+        <img
+          src="{{ url_for('static', filename='imge/fundador/hero_warehouse.jpg') }}"
+          alt=""
+          width="1600"
+          height="900"
+          decoding="async"
+          fetchpriority="high"
+        />
+        <span class="FfHero__veil"></span>
+      </div>
+
+      <div class="FfHero__inner">
+        <div class="FfHero__copy">
+          <p class="FfHero__brand">DropNexo</p>
+          <p class="FfHero__eyebrow">Programa de abertura · só 10 vagas</p>
+          <h1 id="ff-hero-title">Seja um Fornecedor Fundador</h1>
+          <p class="FfHero__pitch">
+            Conecte seu catálogo a vendedores de dropshipping na DropNexo.
+            Entre no grupo fundador e opere com <strong>acesso completo, sem mensalidade</strong>
+            — enquanto ajudar a construir a plataforma com a gente.
+          </p>
+
+          <ul class="FfHero__benefits">
+            <li><strong>Vitalício</strong> — acesso completo enquanto Fundador ativo</li>
+            <li><strong>Selo na rede</strong> — vendedores te encontram e reconhecem</li>
+            <li><strong>Voz no produto</strong> — suas necessidades entram no roadmap</li>
+            <li><strong>Suporte direto</strong> — implantação com o fundador</li>
+            <li><strong>Bling + ERP</strong> — integramos o que for viável</li>
+            <li><strong>0% sobre vendas</strong> — sem comissão no faturamento</li>
+          </ul>
+
+          <div class="FfHero__actions">
+            <a class="FfBtn FfBtn--primary" href="{{ cta_fundador_url }}">{{ cta_fundador_label }}{% if programa.aberto %} — cadastrar{% endif %}</a>
+            <a class="FfBtn FfBtn--ghost" href="#o-que-e">Quero saber mais</a>
+          </div>
+          <p class="FfHero__note">Sem cartão · cadastro em minutos · {{ programa.vagas_restantes }} de {{ programa.vagas_max }} vagas restantes</p>
+        </div>
+
+        <aside class="FfHero__side">
+          <article class="FfMockCard" aria-label="Exemplo de como o selo aparece na rede">
+            <p class="FfMockCard__caption">Assim o vendedor te vê na rede</p>
+            <div class="FfMockCard__body">
+              <img
+                class="FfMockCard__stamp"
+                src="{{ url_for('static', filename='imge/selo_fornecedor_fundador.png') }}"
+                alt="Selo Fundador"
+                width="96"
+                height="96"
+                decoding="async"
+              />
+              <div class="FfMockCard__top">
+                <div class="FfMockCard__logo" aria-hidden="true">
+                  <span class="FfMockCard__mono">AD</span>
+                </div>
+                <div class="FfMockCard__text">
+                  <h3 class="FfMockCard__nome">Atlas Distribuidora</h3>
+                  <p class="FfMockCard__local">São Paulo / SP · Casa &amp; utilidades</p>
+                </div>
+              </div>
+              <div class="FfMockCard__meta">
+                <span><strong>248</strong> produtos</span>
+                <span class="FfMockCard__status">Não conectado</span>
+              </div>
+              <div class="FfMockCard__actions" aria-hidden="true">
+                <span class="FfMockCard__btn">Ver catálogo</span>
+                <span class="FfMockCard__btn FfMockCard__btn--pri">Solicitar vínculo</span>
+              </div>
+            </div>
+          </article>
+          <div class="FfCounter" aria-label="Vagas do programa">
+            <p class="FfCounter__label">Vagas restantes</p>
+            <div class="FfCounter__num">
+              <span id="ff-count-restantes">{{ programa.vagas_restantes }}</span>
+            </div>
+            <p class="FfCounter__of">de {{ programa.vagas_max }} nesta rodada</p>
+            <div class="FfCounter__bar" aria-hidden="true">
+              <span style="width: {{ (programa.vagas_usadas / programa.vagas_max * 100) if programa.vagas_max else 0 }}%;"></span>
+            </div>
+            <p class="FfCounter__meta">
+              {% if programa.aberto %}
+              {{ programa.vagas_usadas }} preenchida(s) · abertas agora
+              {% else %}
+              Turma preenchida · lista de espera aberta
+              {% endif %}
+            </p>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    {# —— O QUE É —— #}
+    <section class="FfSection FfWhat" id="o-que-e">
+      <div class="FfWhat__intro">
+        <p class="FfKicker">O que é</p>
+        <h2>Parceiro seed da DropNexo — não cliente de promoção</h2>
+        <p>
+          O Fornecedor Fundador faz parte do primeiro grupo que valida a operação de verdade:
+          catálogo ativo, pedidos reais e feedback que entra no produto.
+          Em troca, recebe condição permanente e proximidade com quem constrói o sistema.
+        </p>
+      </div>
+
+      <div class="FfWhat__panel">
+        <div class="FfWhat__visual">
+          <img
+            src="{{ url_for('static', filename='imge/fundador/rede_nos.jpg') }}"
+            alt="Rede de fornecedor e vendedores na DropNexo"
+            width="960"
+            height="720"
+            loading="lazy"
+          />
+        </div>
+        <div class="FfWhat__copy">
+          <p class="FfKicker">Em uma frase</p>
+          <h3>Você publica o catálogo. Vendedores pedem vínculo. Você aprova quem revende.</h3>
+          <p>A DropNexo organiza o pedido — preço, regra e controle continuam com você.</p>
+          <ul class="FfWhat__bullets">
+            <li>Sem comissão sobre suas vendas</li>
+            <li>Você escolhe quem pode revender</li>
+            <li>Operação real, não promoção</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="FfStory">
+        <article>
+          <h3>Por que só 10?</h3>
+          <p>
+            Queremos acompanhar de perto a implantação, integração e o dia a dia.
+            Com poucas empresas, conseguimos ouvir, ajustar e entregar o que a operação precisa —
+            sem virar fila genérica de suporte.
+          </p>
+        </article>
+        <article>
+          <h3>O que a DropNexo é</h3>
+          <p>
+            Conectamos fornecedores a vendedores/revendedores de dropshipping.
+            Você mantém preço, regra comercial e quem pode revender.
+            A plataforma organiza o encontro e o pedido — sem comissão sobre suas vendas.
+          </p>
+        </article>
+        <article>
+          <h3>O que não é</h3>
+          <p>
+            Não é cupom temporário, não é “teste grátis de 7 dias” e não é marketplace
+            que toma a operação de vocês. É entrada limitada no programa de fundação.
+          </p>
+        </article>
+      </div>
+    </section>
+
+    {# —— BENEFÍCIOS —— #}
+    <section class="FfSection FfSection--tint" id="beneficios">
+      <div class="FfSection__head">
+        <p class="FfKicker">Benefícios</p>
+        <h2>O que o Fornecedor Fundador recebe</h2>
+        <p>Tudo pensado para quem vai usar de verdade — e ajudar a moldar o produto.</p>
+      </div>
+      <div class="FfBenefits">
+        <article class="FfBenefit">
+          <span class="FfBenefit__n" aria-hidden="true">01</span>
+          <h3>Acesso completo, vitalício</h3>
+          <p>
+            Você opera com a capacidade máxima da plataforma (o mesmo nível do Hub):
+            pedidos, vendedores, produtos, depósitos, espaço e integrações —
+            <strong>sem mensalidade</strong>, enquanto permanecer Fundador ativo.
+          </p>
+        </article>
+        <article class="FfBenefit">
+          <span class="FfBenefit__n" aria-hidden="true">02</span>
+          <h3>Selo exclusivo na rede</h3>
+          <p>
+            Vendedores veem que você faz parte do grupo fundador.
+            É reconhecimento visível — e um filtro dedicado na rede para quem busca
+            parceiros dessa primeira turma.
+          </p>
+        </article>
+        <article class="FfBenefit">
+          <span class="FfBenefit__n" aria-hidden="true">03</span>
+          <h3>Voz no produto</h3>
+          <p>
+            Sugestões, críticas e necessidades da sua operação entram no roadmap.
+            Não é “mande um e-mail e some”: é participação real na evolução da DropNexo.
+          </p>
+        </article>
+        <article class="FfBenefit">
+          <span class="FfBenefit__n" aria-hidden="true">04</span>
+          <h3>Acesso antecipado</h3>
+          <p>
+            Novas funcionalidades e melhorias chegam primeiro para Fundadores,
+            para testar com operação real antes da liberação geral.
+          </p>
+        </article>
+        <article class="FfBenefit">
+          <span class="FfBenefit__n" aria-hidden="true">05</span>
+          <h3>Suporte direto com o fundador</h3>
+          <p>
+            Contato próximo na implantação, entendimento da operação e prioridade
+            para destravar o que impede vocês de vender pela plataforma.
+          </p>
+        </article>
+        <article class="FfBenefit">
+          <span class="FfBenefit__n" aria-hidden="true">06</span>
+          <h3>Integração com o que você já usa</h3>
+          <p>
+            Bling já disponível. No cadastro perguntamos qual sistema/ERP vocês usam
+            hoje (produtos, estoque, pedidos) — para integrar o que for viável e
+            reduzir trabalho manual.
+          </p>
+        </article>
+      </div>
+    </section>
+
+    {# —— CAPACIDADE (sem chamar de plano) —— #}
+
+    <div class="FfInlineCta">
+      <a class="FfBtn FfBtn--primary" href="{{ cta_fundador_url }}">{{ cta_fundador_label }}</a>
+      <p>{% if programa.aberto %}{{ programa.vagas_restantes }} vaga(s) restantes · sem cartão{% else %}Turma preenchida · entre na lista{% endif %}</p>
+    </div>
+
+    <section class="FfSection" id="capacidade">
+      <div class="FfSection__head">
+        <p class="FfKicker">Capacidade</p>
+        <h2>O que você pode operar como Fundador</h2>
+        <p>Limites alinhados à operação completa — sem precisar “fazer upgrade”.</p>
+      </div>
+      <div class="FfCaps">
+        <div><strong>3.000</strong><span>pedidos / mês</span></div>
+        <div><strong>Ilimitados</strong><span>vendedores aprovados</span></div>
+        <div><strong>15.000</strong><span>produtos</span></div>
+        <div><strong>Ilimitados</strong><span>usuários</span></div>
+        <div><strong>Ilimitados</strong><span>depósitos</span></div>
+        <div><strong>100 GB</strong><span>espaço</span></div>
+      </div>
+    </section>
+
+    {# —— CONTRAPARTIDA —— #}
+    <section class="FfSection FfSection--dark" id="compromisso">
+      <div class="FfSection__head FfSection__head--light">
+        <p class="FfKicker FfKicker--light">Em troca</p>
+        <h2>O que pedimos de você</h2>
+        <p>O programa existe para quem vai operar — não para ocupar vaga.</p>
+      </div>
+      <ol class="FfCommit">
+        <li>
+          <strong>Usar de verdade</strong>
+          <span>Publicar e manter catálogo ativo na plataforma.</span>
+        </li>
+        <li>
+          <strong>Vender pela rede</strong>
+          <span>Receber vínculos, aprovar revendedores e processar pedidos no DropNexo.</span>
+        </li>
+        <li>
+          <strong>Conversar com a gente</strong>
+          <span>Feedback pontual sobre o que falta para a operação fluir.</span>
+        </li>
+      </ol>
+      <p class="FfCommit__note">
+        Se a conta ficar parada, a equipe pode desativar o benefício Fundador e liberar a vaga
+        para quem quer crescer junto — com transparência.
+      </p>
+    </section>
+
+    {# —— COMO ENTRAR —— #}
+    <section class="FfSection" id="como-entrar">
+      <div class="FfSection__head">
+        <p class="FfKicker">Como entrar</p>
+        <h2>Três passos. Sem cartão.</h2>
+      </div>
+      <div class="FfSteps">
+        <article>
+          <span>1</span>
+          <h3>Cadastre-se como fornecedor</h3>
+          <p>CNPJ, segmento e o sistema que você usa hoje. Leva poucos minutos.</p>
+        </article>
+        <article>
+          <span>2</span>
+          <h3>Ative a conta pelo e-mail</h3>
+          <p>Defina a senha e entre no painel. Se houver vaga, você já entra como Fundador.</p>
+        </article>
+        <article>
+          <span>3</span>
+          <h3>Publique o catálogo</h3>
+          <p>Comece a operar — e fale conosco sobre integração se precisar.</p>
+        </article>
+      </div>
+    </section>
+
+    {# —— FAQ —— #}
+
+    <div class="FfInlineCta">
+      <a class="FfBtn FfBtn--primary" href="{{ cta_fundador_url }}">{{ cta_fundador_label }}</a>
+      <p>{% if programa.aberto %}{{ programa.vagas_restantes }} vaga(s) restantes · sem cartão{% else %}Turma preenchida · entre na lista{% endif %}</p>
+    </div>
+
+    <section class="FfSection FfSection--tint" id="faq">
+      <div class="FfSection__head">
+        <p class="FfKicker">Dúvidas</p>
+        <h2>Perguntas frequentes</h2>
+      </div>
+      <div class="FfFaq">
+        {% for pergunta, resposta in faq %}
+        <details>
+          <summary>{{ pergunta }}</summary>
+          <p>{{ resposta }}</p>
+        </details>
+        {% endfor %}
+      </div>
+    </section>
+
+    {# —— CTA FINAL —— #}
+    <section class="FfCta" id="participar">
+      <div class="FfCta__inner">
+        <div>
+          <p class="FfKicker FfKicker--light">Agora</p>
+          <h2>
+            {% if programa.aberto %}
+            Restam {{ programa.vagas_restantes }} vaga(s) de Fornecedor Fundador
+            {% else %}
+            As 10 vagas desta rodada estão preenchidas
+            {% endif %}
+          </h2>
+          <p>
+            {% if programa.aberto %}
+            Cadastro gratuito. Sem cartão. Acesso completo enquanto Fundador ativo.
+            {% else %}
+            Entre na lista de espera — avisamos quando abrir nova rodada.
+            {% endif %}
+          </p>
+        </div>
+        <a class="FfBtn FfBtn--white" href="{{ cta_fundador_url }}">{{ cta_fundador_label }}</a>
+      </div>
+    </section>
+  </main>
+
+  {% include "partials/public_footer.html" %}
+  <script src="{{ url_for('static', filename='script/public.js') }}?v=3"></script>
+  <script src="{{ url_for('static', filename='script/Slanding_fundador.js') }}?v=1"></script>
+</body>
+</html>
