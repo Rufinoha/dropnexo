@@ -18,6 +18,7 @@ public_bp = Blueprint("public", __name__)
 @public_bp.get("/")
 def home():
     planos_home = catalogo_planos_home()
+    programa = planos_home.get("programa_fundador") or {}
     return render_template(
         "home.html",
         url_home=url_for("public.home"),
@@ -27,6 +28,8 @@ def home():
         url_cadastro_vendedor=url_for("cadastro.pagina_cadastro", tipo="vendedor"),
         url_para_vendedores=url_for("public.para_vendedores"),
         url_para_fornecedores=url_for("public.para_fornecedores"),
+        programa_fundador=programa,
+        mostrar_tarja_fundador=bool(programa.get("aberto")),
     )
 
 

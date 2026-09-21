@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="{{ url_for('static', filename='style/public.css') }}?v=15" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style/public.css') }}?v=16" />
   {% include "partials/gtag_analytics.html" %}
 </head>
 <body class="public-site">
@@ -27,7 +27,11 @@
             <a class="pub-btn pub-btn--primary pub-btn--lg" href="{{ url_cadastro }}">Começar grátis</a>
             <a class="pub-btn pub-btn--ghost pub-btn--lg" href="#planos">Ver planos</a>
           </div>
+          {% if landing.perfil == 'fornecedor' and modo_fornecedor == 'fundador' %}
+          <p style="margin: 0.85rem 0 0; font-size: 0.8rem; color: var(--pub-muted);">Programa Fornecedor Fundador — Hub vitalício, sem cartão</p>
+          {% else %}
           <p style="margin: 0.85rem 0 0; font-size: 0.8rem; color: var(--pub-muted);">Sem cartão de crédito no plano Explorar</p>
+          {% endif %}
         </div>
         <div class="pub-landing-hero__card">
           <h3>Por que {{ landing.segment_label|lower }} escolhe o DropNexo</h3>
@@ -47,6 +51,20 @@
 
     <section class="pub-section" id="planos" style="padding-top: 2rem;">
       <div class="pub-section__head">
+        {% if landing.perfil == 'fornecedor' and modo_fornecedor == 'fundador' %}
+        <p class="pub-kicker">Programa fundador</p>
+        <h2>Fornecedor Fundador — até 10 vagas</h2>
+        <p>
+          Acesso completo do plano Hub, vitalício enquanto você estiver ativo no programa.
+          Selo na rede, voz no produto e suporte direto com o fundador. Sem cartão.
+        </p>
+        {% if programa_fundador %}
+        <p class="pub-pricing-note" style="margin-top: 0.85rem;">
+          Vagas: {{ programa_fundador.vagas_usadas }}/{{ programa_fundador.vagas_max }}
+          · restam <strong>{{ programa_fundador.vagas_restantes }}</strong>
+        </p>
+        {% endif %}
+        {% else %}
         <p class="pub-kicker">Planos</p>
         <h2>0% de comissão sobre vendas</h2>
         <p>Mensalidade conforme pedidos e conexões na rede. Integrações (Bling, ERP, lojas) a partir do primeiro plano pago.</p>
@@ -56,15 +74,22 @@
           <a href="{{ url_espera }}">Entrar na lista de espera</a>
         </p>
         {% endif %}
+        {% endif %}
       </div>
-      <div class="pub-pricing">
+      <div class="pub-pricing{% if landing.perfil == 'fornecedor' and modo_fornecedor == 'fundador' %} pub-pricing--fundador{% endif %}">
         {% for plano in planos %}
         {{ render_pricing_card(plano, url_cadastro) }}
         {% endfor %}
       </div>
+      {% if not (landing.perfil == 'fornecedor' and modo_fornecedor == 'fundador') %}
       <p class="pub-pricing-note">
         Pedidos acima do limite: excedente por pedido · Plano Enterprise sob consulta
       </p>
+      {% else %}
+      <p class="pub-pricing-note">
+        Benefício vitalício enquanto Fornecedor Fundador ativo · controle manual pela equipe DropNexo
+      </p>
+      {% endif %}
     </section>
 
     <section class="pub-section pub-section--tight" id="faq">

@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="{{ url_for('static', filename='style/public.css') }}?v=15" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style/public.css') }}?v=17" />
   {% include "partials/gtag_analytics.html" %}
 </head>
 <body class="public-site public-site--home">
@@ -47,6 +47,16 @@
           </div>
         </div>
       </div>
+
+      {% if mostrar_tarja_fundador %}
+      <aside class="pub-fundador-float" role="region" aria-label="Fornecedor Fundador">
+        <div class="pub-fundador-float__copy">
+          <strong>Seja um Fornecedor Fundador</strong>
+          <span>Até {{ programa_fundador.vagas_restantes }} vaga(s) · Hub vitalício</span>
+        </div>
+        <a class="pub-fundador-float__btn" href="{{ url_para_fornecedores }}#planos">Saiba mais</a>
+      </aside>
+      {% endif %}
 
       <div class="pub-hero__strip" role="region" aria-label="Por que começar agora">
         <div class="pub-hero__strip-inner">
