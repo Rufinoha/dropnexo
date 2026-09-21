@@ -4,7 +4,7 @@
 {% block topbar_title %}Manutenção de tenant{% endblock %}
 {% block head_extra %}
 <link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_crud.css') }}?v=3" />
-<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_manutencao_tenant.css') }}?v=14" />
+<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_manutencao_tenant.css') }}?v=15" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ConfigPage CfgMt_Page">
@@ -154,8 +154,20 @@
         <h3>Fornecedor Fundador</h3>
         <p id="cfgmt_fundador_status" class="CfgMt_FundadorStatus">Carregando…</p>
       </div>
-      <button type="button" class="Cl_botaoprimario" id="cfgmt_btnMigrarCupons">Migrar cupons TROVAVITALICIO / FORNFUND</button>
+      <button type="button" class="Cl_botaoprimario" id="cfgmt_btnMigrarForn">Migrar Fornecedor</button>
     </header>
+
+    <div class="CfgMt_MigrarBox" id="cfgmt_migrar_box" hidden>
+      <label class="CfgMt_MigrarLabel" for="cfgmt_migrar_select">Selecione o fornecedor</label>
+      <div class="CfgMt_MigrarRow">
+        <select id="cfgmt_migrar_select" class="CfgMt_MigrarSelect">
+          <option value="">Carregando…</option>
+        </select>
+        <button type="button" class="Cl_botaoprimario" id="cfgmt_btnMigrarConfirmar">Confirmar</button>
+        <button type="button" class="Cl_BtnCancelar" id="cfgmt_btnMigrarCancelar">Cancelar</button>
+      </div>
+      <p class="CfgMt_MigrarHint" id="cfgmt_migrar_hint">Lista apenas fornecedores que ainda não estão como Fundador ativo.</p>
+    </div>
     <div class="Cl_TabelaPrincipal Cat_TabelaScroll">
       <table>
         <thead>
@@ -233,5 +245,5 @@
 {% block page_js %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
-<script src="{{ url_for('config.static', filename='script/Sconfig_manutencao_tenant.js') }}?v=14"></script>
+<script src="{{ url_for('config.static', filename='script/Sconfig_manutencao_tenant.js') }}?v=15"></script>
 {% endblock %}

@@ -3067,19 +3067,45 @@ def manutencao_tenant_fundador_toggle():
         conn.close()
 
 
-@config_bp.post(f"{MANUTENCAO_TENANT_PREFIX}/fundador/migrar-cupons")
+@config_bp.get(f"{MANUTENCAO_TENANT_PREFIX}/fundador/candidatos")
 @login_obrigatorio()
-def manutencao_tenant_fundador_migrar_cupons():
+def manutencao_tenant_fundador_candidatos():
     if (r := _exigir_dev()) is not None:
         return r
-    from sistema.planos.fornecedor_fundador import migrar_cupons_fundador
+    from sistema.planos.fornecedor_fundador import listar_candidatos_fundador
 
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
-        res = migrar_cupons_fundador(cur)
+        return jsonify(success=True, itens=listar_candidatos_fundador(cur))
+    finally:
+        conn.close()
+
+
+@config_bp.post(f"{MANUTENCAO_TENANT_PREFIX}/fundador/migrar")
+@login_obrigatorio()
+def manutencao_tenant_fundador_migrar():
+    if (r := _exigir_dev()) is not None:
+        return r
+    from sistema.planos.fornecedor_fundador import atribuir_fundador, status_programa
+
+    body = request.get_json(silent=True) or {}
+    try:
+        id_tenant = int(body.get("id") or 0)
+    except (TypeError, ValueError):
+        return jsonify(success=False, message="Fornecedor inválido."), 400
+    if not id_tenant:
+        return jsonify(success=False, message="Selecione um fornecedor."), 400
+    obs = (body.get("obs") or "").strip() or "Migracao manual DEV"
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        res = atribuir_fundador(cur, id_tenant, forcar=True, obs=obs)
+        if not res.get("ok"):
+            conn.rollback()
+            return jsonify(success=False, message=res.get("message") or "Falha."), 400
         conn.commit()
-        return jsonify(success=True, **res)
+        return jsonify(success=True, **res, status=status_programa(cur))
     except Exception as e:
         conn.rollback()
         return jsonify(success=False, message=str(e)), 500

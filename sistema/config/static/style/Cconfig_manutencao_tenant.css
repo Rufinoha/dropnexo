@@ -665,3 +665,41 @@ button.CfgMt_KpiMini:hover {
   margin-bottom: 1rem;
 }
 .CfgMt_FundadorStatus { margin: 0.35rem 0 0; color: #64748b; font-size: 0.9rem; }
+.CfgMt_MigrarBox {
+  margin: 0 0 1.25rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid #dbe3ee;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+.CfgMt_MigrarLabel {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #64748b;
+  margin-bottom: 0.45rem;
+}
+.CfgMt_MigrarRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  align-items: center;
+}
+.CfgMt_MigrarSelect {
+  flex: 1 1 16rem;
+  min-width: 12rem;
+  max-width: 36rem;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #fff;
+  font-size: 0.92rem;
+  color: #0f172a;
+}
+.CfgMt_MigrarHint {
+  margin: 0.55rem 0 0;
+  font-size: 0.82rem;
+  color: #64748b;
+}

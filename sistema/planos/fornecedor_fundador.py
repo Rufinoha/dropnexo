@@ -8,7 +8,6 @@ _log = logging.getLogger(__name__)
 
 VAGAS_MAX = 10
 PLANO_HUB = "enterprise"
-CUPONS_MIGRAVELS = ("TROVAVITALICIO", "FORNFUND")
 EMAIL_ESPERA = "hazael@h74.com.br"
 SLUG_VITRINE = "fundador"
 
@@ -286,47 +285,33 @@ def tentar_reservar_no_cadastro(
     return res
 
 
-def migrar_cupons_fundador(cur) -> dict[str, Any]:
-    """Migra tenants que usaram TROVAVITALICIO ou FORNFUND para Fundador (forcado)."""
+def listar_candidatos_fundador(cur) -> list[dict[str, Any]]:
+    """Fornecedores/híbridos que ainda não estão como Fundador ativo."""
     garantir_colunas_fundador(cur)
-    codigos = [c.upper() for c in CUPONS_MIGRAVELS]
-    cur.execute("SELECT to_regclass(%s)", ("tbl_cupom_uso",))
-    if not cur.fetchone()[0]:
-        return {"ok": True, "migrados": [], "ignorados": [], "message": "tbl_cupom_uso ausente."}
-
     cur.execute(
         """
-        SELECT DISTINCT u.id_tenant
-        FROM tbl_cupom_uso u
-        JOIN tbl_tenant t ON t.id = u.id_tenant
-        WHERE upper(u.codigo) = ANY(%s)
-          AND t.tipo_negocio IN ('fornecedor', 'hibrido')
-        ORDER BY 1
-        """,
-        (codigos,),
+        SELECT t.id, t.nome, t.slug, t.documento, t.ativo, t.tipo_negocio,
+               COALESCE(t.eh_fornecedor_fundador, FALSE) AS ja_foi
+        FROM tbl_tenant t
+        WHERE t.tipo_negocio IN ('fornecedor', 'hibrido')
+          AND COALESCE(t.fornecedor_fundador_ativo, FALSE) = FALSE
+        ORDER BY t.nome ASC, t.id ASC
+        """
     )
-    ids = [int(r[0]) for r in cur.fetchall()]
-    migrados: list[int] = []
-    ignorados: list[dict] = []
-    for tid in ids:
-        res = atribuir_fundador(
-            cur,
-            tid,
-            forcar=True,
-            obs=f"Migracao automatica cupons {', '.join(codigos)}",
+    out: list[dict[str, Any]] = []
+    for r in cur.fetchall():
+        out.append(
+            {
+                "id": int(r[0]),
+                "nome": r[1] or "",
+                "slug": r[2] or "",
+                "documento": r[3] or "",
+                "ativo": bool(r[4]),
+                "tipo_negocio": r[5] or "",
+                "ja_foi_fundador": bool(r[6]),
+            }
         )
-        if res.get("ok"):
-            migrados.append(tid)
-        else:
-            ignorados.append({"id_tenant": tid, "message": res.get("message")})
-    return {
-        "ok": True,
-        "migrados": migrados,
-        "ignorados": ignorados,
-        "total": len(migrados),
-        "vagas_usadas": contar_fundadores_ativos(cur),
-        "vagas_restantes": vagas_restantes(cur),
-    }
+    return out
 
 
 def listar_fundadores(cur) -> list[dict[str, Any]]:

@@ -39,7 +39,12 @@
     paneFundador: document.getElementById("cfgmt_pane_fundador"),
     fundadorLista: document.getElementById("cfgmt_fundador_lista"),
     fundadorStatus: document.getElementById("cfgmt_fundador_status"),
-    btnMigrarCupons: document.getElementById("cfgmt_btnMigrarCupons"),
+    btnMigrarForn: document.getElementById("cfgmt_btnMigrarForn"),
+    migrarBox: document.getElementById("cfgmt_migrar_box"),
+    migrarSelect: document.getElementById("cfgmt_migrar_select"),
+    migrarHint: document.getElementById("cfgmt_migrar_hint"),
+    btnMigrarConfirmar: document.getElementById("cfgmt_btnMigrarConfirmar"),
+    btnMigrarCancelar: document.getElementById("cfgmt_btnMigrarCancelar"),
   };
   if (!el.lista) return;
 
@@ -151,23 +156,78 @@
     }
   });
 
-  el.btnMigrarCupons?.addEventListener("click", async () => {
-    if (!confirm("Migrar tenants com cupons TROVAVITALICIO / FORNFUND para Fundador?")) return;
-    el.btnMigrarCupons.disabled = true;
+  function fecharMigrarBox() {
+    if (el.migrarBox) el.migrarBox.hidden = true;
+    if (el.migrarSelect) el.migrarSelect.innerHTML = '<option value="">—</option>';
+  }
+
+  async function abrirMigrarBox() {
+    if (!el.migrarBox || !el.migrarSelect) return;
+    el.migrarBox.hidden = false;
+    el.migrarSelect.innerHTML = '<option value="">Carregando…</option>';
+    el.migrarSelect.disabled = true;
+    if (el.btnMigrarConfirmar) el.btnMigrarConfirmar.disabled = true;
     try {
-      const r = await fetch(BASE + "/fundador/migrar-cupons", {
+      const r = await fetch(BASE + "/fundador/candidatos", { credentials: "same-origin" });
+      const j = await r.json();
+      if (!j.success) throw new Error(j.message || "Erro ao listar fornecedores");
+      const itens = j.itens || [];
+      if (!itens.length) {
+        el.migrarSelect.innerHTML = '<option value="">Nenhum fornecedor disponível</option>';
+        if (el.migrarHint) {
+          el.migrarHint.textContent = "Todos os fornecedores já estão como Fundador ativo, ou não há candidatos.";
+        }
+        return;
+      }
+      el.migrarSelect.innerHTML =
+        '<option value="">Selecione…</option>' +
+        itens
+          .map((t) => {
+            const doc = t.documento ? ` · ${t.documento}` : "";
+            const marca = t.ja_foi_fundador ? " (reativar)" : "";
+            const off = t.ativo ? "" : " [inativo]";
+            return `<option value="${t.id}">#${t.id} — ${esc(t.nome)}${esc(doc)}${marca}${off}</option>`;
+          })
+          .join("");
+      el.migrarSelect.disabled = false;
+      if (el.btnMigrarConfirmar) el.btnMigrarConfirmar.disabled = false;
+      if (el.migrarHint) {
+        el.migrarHint.textContent = `${itens.length} fornecedor(es) elegível(is). Confirma e libera Hub vitalício.`;
+      }
+    } catch (err) {
+      el.migrarSelect.innerHTML = `<option value="">${esc(err.message || "Erro")}</option>`;
+    }
+  }
+
+  el.btnMigrarForn?.addEventListener("click", () => {
+    abrirMigrarBox();
+  });
+  el.btnMigrarCancelar?.addEventListener("click", fecharMigrarBox);
+  el.btnMigrarConfirmar?.addEventListener("click", async () => {
+    const id = parseInt(el.migrarSelect?.value || "0", 10);
+    if (!id) {
+      alert("Selecione um fornecedor.");
+      return;
+    }
+    const nome = el.migrarSelect?.selectedOptions?.[0]?.textContent || `#${id}`;
+    if (!confirm(`Migrar "${nome}" para Fornecedor Fundador?`)) return;
+    el.btnMigrarConfirmar.disabled = true;
+    try {
+      const r = await fetch(BASE + "/fundador/migrar", {
         method: "POST",
         credentials: "same-origin",
-        headers: { Accept: "application/json" },
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ id }),
       });
       const j = await r.json();
       if (!j.success) throw new Error(j.message || "Falha");
-      alert(`Migrados: ${(j.migrados || []).length}. Total ativos: ${j.vagas_usadas ?? "?"}`);
+      alert(j.message || "Migrado com sucesso.");
+      fecharMigrarBox();
       await carregarFundadores();
     } catch (err) {
       alert(err.message || "Erro");
     } finally {
-      el.btnMigrarCupons.disabled = false;
+      if (el.btnMigrarConfirmar) el.btnMigrarConfirmar.disabled = false;
     }
   });
 
