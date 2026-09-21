@@ -74,9 +74,6 @@
     if (item.slug === "mercado-livre") return st.config_url || "/integracoes/mercado-livre";
     if (item.slug === "tiktok") return st.config_url || "/integracoes/tiktok";
     if (item.slug === "amazon") return st.config_url || "/integracoes/amazon";
-    if (item.slug === "xml-dropshipping") {
-      return st.config_url || "/integracoes/xml-dropshipping";
-    }
     return st.config_url || `/integracoes/${item.slug}`;
   }
 
@@ -88,7 +85,6 @@
     "mercado-livre",
     "tiktok",
     "amazon",
-    "xml-dropshipping",
   ]);
 
   function seloEmBreveHtml() {
@@ -155,17 +151,10 @@
     const oauth = (st.oauth_url || "").trim();
     const usaOauth = !!oauth;
     const hrefPrimary = usaOauth ? oauth : cfgUrl;
-    const isXmlRc = item.slug === "xml-dropshipping";
-    const labelPrimary = usaOauth
-      ? "Conectar conta"
-      : isXmlRc
-        ? "Configurar Revenda de Calçados"
-        : "Configurar";
+    const labelPrimary = usaOauth ? "Conectar conta" : "Configurar";
     const hint = usaOauth
       ? "Redirecionamento seguro para autorizar o acesso."
-      : isXmlRc
-        ? "Na próxima tela você cola a URL XML do site da Revenda de Calçados."
-        : "Abra a tela de configuração desta integração.";
+      : "Abra a tela de configuração desta integração.";
     return `
       <div class="FnInt_ConnectDialog__bar" aria-hidden="true"></div>
       <button type="button" class="FnInt_ConnectDialog__close" data-action="fechar-modal" aria-label="Fechar">
@@ -347,10 +336,8 @@
       slug === "melhor-envio" ||
       slug === "mercado-livre" ||
       slug === "tiktok" ||
-      slug === "amazon" ||
-      slug === "xml-dropshipping"
+      slug === "amazon"
     ) {
-      // XML Dropshipping: sem OAuth — abre tela para colar URL/token do feed
       window.location.href = configUrlIntegracao(item);
       return;
     }

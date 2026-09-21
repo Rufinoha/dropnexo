@@ -457,7 +457,6 @@ def _garantir_check_origem_pedido(cur) -> None:
         "tiktok",
         "amazon",
         "loja_virtual",
-        "xml_dropshipping",
     )
     lista = ", ".join(f"'{o}'" for o in origens)
     try:

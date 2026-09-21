@@ -20,23 +20,17 @@ TZ_BR = ZoneInfo("America/Sao_Paulo")
 CODIGO_ML_CATEGORIAS = "ml_categorias_cache"
 CODIGO_TIKTOK_CATEGORIAS = "tiktok_categorias_cache"
 CODIGO_AMAZON_PRODUCT_TYPES = "amazon_product_types_cache"
-CODIGO_XML_DROPSHIPPING_SYNC = "xml_dropshipping_sync"
-
 CODIGOS_CACHE_CATEGORIAS = (
     CODIGO_ML_CATEGORIAS,
     CODIGO_TIKTOK_CATEGORIAS,
     CODIGO_AMAZON_PRODUCT_TYPES,
 )
 
-# Sync Revenda de Calçados — vários horários/dia (Brasília)
-HORAS_XML_SYNC_DEFAULT = ("07:00", "10:00", "13:00", "16:00", "19:00")
-
 # Defaults: (agendamento, hora_local HH:MM America/Sao_Paulo)
 _DEFAULTS_AGENDA: dict[str, tuple[str, str]] = {
     CODIGO_ML_CATEGORIAS: ("domingo", "02:00"),
     CODIGO_TIKTOK_CATEGORIAS: ("domingo", "03:00"),
     CODIGO_AMAZON_PRODUCT_TYPES: ("domingo", "04:00"),
-    CODIGO_XML_DROPSHIPPING_SYNC: ("diario", HORAS_XML_SYNC_DEFAULT[0]),
 }
 
 
@@ -211,19 +205,12 @@ def garantir_tabelas_tarefas(cur) -> None:
             "Cache de Product Types Amazon",
             "Baixa Product Types usando a conta doadora e atualiza o cache do mapeamento.",
         ),
-        (
-            CODIGO_XML_DROPSHIPPING_SYNC,
-            "Sync estoque Revenda de Calçados",
-            "Atualiza estoque e preços do feed XML da Revenda de Calçados "
-            "para cada vendedor conectado (horários 07:00, 10:00, 13:00, 16:00 e 19:00). "
-            "Produtos ausentes no feed ficam com estoque 0. Categorias mapeiam na tela da integração.",
-        ),
     ]
     # Removidos: Bling cache + categorias XML (mapeamento fica na integração)
     cur.execute(
         """
         DELETE FROM tbl_tarefa_secundaria
-        WHERE codigo IN ('bling_categorias_cache', 'xml_dropshipping_categorias_cache')
+        WHERE codigo IN ('bling_categorias_cache', 'xml_dropshipping_categorias_cache', 'xml_dropshipping_sync')
         """
     )
     _ddl_seguro(cur, "DROP TABLE IF EXISTS tbl_bling_categoria_cache", sp="sp_ts_drop_bling_cache")
@@ -298,27 +285,6 @@ def garantir_tabelas_tarefas(cur) -> None:
               AND TRIM(hora_local) = '02:00'
             """,
             (CODIGO_AMAZON_PRODUCT_TYPES,),
-        )
-        # Revenda: agenda multi-horário padrão (só se ainda não configurado)
-        cur.execute(
-            """
-            UPDATE tbl_tarefa_secundaria
-            SET agendamento = 'diario',
-                hora_local = %s,
-                meta = COALESCE(meta, '{}'::jsonb) || %s::jsonb,
-                atualizado_em = NOW()
-            WHERE codigo = %s
-              AND (
-                    meta->'horas_local' IS NULL
-                 OR jsonb_typeof(meta->'horas_local') <> 'array'
-                 OR jsonb_array_length(meta->'horas_local') = 0
-              )
-            """,
-            (
-                HORAS_XML_SYNC_DEFAULT[0],
-                json.dumps({"horas_local": list(HORAS_XML_SYNC_DEFAULT)}, ensure_ascii=False),
-                CODIGO_XML_DROPSHIPPING_SYNC,
-            ),
         )
 
     if tem_doador:
@@ -522,49 +488,6 @@ def encerrar_execucoes_orfaas(cur) -> int:
         )
         n += 1
     return n
-
-
-def agenda_xml_dropshipping_sync(cur) -> dict:
-    """Horários + status por slot da tarefa de estoque Revenda (para UI da integração)."""
-    garantir_tabelas_tarefas(cur)
-    tem_hora = _coluna_existe(cur, "tbl_tarefa_secundaria", "hora_local")
-    hora_sql = (
-        "COALESCE(NULLIF(TRIM(hora_local), ''), '07:00')" if tem_hora else "'07:00'"
-    )
-    cur.execute(
-        f"""
-        SELECT id, agendamento, {hora_sql}, meta
-        FROM tbl_tarefa_secundaria
-        WHERE codigo = %s AND ativo = TRUE
-        LIMIT 1
-        """,
-        (CODIGO_XML_DROPSHIPPING_SYNC,),
-    )
-    row = cur.fetchone()
-    if not row:
-        horas = list(HORAS_XML_SYNC_DEFAULT)
-        return {
-            "agendamento": "diario",
-            "hora_local": horas[0],
-            "horas_local": horas,
-            "slots": [
-                {
-                    "hora": h,
-                    "status": "nunca",
-                    "iniciado_em": None,
-                    "finalizado_em": None,
-                    "mensagem": "",
-                }
-                for h in horas
-            ],
-        }
-    horas = _horas_da_tarefa(row[3], row[2])
-    return {
-        "agendamento": row[1] or "diario",
-        "hora_local": row[2] or horas[0],
-        "horas_local": horas,
-        "slots": _status_slots_tarefa(cur, int(row[0]), horas),
-    }
 
 
 def listar_tarefas_secundarias(cur) -> list[dict]:
@@ -859,77 +782,7 @@ def _rodar_sync_por_codigo(cur, codigo: str, *, conn=None, id_exec: int | None =
             id_exec=id_exec,
             atualizar_progresso=_atualizar_progresso_exec,
         )
-    if codigo == CODIGO_XML_DROPSHIPPING_SYNC:
-        return _sincronizar_xml_dropshipping_todos(
-            cur, conn=conn, id_exec=id_exec
-        )
     raise RuntimeError(f"Executor não implementado para «{codigo}».")
-
-
-def _sincronizar_xml_dropshipping_todos(cur, *, conn=None, id_exec=None) -> dict:
-    """Roda sync de estoque/catálogo para todos os vendedores com XML conectado."""
-    from api.xml_dropshipping.xml_dropshipping import (
-        listar_tenants_conectados_sync,
-        sincronizar_feed_tenant,
-    )
-
-    tenants = listar_tenants_conectados_sync(cur)
-    if not tenants:
-        msg = "Nenhum vendedor com XML Dropshipping conectado — nada a sincronizar."
-        _atualizar_progresso_exec(cur, conn, id_exec, msg, {"fase": "ok", "pct": 100})
-        return {
-            "mensagem": msg,
-            "log_texto": msg,
-            "tenants": 0,
-            "ok": 0,
-            "erro": 0,
-        }
-
-    logs: list[str] = []
-    ok = erro = 0
-    total = len(tenants)
-    for i, tid in enumerate(tenants, start=1):
-        pct = round((i - 1) / max(total, 1) * 100, 1)
-        _atualizar_progresso_exec(
-            cur,
-            conn,
-            id_exec,
-            f"Atualizando estoque XML · tenant #{tid} ({i}/{total})…",
-            {"fase": "sync", "pct": pct, "id_tenant": tid},
-        )
-        try:
-            if conn is not None:
-                conn.commit()
-            res = sincronizar_feed_tenant(cur, tid, conn=conn)
-            ok += 1
-            logs.append(f"OK tenant #{tid}: {res.get('mensagem')}")
-        except Exception as e:
-            erro += 1
-            logs.append(f"ERRO tenant #{tid}: {e}")
-            _log.warning("XML Dropshipping sync tenant %s: %s", tid, e)
-            if conn is not None:
-                try:
-                    conn.rollback()
-                except Exception:
-                    pass
-
-    msg = (
-        f"Sync XML Dropshipping (estoque): {ok} ok · {erro} erro(s) · "
-        f"{total} conta(s)."
-    )
-    logs.append(msg)
-    _atualizar_progresso_exec(
-        cur, conn, id_exec, msg, {"fase": "ok", "pct": 100, "ok": ok, "erro": erro}
-    )
-    if erro and not ok:
-        raise TarefaSecundariaErro(msg, log_texto="\n".join(logs))
-    return {
-        "mensagem": msg,
-        "log_texto": "\n".join(logs),
-        "tenants": total,
-        "ok": ok,
-        "erro": erro,
-    }
 
 
 def _ml_get_autenticado(cur, id_tenant: int, path: str) -> Any:
