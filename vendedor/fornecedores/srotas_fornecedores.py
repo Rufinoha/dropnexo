@@ -1008,6 +1008,17 @@ def rede():
         from core.dominio import garantir_colunas_vinculo_status
 
         garantir_colunas_vinculo_status(cur)
+        from sistema.planos.fornecedor_fundador import garantir_colunas_fundador
+
+        try:
+            garantir_colunas_fundador(cur)
+        except Exception:
+            pass
+        if (request.args.get("somente_fundador") or "").strip().lower() in ("1", "true", "yes"):
+            where.append(
+                "COALESCE(t.eh_fornecedor_fundador, FALSE) = TRUE "
+                "AND COALESCE(t.fornecedor_fundador_ativo, FALSE) = TRUE"
+            )
         # Vínculo clássico (sem fornecedor local) — um por tenant fornecedor
         cur.execute(
             f"""
@@ -1028,7 +1039,9 @@ def rede():
                       AND p2.id_armazem_fornecedor IS NULL),
                    v.mensagem_resposta, v.motivo_status,
                    v.status_alterado_por_lado, v.status_alterado_por_usuario,
-                   t.tipo_negocio, t.logo_caminho
+                   t.tipo_negocio, t.logo_caminho,
+                   COALESCE(t.eh_fornecedor_fundador, FALSE),
+                   COALESCE(t.fornecedor_fundador_ativo, FALSE)
             FROM tbl_tenant t
             LEFT JOIN tbl_vinculo_vendedor_fornecedor v
                 ON v.id_tenant_fornecedor = t.id
@@ -1046,6 +1059,8 @@ def rede():
             tid = row[0]
             tipo = (row[15] or "").strip().lower()
             logo_tenant = (row[16] or "").strip() if len(row) > 16 else ""
+            eh_ff = bool(row[17]) if len(row) > 17 else False
+            ff_ativo = bool(row[18]) if len(row) > 18 else False
             cur.execute(
                 """
                 SELECT s.id, s.nome
@@ -1100,6 +1115,8 @@ def rede():
                 "tipo_negocio": tipo,
                 "id_armazem_fornecedor": None,
                 "logo_url": _url_logo_rede(tid, logo_tenant),
+                "eh_fornecedor_fundador": eh_ff,
+                "fornecedor_fundador_ativo": ff_ativo,
             }
             # Fornecedor clássico: aparece o tenant
             if tipo != "armazem":

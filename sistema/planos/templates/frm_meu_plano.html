@@ -131,6 +131,9 @@
   <section class="mpl-catalogo">
     <h3 class="mpl-sec-title">{{ seg.titulo }}</h3>
     <p class="mpl-sec-desc">{{ seg.descricao }}</p>
+    {% if seg.url_espera and seg.modo_fornecedor == 'normal' %}
+    <p class="mpl-sec-desc"><a href="{{ seg.url_espera }}">Lista de espera — Fornecedor Fundador</a></p>
+    {% endif %}
     <div class="mpl-grid">
       {% for p in seg.planos %}
       <article class="mpl-plan{% if p.slug == plano_atual.slug or p.featured %} is-featured{% endif %}{% if p.slug == plano_atual.slug or p._eh_atual %} is-atual{% endif %}">
@@ -155,7 +158,9 @@
           <li class="{% if r.on %}is-on{% else %}is-off{% endif %}">{{ r.label }}{% if r.sub %} <span>{{ r.sub }}</span>{% endif %}</li>
           {% endfor %}
         </ul>
-        {% if pode_pagamento and p.preco_mensal and p.preco_mensal > 0 and not p._eh_atual %}
+        {% if pode_pagamento and p.fundador and not p._eh_atual %}
+        <button type="button" class="Cl_botaoprimario mpl-btn-assinar" data-plano="{{ p.slug }}" data-plano-nome="{{ p.nome }}" data-valor-centavos="0">Ativar Fornecedor Fundador</button>
+        {% elif pode_pagamento and p.preco_mensal and p.preco_mensal > 0 and not p._eh_atual %}
         <button type="button" class="Cl_botaoprimario mpl-btn-assinar" data-plano="{{ p.slug }}" data-plano-nome="{{ p.nome }}" data-valor-centavos="{{ (p.preco_mensal * 100)|int }}">Assinar</button>
         {% elif p._eh_atual %}
         <p class="mpl-atual-hint">Plano atual da conta</p>

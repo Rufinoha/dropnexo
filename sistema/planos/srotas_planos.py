@@ -34,6 +34,7 @@ _MAPA_VITRINE_PARA_BANCO = {
     "pro": "enterprise",
     "hub": "enterprise",
     "distribuidor": "enterprise",  # legado fornecedor
+    "fundador": "enterprise",
 }
 
 
@@ -41,8 +42,11 @@ def init_app(app):
     app.register_blueprint(planos_bp)
 
 
-def catalogo_planos_home():
-    """Catálogo público da home — blocos vendedor e fornecedor (preview comercial)."""
+def catalogo_planos_home(cur=None):
+    """Catálogo público da home — blocos vendedor e fornecedor (preview comercial).
+
+    Se `cur` for None, tenta conectar ao banco para filtrar planos fornecedor (programa Fundador).
+    """
     _check = (
         '<svg class="home-plan__check-svg" viewBox="0 0 16 16" fill="none" '
         'stroke="currentColor" stroke-width="2" aria-hidden="true">'
@@ -255,7 +259,37 @@ def catalogo_planos_home():
         ),
     ]
 
-    return {"vendedor": vendedor, "fornecedor": fornecedor}
+    out: dict = {"vendedor": vendedor, "fornecedor": fornecedor}
+    conn = None
+    own_cur = cur
+    if own_cur is None:
+        try:
+            conn = Var_ConectarBanco()
+            own_cur = conn.cursor()
+        except Exception:
+            own_cur = None
+    if own_cur is not None:
+        try:
+            from sistema.planos.fornecedor_fundador import catalogo_fornecedor_com_fundador
+
+            cat = catalogo_fornecedor_com_fundador(own_cur, fornecedor)
+            out["fornecedor"] = cat["planos"]
+            out["programa_fundador"] = cat["programa"]
+            out["modo_fornecedor"] = cat["modo"]
+            out["url_espera_fundador"] = cat["url_espera"]
+        except Exception:
+            pass
+        finally:
+            if conn is not None:
+                try:
+                    own_cur.close()
+                except Exception:
+                    pass
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+    return out
 
 
 def landing_perfil(perfil: str) -> dict:
@@ -451,6 +485,16 @@ def _plano_atual_tenant(id_tenant: int, plano_sessao: str | None) -> dict:
         slug_final = plano_slug_app(out.get("slug") or slug)
         out["slug"] = slug_final
         out["nome"] = limites_plano(plano=slug_final, tipo_negocio=tipo).get("nome") or out["nome"]
+        if tipo in ("fornecedor", "hibrido"):
+            from sistema.planos.fornecedor_fundador import eh_fundador_ativo, plano_fundador_vitrine
+
+            if eh_fundador_ativo(cur, int(id_tenant)):
+                card = plano_fundador_vitrine()
+                out["slug"] = "enterprise"
+                out["nome"] = card["nome"]
+                out["destaque"] = card.get("destaque") or out.get("destaque") or ""
+                out["valor_centavos"] = 0
+                out["fundador"] = True
         cur.close()
         conn.close()
     except Exception:
@@ -488,11 +532,22 @@ def meu_plano():
             }
         )
     if tipo in ("fornecedor", "hibrido"):
+        planos_forn = _marcar_plano_atual_vitrine(home["fornecedor"], atual["slug"])
+        if atual.get("fundador"):
+            planos_forn = [
+                {
+                    **p,
+                    "_eh_atual": bool(p.get("fundador") or (p.get("slug") or "").lower() == "fundador"),
+                }
+                for p in planos_forn
+            ]
         segmentos.append(
             {
                 "titulo": "Planos para fornecedores",
                 "descricao": "Limites da vitrine comercial (pedidos, vendedores e SKUs).",
-                "planos": _marcar_plano_atual_vitrine(home["fornecedor"], atual["slug"]),
+                "planos": planos_forn,
+                "url_espera": home.get("url_espera_fundador"),
+                "modo_fornecedor": home.get("modo_fornecedor"),
             }
         )
 

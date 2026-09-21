@@ -238,6 +238,7 @@
         cidade: String(fd.get("cidade") || "").trim(),
         uf: String(fd.get("uf") || "").trim().toUpperCase(),
         ids_segmentos_nichos: [parseInt(idSegmento, 10)],
+        sistema_erp: String(fd.get("sistema_erp") || "").trim(),
       };
 
       const btn = document.getElementById("btn-cadastrar");

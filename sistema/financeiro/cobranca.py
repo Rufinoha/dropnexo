@@ -606,6 +606,11 @@ def emitir_fatura(
 
     garantir_referencia_fatura(cur)
 
+    from sistema.planos.fornecedor_fundador import eh_fundador_ativo
+
+    if eh_fundador_ativo(cur, int(id_tenant)):
+        raise ValueError("Fornecedor Fundador não gera cobrança.")
+
     forma = (forma or "boleto").strip().lower()
     if forma not in FORMAS:
         raise ValueError("Forma de pagamento inválida.")
@@ -1247,6 +1252,10 @@ def job_financeiro_diario(cur) -> dict:
         WHERE t.plano IN ('professional', 'scale', 'enterprise')
           AND p.valor_centavos > 0
           AND tc.dia_vencimento = %s
+          AND NOT (
+            COALESCE(t.eh_fornecedor_fundador, FALSE)
+            AND COALESCE(t.fornecedor_fundador_ativo, FALSE)
+          )
         """,
         (hoje.day,),
     )

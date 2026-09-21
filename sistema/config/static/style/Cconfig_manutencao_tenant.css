@@ -654,3 +654,14 @@ button.CfgMt_KpiMini:hover {
   .CfgMt_Matrix { grid-template-columns: 1fr; }
   .CfgMt_MatrixHead:not(:first-child) { display: none; }
 }
+
+.CfgMt_PaneFundador { padding-top: 0.5rem; }
+.CfgMt_FundadorHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+.CfgMt_FundadorStatus { margin: 0.35rem 0 0; color: #64748b; font-size: 0.9rem; }

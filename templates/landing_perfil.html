@@ -50,6 +50,12 @@
         <p class="pub-kicker">Planos</p>
         <h2>0% de comissão sobre vendas</h2>
         <p>Mensalidade conforme pedidos e conexões na rede. Integrações (Bling, ERP, lojas) a partir do primeiro plano pago.</p>
+        {% if landing.perfil == 'fornecedor' and modo_fornecedor == 'normal' and url_espera %}
+        <p class="pub-pricing-note" style="margin-top: 1rem;">
+          Programa Fornecedor Fundador esgotado.
+          <a href="{{ url_espera }}">Entrar na lista de espera</a>
+        </p>
+        {% endif %}
       </div>
       <div class="pub-pricing">
         {% for plano in planos %}

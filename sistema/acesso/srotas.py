@@ -55,6 +55,9 @@ def para_fornecedores():
         "landing_perfil.html",
         landing=landing_perfil("fornecedor"),
         planos=planos_home["fornecedor"],
+        programa_fundador=planos_home.get("programa_fundador"),
+        modo_fornecedor=planos_home.get("modo_fornecedor"),
+        url_espera=planos_home.get("url_espera_fundador"),
         url_home=url_for("public.home"),
         url_login=url_for("auth.pagina_login"),
         url_cadastro=url_for("cadastro.pagina_cadastro", tipo="fornecedor"),
@@ -613,6 +616,21 @@ def api_definir_senha():
             """,
             (id_usuario,),
         )
+        from sistema.planos.fornecedor_fundador import atribuir_fundador, eh_fundador_ativo
+
+        cur.execute(
+            """
+            SELECT t.id
+            FROM tbl_tenant t
+            JOIN tbl_usuario_tenant ut ON ut.id_tenant = t.id AND ut.ativo = TRUE
+            JOIN tbl_perfil pf ON pf.id = ut.id_perfil AND pf.codigo = 'dono'
+            WHERE ut.id_usuario = %s AND t.tipo_negocio IN ('fornecedor', 'hibrido')
+            """,
+            (id_usuario,),
+        )
+        for (tid_f,) in cur.fetchall():
+            if eh_fundador_ativo(cur, int(tid_f)):
+                atribuir_fundador(cur, int(tid_f))
         conn.commit()
         return jsonify(success=True, redirect=url_for("auth.pagina_login"))
     except Exception as e:
@@ -924,6 +942,12 @@ from global_utils import (
 )
 from fornecedor.segmentos.segmentos import listar_segmentos_plataforma, salvar_segmentos_fornecedor
 from core.dominio import consultar_cnpj
+from sistema.planos.fornecedor_fundador import (
+    EMAIL_ESPERA,
+    registrar_espera,
+    status_programa,
+    tentar_reservar_no_cadastro,
+)
 
 cadastro_bp = Blueprint("cadastro", __name__)
 
@@ -1064,10 +1088,23 @@ def pagina_cadastro():
         "vendedor": "Vendedor",
         "armazem": "Armazém",
     }
+    programa_fundador = None
+    if tipo == "fornecedor":
+        try:
+            conn_pf = Var_ConectarBanco()
+            cur_pf = conn_pf.cursor()
+            programa_fundador = status_programa(cur_pf)
+            conn_pf.commit()
+            cur_pf.close()
+            conn_pf.close()
+        except Exception:
+            programa_fundador = None
     return render_template(
         "frm_cadastro.html",
         tipo_negocio=tipo,
         titulo_tipo=titulos.get(tipo, "Conta"),
+        programa_fundador=programa_fundador,
+        url_lista_espera_fundador=url_for("cadastro.pagina_lista_espera_fundador"),
     )
 
 
@@ -1221,6 +1258,8 @@ def api_cadastro_novo():
                 except (TypeError, ValueError):
                     continue
             salvar_segmentos_fornecedor(cur, id_tenant, ids_parsed, exigir_minimo=True)
+            sistema_erp = (dados.get("sistema_erp") or "").strip() or None
+            tentar_reservar_no_cadastro(cur, id_tenant, sistema_erp=sistema_erp)
 
         if row_usuario:
             id_usuario, usuario_ativo, senha_hash, token_ativacao = row_usuario
@@ -1345,6 +1384,88 @@ def api_cadastro_novo():
         except Exception:
             pass
 
+
+
+
+@cadastro_bp.get("/lista-espera-fundador")
+def pagina_lista_espera_fundador():
+    return render_template(
+        "frm_lista_espera_fundador.html",
+        url_cadastro_fornecedor=url_for("cadastro.pagina_cadastro", tipo="fornecedor"),
+        url_home=url_for("public.home"),
+        api_espera=url_for("cadastro.api_lista_espera_fundador"),
+    )
+
+
+@cadastro_bp.post("/api/lista-espera-fundador")
+def api_lista_espera_fundador():
+    dados = request.get_json(silent=True) or {}
+    nome = (dados.get("nome") or "").strip()
+    whatsapp = _so_digitos(dados.get("whatsapp") or "")
+    segmento = (dados.get("segmento") or "").strip()
+    email = (dados.get("email") or "").strip().lower() or None
+    empresa = (dados.get("empresa") or "").strip() or None
+    comentarios = (dados.get("comentarios") or "").strip() or None
+
+    if len(nome) < 2:
+        return jsonify(success=False, message="Informe seu nome."), 400
+    if len(whatsapp) < 10 or len(whatsapp) > 15:
+        return jsonify(success=False, message="WhatsApp inválido."), 400
+    if len(segmento) < 2:
+        return jsonify(success=False, message="Informe o segmento."), 400
+    if email and not valida_email(email):
+        return jsonify(success=False, message="E-mail inválido."), 400
+
+    conn = None
+    cur = None
+    try:
+        conn = Var_ConectarBanco()
+        cur = conn.cursor()
+        id_espera = registrar_espera(
+            cur,
+            nome=nome,
+            whatsapp=whatsapp,
+            segmento=segmento,
+            email=email,
+            empresa=empresa,
+            comentarios=comentarios,
+        )
+        conn.commit()
+        corpo = (
+            "<p>Novo cadastro na lista de espera — Fornecedor Fundador.</p>"
+            f"<p><strong>ID:</strong> {id_espera}</p>"
+            f"<p><strong>Nome:</strong> {nome}</p>"
+            f"<p><strong>WhatsApp:</strong> {whatsapp}</p>"
+            f"<p><strong>Segmento:</strong> {segmento}</p>"
+            f"<p><strong>E-mail:</strong> {email or '—'}</p>"
+            f"<p><strong>Empresa:</strong> {empresa or '—'}</p>"
+            f"<p><strong>Comentários:</strong> {comentarios or '—'}</p>"
+        )
+        enviar_email(
+            [EMAIL_ESPERA],
+            "Lista de espera — Fornecedor Fundador",
+            corpo,
+            tag="dropnexo_fundador_espera",
+        )
+        return jsonify(success=True, message="Você entrou na lista de espera. Entraremos em contato.")
+    except Exception as e:
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        return jsonify(success=False, message=str(e) or "Erro ao registrar."), 500
+    finally:
+        try:
+            if cur:
+                cur.close()
+        except Exception:
+            pass
+        try:
+            if conn:
+                conn.close()
+        except Exception:
+            pass
 
 def init_app(app):
     app.register_blueprint(public_bp)

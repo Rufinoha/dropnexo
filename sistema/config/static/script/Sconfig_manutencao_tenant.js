@@ -36,6 +36,10 @@
     tabs: document.getElementById("cfgmt_tabs"),
     paneDash: document.getElementById("cfgmt_pane_dashboard"),
     paneTenants: document.getElementById("cfgmt_pane_tenants"),
+    paneFundador: document.getElementById("cfgmt_pane_fundador"),
+    fundadorLista: document.getElementById("cfgmt_fundador_lista"),
+    fundadorStatus: document.getElementById("cfgmt_fundador_status"),
+    btnMigrarCupons: document.getElementById("cfgmt_btnMigrarCupons"),
   };
   if (!el.lista) return;
 
@@ -56,12 +60,13 @@
   }
 
   function ativarAba(tab) {
-    const id = tab === "tenants" ? "tenants" : "dashboard";
+    const id = ["tenants", "fundador"].includes(tab) ? tab : "dashboard";
     el.tabs?.querySelectorAll(".CfgMt_Tab").forEach((b) => {
       b.classList.toggle("is-active", b.dataset.cfgmtTab === id);
     });
     if (el.paneDash) el.paneDash.hidden = id !== "dashboard";
     if (el.paneTenants) el.paneTenants.hidden = id !== "tenants";
+    if (el.paneFundador) el.paneFundador.hidden = id !== "fundador";
     try {
       localStorage.setItem("cfgmt_aba", id);
     } catch {
@@ -75,7 +80,96 @@
       }
     }
     if (id === "tenants" && !tenantsCarregados) carregar();
+    if (id === "fundador") carregarFundadores();
   }
+
+  async function carregarFundadores() {
+    if (!el.fundadorLista) return;
+    el.fundadorLista.innerHTML = '<tr><td colspan="7">Carregando…</td></tr>';
+    try {
+      const r = await fetch(BASE + "/fundador", { credentials: "same-origin" });
+      const j = await r.json();
+      if (!j.success) throw new Error(j.message || "Erro");
+      const st = j.status || {};
+      if (el.fundadorStatus) {
+        el.fundadorStatus.textContent =
+          `Vagas: ${st.vagas_usadas || 0}/${st.vagas_max || 10} · restantes: ${st.vagas_restantes || 0}`;
+      }
+      const itens = j.itens || [];
+      if (!itens.length) {
+        el.fundadorLista.innerHTML = '<tr><td colspan="7">Nenhum Fundador cadastrado.</td></tr>';
+        return;
+      }
+      el.fundadorLista.innerHTML = itens
+        .map((t) => {
+          const ativo = t.fornecedor_fundador_ativo ? "Sim" : "Não";
+          const btn = t.fornecedor_fundador_ativo
+            ? `<button type="button" class="Cl_BtnCancelar cfgmt-fundador-toggle" data-id="${t.id}" data-ativo="0">Desativar</button>`
+            : `<button type="button" class="Cl_botaoprimario cfgmt-fundador-toggle" data-id="${t.id}" data-ativo="1">Ativar</button>`;
+          return `<tr>
+            <td>${t.id}</td>
+            <td>${esc(t.nome)}</td>
+            <td>${ativo}</td>
+            <td>${esc(t.sistema_erp || "—")}</td>
+            <td>${t.produtos_publicados ?? 0}</td>
+            <td>${esc(t.whatsapp || "—")}</td>
+            <td>${btn}</td>
+          </tr>`;
+        })
+        .join("");
+    } catch (err) {
+      el.fundadorLista.innerHTML = `<tr><td colspan="7">${esc(err.message || "Erro")}</td></tr>`;
+    }
+  }
+
+  async function toggleFundador(id, ativo) {
+    const obs = ativo ? "" : prompt("Observação (opcional) ao desativar:") || "";
+    const r = await fetch(BASE + "/fundador/toggle", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ id, ativo: !!ativo, obs }),
+    });
+    const j = await r.json();
+    if (!j.success) throw new Error(j.message || "Falha");
+    return j;
+  }
+
+  el.fundadorLista?.addEventListener("click", async (e) => {
+    const btn = e.target.closest(".cfgmt-fundador-toggle");
+    if (!btn) return;
+    const id = parseInt(btn.dataset.id, 10);
+    const ativo = btn.dataset.ativo === "1";
+    btn.disabled = true;
+    try {
+      await toggleFundador(id, ativo);
+      await carregarFundadores();
+    } catch (err) {
+      alert(err.message || "Erro");
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  el.btnMigrarCupons?.addEventListener("click", async () => {
+    if (!confirm("Migrar tenants com cupons TROVAVITALICIO / FORNFUND para Fundador?")) return;
+    el.btnMigrarCupons.disabled = true;
+    try {
+      const r = await fetch(BASE + "/fundador/migrar-cupons", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { Accept: "application/json" },
+      });
+      const j = await r.json();
+      if (!j.success) throw new Error(j.message || "Falha");
+      alert(`Migrados: ${(j.migrados || []).length}. Total ativos: ${j.vagas_usadas ?? "?"}`);
+      await carregarFundadores();
+    } catch (err) {
+      alert(err.message || "Erro");
+    } finally {
+      el.btnMigrarCupons.disabled = false;
+    }
+  });
 
   function esc(s) {
     return String(s ?? "")

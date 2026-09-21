@@ -236,6 +236,23 @@ def api_assinar():
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
+        slug_vitrine = (body.get("plano_slug") or "").strip().lower()
+        tipo_neg = (session.get("tenant_tipo_negocio") or "").strip().lower()
+        if slug_vitrine in ("fundador", "hub") and tipo_neg in ("fornecedor", "hibrido"):
+            from sistema.planos.fornecedor_fundador import atribuir_fundador, programa_aberto
+
+            if programa_aberto(cur):
+                res = atribuir_fundador(cur, tid)
+                if not res.get("ok"):
+                    raise ValueError(res.get("message") or "Não foi possível ativar Fornecedor Fundador.")
+                conn.commit()
+                session["tenant_plano"] = "enterprise"
+                return jsonify(
+                    success=True,
+                    liberado=True,
+                    message=res.get("message") or "Fornecedor Fundador ativado.",
+                    fundador=True,
+                )
         result = assinar_plano(
             cur,
             tid,

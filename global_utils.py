@@ -661,6 +661,7 @@ _ALIASES_PLANO_BANCO = {
     "hub": "enterprise",
     "distribuidor": "enterprise",  # legado fornecedor
     "empresarial": "enterprise",
+    "fundador": "enterprise",
 }
 
 

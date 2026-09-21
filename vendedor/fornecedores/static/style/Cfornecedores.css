@@ -1131,3 +1131,18 @@
   background: #f0fdf4;
   color: #15803d;
 }
+
+.Forn_BadgeFundador {
+  display: inline-block;
+  margin-left: 0.35rem;
+  padding: 0.1rem 0.45rem;
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #92400e;
+  background: #fef3c7;
+  border: 1px solid #fcd34d;
+  border-radius: 999px;
+  vertical-align: middle;
+}

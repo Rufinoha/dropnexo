@@ -308,6 +308,8 @@
     const busca = (inpBusca && inpBusca.value.trim()) || "";
     if (busca) params.set("busca", busca);
     if (segmentosMarcados.size) params.set("segmentos", [...segmentosMarcados].join(","));
+    const chkFund = document.getElementById("ob_somenteFundador");
+    if (chkFund && chkFund.checked) params.set("somente_fundador", "1");
     const qs = params.toString();
     return "/fornecedores/rede" + (qs ? "?" + qs : "");
   }
@@ -406,7 +408,7 @@
             <div class="Forn_CardBrand">
               ${htmlLogoCard(f)}
               <div class="Forn_CardBrandText">
-                <h3 class="Forn_CardNome">${esc(f.nome)}</h3>
+                <h3 class="Forn_CardNome">${esc(f.nome)}${f.eh_fornecedor_fundador && f.fornecedor_fundador_ativo ? ' <span class="Forn_BadgeFundador">Fundador</span>' : ""}</h3>
                 <p class="Forn_CardLocal">${esc(local)}</p>
               </div>
             </div>
@@ -743,6 +745,7 @@
   });
 
   if (btnBuscar) btnBuscar.addEventListener("click", carregar);
+  document.getElementById("ob_somenteFundador")?.addEventListener("change", carregar);
   if (inpBusca) {
     inpBusca.addEventListener("keydown", (e) => {
       if (e.key === "Enter") carregar();

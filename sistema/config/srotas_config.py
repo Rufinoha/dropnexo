@@ -3013,6 +3013,79 @@ def integracao_status_padrao_excluir():
         conn.close()
 
 
+
+
+@config_bp.get(f"{MANUTENCAO_TENANT_PREFIX}/fundador")
+@login_obrigatorio()
+def manutencao_tenant_fundador_lista():
+    if (r := _exigir_dev()) is not None:
+        return r
+    from sistema.planos.fornecedor_fundador import listar_fundadores, status_programa
+
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        return jsonify(
+            success=True,
+            status=status_programa(cur),
+            itens=listar_fundadores(cur),
+        )
+    finally:
+        conn.close()
+
+
+@config_bp.post(f"{MANUTENCAO_TENANT_PREFIX}/fundador/toggle")
+@login_obrigatorio()
+def manutencao_tenant_fundador_toggle():
+    if (r := _exigir_dev()) is not None:
+        return r
+    from sistema.planos.fornecedor_fundador import atribuir_fundador, desativar_fundador
+
+    body = request.get_json(silent=True) or {}
+    try:
+        id_tenant = int(body.get("id") or 0)
+    except (TypeError, ValueError):
+        return jsonify(success=False, message="Tenant inválido."), 400
+    ativo = bool(body.get("ativo"))
+    obs = (body.get("obs") or "").strip() or None
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        if ativo:
+            res = atribuir_fundador(cur, id_tenant, forcar=True, obs=obs)
+        else:
+            res = desativar_fundador(cur, id_tenant, obs=obs)
+        if not res.get("ok"):
+            conn.rollback()
+            return jsonify(success=False, message=res.get("message") or "Falha."), 400
+        conn.commit()
+        return jsonify(success=True, **res)
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
+@config_bp.post(f"{MANUTENCAO_TENANT_PREFIX}/fundador/migrar-cupons")
+@login_obrigatorio()
+def manutencao_tenant_fundador_migrar_cupons():
+    if (r := _exigir_dev()) is not None:
+        return r
+    from sistema.planos.fornecedor_fundador import migrar_cupons_fundador
+
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        res = migrar_cupons_fundador(cur)
+        conn.commit()
+        return jsonify(success=True, **res)
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
 def init_app(app):
     app.register_blueprint(config_bp)
 

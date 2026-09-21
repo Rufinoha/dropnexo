@@ -4,7 +4,7 @@
 {% block topbar_title %}Manutenção de tenant{% endblock %}
 {% block head_extra %}
 <link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_crud.css') }}?v=3" />
-<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_manutencao_tenant.css') }}?v=13" />
+<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_manutencao_tenant.css') }}?v=14" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ConfigPage CfgMt_Page">
@@ -16,6 +16,7 @@
   <nav class="CfgMt_Tabs" id="cfgmt_tabs" aria-label="Seções">
     <button type="button" class="CfgMt_Tab is-active" data-cfgmt-tab="dashboard">Dashboard</button>
     <button type="button" class="CfgMt_Tab" data-cfgmt-tab="tenants">Tenants</button>
+    <button type="button" class="CfgMt_Tab" data-cfgmt-tab="fundador">Fornecedor Fundador</button>
   </nav>
 
   <div id="cfgmt_pane_dashboard" class="CfgMt_Pane">
@@ -147,6 +148,34 @@
     </section>
   </div>
 
+  <div id="cfgmt_pane_fundador" class="CfgMt_Pane CfgMt_PaneFundador" hidden>
+    <header class="CfgMt_FundadorHead">
+      <div>
+        <h3>Fornecedor Fundador</h3>
+        <p id="cfgmt_fundador_status" class="CfgMt_FundadorStatus">Carregando…</p>
+      </div>
+      <button type="button" class="Cl_botaoprimario" id="cfgmt_btnMigrarCupons">Migrar cupons TROVAVITALICIO / FORNFUND</button>
+    </header>
+    <div class="Cl_TabelaPrincipal Cat_TabelaScroll">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Nome</th>
+            <th>Ativo</th>
+            <th>ERP</th>
+            <th>Produtos pub.</th>
+            <th>WhatsApp</th>
+            <th>Ações</th>
+          </tr>
+        </thead>
+        <tbody id="cfgmt_fundador_lista">
+          <tr><td colspan="7">Carregando…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
   <div id="cfgmt_pane_tenants" class="CfgMt_Pane" hidden>
     <div class="filter-panel">
       <div class="filter-panel-fields">
@@ -204,5 +233,5 @@
 {% block page_js %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
-<script src="{{ url_for('config.static', filename='script/Sconfig_manutencao_tenant.js') }}?v=13"></script>
+<script src="{{ url_for('config.static', filename='script/Sconfig_manutencao_tenant.js') }}?v=14"></script>
 {% endblock %}

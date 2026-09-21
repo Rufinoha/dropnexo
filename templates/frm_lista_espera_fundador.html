@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Lista de espera — Fornecedor Fundador — {{ MARCA_NOME }}</title>
+  <meta name="robots" content="noindex, nofollow" />
+  {% include "partials/marca_favicon.html" %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='style/global_utils.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style/Ccadastro.css') }}" />
+  <script defer src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+</head>
+<body class="public-body cadastro-body cadastro-body--fornecedor">
+  <main class="cadastro-wrap">
+    <div class="cadastro-card">
+      <header class="cadastro-header">
+        <p class="auth-brand"><img src="{{ marca_logo_nome_url }}" alt="{{ MARCA_NOME }}" class="auth-brand-logo" /></p>
+        <h1>Lista de espera — Fornecedor Fundador</h1>
+        <p class="muted">As 10 vagas do programa estão preenchidas. Deixe seus dados para avisarmos quando abrir nova rodada.</p>
+      </header>
+      <form id="form-espera-fundador" class="cadastro-form" novalidate>
+        <label class="cadastro-field"><span>Nome *</span><input type="text" name="nome" required maxlength="255" /></label>
+        <label class="cadastro-field"><span>WhatsApp *</span><input type="tel" name="whatsapp" required maxlength="16" placeholder="(11) 99999-9999" /></label>
+        <label class="cadastro-field"><span>Segmento *</span><input type="text" name="segmento" required maxlength="120" /></label>
+        <label class="cadastro-field"><span>E-mail</span><input type="email" name="email" maxlength="255" /></label>
+        <label class="cadastro-field"><span>Empresa</span><input type="text" name="empresa" maxlength="255" /></label>
+        <label class="cadastro-field cadastro-field-span2"><span>Comentários</span><input type="text" name="comentarios" maxlength="500" /></label>
+        <p class="form-msg" id="msg-espera" hidden></p>
+        <div class="cadastro-actions">
+          <button type="submit" class="btn btn-primary btn-block">Enviar</button>
+        </div>
+        <p class="small muted cadastro-footer"><a href="{{ url_cadastro_fornecedor }}">Cadastro fornecedor</a> · <a href="{{ url_home }}">Início</a></p>
+      </form>
+    </div>
+  </main>
+  <script>
+    window.OSB_ESPERA_FUNDADOR_API = {{ api_espera|tojson }};
+  </script>
+  <script src="{{ url_for('static', filename='script/Slista_espera_fundador.js') }}"></script>
+</body>
+</html>

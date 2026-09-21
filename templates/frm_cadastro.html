@@ -21,7 +21,14 @@
         <p class="auth-brand"><img src="{{ marca_logo_nome_url }}" alt="{{ MARCA_NOME }}" class="auth-brand-logo" /></p>
         <h1>Cadastro — {{ titulo_tipo }}</h1>
         <p class="muted">
+          {% if tipo_negocio == 'fornecedor' and programa_fundador and programa_fundador.aberto %}
+          Programa <strong>Fornecedor Fundador</strong> — {{ programa_fundador.vagas_restantes }} vaga(s) com acesso Hub vitalício ao concluir o cadastro.
+          {% elif tipo_negocio == 'fornecedor' %}
+          Plano <strong>Explorar (Starter)</strong> após confirmar o e-mail.
+          <a href="{{ url_lista_espera_fundador }}">Lista de espera Fornecedor Fundador</a>
+          {% else %}
           Plano <strong>Starter</strong> após confirmar o e-mail.
+          {% endif %}
           <a href="{{ url_for('public.home') }}#cadastro">Trocar perfil</a>
           · <a href="{{ url_for('public.home') }}">Voltar</a>
         </p>
@@ -58,6 +65,10 @@
             <select name="id_segmento" id="cad-segmento" required>
               <option value="">Selecione o segmento…</option>
             </select>
+          </label>
+          <label class="cadastro-field cadastro-field-span2">
+            <span>Qual sistema você usa hoje para produtos, estoque e pedidos?</span>
+            <input type="text" name="sistema_erp" maxlength="255" placeholder="Ex.: Bling, Tiny, planilha, ERP próprio…" />
           </label>
         </fieldset>
 
