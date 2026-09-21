@@ -164,7 +164,7 @@
 .CfgMt_ColPlano { width: 9%; }
 .CfgMt_ColAtivo { width: 6%; }
 .CfgMt_ColData { width: 11.5%; }
-.CfgMt_ColAcoes { width: 6%; }
+.CfgMt_ColAcoes { width: 14%; }
 
 .CfgMt_ColId,
 .CfgMt_ColAtivo,
@@ -190,9 +190,41 @@
   padding-right: 0.45rem !important;
 }
 .CfgMt_ColAcoes {
-  text-align: center;
+  text-align: right;
   padding-left: 0.4rem !important;
-  padding-right: 0.4rem !important;
+  padding-right: 0.55rem !important;
+}
+.CfgMt_BtnAcao {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 0.35rem;
+  padding: 0.28rem 0.65rem;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #0f172a;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.CfgMt_BtnAcao:hover { border-color: #021F81; color: #021F81; }
+.CfgMt_BtnAcao--del {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #b91c1c;
+}
+.CfgMt_BtnAcao--del:hover { background: #fee2e2; color: #991b1b; }
+.CfgMt_BtnAcao--off {
+  border-color: #fde68a;
+  background: #fffbeb;
+  color: #b45309;
+}
+.CfgMt_BtnAcao--off:hover { background: #fef3c7; }
+.CfgMt_AcaoOff {
+  margin-left: 0.45rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #94a3b8;
 }
 .CfgMt_ColData {
   white-space: nowrap;

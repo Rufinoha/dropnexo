@@ -930,18 +930,27 @@
         el.lista.innerHTML = `<tr><td colspan="9">Nenhum tenant encontrado.</td></tr>`;
         return;
       }
-      const util = window.Util || { gerarIconeTech: () => "…" };
       el.lista.innerHTML = itens
         .map((t) => {
           const sessao = t.eh_tenant_sessao
             ? ' <span class="CfgMt_Badge CfgMt_Badge--sessao">sessão</span>'
             : "";
           const bloqueado = !!(t.eh_tenant_sessao || t.protegido);
-          const titleExcluir = t.protegido
+          const titleBloqueio = t.protegido
             ? "Tenant protegido"
             : t.eh_tenant_sessao
-              ? "Não exclua o tenant da sessão atual"
-              : "Excluir";
+              ? "Tenant da sessão atual"
+              : "";
+          let acao = "";
+          if (bloqueado) {
+            acao = `<span class="CfgMt_AcaoOff" title="${esc(titleBloqueio)}">—</span>`;
+          } else if (t.tem_relacionamento) {
+            acao = t.ativo
+              ? `<button type="button" class="CfgMt_BtnAcao CfgMt_BtnAcao--off btnDesativar" data-id="${t.id}" data-nome="${esc(t.nome)}">Desativar</button>`
+              : `<span class="CfgMt_AcaoOff">Inativo</span>`;
+          } else {
+            acao = `<button type="button" class="CfgMt_BtnAcao CfgMt_BtnAcao--del btnExcluir" data-id="${t.id}" data-nome="${esc(t.nome)}">Excluir</button>`;
+          }
           const ehCnpj =
             String(t.tipo_pessoa || "").toUpperCase() === "J" ||
             String(t.documento || "").replace(/\D+/g, "").length === 14;
@@ -957,59 +966,69 @@
           <td class="CfgMt_ColData">${formatarDataHora(t.criado_em)}</td>
           <td class="CfgMt_ColData">${formatarDataHora(t.dono_ultimo_acesso)}</td>
           <td class="Cl_TableActions CfgMt_ColAcoes">
-            <button type="button" class="Cl_BtnAcao btnEditar" data-id="${t.id}" title="Editar">${util.gerarIconeTech("editar")}</button>
-            <button type="button" class="Cl_BtnAcao btnExcluir" data-id="${t.id}" data-slug="${esc(t.slug)}" data-nome="${esc(t.nome)}" title="${titleExcluir}" ${bloqueado ? "disabled" : ""}>${util.gerarIconeTech("excluir")}</button>
+            <button type="button" class="CfgMt_BtnAcao btnEditar" data-id="${t.id}">Editar</button>
+            ${acao}
           </td>
         </tr>`;
         })
         .join("");
-      window.lucide?.createIcons?.();
-      window.Util?.gerarIconeTech?.refresh?.();
       tenantsCarregados = true;
     } catch (e) {
       el.lista.innerHTML = `<tr><td colspan="9">${esc(e.message)}</td></tr>`;
     }
   }
 
-  async function excluir(id, slug, nome) {
-    if (!id || !slug) return;
+  async function desativar(id, nome) {
+    if (!id) return;
     const c1 = await Swal.fire({
       icon: "warning",
-      title: "Excluir tenant permanentemente?",
+      title: "Desativar tenant?",
       html:
-        `Isso remove <strong>${esc(nome || slug)}</strong> (#${id}) e todos os dados ligados ` +
-        `(produtos, pedidos, usuários, integrações, etc.).<br><br>` +
-        `<small>Ação irreversível — use só para tenants de teste.</small>`,
+        `<strong>${esc(nome || "#" + id)}</strong> tem vínculo ou pedido.<br>` +
+        `A conta sai do ar, mas o histórico permanece.`,
       showCancelButton: true,
-      confirmButtonText: "Continuar",
+      confirmButtonText: "Desativar",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#b45309",
+    });
+    if (!c1.isConfirmed) return;
+    const r = await fetch(`${BASE}/desativar`, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.success) throw new Error(j.message || "Falha ao desativar.");
+    await Swal.fire({
+      icon: "success",
+      title: "Desativado",
+      text: j.message || "Concluído.",
+      confirmButtonColor: "#021F81",
+    });
+    tenantsCarregados = false;
+    metricasCarregadas = false;
+    await Promise.all([carregar(), carregarMetricas()]);
+  }
+
+  async function excluir(id, nome) {
+    if (!id) return;
+    const c1 = await Swal.fire({
+      icon: "warning",
+      title: "Excluir de vez?",
+      html:
+        `Remove <strong>${esc(nome || "#" + id)}</strong> e os dados só dele ` +
+        `(cadastro, usuários, catálogo vazio).<br><br>` +
+        `<small>Sem vínculo e sem pedido — não dá para desfazer.</small>`,
+      showCancelButton: true,
+      confirmButtonText: "Excluir",
       cancelButtonText: "Cancelar",
       confirmButtonColor: "#b91c1c",
     });
     if (!c1.isConfirmed) return;
 
-    const c2 = await Swal.fire({
-      icon: "warning",
-      title: "Confirme digitando o slug",
-      html: `Digite <strong>${esc(slug)}</strong> para confirmar a exclusão.`,
-      input: "text",
-      inputPlaceholder: slug,
-      showCancelButton: true,
-      confirmButtonText: "Excluir de vez",
-      cancelButtonText: "Cancelar",
-      confirmButtonColor: "#b91c1c",
-      preConfirm: (v) => {
-        if ((v || "").trim().toLowerCase() !== String(slug).toLowerCase()) {
-          Swal.showValidationMessage("Slug não confere.");
-          return false;
-        }
-        return (v || "").trim();
-      },
-    });
-    if (!c2.isConfirmed) return;
-
     Swal.fire({
       title: "Excluindo…",
-      text: "Removendo dados em cascata. Pode demorar alguns segundos.",
       allowOutsideClick: false,
       didOpen: () => Swal.showLoading(),
     });
@@ -1017,7 +1036,7 @@
       method: "POST",
       credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, confirm_slug: c2.value }),
+      body: JSON.stringify({ id }),
     });
     const j = await r.json().catch(() => ({}));
     if (!r.ok || !j.success) {
@@ -1085,8 +1104,11 @@
     if (!id) return;
     try {
       if (btn.classList.contains("btnEditar")) return abrirApoio(id);
+      if (btn.classList.contains("btnDesativar")) {
+        return await desativar(id, btn.dataset.nome || "");
+      }
       if (btn.classList.contains("btnExcluir")) {
-        return await excluir(id, btn.dataset.slug || "", btn.dataset.nome || "");
+        return await excluir(id, btn.dataset.nome || "");
       }
     } catch (e) {
       await Swal.fire("Erro", e.message, "error");

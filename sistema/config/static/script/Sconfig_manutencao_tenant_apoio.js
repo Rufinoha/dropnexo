@@ -6,6 +6,7 @@
   let slugAtual = "";
   let protegido = false;
   let ehSessao = false;
+  let temRelacionamento = false;
 
   const el = {
     id: document.getElementById("id"),
@@ -26,6 +27,7 @@
     warn: document.getElementById("warn"),
     btnSalvar: document.getElementById("btnSalvar"),
     btnExcluir: document.getElementById("btnExcluir"),
+    btnDesativar: document.getElementById("btnDesativar"),
     tabs: document.getElementById("cfg_mt_tabs"),
     paneTenant: document.getElementById("cfg_pane_tenant"),
     paneDono: document.getElementById("cfg_pane_dono"),
@@ -210,13 +212,15 @@
         ? "Este tenant já tem dados de fornecedor (produtos/vínculos/pedidos). Ao virar Armazém, isso permanece e a visibilidade na rede é copiada para os parâmetros do armazém. Confira após sair e entrar de novo."
         : "";
     }
+    temRelacionamento = !!t.tem_relacionamento;
+    const bloqueado = protegido || ehSessao || !idTenant;
     if (el.btnExcluir) {
-      el.btnExcluir.disabled = protegido || ehSessao || !idTenant;
-      el.btnExcluir.title = protegido
-        ? "Tenant protegido"
-        : ehSessao
-          ? "Não exclua o tenant da sessão atual"
-          : "Excluir tenant e dados ligados";
+      el.btnExcluir.hidden = temRelacionamento || bloqueado;
+      el.btnExcluir.disabled = bloqueado;
+    }
+    if (el.btnDesativar) {
+      el.btnDesativar.hidden = !temRelacionamento || bloqueado || !t.ativo;
+      el.btnDesativar.disabled = bloqueado;
     }
     atualizarLimparSeg();
   }
@@ -293,57 +297,57 @@
     window.GlobalUtils?.fecharJanelaApoio(nivelModal);
   }
 
+  async function desativar() {
+    if (!idTenant) return;
+    const c1 = await Swal.fire({
+      icon: "warning",
+      title: "Desativar tenant?",
+      html: "Há vínculo ou pedido. A conta sai do ar e o histórico fica.",
+      showCancelButton: true,
+      confirmButtonText: "Desativar",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#b45309",
+    });
+    if (!c1.isConfirmed) return;
+    const r = await fetch(`${BASE}/desativar`, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: idTenant }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.success) throw new Error(j.message || "Falha ao desativar.");
+    await Swal.fire({ icon: "success", title: "Desativado", text: j.message || "Concluído.", confirmButtonColor: "#021F81" });
+    window.parent.postMessage({ grupo: "atualizarTabela" }, "*");
+    window.GlobalUtils?.fecharJanelaApoio(nivelModal);
+  }
+
   async function excluir() {
-    if (!idTenant || !slugAtual) {
+    if (!idTenant) {
       await Swal.fire("Atenção", "Nada para excluir.", "info");
       return;
     }
+    if (temRelacionamento) {
+      await Swal.fire("Atenção", "Este tenant tem vínculo ou pedido. Use Desativar.", "warning");
+      return;
+    }
     if (protegido || ehSessao) {
-      await Swal.fire(
-        "Bloqueado",
-        protegido
-          ? "Tenant protegido."
-          : "Troque de tenant na sessão DEV antes de excluir este.",
-        "warning"
-      );
+      await Swal.fire("Bloqueado", protegido ? "Tenant protegido." : "Troque de tenant na sessão DEV antes.", "warning");
       return;
     }
     const c1 = await Swal.fire({
       icon: "warning",
-      title: "Excluir tenant permanentemente?",
-      html:
-        `Remove <strong>${esc(el.nome?.value || slugAtual)}</strong> (#${idTenant}) e todos os dados ligados.` +
-        `<br><br><small>Irreversível — só para testes.</small>`,
+      title: "Excluir de vez?",
+      html: `Remove <strong>${esc(el.nome?.value || slugAtual)}</strong> e os dados só dele. Sem vínculo e sem pedido.`,
       showCancelButton: true,
-      confirmButtonText: "Continuar",
+      confirmButtonText: "Excluir",
       cancelButtonText: "Cancelar",
       confirmButtonColor: "#b91c1c",
     });
     if (!c1.isConfirmed) return;
 
-    const c2 = await Swal.fire({
-      icon: "warning",
-      title: "Confirme digitando o slug",
-      html: `Digite <strong>${esc(slugAtual)}</strong> para confirmar.`,
-      input: "text",
-      inputPlaceholder: slugAtual,
-      showCancelButton: true,
-      confirmButtonText: "Excluir de vez",
-      cancelButtonText: "Cancelar",
-      confirmButtonColor: "#b91c1c",
-      preConfirm: (v) => {
-        if ((v || "").trim().toLowerCase() !== String(slugAtual).toLowerCase()) {
-          Swal.showValidationMessage("Slug não confere.");
-          return false;
-        }
-        return (v || "").trim();
-      },
-    });
-    if (!c2.isConfirmed) return;
-
     Swal.fire({
       title: "Excluindo…",
-      text: "Removendo dados em cascata…",
       allowOutsideClick: false,
       didOpen: () => Swal.showLoading(),
     });
@@ -351,7 +355,7 @@
       method: "POST",
       credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: idTenant, confirm_slug: c2.value }),
+      body: JSON.stringify({ id: idTenant }),
     });
     const j = await r.json().catch(() => ({}));
     if (!r.ok || !j.success) throw new Error(j.message || "Falha ao excluir.");
@@ -376,6 +380,9 @@
   );
   el.btnExcluir?.addEventListener("click", () =>
     excluir().catch((e) => Swal.fire("Erro", e.message, "error"))
+  );
+  el.btnDesativar?.addEventListener("click", () =>
+    desativar().catch((e) => Swal.fire("Erro", e.message, "error"))
   );
 
   if (window.GlobalUtils?.receberDadosApoio) {

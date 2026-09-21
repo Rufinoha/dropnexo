@@ -1315,6 +1315,16 @@ def _contagens_tenant(cur, id_tenant: int) -> dict:
     }
 
 
+def _tem_relacionamento(contagens: dict) -> bool:
+    """Vínculo ou pedido impede exclusão — só desativa."""
+    return bool(
+        int(contagens.get("vinculos_como_fornecedor") or 0)
+        + int(contagens.get("vinculos_como_vendedor") or 0)
+        + int(contagens.get("pedidos_como_fornecedor") or 0)
+        + int(contagens.get("pedidos_como_vendedor") or 0)
+    )
+
+
 @config_bp.get(MANUTENCAO_TENANT_PREFIX)
 @login_obrigatorio()
 def manutencao_tenant_pagina():
@@ -1372,7 +1382,15 @@ def manutencao_tenant_dados():
                        AND LOWER(COALESCE(pf.codigo, '')) = 'dono'
                      ORDER BY ut.ultimo_acesso_em DESC NULLS LAST, ut.id
                      LIMIT 1
-                   ) AS dono_ultimo_acesso
+                   ) AS dono_ultimo_acesso,
+                   (
+                     SELECT COUNT(*)::int FROM tbl_pedido p
+                     WHERE p.id_tenant_fornecedor = t.id OR p.id_tenant_vendedor = t.id
+                   ) AS n_pedidos,
+                   (
+                     SELECT COUNT(*)::int FROM tbl_vinculo_vendedor_fornecedor v
+                     WHERE v.id_tenant_fornecedor = t.id OR v.id_tenant_vendedor = t.id
+                   ) AS n_vinculos
             FROM tbl_tenant t
             WHERE {" AND ".join(where)}
             ORDER BY t.id DESC
@@ -1396,6 +1414,8 @@ def manutencao_tenant_dados():
             razao = (r[10] or "").strip() if tipo_pessoa == "J" else ""
             criado = r[11]
             dono_acesso = r[12]
+            n_pedidos = int(r[13] or 0)
+            n_vinculos = int(r[14] or 0)
             itens.append(
                 {
                     "id": int(r[0]),
@@ -1411,6 +1431,9 @@ def manutencao_tenant_dados():
                     "razao_social": razao,
                     "criado_em": criado.isoformat() if criado else None,
                     "dono_ultimo_acesso": dono_acesso.isoformat() if dono_acesso else None,
+                    "n_pedidos": n_pedidos,
+                    "n_vinculos": n_vinculos,
+                    "tem_relacionamento": (n_pedidos + n_vinculos) > 0,
                     "eh_tenant_sessao": int(session.get("id_tenant") or 0) == int(r[0]),
                     "protegido": slug_protegido(slug),
                 }
@@ -1590,6 +1613,7 @@ def _tenant_payload(cur, id_tenant: int) -> dict | None:
         "dono_whatsapp": dono_whatsapp,
         "dono": dono,
         "contagens": contagens,
+        "tem_relacionamento": _tem_relacionamento(contagens),
         "eh_tenant_sessao": int(session.get("id_tenant") or 0) == int(row[0]),
         "protegido": slug_protegido(slug),
     }
@@ -1667,11 +1691,20 @@ def manutencao_tenant_excluir():
         if not row:
             return jsonify(success=False, message="Tenant não encontrado."), 404
         slug = (row[0] or "").strip().lower()
-        if confirm_slug != slug:
+        if confirm_slug and confirm_slug != slug:
             return (
                 jsonify(
                     success=False,
                     message="Confirmação inválida. Digite o slug exatamente como cadastrado.",
+                ),
+                400,
+            )
+        contagens = _contagens_tenant(cur, id_tenant)
+        if _tem_relacionamento(contagens):
+            return (
+                jsonify(
+                    success=False,
+                    message="Este tenant tem vínculo ou pedido. Desative em vez de excluir.",
                 ),
                 400,
             )
@@ -1693,6 +1726,47 @@ def manutencao_tenant_excluir():
     except Exception as e:
         conn.rollback()
         _log.exception("Falha ao excluir tenant #%s", id_tenant)
+        return jsonify(success=False, message=str(e)[:400]), 400
+    finally:
+        conn.close()
+
+
+@config_bp.post(f"{MANUTENCAO_TENANT_PREFIX}/desativar")
+@login_obrigatorio()
+def manutencao_tenant_desativar():
+    if (r := _exigir_dev()) is not None:
+        return r
+    from sistema.config.servico_manutencao_tenant import slug_protegido
+
+    body = request.get_json(silent=True) or {}
+    try:
+        id_tenant = int(body.get("id") or 0)
+    except (TypeError, ValueError):
+        return jsonify(success=False, message="Tenant inválido."), 400
+    if id_tenant <= 0:
+        return jsonify(success=False, message="Tenant inválido."), 400
+    if int(session.get("id_tenant") or 0) == id_tenant:
+        return jsonify(success=False, message="Não desative o tenant da sessão atual."), 400
+
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT slug, ativo, nome FROM tbl_tenant WHERE id = %s", (id_tenant,))
+        row = cur.fetchone()
+        if not row:
+            return jsonify(success=False, message="Tenant não encontrado."), 404
+        if slug_protegido((row[0] or "").strip().lower()):
+            return jsonify(success=False, message="Tenant protegido."), 400
+        if not row[1]:
+            return jsonify(success=True, message="Tenant já estava inativo.")
+        cur.execute(
+            "UPDATE tbl_tenant SET ativo = FALSE WHERE id = %s",
+            (id_tenant,),
+        )
+        conn.commit()
+        return jsonify(success=True, message=f"«{row[2] or 'Tenant'}» desativado.")
+    except Exception as e:
+        conn.rollback()
         return jsonify(success=False, message=str(e)[:400]), 400
     finally:
         conn.close()
