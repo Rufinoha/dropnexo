@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import logging
+import os
+from datetime import datetime
 from typing import Any
 
 _log = logging.getLogger(__name__)
@@ -9,6 +11,7 @@ _log = logging.getLogger(__name__)
 VAGAS_MAX = 10
 PLANO_HUB = "enterprise"
 EMAIL_ESPERA = "hazael@h74.com.br"
+EMAIL_TESTE = "hazael@h74.com.br"
 SLUG_VITRINE = "fundador"
 
 
@@ -221,6 +224,8 @@ def atribuir_fundador(
         "ok": True,
         "message": "Fornecedor Fundador ativado.",
         "vagas_restantes": vagas_restantes(cur),
+        "id_tenant": tid,
+        "notificar": True,
     }
 
 
@@ -440,3 +445,148 @@ def catalogo_fornecedor_com_fundador(cur, planos_normais: list[dict]) -> dict[st
         "modo": "normal",
         "url_espera": "/lista-espera-fundador",
     }
+
+
+def _email_links_fundador() -> dict[str, Any]:
+    from global_utils import obter_base_url
+
+    base = obter_base_url()
+    return {
+        "url_politica_privacidade": os.getenv("URL_POLITICA_PRIVACIDADE") or f"{base}/privacidade",
+        "url_politica_interna": os.getenv("URL_POLITICA_INTERNA") or f"{base}/politica-interna",
+        "url_dpo": os.getenv("URL_DPO") or f"{base}/dpo",
+        "ano": datetime.now().year,
+        "url_acesso": f"{base}/login",
+    }
+
+
+def resolver_email_fornecedor(cur, id_tenant: int) -> tuple[str | None, str]:
+    """Preferência: email_comercial → dono → qualquer usuário ativo."""
+    tid = int(id_tenant)
+    cur.execute("SELECT email_comercial, nome FROM tbl_tenant WHERE id = %s", (tid,))
+    row = cur.fetchone()
+    if not row:
+        return None, ""
+    nome = (row[1] or "").strip()
+    email = (row[0] or "").strip().lower()
+    if email and "@" in email:
+        return email, nome
+    cur.execute(
+        """
+        SELECT u.email
+        FROM tbl_usuario_tenant ut
+        JOIN tbl_usuario u ON u.id = ut.id_usuario
+        JOIN tbl_perfil pf ON pf.id = ut.id_perfil
+        WHERE ut.id_tenant = %s AND ut.ativo = TRUE AND u.ativo = TRUE
+          AND lower(pf.codigo) = 'dono'
+        ORDER BY ut.id
+        LIMIT 1
+        """,
+        (tid,),
+    )
+    r2 = cur.fetchone()
+    if r2 and r2[0] and "@" in str(r2[0]):
+        return str(r2[0]).strip().lower(), nome
+    cur.execute(
+        """
+        SELECT u.email
+        FROM tbl_usuario_tenant ut
+        JOIN tbl_usuario u ON u.id = ut.id_usuario
+        WHERE ut.id_tenant = %s AND ut.ativo = TRUE AND u.ativo = TRUE
+          AND u.email IS NOT NULL AND trim(u.email) <> ''
+        ORDER BY ut.id
+        LIMIT 1
+        """,
+        (tid,),
+    )
+    r3 = cur.fetchone()
+    if r3 and r3[0] and "@" in str(r3[0]):
+        return str(r3[0]).strip().lower(), nome
+    return None, nome
+
+
+def renderizar_html_convite_fundador(
+    *,
+    nome_empresa: str,
+    eh_teste: bool = False,
+) -> str:
+    from flask import render_template
+
+    return render_template(
+        "fundador/emails/convite_fundador.html",
+        titulo_email="Você é Fornecedor Fundador • DropNexo",
+        nome_empresa=nome_empresa or "parceiro",
+        eh_teste=bool(eh_teste),
+        **_email_links_fundador(),
+    )
+
+
+def enviar_convite_fundador(
+    cur,
+    id_tenant: int,
+    *,
+    destino_override: str | None = None,
+    eh_teste: bool = False,
+) -> dict[str, Any]:
+    """Envia o e-mail-convite de Fornecedor Fundador."""
+    from api.brevo.srotas_brevo import enviar_email
+
+    email, nome = resolver_email_fornecedor(cur, id_tenant)
+    if destino_override:
+        email = destino_override.strip().lower()
+    if not email or "@" not in email:
+        return {"ok": False, "message": "Fornecedor sem e-mail válido para notificar."}
+
+    html = renderizar_html_convite_fundador(nome_empresa=nome, eh_teste=eh_teste)
+    assunto = "Você é Fornecedor Fundador da DropNexo"
+    if eh_teste:
+        assunto = f"[TESTE] {assunto}"
+    ok, msg, _id = enviar_email(
+        [email],
+        assunto,
+        html,
+        tag="dropnexo_fundador_convite",
+    )
+    if not ok:
+        _log.warning("Falha e-mail Fundador tenant=%s: %s", id_tenant, msg)
+        return {"ok": False, "message": msg or "Falha ao enviar e-mail.", "email": email}
+    return {"ok": True, "message": f"Convite enviado para {email}.", "email": email}
+
+
+def enviar_convite_fundador_teste(cur=None, id_tenant: int | None = None) -> dict[str, Any]:
+    """Prévia DEV: sempre envia para EMAIL_TESTE."""
+    from api.brevo.srotas_brevo import enviar_email
+
+    nome = "Fornecedor Fundador (prévia)"
+    if cur is not None and id_tenant:
+        _email, nome_db = resolver_email_fornecedor(cur, id_tenant)
+        if nome_db:
+            nome = nome_db
+    html = renderizar_html_convite_fundador(nome_empresa=nome, eh_teste=True)
+    ok, msg, _id = enviar_email(
+        [EMAIL_TESTE],
+        "[TESTE] Você é Fornecedor Fundador da DropNexo",
+        html,
+        tag="dropnexo_fundador_teste",
+    )
+    if not ok:
+        return {"ok": False, "message": msg or "Falha ao enviar teste."}
+    return {
+        "ok": True,
+        "message": f"E-mail teste enviado para {EMAIL_TESTE}.",
+        "email": EMAIL_TESTE,
+    }
+
+
+def notificar_se_novo_fundador(cur, res: dict[str, Any]) -> dict[str, Any] | None:
+    """Chamar após commit quando atribuir_fundador retornou notificar=True."""
+    if not res or not res.get("ok") or not res.get("notificar"):
+        return None
+    tid = res.get("id_tenant")
+    if not tid:
+        return None
+    try:
+        return enviar_convite_fundador(cur, int(tid))
+    except Exception as e:
+        _log.exception("Erro ao notificar Fundador %s", tid)
+        return {"ok": False, "message": str(e)}

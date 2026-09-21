@@ -3039,7 +3039,11 @@ def manutencao_tenant_fundador_lista():
 def manutencao_tenant_fundador_toggle():
     if (r := _exigir_dev()) is not None:
         return r
-    from sistema.planos.fornecedor_fundador import atribuir_fundador, desativar_fundador
+    from sistema.planos.fornecedor_fundador import (
+        atribuir_fundador,
+        desativar_fundador,
+        notificar_se_novo_fundador,
+    )
 
     body = request.get_json(silent=True) or {}
     try:
@@ -3059,7 +3063,11 @@ def manutencao_tenant_fundador_toggle():
             conn.rollback()
             return jsonify(success=False, message=res.get("message") or "Falha."), 400
         conn.commit()
-        return jsonify(success=True, **res)
+        email_info = notificar_se_novo_fundador(cur, res) if ativo else None
+        out = dict(success=True, **res)
+        if email_info is not None:
+            out["email"] = email_info
+        return jsonify(out)
     except Exception as e:
         conn.rollback()
         return jsonify(success=False, message=str(e)), 500
@@ -3087,7 +3095,11 @@ def manutencao_tenant_fundador_candidatos():
 def manutencao_tenant_fundador_migrar():
     if (r := _exigir_dev()) is not None:
         return r
-    from sistema.planos.fornecedor_fundador import atribuir_fundador, status_programa
+    from sistema.planos.fornecedor_fundador import (
+        atribuir_fundador,
+        notificar_se_novo_fundador,
+        status_programa,
+    )
 
     body = request.get_json(silent=True) or {}
     try:
@@ -3105,9 +3117,42 @@ def manutencao_tenant_fundador_migrar():
             conn.rollback()
             return jsonify(success=False, message=res.get("message") or "Falha."), 400
         conn.commit()
-        return jsonify(success=True, **res, status=status_programa(cur))
+        email_info = notificar_se_novo_fundador(cur, res)
+        out = dict(success=True, **res, status=status_programa(cur))
+        if email_info is not None:
+            out["email"] = email_info
+        return jsonify(out)
     except Exception as e:
         conn.rollback()
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
+@config_bp.post(f"{MANUTENCAO_TENANT_PREFIX}/fundador/testar-email")
+@login_obrigatorio()
+def manutencao_tenant_fundador_testar_email():
+    if (r := _exigir_dev()) is not None:
+        return r
+    from sistema.planos.fornecedor_fundador import EMAIL_TESTE, enviar_convite_fundador_teste
+
+    body = request.get_json(silent=True) or {}
+    id_tenant = None
+    try:
+        raw = body.get("id")
+        if raw not in (None, ""):
+            id_tenant = int(raw)
+    except (TypeError, ValueError):
+        id_tenant = None
+
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        res = enviar_convite_fundador_teste(cur, id_tenant)
+        if not res.get("ok"):
+            return jsonify(success=False, message=res.get("message") or "Falha."), 500
+        return jsonify(success=True, message=res.get("message"), email=EMAIL_TESTE)
+    except Exception as e:
         return jsonify(success=False, message=str(e)), 500
     finally:
         conn.close()

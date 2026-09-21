@@ -994,6 +994,7 @@ from fornecedor.segmentos.segmentos import listar_segmentos_plataforma, salvar_s
 from core.dominio import consultar_cnpj
 from sistema.planos.fornecedor_fundador import (
     EMAIL_ESPERA,
+    notificar_se_novo_fundador,
     registrar_espera,
     status_programa,
     tentar_reservar_no_cadastro,
@@ -1309,7 +1310,9 @@ def api_cadastro_novo():
                     continue
             salvar_segmentos_fornecedor(cur, id_tenant, ids_parsed, exigir_minimo=True)
             sistema_erp = (dados.get("sistema_erp") or "").strip() or None
-            tentar_reservar_no_cadastro(cur, id_tenant, sistema_erp=sistema_erp)
+            fundador_res = tentar_reservar_no_cadastro(cur, id_tenant, sistema_erp=sistema_erp)
+        else:
+            fundador_res = None
 
         if row_usuario:
             id_usuario, usuario_ativo, senha_hash, token_ativacao = row_usuario
@@ -1327,6 +1330,7 @@ def api_cadastro_novo():
                     (nome_usuario, whatsapp, id_usuario),
                 )
                 conn.commit()
+                notificar_se_novo_fundador(cur, fundador_res)
                 ok, msg = _enviar_email_nova_conta_vinculada(
                     email=email,
                     nome_usuario=nome_usuario,
@@ -1349,6 +1353,7 @@ def api_cadastro_novo():
                 (nome_usuario, whatsapp, token_hash, expira, id_usuario),
             )
             conn.commit()
+            notificar_se_novo_fundador(cur, fundador_res)
             link = f"{obter_base_url()}/definir-senha?token={raw}"
             horas = int(os.getenv("TOKEN_ATIVACAO_HORAS", "48"))
             ok, msg = _enviar_email_ativacao_conta(
@@ -1390,6 +1395,7 @@ def api_cadastro_novo():
             (id_usuario, id_tenant, id_perfil_dono),
         )
         conn.commit()
+        notificar_se_novo_fundador(cur, fundador_res)
 
         link = f"{obter_base_url()}/definir-senha?token={raw}"
         horas = int(os.getenv("TOKEN_ATIVACAO_HORAS", "48"))

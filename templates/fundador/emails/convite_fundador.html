@@ -1,0 +1,142 @@
+{% extends "cadastro/emails/base_email.html" %}
+
+{% block conteudo %}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+  <tr>
+    <td style="padding:0;margin:0;">
+      {% if eh_teste %}
+      <p style="margin:0 0 14px 0;padding:8px 12px;border-radius:8px;background:#fef3c7;border:1px solid #fcd34d;font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#92400e;line-height:1.5;">
+        <strong>[TESTE DEV]</strong> Prévia do convite — o fornecedor receberia este e-mail.
+      </p>
+      {% endif %}
+
+      <p style="margin:0 0 6px 0;font-family:Arial,Helvetica,sans-serif;font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:#2C6BF3;font-weight:700;">
+        Convite exclusivo
+      </p>
+      <h1 style="margin:0 0 12px 0;font-family:Arial,Helvetica,sans-serif;font-size:24px;line-height:1.25;color:#0f172a;font-weight:800;">
+        Você é Fornecedor Fundador da DropNexo
+      </h1>
+      <p style="margin:0 0 16px 0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.7;color:#334155;">
+        Olá{% if nome_empresa %}, <strong>{{ nome_empresa }}</strong>{% endif %}.
+        Reservamos uma das <strong>10 vagas</strong> do programa seed — não é promoção temporária:
+        é parceria vitalícia enquanto você estiver ativo conosco.
+      </p>
+
+      {# Painel de benefícios (tom landing) #}
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:8px 0 20px 0;border-radius:14px;overflow:hidden;">
+        <tr>
+          <td style="background:#0b1b4a;padding:22px 20px;">
+            <p style="margin:0 0 14px 0;font-family:Arial,Helvetica,sans-serif;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#93c5fd;font-weight:700;">
+              O que você recebe
+            </p>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+              <tr>
+                <td width="50%" valign="top" style="padding:0 10px 12px 0;">
+                  <table role="presentation" cellpadding="0" cellspacing="0" width="100%">
+                    <tr>
+                      <td width="14" valign="top" style="padding-top:5px;">
+                        <div style="width:8px;height:8px;border-radius:50%;background:#38bdf8;"></div>
+                      </td>
+                      <td style="font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.55;color:#e2e8f0;">
+                        <strong style="color:#ffffff;">Vitalício</strong> — acesso completo enquanto Fundador ativo
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+                <td width="50%" valign="top" style="padding:0 0 12px 10px;">
+                  <table role="presentation" cellpadding="0" cellspacing="0" width="100%">
+                    <tr>
+                      <td width="14" valign="top" style="padding-top:5px;">
+                        <div style="width:8px;height:8px;border-radius:50%;background:#38bdf8;"></div>
+                      </td>
+                      <td style="font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.55;color:#e2e8f0;">
+                        <strong style="color:#ffffff;">Selo na rede</strong> — vendedores te encontram e reconhecem
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+              <tr>
+                <td width="50%" valign="top" style="padding:0 10px 12px 0;">
+                  <table role="presentation" cellpadding="0" cellspacing="0" width="100%">
+                    <tr>
+                      <td width="14" valign="top" style="padding-top:5px;">
+                        <div style="width:8px;height:8px;border-radius:50%;background:#38bdf8;"></div>
+                      </td>
+                      <td style="font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.55;color:#e2e8f0;">
+                        <strong style="color:#ffffff;">Voz no produto</strong> — suas necessidades entram no roadmap
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+                <td width="50%" valign="top" style="padding:0 0 12px 10px;">
+                  <table role="presentation" cellpadding="0" cellspacing="0" width="100%">
+                    <tr>
+                      <td width="14" valign="top" style="padding-top:5px;">
+                        <div style="width:8px;height:8px;border-radius:50%;background:#38bdf8;"></div>
+                      </td>
+                      <td style="font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.55;color:#e2e8f0;">
+                        <strong style="color:#ffffff;">Suporte direto</strong> — implantação com o fundador
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+              <tr>
+                <td width="50%" valign="top" style="padding:0 10px 0 0;">
+                  <table role="presentation" cellpadding="0" cellspacing="0" width="100%">
+                    <tr>
+                      <td width="14" valign="top" style="padding-top:5px;">
+                        <div style="width:8px;height:8px;border-radius:50%;background:#38bdf8;"></div>
+                      </td>
+                      <td style="font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.55;color:#e2e8f0;">
+                        <strong style="color:#ffffff;">Bling + ERP</strong> — integramos o que for viável
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+                <td width="50%" valign="top" style="padding:0 0 0 10px;">
+                  <table role="presentation" cellpadding="0" cellspacing="0" width="100%">
+                    <tr>
+                      <td width="14" valign="top" style="padding-top:5px;">
+                        <div style="width:8px;height:8px;border-radius:50%;background:#38bdf8;"></div>
+                      </td>
+                      <td style="font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.55;color:#e2e8f0;">
+                        <strong style="color:#ffffff;">0% sobre vendas</strong> — sem comissão no faturamento
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+
+      <p style="margin:0 0 18px 0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.7;color:#475569;">
+        Seu plano <strong>Hub</strong> já está liberado. Publique o catálogo, aprove vendedores
+        e use o selo Fundador na rede — estamos construindo isso juntos.
+      </p>
+
+      <table role="presentation" cellpadding="0" cellspacing="0" align="center" style="margin:6px auto 18px auto;">
+        <tr>
+          <td align="center" bgcolor="#021F81" style="border-radius:12px;">
+            <a href="{{ url_acesso }}"
+               style="display:inline-block;padding:14px 26px;font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:12px;">
+              Acessar minha conta
+            </a>
+          </td>
+        </tr>
+      </table>
+
+      <p style="margin:0 0 8px 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.65;color:#64748b;">
+        Dúvidas ou ideias? Responda este e-mail ou fale com a gente — Fundador tem canal direto.
+      </p>
+      <p style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.65;color:#0f172a;">
+        Bem-vindo ao círculo seed.<br />
+        <strong>Equipe DropNexo</strong>
+      </p>
+    </td>
+  </tr>
+</table>
+{% endblock %}

@@ -40,6 +40,7 @@
     fundadorLista: document.getElementById("cfgmt_fundador_lista"),
     fundadorStatus: document.getElementById("cfgmt_fundador_status"),
     btnMigrarForn: document.getElementById("cfgmt_btnMigrarForn"),
+    btnTestarEmail: document.getElementById("cfgmt_btnTestarEmail"),
     migrarBox: document.getElementById("cfgmt_migrar_box"),
     migrarSelect: document.getElementById("cfgmt_migrar_select"),
     migrarHint: document.getElementById("cfgmt_migrar_hint"),
@@ -202,6 +203,26 @@
   el.btnMigrarForn?.addEventListener("click", () => {
     abrirMigrarBox();
   });
+  el.btnTestarEmail?.addEventListener("click", async () => {
+    if (!confirm("Enviar prévia do e-mail de convite Fundador para hazael@h74.com.br?")) return;
+    el.btnTestarEmail.disabled = true;
+    try {
+      const idSel = parseInt(el.migrarSelect?.value || "0", 10) || null;
+      const r = await fetch(BASE + "/fundador/testar-email", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify(idSel ? { id: idSel } : {}),
+      });
+      const j = await r.json();
+      if (!j.success) throw new Error(j.message || "Falha");
+      alert(j.message || "E-mail teste enviado.");
+    } catch (err) {
+      alert(err.message || "Erro");
+    } finally {
+      el.btnTestarEmail.disabled = false;
+    }
+  });
   el.btnMigrarCancelar?.addEventListener("click", fecharMigrarBox);
   el.btnMigrarConfirmar?.addEventListener("click", async () => {
     const id = parseInt(el.migrarSelect?.value || "0", 10);
@@ -210,7 +231,7 @@
       return;
     }
     const nome = el.migrarSelect?.selectedOptions?.[0]?.textContent || `#${id}`;
-    if (!confirm(`Migrar "${nome}" para Fornecedor Fundador?`)) return;
+    if (!confirm(`Migrar "${nome}" para Fornecedor Fundador?\n\nUm e-mail de convite será enviado ao fornecedor.`)) return;
     el.btnMigrarConfirmar.disabled = true;
     try {
       const r = await fetch(BASE + "/fundador/migrar", {
@@ -221,7 +242,13 @@
       });
       const j = await r.json();
       if (!j.success) throw new Error(j.message || "Falha");
-      alert(j.message || "Migrado com sucesso.");
+      let msg = j.message || "Migrado com sucesso.";
+      if (j.email) {
+        msg += j.email.ok
+          ? `\n\nE-mail: ${j.email.message || "enviado"}`
+          : `\n\nAtenção e-mail: ${j.email.message || "não enviado"}`;
+      }
+      alert(msg);
       fecharMigrarBox();
       await carregarFundadores();
     } catch (err) {

@@ -239,13 +239,18 @@ def api_assinar():
         slug_vitrine = (body.get("plano_slug") or "").strip().lower()
         tipo_neg = (session.get("tenant_tipo_negocio") or "").strip().lower()
         if slug_vitrine in ("fundador", "hub") and tipo_neg in ("fornecedor", "hibrido"):
-            from sistema.planos.fornecedor_fundador import atribuir_fundador, programa_aberto
+            from sistema.planos.fornecedor_fundador import (
+                atribuir_fundador,
+                notificar_se_novo_fundador,
+                programa_aberto,
+            )
 
             if programa_aberto(cur):
                 res = atribuir_fundador(cur, tid)
                 if not res.get("ok"):
                     raise ValueError(res.get("message") or "Não foi possível ativar Fornecedor Fundador.")
                 conn.commit()
+                notificar_se_novo_fundador(cur, res)
                 session["tenant_plano"] = "enterprise"
                 return jsonify(
                     success=True,

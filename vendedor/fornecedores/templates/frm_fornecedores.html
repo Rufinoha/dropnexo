@@ -3,7 +3,7 @@
 {% set nav_ativo = 'fornecedores' %}
 {% block topbar_title %}Fornecedores{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('vd_fornecedores.static', filename='style/Cfornecedores.css') }}?v=12" />
+<link rel="stylesheet" href="{{ url_for('vd_fornecedores.static', filename='style/Cfornecedores.css') }}?v=13" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal Forn_Page">
@@ -19,10 +19,17 @@
         <label for="ob_filtroBusca">Busca</label>
         <input type="text" id="ob_filtroBusca" placeholder="Nome ou cidade do fornecedor…" autocomplete="off" />
       </div>
-      <div class="filter-group">
-        <label class="Forn_CheckFundador">
-          <input type="checkbox" id="ob_somenteFundador" />
-          Só Fornecedores Fundadores
+      <div class="filter-group Forn_CampoFundador">
+        <span class="Forn_CampoFundadorLbl" id="ob_lblFundador">Destaque</span>
+        <label class="Forn_ChipFundador" for="ob_somenteFundador">
+          <input type="checkbox" id="ob_somenteFundador" class="Forn_ChipFundadorInput" aria-labelledby="ob_lblFundador" />
+          <span class="Forn_ChipFundadorFace" aria-hidden="true">
+            <span class="Forn_ChipFundadorMark"></span>
+          </span>
+          <span class="Forn_ChipFundadorText">
+            <strong>Só Fundadores</strong>
+            <small>selo vitalício</small>
+          </span>
         </label>
       </div>
     </div>

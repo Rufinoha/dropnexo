@@ -665,6 +665,12 @@ button.CfgMt_KpiMini:hover {
   margin-bottom: 1rem;
 }
 .CfgMt_FundadorStatus { margin: 0.35rem 0 0; color: #64748b; font-size: 0.9rem; }
+.CfgMt_FundadorActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  align-items: center;
+}
 .CfgMt_MigrarBox {
   margin: 0 0 1.25rem;
   padding: 1rem 1.1rem;
