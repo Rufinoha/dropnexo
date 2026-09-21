@@ -3,7 +3,7 @@
 {% set nav_ativo = 'fn_pedidos' %}
 {% block topbar_title %}Pedidos recebidos{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('fn_pedidos.static', filename='style/Cfn_pedidos.css') }}?v=14" />
+<link rel="stylesheet" href="{{ url_for('fn_pedidos.static', filename='style/Cfn_pedidos.css') }}?v=15" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal PdFn_Page">
@@ -63,6 +63,15 @@
       <p>Quando um vendedor da sua rede gerar o PIX ou anexar comprovante, o pedido aparece aqui.</p>
     </div>
   </div>
+
+  <div class="Cl_Paginacao" id="pd_fn_paginacao" hidden>
+    <button type="button" class="Cl_direcao" id="pd_fn_btnPrimeiro" disabled>Primeiro</button>
+    <button type="button" class="Cl_direcao" id="pd_fn_btnAnterior" disabled>Anterior</button>
+    <span>Página <strong id="pd_fn_paginaAtual">1</strong> de <strong id="pd_fn_totalPaginas">1</strong>
+      (<span id="pd_fn_totalRegistros">0</span> registros)</span>
+    <button type="button" class="Cl_direcao" id="pd_fn_btnProximo" disabled>Próximo</button>
+    <button type="button" class="Cl_direcao" id="pd_fn_btnUltimo" disabled>Último</button>
+  </div>
 </div>
 
 <div id="pd_fn_modal" class="PdFn_Modal" hidden>
@@ -82,5 +91,5 @@
 {% endblock %}
 {% block page_js %}
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-<script src="{{ url_for('fn_pedidos.static', filename='script/Sfn_pedidos.js') }}?v=14"></script>
+<script src="{{ url_for('fn_pedidos.static', filename='script/Sfn_pedidos.js') }}?v=15"></script>
 {% endblock %}

@@ -32,6 +32,20 @@
   let filtroStatus = "";
   let pedidoAtual = null;
   let selecionados = new Set();
+  let paginaAtual = 1;
+  const porPagina = 20;
+  let totalPaginas = 1;
+
+  const pagEl = {
+    wrap: document.getElementById("pd_fn_paginacao"),
+    paginaAtual: document.getElementById("pd_fn_paginaAtual"),
+    totalPaginas: document.getElementById("pd_fn_totalPaginas"),
+    totalRegistros: document.getElementById("pd_fn_totalRegistros"),
+    btnPrimeiro: document.getElementById("pd_fn_btnPrimeiro"),
+    btnAnterior: document.getElementById("pd_fn_btnAnterior"),
+    btnProximo: document.getElementById("pd_fn_btnProximo"),
+    btnUltimo: document.getElementById("pd_fn_btnUltimo"),
+  };
 
   const fmt = (v) =>
     Number(v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -89,6 +103,29 @@
     return "Abrir";
   }
 
+  function pedidosDaPagina() {
+    const rows = pedidosFiltrados();
+    totalPaginas = Math.max(1, Math.ceil(rows.length / porPagina));
+    if (paginaAtual > totalPaginas) paginaAtual = totalPaginas;
+    if (paginaAtual < 1) paginaAtual = 1;
+    const ini = (paginaAtual - 1) * porPagina;
+    return { todos: rows, pagina: rows.slice(ini, ini + porPagina) };
+  }
+
+  function renderPaginacao(total) {
+    if (!pagEl.wrap) return;
+    pagEl.wrap.hidden = total === 0;
+    if (pagEl.paginaAtual) pagEl.paginaAtual.textContent = String(paginaAtual);
+    if (pagEl.totalPaginas) pagEl.totalPaginas.textContent = String(totalPaginas);
+    if (pagEl.totalRegistros) pagEl.totalRegistros.textContent = String(total);
+    const noInicio = paginaAtual <= 1;
+    const noFim = paginaAtual >= totalPaginas;
+    if (pagEl.btnPrimeiro) pagEl.btnPrimeiro.disabled = noInicio;
+    if (pagEl.btnAnterior) pagEl.btnAnterior.disabled = noInicio;
+    if (pagEl.btnProximo) pagEl.btnProximo.disabled = noFim;
+    if (pagEl.btnUltimo) pagEl.btnUltimo.disabled = noFim;
+  }
+
   function atualizarBulkBar() {
     const bar = document.getElementById("pd_fn_bulk");
     const countEl = document.getElementById("pd_fn_bulk_count");
@@ -97,7 +134,7 @@
     if (bar) bar.hidden = n === 0;
     if (countEl) countEl.textContent = n === 1 ? "1 selecionado" : `${n} selecionados`;
     if (checkAll) {
-      const visiveis = pedidosFiltrados().map((p) => p.id);
+      const visiveis = pedidosDaPagina().pagina.map((p) => p.id);
       const todosMarcados = visiveis.length > 0 && visiveis.every((id) => selecionados.has(id));
       checkAll.checked = todosMarcados;
       checkAll.indeterminate = n > 0 && !todosMarcados;
@@ -157,19 +194,20 @@
 
   function renderLista() {
     if (!listaEl) return;
-    const rows = pedidosFiltrados();
-    const idsVisiveis = new Set(rows.map((p) => p.id));
+    const { todos, pagina } = pedidosDaPagina();
+    const idsFiltrados = new Set(todos.map((p) => p.id));
     [...selecionados].forEach((id) => {
-      if (!idsVisiveis.has(id)) selecionados.delete(id);
+      if (!idsFiltrados.has(id)) selecionados.delete(id);
     });
-    if (!rows.length) {
+    renderPaginacao(todos.length);
+    if (!todos.length) {
       listaEl.innerHTML = "";
       if (vazio) vazio.hidden = false;
       atualizarBulkBar();
       return;
     }
     if (vazio) vazio.hidden = true;
-    listaEl.innerHTML = rows
+    listaEl.innerHTML = pagina
       .map((p) => {
         const st = stV(p);
         const urgent = st === "aguardando_confirmacao";
@@ -842,18 +880,43 @@
       c.classList.toggle("is-active", on);
       c.setAttribute("aria-selected", on ? "true" : "false");
     });
+    paginaAtual = 1;
     renderLista();
   });
 
   let buscaTimer = null;
   buscaEl?.addEventListener("input", () => {
     clearTimeout(buscaTimer);
-    buscaTimer = setTimeout(renderLista, 160);
+    buscaTimer = setTimeout(() => {
+      paginaAtual = 1;
+      renderLista();
+    }, 160);
+  });
+
+  pagEl.btnPrimeiro?.addEventListener("click", () => {
+    paginaAtual = 1;
+    renderLista();
+  });
+  pagEl.btnAnterior?.addEventListener("click", () => {
+    if (paginaAtual > 1) {
+      paginaAtual -= 1;
+      renderLista();
+    }
+  });
+  pagEl.btnProximo?.addEventListener("click", () => {
+    if (paginaAtual < totalPaginas) {
+      paginaAtual += 1;
+      renderLista();
+    }
+  });
+  pagEl.btnUltimo?.addEventListener("click", () => {
+    paginaAtual = totalPaginas;
+    renderLista();
   });
 
   document.getElementById("pd_fn_check_all")?.addEventListener("change", (e) => {
     const on = !!e.target.checked;
-    const rows = pedidosFiltrados();
+    const rows = pedidosDaPagina().pagina;
     rows.forEach((p) => {
       if (on) selecionados.add(p.id);
       else selecionados.delete(p.id);
