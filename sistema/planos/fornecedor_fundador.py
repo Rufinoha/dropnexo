@@ -514,7 +514,7 @@ def renderizar_html_convite_fundador(
 
     return render_template(
         "fundador/emails/convite_fundador.html",
-        titulo_email="Você é Fornecedor Fundador • DropNexo",
+        titulo_email="Bem-vindo, Fornecedor Fundador • DropNexo",
         nome_empresa=nome_empresa or "parceiro",
         eh_teste=bool(eh_teste),
         **_email_links_fundador(),
@@ -538,7 +538,7 @@ def enviar_convite_fundador(
         return {"ok": False, "message": "Fornecedor sem e-mail válido para notificar."}
 
     html = renderizar_html_convite_fundador(nome_empresa=nome, eh_teste=eh_teste)
-    assunto = "Você é Fornecedor Fundador da DropNexo"
+    assunto = "Você é Fornecedor Fundador da DropNexo — acesso total e vitalício"
     if eh_teste:
         assunto = f"[TESTE] {assunto}"
     ok, msg, _id = enviar_email(
@@ -565,7 +565,7 @@ def enviar_convite_fundador_teste(cur=None, id_tenant: int | None = None) -> dic
     html = renderizar_html_convite_fundador(nome_empresa=nome, eh_teste=True)
     ok, msg, _id = enviar_email(
         [EMAIL_TESTE],
-        "[TESTE] Você é Fornecedor Fundador da DropNexo",
+        "[TESTE] Você é Fornecedor Fundador da DropNexo — acesso total e vitalício",
         html,
         tag="dropnexo_fundador_teste",
     )

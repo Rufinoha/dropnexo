@@ -129,7 +129,22 @@
   }
 
   async function toggleFundador(id, ativo) {
-    const obs = ativo ? "" : prompt("Observação (opcional) ao desativar:") || "";
+    let obs = "";
+    if (!ativo) {
+      const ask = await Swal.fire({
+        title: "Desativar Fundador?",
+        text: "A vaga será liberada. Observação opcional:",
+        input: "text",
+        inputPlaceholder: "Motivo / observação",
+        showCancelButton: true,
+        confirmButtonText: "Desativar",
+        cancelButtonText: "Cancelar",
+        confirmButtonColor: "#dc2626",
+        cancelButtonColor: "#64748b",
+      });
+      if (!ask.isConfirmed) return { cancelled: true };
+      obs = (ask.value || "").trim();
+    }
     const r = await fetch(BASE + "/fundador/toggle", {
       method: "POST",
       credentials: "same-origin",
@@ -148,10 +163,24 @@
     const ativo = btn.dataset.ativo === "1";
     btn.disabled = true;
     try {
-      await toggleFundador(id, ativo);
+      const j = await toggleFundador(id, ativo);
+      if (j?.cancelled) return;
       await carregarFundadores();
+      if (ativo) {
+        await Swal.fire({
+          icon: "success",
+          title: "Fundador ativado",
+          text: j?.email?.ok ? j.email.message : j?.message || "Benefício liberado.",
+          confirmButtonColor: "#021F81",
+        });
+      }
     } catch (err) {
-      alert(err.message || "Erro");
+      await Swal.fire({
+        icon: "error",
+        title: "Erro",
+        text: err.message || "Erro",
+        confirmButtonColor: "#021F81",
+      });
     } finally {
       btn.disabled = false;
     }
@@ -204,7 +233,17 @@
     abrirMigrarBox();
   });
   el.btnTestarEmail?.addEventListener("click", async () => {
-    if (!confirm("Enviar prévia do e-mail de convite Fundador para hazael@h74.com.br?")) return;
+    const conf = await Swal.fire({
+      title: "Testar e-mail?",
+      text: "Envia a prévia do convite Fundador para hazael@h74.com.br.",
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonText: "Enviar teste",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#021F81",
+      cancelButtonColor: "#64748b",
+    });
+    if (!conf.isConfirmed) return;
     el.btnTestarEmail.disabled = true;
     try {
       const idSel = parseInt(el.migrarSelect?.value || "0", 10) || null;
@@ -216,9 +255,19 @@
       });
       const j = await r.json();
       if (!j.success) throw new Error(j.message || "Falha");
-      alert(j.message || "E-mail teste enviado.");
+      await Swal.fire({
+        icon: "success",
+        title: "E-mail enviado",
+        text: j.message || "E-mail teste enviado.",
+        confirmButtonColor: "#021F81",
+      });
     } catch (err) {
-      alert(err.message || "Erro");
+      await Swal.fire({
+        icon: "error",
+        title: "Erro",
+        text: err.message || "Erro",
+        confirmButtonColor: "#021F81",
+      });
     } finally {
       el.btnTestarEmail.disabled = false;
     }
@@ -227,11 +276,26 @@
   el.btnMigrarConfirmar?.addEventListener("click", async () => {
     const id = parseInt(el.migrarSelect?.value || "0", 10);
     if (!id) {
-      alert("Selecione um fornecedor.");
+      await Swal.fire({
+        icon: "warning",
+        title: "Selecione um fornecedor",
+        confirmButtonColor: "#021F81",
+      });
       return;
     }
     const nome = el.migrarSelect?.selectedOptions?.[0]?.textContent || `#${id}`;
-    if (!confirm(`Migrar "${nome}" para Fornecedor Fundador?\n\nUm e-mail de convite será enviado ao fornecedor.`)) return;
+    const conf = await Swal.fire({
+      title: "Migrar Fornecedor?",
+      html: `<p style="margin:0 0 8px">Migrar <strong>${esc(nome)}</strong> para Fornecedor Fundador?</p>
+             <p style="margin:0;color:#64748b;font-size:0.9rem">Um e-mail de convite será enviado ao fornecedor.</p>`,
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonText: "Migrar",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#021F81",
+      cancelButtonColor: "#64748b",
+    });
+    if (!conf.isConfirmed) return;
     el.btnMigrarConfirmar.disabled = true;
     try {
       const r = await fetch(BASE + "/fundador/migrar", {
@@ -242,17 +306,27 @@
       });
       const j = await r.json();
       if (!j.success) throw new Error(j.message || "Falha");
-      let msg = j.message || "Migrado com sucesso.";
+      let detail = j.message || "Migrado com sucesso.";
       if (j.email) {
-        msg += j.email.ok
+        detail += j.email.ok
           ? `\n\nE-mail: ${j.email.message || "enviado"}`
           : `\n\nAtenção e-mail: ${j.email.message || "não enviado"}`;
       }
-      alert(msg);
+      await Swal.fire({
+        icon: j.email && !j.email.ok ? "warning" : "success",
+        title: "Fornecedor migrado",
+        text: detail,
+        confirmButtonColor: "#021F81",
+      });
       fecharMigrarBox();
       await carregarFundadores();
     } catch (err) {
-      alert(err.message || "Erro");
+      await Swal.fire({
+        icon: "error",
+        title: "Erro",
+        text: err.message || "Erro",
+        confirmButtonColor: "#021F81",
+      });
     } finally {
       if (el.btnMigrarConfirmar) el.btnMigrarConfirmar.disabled = false;
     }
