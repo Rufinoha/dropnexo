@@ -4,7 +4,7 @@
 {% block topbar_title %}Dashboard{% endblock %}
 {% block head_extra %}
 {% if modulo_ativo == 'vendedor' %}
-<link rel="stylesheet" href="{{ url_for('dashboard.static', filename='style/Cdashboard_vendedor.css') }}?v=2" />
+<link rel="stylesheet" href="{{ url_for('dashboard.static', filename='style/Cdashboard_vendedor.css') }}?v=3" />
 {% elif modulo_ativo == 'fornecedor' %}
 <link rel="stylesheet" href="{{ url_for('dashboard.static', filename='style/Cdashboard_fornecedor.css') }}?v=1" />
 {% elif modulo_ativo == 'armazem' %}
@@ -45,22 +45,62 @@
     <div class="DashVd_OkCard">Tudo em dia por aqui. Nenhum alerta no momento.</div>
   </section>
 
-  <section class="DashVd_Secao">
-    <h3 class="DashVd_Titulo">Últimos 7 dias</h3>
-    <div class="DashVd_Kpis" id="dash_vd_kpis">
-      <article class="DashVd_Kpi"><span class="DashVd_KpiVal" data-k="pedidos">—</span><span class="DashVd_KpiLbl">Pedidos</span></article>
-      <article class="DashVd_Kpi"><span class="DashVd_KpiVal" data-k="fat">—</span><span class="DashVd_KpiLbl">Faturamento</span></article>
-      <article class="DashVd_Kpi"><span class="DashVd_KpiVal" data-k="produtos">—</span><span class="DashVd_KpiLbl">Produtos ativos</span></article>
-      <article class="DashVd_Kpi"><span class="DashVd_KpiVal" data-k="forn">—</span><span class="DashVd_KpiLbl">Fornecedores ativos</span></article>
-    </div>
-  </section>
+  <section class="DashVd_Painel" aria-label="Resultado do período">
+    <header class="DashVd_PainelHead">
+      <div>
+        <p class="DashVd_Kicker">Resultado</p>
+        <h3 id="dash_vd_rotulo">Últimos 7 dias</h3>
+      </div>
+      <div class="DashVd_Chips" role="tablist" aria-label="Recorte">
+        <button type="button" data-dias="1" role="tab">Hoje</button>
+        <button type="button" class="is-on" data-dias="7" role="tab" aria-selected="true">7 dias</button>
+        <button type="button" data-dias="30" role="tab">30 dias</button>
+      </div>
+    </header>
 
-  <section class="DashVd_Secao">
-    <div class="DashVd_SecaoHead">
-      <h3 class="DashVd_Titulo">Pedidos recentes</h3>
-      <a class="Cl_BtnLink" href="{{ url_for('vd_pedidos.pedidos') }}">Ver todos</a>
+    <div class="DashVd_Hero">
+      <article class="DashVd_HeroMain">
+        <span>Vendido ao cliente</span>
+        <strong id="dash_vd_vendido">—</strong>
+        <em id="dash_vd_delta"></em>
+      </article>
+      <article>
+        <span>Custo no fornecedor</span>
+        <strong id="dash_vd_custo">—</strong>
+        <small>Produto drop + taxa</small>
+      </article>
+      <article class="is-margem">
+        <span>Margem</span>
+        <strong id="dash_vd_margem">—</strong>
+        <small id="dash_vd_margem_pct">—</small>
+      </article>
+      <article>
+        <span>Pedidos</span>
+        <strong id="dash_vd_pedidos">—</strong>
+        <small>Sem cancelados</small>
+      </article>
     </div>
-    <div id="dash_vd_pedidos" class="DashVd_Pedidos"></div>
+
+    <div class="DashVd_ChartCard">
+      <div class="DashVd_ChartHead">
+        <h4>Dia a dia</h4>
+        <p>Ouro é hoje. Azul é o restante do recorte.</p>
+      </div>
+      <div class="DashVd_Chart" id="dash_vd_chart"></div>
+    </div>
+
+    <div class="DashVd_Split">
+      <article class="DashVd_Card">
+        <h4>De onde veio</h4>
+        <div id="dash_vd_origens"></div>
+      </article>
+      <article class="DashVd_Card">
+        <h4>O que mais saiu</h4>
+        <div id="dash_vd_top"></div>
+      </article>
+    </div>
+
+    <p class="DashVd_Rodape" id="dash_vd_rodape"></p>
   </section>
 </div>
 
@@ -177,7 +217,7 @@
 {% endblock %}
 {% block page_js %}
 {% if modulo_ativo == 'vendedor' %}
-<script src="{{ url_for('dashboard.static', filename='script/Sdashboard_vendedor.js') }}?v=2"></script>
+<script src="{{ url_for('dashboard.static', filename='script/Sdashboard_vendedor.js') }}?v=3"></script>
 {% elif modulo_ativo == 'fornecedor' %}
 <script src="{{ url_for('dashboard.static', filename='script/Sdashboard_fornecedor.js') }}?v=2"></script>
 {% endif %}

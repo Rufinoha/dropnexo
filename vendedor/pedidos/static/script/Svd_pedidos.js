@@ -122,16 +122,152 @@
     return `<span class="Pd_StatusPair">${badge(stC(p), "comprador")}${badge(stV(p), "vendedor")}</span>`;
   }
 
-  async function carregarLista() {
-    const st = el.filtro?.value || "";
-    const url = st ? `/vendedor/pedidos/dados?status=${encodeURIComponent(st)}` : "/vendedor/pedidos/dados";
-    const r = await fetch(url, { credentials: "same-origin" });
-    const j = await r.json();
-    if (!j.success) return;
-    taxasPorFornecedor = j.taxas_fornecedor || {};
+  let todosPedidos = [];
+  let paginaAtual = 1;
+  const porPagina = 20;
+  const PRECISA_ACAO = ["rascunho", "importado", "aguardando_pagamento", "aguardando_confirmacao"];
+  const MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+  const SEMANA = ["seg", "ter", "qua", "qui", "sex", "sáb", "dom"];
 
-    const rows = j.pedidos || [];
-    el.tbody.innerHTML = rows
+  function hojeDia() {
+    const n = new Date();
+    return new Date(n.getFullYear(), n.getMonth(), n.getDate());
+  }
+  function addDias(d, n) {
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+  }
+  function inicioMes(d) {
+    return new Date(d.getFullYear(), d.getMonth(), 1);
+  }
+  function fimMes(d) {
+    return new Date(d.getFullYear(), d.getMonth() + 1, 0);
+  }
+  function addMeses(d, n) {
+    return new Date(d.getFullYear(), d.getMonth() + n, 1);
+  }
+  function mesmoDia(a, b) {
+    return !!(a && b && a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate());
+  }
+  function cmpDia(a, b) {
+    return a.getTime() - b.getTime();
+  }
+  function fmtDia(d) {
+    const z = (n) => String(n).padStart(2, "0");
+    return `${z(d.getDate())}/${z(d.getMonth() + 1)}/${d.getFullYear()}`;
+  }
+  function diaDePedido(iso) {
+    if (!iso) return null;
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return null;
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  }
+  const PRESETS = [
+    { id: "hoje", label: "Hoje", range: () => { const h = hojeDia(); return [h, h]; } },
+    { id: "ontem", label: "Ontem", range: () => { const o = addDias(hojeDia(), -1); return [o, o]; } },
+    { id: "7", label: "Últimos 7 dias", range: () => [addDias(hojeDia(), -6), hojeDia()] },
+    { id: "30", label: "Últimos 30 dias", range: () => [addDias(hojeDia(), -29), hojeDia()] },
+    { id: "mes", label: "Este mês", range: () => [inicioMes(hojeDia()), fimMes(hojeDia())] },
+    { id: "mes_hoje", label: "Mês atual (até hoje)", range: () => [inicioMes(hojeDia()), hojeDia()] },
+    { id: "mes_passado", label: "Mês passado", range: () => { const p = addMeses(hojeDia(), -1); return [inicioMes(p), fimMes(p)]; } },
+    { id: "3m", label: "Últimos 3 meses", range: () => [inicioMes(addMeses(hojeDia(), -2)), hojeDia()] },
+    { id: "ano", label: "Este ano", range: () => [new Date(hojeDia().getFullYear(), 0, 1), hojeDia()] },
+  ];
+  function presetQueCombina(ini, fim) {
+    if (!ini && !fim) return "todos";
+    if (!ini || !fim) return "";
+    for (const p of PRESETS) {
+      const [a, b] = p.range();
+      if (mesmoDia(a, ini) && mesmoDia(b, fim)) return p.id;
+    }
+    return "";
+  }
+  function nomePreset(id) {
+    if (id === "todos") return "Todo o período";
+    if (!id) return "Personalizado";
+    return PRESETS.find((p) => p.id === id)?.label || "Personalizado";
+  }
+  const _iniMes = PRESETS.find((p) => p.id === "mes_hoje").range();
+  let periodoAplicado = { ini: _iniMes[0], fim: _iniMes[1], preset: "mes_hoje" };
+  let rascunho = null;
+  let calMes = inicioMes(hojeDia());
+  let hoverDia = null;
+
+  function noPeriodo(p) {
+    if (!periodoAplicado?.ini || !periodoAplicado?.fim) return true;
+    const d = diaDePedido(p.criado_em);
+    if (!d) return false;
+    return cmpDia(d, periodoAplicado.ini) >= 0 && cmpDia(d, periodoAplicado.fim) <= 0;
+  }
+
+  function pedidosVisiveis() {
+    const st = el.filtro?.value || "";
+    return todosPedidos.filter((p) => {
+      if (st && stV(p) !== st) return false;
+      return noPeriodo(p);
+    });
+  }
+
+  function pintarPeriodoBtn() {
+    const txt = document.getElementById("pd_vd_periodoTxt");
+    const tag = document.getElementById("pd_vd_periodoTag");
+    if (!periodoAplicado?.ini || !periodoAplicado?.fim) {
+      if (txt) txt.textContent = "Todo o período";
+      if (tag) tag.textContent = "Sem recorte";
+      return;
+    }
+    if (txt) txt.textContent = `${fmtDia(periodoAplicado.ini)} – ${fmtDia(periodoAplicado.fim)}`;
+    if (tag) tag.textContent = nomePreset(periodoAplicado.preset);
+  }
+
+  function atualizarAvisoFora() {
+    const aviso = document.getElementById("pd_vd_fora");
+    const txt = document.getElementById("pd_vd_foraTxt");
+    if (!aviso || !txt) return;
+    if (!periodoAplicado?.ini) {
+      aviso.hidden = true;
+      return;
+    }
+    const n = todosPedidos.filter((p) => !noPeriodo(p) && PRECISA_ACAO.includes(stV(p))).length;
+    if (!n) {
+      aviso.hidden = true;
+      return;
+    }
+    txt.textContent = n === 1
+      ? "1 pedido anterior a este período ainda pede ação."
+      : `${n} pedidos anteriores a este período ainda pedem ação.`;
+    aviso.hidden = false;
+  }
+
+  function renderPaginacao(total, totalPaginas) {
+    const wrap = document.getElementById("pd_paginacao");
+    if (!wrap) return;
+    wrap.hidden = total === 0;
+    const set = (id, val) => {
+      const n = document.getElementById(id);
+      if (n) n.textContent = String(val);
+    };
+    set("pd_paginaAtual", paginaAtual);
+    set("pd_totalPaginas", totalPaginas);
+    set("pd_totalRegistros", total);
+    const noInicio = paginaAtual <= 1;
+    const noFim = paginaAtual >= totalPaginas;
+    const dis = (id, on) => {
+      const b = document.getElementById(id);
+      if (b) b.disabled = on;
+    };
+    dis("pd_btnPrimeiro", noInicio);
+    dis("pd_btnAnterior", noInicio);
+    dis("pd_btnProximo", noFim);
+    dis("pd_btnUltimo", noFim);
+  }
+
+  function renderLista() {
+    const rows = pedidosVisiveis();
+    const totalPaginas = Math.max(1, Math.ceil(rows.length / porPagina));
+    if (paginaAtual > totalPaginas) paginaAtual = totalPaginas;
+    if (paginaAtual < 1) paginaAtual = 1;
+    const pagina = rows.slice((paginaAtual - 1) * porPagina, paginaAtual * porPagina);
+    el.tbody.innerHTML = pagina
       .map(
         (p) => `
       <tr>
@@ -150,9 +286,26 @@
       </tr>`
       )
       .join("");
-
-    el.vazio.hidden = rows.length > 0;
+    if (el.vazio) {
+      el.vazio.hidden = rows.length > 0;
+      el.vazio.textContent = periodoAplicado?.ini
+        ? "Nenhum pedido neste período."
+        : "Nenhum pedido encontrado.";
+    }
+    renderPaginacao(rows.length, totalPaginas);
+    pintarPeriodoBtn();
+    atualizarAvisoFora();
     window.lucide?.createIcons?.();
+  }
+
+  async function carregarLista() {
+    const r = await fetch("/vendedor/pedidos/dados", { credentials: "same-origin" });
+    const j = await r.json();
+    if (!j.success) return;
+    taxasPorFornecedor = j.taxas_fornecedor || {};
+    todosPedidos = j.pedidos || [];
+    paginaAtual = 1;
+    renderLista();
   }
 
   function limparFreteLocal() {
@@ -2675,7 +2828,206 @@
       atualizarNavResumos();
     });
   });
+  function classeDiaVd(dia, ini, fim, preview) {
+    const cls = [];
+    if (mesmoDia(dia, hojeDia())) cls.push("is-hoje");
+    const fimVis = fim || preview;
+    if (ini && fimVis) {
+      const a = cmpDia(ini, fimVis) <= 0 ? ini : fimVis;
+      const b = cmpDia(ini, fimVis) <= 0 ? fimVis : ini;
+      if (cmpDia(dia, a) >= 0 && cmpDia(dia, b) <= 0) {
+        if (mesmoDia(dia, a)) cls.push("is-start");
+        if (mesmoDia(dia, b)) cls.push("is-end");
+        cls.push(fim ? "is-in" : "is-preview");
+      }
+    } else if (ini && mesmoDia(dia, ini)) cls.push("is-start");
+    return cls.join(" ");
+  }
+
+  function htmlMesVd(ano, mes, mostrarAnt, mostrarProx) {
+    const primeiro = new Date(ano, mes, 1);
+    const offset = (primeiro.getDay() + 6) % 7;
+    const inicio = addDias(primeiro, -offset);
+    const ini = rascunho?.ini || null;
+    const fim = rascunho?.fim || null;
+    const preview = !fim && ini && hoverDia ? hoverDia : null;
+    let dias = "";
+    for (let i = 0; i < 42; i += 1) {
+      const dia = addDias(inicio, i);
+      const fora = dia.getMonth() !== mes ? " is-out" : "";
+      const iso = `${dia.getFullYear()}-${dia.getMonth()}-${dia.getDate()}`;
+      dias += `<div class="PdPer_Dia ${classeDiaVd(dia, ini, fim, preview)}${fora}"><button type="button" data-dia="${iso}">${dia.getDate()}</button></div>`;
+    }
+    const navAnt = mostrarAnt ? `<button type="button" class="PdPer_Nav" data-nav="-1" aria-label="Mês anterior">‹</button>` : `<span></span>`;
+    const navProx = mostrarProx ? `<button type="button" class="PdPer_Nav" data-nav="1" aria-label="Próximo mês">›</button>` : `<span></span>`;
+    return `<div><div class="PdPer_MesHead">${navAnt}<span class="PdPer_MesNome">${MESES[mes]} ${ano}</span>${navProx}</div><div class="PdPer_Semana">${SEMANA.map((s) => `<span>${s}</span>`).join("")}</div><div class="PdPer_Dias">${dias}</div></div>`;
+  }
+
+  function textoEscolhaVd() {
+    const node = document.getElementById("pd_vd_periodoEscolha");
+    if (!node || !rascunho) return;
+    if (!rascunho.ini) {
+      node.textContent = "Nenhum recorte — a lista mostra todos";
+      return;
+    }
+    if (!rascunho.fim) {
+      node.textContent = `${fmtDia(rascunho.ini)} – escolha o fim`;
+      return;
+    }
+    node.textContent = `${fmtDia(rascunho.ini)} – ${fmtDia(rascunho.fim)}`;
+  }
+
+  function pintarCalendarioVd() {
+    const box = document.getElementById("pd_vd_cals");
+    if (!box) return;
+    const dir = addMeses(calMes, 1);
+    box.innerHTML = htmlMesVd(calMes.getFullYear(), calMes.getMonth(), true, false) + htmlMesVd(dir.getFullYear(), dir.getMonth(), false, true);
+    textoEscolhaVd();
+    document.querySelectorAll("#pd_vd_presets .PdPer_Preset").forEach((b) => {
+      b.classList.toggle("is-on", b.getAttribute("data-preset") === (rascunho?.preset || ""));
+    });
+  }
+
+  function abrirPeriodoVd() {
+    const pop = document.getElementById("pd_vd_periodoPop");
+    const btn = document.getElementById("pd_vd_periodoBtn");
+    rascunho = periodoAplicado?.ini
+      ? { ini: new Date(periodoAplicado.ini), fim: periodoAplicado.fim ? new Date(periodoAplicado.fim) : null, preset: periodoAplicado.preset }
+      : { ini: null, fim: null, preset: "todos" };
+    calMes = inicioMes(rascunho.ini || hojeDia());
+    hoverDia = null;
+    if (pop) pop.hidden = false;
+    if (btn) btn.setAttribute("aria-expanded", "true");
+    pintarCalendarioVd();
+  }
+
+  function fecharPeriodoVd() {
+    const pop = document.getElementById("pd_vd_periodoPop");
+    const btn = document.getElementById("pd_vd_periodoBtn");
+    if (pop) pop.hidden = true;
+    if (btn) btn.setAttribute("aria-expanded", "false");
+    hoverDia = null;
+  }
+
+  function aplicarRascunhoVd() {
+    if (!rascunho?.ini) {
+      periodoAplicado = { ini: null, fim: null, preset: "todos" };
+    } else {
+      const fim = rascunho.fim || rascunho.ini;
+      const a = cmpDia(rascunho.ini, fim) <= 0 ? rascunho.ini : fim;
+      const b = cmpDia(rascunho.ini, fim) <= 0 ? fim : rascunho.ini;
+      periodoAplicado = { ini: a, fim: b, preset: presetQueCombina(a, b) };
+    }
+    paginaAtual = 1;
+    fecharPeriodoVd();
+    renderLista();
+  }
+
+  function incluirPendentesForaVd() {
+    let min = periodoAplicado?.ini || null;
+    todosPedidos.forEach((p) => {
+      if (!PRECISA_ACAO.includes(stV(p))) return;
+      const d = diaDePedido(p.criado_em);
+      if (d && (!min || cmpDia(d, min) < 0)) min = d;
+    });
+    if (!min) return;
+    const fim = periodoAplicado?.fim && cmpDia(periodoAplicado.fim, min) >= 0 ? periodoAplicado.fim : hojeDia();
+    periodoAplicado = { ini: min, fim, preset: presetQueCombina(min, fim) };
+    paginaAtual = 1;
+    renderLista();
+  }
+
+  function iniciarPeriodoVd() {
+    const presets = document.getElementById("pd_vd_presets");
+    if (presets) {
+      presets.innerHTML = PRESETS.map(
+        (p) => `<button type="button" class="PdPer_Preset" data-preset="${p.id}" role="option">${esc(p.label)}</button>`
+      ).join("") + `<button type="button" class="PdPer_Preset" data-preset="todos" role="option">Todo o período</button>`;
+    }
+    pintarPeriodoBtn();
+    document.getElementById("pd_vd_periodoBtn")?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const pop = document.getElementById("pd_vd_periodoPop");
+      if (pop?.hidden) abrirPeriodoVd();
+      else fecharPeriodoVd();
+    });
+    document.getElementById("pd_vd_periodoPop")?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const nav = e.target.closest("[data-nav]");
+      if (nav) {
+        calMes = addMeses(calMes, Number(nav.getAttribute("data-nav")));
+        pintarCalendarioVd();
+        return;
+      }
+      const diaBtn = e.target.closest("[data-dia]");
+      if (diaBtn) {
+        const [y, m, d] = diaBtn.getAttribute("data-dia").split("-").map(Number);
+        const dia = new Date(y, m, d);
+        if (!rascunho.ini || rascunho.fim) rascunho = { ini: dia, fim: null, preset: "" };
+        else {
+          const a = cmpDia(rascunho.ini, dia) <= 0 ? rascunho.ini : dia;
+          const b = cmpDia(rascunho.ini, dia) <= 0 ? dia : rascunho.ini;
+          rascunho = { ini: a, fim: b, preset: presetQueCombina(a, b) };
+        }
+        hoverDia = null;
+        pintarCalendarioVd();
+        return;
+      }
+      const pre = e.target.closest("[data-preset]");
+      if (!pre) return;
+      const id = pre.getAttribute("data-preset");
+      if (id === "todos") rascunho = { ini: null, fim: null, preset: "todos" };
+      else {
+        const p = PRESETS.find((x) => x.id === id);
+        if (!p) return;
+        const [ini, fim] = p.range();
+        rascunho = { ini, fim, preset: id };
+        calMes = inicioMes(ini);
+      }
+      hoverDia = null;
+      pintarCalendarioVd();
+    });
+    document.getElementById("pd_vd_cals")?.addEventListener("mouseover", (e) => {
+      const diaBtn = e.target.closest("[data-dia]");
+      if (!diaBtn || !rascunho?.ini || rascunho.fim) return;
+      const [y, m, d] = diaBtn.getAttribute("data-dia").split("-").map(Number);
+      const next = new Date(y, m, d);
+      if (hoverDia && mesmoDia(hoverDia, next)) return;
+      hoverDia = next;
+      pintarCalendarioVd();
+    });
+    document.getElementById("pd_vd_periodoLimpar")?.addEventListener("click", () => {
+      rascunho = { ini: null, fim: null, preset: "todos" };
+      hoverDia = null;
+      pintarCalendarioVd();
+    });
+    document.getElementById("pd_vd_periodoOk")?.addEventListener("click", aplicarRascunhoVd);
+    document.getElementById("pd_vd_fora")?.addEventListener("click", incluirPendentesForaVd);
+    document.addEventListener("click", () => {
+      const pop = document.getElementById("pd_vd_periodoPop");
+      if (pop && !pop.hidden) fecharPeriodoVd();
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") return;
+      const pop = document.getElementById("pd_vd_periodoPop");
+      if (pop && !pop.hidden) fecharPeriodoVd();
+    });
+  }
+
   document.getElementById("pd_btnFiltrar")?.addEventListener("click", carregarLista);
+  el.filtro?.addEventListener("change", () => {
+    paginaAtual = 1;
+    renderLista();
+  });
+  document.getElementById("pd_btnPrimeiro")?.addEventListener("click", () => { paginaAtual = 1; renderLista(); });
+  document.getElementById("pd_btnAnterior")?.addEventListener("click", () => { if (paginaAtual > 1) { paginaAtual -= 1; renderLista(); } });
+  document.getElementById("pd_btnProximo")?.addEventListener("click", () => { paginaAtual += 1; renderLista(); });
+  document.getElementById("pd_btnUltimo")?.addEventListener("click", () => {
+    const total = Math.max(1, Math.ceil(pedidosVisiveis().length / porPagina));
+    paginaAtual = total;
+    renderLista();
+  });
+  iniciarPeriodoVd();
   document.getElementById("pd_btnCep")?.addEventListener("click", buscarCep);
   document.getElementById("pd_cep")?.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {

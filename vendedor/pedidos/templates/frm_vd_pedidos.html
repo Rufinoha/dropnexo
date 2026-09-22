@@ -3,7 +3,7 @@
 {% set nav_ativo = 'vd_pedidos' %}
 {% block topbar_title %}Pedidos{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('vd_pedidos.static', filename='style/Cvd_pedidos.css') }}?v=26" />
+<link rel="stylesheet" href="{{ url_for('vd_pedidos.static', filename='style/Cvd_pedidos.css') }}?v=27" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal Pd_Page">
@@ -16,20 +16,59 @@
   </div>
 
   <div class="filter-panel Pd_Filtros">
-    <div class="filter-group">
-      <label for="pd_filtroStatus">Situação</label>
-      <select id="pd_filtroStatus">
-        <option value="">Todas</option>
-        <option value="rascunho">Rascunho</option>
-        <option value="importado">Importado (canal)</option>
-        <option value="aguardando_pagamento">Aguardando pagamento</option>
-        <option value="aguardando_confirmacao">Pago — aguardando confirmação</option>
-        <option value="pago">Pagamento confirmado</option>
-        <option value="cancelado">Cancelado</option>
-      </select>
+    <div class="filter-panel-fields">
+      <div class="filter-group">
+        <label for="pd_filtroStatus">Situação</label>
+        <select id="pd_filtroStatus">
+          <option value="">Todas</option>
+          <option value="rascunho">Rascunho</option>
+          <option value="importado">Importado (canal)</option>
+          <option value="aguardando_pagamento">Aguardando pagamento</option>
+          <option value="aguardando_confirmacao">Pago — aguardando confirmação</option>
+          <option value="pago">Pagamento confirmado</option>
+          <option value="em_expedicao">Em expedição</option>
+          <option value="entregue">Entregue</option>
+          <option value="cancelado">Cancelado</option>
+        </select>
+      </div>
+      <div class="filter-group PdPer_Campo">
+        <label for="pd_vd_periodoBtn">Período</label>
+        <div class="PdPer" id="pd_vd_periodo">
+          <button type="button" class="PdPer_Btn" id="pd_vd_periodoBtn" aria-haspopup="dialog" aria-expanded="false" aria-controls="pd_vd_periodoPop">
+            <svg class="PdPer_Ico" viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="3.5" y="5" width="17" height="15" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.7"/>
+              <path d="M3.5 9.5h17M8 3.5v3.5M16 3.5v3.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+            </svg>
+            <span class="PdPer_Txt">
+              <strong id="pd_vd_periodoTxt">—</strong>
+              <em id="pd_vd_periodoTag">Mês atual</em>
+            </span>
+            <svg class="PdPer_Chev" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <div class="PdPer_Pop" id="pd_vd_periodoPop" hidden role="dialog" aria-label="Escolher período">
+            <div class="PdPer_Body">
+              <div class="PdPer_Cals" id="pd_vd_cals"></div>
+              <div class="PdPer_Presets" id="pd_vd_presets" role="listbox" aria-label="Atalhos de período"></div>
+            </div>
+            <footer class="PdPer_Foot">
+              <p class="PdPer_Escolha" id="pd_vd_periodoEscolha">Selecione o intervalo</p>
+              <div class="PdPer_Acoes">
+                <button type="button" class="PdPer_Limpar" id="pd_vd_periodoLimpar">Limpar</button>
+                <button type="button" class="PdPer_Ok" id="pd_vd_periodoOk">Confirmar</button>
+              </div>
+            </footer>
+          </div>
+        </div>
+      </div>
     </div>
-    <button type="button" class="Cl_botaoFiltro" id="pd_btnFiltrar">Filtrar</button>
+    <div class="filter-panel-actions">
+      <button type="button" class="Cl_botaoFiltro" id="pd_btnFiltrar">Filtrar</button>
+    </div>
   </div>
+  <button type="button" class="PdPer_Fora" id="pd_vd_fora" hidden>
+    <span id="pd_vd_foraTxt"></span>
+    <em>Incluir na lista</em>
+  </button>
 
   <div class="Pd_TableWrap">
     <table class="Pd_Table" id="pd_tabela">
@@ -48,6 +87,15 @@
       <tbody id="pd_tbody"></tbody>
     </table>
     <p id="pd_vazio" class="Pd_Vazio" hidden>Nenhum pedido encontrado.</p>
+  </div>
+
+  <div class="Cl_Paginacao" id="pd_paginacao" hidden>
+    <button type="button" class="Cl_direcao" id="pd_btnPrimeiro" disabled>Primeiro</button>
+    <button type="button" class="Cl_direcao" id="pd_btnAnterior" disabled>Anterior</button>
+    <span>Página <strong id="pd_paginaAtual">1</strong> de <strong id="pd_totalPaginas">1</strong>
+      (<span id="pd_totalRegistros">0</span> registros)</span>
+    <button type="button" class="Cl_direcao" id="pd_btnProximo" disabled>Próximo</button>
+    <button type="button" class="Cl_direcao" id="pd_btnUltimo" disabled>Último</button>
   </div>
 </div>
 
@@ -254,6 +302,6 @@
 {% endblock %}
 {% block page_js %}
 <script defer src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
-<script defer src="{{ url_for('vd_pedidos.static', filename='script/Svd_pedidos.js') }}?v=44"></script>
+<script defer src="{{ url_for('vd_pedidos.static', filename='script/Svd_pedidos.js') }}?v=45"></script>
 <script id="pd_cfg" type="application/json">{{ {"mp_icone": url_for("mercadopago.static", filename="imge/icone_mercadopago.png")}|tojson }}</script>
 {% endblock %}

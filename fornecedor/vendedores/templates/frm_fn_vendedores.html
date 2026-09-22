@@ -2,14 +2,26 @@
 {% block title %}Vendedores — {{ MARCA_NOME }}{% endblock %}
 {% block topbar_title %}Vendedores parceiros{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('fn_vendedores.static', filename='style/Cfn_vendedores.css') }}?v=6" />
+<link rel="stylesheet" href="{{ url_for('fn_vendedores.static', filename='style/Cfn_vendedores.css') }}?v=7" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal VdParceiros_Page">
-  <div class="cl-page-title">
-    <h2>Vendedores parceiros</h2>
-    <p class="cl-page-desc">Aprove solicitações, pause ou encerre vínculos (estoques zerados na vitrine).</p>
-    <p class="VdParceiros_Hint">Clique duas vezes em um card para ver os detalhes e tomar a decisão.</p>
+  <div class="cl-page-title VdParceiros_Head">
+    <div class="VdParceiros_HeadText">
+      <h2>Vendedores parceiros</h2>
+      <p class="cl-page-desc">Aprove solicitações, pause ou encerre vínculos (estoques zerados na vitrine).</p>
+      <p class="VdParceiros_Hint">Clique duas vezes em um card para ver os detalhes e tomar a decisão.</p>
+    </div>
+    <div class="VdParceiros_Resumo" id="vd_resumo" aria-label="Resumo dos vínculos">
+      <div class="VdParceiros_ResumoItem is-ativo">
+        <strong id="vd_nConectados">—</strong>
+        <span id="vd_lblConectados">conectados</span>
+      </div>
+      <div class="VdParceiros_ResumoItem is-aguardando">
+        <strong id="vd_nAguardando">—</strong>
+        <span id="vd_lblAguardando">aguardando conexão</span>
+      </div>
+    </div>
   </div>
 
   <div class="filter-panel VdParceiros_Filtros" id="vd_filtros">
@@ -59,5 +71,5 @@
 {% endblock %}
 {% block page_js %}
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-<script src="{{ url_for('fn_vendedores.static', filename='script/Sfn_vendedores.js') }}?v=12"></script>
+<script src="{{ url_for('fn_vendedores.static', filename='script/Sfn_vendedores.js') }}?v=13"></script>
 {% endblock %}

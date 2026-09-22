@@ -10,10 +10,14 @@
 }
 
 .Pd_Filtros {
-  display: flex;
-  gap: 0.75rem;
   align-items: flex-end;
-  margin-bottom: 1rem;
+  margin-bottom: 0.75rem;
+  overflow: visible;
+}
+
+.Pd_Filtros .filter-group select {
+  min-width: 16rem;
+  min-height: 40px;
 }
 
 .Pd_TableWrap { overflow-x: auto; }
@@ -1548,4 +1552,121 @@
 .Pd_Table--itens td:nth-child(4),
 .Pd_Table--itens td:nth-child(5) {
   text-align: right;
+}
+
+.PdPer { position: relative; }
+.PdPer_Btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  height: 40px;
+  min-width: 15.5rem;
+  padding: 0 0.65rem 0 0.55rem;
+  border-radius: 12px;
+  border: 1px solid #d5deea;
+  background: linear-gradient(180deg, #fff 0%, #f8fafc 100%);
+  color: #0f172a;
+  cursor: pointer;
+}
+.PdPer_Btn[aria-expanded="true"] {
+  border-color: #021f81;
+  box-shadow: 0 0 0 3px rgba(2, 31, 129, 0.12);
+}
+.PdPer_Ico { width: 18px; height: 18px; color: #021f81; flex-shrink: 0; }
+.PdPer_Txt { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.05; min-width: 9.2rem; }
+.PdPer_Txt strong { font-size: 0.8rem; font-weight: 750; font-variant-numeric: tabular-nums; }
+.PdPer_Txt em {
+  margin-top: 0.12rem;
+  font-style: normal;
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #021f81;
+}
+.PdPer_Chev { width: 12px; height: 12px; color: #94a3b8; }
+.PdPer_Pop {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 0.45rem);
+  left: 0;
+  width: min(680px, calc(100vw - 2rem));
+  background: #fff;
+  border: 1px solid #e6ebf2;
+  border-radius: 16px;
+  box-shadow: 0 22px 50px rgba(2, 31, 129, 0.16);
+  overflow: hidden;
+}
+.PdPer_Pop[hidden] { display: none !important; }
+.PdPer_Body { display: flex; }
+.PdPer_Cals {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.25rem 0.75rem;
+  padding: 0.85rem 0.9rem 0.7rem;
+  flex: 1;
+  border-right: 1px solid #e2e8f0;
+}
+.PdPer_MesHead { display: flex; align-items: center; justify-content: space-between; min-height: 28px; margin-bottom: 0.35rem; }
+.PdPer_MesNome { font-size: 0.86rem; font-weight: 750; text-transform: capitalize; }
+.PdPer_Nav {
+  width: 28px; height: 28px; border: 0; border-radius: 8px; background: transparent;
+  color: #475569; cursor: pointer; font-size: 1.05rem;
+}
+.PdPer_Nav:hover { background: #f1f5f9; color: #021f81; }
+.PdPer_Semana, .PdPer_Dias { display: grid; grid-template-columns: repeat(7, 1fr); }
+.PdPer_Semana span {
+  text-align: center; font-size: 0.62rem; font-weight: 700; letter-spacing: 0.04em;
+  text-transform: uppercase; color: #94a3b8; padding-bottom: 0.25rem;
+}
+.PdPer_Dia { position: relative; height: 34px; display: flex; align-items: center; justify-content: center; }
+.PdPer_Dia.is-in::before, .PdPer_Dia.is-preview::before {
+  content: ""; position: absolute; left: 0; right: 0; top: 4px; bottom: 4px; background: #e8eefb;
+}
+.PdPer_Dia.is-preview::before { background: #f1f5f9; }
+.PdPer_Dia.is-start::before { left: 50%; }
+.PdPer_Dia.is-end::before { right: 50%; }
+.PdPer_Dia.is-start.is-end::before { display: none; }
+.PdPer_Dia button {
+  position: relative; z-index: 1; width: 30px; height: 30px; border: 0; border-radius: 999px;
+  background: transparent; color: #0f172a; font: inherit; font-size: 0.78rem; font-weight: 650; cursor: pointer;
+}
+.PdPer_Dia.is-out button { color: #cbd5e1; }
+.PdPer_Dia.is-hoje button { box-shadow: inset 0 0 0 1.5px #93a4d4; }
+.PdPer_Dia.is-start button, .PdPer_Dia.is-end button { background: #021f81; color: #fff; box-shadow: none; }
+.PdPer_Presets {
+  display: flex; flex-direction: column; gap: 0.15rem; width: 188px; padding: 0.7rem 0.55rem; background: #fbfcfe;
+}
+.PdPer_Preset {
+  border: 0; background: transparent; text-align: left; border-radius: 8px;
+  padding: 0.42rem 0.65rem; font: inherit; font-size: 0.78rem; font-weight: 600; color: #334155; cursor: pointer;
+}
+.PdPer_Preset:hover { background: #eef2f8; }
+.PdPer_Preset.is-on { background: #e8eefb; color: #021f81; font-weight: 750; }
+.PdPer_Foot {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
+  padding: 0.7rem 0.85rem; border-top: 1px solid #e2e8f0;
+}
+.PdPer_Escolha { margin: 0; font-size: 0.8rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.PdPer_Acoes { display: flex; gap: 0.45rem; }
+.PdPer_Limpar, .PdPer_Ok {
+  height: 34px; padding: 0 0.9rem; border-radius: 9px; font: inherit; font-size: 0.8rem; font-weight: 700; cursor: pointer;
+}
+.PdPer_Limpar { border: 1px solid #d5deea; background: #fff; color: #334155; }
+.PdPer_Ok { border: 0; background: #021f81; color: #fff; }
+.PdPer_Fora {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
+  width: 100%; margin: 0 0 0.75rem; padding: 0.45rem 0.75rem;
+  border: 1px solid #fcd34d; border-radius: 10px; background: #fffbeb; color: #92400e;
+  font: inherit; font-size: 0.8rem; text-align: left; cursor: pointer;
+}
+.PdPer_Fora[hidden] { display: none !important; }
+.PdPer_Fora em { font-style: normal; font-weight: 800; color: #021f81; white-space: nowrap; }
+.Pd_Page .Cl_Paginacao { margin-top: 0.85rem; }
+
+@media (max-width: 860px) {
+  .PdPer_Body { flex-direction: column; }
+  .PdPer_Cals { grid-template-columns: 1fr; border-right: 0; border-bottom: 1px solid #e2e8f0; max-height: 46vh; overflow: auto; }
+  .PdPer_Presets { flex-direction: row; flex-wrap: wrap; width: auto; }
+  .PdPer_Pop { position: fixed; left: 0.75rem; right: 0.75rem; width: auto; }
 }

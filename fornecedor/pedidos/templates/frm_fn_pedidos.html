@@ -3,7 +3,7 @@
 {% set nav_ativo = 'fn_pedidos' %}
 {% block topbar_title %}Pedidos recebidos{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('fn_pedidos.static', filename='style/Cfn_pedidos.css') }}?v=15" />
+<link rel="stylesheet" href="{{ url_for('fn_pedidos.static', filename='style/Cfn_pedidos.css') }}?v=16" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal PdFn_Page">
@@ -36,11 +36,41 @@
       <button type="button" class="PdFn_Chip" data-status="pago" role="tab">Confirmados</button>
       <button type="button" class="PdFn_Chip" data-status="em_expedicao" role="tab">Em expedição</button>
     </div>
+    <div class="PdFn_Periodo" id="pd_fn_periodo">
+      <button type="button" class="PdFn_PeriodoBtn" id="pd_fn_periodoBtn" aria-haspopup="dialog" aria-expanded="false" aria-controls="pd_fn_periodoPop">
+        <svg class="PdFn_PeriodoIco" viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="3.5" y="5" width="17" height="15" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.7"/>
+          <path d="M3.5 9.5h17M8 3.5v3.5M16 3.5v3.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+        </svg>
+        <span class="PdFn_PeriodoTxt">
+          <strong id="pd_fn_periodoTxt">—</strong>
+          <em id="pd_fn_periodoTag">Mês atual</em>
+        </span>
+        <svg class="PdFn_PeriodoChev" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <div class="PdFn_PeriodoPop" id="pd_fn_periodoPop" hidden role="dialog" aria-label="Escolher período">
+        <div class="PdFn_PeriodoBody">
+          <div class="PdFn_Cals" id="pd_fn_cals"></div>
+          <div class="PdFn_Presets" id="pd_fn_presets" role="listbox" aria-label="Atalhos de período"></div>
+        </div>
+        <footer class="PdFn_PeriodoFoot">
+          <p class="PdFn_PeriodoEscolha" id="pd_fn_periodoEscolha">Selecione o intervalo</p>
+          <div class="PdFn_PeriodoAcoes">
+            <button type="button" class="PdFn_PeriodoLimpar" id="pd_fn_periodoLimpar">Limpar</button>
+            <button type="button" class="PdFn_PeriodoOk" id="pd_fn_periodoOk">Confirmar</button>
+          </div>
+        </footer>
+      </div>
+    </div>
     <label class="PdFn_Search">
       <span class="PdFn_SearchIco" aria-hidden="true"></span>
       <input type="search" id="pd_fn_busca" placeholder="Buscar pedido, vendedor ou cliente…" autocomplete="off" />
     </label>
   </div>
+  <button type="button" class="PdFn_Fora" id="pd_fn_fora" hidden>
+    <span id="pd_fn_foraTxt"></span>
+    <em>Incluir na lista</em>
+  </button>
 
   <div class="PdFn_Bulk" id="pd_fn_bulk" hidden>
     <label class="PdFn_BulkAll">
@@ -91,5 +121,5 @@
 {% endblock %}
 {% block page_js %}
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-<script src="{{ url_for('fn_pedidos.static', filename='script/Sfn_pedidos.js') }}?v=15"></script>
+<script src="{{ url_for('fn_pedidos.static', filename='script/Sfn_pedidos.js') }}?v=16"></script>
 {% endblock %}

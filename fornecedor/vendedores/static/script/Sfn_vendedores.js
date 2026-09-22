@@ -461,7 +461,19 @@
       return;
     }
     dadosCache = j.dados || [];
+    atualizarResumo();
     aplicarFiltros();
+  }
+
+  function atualizarResumo() {
+    const nCon = dadosCache.filter((v) => v.status === "ativo").length;
+    const nAg = dadosCache.filter((v) => v.status === "aguardando").length;
+    const elC = document.getElementById("vd_nConectados");
+    const elA = document.getElementById("vd_nAguardando");
+    const lblC = document.getElementById("vd_lblConectados");
+    if (elC) elC.textContent = String(nCon);
+    if (elA) elA.textContent = String(nAg);
+    if (lblC) lblC.textContent = nCon === 1 ? "conectado" : "conectados";
   }
 
   lista.addEventListener("click", (e) => {

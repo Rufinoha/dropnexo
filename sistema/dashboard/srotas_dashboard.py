@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from flask import Blueprint, jsonify, render_template, session
+from flask import Blueprint, jsonify, render_template, request, session
 
 from global_utils import Var_ConectarBanco, exigir_modulo, login_obrigatorio
 from sistema.plataforma.sessao import MODULO_FORNECEDOR, MODULO_VENDEDOR
@@ -55,10 +55,15 @@ def dados_vendedor():
 
     from sistema.dashboard.servico_dashboard_vendedor import montar_dashboard_vendedor
 
+    try:
+        dias = int(request.args.get("dias") or 7)
+    except (TypeError, ValueError):
+        dias = 7
+
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
-        dados = montar_dashboard_vendedor(cur, id_tenant)
+        dados = montar_dashboard_vendedor(cur, id_tenant, dias)
         return jsonify(success=True, dados=dados)
     except Exception as e:
         try:
