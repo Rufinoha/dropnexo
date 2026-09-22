@@ -1477,6 +1477,73 @@ def cancelar_pedido(
         pass
 
 
+_STATUS_EXCLUIR_MANUAL = (
+    STATUS_RASCUNHO,
+    STATUS_IMPORTADO,
+    STATUS_AGUARDANDO,
+    STATUS_AGUARDANDO_CONFIRMACAO,
+    STATUS_CANCELADO,
+)
+
+
+def excluir_pedido_manual(
+    cur,
+    id_pedido: int,
+    *,
+    id_vendedor: int,
+) -> dict:
+    """Apaga o pedido do banco. Só pedido manual e que ainda não foi pago ou expedido."""
+    ped = obter_pedido(cur, id_pedido, id_vendedor=id_vendedor)
+    if not ped:
+        raise ValueError("Pedido não encontrado.")
+    origem = (ped.get("origem") or "manual").strip().lower()
+    if origem != "manual":
+        raise ValueError("Só é possível excluir pedido criado manualmente.")
+    st = status_vendedor_pedido(ped)
+    if st not in _STATUS_EXCLUIR_MANUAL:
+        raise ValueError("Pedido pago, em expedição ou entregue não pode ser excluído.")
+
+    if st in (STATUS_AGUARDANDO, STATUS_AGUARDANDO_CONFIRMACAO):
+        estornar_estoque_do_pedido(cur, id_pedido, ped=ped)
+
+    caminhos: list[str] = []
+    if _tem_tabela_anexo(cur):
+        cur.execute(
+            "SELECT caminho FROM tbl_pedido_anexo WHERE id_pedido = %s",
+            (id_pedido,),
+        )
+        caminhos = [r[0] for r in cur.fetchall() if r and r[0]]
+
+    cur.execute(
+        """
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = 'tbl_integracao_map'
+        """
+    )
+    if cur.fetchone():
+        cur.execute(
+            """
+            DELETE FROM tbl_integracao_map
+            WHERE entidade = 'pedido' AND id_dropnexo = %s
+            """,
+            (id_pedido,),
+        )
+
+    id_grupo = ped.get("id_grupo")
+    cur.execute(
+        "DELETE FROM tbl_pedido WHERE id = %s AND id_tenant_vendedor = %s",
+        (id_pedido, id_vendedor),
+    )
+    if id_grupo:
+        cur.execute("SELECT 1 FROM tbl_pedido WHERE id_grupo = %s LIMIT 1", (id_grupo,))
+        if not cur.fetchone():
+            cur.execute(
+                "DELETE FROM tbl_pedido_grupo WHERE id = %s AND id_tenant_vendedor = %s",
+                (id_grupo, id_vendedor),
+            )
+    return {"id": id_pedido, "caminhos": caminhos}
+
+
 def listar_pedidos_por_id_ml(cur, id_vendedor: int, id_ml_pedido: str) -> list[int]:
     """Retorna IDs DropNexo ligados a um pedido ML."""
     if "id_ml_pedido" not in _pedido_colunas(cur):

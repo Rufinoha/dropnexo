@@ -21,6 +21,7 @@ from core.pedidos.servico import (
     confirmar_grupo,
     confirmar_pedido,
     excluir_anexo_pedido,
+    excluir_pedido_manual,
     listar_anexos_pedido,
     pedido_tem_comprovante_pix,
     listar_fornecedores_pedido,
@@ -854,7 +855,49 @@ def pedidos_cancelar():
         conn.commit()
         return jsonify(success=True, message="Pedido cancelado.")
     except ValueError as e:
+        conn.rollback()
         return jsonify(success=False, message=str(e)), 400
+    finally:
+        conn.close()
+
+
+@vd_pedidos_bp.post("/vendedor/pedidos/excluir")
+@login_obrigatorio()
+@exigir_modulo(MODULO_VENDEDOR)
+@exigir_permissao(codigo="vd_pedidos.editar")
+def pedidos_excluir():
+    id_v = _id_vendedor()
+    if not id_v:
+        return jsonify(success=False, message="Sessão inválida."), 403
+    body = request.get_json(silent=True) or {}
+    try:
+        id_pedido = int(body.get("id_pedido"))
+    except (TypeError, ValueError):
+        return jsonify(success=False, message="Pedido inválido."), 400
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        info = excluir_pedido_manual(cur, id_pedido, id_vendedor=id_v)
+        conn.commit()
+        for caminho in info.get("caminhos") or []:
+            caminho = str(caminho).replace("\\", "/")
+            if not caminho or ".." in caminho.split("/"):
+                continue
+            arquivo = _RAIZ.joinpath(*caminho.split("/"))
+            if arquivo.is_file():
+                try:
+                    arquivo.unlink()
+                except OSError:
+                    pass
+        return jsonify(success=True, message="Pedido excluído.")
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 400
+    except Exception:
+        conn.rollback()
+        import logging
+        logging.getLogger(__name__).exception("Erro ao excluir pedido")
+        return jsonify(success=False, message="Erro interno ao excluir o pedido."), 500
     finally:
         conn.close()
 

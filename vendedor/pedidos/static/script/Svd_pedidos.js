@@ -486,13 +486,19 @@
     if (elBtnSalvar) elBtnSalvar.hidden = !editavelCampos;
     if (elBtnConfirmar) elBtnConfirmar.hidden = !editavelCampos;
 
-    const podeCancelar =
-      pedidosGrupo.some(
-        (p) =>
-          (stV(p) === "rascunho" || stV(p) === "aguardando_pagamento") &&
-          (p.origem || "manual") === "manual"
-      ) && !bloqueadoIntegracao;
-    if (elBtnCancelar) elBtnCancelar.hidden = !podeCancelar;
+    const statusExcluir = new Set([
+      "rascunho",
+      "importado",
+      "aguardando_pagamento",
+      "aguardando_confirmacao",
+      "cancelado",
+    ]);
+    const podeExcluir =
+      pedidosGrupo.length > 0 &&
+      pedidosGrupo.every(
+        (p) => p.id && (p.origem || "manual") === "manual" && statusExcluir.has(stV(p))
+      );
+    if (elBtnCancelar) elBtnCancelar.hidden = !podeExcluir;
 
     if (elBtnEmailTeste) {
       elBtnEmailTeste.hidden = !(ehDev && pedidosGrupo.some((p) => p.id));
@@ -2714,32 +2720,51 @@
     return jc;
   }
 
-  async function cancelarPedidoGrupo() {
-    const cancelaveis = pedidosGrupo.filter(
-      (p) =>
-        (stV(p) === "rascunho" ||
-          stV(p) === "aguardando_pagamento" ||
-          stV(p) === "aguardando_confirmacao") &&
-        (p.origem || "manual") === "manual"
+  async function excluirPedidoGrupo() {
+    const statusExcluir = new Set([
+      "rascunho",
+      "importado",
+      "aguardando_pagamento",
+      "aguardando_confirmacao",
+      "cancelado",
+    ]);
+    const alvos = pedidosGrupo.filter(
+      (p) => p.id && (p.origem || "manual") === "manual" && statusExcluir.has(stV(p))
     );
-    if (!cancelaveis.length) return;
-    if (!confirm("Cancelar este(s) pedido(s)?")) return;
+    if (!alvos.length) return;
+    const ok = window.Swal
+      ? (
+          await Swal.fire({
+            icon: "warning",
+            title: alvos.length > 1 ? "Excluir estes pedidos?" : "Excluir este pedido?",
+            text: "O pedido sai da lista. Essa ação não dá para desfazer.",
+            confirmButtonText: "Excluir",
+            cancelButtonText: "Voltar",
+            showCancelButton: true,
+            confirmButtonColor: "#b91c1c",
+          })
+        ).isConfirmed
+      : confirm("Excluir este pedido? Essa ação não dá para desfazer.");
+    if (!ok) return;
     try {
-      for (const p of cancelaveis) {
-        const r = await fetch("/vendedor/pedidos/cancelar", {
+      for (const p of alvos) {
+        const r = await fetch("/vendedor/pedidos/excluir", {
           method: "POST",
           credentials: "same-origin",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ id_pedido: p.id }),
         });
         const j = await parseJsonResp(r);
-        if (!j.success) throw new Error(j.message || "Erro ao cancelar.");
+        if (!j.success) throw new Error(j.message || "Erro ao excluir.");
       }
       fecharModal();
       await carregarLista();
+      if (window.Swal) {
+        Swal.fire({ icon: "success", title: "Pedido excluído", timer: 1400, showConfirmButton: false });
+      }
     } catch (e) {
       if (window.Swal) {
-        Swal.fire({ icon: "error", title: "Cancelar", text: e.message, confirmButtonColor: "#021F81" });
+        Swal.fire({ icon: "error", title: "Excluir", text: e.message, confirmButtonColor: "#021F81" });
       }
     }
   }
@@ -2812,7 +2837,7 @@
 
   document.getElementById("pd_btnNovo")?.addEventListener("click", abrirModal);
   document.getElementById("pd_btnFechar")?.addEventListener("click", fecharModal);
-  elBtnCancelar?.addEventListener("click", cancelarPedidoGrupo);
+  elBtnCancelar?.addEventListener("click", excluirPedidoGrupo);
   elBtnEmailTeste?.addEventListener("click", enviarEmailTesteLayout);
 
   document.querySelectorAll(".Pd_WizNavItem").forEach((btn) => {
