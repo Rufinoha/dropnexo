@@ -8,8 +8,20 @@
   const alertasEl = document.getElementById("dash_vd_alertas");
   const mostrarAvisos = document.getElementById("dash_vd_avisos_mostrar");
   const AVISO_KEY = "dash_vd_avisos_lidos";
+  const MESES_CURTO = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+  const pop = document.getElementById("dash_vd_mes_pop");
+  const btnMes = document.getElementById("dash_vd_rotulo");
+  const grade = document.getElementById("dash_vd_mes_grade");
+  const popAnoEl = document.getElementById("dash_vd_pop_ano");
 
   let avisosAtuais = [];
+  let anoSel = null;
+  let mesSel = null;
+  let hojeAno = null;
+  let hojeMes = null;
+  let anoMin = null;
+  let popAno = null;
+  let ehMesAtual = true;
 
   function esc(s) {
     const d = document.createElement("div");
@@ -130,13 +142,13 @@
     }
   }
 
-  function barra(d, max, maxH, label, valorTxt, extraCls) {
+  function barra(d, max, maxH, label, valorTxt, extraCls, attrs) {
     const valor = Number(d.vendido) || 0;
     const h = max > 0 && valor > 0 ? Math.max(8, Math.round((valor / max) * maxH)) : 4;
     const zero = valor <= 0;
     const cls = "DashVd_Bar" + (d.hoje || d.atual ? " is-hoje" : "") + (zero ? " is-zero" : "") + (extraCls || "");
     return (
-      '<button type="button" class="' + cls + '" style="--h:' + h + 'px">' +
+      '<button type="button" class="' + cls + '" style="--h:' + h + 'px"' + (attrs || "") + ">" +
       '<span class="DashVd_Tip"><b>' + esc(d.vendido_fmt || moeda(valor)) + "</b>" +
       "<span>" + esc(d.pedidos) + (d.pedidos === 1 ? " pedido" : " pedidos") + "</span>" +
       (d.margem_fmt ? "<span>Margem " + esc(d.margem_fmt) + "</span>" : "") +
@@ -153,7 +165,9 @@
     const legenda = document.getElementById("dash_vd_chart_legenda");
     const ultimo = rows.length ? rows[rows.length - 1].dia_num : 0;
     if (legenda && ultimo) {
-      legenda.textContent = "Do dia 1 ao " + ultimo + ". Ouro é hoje.";
+      legenda.textContent = ehMesAtual
+        ? "Do dia 1 ao " + ultimo + ". Ouro é hoje."
+        : "Do dia 1 ao " + ultimo + ".";
     }
     if (!rows.length) {
       box.innerHTML = '<p class="DashVd_Vazio">Sem dias neste mês.</p>';
@@ -189,7 +203,9 @@
       .map((d) => {
         const valor = Number(d.vendido) || 0;
         const txt = valor > 0 ? curto(valor) : "";
-        return barra(d, max, 96, d.label || "", txt, "");
+        const futuro = ano != null && hojeAno != null && (ano > hojeAno || (ano === hojeAno && d.mes > hojeMes));
+        const attrs = futuro ? "" : ' data-mes="' + esc(d.mes) + '"';
+        return barra(d, max, 96, d.label || "", txt, futuro ? " is-futuro" : "", attrs);
       })
       .join("");
   }
@@ -220,18 +236,72 @@
       "</ol>";
   }
 
+  function fecharMes() {
+    if (!pop || !btnMes) return;
+    pop.hidden = true;
+    btnMes.setAttribute("aria-expanded", "false");
+  }
+
+  function pintarGrade() {
+    if (!grade || popAno == null) return;
+    if (popAnoEl) popAnoEl.textContent = String(popAno);
+    const prev = document.getElementById("dash_vd_ano_prev");
+    const next = document.getElementById("dash_vd_ano_next");
+    if (prev) prev.disabled = anoMin != null && popAno <= anoMin;
+    if (next) next.disabled = hojeAno != null && popAno >= hojeAno;
+    grade.innerHTML = MESES_CURTO.map((nome, i) => {
+      const m = i + 1;
+      const futuro = hojeAno != null && (popAno > hojeAno || (popAno === hojeAno && m > hojeMes));
+      const on = popAno === anoSel && m === mesSel;
+      const hoje = popAno === hojeAno && m === hojeMes;
+      const cls = (on ? " is-on" : "") + (hoje ? " is-hoje" : "");
+      return (
+        '<button type="button" class="' + cls.trim() + '" data-mes="' + m + '"' +
+        (futuro ? " disabled" : "") + ">" + nome + "</button>"
+      );
+    }).join("");
+  }
+
+  function abrirMes() {
+    if (!pop || !btnMes) return;
+    popAno = anoSel || hojeAno;
+    pintarGrade();
+    pop.hidden = false;
+    btnMes.setAttribute("aria-expanded", "true");
+  }
+
+  function irPara(ano, mes) {
+    anoSel = ano;
+    mesSel = mes;
+    fecharMes();
+    carregar();
+  }
+
   async function carregar() {
     try {
       if (erro) erro.hidden = true;
-      const r = await fetch("/index/dados-vendedor", { credentials: "same-origin" });
+      const qs = new URLSearchParams();
+      if (anoSel && mesSel) {
+        qs.set("ano", String(anoSel));
+        qs.set("mes", String(mesSel));
+      }
+      const url = "/index/dados-vendedor" + (qs.toString() ? "?" + qs.toString() : "");
+      const r = await fetch(url, { credentials: "same-origin" });
       const j = await r.json();
       if (!j.success) throw new Error(j.message || "Falha ao carregar.");
       const d = j.dados || {};
+      anoSel = d.ano || anoSel;
+      mesSel = d.mes || mesSel;
+      hojeAno = d.hoje_ano || hojeAno;
+      hojeMes = d.hoje_mes || hojeMes;
+      anoMin = d.ano_min || anoMin;
+      ehMesAtual = !!d.eh_mes_atual;
       renderKpis(d.kpis || {}, d.rotulo, d.comparacao);
       renderChart(d.serie || []);
       renderAno(d.ano_serie || [], d.ano);
       renderTop(d.top_produtos || []);
       renderAlertas(d.alertas || []);
+      if (pop && !pop.hidden) pintarGrade();
       if (loading) loading.hidden = true;
       root.removeAttribute("data-loading");
     } catch (e) {
@@ -264,6 +334,64 @@
       renderAlertas(avisosAtuais);
     });
   }
+
+  if (btnMes) {
+    btnMes.addEventListener("click", () => {
+      if (pop && !pop.hidden) fecharMes();
+      else abrirMes();
+    });
+  }
+
+  if (grade) {
+    grade.addEventListener("click", (ev) => {
+      const btn = ev.target.closest("button[data-mes]");
+      if (!btn || btn.disabled || popAno == null) return;
+      irPara(popAno, Number(btn.getAttribute("data-mes")));
+    });
+  }
+
+  const anoPrev = document.getElementById("dash_vd_ano_prev");
+  const anoNext = document.getElementById("dash_vd_ano_next");
+  if (anoPrev) {
+    anoPrev.addEventListener("click", () => {
+      if (anoMin != null && popAno <= anoMin) return;
+      popAno -= 1;
+      pintarGrade();
+    });
+  }
+  if (anoNext) {
+    anoNext.addEventListener("click", () => {
+      if (hojeAno != null && popAno >= hojeAno) return;
+      popAno += 1;
+      pintarGrade();
+    });
+  }
+
+  const btnHoje = document.getElementById("dash_vd_mes_hoje");
+  if (btnHoje) {
+    btnHoje.addEventListener("click", () => {
+      if (hojeAno && hojeMes) irPara(hojeAno, hojeMes);
+    });
+  }
+
+  const anoChart = document.getElementById("dash_vd_ano_chart");
+  if (anoChart) {
+    anoChart.addEventListener("click", (ev) => {
+      const btn = ev.target.closest("[data-mes]");
+      if (!btn || !anoSel) return;
+      irPara(anoSel, Number(btn.getAttribute("data-mes")));
+    });
+  }
+
+  document.addEventListener("click", (ev) => {
+    if (!pop || pop.hidden) return;
+    if (ev.target.closest(".DashVd_MesWrap")) return;
+    fecharMes();
+  });
+
+  document.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape") fecharMes();
+  });
 
   carregar();
 })();

@@ -4,7 +4,7 @@
 {% block topbar_title %}Dashboard{% endblock %}
 {% block head_extra %}
 {% if modulo_ativo == 'vendedor' %}
-<link rel="stylesheet" href="{{ url_for('dashboard.static', filename='style/Cdashboard_vendedor.css') }}?v=4" />
+<link rel="stylesheet" href="{{ url_for('dashboard.static', filename='style/Cdashboard_vendedor.css') }}?v=5" />
 {% elif modulo_ativo == 'fornecedor' %}
 <link rel="stylesheet" href="{{ url_for('dashboard.static', filename='style/Cdashboard_fornecedor.css') }}?v=1" />
 {% elif modulo_ativo == 'armazem' %}
@@ -45,7 +45,18 @@
     <header class="DashVd_PainelHead">
       <div>
         <p class="DashVd_Kicker">Resultado do mês</p>
-        <h3 id="dash_vd_rotulo">Mês atual</h3>
+        <div class="DashVd_MesWrap">
+          <button type="button" class="DashVd_MesBtn" id="dash_vd_rotulo" aria-haspopup="dialog" aria-expanded="false">Mês atual</button>
+          <div class="DashVd_MesPop" id="dash_vd_mes_pop" hidden role="dialog" aria-label="Escolher mês">
+            <div class="DashVd_MesAno">
+              <button type="button" id="dash_vd_ano_prev" aria-label="Ano anterior">‹</button>
+              <strong id="dash_vd_pop_ano">—</strong>
+              <button type="button" id="dash_vd_ano_next" aria-label="Próximo ano">›</button>
+            </div>
+            <div class="DashVd_MesGrade" id="dash_vd_mes_grade"></div>
+            <button type="button" class="DashVd_MesHoje" id="dash_vd_mes_hoje">Voltar ao mês atual</button>
+          </div>
+        </div>
       </div>
     </header>
 
@@ -211,7 +222,7 @@
 {% endblock %}
 {% block page_js %}
 {% if modulo_ativo == 'vendedor' %}
-<script src="{{ url_for('dashboard.static', filename='script/Sdashboard_vendedor.js') }}?v=4"></script>
+<script src="{{ url_for('dashboard.static', filename='script/Sdashboard_vendedor.js') }}?v=5"></script>
 {% elif modulo_ativo == 'fornecedor' %}
 <script src="{{ url_for('dashboard.static', filename='script/Sdashboard_fornecedor.js') }}?v=2"></script>
 {% endif %}

@@ -47,16 +47,36 @@ def _hoje_sp() -> date:
     return datetime.now(ZoneInfo("America/Sao_Paulo")).date()
 
 
-def _mes_calendario() -> tuple[date, date, date, date, date]:
-    """Hoje, 1º do mês, último dia, 1º do mês anterior, último dia do mês anterior."""
+def _recorte(ano: int | None, mes: int | None):
+    """Mês pedido, limitado ao mês atual. Sem ano/mês, usa o mês de hoje."""
     import calendar
 
     hoje = _hoje_sp()
-    inicio = hoje.replace(day=1)
-    fim = date(hoje.year, hoje.month, calendar.monthrange(hoje.year, hoje.month)[1])
+    ano_min = hoje.year - 4
+    try:
+        ano_n = int(ano) if ano is not None else hoje.year
+        mes_n = int(mes) if mes is not None else hoje.month
+    except (TypeError, ValueError):
+        ano_n, mes_n = hoje.year, hoje.month
+    if ano_n < ano_min:
+        ano_n = ano_min
+    if ano_n > hoje.year or (ano_n == hoje.year and mes_n > hoje.month):
+        ano_n, mes_n = hoje.year, hoje.month
+    if mes_n < 1 or mes_n > 12:
+        mes_n = hoje.month if ano_n == hoje.year else 1
+
+    inicio = date(ano_n, mes_n, 1)
+    fim = date(ano_n, mes_n, calendar.monthrange(ano_n, mes_n)[1])
     fim_ant = inicio - timedelta(days=1)
     inicio_ant = fim_ant.replace(day=1)
-    return hoje, inicio, fim, inicio_ant, fim_ant
+    eh_atual = ano_n == hoje.year and mes_n == hoje.month
+    if eh_atual:
+        fim_comp = date(inicio_ant.year, inicio_ant.month, min(hoje.day, fim_ant.day))
+        fim_totais = hoje
+    else:
+        fim_comp = fim_ant
+        fim_totais = fim
+    return hoje, inicio, fim, inicio_ant, fim_comp, fim_totais, eh_atual, ano_min
 
 
 def _totais_periodo(cur, id_vendedor: int, cv: str, inicio: date, fim: date) -> dict:
@@ -229,13 +249,12 @@ def _serie_anual(cur, id_vendedor: int, cv: str, ano: int, mes_atual: int) -> li
     return out
 
 
-def montar_dashboard_vendedor(cur, id_vendedor: int) -> dict:
+def montar_dashboard_vendedor(cur, id_vendedor: int, ano: int | None = None, mes: int | None = None) -> dict:
     cv = col_status_vendedor(cur)
-    hoje, inicio, fim, inicio_ant, fim_ant = _mes_calendario()
-    fim_igual_ant = date(inicio_ant.year, inicio_ant.month, min(hoje.day, fim_ant.day))
+    hoje, inicio, fim, inicio_ant, fim_comp, fim_totais, eh_atual, ano_min = _recorte(ano, mes)
 
-    atual = _totais_periodo(cur, id_vendedor, cv, inicio, hoje)
-    anterior = _totais_periodo(cur, id_vendedor, cv, inicio_ant, fim_igual_ant)
+    atual = _totais_periodo(cur, id_vendedor, cv, inicio, fim_totais)
+    anterior = _totais_periodo(cur, id_vendedor, cv, inicio_ant, fim_comp)
     delta_pct = _pct(atual["vendido"] - anterior["vendido"], anterior["vendido"])
 
     cur.execute(
@@ -364,7 +383,12 @@ def montar_dashboard_vendedor(cur, id_vendedor: int) -> dict:
     return {
         "rotulo": rotulo,
         "comparacao": _MESES[inicio_ant.month - 1],
-        "ano": hoje.year,
+        "ano": inicio.year,
+        "mes": inicio.month,
+        "hoje_ano": hoje.year,
+        "hoje_mes": hoje.month,
+        "ano_min": ano_min,
+        "eh_mes_atual": eh_atual,
         "kpis": {
             **atual,
             "delta_pct": delta_pct,
@@ -373,7 +397,7 @@ def montar_dashboard_vendedor(cur, id_vendedor: int) -> dict:
             "fornecedores_ativos": vinculos["ativo"],
         },
         "serie": _serie_diaria(cur, id_vendedor, cv, inicio, fim, hoje),
-        "ano_serie": _serie_anual(cur, id_vendedor, cv, hoje.year, hoje.month),
-        "top_produtos": _top_produtos(cur, id_vendedor, cv, inicio, fim),
+        "ano_serie": _serie_anual(cur, id_vendedor, cv, inicio.year, inicio.month),
+        "top_produtos": _top_produtos(cur, id_vendedor, cv, inicio, fim_totais),
         "alertas": alertas,
     }

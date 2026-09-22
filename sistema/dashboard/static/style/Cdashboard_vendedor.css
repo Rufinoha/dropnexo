@@ -125,12 +125,131 @@
   color: var(--vd-gold-deep);
 }
 
-.DashVd_PainelHead h3 {
+.DashVd_MesWrap { position: relative; }
+
+.DashVd_MesBtn {
   margin: 0;
+  padding: 0 1.35rem 0 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
   font-size: 1.35rem;
+  font-weight: 700;
   letter-spacing: -0.03em;
   color: var(--vd-navy);
+  cursor: pointer;
+  position: relative;
 }
+
+.DashVd_MesBtn::after {
+  content: "";
+  position: absolute;
+  right: 0.15rem;
+  top: 50%;
+  width: 0.45rem;
+  height: 0.45rem;
+  border-right: 2px solid var(--vd-gold-deep);
+  border-bottom: 2px solid var(--vd-gold-deep);
+  transform: translateY(-70%) rotate(45deg);
+}
+
+.DashVd_MesBtn:hover { color: var(--vd-navy-deep); }
+
+.DashVd_MesPop {
+  position: absolute;
+  z-index: 6;
+  top: calc(100% + 0.45rem);
+  left: 0;
+  width: 16.5rem;
+  padding: 0.75rem 0.75rem 0.65rem;
+  border-radius: 16px;
+  border: 1px solid var(--vd-line);
+  background: #fff;
+  box-shadow: 0 18px 40px rgba(2, 31, 129, 0.14);
+}
+
+.DashVd_MesAno {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.55rem;
+}
+
+.DashVd_MesAno strong {
+  font-size: 0.95rem;
+  color: var(--vd-navy);
+}
+
+.DashVd_MesAno button,
+.DashVd_MesHoje {
+  border: 0;
+  background: #f4f7fb;
+  color: var(--vd-navy);
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.DashVd_MesAno button {
+  width: 1.8rem;
+  height: 1.8rem;
+  border-radius: 8px;
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+.DashVd_MesAno button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.DashVd_MesGrade {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.35rem;
+}
+
+.DashVd_MesGrade button {
+  border: 1px solid transparent;
+  background: #f7f9fc;
+  color: var(--vd-ink);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  border-radius: 9px;
+  padding: 0.42rem 0.2rem;
+  cursor: pointer;
+}
+
+.DashVd_MesGrade button:hover { background: #eef2fb; }
+
+.DashVd_MesGrade button.is-on {
+  background: var(--vd-navy);
+  color: #fff;
+}
+
+.DashVd_MesGrade button.is-hoje:not(.is-on) {
+  border-color: var(--vd-gold);
+  color: var(--vd-gold-deep);
+}
+
+.DashVd_MesGrade button:disabled {
+  opacity: 0.35;
+  cursor: default;
+  background: transparent;
+}
+
+.DashVd_MesHoje {
+  display: block;
+  width: 100%;
+  margin-top: 0.55rem;
+  border-radius: 9px;
+  padding: 0.4rem 0.5rem;
+  font-size: 0.75rem;
+}
+
+.DashVd_Chart.is-ano .DashVd_Bar[data-mes] { cursor: pointer; }
+.DashVd_Bar.is-futuro { opacity: 0.4; cursor: default; }
 
 .DashVd_Hero {
   display: grid;
