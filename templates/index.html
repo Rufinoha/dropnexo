@@ -4,7 +4,7 @@
 {% block topbar_title %}Dashboard{% endblock %}
 {% block head_extra %}
 {% if modulo_ativo == 'vendedor' %}
-<link rel="stylesheet" href="{{ url_for('dashboard.static', filename='style/Cdashboard_vendedor.css') }}?v=3" />
+<link rel="stylesheet" href="{{ url_for('dashboard.static', filename='style/Cdashboard_vendedor.css') }}?v=4" />
 {% elif modulo_ativo == 'fornecedor' %}
 <link rel="stylesheet" href="{{ url_for('dashboard.static', filename='style/Cdashboard_fornecedor.css') }}?v=1" />
 {% elif modulo_ativo == 'armazem' %}
@@ -36,25 +36,16 @@
   <p class="DashVd_Loading" id="dash_vd_loading">Carregando painel…</p>
   <div id="dash_vd_erro" class="DashVd_Erro" hidden></div>
 
-  <section class="DashVd_Secao" id="dash_vd_alertas_wrap" hidden>
-    <h3 class="DashVd_Titulo">Precisa da sua atenção</h3>
-    <div id="dash_vd_alertas" class="DashVd_Alertas"></div>
-  </section>
+  <div class="DashVd_Avisos" id="dash_vd_alertas_wrap" hidden>
+    <div id="dash_vd_alertas" class="DashVd_AvisosLista"></div>
+    <button type="button" class="DashVd_AvisosMostrar" id="dash_vd_avisos_mostrar" hidden></button>
+  </div>
 
-  <section class="DashVd_Secao" id="dash_vd_ok" hidden>
-    <div class="DashVd_OkCard">Tudo em dia por aqui. Nenhum alerta no momento.</div>
-  </section>
-
-  <section class="DashVd_Painel" aria-label="Resultado do período">
+  <section class="DashVd_Painel" aria-label="Resultado do mês">
     <header class="DashVd_PainelHead">
       <div>
-        <p class="DashVd_Kicker">Resultado</p>
-        <h3 id="dash_vd_rotulo">Últimos 7 dias</h3>
-      </div>
-      <div class="DashVd_Chips" role="tablist" aria-label="Recorte">
-        <button type="button" data-dias="1" role="tab">Hoje</button>
-        <button type="button" class="is-on" data-dias="7" role="tab" aria-selected="true">7 dias</button>
-        <button type="button" data-dias="30" role="tab">30 dias</button>
+        <p class="DashVd_Kicker">Resultado do mês</p>
+        <h3 id="dash_vd_rotulo">Mês atual</h3>
       </div>
     </header>
 
@@ -84,18 +75,21 @@
     <div class="DashVd_ChartCard">
       <div class="DashVd_ChartHead">
         <h4>Dia a dia</h4>
-        <p>Ouro é hoje. Azul é o restante do recorte.</p>
+        <p id="dash_vd_chart_legenda">Do dia 1 ao último dia do mês. Ouro é hoje.</p>
       </div>
       <div class="DashVd_Chart" id="dash_vd_chart"></div>
     </div>
 
     <div class="DashVd_Split">
       <article class="DashVd_Card">
-        <h4>De onde veio</h4>
-        <div id="dash_vd_origens"></div>
+        <div class="DashVd_ChartHead">
+          <h4>Faturamento de <span id="dash_vd_ano">—</span></h4>
+          <p id="dash_vd_ano_total"></p>
+        </div>
+        <div class="DashVd_Chart is-ano" id="dash_vd_ano_chart"></div>
       </article>
       <article class="DashVd_Card">
-        <h4>O que mais saiu</h4>
+        <h4>Top 5 do mês</h4>
         <div id="dash_vd_top"></div>
       </article>
     </div>
@@ -217,7 +211,7 @@
 {% endblock %}
 {% block page_js %}
 {% if modulo_ativo == 'vendedor' %}
-<script src="{{ url_for('dashboard.static', filename='script/Sdashboard_vendedor.js') }}?v=3"></script>
+<script src="{{ url_for('dashboard.static', filename='script/Sdashboard_vendedor.js') }}?v=4"></script>
 {% elif modulo_ativo == 'fornecedor' %}
 <script src="{{ url_for('dashboard.static', filename='script/Sdashboard_fornecedor.js') }}?v=2"></script>
 {% endif %}

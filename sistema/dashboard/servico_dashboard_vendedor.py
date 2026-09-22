@@ -12,17 +12,6 @@ CANAIS_INTEGRACAO = (
     ("tbl_integracao_melhor_envio", "Melhor Envio", "/integracoes/melhor-envio"),
 )
 
-ORIGEM_LABEL = {
-    "manual": "Manual",
-    "mercado_livre": "Mercado Livre",
-    "bling": "Bling",
-    "tiktok": "TikTok",
-    "amazon": "Amazon",
-}
-
-ORIGEM_ORDEM = ("manual", "mercado_livre", "bling", "tiktok", "amazon")
-
-
 def _fmt_brl(v) -> str:
     try:
         n = float(v or 0)
@@ -44,20 +33,30 @@ def _pct(parte: float, todo: float) -> float | None:
     return round((parte / todo) * 100, 1)
 
 
-def _normalizar_dias(dias: int) -> int:
-    return dias if dias in (1, 7, 30) else 7
+_MESES = (
+    "janeiro", "fevereiro", "março", "abril", "maio", "junho",
+    "julho", "agosto", "setembro", "outubro", "novembro", "dezembro",
+)
+_MESES_CURTO = ("jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez")
 
 
-def _janela(dias: int) -> tuple[date, date, date, date]:
-    """Retorna (inicio, fim, inicio_anterior, fim_anterior) no fuso de São Paulo."""
+def _hoje_sp() -> date:
     from datetime import datetime
     from zoneinfo import ZoneInfo
 
-    hoje = datetime.now(ZoneInfo("America/Sao_Paulo")).date()
-    inicio = hoje - timedelta(days=dias - 1)
+    return datetime.now(ZoneInfo("America/Sao_Paulo")).date()
+
+
+def _mes_calendario() -> tuple[date, date, date, date, date]:
+    """Hoje, 1º do mês, último dia, 1º do mês anterior, último dia do mês anterior."""
+    import calendar
+
+    hoje = _hoje_sp()
+    inicio = hoje.replace(day=1)
+    fim = date(hoje.year, hoje.month, calendar.monthrange(hoje.year, hoje.month)[1])
     fim_ant = inicio - timedelta(days=1)
-    inicio_ant = fim_ant - timedelta(days=dias - 1)
-    return inicio, hoje, inicio_ant, fim_ant
+    inicio_ant = fim_ant.replace(day=1)
+    return hoje, inicio, fim, inicio_ant, fim_ant
 
 
 def _totais_periodo(cur, id_vendedor: int, cv: str, inicio: date, fim: date) -> dict:
@@ -104,7 +103,7 @@ def _totais_periodo(cur, id_vendedor: int, cv: str, inicio: date, fim: date) -> 
     }
 
 
-def _serie_diaria(cur, id_vendedor: int, cv: str, inicio: date, fim: date) -> list[dict]:
+def _serie_diaria(cur, id_vendedor: int, cv: str, inicio: date, fim: date, hoje: date) -> list[dict]:
     cur.execute(
         f"""
         WITH dias AS (
@@ -139,7 +138,6 @@ def _serie_diaria(cur, id_vendedor: int, cv: str, inicio: date, fim: date) -> li
         """,
         (inicio, fim, id_vendedor, inicio, fim),
     )
-    hoje = fim
     out = []
     for dia, vendido, custo, pedidos in cur.fetchall():
         vendido_n = _num(vendido)
@@ -160,44 +158,6 @@ def _serie_diaria(cur, id_vendedor: int, cv: str, inicio: date, fim: date) -> li
             }
         )
     return out
-
-
-def _por_origem(cur, id_vendedor: int, cv: str, inicio: date, fim: date) -> list[dict]:
-    cur.execute(
-        f"""
-        SELECT LOWER(COALESCE(NULLIF(TRIM(p.origem), ''), 'manual')) AS origem,
-               COUNT(DISTINCT p.id)::int,
-               COALESCE(SUM(i.preco_venda * i.quantidade), 0)
-        FROM tbl_pedido p
-        LEFT JOIN tbl_pedido_item i ON i.id_pedido = p.id
-        WHERE p.id_tenant_vendedor = %s
-          AND COALESCE(p.{cv}, '') <> 'cancelado'
-          AND (p.criado_em AT TIME ZONE 'America/Sao_Paulo')::date BETWEEN %s AND %s
-        GROUP BY 1
-        """,
-        (id_vendedor, inicio, fim),
-    )
-    bruto = { (r[0] or "manual"): (int(r[1] or 0), _num(r[2])) for r in cur.fetchall() }
-    total = sum(v[1] for v in bruto.values()) or 0
-    chaves = [k for k in ORIGEM_ORDEM if k in bruto]
-    extras = [k for k in bruto if k not in ORIGEM_ORDEM]
-    linhas = []
-    for chave in chaves + extras:
-        qtd, vendido = bruto[chave]
-        if qtd <= 0 and vendido <= 0:
-            continue
-        linhas.append(
-            {
-                "origem": chave,
-                "label": ORIGEM_LABEL.get(chave, chave.replace("_", " ").title()),
-                "pedidos": qtd,
-                "vendido": vendido,
-                "vendido_fmt": _fmt_brl(vendido),
-                "pct": _pct(vendido, total) or 0,
-            }
-        )
-    linhas.sort(key=lambda x: x["vendido"], reverse=True)
-    return linhas
 
 
 def _top_produtos(cur, id_vendedor: int, cv: str, inicio: date, fim: date) -> list[dict]:
@@ -237,13 +197,45 @@ def _top_produtos(cur, id_vendedor: int, cv: str, inicio: date, fim: date) -> li
     return out
 
 
-def montar_dashboard_vendedor(cur, id_vendedor: int, dias: int = 7) -> dict:
-    cv = col_status_vendedor(cur)
-    dias = _normalizar_dias(int(dias or 7))
-    inicio, fim, inicio_ant, fim_ant = _janela(dias)
+def _serie_anual(cur, id_vendedor: int, cv: str, ano: int, mes_atual: int) -> list[dict]:
+    cur.execute(
+        f"""
+        SELECT EXTRACT(MONTH FROM (p.criado_em AT TIME ZONE 'America/Sao_Paulo'))::int,
+               COALESCE(SUM(i.preco_venda * i.quantidade), 0),
+               COUNT(DISTINCT p.id)::int
+        FROM tbl_pedido p
+        LEFT JOIN tbl_pedido_item i ON i.id_pedido = p.id
+        WHERE p.id_tenant_vendedor = %s
+          AND COALESCE(p.{cv}, '') <> 'cancelado'
+          AND EXTRACT(YEAR FROM (p.criado_em AT TIME ZONE 'America/Sao_Paulo')) = %s
+        GROUP BY 1
+        """,
+        (id_vendedor, ano),
+    )
+    por_mes = {int(r[0]): (_num(r[1]), int(r[2] or 0)) for r in cur.fetchall() if r[0]}
+    out = []
+    for mes in range(1, 13):
+        vendido, pedidos = por_mes.get(mes, (0.0, 0))
+        out.append(
+            {
+                "mes": mes,
+                "label": _MESES_CURTO[mes - 1],
+                "atual": mes == mes_atual,
+                "vendido": vendido,
+                "vendido_fmt": _fmt_brl(vendido),
+                "pedidos": pedidos,
+            }
+        )
+    return out
 
-    atual = _totais_periodo(cur, id_vendedor, cv, inicio, fim)
-    anterior = _totais_periodo(cur, id_vendedor, cv, inicio_ant, fim_ant)
+
+def montar_dashboard_vendedor(cur, id_vendedor: int) -> dict:
+    cv = col_status_vendedor(cur)
+    hoje, inicio, fim, inicio_ant, fim_ant = _mes_calendario()
+    fim_igual_ant = date(inicio_ant.year, inicio_ant.month, min(hoje.day, fim_ant.day))
+
+    atual = _totais_periodo(cur, id_vendedor, cv, inicio, hoje)
+    anterior = _totais_periodo(cur, id_vendedor, cv, inicio_ant, fim_igual_ant)
     delta_pct = _pct(atual["vendido"] - anterior["vendido"], anterior["vendido"])
 
     cur.execute(
@@ -368,10 +360,11 @@ def montar_dashboard_vendedor(cur, id_vendedor: int, dias: int = 7) -> dict:
     nivel_rank = {"alta": 0, "media": 1, "baixa": 2}
     alertas.sort(key=lambda a: nivel_rank.get(a.get("nivel"), 9))
 
-    rotulo = {1: "Hoje", 7: "Últimos 7 dias", 30: "Últimos 30 dias"}[dias]
+    rotulo = f"{_MESES[inicio.month - 1].capitalize()} de {inicio.year}"
     return {
-        "dias": dias,
         "rotulo": rotulo,
+        "comparacao": _MESES[inicio_ant.month - 1],
+        "ano": hoje.year,
         "kpis": {
             **atual,
             "delta_pct": delta_pct,
@@ -379,8 +372,8 @@ def montar_dashboard_vendedor(cur, id_vendedor: int, dias: int = 7) -> dict:
             "produtos_ativos": produtos_ativos,
             "fornecedores_ativos": vinculos["ativo"],
         },
-        "serie": _serie_diaria(cur, id_vendedor, cv, inicio, fim),
-        "origens": _por_origem(cur, id_vendedor, cv, inicio, fim),
+        "serie": _serie_diaria(cur, id_vendedor, cv, inicio, fim, hoje),
+        "ano_serie": _serie_anual(cur, id_vendedor, cv, hoje.year, hoje.month),
         "top_produtos": _top_produtos(cur, id_vendedor, cv, inicio, fim),
         "alertas": alertas,
     }
