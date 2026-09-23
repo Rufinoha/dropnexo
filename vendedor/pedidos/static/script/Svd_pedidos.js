@@ -282,6 +282,7 @@
           ${icoBtn("editar", stV(p) === "rascunho" ? "Editar pedido" : "Ver pedido", "Pd_BtnEdit", `data-acao="editar" data-id="${p.id}" data-grupo="${p.id_grupo || ""}" data-status="${esc(stV(p))}"`)}
           ${icoBtn("nf_hub", "Incluir NF", "Pd_BtnNf", `data-acao="nf" data-id="${p.id}" data-grupo="${p.id_grupo || ""}"`)}
           ${icoBtn("etiqueta", "Incluir etiqueta", "Pd_BtnEtq", `data-acao="etiqueta" data-id="${p.id}" data-grupo="${p.id_grupo || ""}"`)}
+          ${(p.origem || "manual") === "manual" && stV(p) !== "cancelado" ? icoBtn("cancelar", "Cancelar pedido", "Pd_BtnCancel", `data-acao="cancelar" data-id="${p.id}"`) : ""}
         </td>
       </tr>`
       )
@@ -486,19 +487,10 @@
     if (elBtnSalvar) elBtnSalvar.hidden = !editavelCampos;
     if (elBtnConfirmar) elBtnConfirmar.hidden = !editavelCampos;
 
-    const statusExcluir = new Set([
-      "rascunho",
-      "importado",
-      "aguardando_pagamento",
-      "aguardando_confirmacao",
-      "cancelado",
-    ]);
-    const podeExcluir =
-      pedidosGrupo.length > 0 &&
-      pedidosGrupo.every(
-        (p) => p.id && (p.origem || "manual") === "manual" && statusExcluir.has(stV(p))
-      );
-    if (elBtnCancelar) elBtnCancelar.hidden = !podeExcluir;
+    const podeCancelar = pedidosGrupo.some(
+      (p) => p.id && (p.origem || "manual") === "manual" && stV(p) !== "cancelado"
+    );
+    if (elBtnCancelar) elBtnCancelar.hidden = !podeCancelar;
 
     if (elBtnEmailTeste) {
       elBtnEmailTeste.hidden = !(ehDev && pedidosGrupo.some((p) => p.id));
@@ -2720,51 +2712,74 @@
     return jc;
   }
 
-  async function excluirPedidoGrupo() {
-    const statusExcluir = new Set([
-      "rascunho",
-      "importado",
-      "aguardando_pagamento",
-      "aguardando_confirmacao",
-      "cancelado",
-    ]);
-    const alvos = pedidosGrupo.filter(
-      (p) => p.id && (p.origem || "manual") === "manual" && statusExcluir.has(stV(p))
-    );
-    if (!alvos.length) return;
+  const STATUS_PODE_CANCELAR = new Set([
+    "rascunho",
+    "importado",
+    "aguardando_pagamento",
+    "aguardando_confirmacao",
+  ]);
+
+  function motivoNaoCancelar(p) {
+    if ((p.origem || "manual") !== "manual") {
+      return "Pedido de canal não pode ser cancelado por aqui.";
+    }
+    const st = stV(p);
+    if (STATUS_PODE_CANCELAR.has(st)) return "";
+    if (st === "pago") return "Pedido pago não pode ser cancelado. O fornecedor já recebeu o pagamento.";
+    if (st === "em_expedicao") return "Pedido em expedição não pode ser cancelado. O fornecedor já está despachando.";
+    if (st === "entregue") return "Pedido entregue não pode ser cancelado.";
+    if (st === "cancelado") return "Este pedido já está cancelado.";
+    return "Este status não pode ser cancelado.";
+  }
+
+  async function cancelarPedidos(peds) {
+    const lista = (peds || []).filter((p) => p && p.id && stV(p) !== "cancelado");
+    if (!lista.length) return;
+    const liberados = lista.filter((p) => !motivoNaoCancelar(p));
+    const bloqueados = lista.filter((p) => motivoNaoCancelar(p));
+    if (!liberados.length) {
+      const texto = motivoNaoCancelar(bloqueados[0]);
+      if (window.Swal) {
+        Swal.fire({ icon: "info", title: "Não é possível cancelar", text: texto, confirmButtonColor: "#021F81" });
+      }
+      return;
+    }
+    const aviso = bloqueados.length
+      ? " Alguns deste grupo não entram: " + bloqueados.map((p) => (p.numero || p.id) + " — " + motivoNaoCancelar(p)).join(" ")
+      : "";
     const ok = window.Swal
       ? (
           await Swal.fire({
             icon: "warning",
-            title: alvos.length > 1 ? "Excluir estes pedidos?" : "Excluir este pedido?",
-            text: "O pedido sai da lista. Essa ação não dá para desfazer.",
-            confirmButtonText: "Excluir",
+            title: liberados.length > 1 ? "Cancelar estes pedidos?" : "Cancelar este pedido?",
+            text: "O número permanece na lista, com status cancelado." + aviso,
+            confirmButtonText: "Cancelar pedido",
             cancelButtonText: "Voltar",
             showCancelButton: true,
             confirmButtonColor: "#b91c1c",
           })
         ).isConfirmed
-      : confirm("Excluir este pedido? Essa ação não dá para desfazer.");
+      : confirm("Cancelar este pedido? O número permanece na lista.");
     if (!ok) return;
     try {
-      for (const p of alvos) {
-        const r = await fetch("/vendedor/pedidos/excluir", {
+      for (const p of liberados) {
+        const r = await fetch("/vendedor/pedidos/cancelar", {
           method: "POST",
           credentials: "same-origin",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ id_pedido: p.id }),
         });
         const j = await parseJsonResp(r);
-        if (!j.success) throw new Error(j.message || "Erro ao excluir.");
+        if (!j.success) throw new Error(j.message || "Erro ao cancelar.");
       }
       fecharModal();
       await carregarLista();
       if (window.Swal) {
-        Swal.fire({ icon: "success", title: "Pedido excluído", timer: 1400, showConfirmButton: false });
+        Swal.fire({ icon: "success", title: "Pedido cancelado", timer: 1400, showConfirmButton: false });
       }
     } catch (e) {
       if (window.Swal) {
-        Swal.fire({ icon: "error", title: "Excluir", text: e.message, confirmButtonColor: "#021F81" });
+        Swal.fire({ icon: "error", title: "Cancelar", text: e.message, confirmButtonColor: "#021F81" });
       }
     }
   }
@@ -2837,7 +2852,11 @@
 
   document.getElementById("pd_btnNovo")?.addEventListener("click", abrirModal);
   document.getElementById("pd_btnFechar")?.addEventListener("click", fecharModal);
-  elBtnCancelar?.addEventListener("click", excluirPedidoGrupo);
+  elBtnCancelar?.addEventListener("click", () => {
+    cancelarPedidos(
+      pedidosGrupo.filter((p) => p.id && (p.origem || "manual") === "manual" && stV(p) !== "cancelado")
+    );
+  });
   elBtnEmailTeste?.addEventListener("click", enviarEmailTesteLayout);
 
   document.querySelectorAll(".Pd_WizNavItem").forEach((btn) => {
@@ -3084,6 +3103,11 @@
         painelInicial: painel,
         idPedidoFoco: idPed,
       });
+      return;
+    }
+    if (acao === "cancelar") {
+      const ped = todosPedidos.find((p) => p.id === idPed);
+      if (ped) cancelarPedidos([ped]);
       return;
     }
     if (acao === "nf" || acao === "etiqueta") {

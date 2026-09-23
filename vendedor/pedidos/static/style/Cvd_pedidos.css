@@ -1446,6 +1446,8 @@
 }
 
 .Pd_Acoes .Cl_BtnAcao:hover { color: #021F81; background: #f1f5f9 !important; }
+.Pd_Acoes .Pd_BtnCancel { color: #b91c1c; }
+.Pd_Acoes .Pd_BtnCancel:hover { color: #991b1b; background: #fef2f2 !important; }
 
 .Pd_AnexosLista { display: flex; flex-direction: column; gap: 1rem; }
 
