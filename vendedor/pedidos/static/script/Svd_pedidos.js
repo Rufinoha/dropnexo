@@ -664,26 +664,30 @@
   }
 
   async function excluirComprovantePix(idAnexo) {
+    const ped = pedidosGrupo.find((p) => (p.anexos || []).some((a) => a.id === idAnexo));
+    const travaStatus = ped && ["pago", "em_expedicao"].includes(stV(ped));
     const ok = window.Swal
       ? (
           await Swal.fire({
             icon: "warning",
             title: "Excluir comprovante?",
-            html: "<p style='text-align:left;margin:0;line-height:1.45'>O pedido volta para <strong>aguardando pagamento</strong>. Você poderá gerar o PIX e anexar outro comprovante.</p>",
-            confirmButtonText: "Excluir e voltar status",
+            html: travaStatus
+              ? "<p style='text-align:left;margin:0;line-height:1.45'>Só o arquivo sai. O status do pedido <strong>não muda</strong>.</p>"
+              : "<p style='text-align:left;margin:0;line-height:1.45'>O pedido volta para <strong>aguardando pagamento</strong>. Você poderá gerar o PIX e anexar outro comprovante.</p>",
+            confirmButtonText: travaStatus ? "Excluir anexo" : "Excluir e voltar status",
             cancelButtonText: "Cancelar",
             showCancelButton: true,
             confirmButtonColor: "#b91c1c",
           })
         ).isConfirmed
-      : confirm("Excluir comprovante e voltar ao status anterior?");
+      : confirm(travaStatus ? "Excluir o comprovante? O status do pedido não muda." : "Excluir comprovante e voltar ao status anterior?");
     if (!ok) return;
     const done = await excluirAnexo(idAnexo, { confirmar: false });
     if (done && window.Swal) {
       Swal.fire({
         icon: "success",
         title: "Comprovante removido",
-        text: "Status voltou para aguardando pagamento.",
+        text: travaStatus ? "O arquivo saiu. O status do pedido permanece." : "Status voltou para aguardando pagamento.",
         confirmButtonColor: "#021F81",
         timer: 2200,
         showConfirmButton: true,
@@ -709,11 +713,13 @@
       const j = await parseJsonResp(r);
       if (!j.success) throw new Error(j.message || "Erro ao enviar comprovante.");
       const ped = pedidosGrupo.find((p) => p.id === idPed);
+      const jaPago = ped && ["pago", "em_expedicao", "entregue"].includes(stV(ped));
       if (ped) {
-        ped.status_pagamento = "comprovante_enviado";
-        ped.status_vendedor = "pago";
-        ped.status = "pago";
-        ped.status_pagamento = "pago";
+        if (!jaPago) {
+          ped.status_pagamento = "pago";
+          ped.status_vendedor = "pago";
+          ped.status = "pago";
+        }
         ped.anexos = ped.anexos || [];
         if (j.anexo) ped.anexos.push(j.anexo);
       }
@@ -727,7 +733,9 @@
         Swal.fire({
           icon: "success",
           title: "Comprovante atualizado",
-          text: "O novo arquivo substituiu o anterior. Aguarde o fornecedor confirmar.",
+          text: jaPago
+            ? "O novo arquivo substituiu o anterior. O status do pedido não mudou."
+            : "O novo arquivo substituiu o anterior. Aguarde o fornecedor confirmar.",
           confirmButtonColor: "#021F81",
         });
       }
@@ -1985,8 +1993,9 @@
         }
       </div>`;
 
-    const podeMexerComp =
-      !pagoConfirmadoForn && st !== "entregue" && st !== "cancelado";
+    const podeMexerComp = st !== "entregue" && st !== "cancelado";
+    const comprovanteTravaStatus =
+      ["pago", "em_expedicao"].includes(st) && (stPag === "pago" || !!ped?.pago_em);
     const listaComprovantes = temComprovante
       ? `<div class="Pd_ComprovanteLista">
           ${comprovantes
@@ -2008,7 +2017,11 @@
           ${
             podeMexerComp
               ? `<input type="file" id="pd_alt_comp_${idPed}" class="Pd_AnexoInput" accept=".pdf,.png,.jpg,.jpeg,.webp" hidden data-alt-upload-comprovante="${idPed}" />
-                 <p class="Pd_Hint">Errado? <strong>Alterar</strong> troca o arquivo · <strong>Excluir</strong> remove e volta para aguardando pagamento.</p>`
+                 <p class="Pd_Hint">${
+                   comprovanteTravaStatus
+                     ? "Errado? <strong>Alterar</strong> troca o arquivo · <strong>Excluir</strong> remove o anexo. O status do pedido não muda."
+                     : "Errado? <strong>Alterar</strong> troca o arquivo · <strong>Excluir</strong> remove e volta para aguardando pagamento."
+                 }</p>`
               : ""
           }
         </div>`

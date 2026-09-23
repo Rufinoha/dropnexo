@@ -332,12 +332,11 @@ def voltar_cobranca_apos_remover_comprovante(
     if not ped:
         raise ValueError("Pedido não encontrado.")
     st = status_vendedor_pedido(ped)
-    if st in ("em_expedicao", "entregue", "cancelado"):
+    if st in ("entregue", "cancelado"):
         raise ValueError("Não é possível alterar cobrança neste status.")
-    if st == STATUS_PAGO and (
-        ped.get("pago_em") or (ped.get("status_pagamento") or "").lower() == "pago"
-    ):
-        raise ValueError("Pagamento já aprovado pelo fornecedor. Não é possível remover o comprovante.")
+    # Pago ou em expedição: só sai o arquivo. O número e o status ficam.
+    if st in ("em_expedicao", STATUS_PAGO):
+        return ped
 
     _marcar_aguardando_pagamento(cur, id_pedido)
     cur.execute(
@@ -367,6 +366,8 @@ def marcar_comprovante_enviado(cur, id_pedido: int, *, id_vendedor: int | None =
     if ped.get("meio_pagamento") != "pix_manual":
         raise ValueError("Pedido não usa PIX manual.")
     st = status_vendedor_pedido(ped)
+    if st in (STATUS_PAGO, "em_expedicao"):
+        return
     if st not in (STATUS_AGUARDANDO, STATUS_IMPORTADO, STATUS_AGUARDANDO_CONFIRMACAO):
         raise ValueError("Pedido não está aguardando pagamento.")
 
