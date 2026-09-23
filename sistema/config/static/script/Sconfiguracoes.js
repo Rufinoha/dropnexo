@@ -10,6 +10,12 @@
       iconeTech: "checklist",
     },
     {
+      titulo: "Status do pedido",
+      texto: "Escolhe um tenant e um pedido e altera o status, com estoque, pagamento e histórico. Sem canal e sem e-mail.",
+      rota: "/configuracoes/status-pedido",
+      iconeTech: "checklist",
+    },
+    {
       titulo: "Manutenção de tenant",
       texto: "Corrigir tipo (vendedor / fornecedor / híbrido), plano, ativo e dados básicos — só desenvolvedor.",
       rota: "/configuracoes/manutencao-tenant",

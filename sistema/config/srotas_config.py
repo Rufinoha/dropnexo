@@ -3231,6 +3231,108 @@ def manutencao_tenant_fundador_testar_email():
     finally:
         conn.close()
 
+STATUS_PEDIDO_PREFIX = "/configuracoes/status-pedido"
+
+
+@config_bp.get(STATUS_PEDIDO_PREFIX)
+@login_obrigatorio()
+def status_pedido_pagina():
+    if not session.get("eh_desenvolvedor"):
+        return redirect(url_for("dashboard.index"))
+    return render_template("frm_config_status_pedido.html", nav_ativo="config")
+
+
+@config_bp.get(f"{STATUS_PEDIDO_PREFIX}/tenants")
+@login_obrigatorio()
+def status_pedido_tenants():
+    if (r := _exigir_dev()) is not None:
+        return r
+    from sistema.config.servico_status_pedido import listar_tenants_pedido
+
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        return jsonify(success=True, tenants=listar_tenants_pedido(cur, request.args.get("q") or ""))
+    finally:
+        conn.close()
+
+
+@config_bp.get(f"{STATUS_PEDIDO_PREFIX}/pedidos")
+@login_obrigatorio()
+def status_pedido_lista():
+    if (r := _exigir_dev()) is not None:
+        return r
+    try:
+        id_vendedor = int(request.args.get("id_tenant") or 0)
+    except (TypeError, ValueError):
+        return jsonify(success=False, message="Tenant inválido."), 400
+    if id_vendedor <= 0:
+        return jsonify(success=False, message="Selecione o tenant."), 400
+    from sistema.config.servico_status_pedido import listar_pedidos_tenant
+
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        return jsonify(
+            success=True,
+            pedidos=listar_pedidos_tenant(cur, id_vendedor, request.args.get("q") or ""),
+        )
+    finally:
+        conn.close()
+
+
+@config_bp.get(f"{STATUS_PEDIDO_PREFIX}/pedido/<int:id_pedido>")
+@login_obrigatorio()
+def status_pedido_detalhe(id_pedido: int):
+    if (r := _exigir_dev()) is not None:
+        return r
+    from sistema.config.servico_status_pedido import detalhe_pedido_status
+
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        return jsonify(success=True, pedido=detalhe_pedido_status(cur, id_pedido))
+    except ValueError as e:
+        return jsonify(success=False, message=str(e)), 400
+    finally:
+        conn.close()
+
+
+@config_bp.post(f"{STATUS_PEDIDO_PREFIX}/aplicar")
+@login_obrigatorio()
+def status_pedido_aplicar():
+    if (r := _exigir_dev()) is not None:
+        return r
+    body = request.get_json(silent=True) or {}
+    try:
+        id_pedido = int(body.get("id_pedido") or 0)
+    except (TypeError, ValueError):
+        return jsonify(success=False, message="Pedido inválido."), 400
+    from sistema.config.servico_status_pedido import aplicar_status_pedido_dev
+
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        res = aplicar_status_pedido_dev(
+            cur,
+            id_pedido,
+            (body.get("status") or "").strip(),
+            id_usuario=session.get("id_usuario"),
+            motivo=body.get("motivo") or "",
+        )
+        conn.commit()
+        return jsonify(success=True, message="Status atualizado.", resultado=res)
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 400
+    except Exception:
+        conn.rollback()
+        _log.exception("Falha ao ajustar status do pedido %s", id_pedido)
+        return jsonify(success=False, message="Erro interno ao alterar o status."), 500
+    finally:
+        conn.close()
+
+
 def init_app(app):
     app.register_blueprint(config_bp)
 

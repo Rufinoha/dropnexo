@@ -1,0 +1,58 @@
+{% extends "frm_base.html" %}
+{% block title %}Status do pedido — {{ MARCA_NOME }}{% endblock %}
+{% set nav_ativo = 'config' %}
+{% block topbar_title %}Status do pedido{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_crud.css') }}?v=3" />
+<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_status_pedido.css') }}?v=1" />
+{% endblock %}
+{% block content %}
+<div class="Cl_ConfigPage">
+  <div class="Cl_ConfigPageHeader">
+    <h2>Status do pedido</h2>
+    <a class="Cl_BtnLink" href="{{ url_for('config.configuracoes') }}">Voltar às Configurações</a>
+  </div>
+  <p class="Cl_ConfigSub">Escolha o tenant, o pedido e o status. Estoque, pagamento e datas acompanham a troca. Canal e e-mail não são disparados.</p>
+
+  <div class="CfgSt_Grid">
+    <label class="Cl_FormCampo">
+      <span>Tenant</span>
+      <input type="search" id="cfgst_tenant_q" placeholder="Nome ou id" autocomplete="off" />
+    </label>
+    <button type="button" class="Cl_botaoFiltro" id="cfgst_tenant_buscar">Buscar tenant</button>
+    <label class="Cl_FormCampo CfgSt_Grow">
+      <span>Selecionar tenant</span>
+      <select id="cfgst_tenant"></select>
+    </label>
+  </div>
+
+  <div class="CfgSt_Grid">
+    <label class="Cl_FormCampo">
+      <span>Pedido</span>
+      <input type="search" id="cfgst_ped_q" placeholder="Número, cliente ou id" autocomplete="off" />
+    </label>
+    <button type="button" class="Cl_botaoFiltro" id="cfgst_ped_buscar">Buscar pedido</button>
+    <label class="Cl_FormCampo CfgSt_Grow">
+      <span>Selecionar pedido</span>
+      <select id="cfgst_pedido"></select>
+    </label>
+  </div>
+
+  <section class="CfgSt_Painel" id="cfgst_painel" hidden>
+    <p class="CfgSt_Atual" id="cfgst_atual"></p>
+    <label class="Cl_FormCampo">
+      <span>Novo status</span>
+      <select id="cfgst_status"></select>
+    </label>
+    <ul class="CfgSt_Efeitos" id="cfgst_efeitos"></ul>
+    <label class="Cl_FormCampo">
+      <span>Motivo</span>
+      <input type="text" id="cfgst_motivo" maxlength="240" placeholder="Por que este status está sendo alterado" />
+    </label>
+    <button type="button" class="Cl_BtnSalvar" id="cfgst_aplicar">Aplicar status</button>
+  </section>
+</div>
+{% endblock %}
+{% block page_js %}
+<script src="{{ url_for('config.static', filename='script/Sconfig_status_pedido.js') }}?v=1"></script>
+{% endblock %}
