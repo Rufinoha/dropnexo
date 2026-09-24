@@ -1513,6 +1513,7 @@ def _log_convite_email(cur, email: str) -> list[dict]:
             """,
             (email_n,),
         )
+        rows = cur.fetchall()
         cur.execute("RELEASE SAVEPOINT sp_log_convite")
     except Exception:
         try:
@@ -1521,7 +1522,7 @@ def _log_convite_email(cur, email: str) -> list[dict]:
             pass
         return []
     out = []
-    for row in cur.fetchall():
+    for row in rows:
         out.append(
             {
                 "id": int(row[0]),
@@ -1639,9 +1640,15 @@ def _tenant_payload(cur, id_tenant: int) -> dict | None:
 
     if dono.get("id"):
         try:
+            cur.execute("SAVEPOINT sp_convite_status")
             dono["convite_status"] = status_convite(cur, int(dono["id"]))
+            cur.execute("RELEASE SAVEPOINT sp_convite_status")
         except Exception:
             dono["convite_status"] = ""
+            try:
+                cur.execute("ROLLBACK TO SAVEPOINT sp_convite_status")
+            except Exception:
+                pass
         dono["convite_log"] = _log_convite_email(cur, dono.get("email") or "")
     else:
         dono["convite_status"] = ""
