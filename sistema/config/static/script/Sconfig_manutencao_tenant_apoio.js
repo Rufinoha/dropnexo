@@ -43,6 +43,35 @@
     donoDev: document.getElementById("dono_dev"),
     donoCriado: document.getElementById("dono_criado"),
     donoAcesso: document.getElementById("dono_acesso"),
+    donoConvite: document.getElementById("dono_convite"),
+    donoConviteStatus: document.getElementById("dono_convite_status"),
+    donoReenviar: document.getElementById("dono_reenviar"),
+    donoConviteLog: document.getElementById("dono_convite_log"),
+  };
+
+  const CONVITE_ROTULO = {
+    PENDENTE: "Convite pendente. A senha ainda não foi definida.",
+    EXPIRADO: "O convite expirou. Reenvie para a pessoa continuar o cadastro.",
+    SEM_CONVITE: "Não há convite ativo. Envie um para a pessoa definir a senha.",
+    ACEITO: "Cadastro concluído. A senha já foi definida.",
+  };
+
+  const BREVO_ROTULO = {
+    Enviado: "Aceito pelo Brevo",
+    Falha: "Falha no envio",
+    request: "Na fila",
+    delivered: "Entregue",
+    opened: "Aberto",
+    unique_opened: "Aberto",
+    first_opening: "Aberto",
+    click: "Clicou",
+    softBounce: "Recusado (temporário)",
+    hardBounce: "Recusado",
+    blocked: "Bloqueado",
+    invalid: "E-mail inválido",
+    spam: "Marcado como spam",
+    error: "Erro",
+    unsubscribed: "Descadastrou",
   };
 
   function pickTab(tab) {
@@ -97,6 +126,40 @@
     if (el.donoDev) el.donoDev.value = simNao(!!d.eh_desenvolvedor);
     if (el.donoCriado) el.donoCriado.value = formatarDataHora(d.criado_em);
     if (el.donoAcesso) el.donoAcesso.value = formatarDataHora(d.ultimo_acesso_em);
+    pintarConvite(d);
+  }
+
+  function rotuloBrevo(status) {
+    const s = String(status || "").trim();
+    return BREVO_ROTULO[s] || s || "Sem status";
+  }
+
+  function pintarConvite(d) {
+    const st = d?.convite_status || "";
+    const mostrar = !!st;
+    if (el.donoConvite) el.donoConvite.hidden = !mostrar;
+    if (!mostrar) return;
+    if (el.donoConviteStatus) {
+      el.donoConviteStatus.textContent = CONVITE_ROTULO[st] || st;
+    }
+    if (el.donoReenviar) el.donoReenviar.hidden = st === "ACEITO" || !d.email;
+    const itens = Array.isArray(d.convite_log) ? d.convite_log : [];
+    if (!el.donoConviteLog) return;
+    if (!itens.length) {
+      el.donoConviteLog.innerHTML = "<li>Nenhum envio deste convite no log do Brevo.</li>";
+      return;
+    }
+    el.donoConviteLog.innerHTML = itens
+      .map((item) => {
+        const quando = formatarDataHora(item.enviado_em || item.atualizado_em);
+        const erro = item.erro ? ` · ${esc(item.erro)}` : "";
+        return (
+          `<li><span>${esc(quando)}</span>` +
+          `<strong>${esc(rotuloBrevo(item.status))}</strong>` +
+          `<span>${esc(item.assunto || "Convite")}${erro}</span></li>`
+        );
+      })
+      .join("");
   }
 
   function esc(s) {
@@ -384,6 +447,40 @@
   el.btnDesativar?.addEventListener("click", () =>
     desativar().catch((e) => Swal.fire("Erro", e.message, "error"))
   );
+  el.donoReenviar?.addEventListener("click", () =>
+    reenviarConvite().catch((e) => Swal.fire("Erro", e.message, "error"))
+  );
+
+  async function reenviarConvite() {
+    if (!idTenant) return;
+    const email = (el.donoEmail?.value || "").trim();
+    const conf = await Swal.fire({
+      icon: "question",
+      title: "Reenviar convite?",
+      text: email
+        ? `O link novo vai para ${email}. O anterior deixa de valer.`
+        : "O link anterior deixa de valer.",
+      showCancelButton: true,
+      confirmButtonText: "Reenviar",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#021F81",
+    });
+    if (!conf.isConfirmed) return;
+    Swal.fire({ title: "Enviando…", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    const r = await fetch(`${BASE}/${idTenant}/reenviar-convite`, {
+      method: "POST",
+      credentials: "same-origin",
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.success) throw new Error(j.message || "Falha ao reenviar.");
+    if (j.tenant) preencher(j.tenant);
+    await Swal.fire({
+      icon: "success",
+      title: "Convite reenviado",
+      text: "O Brevo aceitou o envio. Entrega e abertura aparecem nesta lista quando o webhook atualizar.",
+      confirmButtonColor: "#021F81",
+    });
+  }
 
   if (window.GlobalUtils?.receberDadosApoio) {
     window.GlobalUtils.receberDadosApoio((id, nivel) => {

@@ -252,7 +252,14 @@ def criar_token_ativacao(cur, uid: int) -> str:
     return raw
 
 
-def enviar_email_convite(*, email: str, nome: str, nome_tenant: str, token_bruto: str) -> tuple[bool, str]:
+def enviar_email_convite(
+    *,
+    email: str,
+    nome: str,
+    nome_tenant: str,
+    token_bruto: str,
+    id_tenant: int | None = None,
+) -> tuple[bool, str]:
     horas = int(os.getenv("TOKEN_ATIVACAO_HORAS", "24"))
     link = f"{obter_base_url()}/definir-senha?token={token_bruto}"
     base = obter_base_url()
@@ -268,7 +275,16 @@ def enviar_email_convite(*, email: str, nome: str, nome_tenant: str, token_bruto
         url_politica_interna=os.getenv("URL_POLITICA_INTERNA") or f"{base}/politica-interna",
         url_dpo=os.getenv("URL_DPO") or f"{base}/dpo",
     )
-    ok, msg, _ = enviar_email([email], "Convite de acesso • DropNexo", html, tag="dropnexo_convite_equipe")
+    meta = None
+    if id_tenant:
+        meta = [{"email": email, "id_tenant": int(id_tenant), "nome_tenant": nome_tenant}]
+    ok, msg, _ = enviar_email(
+        [email],
+        "Convite de acesso • DropNexo",
+        html,
+        tag="dropnexo_convite_equipe",
+        dest_meta=meta,
+    )
     return ok, msg
 
 
@@ -1063,6 +1079,7 @@ def reenviar_convite_usuario(*, id_tenant: int, uid: int) -> tuple[dict, int]:
             nome=row[1],
             nome_tenant=row[2],
             token_bruto=token_bruto,
+            id_tenant=id_tenant,
         )
         if not ok:
             return {"success": False, "message": msg}, 500

@@ -23,6 +23,7 @@ from sistema.plataforma.sessao import (
     normalizar_bool,
     reenviar_convite_usuario,
     salvar_usuario_tenant,
+    status_convite,
 )
 
 _MOD_DIR = Path(__file__).resolve().parent
@@ -1484,6 +1485,57 @@ def manutencao_tenant_metricas_lista():
         conn.close()
 
 
+def _log_convite_email(cur, email: str) -> list[dict]:
+    """Envios de convite/ativação desse e-mail, com o status que o webhook do Brevo gravou."""
+    email_n = (email or "").strip().lower()
+    if not email_n or "@" not in email_n:
+        return []
+    try:
+        cur.execute("SAVEPOINT sp_log_convite")
+        cur.execute(
+            """
+            SELECT d.id_destinatario, d.status_atual, d.dt_ultimo_evento,
+                   e.dt_envio, e.assunto, d.tag_email,
+                   (
+                     SELECT ev.mensagem_erro
+                     FROM tbl_email_evento ev
+                     WHERE ev.id_destinatario = d.id_destinatario
+                       AND NULLIF(TRIM(COALESCE(ev.mensagem_erro, '')), '') IS NOT NULL
+                     ORDER BY ev.data_evento DESC, ev.id_evento DESC
+                     LIMIT 1
+                   )
+            FROM tbl_email_destinatario d
+            JOIN tbl_email_envio e ON e.id_envio = d.id_envio
+            WHERE lower(d.email) = %s
+              AND d.tag_email IN ('dropnexo_cadastro', 'dropnexo_convite_equipe')
+            ORDER BY COALESCE(d.dt_ultimo_evento, e.dt_envio) DESC, d.id_destinatario DESC
+            LIMIT 8
+            """,
+            (email_n,),
+        )
+        cur.execute("RELEASE SAVEPOINT sp_log_convite")
+    except Exception:
+        try:
+            cur.execute("ROLLBACK TO SAVEPOINT sp_log_convite")
+        except Exception:
+            pass
+        return []
+    out = []
+    for row in cur.fetchall():
+        out.append(
+            {
+                "id": int(row[0]),
+                "status": row[1] or "",
+                "atualizado_em": row[2].isoformat() if row[2] else None,
+                "enviado_em": row[3].isoformat() if row[3] else None,
+                "assunto": row[4] or "",
+                "tag": row[5] or "",
+                "erro": row[6] or "",
+            }
+        )
+    return out
+
+
 def _tenant_payload(cur, id_tenant: int) -> dict | None:
     cur.execute(
         """
@@ -1585,6 +1637,16 @@ def _tenant_payload(cur, id_tenant: int) -> dict | None:
         except Exception:
             pass
 
+    if dono.get("id"):
+        try:
+            dono["convite_status"] = status_convite(cur, int(dono["id"]))
+        except Exception:
+            dono["convite_status"] = ""
+        dono["convite_log"] = _log_convite_email(cur, dono.get("email") or "")
+    else:
+        dono["convite_status"] = ""
+        dono["convite_log"] = []
+
     dono_email = dono.get("email") or ""
     dono_whatsapp = dono.get("whatsapp") or ""
     dono_nome = dono.get("nome") or ""
@@ -1654,6 +1716,43 @@ def manutencao_tenant_apoio():
         if not tenant:
             return jsonify(success=False, message="Tenant não encontrado."), 404
         return jsonify(success=True, tenant=tenant)
+    finally:
+        conn.close()
+
+
+@config_bp.post(f"{MANUTENCAO_TENANT_PREFIX}/<int:id_tenant>/reenviar-convite")
+@login_obrigatorio()
+def manutencao_tenant_reenviar_convite(id_tenant: int):
+    if (r := _exigir_dev()) is not None:
+        return r
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        tenant = _tenant_payload(cur, id_tenant)
+        if not tenant:
+            return jsonify(success=False, message="Tenant não encontrado."), 404
+        dono = tenant.get("dono") or {}
+        uid = int(dono.get("id") or 0)
+        if uid <= 0:
+            return jsonify(success=False, message="Este tenant não tem dono para receber o convite."), 400
+        if (dono.get("convite_status") or "") == "ACEITO":
+            return jsonify(success=False, message="Este dono já definiu a senha. O convite não é reenviado."), 400
+    finally:
+        conn.close()
+
+    payload, status = reenviar_convite_usuario(id_tenant=id_tenant, uid=uid)
+    if status != 200:
+        return jsonify(payload), status
+
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        tenant = _tenant_payload(cur, id_tenant)
+        return jsonify(
+            success=True,
+            message=payload.get("message") or "Convite reenviado.",
+            tenant=tenant,
+        )
     finally:
         conn.close()
 

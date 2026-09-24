@@ -68,7 +68,9 @@ def dados_vendedor():
     try:
         cur = conn.cursor()
         dados = montar_dashboard_vendedor(cur, id_tenant, _opc("ano"), _opc("mes"))
-        return jsonify(success=True, dados=dados)
+        resp = jsonify(success=True, dados=dados)
+        resp.headers["Cache-Control"] = "no-store"
+        return resp
     except Exception as e:
         try:
             conn.rollback()

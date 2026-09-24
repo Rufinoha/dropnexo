@@ -657,21 +657,13 @@ def homologacao_executar():
         if not row or row[0] != "conectado":
             return jsonify(success=False, message="Conecte o Bling antes de executar a homologação."), 400
 
-        from api.bling.cliente import renovar_access_token
+        from api.bling.cliente import obter_access_token_valido
 
         access = descriptografar_token(row[1])
         refresh = descriptografar_token(row[2]) if row[2] else None
-        refresh_holder = {"token": refresh}
 
         def refresh_fn() -> str:
-            rt = refresh_holder["token"]
-            if not rt:
-                raise RuntimeError("Refresh token ausente. Reconecte o Bling.")
-            payload = renovar_access_token(rt)
-            refresh_holder["token"] = payload.get("refresh_token") or rt
-            _salvar_tokens(cur, int(id_tenant), payload)
-            conn.commit()
-            return payload["access_token"]
+            return obter_access_token_valido(int(id_tenant), forcar=True)
 
         resultado = executar_homologacao(
             access,

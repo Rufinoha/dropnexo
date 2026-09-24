@@ -373,7 +373,11 @@ def carregar_tokens_armazenados(cur, id_tenant: int) -> dict[str, str]:
 
 def _salvar_tokens(cur, id_tenant: int, payload: dict[str, Any]) -> None:
     expires_in = int(payload.get("expires_in") or 3600)
-    expires_em = datetime.now(timezone.utc) + timedelta(seconds=max(60, expires_in - 60))
+    expires_em = datetime.now(timezone.utc) + timedelta(seconds=max(60, expires_in - 300))
+    refresh = (payload.get("refresh_token") or "").strip()
+    if not refresh:
+        atual = carregar_tokens_armazenados(cur, id_tenant)
+        refresh = (atual.get("refresh_token") or "").strip()
     cur.execute(
         """
         INSERT INTO tbl_integracao_bling (
@@ -392,7 +396,7 @@ def _salvar_tokens(cur, id_tenant: int, payload: dict[str, Any]) -> None:
         (
             id_tenant,
             criptografar_token(payload.get("access_token") or ""),
-            criptografar_token(payload.get("refresh_token") or ""),
+            criptografar_token(refresh),
             expires_em,
             agora_utc(),
             agora_utc(),
@@ -418,27 +422,75 @@ def _carregar_tokens(cur, id_tenant: int) -> dict[str, Any] | None:
     }
 
 
-def obter_access_token_valido(id_tenant: int) -> str:
+# Um refresh por tenant. O Bling devolve outro refresh_token e invalida o anterior.
+_BLING_LOCK_NS = 87021
+_MARGEM_RENOVACAO = timedelta(minutes=5)
+
+
+def _expires_utc(expires: datetime | None) -> datetime | None:
+    if not isinstance(expires, datetime):
+        return None
+    if expires.tzinfo is None:
+        return expires.replace(tzinfo=timezone.utc)
+    return expires
+
+
+def _access_ainda_vale(dados: dict[str, Any] | None) -> bool:
+    if not dados or not (dados.get("access_token") or "").strip():
+        return False
+    expires = _expires_utc(dados.get("expires_em"))
+    if not expires:
+        return False
+    return expires > datetime.now(timezone.utc) + _MARGEM_RENOVACAO
+
+
+def obter_access_token_valido(id_tenant: int, *, forcar: bool = False) -> str:
+    """Devolve um access token válido. Se venceu, renova com o refresh token e grava o par novo."""
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
         dados = _carregar_tokens(cur, id_tenant)
         if not dados or not dados["access_token"]:
             raise RuntimeError("Conta Bling não conectada para este tenant.")
-
-        expires = dados["expires_em"]
-        agora = datetime.now(timezone.utc)
-        if expires and expires > agora:
+        if not forcar and _access_ainda_vale(dados):
             return dados["access_token"]
 
-        refresh = dados["refresh_token"]
-        if not refresh:
-            raise RuntimeError("Refresh token Bling ausente. Reconecte a integração.")
+        cur.execute("SELECT pg_advisory_lock(%s, %s)", (_BLING_LOCK_NS, int(id_tenant)))
+        try:
+            dados = _carregar_tokens(cur, id_tenant)
+            if not dados or not dados["access_token"]:
+                raise RuntimeError("Conta Bling não conectada para este tenant.")
+            if not forcar and _access_ainda_vale(dados):
+                return dados["access_token"]
 
-        novo = renovar_access_token(refresh)
-        _salvar_tokens(cur, id_tenant, novo)
-        conn.commit()
-        return novo["access_token"]
+            refresh = (dados.get("refresh_token") or "").strip()
+            if not refresh:
+                raise RuntimeError(
+                    "Não há refresh token do Bling para renovar o acesso. Autorize a integração de novo."
+                )
+            try:
+                novo = renovar_access_token(refresh)
+            except RuntimeError as e:
+                texto = str(e).lower()
+                if "invalid_grant" in texto or "invalid refresh token" in texto:
+                    raise RuntimeError(
+                        "O Bling recusou o refresh token guardado. "
+                        "O access token se renova com ele, sem desconectar; este refresh já não vale no Bling."
+                    ) from e
+                raise
+            if not (novo.get("refresh_token") or "").strip():
+                novo["refresh_token"] = refresh
+            _salvar_tokens(cur, id_tenant, novo)
+            conn.commit()
+            return novo["access_token"]
+        finally:
+            try:
+                cur.execute(
+                    "SELECT pg_advisory_unlock(%s, %s)",
+                    (_BLING_LOCK_NS, int(id_tenant)),
+                )
+            except Exception:
+                pass
     finally:
         conn.close()
 
@@ -474,8 +526,10 @@ def api_request(
     headers = {
         "Authorization": f"Bearer {token}",
         "Accept": "application/json",
+        "enable-jwt": "1",
     }
     ultimo_erro: Exception | None = None
+    renovou_401 = False
     for tentativa in range(BLING_API_MAX_TENTATIVAS_429):
         _aguardar_throttle_api()
         r = requests.request(
@@ -499,6 +553,11 @@ def api_request(
         if isinstance(body, dict) and isinstance(body.get("error"), dict):
             msg = body.get("error", {}).get("message")
         ultimo_erro = RuntimeError(msg or f"Bling API {r.status_code}: {r.text[:500]}")
+        if r.status_code == 401 and not renovou_401:
+            renovou_401 = True
+            token = obter_access_token_valido(id_tenant, forcar=True)
+            headers["Authorization"] = f"Bearer {token}"
+            continue
         if _eh_erro_rate_limit(r.status_code, msg or str(ultimo_erro)):
             pausa = min(8.0, 1.5 * (tentativa + 1))
             _log.warning(

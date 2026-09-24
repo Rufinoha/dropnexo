@@ -286,7 +286,7 @@
         qs.set("mes", String(mesSel));
       }
       const url = "/index/dados-vendedor" + (qs.toString() ? "?" + qs.toString() : "");
-      const r = await fetch(url, { credentials: "same-origin" });
+      const r = await fetch(url, { credentials: "same-origin", cache: "no-store" });
       const j = await r.json();
       if (!j.success) throw new Error(j.message || "Falha ao carregar.");
       const d = j.dados || {};

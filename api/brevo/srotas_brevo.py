@@ -198,6 +198,7 @@ def enviar_email(
     corpo_html: str,
     tag: str = "dropnexo",
     criado_por: Optional[int] = None,
+    dest_meta: list | None = None,
 ) -> Tuple[bool, str, Optional[int]]:
     emails = [e.strip().lower() for e in destinatarios if e and str(e).strip()]
     if not emails:
@@ -213,11 +214,15 @@ def enviar_email(
     try:
         resp = _send_brevo_email(emails, assunto.strip(), corpo_html, tag_norm)
     except requests.RequestException as e:
-        _log_envio_email(emails, assunto, corpo_html, tag_norm, criado_por, status="Falha")
+        _log_envio_email(
+            emails, assunto, corpo_html, tag_norm, criado_por, status="Falha", dest_meta=dest_meta
+        )
         return False, str(e), None
 
     if resp.status_code not in (200, 201):
-        _log_envio_email(emails, assunto, corpo_html, tag_norm, criado_por, status="Falha")
+        _log_envio_email(
+            emails, assunto, corpo_html, tag_norm, criado_por, status="Falha", dest_meta=dest_meta
+        )
         return False, f"Erro Brevo ({resp.status_code}): {resp.text}", None
 
     message_ids: dict[str, str] = {}
@@ -236,6 +241,7 @@ def enviar_email(
         criado_por,
         status="Enviado",
         message_ids=message_ids,
+        dest_meta=dest_meta,
     )
     if not ok_log:
         return True, f"E-mail enviado, mas falhou ao registrar log: {info}", None

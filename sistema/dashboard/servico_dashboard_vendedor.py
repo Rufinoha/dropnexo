@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
-from core.pedidos.servico import col_status_vendedor
+from core.pedidos.servico import _pedido_colunas, col_status_vendedor
 
 CANAIS_INTEGRACAO = (
     ("tbl_integracao_mercado_livre", "Mercado Livre", "/integracoes/mercado-livre"),
@@ -79,6 +79,23 @@ def _recorte(ano: int | None, mes: int | None):
     return hoje, inicio, fim, inicio_ant, fim_comp, fim_totais, eh_atual, ano_min
 
 
+def _sql_sem_cancelado(cur, alias: str, cv: str) -> str:
+    """Pedido cancelado não entra no faturamento, nem pelo status do vendedor só."""
+    partes = [f"LOWER(TRIM(COALESCE({alias}.{cv}, ''))) <> 'cancelado'"]
+    cols = _pedido_colunas(cur)
+    if "status_pagamento" in cols:
+        partes.append(
+            f"LOWER(TRIM(COALESCE({alias}.status_pagamento, ''))) <> 'cancelado'"
+        )
+    if "status_comprador" in cols:
+        partes.append(
+            f"LOWER(TRIM(COALESCE({alias}.status_comprador, ''))) <> 'cancelado'"
+        )
+    if "cancelado_em" in cols:
+        partes.append(f"{alias}.cancelado_em IS NULL")
+    return "(" + " AND ".join(partes) + ")"
+
+
 def _totais_periodo(cur, id_vendedor: int, cv: str, inicio: date, fim: date) -> dict:
     cur.execute(
         f"""
@@ -88,7 +105,7 @@ def _totais_periodo(cur, id_vendedor: int, cv: str, inicio: date, fim: date) -> 
                    LOWER(COALESCE(NULLIF(TRIM(p.origem), ''), 'manual')) AS origem
             FROM tbl_pedido p
             WHERE p.id_tenant_vendedor = %s
-              AND COALESCE(p.{cv}, '') <> 'cancelado'
+              AND {_sql_sem_cancelado(cur, "p", cv)}
               AND (p.criado_em AT TIME ZONE 'America/Sao_Paulo')::date BETWEEN %s AND %s
         )
         SELECT
@@ -136,7 +153,7 @@ def _serie_diaria(cur, id_vendedor: int, cv: str, inicio: date, fim: date, hoje:
                    COALESCE(p.valor_taxa_pedido, 0) AS taxa
             FROM tbl_pedido p
             WHERE p.id_tenant_vendedor = %s
-              AND COALESCE(p.{cv}, '') <> 'cancelado'
+              AND {_sql_sem_cancelado(cur, "p", cv)}
               AND (p.criado_em AT TIME ZONE 'America/Sao_Paulo')::date BETWEEN %s AND %s
         ),
         itens AS (
@@ -191,7 +208,7 @@ def _top_produtos(cur, id_vendedor: int, cv: str, inicio: date, fim: date) -> li
         FROM tbl_pedido p
         JOIN tbl_pedido_item i ON i.id_pedido = p.id
         WHERE p.id_tenant_vendedor = %s
-          AND COALESCE(p.{cv}, '') <> 'cancelado'
+          AND {_sql_sem_cancelado(cur, "p", cv)}
           AND (p.criado_em AT TIME ZONE 'America/Sao_Paulo')::date BETWEEN %s AND %s
         GROUP BY 1, 2
         ORDER BY SUM(i.quantidade) DESC, SUM(i.preco_venda * i.quantidade) DESC
@@ -226,7 +243,7 @@ def _serie_anual(cur, id_vendedor: int, cv: str, ano: int, mes_atual: int) -> li
         FROM tbl_pedido p
         LEFT JOIN tbl_pedido_item i ON i.id_pedido = p.id
         WHERE p.id_tenant_vendedor = %s
-          AND COALESCE(p.{cv}, '') <> 'cancelado'
+          AND {_sql_sem_cancelado(cur, "p", cv)}
           AND EXTRACT(YEAR FROM (p.criado_em AT TIME ZONE 'America/Sao_Paulo')) = %s
         GROUP BY 1
         """,
@@ -263,6 +280,7 @@ def montar_dashboard_vendedor(cur, id_vendedor: int, ano: int | None = None, mes
         FROM tbl_pedido
         WHERE id_tenant_vendedor = %s
           AND COALESCE({cv}, '') IN ('rascunho', 'importado', 'aguardando_pagamento', 'pago')
+          AND {_sql_sem_cancelado(cur, "tbl_pedido", cv)}
         """,
         (id_vendedor,),
     )
