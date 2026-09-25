@@ -566,14 +566,20 @@
 
 .PdFn_CardMain {
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  height: 40px;
+  gap: 0.1rem;
+  overflow: hidden;
 }
 
 .PdFn_CardTop {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.3rem 0.5rem;
+  flex-wrap: nowrap;
+  gap: 0.35rem;
   align-items: center;
-  margin-bottom: 0.1rem;
+  min-width: 0;
 }
 
 .PdFn_CardNum {
@@ -620,8 +626,113 @@
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 0.2rem;
-  min-width: 110px;
+  justify-content: center;
+  gap: 0.12rem;
+  height: 40px;
+  min-width: 0;
+  padding-left: 0.75rem;
+  border-left: 1px solid rgba(226, 232, 240, 0.95);
+  box-sizing: border-box;
+}
+
+.PdFn_Facts {
+  display: contents;
+}
+
+.PdFn_Fact {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.08rem;
+  height: 40px;
+  padding-left: 0.75rem;
+  border-left: 1px solid rgba(226, 232, 240, 0.95);
+  box-sizing: border-box;
+}
+
+.PdFn_FactLbl {
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #94a3b8;
+  line-height: 1;
+}
+
+.PdFn_FactVal {
+  font-size: 0.78rem;
+  font-weight: 650;
+  color: var(--pdfn-ink);
+  line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.PdFn_Fact--origem .PdFn_FactVal::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 0.32rem;
+  border-radius: 50%;
+  background: #94a3b8;
+  box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.18);
+  vertical-align: 0.05em;
+}
+
+.PdFn_Fact--origem[data-origem="manual"] .PdFn_FactVal::before {
+  background: var(--pdfn-navy);
+  box-shadow: 0 0 0 3px rgba(2, 31, 129, 0.14);
+}
+.PdFn_Fact--origem[data-origem="bling"] .PdFn_FactVal::before {
+  background: #16a34a;
+  box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.16);
+}
+.PdFn_Fact--origem[data-origem="mercado_livre"] .PdFn_FactVal::before {
+  background: #eab308;
+  box-shadow: 0 0 0 3px rgba(234, 179, 8, 0.22);
+}
+.PdFn_Fact--origem[data-origem="amazon"] .PdFn_FactVal::before {
+  background: #f97316;
+  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.18);
+}
+.PdFn_Fact--origem[data-origem="tiktok"] .PdFn_FactVal::before {
+  background: #111827;
+  box-shadow: 0 0 0 3px rgba(17, 24, 39, 0.12);
+}
+
+.PdFn_Fact--destino .PdFn_FactVal {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.PdFn_Cidade {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.PdFn_Uf {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  height: 15px;
+  padding: 0 0.32rem;
+  border-radius: 4px;
+  background: var(--pdfn-navy);
+  color: #fff;
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  line-height: 1;
+}
+
+.PdFn_Fact--data .PdFn_FactVal {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
 }
 
 .PdFn_CardTotal {
@@ -728,8 +839,8 @@
 }
 .PdFn_CardHit {
   display: grid;
-  grid-template-columns: auto 1fr auto;
-  gap: 0.65rem;
+  grid-template-columns: 40px minmax(180px, 1.45fr) minmax(108px, 124px) minmax(128px, 1fr) 100px minmax(104px, 116px);
+  column-gap: 0.85rem;
   align-items: center;
   border: 0;
   background: transparent;
@@ -1344,23 +1455,43 @@ a.PdFn_Check:hover {
   to { transform: translateY(0) scale(1); opacity: 1; }
 }
 
+@media (max-width: 1180px) {
+  .PdFn_CardHit {
+    grid-template-columns: 40px minmax(0, 1.35fr) 118px minmax(0, 0.85fr) 92px 104px;
+    column-gap: 0.55rem;
+  }
+  .PdFn_Fact,
+  .PdFn_CardSide { padding-left: 0.5rem; }
+}
+
 @media (max-width: 900px) {
   .PdFn_PageHead { flex-direction: column; }
-  .PdFn_Card {
-    grid-template-columns: auto 1fr;
-    grid-template-areas:
-      "thumbs main"
-      "side side";
+  .PdFn_CardHit {
+    grid-template-columns: 40px minmax(0, 1fr);
+    row-gap: 0.35rem;
   }
-  .PdFn_Thumbs { grid-area: thumbs; }
-  .PdFn_CardMain { grid-area: main; }
+  .PdFn_Facts {
+    display: flex;
+    grid-column: 1 / -1;
+    gap: 0.85rem;
+    border-top: 1px solid var(--pdfn-line);
+    padding-top: 0.28rem;
+  }
+  .PdFn_Fact {
+    height: auto;
+    flex: 1 1 0;
+    border-left: 0;
+    padding-left: 0;
+  }
+  .PdFn_Fact--data { flex: 0 0 auto; }
   .PdFn_CardSide {
-    grid-area: side;
+    grid-column: 1 / -1;
     flex-direction: row;
     justify-content: space-between;
     align-items: center;
-    min-width: 0;
-    padding-top: 0.25rem;
+    height: auto;
+    border-left: 0;
+    padding: 0.25rem 0 0;
     border-top: 1px solid var(--pdfn-line);
   }
   .PdFn_Ops { grid-template-columns: 1fr; }

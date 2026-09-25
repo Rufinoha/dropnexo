@@ -270,6 +270,9 @@
         p.numero,
         p.vendedor_nome,
         p.cliente_nome,
+        p.entrega_cidade,
+        p.entrega_uf,
+        origemLabel(p.origem),
         ...(p.itens_preview || []).map((i) => i.nome_produto),
         ...(p.itens_preview || []).map((i) => i.sku),
       ]
@@ -311,13 +314,19 @@
         const urgent = st === "aguardando_confirmacao";
         const ready = st === "pago";
         const on = selecionados.has(p.id);
-        const data = p.criado_em
-          ? new Date(p.criado_em).toLocaleDateString("pt-BR", {
-              day: "2-digit",
-              month: "short",
-            })
+        const emissao = p.criado_em
+          ? new Date(p.criado_em).toLocaleDateString("pt-BR")
           : "—";
-        const orig = origemLabel(p.origem);
+        const orig = origemLabel(p.origem) || "—";
+        const cidade = (p.entrega_cidade || "").trim();
+        const uf = (p.entrega_uf || "").trim().toUpperCase();
+        const destinoHtml = cidade
+          ? `<span class="PdFn_Cidade">${esc(cidade)}</span>${
+              uf ? `<span class="PdFn_Uf">${esc(uf)}</span>` : ""
+            }`
+          : uf
+            ? `<span class="PdFn_Uf">${esc(uf)}</span>`
+            : `<span class="PdFn_Cidade">—</span>`;
         const cardCls = [
           "PdFn_Card",
           urgent ? "PdFn_Card--urgent" : "",
@@ -336,10 +345,23 @@
           <div class="PdFn_CardMain">
             <div class="PdFn_CardTop">
               <span class="PdFn_CardNum">${esc(p.numero)}</span>
-              ${orig ? `<span class="PdFn_Origem">${esc(orig)}</span>` : ""}
               ${badge(st)}
             </div>
-            <p class="PdFn_CardMeta"><strong>${esc(p.vendedor_nome || "Vendedor")}</strong> · ${esc(p.cliente_nome || "Cliente")} · ${esc(data)}</p>
+            <p class="PdFn_CardMeta"><strong>${esc(p.vendedor_nome || "Vendedor")}</strong> · ${esc(p.cliente_nome || "Cliente")}</p>
+          </div>
+          <div class="PdFn_Facts">
+            <div class="PdFn_Fact PdFn_Fact--origem" data-origem="${esc(p.origem || "")}">
+              <span class="PdFn_FactLbl">Origem</span>
+              <span class="PdFn_FactVal">${esc(orig)}</span>
+            </div>
+            <div class="PdFn_Fact PdFn_Fact--destino">
+              <span class="PdFn_FactLbl">Destino</span>
+              <span class="PdFn_FactVal">${destinoHtml}</span>
+            </div>
+            <div class="PdFn_Fact PdFn_Fact--data">
+              <span class="PdFn_FactLbl">Emissão</span>
+              <span class="PdFn_FactVal">${esc(emissao)}</span>
+            </div>
           </div>
           <div class="PdFn_CardSide">
             <span class="PdFn_CardTotal">${fmt(p.valor_total)}</span>
