@@ -19,7 +19,7 @@
       </div>
       <div class="PdFn_Stat PdFn_Stat--focus" data-stat="aguardando_confirmacao">
         <span class="PdFn_StatVal">0</span>
-        <span class="PdFn_StatLbl">Aguardando aprovação</span>
+        <span class="PdFn_StatLbl">Pronto para expedir</span>
       </div>
       <div class="PdFn_Stat" data-stat="pago">
         <span class="PdFn_StatVal">0</span>
@@ -32,7 +32,7 @@
     <div class="PdFn_Chips" id="pd_fn_chips" role="tablist" aria-label="Filtrar por situação">
       <button type="button" class="PdFn_Chip is-active" data-status="" role="tab" aria-selected="true">Todos</button>
       <button type="button" class="PdFn_Chip" data-status="aguardando_pagamento" role="tab">Aguardando pagamento</button>
-      <button type="button" class="PdFn_Chip" data-status="aguardando_confirmacao" role="tab">Aguardando aprovação</button>
+      <button type="button" class="PdFn_Chip" data-status="aguardando_confirmacao" role="tab">Pronto para expedir</button>
       <button type="button" class="PdFn_Chip" data-status="pago" role="tab">Confirmados</button>
       <button type="button" class="PdFn_Chip" data-status="em_expedicao" role="tab">Em expedição</button>
     </div>
@@ -82,5 +82,5 @@
 {% endblock %}
 {% block page_js %}
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-<script src="{{ url_for('az_pedidos.static', filename='script/Saz_pedidos.js') }}?v=14"></script>
+<script src="{{ url_for('az_pedidos.static', filename='script/Saz_pedidos.js') }}?v=15"></script>
 {% endblock %}

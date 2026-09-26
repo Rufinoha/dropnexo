@@ -3,7 +3,7 @@
     rascunho: "Rascunho",
     importado: "Importado",
     aguardando_pagamento: "Aguardando pagamento",
-    aguardando_confirmacao: "Aguardando aprovação",
+    aguardando_confirmacao: "Pago — aguardando expedição",
     pago: "Pago (fornecedor aprovou)",
     cancelado: "Cancelado",
     em_expedicao: "Em expedição",
@@ -713,12 +713,12 @@
       const j = await parseJsonResp(r);
       if (!j.success) throw new Error(j.message || "Erro ao enviar comprovante.");
       const ped = pedidosGrupo.find((p) => p.id === idPed);
-      const jaPago = ped && ["pago", "em_expedicao", "entregue"].includes(stV(ped));
+      const jaPago = ped && ["pago", "aguardando_confirmacao", "em_expedicao", "entregue"].includes(stV(ped));
       if (ped) {
         if (!jaPago) {
-          ped.status_pagamento = "pago";
-          ped.status_vendedor = "pago";
-          ped.status = "pago";
+          ped.status_pagamento = "informado";
+          ped.status_vendedor = "aguardando_confirmacao";
+          ped.status = "aguardando_confirmacao";
         }
         ped.anexos = ped.anexos || [];
         if (j.anexo) ped.anexos.push(j.anexo);
@@ -735,7 +735,7 @@
           title: "Comprovante atualizado",
           text: jaPago
             ? "O novo arquivo substituiu o anterior. O status do pedido não mudou."
-            : "O novo arquivo substituiu o anterior. Aguarde o fornecedor confirmar.",
+            : "O novo arquivo substituiu o anterior. O fornecedor confirma na expedição.",
           confirmButtonColor: "#021F81",
         });
       }
@@ -1897,9 +1897,8 @@
     const temComprovante = comprovantes.length > 0;
     const pagoConfirmadoForn =
       ped &&
-      ["pago", "em_expedicao", "entregue"].includes(stV(ped)) &&
-      (stPag === "pago" || !!ped.pago_em) &&
-      temComprovante;
+      (["em_expedicao", "entregue"].includes(stV(ped)) ||
+        (stV(ped) === "pago" && (stPag === "pago" || !!ped.pago_em)));
     const aguardando = stV(ped) === "aguardando_pagamento";
     const aguardandoConf = temComprovante || stV(ped) === "aguardando_confirmacao";
     const importado = stV(ped) === "importado";
@@ -1916,9 +1915,9 @@
     let statusHtml = "";
     if (pagoConfirmadoForn) {
       const quando = ped.pago_em ? new Date(ped.pago_em).toLocaleString("pt-BR") : "";
-      statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pago">Pagamento aprovado pelo fornecedor${quando ? ` · ${esc(quando)}` : ""}</div>`;
+      statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pago">Pagamento confirmado na expedição${quando ? ` · ${esc(quando)}` : ""}</div>`;
     } else if (temComprovante && isPixManual) {
-      statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pendente">Comprovante enviado — aguardando o fornecedor confirmar</div>`;
+      statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pendente">Comprovante enviado — o fornecedor confirma na expedição</div>`;
     } else if (isPixManual && ped && !docsFreteOk) {
       statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pendente">Antes de gerar o PIX, anexe em <strong>Frete e NF</strong>: ${esc(docsFreteFaltando.join(", "))}</div>`;
     } else if (isPixManual && ped) {
@@ -2089,7 +2088,7 @@
           <button type="button" class="Cl_botaoFiltro" data-copiar-pixm="${idPed}">Copiar código</button>
         </div>
       </div>
-      <p class="Pd_Hint">Pague o valor exato, anexe o comprovante abaixo e aguarde o fornecedor aprovar. Só depois o pedido fica pago.</p>`;
+      <p class="Pd_Hint">Pague o valor exato e anexe o comprovante. O fornecedor confirma ao colocar o pedido em expedição.</p>`;
 
     const canvas = document.getElementById(`pd_pixm_qr_${idPed}`);
     const colQr = canvas?.closest(".Pd_PixDualCol");
@@ -2138,10 +2137,9 @@
       if (!j.success) throw new Error(j.message || "Erro ao enviar comprovante.");
       const ped = pedidosGrupo.find((p) => p.id === idPed);
       if (ped) {
-        ped.status_pagamento = "comprovante_enviado";
-        ped.status_vendedor = "pago";
-        ped.status = "pago";
-        ped.status_pagamento = "pago";
+        ped.status_pagamento = "informado";
+        ped.status_vendedor = "aguardando_confirmacao";
+        ped.status = "aguardando_confirmacao";
         ped.anexos = ped.anexos || [];
         if (j.anexo) ped.anexos.push(j.anexo);
       }
@@ -2149,7 +2147,7 @@
         Swal.fire({
           icon: "success",
           title: "Comprovante enviado",
-          text: "Aguardando o fornecedor confirmar o pagamento.",
+          text: "Pagamento registrado. O fornecedor confirma ao colocar o pedido em expedição.",
           confirmButtonColor: "#021F81",
         });
       }
@@ -2187,12 +2185,18 @@
     const j = await r.json();
     if (!j.success) return;
     const stEl = document.getElementById(`pd_pixSt_${idPed}`);
-    if (j.status === "pago") {
-      if (stEl) stEl.textContent = "Pagamento confirmado!";
+    if (j.status === "pago" || j.status === "aguardando_confirmacao") {
+      if (stEl) stEl.textContent = "Pagamento recebido. O fornecedor confirma na expedição.";
       pararPollPix();
       await atualizarGrupoAposPagamento(idPed);
       if (window.Swal) {
-        Swal.fire({ icon: "success", title: "Pago", text: "Pagamento confirmado.", timer: 2000, showConfirmButton: false });
+        Swal.fire({
+          icon: "success",
+          title: "Pagamento recebido",
+          text: "O fornecedor confirma ao colocar o pedido em expedição.",
+          timer: 2200,
+          showConfirmButton: false,
+        });
       }
     } else if (stEl) {
       stEl.textContent = "Aguardando confirmação do PIX…";
@@ -2202,9 +2206,9 @@
   async function atualizarGrupoAposPagamento(idPed) {
     const ped = pedidosGrupo.find((p) => p.id === idPed);
     if (ped) {
-      ped.status_vendedor = "pago";
-      ped.status = "pago";
-      ped.status_pagamento = "pago";
+      ped.status_vendedor = "aguardando_confirmacao";
+      ped.status = "aguardando_confirmacao";
+      ped.status_pagamento = "informado";
     }
     await carregarLista();
     if (idGrupo) {

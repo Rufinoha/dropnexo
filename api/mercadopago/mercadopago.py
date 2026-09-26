@@ -397,11 +397,12 @@ from typing import Any
 from global_utils import agora_utc, obter_base_url
 from core.pedidos.servico import (
     STATUS_AGUARDANDO,
+    STATUS_AGUARDANDO_CONFIRMACAO,
     STATUS_IMPORTADO,
     STATUS_PAGO,
     _status_vendedor_pagavel,
-    marcar_pedido_pago,
     obter_pedido,
+    registrar_pagamento_vendedor,
     status_vendedor_pedido,
 )
 
@@ -684,13 +685,19 @@ def aplicar_status_mp(cur, id_pedido: int, payment: dict[str, Any]) -> dict[str,
     )
 
     if status in MP_STATUS_APROVADO:
-        marcar_pedido_pago(
+        registrar_pagamento_vendedor(
             cur,
             id_pedido,
+            detalhe="Pagamento aprovado no Mercado Pago. Aguardando expedição do fornecedor.",
+            meio="mercado_pago",
             mp_payment_id=int(payment_id) if payment_id else None,
             mp_status=status,
         )
-        return {"id_pedido": id_pedido, "status": STATUS_PAGO, "mp_status": status}
+        return {
+            "id_pedido": id_pedido,
+            "status": STATUS_AGUARDANDO_CONFIRMACAO,
+            "mp_status": status,
+        }
 
     return {"id_pedido": id_pedido, "status": STATUS_AGUARDANDO, "mp_status": status}
 
@@ -699,8 +706,9 @@ def sincronizar_pagamento_pedido(cur, id_vendedor: int, id_pedido: int) -> dict[
     ped = obter_pedido(cur, id_pedido, id_vendedor=id_vendedor)
     if not ped:
         raise ValueError("Pedido não encontrado.")
-    if status_vendedor_pedido(ped) == STATUS_PAGO:
-        return {"status": STATUS_PAGO, "status_vendedor": STATUS_PAGO, "mp_status": "approved"}
+    st_atual = status_vendedor_pedido(ped)
+    if st_atual in (STATUS_PAGO, STATUS_AGUARDANDO_CONFIRMACAO, "em_expedicao", "entregue"):
+        return {"status": st_atual, "status_vendedor": st_atual, "mp_status": "approved"}
 
     cur.execute(
         """

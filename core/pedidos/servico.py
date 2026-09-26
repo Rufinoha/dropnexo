@@ -1750,6 +1750,66 @@ def marcar_pedido_pago(
     return True
 
 
+def registrar_pagamento_vendedor(
+    cur,
+    id_pedido: int,
+    *,
+    detalhe: str,
+    meio: str | None = None,
+    mp_payment_id: int | None = None,
+    mp_status: str | None = None,
+    id_usuario: int | None = None,
+) -> None:
+    """Vendedor pagou o fornecedor. Fica aguardando confirmação, baixa estoque e envia ao ERP do produto."""
+    ped = obter_pedido(cur, id_pedido)
+    if not ped:
+        raise ValueError("Pedido não encontrado.")
+    st = status_vendedor_pedido(ped)
+    if st in (STATUS_CANCELADO, STATUS_ENTREGUE):
+        raise ValueError("Não é possível registrar pagamento neste status.")
+    if st not in (STATUS_AGUARDANDO, STATUS_IMPORTADO, STATUS_RASCUNHO):
+        try:
+            baixar_estoque_do_pedido(cur, id_pedido)
+        except Exception:
+            pass
+        return
+
+    agora = agora_utc()
+    set_sv, dup = _sql_set_status_vendedor(cur)
+    params: list[Any] = [STATUS_AGUARDANDO_CONFIRMACAO]
+    if dup:
+        params.append(STATUS_AGUARDANDO_CONFIRMACAO)
+    meio_sql = ""
+    if meio:
+        meio_sql = "meio_pagamento = %s,"
+        params.append(meio)
+    params.extend([mp_payment_id, mp_status, agora, id_pedido])
+    cur.execute(
+        f"""
+        UPDATE tbl_pedido SET
+            {set_sv},
+            {meio_sql}
+            status_pagamento = 'informado',
+            mp_payment_id = COALESCE(%s, mp_payment_id),
+            mp_payment_status = COALESCE(%s, mp_payment_status),
+            atualizado_em = %s
+        WHERE id = %s
+        """,
+        params,
+    )
+    registrar_historico(cur, id_pedido, "comprovante_enviado", detalhe, id_usuario)
+    try:
+        baixar_estoque_do_pedido(cur, id_pedido)
+    except Exception:
+        pass
+    try:
+        from core.pedidos.erp_export import exportar_pedido_para_erp_do_produto
+
+        exportar_pedido_para_erp_do_produto(cur, id_pedido)
+    except Exception:
+        pass
+
+
 def _pedido_ja_importado_bling(
     cur, id_vendedor: int, id_bling: str, id_fornecedor: int
 ) -> int | None:
@@ -2225,21 +2285,7 @@ def importar_pedido_bling(
                 ),
             )
 
-        itens_baixa = [
-            (i["id_variante"], i["quantidade"], i.get("id_deposito")) for i in itens
-        ]
-        try:
-            # Garante flag e baixa física (sem reserva)
-            garantir_col_estoque_baixado(cur)
-            baixar_itens_pedido(cur, itens_baixa)
-            if "estoque_baixado" in _pedido_colunas(cur):
-                cur.execute(
-                    "UPDATE tbl_pedido SET estoque_baixado = TRUE WHERE id = %s",
-                    (id_pedido,),
-                )
-            hist_estoque = "Estoque baixado."
-        except ValueError as e:
-            hist_estoque = f"Importado sem baixa de estoque ({e})."
+        hist_estoque = "Estoque será baixado quando o vendedor pagar o fornecedor."
 
         cur.execute(
             """
@@ -2264,12 +2310,6 @@ def importar_pedido_bling(
             f"Pedido importado do Bling (#{numero_bling}). {hist_estoque}",
             id_usuario,
         )
-        try:
-            from api.bling.pedidos import tentar_exportar_pedido_fornecedor_ao_disponibilizar
-
-            tentar_exportar_pedido_fornecedor_ao_disponibilizar(cur, id_pedido)
-        except Exception:
-            pass
         ids_criados.append(id_pedido)
 
     return ids_criados
@@ -2484,20 +2524,7 @@ def importar_pedido_ml(
                 ),
             )
 
-        itens_baixa = [
-            (i["id_variante"], i["quantidade"], i.get("id_deposito")) for i in itens
-        ]
-        try:
-            garantir_col_estoque_baixado(cur)
-            baixar_itens_pedido(cur, itens_baixa)
-            if "estoque_baixado" in _pedido_colunas(cur):
-                cur.execute(
-                    "UPDATE tbl_pedido SET estoque_baixado = TRUE WHERE id = %s",
-                    (id_pedido,),
-                )
-            hist_estoque = "Estoque baixado."
-        except ValueError as e:
-            hist_estoque = f"Importado sem baixa de estoque ({e})."
+        hist_estoque = "Estoque será baixado quando o vendedor pagar o fornecedor."
 
         cur.execute(
             """
@@ -2525,12 +2552,6 @@ def importar_pedido_ml(
             f"Pedido importado do Mercado Livre (#{numero_ml}). {hist_estoque}",
             id_usuario,
         )
-        try:
-            from api.bling.pedidos import tentar_exportar_pedido_fornecedor_ao_disponibilizar
-
-            tentar_exportar_pedido_fornecedor_ao_disponibilizar(cur, id_pedido)
-        except Exception:
-            pass
         ids_criados.append(id_pedido)
 
     return ids_criados
@@ -2744,20 +2765,7 @@ def importar_pedido_tiktok(
                 ),
             )
 
-        itens_baixa = [
-            (i["id_variante"], i["quantidade"], i.get("id_deposito")) for i in itens
-        ]
-        try:
-            garantir_col_estoque_baixado(cur)
-            baixar_itens_pedido(cur, itens_baixa)
-            if "estoque_baixado" in _pedido_colunas(cur):
-                cur.execute(
-                    "UPDATE tbl_pedido SET estoque_baixado = TRUE WHERE id = %s",
-                    (id_pedido,),
-                )
-            hist_estoque = "Estoque baixado."
-        except ValueError as e:
-            hist_estoque = f"Importado sem baixa de estoque ({e})."
+        hist_estoque = "Estoque será baixado quando o vendedor pagar o fornecedor."
 
         cur.execute(
             """
@@ -2785,12 +2793,6 @@ def importar_pedido_tiktok(
             f"Pedido importado do TikTok Shop (#{numero_tt}). {hist_estoque}",
             id_usuario,
         )
-        try:
-            from api.bling.pedidos import tentar_exportar_pedido_fornecedor_ao_disponibilizar
-
-            tentar_exportar_pedido_fornecedor_ao_disponibilizar(cur, id_pedido)
-        except Exception:
-            pass
         ids_criados.append(id_pedido)
 
     return ids_criados
@@ -3004,20 +3006,7 @@ def importar_pedido_amazon(
                 ),
             )
 
-        itens_baixa = [
-            (i["id_variante"], i["quantidade"], i.get("id_deposito")) for i in itens
-        ]
-        try:
-            garantir_col_estoque_baixado(cur)
-            baixar_itens_pedido(cur, itens_baixa)
-            if "estoque_baixado" in _pedido_colunas(cur):
-                cur.execute(
-                    "UPDATE tbl_pedido SET estoque_baixado = TRUE WHERE id = %s",
-                    (id_pedido,),
-                )
-            hist_estoque = "Estoque baixado."
-        except ValueError as e:
-            hist_estoque = f"Importado sem baixa de estoque ({e})."
+        hist_estoque = "Estoque será baixado quando o vendedor pagar o fornecedor."
 
         cur.execute(
             """
@@ -3045,12 +3034,6 @@ def importar_pedido_amazon(
             f"Pedido importado da Amazon (#{numero_amz}). {hist_estoque}",
             id_usuario,
         )
-        try:
-            from api.bling.pedidos import tentar_exportar_pedido_fornecedor_ao_disponibilizar
-
-            tentar_exportar_pedido_fornecedor_ao_disponibilizar(cur, id_pedido)
-        except Exception:
-            pass
         ids_criados.append(id_pedido)
 
     return ids_criados
@@ -3096,15 +3079,9 @@ def marcar_em_expedicao(
     if not ped:
         raise ValueError("Pedido não encontrado.")
     st = status_vendedor_pedido(ped)
-    # Canal: pode expedir sem "pago" (impressão de etiqueta implica acerto).
-    # Manual: preferencialmente pago; ainda permite aguardando se docs ok.
-    if st not in (
-        STATUS_PAGO,
-        STATUS_AGUARDANDO,
-        STATUS_AGUARDANDO_CONFIRMACAO,
-        STATUS_IMPORTADO,
-    ):
-        raise ValueError("Pedido não pode ser expedido neste status.")
+    # Só depois que o vendedor pagou (ou legado já em pago). A expedição confirma.
+    if st not in (STATUS_PAGO, STATUS_AGUARDANDO_CONFIRMACAO):
+        raise ValueError("O vendedor ainda não pagou este pedido.")
 
     docs = pedido_docs_frete_ok(cur, id_pedido)
     if not docs.get("ok"):
@@ -3113,7 +3090,7 @@ def marcar_em_expedicao(
             or "Anexe a etiqueta de frete e a NF ou declaração de conteúdo antes de expedir."
         )
 
-    # Estoque já foi baixado na entrada (canal) ou no pagamento (manual) — não baixa de novo.
+    # Estoque já baixou quando o vendedor pagou — não baixa de novo.
 
     agora = agora_utc()
     cv = col_status_vendedor(cur)
@@ -3140,6 +3117,12 @@ def marcar_em_expedicao(
     if codigo_rastreio:
         det += f" Rastreio: {codigo_rastreio}."
     registrar_historico(cur, id_pedido, "expedido", det, id_usuario)
+    try:
+        from core.pedidos.erp_export import retentar_exportacao_se_pendente
+
+        retentar_exportacao_se_pendente(cur, id_pedido)
+    except Exception:
+        pass
     try:
         from api.bling.pedidos import exportar_status_pedido_bling
 
@@ -3211,6 +3194,12 @@ def marcar_entregue(
         (STATUS_ENTREGUE, agora, agora, agora, id_pedido),
     )
     registrar_historico(cur, id_pedido, "entregue", "Pedido marcado como entregue.", id_usuario)
+    try:
+        from core.pedidos.erp_export import retentar_exportacao_se_pendente
+
+        retentar_exportacao_se_pendente(cur, id_pedido)
+    except Exception:
+        pass
     try:
         from api.bling.pedidos import exportar_status_pedido_bling
 

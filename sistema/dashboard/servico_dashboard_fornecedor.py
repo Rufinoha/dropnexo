@@ -53,7 +53,7 @@ def montar_dashboard_fornecedor(cur, id_fornecedor: int) -> dict:
     )
     pedidos_hoje = int(cur.fetchone()[0] or 0)
 
-    # Pedidos aguardando aprovação do fornecedor (PIX / confirmação)
+    # Pedidos que o vendedor já pagou e ainda não foram expedidos
     cur.execute(
         f"""
         SELECT COUNT(*)::int

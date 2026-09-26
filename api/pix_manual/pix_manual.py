@@ -182,8 +182,6 @@ from core.pedidos.servico import (
     STATUS_IMPORTADO,
     STATUS_PAGO,
     _sql_set_status_vendedor,
-    _status_vendedor_pagavel,
-    marcar_pedido_pago,
     obter_pedido,
     pedido_docs_frete_ok,
     pedido_tem_comprovante_pix,
@@ -334,8 +332,8 @@ def voltar_cobranca_apos_remover_comprovante(
     st = status_vendedor_pedido(ped)
     if st in ("entregue", "cancelado"):
         raise ValueError("Não é possível alterar cobrança neste status.")
-    # Pago ou em expedição: só sai o arquivo. O número e o status ficam.
-    if st in ("em_expedicao", STATUS_PAGO):
+    # Já pago ao fornecedor (ou legado pago / em expedição): só sai o arquivo.
+    if st in ("em_expedicao", STATUS_PAGO, STATUS_AGUARDANDO_CONFIRMACAO):
         return ped
 
     _marcar_aguardando_pagamento(cur, id_pedido)
@@ -366,15 +364,18 @@ def marcar_comprovante_enviado(cur, id_pedido: int, *, id_vendedor: int | None =
     if ped.get("meio_pagamento") != "pix_manual":
         raise ValueError("Pedido não usa PIX manual.")
     st = status_vendedor_pedido(ped)
-    if st in (STATUS_PAGO, "em_expedicao"):
+    if st in (STATUS_PAGO, STATUS_AGUARDANDO_CONFIRMACAO, "em_expedicao", "entregue"):
         return
-    if st not in (STATUS_AGUARDANDO, STATUS_IMPORTADO, STATUS_AGUARDANDO_CONFIRMACAO):
+    if st not in (STATUS_AGUARDANDO, STATUS_IMPORTADO):
         raise ValueError("Pedido não está aguardando pagamento.")
 
-    marcar_pedido_pago(
+    from core.pedidos.servico import registrar_pagamento_vendedor
+
+    registrar_pagamento_vendedor(
         cur,
         id_pedido,
-        detalhe="Vendedor anexou comprovante PIX. Pedido marcado como pago.",
+        detalhe="Vendedor anexou comprovante PIX. Aguardando expedição do fornecedor.",
+        meio="pix_manual",
     )
 
 
@@ -408,30 +409,8 @@ def confirmar_pix_manual(
     if st not in (STATUS_AGUARDANDO, STATUS_IMPORTADO, STATUS_AGUARDANDO_CONFIRMACAO):
         raise ValueError("Este pedido não está aguardando confirmação de pagamento.")
 
-    tem_comprovante = pedido_tem_comprovante_pix(cur, id_pedido)
-    detalhe = (
-        "Fornecedor aprovou o comprovante PIX manual."
-        if tem_comprovante
-        else "Fornecedor confirmou recebimento do PIX (sem comprovante anexado)."
-    )
-    hist = (
-        "Fornecedor confirmou recebimento do PIX manual."
-        if tem_comprovante
-        else "Fornecedor confirmou recebimento do PIX sem comprovante anexado."
-    )
-
-    marcar_pedido_pago(
-        cur,
-        id_pedido,
-        id_usuario=id_usuario,
-        detalhe=detalhe,
-    )
-    registrar_historico(
-        cur,
-        id_pedido,
-        "pago_manual",
-        hist,
-        id_usuario,
+    raise ValueError(
+        "O pagamento do vendedor fica confirmado quando o pedido vai para expedição."
     )
 
 
@@ -497,9 +476,11 @@ def rejeitar_comprovante_pix(
         raise ValueError("Informe o motivo da rejeição (mínimo 5 caracteres).")
 
     st = status_vendedor_pedido(ped)
-    if st not in (STATUS_AGUARDANDO_CONFIRMACAO, STATUS_AGUARDANDO) and ped.get(
-        "status_pagamento"
-    ) != "comprovante_enviado":
+    if st == STATUS_AGUARDANDO_CONFIRMACAO:
+        raise ValueError(
+            "O pagamento já foi registrado. A confirmação ocorre quando o pedido vai para expedição."
+        )
+    if st != STATUS_AGUARDANDO and ped.get("status_pagamento") != "comprovante_enviado":
         raise ValueError("Não há comprovante pendente de validação.")
 
     set_sv, dup = _sql_set_status_vendedor(cur)

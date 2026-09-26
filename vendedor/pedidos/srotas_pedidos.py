@@ -982,7 +982,7 @@ def pedidos_pix_manual_reabrir(id_pedido: int):
         conn.commit()
         return jsonify(
             success=True,
-            message="PIX gerado. Pague, anexe o comprovante e aguarde o fornecedor aprovar.",
+            message="PIX gerado. Pague e anexe o comprovante. O fornecedor confirma na expedição.",
             pedido=ped,
             **result,
         )

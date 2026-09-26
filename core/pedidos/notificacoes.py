@@ -45,8 +45,8 @@ EVENTO_ASSUNTO_PREFIXO = {
 EVENTO_MENSAGEM = {
     "confirmado": "Um pedido foi confirmado e está aguardando pagamento.",
     "aguardando_pagamento": "Há um pedido aguardando pagamento.",
-    "aguardando_confirmacao": "O vendedor enviou o comprovante e o pagamento aguarda sua confirmação.",
-    "comprovante_enviado": "O vendedor anexou o comprovante PIX. Valide o pagamento no painel.",
+    "aguardando_confirmacao": "O vendedor pagou. Ao colocar o pedido em expedição, o pagamento fica confirmado.",
+    "comprovante_enviado": "O vendedor anexou o comprovante PIX. Ao expedir, o pagamento fica confirmado.",
     "comprovante_rejeitado": "O comprovante PIX foi rejeitado. Envie um novo comprovante.",
     "pago": "O pagamento de um pedido foi confirmado.",
     "cancelado": "Um pedido foi cancelado.",

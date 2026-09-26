@@ -1084,6 +1084,7 @@ def exportar_pedido_fornecedor_bling(
     *,
     id_usuario: int | None = None,
     forcar: bool = False,
+    por_produto: bool = False,
 ) -> dict[str, Any]:
     if id_usuario is not None:
         pass
@@ -1098,19 +1099,22 @@ def exportar_pedido_fornecedor_bling(
 
     cfg = _carregar_config_fornecedor(cur, id_forn)
     modo = (cfg.get("pedidos_modo") or "exportar").strip()
-    if modo not in ("exportar", "atualizar"):
-        raise ValueError("Modo de pedidos não permite exportar ao Bling.")
-
     opcoes = cfg.get("opcoes") or {}
-    if opcoes.get("pedidos_exportar") is False:
-        raise ValueError("Exportação de pedidos está desativada.")
+    if not por_produto:
+        if modo not in ("exportar", "atualizar"):
+            raise ValueError("Modo de pedidos não permite exportar ao Bling.")
+        if opcoes.get("pedidos_exportar") is False:
+            raise ValueError("Exportação de pedidos está desativada.")
 
     # Qualquer origem (manual, Bling, marketplace, arquivo…) pode ir ao Bling do fornecedor.
     # O DropNexo é o hub: origem do vendedor → DN → Bling do fornecedor.
     _ = forcar  # mantido por compatibilidade da assinatura
 
     st = status_vendedor_pedido(ped)
-    if st not in _STATUS_EXPORTAVEIS_BLING:
+    permitidos = _STATUS_EXPORTAVEIS_BLING
+    if por_produto:
+        permitidos = _STATUS_EXPORTAVEIS_BLING | {"em_expedicao", "entregue"}
+    if st not in permitidos:
         raise ValueError(
             "Somente pedidos aguardando pagamento ou pagos podem ser exportados ao Bling."
         )
@@ -1266,6 +1270,12 @@ def exportar_pedidos_pendentes_fornecedor(
     if not _bling_conectado(cur, id_tenant):
         raise ValueError("Conecte o Bling antes de exportar pedidos.")
 
+    from core.pedidos.erp_export import (
+        exportar_pedido_para_erp_do_produto,
+        garantir_colunas_export_erp,
+    )
+
+    garantir_colunas_export_erp(cur)
     limite = datetime.now(timezone.utc) - timedelta(days=max(1, min(int(dias or 30), 90)))
     cv = "status_vendedor"
     try:
@@ -1280,8 +1290,13 @@ def exportar_pedidos_pendentes_fornecedor(
         SELECT p.id
         FROM tbl_pedido p
         WHERE p.id_tenant_fornecedor = %s
-          AND p.{cv} IN (%s, %s)
-          AND COALESCE(p.pago_em, p.confirmado_em, p.criado_em) >= %s
+          AND (
+                COALESCE(p.erp_export_pendente, FALSE)
+                OR (
+                    p.{cv} IN (%s, %s, %s)
+                    AND COALESCE(p.pago_em, p.confirmado_em, p.criado_em) >= %s
+                )
+          )
           AND NOT EXISTS (
               SELECT 1 FROM tbl_integracao_map m
               WHERE m.id_tenant = %s AND m.provedor = 'bling' AND m.contexto = 'fornecedor'
@@ -1293,6 +1308,7 @@ def exportar_pedidos_pendentes_fornecedor(
             id_tenant,
             STATUS_AGUARDANDO_CONFIRMACAO,
             STATUS_PAGO,
+            "em_expedicao",
             limite,
             id_tenant,
         ),
@@ -1304,13 +1320,13 @@ def exportar_pedidos_pendentes_fornecedor(
     erros = 0
     for pid in ids:
         try:
-            res = exportar_pedido_fornecedor_bling(cur, pid)
-            if res.get("exportados"):
+            res = exportar_pedido_para_erp_do_produto(cur, pid)
+            if res == "ok":
                 exportados += 1
+            elif res == "pendente":
+                erros += 1
             else:
                 ignorados += 1
-        except ValueError:
-            ignorados += 1
         except Exception as e:
             erros += 1
             _registrar_log(cur, id_tenant, "fornecedor", "erro", f"Pedido #{pid}", str(e)[:500])

@@ -3,7 +3,7 @@
   const LABEL = {
     importado: "Aguardando pagamento",
     aguardando_pagamento: "Aguardando pagamento",
-    aguardando_confirmacao: "Aguardando aprovação",
+    aguardando_confirmacao: "Pronto para expedir",
     pago: "Pagamento confirmado",
     cancelado: "Cancelado",
     em_expedicao: "Em expedição",
@@ -83,7 +83,7 @@
   }
 
   function ctaLista(st) {
-    if (st === "aguardando_confirmacao") return "Validar PIX";
+    if (st === "aguardando_confirmacao") return "Expedir";
     if (st === "pago") return "Separar";
     if (st === "em_expedicao") return "Acompanhar";
     return "Abrir";
@@ -370,10 +370,10 @@
   }
 
   function stepRail(st) {
-    const payDone = !["aguardando_pagamento", "importado", "aguardando_confirmacao"].includes(st);
-    const payActive = ["aguardando_pagamento", "importado", "aguardando_confirmacao"].includes(st);
+    const payDone = !["aguardando_pagamento", "importado"].includes(st);
+    const payActive = ["aguardando_pagamento", "importado"].includes(st);
     const packDone = ["em_expedicao", "entregue"].includes(st);
-    const packActive = st === "pago";
+    const packActive = st === "pago" || st === "aguardando_confirmacao";
     const shipDone = st === "entregue";
     const shipActive = st === "em_expedicao";
 
@@ -424,7 +424,7 @@
     const { etq, fiscal, comprovantes, ok } = docsInfo(p);
     const fiscalTitulo = fiscal?.tipo === "declaracao" ? "Declaração" : "Nota fiscal";
     const st = stV(p);
-    const pixNeeded = ["aguardando_confirmacao", "aguardando_pagamento", "importado"].includes(st);
+    const pixNeeded = ["aguardando_pagamento", "importado"].includes(st);
 
     let html = `
       <div class="PdFn_Checks">
@@ -502,55 +502,24 @@
   function renderAcoes(p) {
     if (!foot) return;
     foot.innerHTML = "";
-    const { comprovantes, ok: docsOk } = docsInfo(p);
-    const temComprovante = comprovantes.length > 0;
+    const { ok: docsOk } = docsInfo(p);
     const st = stV(p);
-    const meio = String(p.meio_pagamento || "").toLowerCase();
-    const ehPixManual =
-      meio === "pix_manual" ||
-      !!(p.pix_manual_txid || "").trim() ||
-      String(p.status_pagamento || "").toLowerCase() === "comprovante_enviado";
-    const podeConfirmarPix =
-      ehPixManual &&
-      ["aguardando_pagamento", "importado", "aguardando_confirmacao"].includes(st);
 
-    if (podeConfirmarPix) {
-      const links = comprovantes
-        .map(
-          (a) =>
-            `<li><a href="${anexoHref(a)}" target="_blank" rel="noopener">${esc(a.nome_original)}</a></li>`
-        )
-        .join("");
-      const avisoSemComp = temComprovante
-        ? ""
-        : `<p class="PdFn_PayValidHint">Sem comprovante anexado — você pode confirmar se já viu o crédito no banco.</p>`;
-      const btnRejeitar = temComprovante
-        ? `<button type="button" class="Cl_BtnExcluir" id="pd_fn_btn_rej_pix">Rejeitar comprovante</button>`
-        : "";
+    if (st === "aguardando_pagamento" || st === "importado") {
       foot.innerHTML = `
         <div class="PdFn_PayValid">
           <div class="PdFn_PayValidHead">
             <span class="PdFn_PayValidMark" aria-hidden="true">PIX</span>
             <div>
-              <strong>Validar pagamento</strong>
-              <p>Confirme só depois de verificar o crédito na sua conta.</p>
+              <strong>Aguardando o vendedor</strong>
+              <p>O pedido segue quando o vendedor pagar. A expedição confirma esse pagamento.</p>
             </div>
           </div>
-          <ul class="PdFn_PayValidList">${links || "<li>Nenhum comprovante anexado pelo vendedor</li>"}</ul>
-          ${avisoSemComp}
-          <div class="PdFn_PayValidBtns">
-            <button type="button" class="Cl_botaoprimario" id="pd_fn_btn_conf_pix">Confirmar pagamento</button>
-            ${btnRejeitar}
-          </div>
         </div>`;
-      document
-        .getElementById("pd_fn_btn_conf_pix")
-        ?.addEventListener("click", () => confirmarPix(p.id, temComprovante));
-      document.getElementById("pd_fn_btn_rej_pix")?.addEventListener("click", () => rejeitarPix(p.id));
       return;
     }
 
-    if (st === "pago") {
+    if (st === "pago" || st === "aguardando_confirmacao") {
       foot.innerHTML = `
         <div class="PdFn_ShipBar">
           <div class="PdFn_ShipFields">
@@ -566,7 +535,7 @@
           <div class="PdFn_ShipActions">
             <p class="PdFn_ShipHint">${
               docsOk
-                ? "Documentos ok. Ao expedir, o estoque é baixado."
+                ? "Documentos ok. Ao expedir, o pagamento do vendedor fica confirmado."
                 : "Ainda faltam documentos — a expedição só libera com etiqueta + NF."
             }</p>
             <button type="button" class="Cl_botaoprimario" id="pd_fn_btn_expedir" ${docsOk ? "" : "disabled"}>Marcar em expedição</button>
@@ -584,7 +553,7 @@
             <p>${
               p.codigo_rastreio
                 ? `Rastreio: <strong>${esc(p.codigo_rastreio)}</strong>`
-                : "Pedido separado e estoque baixado."
+                : "Pedido separado. O pagamento do vendedor já está confirmado."
             }</p>
           </div>
           <button type="button" class="Cl_botaoprimario" id="pd_fn_btn_entregue">Marcar entregue</button>
