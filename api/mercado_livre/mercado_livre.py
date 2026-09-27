@@ -1920,6 +1920,13 @@ def _nome_listing_type_ml(listing_type_id: str) -> str:
     return nomes.get((listing_type_id or "").strip(), listing_type_id or "—")
 
 
+_SQL_CATEGORIA_VENDEDOR_ML = """
+CASE
+  WHEN p.id_tenant = pv.id_tenant_vendedor THEN COALESCE(pv.id_categoria_vendedor, p.id_categoria)
+  ELSE pv.id_categoria_vendedor
+END
+"""
+
 _SIMULACAO_TIPOS_ML = frozenset({"free", "gold_special", "gold_pro"})
 
 # CEP de uma cidade de referência. A cotação vale para esse destino, não para o estado inteiro.
@@ -1973,12 +1980,12 @@ def buscar_variantes_simulacao_ml(cur, id_tenant: int, termo: str = "", limite: 
                TRIM(COALESCE(NULLIF(v.sku, ''), p.sku, '')),
                COALESCE(pv.preco_venda, v.preco, p.preco, 0),
                COALESCE(NULLIF(v.valor_drop, 0), NULLIF(p.valor_drop, 0), 0),
-               pv.id_categoria_vendedor,
+               {_SQL_CATEGORIA_VENDEDOR_ML} AS id_categoria_vendedor,
                COALESCE(c.nome, '')
         FROM tbl_produto_vendedor pv
         JOIN tbl_produto_variante v ON v.id = pv.id_variante
         JOIN tbl_produto p ON p.id = pv.id_produto
-        LEFT JOIN tbl_categoria c ON c.id = pv.id_categoria_vendedor
+        LEFT JOIN tbl_categoria c ON c.id = ({_SQL_CATEGORIA_VENDEDOR_ML})
         WHERE {' AND '.join(where)}
         ORDER BY p.nome, v.ordem, v.nome_exibicao
         LIMIT %s
@@ -2175,12 +2182,12 @@ def simular_anuncio_ml(
         raise ValueError("Outros custos não podem ser negativos.")
 
     cur.execute(
-        """
+        f"""
         SELECT COALESCE(NULLIF(TRIM(pv.nome_vitrine), ''), NULLIF(TRIM(v.nome_exibicao), ''), p.nome),
                COALESCE(NULLIF(TRIM(p.nome), ''), ''),
                TRIM(COALESCE(NULLIF(v.sku, ''), p.sku, '')),
                COALESCE(NULLIF(v.valor_drop, 0), NULLIF(p.valor_drop, 0), 0),
-               pv.id_categoria_vendedor,
+               {_SQL_CATEGORIA_VENDEDOR_ML} AS id_categoria_vendedor,
                COALESCE(c.nome, ''),
                COALESCE(v.altura_cm, p.altura_cm),
                COALESCE(v.largura_cm, p.largura_cm),
@@ -2192,7 +2199,7 @@ def simular_anuncio_ml(
         FROM tbl_produto_vendedor pv
         JOIN tbl_produto_variante v ON v.id = pv.id_variante
         JOIN tbl_produto p ON p.id = pv.id_produto
-        LEFT JOIN tbl_categoria c ON c.id = pv.id_categoria_vendedor
+        LEFT JOIN tbl_categoria c ON c.id = ({_SQL_CATEGORIA_VENDEDOR_ML})
         WHERE pv.id_tenant_vendedor = %s AND pv.ativo = TRUE AND v.id = %s
         LIMIT 1
         """,
@@ -3139,7 +3146,7 @@ def _sql_produtos_vitrine_ml(ids_produtos: list[int] | None = None) -> tuple[str
                p.condicao,
                COALESCE(NULLIF(TRIM(p.marca), ''), '') AS marca,
                COALESCE(NULLIF(TRIM(v.gtin), ''), NULLIF(TRIM(p.gtin), ''), '') AS gtin,
-               pv.id_categoria_vendedor,
+               {_SQL_CATEGORIA_VENDEDOR_ML} AS id_categoria_vendedor,
                COALESCE(v.altura_cm, p.altura_cm) AS altura_cm,
                COALESCE(v.largura_cm, p.largura_cm) AS largura_cm,
                COALESCE(v.profundidade_cm, p.profundidade_cm) AS profundidade_cm,
