@@ -716,7 +716,7 @@
       const jaPago = ped && ["pago", "aguardando_confirmacao", "em_expedicao", "entregue"].includes(stV(ped));
       if (ped) {
         if (!jaPago) {
-          ped.status_pagamento = "informado";
+          ped.status_pagamento = "comprovante_enviado";
           ped.status_vendedor = "aguardando_confirmacao";
           ped.status = "aguardando_confirmacao";
         }
@@ -1908,14 +1908,15 @@
     const idPed = ped?.id || 0;
     const docsFreteOk = ped ? freteDocsStatus(ped).ok : false;
     const docsFreteFaltando = ped ? freteDocsStatus(ped).faltando : [];
-    // Botão liberado até ter comprovante (cancela/entregue não)
+    const pedidoProntoPagar = aguardando || importado;
     const podeGerarPixManual =
-      isPixManual && !!idPed && !temComprovante && !["cancelado", "entregue"].includes(st);
-
+      isPixManual && !!idPed && !temComprovante && pedidoProntoPagar && !pagoConfirmadoForn && !aguardandoConf;
     let statusHtml = "";
     if (pagoConfirmadoForn) {
       const quando = ped.pago_em ? new Date(ped.pago_em).toLocaleString("pt-BR") : "";
       statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pago">Pagamento confirmado na expedição${quando ? ` · ${esc(quando)}` : ""}</div>`;
+    } else if (rascunho) {
+      statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pendente">Confirme o pedido para pagar</div>`;
     } else if (temComprovante && isPixManual) {
       statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pendente">Comprovante enviado — o fornecedor confirma na expedição</div>`;
     } else if (isPixManual && ped && !docsFreteOk) {
@@ -1924,8 +1925,6 @@
       statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pendente">Clique em <strong>Gerar PIX</strong> para ver o QR e o copia e cola · ${fmt(totalFornecedorPedido(ped))}</div>`;
     } else if (importado || aguardando) {
       statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pendente">Pague o fornecedor · ${fmt(totalFornecedorPedido(ped))}</div>`;
-    } else if (rascunho) {
-      statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pendente">Confirme o pedido para pagar</div>`;
     }
 
     const logoHtml = icone
@@ -1963,7 +1962,7 @@
         ? `<ol class="Pd_PixPassos">
           <li>Gere o PIX (QR / copia e cola)</li>
           <li>Anexe o comprovante</li>
-          <li>Fornecedor confirma o pagamento</li>
+          <li>Fornecedor confirma na expedição</li>
         </ol>`
         : isPixManual && ped && podeGerarPixManual && !docsFreteOk
           ? `<ol class="Pd_PixPassos">
@@ -2028,11 +2027,12 @@
     const mostrarUploadComprovante =
       isPixManual &&
       ped &&
+      pedidoProntoPagar &&
       !pagoConfirmadoForn &&
       !temComprovante &&
       pixManualAtivo &&
       docsFreteOk;
-    const mostrarQr = pixManualAtivo && !temComprovante && docsFreteOk;
+    const mostrarQr = pedidoProntoPagar && pixManualAtivo && !temComprovante && docsFreteOk;
     const pixBox = isPixManual && ped
       ? `<div class="Pd_PixInline" id="pd_pixm_${ped.id}" ${mostrarQr ? "" : "hidden"}></div>
          ${listaComprovantes}
@@ -2137,7 +2137,7 @@
       if (!j.success) throw new Error(j.message || "Erro ao enviar comprovante.");
       const ped = pedidosGrupo.find((p) => p.id === idPed);
       if (ped) {
-        ped.status_pagamento = "informado";
+        ped.status_pagamento = "comprovante_enviado";
         ped.status_vendedor = "aguardando_confirmacao";
         ped.status = "aguardando_confirmacao";
         ped.anexos = ped.anexos || [];
@@ -2208,7 +2208,7 @@
     if (ped) {
       ped.status_vendedor = "aguardando_confirmacao";
       ped.status = "aguardando_confirmacao";
-      ped.status_pagamento = "informado";
+      ped.status_pagamento = "comprovante_enviado";
     }
     await carregarLista();
     if (idGrupo) {

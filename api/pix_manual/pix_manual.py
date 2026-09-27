@@ -181,6 +181,7 @@ from core.pedidos.servico import (
     STATUS_AGUARDANDO_CONFIRMACAO,
     STATUS_IMPORTADO,
     STATUS_PAGO,
+    STATUS_RASCUNHO,
     _sql_set_status_vendedor,
     obter_pedido,
     pedido_docs_frete_ok,
@@ -301,6 +302,8 @@ def iniciar_pix_manual(
     if not ped:
         raise ValueError("Pedido não encontrado.")
     st = status_vendedor_pedido(ped)
+    if st == STATUS_RASCUNHO:
+        raise ValueError("Confirme o pedido antes de gerar o PIX.")
     if st in ("entregue", "cancelado"):
         raise ValueError("Não é possível gerar PIX neste status do pedido.")
     if pedido_tem_comprovante_pix(cur, id_pedido):
@@ -366,6 +369,8 @@ def marcar_comprovante_enviado(cur, id_pedido: int, *, id_vendedor: int | None =
     st = status_vendedor_pedido(ped)
     if st in (STATUS_PAGO, STATUS_AGUARDANDO_CONFIRMACAO, "em_expedicao", "entregue"):
         return
+    if st == STATUS_RASCUNHO:
+        raise ValueError("Confirme o pedido antes de anexar o comprovante.")
     if st not in (STATUS_AGUARDANDO, STATUS_IMPORTADO):
         raise ValueError("Pedido não está aguardando pagamento.")
 
@@ -429,6 +434,8 @@ def reabrir_pagamento_pix_manual(
     if not ped:
         raise ValueError("Pedido não encontrado.")
     st = status_vendedor_pedido(ped)
+    if st == STATUS_RASCUNHO:
+        raise ValueError("Confirme o pedido antes de gerar o PIX.")
     if st in ("entregue", "cancelado"):
         raise ValueError("Não é possível reabrir cobrança neste status.")
     if pedido_tem_comprovante_pix(cur, id_pedido):

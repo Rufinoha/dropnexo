@@ -1767,7 +1767,9 @@ def registrar_pagamento_vendedor(
     st = status_vendedor_pedido(ped)
     if st in (STATUS_CANCELADO, STATUS_ENTREGUE):
         raise ValueError("Não é possível registrar pagamento neste status.")
-    if st not in (STATUS_AGUARDANDO, STATUS_IMPORTADO, STATUS_RASCUNHO):
+    if st == STATUS_RASCUNHO:
+        raise ValueError("Confirme o pedido antes de registrar o pagamento.")
+    if st not in (STATUS_AGUARDANDO, STATUS_IMPORTADO):
         try:
             baixar_estoque_do_pedido(cur, id_pedido)
         except Exception:
@@ -1789,7 +1791,7 @@ def registrar_pagamento_vendedor(
         UPDATE tbl_pedido SET
             {set_sv},
             {meio_sql}
-            status_pagamento = 'informado',
+            status_pagamento = 'comprovante_enviado',
             mp_payment_id = COALESCE(%s, mp_payment_id),
             mp_payment_status = COALESCE(%s, mp_payment_status),
             atualizado_em = %s
