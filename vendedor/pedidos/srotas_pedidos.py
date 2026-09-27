@@ -29,6 +29,7 @@ from core.pedidos.servico import (
     obter_grupo_pedido,
     obter_pedido,
     pedido_docs_frete_ok,
+    status_vendedor_pedido,
     registrar_anexo_pedido,
     salvar_rascunho,
     taxas_fornecedores_vendedor,
@@ -334,8 +335,16 @@ def pedido_anexos_upload(id_pedido: int):
         if tipo == "comprovante_pix":
             marcar_comprovante_enviado(cur, id_pedido, id_vendedor=id_v)
         docs = pedido_docs_frete_ok(cur, id_pedido)
+        ped_pos = obter_pedido(cur, id_pedido, id_vendedor=id_v) or {}
         conn.commit()
-        return jsonify(success=True, message="Anexo enviado.", anexo=anexo, frete_docs=docs)
+        return jsonify(
+            success=True,
+            message="Anexo enviado.",
+            anexo=anexo,
+            frete_docs=docs,
+            status_vendedor=status_vendedor_pedido(ped_pos) if ped_pos else "",
+            status_pagamento=ped_pos.get("status_pagamento") or "",
+        )
     except ValueError as e:
         conn.rollback()
         return jsonify(success=False, message=str(e)), 400

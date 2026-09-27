@@ -1920,6 +1920,353 @@ def _nome_listing_type_ml(listing_type_id: str) -> str:
     return nomes.get((listing_type_id or "").strip(), listing_type_id or "—")
 
 
+_SIMULACAO_TIPOS_ML = frozenset({"free", "gold_special", "gold_pro"})
+
+# CEP de uma cidade de referência. A cotação vale para esse destino, não para o estado inteiro.
+_DESTINOS_FRETE_ML = {
+    "sp_capital": ("São Paulo — capital", "01310100"),
+    "sp_interior": ("São Paulo — interior", "14010090"),
+    "rj_capital": ("Rio de Janeiro — capital", "20040020"),
+    "bh": ("Belo Horizonte", "30130100"),
+    "curitiba": ("Curitiba", "80010010"),
+    "poa": ("Porto Alegre", "90010150"),
+    "salvador": ("Salvador", "40020010"),
+    "recife": ("Recife", "50010090"),
+    "fortaleza": ("Fortaleza", "60010150"),
+    "brasilia": ("Brasília", "70040902"),
+    "manaus": ("Manaus", "69010060"),
+}
+
+
+def _dinheiro_simulacao(valor) -> float:
+    try:
+        return round(float(valor or 0), 2)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def buscar_variantes_simulacao_ml(cur, id_tenant: int, termo: str = "", limite: int = 20) -> list[dict]:
+    """Variações de Meus produtos para a simulação. Não publica nada."""
+    q = (termo or "").strip()
+    limite = max(1, min(int(limite or 20), 30))
+    where = ["pv.id_tenant_vendedor = %s", "pv.ativo = TRUE"]
+    params: list[Any] = [int(id_tenant)]
+    if q:
+        where.append(
+            """(
+                COALESCE(pv.nome_vitrine, '') ILIKE %s
+                OR COALESCE(v.nome_exibicao, '') ILIKE %s
+                OR COALESCE(p.nome, '') ILIKE %s
+                OR COALESCE(v.sku, '') ILIKE %s
+                OR COALESCE(p.sku, '') ILIKE %s
+            )"""
+        )
+        like = f"%{q}%"
+        params.extend([like, like, like, like, like])
+    params.append(limite)
+    cur.execute(
+        f"""
+        SELECT v.id,
+               p.id,
+               COALESCE(NULLIF(TRIM(pv.nome_vitrine), ''), NULLIF(TRIM(v.nome_exibicao), ''), p.nome),
+               COALESCE(NULLIF(TRIM(p.nome), ''), ''),
+               TRIM(COALESCE(NULLIF(v.sku, ''), p.sku, '')),
+               COALESCE(pv.preco_venda, v.preco, p.preco, 0),
+               COALESCE(NULLIF(v.valor_drop, 0), NULLIF(p.valor_drop, 0), 0),
+               pv.id_categoria_vendedor,
+               COALESCE(c.nome, '')
+        FROM tbl_produto_vendedor pv
+        JOIN tbl_produto_variante v ON v.id = pv.id_variante
+        JOIN tbl_produto p ON p.id = pv.id_produto
+        LEFT JOIN tbl_categoria c ON c.id = pv.id_categoria_vendedor
+        WHERE {' AND '.join(where)}
+        ORDER BY p.nome, v.ordem, v.nome_exibicao
+        LIMIT %s
+        """,
+        params,
+    )
+    out: list[dict] = []
+    for row in cur.fetchall():
+        id_var = int(row[0])
+        nome_var = (row[2] or "").strip()
+        nome_pai = (row[3] or "").strip()
+        titulo = nome_var or nome_pai or "Produto"
+        if nome_pai and nome_var and nome_var.lower() != nome_pai.lower():
+            titulo = f"{nome_pai} — {nome_var}"
+        id_cat = int(row[7]) if row[7] else None
+        ml_cat, _fam = _mapa_categoria_ml(cur, id_tenant, id_cat)
+        aviso = ""
+        if not id_cat:
+            aviso = "Associe uma categoria DropNexo a este produto antes de simular."
+        elif not ml_cat:
+            aviso = (
+                "A categoria deste produto ainda não está mapeada para o Mercado Livre. "
+                "Vincule em Categorias."
+            )
+        drop = _dinheiro_simulacao(row[6])
+        if drop <= 0 and not aviso:
+            aviso = "Esta variação não tem valor drop."
+        out.append(
+            {
+                "id_variante": id_var,
+                "id_produto": int(row[1]),
+                "titulo": titulo,
+                "sku": (row[4] or "").strip(),
+                "preco_venda": _dinheiro_simulacao(row[5]),
+                "valor_drop": drop,
+                "categoria_nome": (row[8] or "").strip(),
+                "categoria_mapeada": bool(ml_cat),
+                "aviso": aviso,
+            }
+        )
+    return out
+
+
+def _comissao_listing_prices_ml(cur, id_tenant: int, *, site_id: str, preco: float, category_id: str, listing_type: str) -> dict:
+    data = api_request(
+        cur,
+        id_tenant,
+        "GET",
+        f"/sites/{site_id}/listing_prices",
+        params={
+            "price": f"{preco:.2f}",
+            "category_id": category_id,
+        },
+    )
+    if isinstance(data, list):
+        itens = data
+    elif isinstance(data, dict) and data.get("listing_type_id"):
+        itens = [data]
+    elif isinstance(data, dict):
+        bruto = data.get("results") or data.get("listing_prices") or data.get("data") or []
+        itens = bruto if isinstance(bruto, list) else []
+    else:
+        itens = []
+    alvo = (listing_type or "").strip()
+    escolhido = None
+    for item in itens:
+        if not isinstance(item, dict):
+            continue
+        lid = str(item.get("listing_type_id") or "").strip()
+        if lid == alvo or (alvo == "gold_pro" and lid == "gold_premium"):
+            escolhido = item
+            break
+    if not escolhido:
+        raise ValueError(
+            f"O Mercado Livre não oferece {_nome_listing_type_ml(alvo)} nesta categoria. "
+            "Escolha outro tipo de anúncio."
+        )
+    detalhes = escolhido.get("sale_fee_details") if isinstance(escolhido.get("sale_fee_details"), dict) else {}
+    comissao = _dinheiro_simulacao(escolhido.get("sale_fee_amount"))
+    pct = detalhes.get("percentage_fee")
+    try:
+        pct_f = round(float(pct), 2) if pct is not None and pct != "" else None
+    except (TypeError, ValueError):
+        pct_f = None
+    if pct_f is None and preco > 0:
+        pct_f = round(comissao / preco * 100, 2)
+    return {
+        "comissao": comissao,
+        "percentual": pct_f or 0.0,
+        "tarifa_fixa": _dinheiro_simulacao(detalhes.get("fixed_fee")),
+    }
+
+
+def _cep_destino_simulacao(destino: str, cep_informado: str) -> tuple[str, str]:
+    chave = (destino or "").strip()
+    if chave == "cep":
+        digitos = re.sub(r"\D", "", cep_informado or "")
+        if len(digitos) != 8:
+            raise ValueError("Informe um CEP com 8 dígitos.")
+        return digitos, f"CEP {digitos[:5]}-{digitos[5:]}"
+    item = _DESTINOS_FRETE_ML.get(chave)
+    if not item:
+        raise ValueError("Escolha o destino da estimativa de frete.")
+    return item[1], item[0]
+
+
+def _medidas_frete_ml(altura, largura, profundidade, peso_kg) -> str:
+    def cm(valor) -> int:
+        try:
+            n = float(valor or 0)
+        except (TypeError, ValueError):
+            n = 0
+        return int(round(n))
+
+    gramas = 0
+    try:
+        if peso_kg:
+            gramas = int(round(float(peso_kg) * 1000))
+    except (TypeError, ValueError):
+        gramas = 0
+    alt, larg, prof = cm(altura), cm(largura), cm(profundidade)
+    if alt <= 0 or larg <= 0 or prof <= 0 or gramas <= 0:
+        raise ValueError(
+            "Informe peso e medidas (altura, largura e profundidade) desta variação para estimar o frete grátis."
+        )
+    return f"{alt}x{larg}x{prof},{gramas}"
+
+
+def _frete_gratis_estimado_ml(
+    cur,
+    id_tenant: int,
+    *,
+    ml_user_id: int,
+    cep: str,
+    dimensoes: str,
+) -> float:
+    data = api_request(
+        cur,
+        id_tenant,
+        "GET",
+        f"/users/{int(ml_user_id)}/shipping_options",
+        params={"zip_code": cep, "dimensions": dimensoes},
+    )
+    opcoes = []
+    if isinstance(data, dict):
+        bruto = data.get("options") or data.get("shipping_options") or []
+        if isinstance(bruto, list):
+            opcoes = bruto
+    custos: list[float] = []
+    for op in opcoes:
+        if not isinstance(op, dict):
+            continue
+        bruto = op.get("list_cost")
+        if bruto is None:
+            bruto = op.get("cost")
+        valor = _dinheiro_simulacao(bruto)
+        if valor >= 0:
+            custos.append(valor)
+    if not custos:
+        raise ValueError(
+            "O Mercado Livre não devolveu o frete para esse destino. Confira peso, medidas e o CEP."
+        )
+    return min(custos)
+
+
+def simular_anuncio_ml(
+    cur,
+    id_tenant: int,
+    *,
+    id_variante: int,
+    preco_venda: float,
+    listing_type: str,
+    imposto_pct: float,
+    outros_custos: float,
+    frete_gratis: bool = False,
+    destino: str = "",
+    cep: str = "",
+) -> dict:
+    """Conta de uma unidade. Não grava preço e não publica anúncio."""
+    tipo = (listing_type or "").strip()
+    if tipo not in _SIMULACAO_TIPOS_ML:
+        raise ValueError("Escolha Clássico, Premium ou Grátis.")
+    preco = _dinheiro_simulacao(preco_venda)
+    if preco <= 0:
+        raise ValueError("Informe um preço de venda maior que zero.")
+    try:
+        imposto = float(imposto_pct or 0)
+    except (TypeError, ValueError):
+        imposto = -1
+    if imposto < 0 or imposto > 100:
+        raise ValueError("O imposto deve ficar entre 0 e 100%.")
+    outros = _dinheiro_simulacao(outros_custos)
+    if outros < 0:
+        raise ValueError("Outros custos não podem ser negativos.")
+
+    cur.execute(
+        """
+        SELECT COALESCE(NULLIF(TRIM(pv.nome_vitrine), ''), NULLIF(TRIM(v.nome_exibicao), ''), p.nome),
+               COALESCE(NULLIF(TRIM(p.nome), ''), ''),
+               TRIM(COALESCE(NULLIF(v.sku, ''), p.sku, '')),
+               COALESCE(NULLIF(v.valor_drop, 0), NULLIF(p.valor_drop, 0), 0),
+               pv.id_categoria_vendedor,
+               COALESCE(c.nome, ''),
+               COALESCE(v.altura_cm, p.altura_cm),
+               COALESCE(v.largura_cm, p.largura_cm),
+               COALESCE(v.profundidade_cm, p.profundidade_cm),
+               COALESCE(
+                   NULLIF(v.peso_bruto_kg, 0), NULLIF(p.peso_bruto_kg, 0),
+                   NULLIF(v.peso_liquido_kg, 0), NULLIF(p.peso_liquido_kg, 0), 0
+               )
+        FROM tbl_produto_vendedor pv
+        JOIN tbl_produto_variante v ON v.id = pv.id_variante
+        JOIN tbl_produto p ON p.id = pv.id_produto
+        LEFT JOIN tbl_categoria c ON c.id = pv.id_categoria_vendedor
+        WHERE pv.id_tenant_vendedor = %s AND pv.ativo = TRUE AND v.id = %s
+        LIMIT 1
+        """,
+        (int(id_tenant), int(id_variante)),
+    )
+    row = cur.fetchone()
+    if not row:
+        raise ValueError("Produto não encontrado em Meus produtos.")
+    nome_var = (row[0] or "").strip()
+    nome_pai = (row[1] or "").strip()
+    titulo = nome_var or nome_pai or "Produto"
+    if nome_pai and nome_var and nome_var.lower() != nome_pai.lower():
+        titulo = f"{nome_pai} — {nome_var}"
+    drop = _dinheiro_simulacao(row[3])
+    if drop <= 0:
+        raise ValueError("Esta variação não tem valor drop. Preencha o valor pago ao fornecedor antes de simular.")
+    id_cat = int(row[4]) if row[4] else None
+    if not id_cat:
+        raise ValueError(
+            f"«{titulo}»: associe uma categoria DropNexo ao produto antes de simular."
+        )
+    category_id, _fam = _mapa_categoria_ml(cur, id_tenant, id_cat)
+    if not category_id:
+        raise ValueError(
+            f"«{titulo}»: a categoria DropNexo ainda não está mapeada para o Mercado Livre. "
+            "Vá em Integrações → Mercado Livre → Categorias e salve o mapeamento."
+        )
+
+    cfg = carregar_config_ml(cur, int(id_tenant))
+    site_id = (cfg.get("ml_site_id") or "MLB").upper()
+    taxas = _comissao_listing_prices_ml(
+        cur,
+        int(id_tenant),
+        site_id=site_id,
+        preco=preco,
+        category_id=category_id,
+        listing_type=tipo,
+    )
+    frete = 0.0
+    destino_rotulo = ""
+    if frete_gratis:
+        cep_destino, destino_rotulo = _cep_destino_simulacao(destino, cep)
+        ml_user_id = int(cfg.get("ml_user_id") or 0)
+        if ml_user_id <= 0:
+            raise ValueError("Reconecte a conta do Mercado Livre para estimar o frete.")
+        dimensoes = _medidas_frete_ml(row[6], row[7], row[8], row[9])
+        frete = _frete_gratis_estimado_ml(
+            cur,
+            int(id_tenant),
+            ml_user_id=ml_user_id,
+            cep=cep_destino,
+            dimensoes=dimensoes,
+        )
+    valor_imposto = round(preco * imposto / 100, 2)
+    sobra = round(preco - drop - taxas["comissao"] - valor_imposto - outros - frete, 2)
+    return {
+        "titulo": titulo,
+        "sku": (row[2] or "").strip(),
+        "categoria_nome": (row[5] or "").strip(),
+        "tipo_anuncio": _nome_listing_type_ml(tipo),
+        "preco_venda": preco,
+        "valor_drop": drop,
+        "comissao": taxas["comissao"],
+        "comissao_percentual": taxas["percentual"],
+        "tarifa_fixa": taxas["tarifa_fixa"],
+        "imposto_pct": round(imposto, 2),
+        "imposto": valor_imposto,
+        "outros_custos": outros,
+        "frete": frete,
+        "destino_rotulo": destino_rotulo,
+        "sobra": sobra,
+    }
+
+
 def _estado_anuncio_ml(cur, id_tenant: int, item_id: str) -> dict[str, Any]:
     try:
         data = api_request(cur, id_tenant, "GET", f"/items/{item_id}")

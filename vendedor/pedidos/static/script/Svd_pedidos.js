@@ -2154,12 +2154,15 @@
       if (!j.success) throw new Error(j.message || "Erro ao enviar comprovante.");
       const ped = pedidosGrupo.find((p) => p.id === idPed);
       if (ped) {
-        ped.status_pagamento = "comprovante_enviado";
-        ped.status_vendedor = "aguardando_confirmacao";
-        ped.status = "aguardando_confirmacao";
+        const stNovo = j.status_vendedor || "aguardando_confirmacao";
+        ped.status_pagamento = j.status_pagamento || "comprovante_enviado";
+        ped.status_vendedor = stNovo;
+        ped.status = stNovo;
         ped.anexos = ped.anexos || [];
         if (j.anexo) ped.anexos.push(j.anexo);
+        refletirStatusNaLista(ped);
       }
+      await carregarLista();
       if (window.Swal) {
         Swal.fire({
           icon: "success",
@@ -2576,9 +2579,20 @@
     window.lucide?.createIcons?.();
   }
 
+  function refletirStatusNaLista(ped) {
+    if (!ped?.id) return;
+    const row = todosPedidos.find((p) => p.id === ped.id);
+    if (!row) return;
+    row.status_vendedor = ped.status_vendedor;
+    row.status = ped.status;
+    row.status_pagamento = ped.status_pagamento;
+    renderLista();
+  }
+
   function fecharModal() {
     pararPollPix();
     el.modal.hidden = true;
+    carregarLista();
   }
 
   function soDigitos(v) {

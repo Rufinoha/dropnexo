@@ -4,6 +4,7 @@
     produtos: document.getElementById("ml_pane_produtos"),
     estoque: document.getElementById("ml_pane_estoque"),
     categorias: document.getElementById("ml_pane_categorias"),
+    simulacao: document.getElementById("ml_pane_simulacao"),
     status: document.getElementById("ml_pane_status"),
   };
 
@@ -72,6 +73,162 @@
       });
     }
   }
+
+  const sim = {
+    busca: document.getElementById("ml_sim_busca"),
+    lista: document.getElementById("ml_sim_lista"),
+    escolha: document.getElementById("ml_sim_escolha"),
+    preco: document.getElementById("ml_sim_preco"),
+    drop: document.getElementById("ml_sim_drop"),
+    imposto: document.getElementById("ml_sim_imposto"),
+    outros: document.getElementById("ml_sim_outros"),
+    btn: document.getElementById("ml_sim_calcular"),
+    resultado: document.getElementById("ml_sim_resultado"),
+    variante: null,
+  };
+  let simTimer = 0;
+
+  function moedaSim(n) {
+    return Number(n || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  }
+
+  function numeroSim(texto) {
+    let s = String(texto || "").trim().replace(/\s/g, "").replace(/R\$/g, "");
+    if (s.includes(",")) s = s.replace(/\./g, "").replace(",", ".");
+    const n = Number(s);
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  function mostrarResultadoSim(html) {
+    if (!sim.resultado) return;
+    sim.resultado.hidden = false;
+    sim.resultado.innerHTML = html;
+  }
+
+  function escolherVarianteSim(item) {
+    sim.variante = item;
+    if (sim.busca) sim.busca.value = item.titulo || "";
+    if (sim.lista) sim.lista.hidden = true;
+    if (sim.preco) sim.preco.value = Number(item.preco_venda || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    if (sim.drop) sim.drop.value = moedaSim(item.valor_drop);
+    if (sim.escolha) {
+      const cat = item.categoria_nome ? `Categoria: ${item.categoria_nome}.` : "Sem categoria no DropNexo.";
+      sim.escolha.hidden = false;
+      sim.escolha.textContent = [item.sku ? `SKU ${item.sku}` : "", cat, item.aviso || ""].filter(Boolean).join(" ");
+    }
+    if (sim.resultado) sim.resultado.hidden = true;
+  }
+
+  async function buscarSimulacao() {
+    if (!sim.lista || !sim.busca) return;
+    const q = sim.busca.value.trim();
+    if (q.length < 2) {
+      sim.lista.hidden = true;
+      sim.lista.innerHTML = "";
+      return;
+    }
+    const r = await fetch(`/api/integracoes/mercado-livre/simulacao/produtos?q=${encodeURIComponent(q)}`, {
+      credentials: "same-origin",
+    });
+    const j = await r.json();
+    if (!j.success) {
+      sim.lista.hidden = true;
+      return;
+    }
+    const itens = j.itens || [];
+    if (!itens.length) {
+      sim.lista.hidden = false;
+      sim.lista.innerHTML = `<p class="Mp_Hint" style="margin:0.6rem 0.75rem">Nenhum produto encontrado.</p>`;
+      return;
+    }
+    sim.lista.hidden = false;
+    sim.lista.innerHTML = itens
+      .map(
+        (item, i) => `
+        <button type="button" class="Mp_SimItem" data-sim-i="${i}">
+          ${esc(item.titulo)}
+          <small>${esc([item.sku, item.categoria_nome || "sem categoria", moedaSim(item.preco_venda)].filter(Boolean).join(" · "))}</small>
+        </button>`
+      )
+      .join("");
+    sim.lista.querySelectorAll("[data-sim-i]").forEach((btn) => {
+      btn.addEventListener("click", () => escolherVarianteSim(itens[Number(btn.dataset.simI)]));
+    });
+  }
+
+  async function calcularSimulacao() {
+    if (!sim.variante) {
+      mostrarResultadoSim(`<p class="Mp_SimAviso">Escolha um produto de Meus produtos.</p>`);
+      return;
+    }
+    if (sim.btn) sim.btn.disabled = true;
+    try {
+      const tipo = document.querySelector('input[name="ml_sim_tipo"]:checked')?.value || "gold_special";
+      const r = await fetch("/api/integracoes/mercado-livre/simulacao", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id_variante: sim.variante.id_variante,
+          preco_venda: numeroSim(sim.preco?.value),
+          listing_type: tipo,
+          imposto_pct: numeroSim(sim.imposto?.value),
+          outros_custos: numeroSim(sim.outros?.value),
+          frete_gratis: !!document.getElementById("ml_sim_frete")?.checked,
+          destino: document.getElementById("ml_sim_destino")?.value || "",
+          cep: document.getElementById("ml_sim_cep")?.value || "",
+        }),
+      });
+      const j = await r.json();
+      if (!j.success) {
+        mostrarResultadoSim(`<p class="Mp_SimAviso">${esc(j.message || "Não foi possível calcular.")}</p>`);
+        return;
+      }
+      const d = j.resultado || {};
+      const neg = Number(d.sobra) < 0;
+      const fixa = Number(d.tarifa_fixa) > 0 ? ` · inclui tarifa fixa ${moedaSim(d.tarifa_fixa)}` : "";
+      const freteLinha = d.destino_rotulo
+        ? `<div class="Mp_SimLinha"><span>Frete grátis estimado para ${esc(d.destino_rotulo)}</span><strong>− ${moedaSim(d.frete)}</strong></div>`
+        : "";
+      mostrarResultadoSim(`
+        <div class="Mp_SimLinha"><span>Preço de venda</span><strong>${moedaSim(d.preco_venda)}</strong></div>
+        <div class="Mp_SimLinha"><span>Valor drop</span><strong>− ${moedaSim(d.valor_drop)}</strong></div>
+        <div class="Mp_SimLinha"><span>Comissão ${esc(d.tipo_anuncio || "")} (${Number(d.comissao_percentual || 0).toLocaleString("pt-BR")}%)${esc(fixa)}</span><strong>− ${moedaSim(d.comissao)}</strong></div>
+        <div class="Mp_SimLinha"><span>Imposto (${Number(d.imposto_pct || 0).toLocaleString("pt-BR")}%)</span><strong>− ${moedaSim(d.imposto)}</strong></div>
+        <div class="Mp_SimLinha"><span>Outros custos</span><strong>− ${moedaSim(d.outros_custos)}</strong></div>
+        ${freteLinha}
+        <div class="Mp_SimSobra${neg ? " is-neg" : ""}"><span>Sobra</span><span>${moedaSim(d.sobra)}</span></div>
+      `);
+    } catch (e) {
+      mostrarResultadoSim(`<p class="Mp_SimAviso">${e.message || "Falha ao calcular."}</p>`);
+    } finally {
+      if (sim.btn) sim.btn.disabled = false;
+    }
+  }
+
+  sim.busca?.addEventListener("input", () => {
+    sim.variante = null;
+    clearTimeout(simTimer);
+    simTimer = setTimeout(() => {
+      buscarSimulacao().catch(() => {
+        if (sim.lista) sim.lista.hidden = true;
+      });
+    }, 250);
+  });
+  sim.btn?.addEventListener("click", () => calcularSimulacao());
+  document.getElementById("ml_sim_frete")?.addEventListener("change", (ev) => {
+    const box = document.getElementById("ml_sim_destino_box");
+    if (box) box.hidden = !ev.target.checked;
+  });
+  document.getElementById("ml_sim_destino")?.addEventListener("change", (ev) => {
+    const cepBox = document.getElementById("ml_sim_cep_box");
+    if (cepBox) cepBox.hidden = ev.target.value !== "cep";
+  });
+  document.addEventListener("click", (ev) => {
+    if (!sim.lista || sim.lista.hidden) return;
+    if (ev.target === sim.busca || sim.lista.contains(ev.target)) return;
+    sim.lista.hidden = true;
+  });
 
   function listingTypeSelecionado() {
     return document.querySelector('input[name="ml_listing_type"]:checked')?.value || "auto";

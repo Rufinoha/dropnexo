@@ -3,7 +3,7 @@
 {% block title %}Mercado Livre — Integrações — {{ MARCA_NOME }}{% endblock %}
 {% block topbar_title %}Mercado Livre{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('static', filename='style/Cmercadopago_integracao.css') }}?v=16" />
+<link rel="stylesheet" href="{{ url_for('static', filename='style/Cmercadopago_integracao.css') }}?v=18" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal Mp_Wrap">
@@ -46,6 +46,7 @@
     <nav class="Mp_SubTabs" id="ml_subtabs" aria-label="Seções Mercado Livre">
       <button type="button" class="Mp_SubTab is-active" data-ml-tab="pedidos">Pedidos</button>
       <button type="button" class="Mp_SubTab" data-ml-tab="produtos">Produtos</button>
+      <button type="button" class="Mp_SubTab" data-ml-tab="simulacao">Simulação</button>
       <button type="button" class="Mp_SubTab" data-ml-tab="estoque">Estoque</button>
       <button type="button" class="Mp_SubTab" data-ml-tab="categorias">Categorias</button>
       <button type="button" class="Mp_SubTab" data-ml-tab="status">Status</button>
@@ -175,6 +176,95 @@
       </ol>
     </div>
 
+    <div id="ml_pane_simulacao" hidden>
+      <h3>Simulação de margem</h3>
+      <p class="Mp_Hint">Veja quanto sobra em uma venda depois do valor drop, da comissão do Mercado Livre, do imposto e de outros custos. Nada é gravado no produto e nenhum anúncio é publicado.</p>
+      <div class="Mp_SimBusca">
+        <label class="Mp_PickerLabel" for="ml_sim_busca">Produto de Meus produtos</label>
+        <input type="search" id="ml_sim_busca" class="Mp_PickerBusca" placeholder="Nome ou SKU" autocomplete="off" />
+        <div id="ml_sim_lista" class="Mp_SimLista" hidden></div>
+      </div>
+      <p id="ml_sim_escolha" class="Mp_Hint Mp_Hint--note" hidden></p>
+      <div class="Mp_Grid2 Mp_SimGrid">
+        <div class="Cl_FormCampo">
+          <label for="ml_sim_preco">Preço de venda</label>
+          <input type="text" id="ml_sim_preco" inputmode="decimal" placeholder="0,00" />
+        </div>
+        <div class="Cl_FormCampo">
+          <label for="ml_sim_drop">Valor drop</label>
+          <input type="text" id="ml_sim_drop" readonly />
+        </div>
+        <div class="Cl_FormCampo">
+          <label for="ml_sim_imposto">Imposto sobre a venda (%)</label>
+          <input type="text" id="ml_sim_imposto" inputmode="decimal" value="0" />
+        </div>
+        <div class="Cl_FormCampo">
+          <label for="ml_sim_outros">Outros custos (R$)</label>
+          <input type="text" id="ml_sim_outros" inputmode="decimal" value="0" />
+        </div>
+      </div>
+      <fieldset class="Mp_RadioGroup">
+        <legend class="Mp_RadioLegend">Tipo de anúncio</legend>
+        <label class="Mp_RadioRow">
+          <input type="radio" name="ml_sim_tipo" value="gold_special" checked />
+          <span><strong>Clássico</strong></span>
+        </label>
+        <label class="Mp_RadioRow">
+          <input type="radio" name="ml_sim_tipo" value="gold_pro" />
+          <span><strong>Premium</strong></span>
+        </label>
+        <label class="Mp_RadioRow">
+          <input type="radio" name="ml_sim_tipo" value="free" />
+          <span><strong>Grátis</strong></span>
+        </label>
+      </fieldset>
+      <label class="Mp_RadioRow" style="margin-top:0.85rem">
+        <input type="checkbox" id="ml_sim_frete" />
+        <span><strong>Considerar frete grátis</strong> — estima o custo que você absorve até o destino escolhido</span>
+      </label>
+      <div id="ml_sim_destino_box" class="Mp_SimDestino" hidden>
+        <div class="Cl_FormCampo">
+          <label for="ml_sim_destino">Destino da estimativa</label>
+          <select id="ml_sim_destino">
+            <optgroup label="Sudeste">
+              <option value="sp_capital">São Paulo — capital</option>
+              <option value="sp_interior">São Paulo — interior</option>
+              <option value="rj_capital">Rio de Janeiro — capital</option>
+              <option value="bh">Belo Horizonte</option>
+            </optgroup>
+            <optgroup label="Sul">
+              <option value="curitiba">Curitiba</option>
+              <option value="poa">Porto Alegre</option>
+            </optgroup>
+            <optgroup label="Nordeste">
+              <option value="salvador">Salvador</option>
+              <option value="recife">Recife</option>
+              <option value="fortaleza">Fortaleza</option>
+            </optgroup>
+            <optgroup label="Centro-Oeste">
+              <option value="brasilia">Brasília</option>
+            </optgroup>
+            <optgroup label="Norte">
+              <option value="manaus">Manaus</option>
+            </optgroup>
+            <optgroup label="Outro">
+              <option value="cep">Informar um CEP</option>
+            </optgroup>
+          </select>
+        </div>
+        <div class="Cl_FormCampo" id="ml_sim_cep_box" hidden>
+          <label for="ml_sim_cep">CEP de destino</label>
+          <input type="text" id="ml_sim_cep" inputmode="numeric" maxlength="9" placeholder="00000-000" />
+        </div>
+        <p class="Mp_Hint">Cada cidade usa um CEP de referência. O valor é a estimativa dessa rota, não do estado inteiro. Sem peso ou medidas no produto, a cotação não sai.</p>
+      </div>
+      <p class="Mp_Hint">A comissão é a que o Mercado Livre devolve para a categoria mapeada.</p>
+      <div class="Mp_Actions">
+        <button type="button" class="Cl_botaoprimario" id="ml_sim_calcular">Calcular</button>
+      </div>
+      <div id="ml_sim_resultado" class="Mp_SimResult" hidden></div>
+    </div>
+
     <div id="ml_pane_estoque" hidden>
       <h3>Estoque</h3>
       <p class="Mp_Hint">Envia o estoque da vitrine DropNexo para os anúncios vinculados no Mercado Livre.</p>
@@ -258,5 +348,5 @@
 </div>
 {% endblock %}
 {% block page_js %}
-<script src="{{ url_for('static', filename='script/Smercado_livre_integracao.js') }}?v=26"></script>
+<script src="{{ url_for('static', filename='script/Smercado_livre_integracao.js') }}?v=28"></script>
 {% endblock %}

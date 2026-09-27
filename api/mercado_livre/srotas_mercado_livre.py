@@ -12,7 +12,9 @@ from api.mercado_livre.mercado_livre import (
     carregar_config_ml,
     desconectar_ml,
     gerar_state_oauth,
+    buscar_variantes_simulacao_ml,
     listar_mapeamento_categorias_ml,
+    simular_anuncio_ml,
     ml_configurado,
     ml_conectado,
     prefetch_sugestoes_categorias_ml,
@@ -298,6 +300,79 @@ def sync_produtos():
     except Exception as e:
         conn.rollback()
         return jsonify(success=False, message=str(e)[:300]), 400
+    finally:
+        conn.close()
+
+
+def _exigir_simulacao_ml():
+    if not _pode_integracoes():
+        return jsonify(success=False, message="Sem permissão."), 403
+    if garantir_modulo_sessao() != "vendedor" and not session.get("eh_desenvolvedor"):
+        return jsonify(success=False, message="Apenas vendedores."), 403
+    return None
+
+
+@ml_bp.get("/api/integracoes/mercado-livre/simulacao/produtos")
+@login_obrigatorio()
+def simulacao_produtos():
+    bloqueio = _exigir_simulacao_ml()
+    if bloqueio:
+        return bloqueio
+    id_tenant = session.get("id_tenant")
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        if not ml_conectado(cur, int(id_tenant)):
+            return jsonify(success=False, message="Mercado Livre não conectado."), 400
+        itens = buscar_variantes_simulacao_ml(
+            cur, int(id_tenant), request.args.get("q") or ""
+        )
+        return jsonify(success=True, itens=itens)
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)[:300]), 500
+    finally:
+        conn.close()
+
+
+@ml_bp.post("/api/integracoes/mercado-livre/simulacao")
+@login_obrigatorio()
+def simulacao_calcular():
+    bloqueio = _exigir_simulacao_ml()
+    if bloqueio:
+        return bloqueio
+    body = request.get_json(silent=True) or {}
+    id_tenant = session.get("id_tenant")
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        if not ml_conectado(cur, int(id_tenant)):
+            return jsonify(success=False, message="Mercado Livre não conectado."), 400
+        try:
+            id_variante = int(body.get("id_variante") or 0)
+        except (TypeError, ValueError):
+            id_variante = 0
+        if id_variante <= 0:
+            return jsonify(success=False, message="Escolha um produto."), 400
+        resultado = simular_anuncio_ml(
+            cur,
+            int(id_tenant),
+            id_variante=id_variante,
+            preco_venda=body.get("preco_venda"),
+            listing_type=body.get("listing_type") or "",
+            imposto_pct=body.get("imposto_pct") or 0,
+            outros_custos=body.get("outros_custos") or 0,
+            frete_gratis=bool(body.get("frete_gratis")),
+            destino=body.get("destino") or "",
+            cep=body.get("cep") or "",
+        )
+        return jsonify(success=True, resultado=resultado)
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 400
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)[:300]), 500
     finally:
         conn.close()
 
