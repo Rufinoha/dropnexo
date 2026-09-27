@@ -826,11 +826,12 @@ def listar_pedidos_fornecedor(cur, id_fornecedor: int, status: str | None = None
     where = [
         f"p.id_tenant_fornecedor = %s",
         f"p.{cv} <> %s",
-        # Manual só aparece ao fornecedor após pago (estoque/baixa nesse momento)
+        # Manual só aparece depois que o vendedor paga (aguardando_confirmacao).
+        # Rascunho e cobrança em aberto ficam só com o vendedor.
         f"""NOT (
               COALESCE(p.origem, '') = 'manual'
               AND COALESCE(p.{cv}, '') IN (
-                'rascunho', 'importado', 'aguardando_pagamento', 'aguardando_confirmacao'
+                'rascunho', 'importado', 'aguardando_pagamento'
               )
             )""",
     ]
