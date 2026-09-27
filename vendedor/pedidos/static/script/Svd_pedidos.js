@@ -665,15 +665,19 @@
 
   async function excluirComprovantePix(idAnexo) {
     const ped = pedidosGrupo.find((p) => (p.anexos || []).some((a) => a.id === idAnexo));
-    const travaStatus = ped && ["pago", "em_expedicao"].includes(stV(ped));
+    const stPed = stV(ped);
+    const travaStatus = ["pago", "em_expedicao", "aguardando_confirmacao"].includes(stPed);
     const ok = window.Swal
       ? (
           await Swal.fire({
             icon: "warning",
             title: "Excluir comprovante?",
-            html: travaStatus
-              ? "<p style='text-align:left;margin:0;line-height:1.45'>Só o arquivo sai. O status do pedido <strong>não muda</strong>.</p>"
-              : "<p style='text-align:left;margin:0;line-height:1.45'>O pedido volta para <strong>aguardando pagamento</strong>. Você poderá gerar o PIX e anexar outro comprovante.</p>",
+            html:
+              stPed === "aguardando_confirmacao"
+                ? "<p style='text-align:left;margin:0;line-height:1.45'>O arquivo sai. O pedido <strong>continua pago</strong>, aguardando a expedição. Você pode anexar outro comprovante.</p>"
+                : travaStatus
+                  ? "<p style='text-align:left;margin:0;line-height:1.45'>Só o arquivo sai. O status do pedido <strong>não muda</strong>.</p>"
+                  : "<p style='text-align:left;margin:0;line-height:1.45'>O pedido volta para <strong>aguardando pagamento</strong>. Você poderá gerar o PIX e anexar outro comprovante.</p>",
             confirmButtonText: travaStatus ? "Excluir anexo" : "Excluir e voltar status",
             cancelButtonText: "Cancelar",
             showCancelButton: true,
@@ -687,7 +691,12 @@
       Swal.fire({
         icon: "success",
         title: "Comprovante removido",
-        text: travaStatus ? "O arquivo saiu. O status do pedido permanece." : "Status voltou para aguardando pagamento.",
+        text:
+          stPed === "aguardando_confirmacao"
+            ? "O arquivo saiu. Anexe outro comprovante — o pedido continua pago."
+            : travaStatus
+              ? "O arquivo saiu. O status do pedido permanece."
+              : "Status voltou para aguardando pagamento.",
         confirmButtonColor: "#021F81",
         timer: 2200,
         showConfirmButton: true,
@@ -1919,6 +1928,8 @@
       statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pendente">Confirme o pedido para pagar</div>`;
     } else if (temComprovante && isPixManual) {
       statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pendente">Comprovante enviado — o fornecedor confirma na expedição</div>`;
+    } else if (isPixManual && ped && st === "aguardando_confirmacao") {
+      statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pendente">Comprovante removido. Anexe outro arquivo — o pedido continua pago, aguardando a expedição.</div>`;
     } else if (isPixManual && ped && !docsFreteOk) {
       statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pendente">Antes de gerar o PIX, anexe em <strong>Frete e NF</strong>: ${esc(docsFreteFaltando.join(", "))}</div>`;
     } else if (isPixManual && ped) {
@@ -2016,9 +2027,11 @@
             podeMexerComp
               ? `<input type="file" id="pd_alt_comp_${idPed}" class="Pd_AnexoInput" accept=".pdf,.png,.jpg,.jpeg,.webp" hidden data-alt-upload-comprovante="${idPed}" />
                  <p class="Pd_Hint">${
-                   comprovanteTravaStatus
-                     ? "Errado? <strong>Alterar</strong> troca o arquivo · <strong>Excluir</strong> remove o anexo. O status do pedido não muda."
-                     : "Errado? <strong>Alterar</strong> troca o arquivo · <strong>Excluir</strong> remove e volta para aguardando pagamento."
+                   st === "aguardando_confirmacao"
+                     ? "Errado? <strong>Alterar</strong> troca o arquivo · <strong>Excluir</strong> remove o anexo. O pedido continua pago — anexe outro comprovante."
+                     : comprovanteTravaStatus
+                       ? "Errado? <strong>Alterar</strong> troca o arquivo · <strong>Excluir</strong> remove o anexo. O status do pedido não muda."
+                       : "Errado? <strong>Alterar</strong> troca o arquivo · <strong>Excluir</strong> remove e volta para aguardando pagamento."
                  }</p>`
               : ""
           }
@@ -2027,11 +2040,15 @@
     const mostrarUploadComprovante =
       isPixManual &&
       ped &&
-      pedidoProntoPagar &&
+      (pedidoProntoPagar || st === "aguardando_confirmacao") &&
       !pagoConfirmadoForn &&
       !temComprovante &&
       pixManualAtivo &&
       docsFreteOk;
+    const labelUpload =
+      st === "aguardando_confirmacao"
+        ? "Anexe o comprovante novamente:"
+        : "Após pagar, anexe o comprovante:";
     const mostrarQr = pedidoProntoPagar && pixManualAtivo && !temComprovante && docsFreteOk;
     const pixBox = isPixManual && ped
       ? `<div class="Pd_PixInline" id="pd_pixm_${ped.id}" ${mostrarQr ? "" : "hidden"}></div>
@@ -2039,7 +2056,7 @@
          ${
            mostrarUploadComprovante
              ? `<div class="Pd_ComprovanteUpload">
-           <label class="Pd_Hint">Após pagar, anexe o comprovante:</label>
+           <label class="Pd_Hint">${labelUpload}</label>
            <input type="file" class="Pd_AnexoInput" accept=".pdf,.png,.jpg,.jpeg,.webp" data-upload-comprovante="${ped.id}" />
          </div>`
              : ""
