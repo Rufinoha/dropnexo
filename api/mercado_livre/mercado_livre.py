@@ -606,14 +606,14 @@ def carregar_config_ml(cur, id_tenant: int) -> dict[str, Any]:
             (id_tenant,),
         )
     else:
-    cur.execute(
-        """
-        SELECT status, ml_user_id, ml_site_id, ml_conta_info,
-               pedidos_importar_auto, ultima_sync_pedidos, conectado_em, ultimo_erro
-        FROM tbl_integracao_mercado_livre WHERE id_tenant = %s
-        """,
-        (id_tenant,),
-    )
+        cur.execute(
+            """
+            SELECT status, ml_user_id, ml_site_id, ml_conta_info,
+                   pedidos_importar_auto, ultima_sync_pedidos, conectado_em, ultimo_erro
+            FROM tbl_integracao_mercado_livre WHERE id_tenant = %s
+            """,
+            (id_tenant,),
+        )
     row = cur.fetchone()
     if not row:
         return {**base, "config_ext_disponivel": ext}
