@@ -127,14 +127,39 @@
   text-transform: uppercase;
   color: rgba(186, 210, 255, 0.92);
 }
-.FfHero h1 {
+.FfHero__head {
+  position: relative;
   margin: 0 0 0.85rem;
-  max-width: 12ch;
+  min-height: 9.4rem;
+}
+.FfHero h1 {
+  margin: 0;
+  max-width: 11ch;
+  padding-right: 8.6rem;
   font-family: var(--ff-display);
   font-size: clamp(2.15rem, 5.2vw, 3.35rem);
   font-weight: 800;
   line-height: 1.02;
   letter-spacing: -0.045em;
+}
+.FfStamp {
+  position: absolute;
+  z-index: 2;
+  right: -1.35rem;
+  top: -1.35rem;
+  width: 16.5rem;
+  height: auto;
+  overflow: visible;
+  transform: rotate(-4deg);
+  filter: drop-shadow(0 12px 18px rgba(0, 0, 0, 0.38));
+  pointer-events: none;
+}
+.FfHero__legal {
+  margin: 0.35rem 0 0;
+  max-width: 46ch;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: rgba(186, 210, 255, 0.78);
 }
 .FfHero__pitch {
   margin: 0 0 1.15rem;
@@ -849,7 +874,8 @@
   .FfWhat__panel {
     min-height: 0;
   }
-  .FfHero h1 { max-width: 14ch; }
+  .FfHero h1 { max-width: 12ch; padding-right: 6.4rem; }
+  .FfStamp { width: 11.5rem; right: -0.6rem; top: -0.7rem; }
   .FfMockCard { width: 100%; }
   .FfCaps {
     grid-template-columns: repeat(2, minmax(0, 1fr));

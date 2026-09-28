@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="{{ url_for('static', filename='style/public.css') }}?v=17" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style/public.css') }}?v=23" />
   {% include "partials/gtag_analytics.html" %}
 </head>
 <body class="public-site public-site--home">
@@ -49,12 +49,41 @@
       </div>
 
       {% if mostrar_tarja_fundador %}
-      <aside class="pub-fundador-float" role="region" aria-label="Fornecedor Fundador">
-        <div class="pub-fundador-float__copy">
-          <strong>Seja um Fornecedor Fundador</strong>
-          <span>Até {{ programa_fundador.vagas_restantes }} vaga(s) · Hub vitalício</span>
+      <aside class="pub-fundador-card" role="region" aria-label="Fornecedor Fundador">
+        <svg class="pub-fundador-card__seal" viewBox="68 0 284 296" aria-hidden="true">
+          <defs>
+            <radialGradient id="homeSealGold" cx="34%" cy="28%" r="78%">
+              <stop offset="0%" stop-color="#fff6c4"/>
+              <stop offset="42%" stop-color="#f6c431"/>
+              <stop offset="74%" stop-color="#e3a60d"/>
+              <stop offset="100%" stop-color="#c4840a"/>
+            </radialGradient>
+          </defs>
+          <polygon fill="url(#homeSealGold)" points="210.0,10.0 215.7,46.2 225.5,10.9 227.1,47.4 240.7,13.5 238.2,50.0 255.6,17.7 249.0,53.8 269.9,23.7 259.3,58.7 283.4,31.2 269.0,64.8 296.0,40.1 278.0,71.9 307.6,50.4 286.1,80.0 317.9,62.0 293.2,89.0 326.8,74.6 299.3,98.7 334.3,88.1 304.2,109.0 340.3,102.4 308.0,119.8 344.5,117.3 310.6,130.9 347.1,132.5 311.8,142.3 348.0,148.0 311.8,153.7 347.1,163.5 310.6,165.1 344.5,178.7 308.0,176.2 340.3,193.6 304.2,187.0 334.3,207.9 299.3,197.3 326.8,221.4 293.2,207.0 317.9,234.0 286.1,216.0 307.6,245.6 278.0,224.1 296.0,255.9 269.0,231.2 283.4,264.8 259.3,237.3 269.9,272.3 249.0,242.2 255.6,278.3 238.2,246.0 240.7,282.5 227.1,248.6 225.5,285.1 215.7,249.8 210.0,286.0 204.3,249.8 194.5,285.1 192.9,248.6 179.3,282.5 181.8,246.0 164.4,278.3 171.0,242.2 150.1,272.3 160.7,237.3 136.6,264.8 151.0,231.2 124.0,255.9 142.0,224.1 112.4,245.6 133.9,216.0 102.1,234.0 126.8,207.0 93.2,221.4 120.7,197.3 85.7,207.9 115.8,187.0 79.7,193.6 112.0,176.2 75.5,178.7 109.4,165.1 72.9,163.5 108.2,153.7 72.0,148.0 108.2,142.3 72.9,132.5 109.4,130.9 75.5,117.3 112.0,119.8 79.7,102.4 115.8,109.0 85.7,88.1 120.7,98.7 93.2,74.6 126.8,89.0 102.1,62.0 133.9,80.0 112.4,50.4 142.0,71.9 124.0,40.1 151.0,64.8 136.6,31.2 160.7,58.7 150.1,23.7 171.0,53.8 164.4,17.7 181.8,50.0 179.3,13.5 192.9,47.4 194.5,10.9 204.3,46.2"/>
+          <circle cx="210" cy="148" r="104" fill="url(#homeSealGold)"/>
+          <circle cx="210" cy="148" r="104" fill="none" stroke="#8a5a08" stroke-width="3"/>
+          <circle cx="210" cy="148" r="96" fill="none" stroke="#fff6d0" stroke-width="5"/>
+          <circle cx="210" cy="148" r="90" fill="none" stroke="#a16207" stroke-width="1.6"/>
+          <path fill="#6b3f09" d="M176 112 L188 86 L202 106 L210 70 L218 106 L232 86 L244 112 Z"/>
+          <rect x="174" y="110" width="72" height="8" rx="2" fill="#6b3f09"/>
+          <circle cx="188" cy="84" r="4.2" fill="#6b3f09"/>
+          <circle cx="210" cy="66" r="4.6" fill="#6b3f09"/>
+          <circle cx="232" cy="84" r="4.2" fill="#6b3f09"/>
+          <path d="M210 58 V44 M203 51 H217" fill="none" stroke="#6b3f09" stroke-width="3.2" stroke-linecap="round"/>
+          <text x="210" y="156" text-anchor="middle" fill="#4a3008" font-family="Outfit, sans-serif" font-size="32" font-weight="800">GRÁTIS</text>
+          <text x="210" y="180" text-anchor="middle" fill="#4a3008" font-family="Outfit, sans-serif" font-size="15" font-weight="800">PARA SEMPRE*</text>
+        </svg>
+        <div class="pub-fundador-card__body">
+          <p class="pub-fundador-card__kicker">Para fornecedores</p>
+          <p class="pub-fundador-card__title">Venda na DropNexo <strong>grátis para sempre*</strong></p>
+          <ul class="pub-fundador-card__perks">
+            <li>0% mensalidade</li>
+            <li>0% comissão</li>
+          </ul>
+          <p class="pub-fundador-card__vagas">Apenas <strong>{{ programa_fundador.vagas_restantes }}</strong> vaga{{ 's' if programa_fundador.vagas_restantes != 1 else '' }} restantes nesta rodada</p>
+          <p class="pub-fundador-card__legal">*enquanto for Fundador ativo</p>
+          <a class="pub-fundador-card__btn" href="{{ url_para_fornecedores }}">Quero ser Fornecedor Fundador →</a>
         </div>
-        <a class="pub-fundador-float__btn" href="{{ url_para_fornecedores }}">Saiba mais</a>
       </aside>
       {% endif %}
 

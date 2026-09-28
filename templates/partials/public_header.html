@@ -12,7 +12,7 @@
       <a href="{{ url_para_vendedores }}">Vendedores</a>
       {% endif %}
       {% if url_para_fornecedores is defined %}
-      <a href="{{ url_para_fornecedores }}">Fornecedores</a>
+      <a href="{{ url_para_fornecedores }}"{% if mostrar_tarja_fundador %} class="pub-nav__forn"{% endif %}>Fornecedores{% if mostrar_tarja_fundador %} <span class="pub-nav__gratis">Grátis</span>{% endif %}</a>
       {% endif %}
       {% if request.endpoint == 'public.home' %}
       <a href="#como-funciona">Como funciona</a>

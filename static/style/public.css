@@ -1880,86 +1880,176 @@
 }
 
 
-/* —— Tarja Fornecedor Fundador (home, overlay no hero) —— */
-.pub-fundador-float {
-  position: absolute;
-  z-index: 3;
-  right: clamp(1rem, 3.5vw, 2.5rem);
-  bottom: calc(4.75rem + 1.1rem);
-  max-width: min(420px, calc(100% - 2rem));
-  display: flex;
-  align-items: center;
-  gap: 0.85rem;
-  padding: 0.75rem 0.85rem 0.75rem 1rem;
-  border-radius: 14px;
-  color: #fff;
-  background:
-    linear-gradient(120deg, rgba(2, 31, 129, 0.94) 0%, rgba(26, 79, 214, 0.92) 55%, rgba(44, 107, 243, 0.9) 100%);
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  box-shadow:
-    0 14px 36px rgba(2, 8, 28, 0.45),
-    inset 0 1px 0 rgba(255, 255, 255, 0.18);
-  backdrop-filter: blur(10px);
-  animation: pub-hero-in 1.05s cubic-bezier(0.22, 1, 0.36, 1) 0.28s both;
-}
-.pub-fundador-float__copy {
-  display: flex;
-  flex-direction: column;
-  gap: 0.12rem;
-  min-width: 0;
-}
-.pub-fundador-float__copy strong {
-  font-size: 0.92rem;
-  font-weight: 800;
-  letter-spacing: 0.01em;
-  line-height: 1.25;
-}
-.pub-fundador-float__copy span {
-  font-size: 0.78rem;
-  opacity: 0.9;
-  line-height: 1.3;
-}
-.pub-fundador-float__btn {
-  flex: 0 0 auto;
+.pub-nav__forn {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  padding: 0.45rem 0.95rem;
+  gap: 0.35rem;
+}
+.pub-nav__gratis {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.08rem 0.38rem;
   border-radius: 999px;
-  font-size: 0.8rem;
+  background: #f6c431;
+  color: #4a3008;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+
+/* —— Cartão Fornecedor Fundador (home) —— */
+.pub-fundador-card {
+  position: absolute;
+  z-index: 3;
+  right: clamp(1.5rem, 4vw, 3.25rem);
+  bottom: 7rem;
+  width: min(400px, calc(100% - 2.5rem));
+  padding: 9.9rem 1.2rem 1.1rem;
+  border-radius: 26px;
+  color: #fff;
+  text-align: center;
+  background:
+    linear-gradient(180deg, rgba(10, 20, 52, 0.55) 0%, rgba(4, 10, 28, 0.92) 42%) padding-box,
+    linear-gradient(145deg, #fff4c2, #f6c431 32%, #a16207 68%, #fff1b8) border-box;
+  border: 1.5px solid transparent;
+  box-shadow:
+    0 28px 60px rgba(0, 0, 0, 0.48),
+    0 0 70px rgba(246, 196, 49, 0.22);
+  backdrop-filter: blur(10px);
+}
+.pub-fundador-card__seal {
+  position: absolute;
+  left: 50%;
+  top: -4.4rem;
+  width: 12.4rem;
+  height: auto;
+  transform: translateX(-50%) rotate(-7deg);
+  filter:
+    drop-shadow(0 16px 18px rgba(0, 0, 0, 0.45))
+    drop-shadow(0 0 22px rgba(246, 196, 49, 0.55));
+  pointer-events: none;
+  animation: pub-fundador-seal 3.6s ease-in-out infinite alternate;
+}
+.pub-fundador-card__kicker {
+  margin: 0 0 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #f6c431;
+}
+.pub-fundador-card__kicker::before,
+.pub-fundador-card__kicker::after {
+  content: "";
+  display: inline-block;
+  width: 1.4rem;
+  height: 1px;
+  margin: 0 0.45rem 0.18rem;
+  vertical-align: middle;
+  background: rgba(246, 196, 49, 0.7);
+}
+.pub-fundador-card__title {
+  margin: 0 0 0.7rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+  line-height: 1.2;
+  color: rgba(255, 255, 255, 0.92);
+}
+.pub-fundador-card__title strong {
+  display: block;
+  margin-top: 0.12rem;
+  font-size: clamp(1.35rem, 2vw, 1.7rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  text-transform: uppercase;
+  background: linear-gradient(180deg, #fff6c4 10%, #f6c431 55%, #e2a30c 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.pub-fundador-card__perks {
+  display: flex;
+  justify-content: center;
+  gap: 0.45rem;
+  margin: 0 0 0.75rem;
+  padding: 0;
+  list-style: none;
+}
+.pub-fundador-card__perks li {
+  padding: 0.28rem 0.6rem;
+  border-radius: 999px;
+  background: rgba(246, 196, 49, 0.12);
+  border: 1px solid rgba(246, 196, 49, 0.35);
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: #fff6d0;
+}
+.pub-fundador-card__vagas {
+  margin: 0;
+  font-size: 0.86rem;
+  color: rgba(255, 255, 255, 0.88);
+}
+.pub-fundador-card__vagas strong {
+  color: #fecaca;
+  font-size: 1.05rem;
+}
+.pub-fundador-card__legal {
+  margin: 0.15rem 0 0.85rem;
+  font-size: 0.72rem;
+  color: rgba(226, 232, 240, 0.7);
+}
+.public-site .pub-fundador-card__btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.78rem 1rem;
+  border-radius: 999px;
+  font-family: Outfit, system-ui, sans-serif;
+  font-size: 0.95rem;
   font-weight: 800;
   text-decoration: none;
-  white-space: nowrap;
-  color: #021f81;
-  background: #fff;
-  box-shadow: 0 1px 0 rgba(2, 31, 129, 0.1);
-  transition: transform 0.15s ease, background 0.15s ease;
+  color: #3f2a06;
+  background: linear-gradient(180deg, #fff1b8, #f6c431 42%, #e2a30c);
+  box-shadow: 0 10px 24px rgba(226, 163, 12, 0.4);
 }
-.pub-fundador-float__btn:hover {
-  background: #e8f0ff;
+.public-site .pub-fundador-card__btn:hover {
+  color: #3f2a06;
+  filter: brightness(1.06);
   transform: translateY(-1px);
 }
-@media (max-width: 900px) {
-  .pub-fundador-float {
-    left: clamp(1rem, 4vw, 1.5rem);
-    right: clamp(1rem, 4vw, 1.5rem);
-    max-width: none;
-    bottom: calc(6.5rem + 0.75rem);
+@keyframes pub-fundador-seal {
+  from { filter: drop-shadow(0 16px 18px rgba(0, 0, 0, 0.45)) drop-shadow(0 0 14px rgba(246, 196, 49, 0.35)); }
+  to { filter: drop-shadow(0 16px 18px rgba(0, 0, 0, 0.45)) drop-shadow(0 0 28px rgba(246, 196, 49, 0.75)); }
+}
+@media (max-width: 1100px) {
+  .pub-fundador-card {
+    width: min(340px, calc(100% - 2rem));
+    right: 1.15rem;
+    bottom: 8.25rem;
+  }
+  .pub-fundador-card__seal {
+    width: 10.6rem;
+    top: -3.6rem;
   }
 }
-@media (max-width: 640px) {
-  .pub-fundador-float {
-    flex-direction: column;
-    align-items: stretch;
-    text-align: left;
-    bottom: calc(7.5rem + 0.5rem);
+@media (max-width: 900px) {
+  .pub-fundador-card {
+    position: relative;
+    right: auto;
+    bottom: auto;
+    width: min(440px, calc(100% - 2rem));
+    margin: 4.2rem auto 1.25rem;
+    padding-top: 7.6rem;
   }
-  .pub-fundador-float__btn {
-    width: 100%;
+  .pub-fundador-card__seal {
+    width: 10rem;
+    top: -3.5rem;
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .pub-fundador-float {
+  .pub-fundador-card__seal {
     animation: none;
   }
 }
