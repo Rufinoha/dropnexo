@@ -20,6 +20,7 @@ TZ_BR = ZoneInfo("America/Sao_Paulo")
 CODIGO_ML_CATEGORIAS = "ml_categorias_cache"
 CODIGO_TIKTOK_CATEGORIAS = "tiktok_categorias_cache"
 CODIGO_AMAZON_PRODUCT_TYPES = "amazon_product_types_cache"
+CODIGO_BLING_REFRESH = "bling_refresh_token"
 CODIGOS_CACHE_CATEGORIAS = (
     CODIGO_ML_CATEGORIAS,
     CODIGO_TIKTOK_CATEGORIAS,
@@ -31,6 +32,7 @@ _DEFAULTS_AGENDA: dict[str, tuple[str, str]] = {
     CODIGO_ML_CATEGORIAS: ("domingo", "02:00"),
     CODIGO_TIKTOK_CATEGORIAS: ("domingo", "03:00"),
     CODIGO_AMAZON_PRODUCT_TYPES: ("domingo", "04:00"),
+    CODIGO_BLING_REFRESH: ("diario", "05:00"),
 }
 
 
@@ -204,6 +206,11 @@ def garantir_tabelas_tarefas(cur) -> None:
             CODIGO_AMAZON_PRODUCT_TYPES,
             "Cache de Product Types Amazon",
             "Baixa Product Types usando a conta doadora e atualiza o cache do mapeamento.",
+        ),
+        (
+            CODIGO_BLING_REFRESH,
+            "Renovação do token Bling",
+            "Renova o access das contas Bling conectadas quando ele vence, e grava o refresh novo. Não reenvia um refresh que o Bling já recusou.",
         ),
     ]
     # Removidos: Bling cache + categorias XML (mapeamento fica na integração)
@@ -750,6 +757,11 @@ def _agendamento_permite_agora(
 
 
 def _rodar_sync_por_codigo(cur, codigo: str, *, conn=None, id_exec: int | None = None) -> dict:
+    if codigo == CODIGO_BLING_REFRESH:
+        from api.bling.cliente import renovar_contas_conectadas
+
+        return renovar_contas_conectadas()
+
     from sistema.tarefas_secundarias.doador import obter_ou_promover_doador
 
     id_doador = obter_ou_promover_doador(cur, codigo)

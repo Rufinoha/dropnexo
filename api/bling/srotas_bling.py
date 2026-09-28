@@ -13,8 +13,8 @@ from api.bling.cliente import (
     bling_configurado,
     carregar_tokens_armazenados,
     gerar_state_oauth,
+    obter_access_token_valido,
     redirect_uri_oauth,
-    renovar_access_token,
     revogar_tokens_bling,
     trocar_code_por_tokens,
     url_autorizacao,
@@ -350,6 +350,10 @@ def desconectar():
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
+        try:
+            obter_access_token_valido(int(id_tenant), forcar=True)
+        except Exception:
+            pass
         tokens = carregar_tokens_armazenados(cur, int(id_tenant))
         revogacao = revogar_tokens_bling(
             access_token=tokens.get("access_token") or None,

@@ -130,6 +130,27 @@ def renovar_access_token(refresh_token: str) -> dict[str, Any]:
     )
 
 
+_MSG_REFRESH_RECUSADO = (
+    "O Bling recusou o refresh token guardado. "
+    "O access token se renova com ele, sem desconectar; este refresh já não vale no Bling."
+)
+_MSG_REFRESH_SEM_NOVO = (
+    "O Bling aceitou a renovação sem devolver o refresh novo. "
+    "O refresh anterior já não vale no Bling."
+)
+
+
+def _texto_refresh_recusado(texto: str | None) -> bool:
+    t = (texto or "").lower()
+    return (
+        "recusou o refresh" in t
+        or "invalid_grant" in t
+        or "invalid refresh token" in t
+        or "já não vale no bling" in t
+        or "ja nao vale no bling" in t
+    )
+
+
 def _revoke_urls() -> tuple[str, ...]:
     custom = _env("BLING_OAUTH_REVOKE_URL")
     if custom:
@@ -153,27 +174,6 @@ def _token_ja_invalido_resposta(status: int, texto: str) -> bool:
             "invalid token parameter to revoke",
         )
     )
-
-
-def _atualizar_tokens_para_revogacao(
-    refresh_token: str,
-    access_token: str,
-) -> tuple[str, str, str | None]:
-    """
-    Renova tokens antes do revoke (Bling rotaciona refresh_token a cada uso).
-    Retorna (access, refresh, erro).
-    """
-    refresh = (refresh_token or "").strip()
-    access = (access_token or "").strip()
-    if not refresh:
-        return access, refresh, None
-    try:
-        novo = renovar_access_token(refresh)
-        access = (novo.get("access_token") or access).strip()
-        refresh = (novo.get("refresh_token") or refresh).strip()
-        return access, refresh, None
-    except Exception as exc:
-        return access, refresh, str(exc)
 
 
 def _access_token_inativo(access_token: str) -> bool:
@@ -248,11 +248,11 @@ def revogar_tokens_bling(
     refresh_token: str | None = None,
 ) -> dict[str, Any]:
     """
-    Revoga tokens e tenta desinstalar o app no Bling (Minhas instalações).
+    Revoga os tokens já gravados e tenta desinstalar o app no Bling.
 
-    1. Renova tokens (refresh rotacionado pelo Bling)
-    2. uninstall (company/user) → logout → revoke simples
-    3. Verifica se access_token parou de funcionar
+    A renovação, quando necessária, acontece antes, em obter_access_token_valido,
+    que grava o par novo. Aqui não se chama o refresh: um refresh sem gravar
+    invalida o token que está no banco.
     """
     resultado: dict[str, Any] = {
         "revogado_bling": False,
@@ -269,12 +269,6 @@ def revogar_tokens_bling(
     if not refresh and not access:
         resultado["detalhes"].append("sem_tokens_locais")
         return resultado
-
-    access, refresh, err_refresh = _atualizar_tokens_para_revogacao(refresh, access)
-    if err_refresh:
-        resultado["detalhes"].append(f"refresh_pre_revoke:{err_refresh[:120]}")
-    elif refresh:
-        resultado["detalhes"].append("refresh_pre_revoke:ok")
 
     access_verificar = access
 
@@ -444,6 +438,26 @@ def _access_ainda_vale(dados: dict[str, Any] | None) -> bool:
     return expires > datetime.now(timezone.utc) + _MARGEM_RENOVACAO
 
 
+def _refresh_recusado_gravado(cur, id_tenant: int) -> bool:
+    cur.execute(
+        "SELECT ultimo_erro FROM tbl_integracao_bling WHERE id_tenant = %s",
+        (int(id_tenant),),
+    )
+    row = cur.fetchone()
+    return _texto_refresh_recusado(row[0] if row else None)
+
+
+def _gravar_refresh_recusado(cur, id_tenant: int, mensagem: str) -> None:
+    cur.execute(
+        """
+        UPDATE tbl_integracao_bling
+        SET ultimo_erro = %s, atualizado_em = %s
+        WHERE id_tenant = %s AND status = 'conectado'
+        """,
+        (mensagem, agora_utc(), int(id_tenant)),
+    )
+
+
 def obter_access_token_valido(id_tenant: int, *, forcar: bool = False) -> str:
     """Devolve um access token válido. Se venceu, renova com o refresh token e grava o par novo."""
     conn = Var_ConectarBanco()
@@ -463,6 +477,9 @@ def obter_access_token_valido(id_tenant: int, *, forcar: bool = False) -> str:
             if not forcar and _access_ainda_vale(dados):
                 return dados["access_token"]
 
+            if _refresh_recusado_gravado(cur, id_tenant):
+                raise RuntimeError(_MSG_REFRESH_RECUSADO)
+
             refresh = (dados.get("refresh_token") or "").strip()
             if not refresh:
                 raise RuntimeError(
@@ -473,13 +490,14 @@ def obter_access_token_valido(id_tenant: int, *, forcar: bool = False) -> str:
             except RuntimeError as e:
                 texto = str(e).lower()
                 if "invalid_grant" in texto or "invalid refresh token" in texto:
-                    raise RuntimeError(
-                        "O Bling recusou o refresh token guardado. "
-                        "O access token se renova com ele, sem desconectar; este refresh já não vale no Bling."
-                    ) from e
+                    _gravar_refresh_recusado(cur, id_tenant, _MSG_REFRESH_RECUSADO)
+                    conn.commit()
+                    raise RuntimeError(_MSG_REFRESH_RECUSADO) from e
                 raise
             if not (novo.get("refresh_token") or "").strip():
-                novo["refresh_token"] = refresh
+                _gravar_refresh_recusado(cur, id_tenant, _MSG_REFRESH_SEM_NOVO)
+                conn.commit()
+                raise RuntimeError(_MSG_REFRESH_SEM_NOVO)
             _salvar_tokens(cur, id_tenant, novo)
             conn.commit()
             return novo["access_token"]
@@ -493,6 +511,72 @@ def obter_access_token_valido(id_tenant: int, *, forcar: bool = False) -> str:
                 pass
     finally:
         conn.close()
+
+
+def renovar_contas_conectadas() -> dict[str, Any]:
+    """Renova contas conectadas cujo access venceu. Não reenvia refresh já recusado."""
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT id_tenant
+            FROM tbl_integracao_bling
+            WHERE status = 'conectado'
+              AND refresh_token_enc IS NOT NULL
+            ORDER BY id_tenant
+            """
+        )
+        ids = [int(r[0]) for r in cur.fetchall() if r and r[0]]
+    finally:
+        conn.close()
+
+    ok = 0
+    pulados = 0
+    recusados = 0
+    erros = 0
+    linhas: list[str] = []
+    for id_tenant in ids:
+        try:
+            conn = Var_ConectarBanco()
+            try:
+                cur = conn.cursor()
+                dados = _carregar_tokens(cur, id_tenant)
+                recusado = _refresh_recusado_gravado(cur, id_tenant)
+            finally:
+                conn.close()
+            if recusado:
+                recusados += 1
+                linhas.append(f"tenant {id_tenant}: refresh já recusado, sem nova chamada")
+                continue
+            if dados and _access_ainda_vale(dados):
+                pulados += 1
+                continue
+            obter_access_token_valido(id_tenant)
+            ok += 1
+            linhas.append(f"tenant {id_tenant}: renovado")
+        except RuntimeError as e:
+            texto = str(e)
+            if _texto_refresh_recusado(texto):
+                recusados += 1
+                linhas.append(f"tenant {id_tenant}: refresh recusado")
+            else:
+                erros += 1
+                linhas.append(f"tenant {id_tenant}: {texto[:180]}")
+        except Exception as e:
+            erros += 1
+            linhas.append(f"tenant {id_tenant}: {str(e)[:180]}")
+
+    return {
+        "mensagem": (
+            f"Bling: {ok} renovadas, {pulados} em dia, "
+            f"{recusados} refresh recusado, {erros} erros."
+        ),
+        "log_texto": "\n".join(linhas),
+        "ok": ok,
+        "erro": erros,
+        "tenants": len(ids),
+    }
 
 
 def _aguardar_throttle_api() -> None:
