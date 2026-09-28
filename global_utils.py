@@ -98,6 +98,23 @@ def init_app(app):
         except Exception:
             return {"vinculo_alertas": []}
 
+    @app.context_processor
+    def _inject_bling_reconectar():
+        from flask import session
+
+        if not session.get("id_tenant") or not session.get("id_usuario"):
+            return {"bling_precisa_reconectar": False}
+        try:
+            from api.bling.cliente import tenant_precisa_reconectar_bling
+
+            return {
+                "bling_precisa_reconectar": tenant_precisa_reconectar_bling(
+                    int(session["id_tenant"])
+                )
+            }
+        except Exception:
+            return {"bling_precisa_reconectar": False}
+
 
 def url_imagem_produto(imagem_url: str | None) -> str:
     """Converte caminho local (imge/produtos/..., upload/tenant...) ou URL externa para URL servível."""

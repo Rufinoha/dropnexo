@@ -203,6 +203,58 @@ def obter_dados_empresa_bling(id_tenant: int) -> dict[str, Any]:
     return data
 
 
+def consultar_empresa_com_access(access_token: str) -> dict[str, Any]:
+    """Lê a empresa do access recém-autorizado, antes de gravar o token."""
+    import requests
+
+    from api.bling.cliente import BLING_API_BASE
+
+    token = (access_token or "").strip()
+    if not token:
+        return {}
+    r = requests.get(
+        f"{BLING_API_BASE}/empresas/me/dados-basicos",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/json",
+            "enable-jwt": "1",
+        },
+        timeout=45,
+    )
+    if r.status_code >= 400:
+        raise RuntimeError(f"Bling API {r.status_code}")
+    body = r.json() if r.content else {}
+    data = body.get("data") if isinstance(body, dict) else {}
+    return data if isinstance(data, dict) else {}
+
+
+def empresa_bling_gravada(cur, id_tenant: int) -> tuple[str, str]:
+    """company_id já ligado a esta conta, e o status da integração."""
+    cur.execute(
+        """
+        SELECT status, bling_company_id, bling_conta_info
+        FROM tbl_integracao_bling
+        WHERE id_tenant = %s
+        """,
+        (int(id_tenant),),
+    )
+    row = cur.fetchone()
+    if not row:
+        return "", ""
+    status = row[0] or ""
+    company_id = str(row[1] or "").strip()
+    if company_id:
+        return company_id, status
+    info = row[2] if isinstance(row[2], dict) else {}
+    if isinstance(row[2], str):
+        try:
+            info = json.loads(row[2]) or {}
+        except json.JSONDecodeError:
+            info = {}
+    company_id = str((info or {}).get("company_id") or "").strip()
+    return company_id, status
+
+
 def salvar_conta_bling(cur, id_tenant: int, dados: dict[str, Any]) -> dict[str, Any]:
     company_id = str(dados.get("id") or "").strip()
     if not company_id:

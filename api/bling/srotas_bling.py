@@ -11,6 +11,7 @@ from flask import Blueprint, abort, current_app, jsonify, redirect, render_templ
 
 from api.bling.cliente import (
     bling_configurado,
+    bling_precisa_reconectar,
     carregar_tokens_armazenados,
     gerar_state_oauth,
     mensagem_publica_bling,
@@ -270,6 +271,7 @@ def api_status():
             contexto_modulo_rotulo=rotulo_modulo(garantir_modulo_sessao()),
             conectado_em=row[1].isoformat() if row and row[1] else None,
             ultimo_erro=texto_publico_erro_bling(row[2] if row else None),
+            precisa_reconectar=bling_precisa_reconectar(row[0] if row else None, row[2] if row else None),
             token_expires_em=row[3].isoformat() if row and row[3] else None,
             configs=configs,
             logs=logs,
@@ -285,7 +287,7 @@ def oauth_iniciar():
     from sistema.planos.limites import limites_plano, mensagem_upgrade_integracao
 
     if not _pode_integracoes():
-        return jsonify(success=False, message="Sem permissão."), 403
+        return redirect(url_for("integracoes.pagina", erro="Sem permissão para reconectar o Bling."))
     if not limites_plano().get("integracao"):
         return redirect(url_for("integracoes.pagina", erro=mensagem_upgrade_integracao()))
     if not bling_configurado():
@@ -319,20 +321,67 @@ def oauth_callback():
 
     try:
         tokens = trocar_code_por_tokens(code)
+        access = (tokens.get("access_token") or "").strip()
+        refresh = (tokens.get("refresh_token") or "").strip()
+        if not access or not refresh:
+            session.pop("bling_oauth_state", None)
+            session.pop("bling_oauth_contexto", None)
+            return redirect(
+                url_for(
+                    "integracoes.pagina_bling",
+                    erro="O Bling não devolveu a autorização completa. Tente reconectar de novo.",
+                )
+            )
+
+        from api.bling.config import consultar_empresa_com_access, empresa_bling_gravada, salvar_conta_bling
+
+        try:
+            dados_empresa = consultar_empresa_com_access(access)
+        except Exception:
+            dados_empresa = {}
+        novo_company = str((dados_empresa or {}).get("id") or "").strip()
+
         conn = Var_ConectarBanco()
         try:
             cur = conn.cursor()
-            from api.bling.cliente import _salvar_tokens
+            gravado, status_atual = empresa_bling_gravada(cur, int(id_tenant))
+            ja_ligada = bool(gravado) or status_atual == "conectado"
+            if gravado and novo_company and novo_company != gravado:
+                try:
+                    revogar_tokens_bling(access_token=access, refresh_token=refresh)
+                except Exception:
+                    pass
+                session.pop("bling_oauth_state", None)
+                session.pop("bling_oauth_contexto", None)
+                return redirect(
+                    url_for(
+                        "integracoes.pagina_bling",
+                        erro="Autorize a mesma empresa Bling que já está ligada a esta conta.",
+                    )
+                )
+            if gravado and not novo_company:
+                session.pop("bling_oauth_state", None)
+                session.pop("bling_oauth_contexto", None)
+                return redirect(
+                    url_for(
+                        "integracoes.pagina_bling",
+                        erro="Não foi possível confirmar a empresa do Bling. Tente reconectar de novo.",
+                    )
+                )
 
             _salvar_tokens(cur, int(id_tenant), tokens)
-            contexto = session.get("bling_oauth_contexto") or garantir_modulo_sessao()
-            aplicar_defaults_conexao(cur, int(id_tenant), contexto)
-            from api.bling.config import garantir_conta_bling
+            if not ja_ligada:
+                contexto = session.get("bling_oauth_contexto") or garantir_modulo_sessao()
+                aplicar_defaults_conexao(cur, int(id_tenant), contexto)
+            if novo_company:
+                salvar_conta_bling(cur, int(id_tenant), dados_empresa)
+            elif not ja_ligada:
+                from api.bling.config import garantir_conta_bling
 
-            try:
-                garantir_conta_bling(cur, int(id_tenant), forcar=True)
-            except Exception:
-                pass
+                try:
+                    garantir_conta_bling(cur, int(id_tenant), forcar=True)
+                except Exception:
+                    pass
             conn.commit()
         finally:
             conn.close()

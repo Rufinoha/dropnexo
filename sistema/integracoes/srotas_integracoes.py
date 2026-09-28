@@ -376,6 +376,9 @@ def pagina_bling():
     if papel == "pedidos" and (r := _exigir_modulo(MODULO_VENDEDOR)) is not None:
         return r
     bling_conectado = _bling_conectado(session.get("id_tenant"))
+    from api.bling.cliente import tenant_precisa_reconectar_bling
+
+    bling_precisa_reconectar = tenant_precisa_reconectar_bling(session.get("id_tenant"))
     subtitulo = (
         "Importe pedidos de venda pagos do seu Bling."
         if papel == "pedidos"
@@ -386,6 +389,7 @@ def pagina_bling():
         nav_codigo="integracoes",
         icone_bling=url_icone_integracao("bling", icones_base_url=_icones_base_url()),
         bling_conectado=bling_conectado,
+        bling_precisa_reconectar=bling_precisa_reconectar,
         bling_papel=papel,
         bling_subtitulo=subtitulo,
     )

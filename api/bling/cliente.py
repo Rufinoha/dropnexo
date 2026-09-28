@@ -156,6 +156,28 @@ def _texto_refresh_recusado(texto: str | None) -> bool:
     )
 
 
+def bling_precisa_reconectar(status: str | None, ultimo_erro: str | None) -> bool:
+    return (status or "") == "conectado" and _texto_refresh_recusado(ultimo_erro)
+
+
+def tenant_precisa_reconectar_bling(id_tenant: int | None) -> bool:
+    if not id_tenant:
+        return False
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT status, ultimo_erro FROM tbl_integracao_bling WHERE id_tenant = %s",
+            (int(id_tenant),),
+        )
+        row = cur.fetchone()
+    finally:
+        conn.close()
+    if not row:
+        return False
+    return bling_precisa_reconectar(row[0], row[1])
+
+
 def _erro_interno_bling(texto: str | None) -> bool:
     if _texto_refresh_recusado(texto):
         return True

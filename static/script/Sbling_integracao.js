@@ -1,6 +1,7 @@
 (function () {
   const badge = document.getElementById("bl_status_badge");
   const btnConectar = document.getElementById("bl_btn_conectar");
+  const btnReconectar = document.getElementById("bl_btn_reconectar");
   const btnDesconectar = document.getElementById("bl_btn_desconectar");
   const painelConfig = document.getElementById("bl_painel_config");
   const ctxInput = document.getElementById("bl_contexto_ativo");
@@ -1307,6 +1308,7 @@
       badge.className = "Bl_ConnBadge " + (on ? "is-on" : "is-off");
     }
     definirVisivel(btnConectar, !on);
+    definirVisivel(btnReconectar, on && !!data.precisa_reconectar);
     definirVisivel(btnDesconectar, on);
     definirVisivel(painelConfig, on);
 
@@ -1937,6 +1939,15 @@
   const params = new URLSearchParams(location.search);
   if (params.get("conectado") === "1") {
     Swal.fire({ icon: "success", title: "Conectado", timer: 1500, showConfirmButton: false });
+    window.history.replaceState({}, "", location.pathname);
+  }
+  if (params.get("erro")) {
+    Swal.fire({
+      icon: "warning",
+      title: "Reconectar",
+      text: params.get("erro"),
+      confirmButtonColor: "#021F81",
+    });
     window.history.replaceState({}, "", location.pathname);
   }
   const aba = params.get("aba");
