@@ -101,7 +101,9 @@ def _email_dev(numero: str, id_pedido: int, id_fornecedor: int, erro: str) -> No
         "<p>Falha ao criar o pedido no ERP do fornecedor.</p>"
         f"<p>Pedido <strong>{html.escape(numero)}</strong> "
         f"(id {int(id_pedido)}), fornecedor {int(id_fornecedor)}.</p>"
-        f"<p>{html.escape(erro)}</p>"
+        "<pre style=\"white-space:pre-wrap;font-family:Consolas,monospace;\">"
+        f"{html.escape(erro)}"
+        "</pre>"
     )
     enviar_email(
         [DEV_EMAIL_ERP],
@@ -152,14 +154,21 @@ def exportar_pedido_para_erp_do_produto(cur, id_pedido: int) -> str:
     try:
         res = exportar_pedido_fornecedor_bling(cur, int(id_pedido), por_produto=True)
     except Exception as e:
-        erro = str(e)[:500]
-        _marcar_pendente(cur, int(id_pedido), erro)
+        from api.bling.cliente import detalhe_excecao_bling, resumo_diagnostico_bling
+
         try:
-            _registrar_log(cur, id_forn, "fornecedor", "aviso", f"Pedido #{numero}", erro)
+            conta = resumo_diagnostico_bling(cur, id_forn)
+        except Exception:
+            conta = "Conta Bling: não foi possível ler o diagnóstico."
+        erro_curto = str(e)[:500]
+        erro_email = f"{detalhe_excecao_bling(e)}\n\n{conta}"[:1800]
+        _marcar_pendente(cur, int(id_pedido), erro_curto)
+        try:
+            _registrar_log(cur, id_forn, "fornecedor", "aviso", f"Pedido #{numero}", erro_curto)
         except Exception:
             _log.warning("log export erp pedido %s", id_pedido)
         try:
-            _email_dev(numero, int(id_pedido), id_forn, erro)
+            _email_dev(numero, int(id_pedido), id_forn, erro_email)
         except Exception:
             _log.warning("e-mail export erp pedido %s", id_pedido)
         return "pendente"

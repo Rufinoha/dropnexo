@@ -503,7 +503,11 @@ def _refresh_recusado_gravado(cur, id_tenant: int) -> bool:
         (int(id_tenant),),
     )
     row = cur.fetchone()
-    return _texto_refresh_recusado(row[0] if row else None)
+    texto = row[0] if row else None
+    if not _texto_refresh_recusado(texto):
+        return False
+    # Recusa gravada sem o corpo do Bling: a próxima tentativa consulta uma vez e grava o detalhe.
+    return "Resposta do Bling:" in (texto or "")
 
 
 def _gravar_refresh_recusado(cur, id_tenant: int, mensagem: str) -> None:
@@ -549,7 +553,8 @@ def obter_access_token_valido(id_tenant: int, *, forcar: bool = False) -> str:
             except RuntimeError as e:
                 texto = str(e).lower()
                 if "invalid_grant" in texto or "invalid refresh token" in texto:
-                    _gravar_refresh_recusado(cur, id_tenant, _MSG_REFRESH_RECUSADO)
+                    detalhe = f"{_MSG_REFRESH_RECUSADO}\n\nResposta do Bling:\n{str(e)[:800]}"
+                    _gravar_refresh_recusado(cur, id_tenant, detalhe)
                     conn.commit()
                     raise RuntimeError(_MSG_REFRESH_RECUSADO) from e
                 raise
@@ -570,6 +575,59 @@ def obter_access_token_valido(id_tenant: int, *, forcar: bool = False) -> str:
                 pass
     finally:
         conn.close()
+
+
+def texto_publico_erro_bling(texto: str | None) -> str | None:
+    """Tira o corpo cru do Bling antes de devolver a conta na tela."""
+    if not texto:
+        return None
+    publico = texto.split("\n\nResposta do Bling:")[0].strip()
+    return publico[:400] or None
+
+
+def resumo_diagnostico_bling(cur, id_tenant: int) -> str:
+    """Estado da conexão, sem access nem refresh. Serve para o e-mail de diagnóstico."""
+    cur.execute(
+        """
+        SELECT status, token_expires_em, conectado_em, atualizado_em, ultimo_erro,
+               (NULLIF(access_token_enc, '') IS NOT NULL),
+               (NULLIF(refresh_token_enc, '') IS NOT NULL)
+        FROM tbl_integracao_bling
+        WHERE id_tenant = %s
+        """,
+        (int(id_tenant),),
+    )
+    row = cur.fetchone()
+    if not row:
+        return "Conta Bling: não há registro para este fornecedor."
+    status, expira, conectado_em, atualizado_em, ultimo, tem_access, tem_refresh = row
+    return (
+        f"status={status or '—'}\n"
+        f"access_guardado={'sim' if tem_access else 'não'}\n"
+        f"refresh_guardado={'sim' if tem_refresh else 'não'}\n"
+        f"access_expira_em={expira or '—'}\n"
+        f"conectado_em={conectado_em or '—'}\n"
+        f"tokens_atualizados_em={atualizado_em or '—'}\n"
+        f"ultimo_erro_gravado={ultimo or '—'}"
+    )
+
+
+def detalhe_excecao_bling(exc: BaseException) -> str:
+    """Mensagem nossa e a resposta original do Bling, se a exceção foi encadeada."""
+    partes = [str(exc).strip()]
+    causa = exc.__cause__
+    vistos = {id(exc)}
+    while causa is not None and id(causa) not in vistos:
+        texto = str(causa).strip()
+        if texto and texto not in partes:
+            partes.append(texto)
+        vistos.add(id(causa))
+        causa = causa.__cause__
+    if len(partes) == 1:
+        partes.append(
+            "O Bling não foi consultado de novo: a recusa deste refresh já estava gravada."
+        )
+    return "\n\n".join(partes)[:2000]
 
 
 def renovar_contas_conectadas() -> dict[str, Any]:
