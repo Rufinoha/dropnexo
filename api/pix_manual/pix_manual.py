@@ -333,11 +333,12 @@ def voltar_cobranca_apos_remover_comprovante(
     if not ped:
         raise ValueError("Pedido não encontrado.")
     st = status_vendedor_pedido(ped)
-    if st in ("entregue", "cancelado"):
+    if st == "cancelado":
         raise ValueError("Não é possível alterar cobrança neste status.")
-    # Já pago ao fornecedor (ou legado pago / em expedição): só sai o arquivo.
-    if st in ("em_expedicao", STATUS_PAGO, STATUS_AGUARDANDO_CONFIRMACAO):
-        return ped
+    if st in ("em_expedicao", "entregue"):
+        raise ValueError(
+            "O comprovante não pode ser excluído depois que o fornecedor expediu o pedido."
+        )
 
     _marcar_aguardando_pagamento(cur, id_pedido)
     cur.execute(

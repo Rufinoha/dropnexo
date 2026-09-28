@@ -370,6 +370,25 @@ def pedido_anexos_upload(id_pedido: int):
         conn.close()
 
 
+def _comprovante_pix_bloqueado(cur, id_vendedor: int, id_anexo: int) -> bool:
+    cur.execute(
+        """
+        SELECT a.tipo, a.id_pedido
+        FROM tbl_pedido_anexo a
+        JOIN tbl_pedido p ON p.id = a.id_pedido
+        WHERE a.id = %s AND p.id_tenant_vendedor = %s
+        """,
+        (id_anexo, id_vendedor),
+    )
+    row = cur.fetchone()
+    if not row or (row[0] or "").strip().lower() != "comprovante_pix":
+        return False
+    ped = obter_pedido(cur, int(row[1]), id_vendedor=id_vendedor)
+    if not ped:
+        return False
+    return status_vendedor_pedido(ped) in ("em_expedicao", "entregue")
+
+
 @vd_pedidos_bp.delete("/vendedor/pedidos/anexos/<int:id_anexo>")
 @login_obrigatorio()
 @exigir_modulo(MODULO_VENDEDOR)
@@ -381,15 +400,11 @@ def pedido_anexo_excluir(id_anexo: int):
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
+        if _comprovante_pix_bloqueado(cur, id_v, id_anexo):
+            raise ValueError(
+                "O comprovante não pode ser excluído depois que o fornecedor expediu o pedido."
+            )
         info = excluir_anexo_pedido(cur, id_v, id_anexo)
-        caminho = (info.get("caminho") or "").replace("\\", "/")
-        if caminho and ".." not in caminho.split("/"):
-            arquivo = _RAIZ.joinpath(*caminho.split("/"))
-            if arquivo.is_file():
-                try:
-                    arquivo.unlink()
-                except OSError:
-                    pass
         pedido = None
         if info.get("tipo") == "comprovante_pix":
             ainda_tem = pedido_tem_comprovante_pix(cur, int(info["id_pedido"]))
@@ -400,6 +415,14 @@ def pedido_anexo_excluir(id_anexo: int):
                     id_vendedor=id_v,
                     id_usuario=_id_usuario(),
                 )
+        caminho = (info.get("caminho") or "").replace("\\", "/")
+        if caminho and ".." not in caminho.split("/"):
+            arquivo = _RAIZ.joinpath(*caminho.split("/"))
+            if arquivo.is_file():
+                try:
+                    arquivo.unlink()
+                except OSError:
+                    pass
         conn.commit()
         return jsonify(
             success=True,

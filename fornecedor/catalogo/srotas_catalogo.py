@@ -2387,6 +2387,12 @@ def catalogos_atualizar_bling():
             cur, int(id_tenant), ids, contexto="fornecedor"
         )
         conn.commit()
+        from api.bling.cliente import sanitizar_motivos_bling
+
+        sanitizar_motivos_bling(
+            resumo.get("falhas"),
+            contexto="Atualizar produtos pelo Bling",
+        )
         n_ok = int(resumo.get("atualizados") or 0)
         n_falha = len(resumo.get("falhas") or [])
         n_sem = int(resumo.get("sem_vinculo") or 0)
@@ -2401,7 +2407,12 @@ def catalogos_atualizar_bling():
         return jsonify(success=False, message=str(e)), 400
     except Exception as e:
         conn.rollback()
-        return jsonify(success=False, message=str(e)), 500
+        from api.bling.cliente import mensagem_publica_bling
+
+        return jsonify(
+            success=False,
+            message=mensagem_publica_bling(e, contexto="Atualizar produtos pelo Bling"),
+        ), 500
     finally:
         conn.close()
 
@@ -2437,12 +2448,23 @@ def catalogos_estoque_sincronizar():
         resumo = sincronizar_estoque_produtos_bling(cur, id_tenant, ids)
         conn.commit()
         msg = f"Estoque sincronizado em {resumo['sincronizados']} de {resumo['total']} produto(s)."
+        from api.bling.cliente import sanitizar_motivos_bling
+
+        sanitizar_motivos_bling(
+            resumo.get("falhas"),
+            contexto="Sincronizar estoque pelo Bling",
+        )
         if resumo["falhas"]:
             msg += f" {len(resumo['falhas'])} com aviso."
         return jsonify(success=True, message=msg, resumo=resumo)
     except Exception as e:
         conn.rollback()
-        return jsonify(success=False, message=str(e)), 500
+        from api.bling.cliente import mensagem_publica_bling
+
+        return jsonify(
+            success=False,
+            message=mensagem_publica_bling(e, contexto="Sincronizar estoque pelo Bling"),
+        ), 500
     finally:
         conn.close()
 

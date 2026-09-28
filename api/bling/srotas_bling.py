@@ -13,6 +13,7 @@ from api.bling.cliente import (
     bling_configurado,
     carregar_tokens_armazenados,
     gerar_state_oauth,
+    mensagem_publica_bling,
     obter_access_token_valido,
     redirect_uri_oauth,
     revogar_tokens_bling,
@@ -338,7 +339,12 @@ def oauth_callback():
         session.pop("bling_oauth_contexto", None)
         return redirect(url_for("integracoes.pagina", conectado="bling"))
     except Exception as e:
-        return redirect(url_for("integracoes.pagina", erro=str(e)[:120]))
+        return redirect(
+            url_for(
+                "integracoes.pagina",
+                erro=mensagem_publica_bling(e, contexto="Retorno OAuth Bling")[:120],
+            )
+        )
 
 
 @bling_bp.post("/api/integracoes/bling/desconectar")
@@ -441,7 +447,7 @@ def listar_situacoes_pedidos_api():
         situacoes, aviso = listar_situacoes_venda_para_ui(int(id_tenant))
         return jsonify(success=True, situacoes=situacoes, aviso=aviso)
     except Exception as e:
-        return jsonify(success=False, message=str(e)[:300]), 400
+        return jsonify(success=False, message=mensagem_publica_bling(e, contexto="Integração Bling")[:300]), 400
 
 
 @bling_bp.get("/api/integracoes/bling/status-padrao")
@@ -514,7 +520,7 @@ def api_status_padrao_bling():
         )
     except Exception as e:
         conn.rollback()
-        return jsonify(success=False, message=str(e)[:300]), 400
+        return jsonify(success=False, message=mensagem_publica_bling(e, contexto="Integração Bling")[:300]), 400
     finally:
         conn.close()
 
@@ -543,7 +549,7 @@ def api_migrar_status_padrao_bling():
         return jsonify(success=True, **result, message="Mapeamento atualizado para o padrão.")
     except Exception as e:
         conn.rollback()
-        return jsonify(success=False, message=str(e)[:300]), 400
+        return jsonify(success=False, message=mensagem_publica_bling(e, contexto="Integração Bling")[:300]), 400
     finally:
         conn.close()
 
@@ -676,7 +682,7 @@ def homologacao_executar():
         return jsonify(success=resultado.sucesso, message=resultado.mensagem, dados=resultado.to_dict())
     except Exception as e:
         conn.rollback()
-        return jsonify(success=False, message=str(e)), 500
+        return jsonify(success=False, message=mensagem_publica_bling(e, contexto="Integração Bling")), 500
     finally:
         conn.close()
 
@@ -803,15 +809,16 @@ def sync_produtos():
         return jsonify(success=True, message=msg, dados=resultado)
     except ValueError as e:
         conn.rollback()
-        return jsonify(success=False, message=str(e)), 400
+        return jsonify(success=False, message=mensagem_publica_bling(e, contexto="Integração Bling")), 400
     except Exception as e:
         conn.rollback()
-        msg = str(e)
-        if "transaction is aborted" in msg.lower():
+        if "transaction is aborted" in str(e).lower():
             msg = (
                 "Falha no banco durante a importação. "
                 "Verifique se a migration 023_integracao_bling_categoria_map.sql foi aplicada em produção."
             )
+        else:
+            msg = mensagem_publica_bling(e, contexto="Importação de produtos do Bling")
         return jsonify(success=False, message=msg), 500
     finally:
         conn.close()
@@ -871,10 +878,10 @@ def sync_pedidos():
         return jsonify(success=True, **resultado)
     except ValueError as e:
         conn.rollback()
-        return jsonify(success=False, message=str(e)), 400
+        return jsonify(success=False, message=mensagem_publica_bling(e, contexto="Integração Bling")), 400
     except Exception as e:
         conn.rollback()
-        return jsonify(success=False, message=str(e)), 500
+        return jsonify(success=False, message=mensagem_publica_bling(e, contexto="Integração Bling")), 500
     finally:
         conn.close()
 
@@ -904,7 +911,7 @@ def api_categorias_bling():
         categorias = listar_categorias_bling_flat(int(id_tenant))
         return jsonify(success=True, categorias=categorias)
     except Exception as e:
-        return jsonify(success=False, message=str(e)), 500
+        return jsonify(success=False, message=mensagem_publica_bling(e, contexto="Integração Bling")), 500
 
 
 @bling_bp.get("/api/integracoes/bling/categorias/mapeamento")
@@ -960,7 +967,7 @@ def api_categorias_bling_mapeamento():
         dados = listar_painel_categorias_bling(cur, id_tenant_int, contexto)
         return jsonify(success=True, dados=dados)
     except Exception as e:
-        return jsonify(success=False, message=str(e)), 500
+        return jsonify(success=False, message=mensagem_publica_bling(e, contexto="Integração Bling")), 500
     finally:
         conn.close()
 
@@ -1035,10 +1042,10 @@ def api_categorias_bling_salvar():
         return jsonify(success=True, message="Mapeamento salvo.", dados=resultado)
     except ValueError as e:
         conn.rollback()
-        return jsonify(success=False, message=str(e)), 400
+        return jsonify(success=False, message=mensagem_publica_bling(e, contexto="Integração Bling")), 400
     except Exception as e:
         conn.rollback()
-        return jsonify(success=False, message=str(e)), 500
+        return jsonify(success=False, message=mensagem_publica_bling(e, contexto="Integração Bling")), 500
     finally:
         conn.close()
 
@@ -1173,7 +1180,7 @@ def api_categorias_bling_validar_importacao():
         )
         return jsonify(success=True, dados=val)
     except Exception as e:
-        return jsonify(success=False, message=str(e)), 500
+        return jsonify(success=False, message=mensagem_publica_bling(e, contexto="Integração Bling")), 500
     finally:
         conn.close()
 
@@ -1216,7 +1223,7 @@ def api_depositos_bling():
         )
     except Exception as e:
         conn.rollback()
-        return jsonify(success=False, message=str(e)), 500
+        return jsonify(success=False, message=mensagem_publica_bling(e, contexto="Integração Bling")), 500
     finally:
         conn.close()
 
@@ -1281,10 +1288,10 @@ def api_vincular_deposito_bling():
         )
     except ValueError as e:
         conn.rollback()
-        return jsonify(success=False, message=str(e)), 400
+        return jsonify(success=False, message=mensagem_publica_bling(e, contexto="Integração Bling")), 400
     except Exception as e:
         conn.rollback()
-        return jsonify(success=False, message=str(e)), 500
+        return jsonify(success=False, message=mensagem_publica_bling(e, contexto="Integração Bling")), 500
     finally:
         conn.close()
 
@@ -1328,7 +1335,7 @@ def api_sincronizar_estoque_deposito_bling():
         )
         return jsonify(success=True, sync_job_id=sync_job_id)
     except Exception as e:
-        return jsonify(success=False, message=str(e)), 500
+        return jsonify(success=False, message=mensagem_publica_bling(e, contexto="Integração Bling")), 500
     finally:
         conn.close()
 
@@ -1508,7 +1515,7 @@ def api_imagens_fila_processar():
         conn.commit()
     except Exception as e:
         conn.rollback()
-        return jsonify(success=False, message=str(e)[:300]), 500
+        return jsonify(success=False, message=mensagem_publica_bling(e, contexto="Integração Bling")[:300]), 500
     finally:
         conn.close()
 

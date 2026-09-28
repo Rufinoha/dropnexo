@@ -649,6 +649,7 @@
             ped.status_pagamento = "pendente";
             ped.pago_em = null;
           }
+          refletirStatusNaLista(ped);
         }
         if (!silencioso && painelAtivo === "valores") await renderPayIntegracoes();
       }
@@ -666,37 +667,37 @@
   async function excluirComprovantePix(idAnexo) {
     const ped = pedidosGrupo.find((p) => (p.anexos || []).some((a) => a.id === idAnexo));
     const stPed = stV(ped);
-    const travaStatus = ["pago", "em_expedicao", "aguardando_confirmacao"].includes(stPed);
+    if (["em_expedicao", "entregue"].includes(stPed)) {
+      if (window.Swal) {
+        Swal.fire({
+          icon: "info",
+          title: "Comprovante",
+          text: "O comprovante não pode ser excluído depois que o fornecedor expediu o pedido.",
+          confirmButtonColor: "#021F81",
+        });
+      }
+      return;
+    }
     const ok = window.Swal
       ? (
           await Swal.fire({
             icon: "warning",
             title: "Excluir comprovante?",
-            html:
-              stPed === "aguardando_confirmacao"
-                ? "<p style='text-align:left;margin:0;line-height:1.45'>O arquivo sai. O pedido <strong>continua pago</strong>, aguardando a expedição. Você pode anexar outro comprovante.</p>"
-                : travaStatus
-                  ? "<p style='text-align:left;margin:0;line-height:1.45'>Só o arquivo sai. O status do pedido <strong>não muda</strong>.</p>"
-                  : "<p style='text-align:left;margin:0;line-height:1.45'>O pedido volta para <strong>aguardando pagamento</strong>. Você poderá gerar o PIX e anexar outro comprovante.</p>",
-            confirmButtonText: travaStatus ? "Excluir anexo" : "Excluir e voltar status",
+            html: "<p style='text-align:left;margin:0;line-height:1.45'>O arquivo sai e o pedido volta para <strong>aguardando pagamento</strong>. O fornecedor deixa de vê-lo até você anexar outro comprovante.</p>",
+            confirmButtonText: "Excluir e voltar status",
             cancelButtonText: "Cancelar",
             showCancelButton: true,
             confirmButtonColor: "#b91c1c",
           })
         ).isConfirmed
-      : confirm(travaStatus ? "Excluir o comprovante? O status do pedido não muda." : "Excluir comprovante e voltar ao status anterior?");
+      : confirm("Excluir comprovante e voltar para aguardando pagamento?");
     if (!ok) return;
     const done = await excluirAnexo(idAnexo, { confirmar: false });
     if (done && window.Swal) {
       Swal.fire({
         icon: "success",
         title: "Comprovante removido",
-        text:
-          stPed === "aguardando_confirmacao"
-            ? "O arquivo saiu. Anexe outro comprovante — o pedido continua pago."
-            : travaStatus
-              ? "O arquivo saiu. O status do pedido permanece."
-              : "Status voltou para aguardando pagamento.",
+        text: "Status voltou para aguardando pagamento.",
         confirmButtonColor: "#021F81",
         timer: 2200,
         showConfirmButton: true,
@@ -1928,8 +1929,6 @@
       statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pendente">Confirme o pedido para pagar</div>`;
     } else if (temComprovante && isPixManual) {
       statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pendente">Comprovante enviado — o fornecedor confirma na expedição</div>`;
-    } else if (isPixManual && ped && st === "aguardando_confirmacao") {
-      statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pendente">Comprovante removido. Anexe outro arquivo — o pedido continua pago, aguardando a expedição.</div>`;
     } else if (isPixManual && ped && !docsFreteOk) {
       statusHtml = `<div class="Pd_PayStatus Pd_PayStatus--pendente">Antes de gerar o PIX, anexe em <strong>Frete e NF</strong>: ${esc(docsFreteFaltando.join(", "))}</div>`;
     } else if (isPixManual && ped) {
@@ -2002,9 +2001,7 @@
         }
       </div>`;
 
-    const podeMexerComp = st !== "entregue" && st !== "cancelado";
-    const comprovanteTravaStatus =
-      ["pago", "em_expedicao"].includes(st) && (stPag === "pago" || !!ped?.pago_em);
+    const podeMexerComp = !["em_expedicao", "entregue", "cancelado"].includes(st);
     const listaComprovantes = temComprovante
       ? `<div class="Pd_ComprovanteLista">
           ${comprovantes
@@ -2026,13 +2023,7 @@
           ${
             podeMexerComp
               ? `<input type="file" id="pd_alt_comp_${idPed}" class="Pd_AnexoInput" accept=".pdf,.png,.jpg,.jpeg,.webp" hidden data-alt-upload-comprovante="${idPed}" />
-                 <p class="Pd_Hint">${
-                   st === "aguardando_confirmacao"
-                     ? "Errado? <strong>Alterar</strong> troca o arquivo · <strong>Excluir</strong> remove o anexo. O pedido continua pago — anexe outro comprovante."
-                     : comprovanteTravaStatus
-                       ? "Errado? <strong>Alterar</strong> troca o arquivo · <strong>Excluir</strong> remove o anexo. O status do pedido não muda."
-                       : "Errado? <strong>Alterar</strong> troca o arquivo · <strong>Excluir</strong> remove e volta para aguardando pagamento."
-                 }</p>`
+                 <p class="Pd_Hint">Errado? <strong>Alterar</strong> troca o arquivo. <strong>Excluir</strong> remove o comprovante e volta o pedido para aguardando pagamento.</p>`
               : ""
           }
         </div>`

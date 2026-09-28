@@ -1,6 +1,7 @@
 # api/bling/cliente.py — OAuth 2.0 e cliente HTTP Bling API v3
 from __future__ import annotations
 
+import html
 import logging
 import os
 import secrets
@@ -140,6 +141,10 @@ _MSG_REFRESH_SEM_NOVO = (
 )
 
 
+MSG_USUARIO_BLING = "Não foi possível falar com o Bling agora. Tente de novo mais tarde."
+_EMAIL_DEV_BLING = "hazael@h74.com.br"
+
+
 def _texto_refresh_recusado(texto: str | None) -> bool:
     t = (texto or "").lower()
     return (
@@ -149,6 +154,60 @@ def _texto_refresh_recusado(texto: str | None) -> bool:
         or "já não vale no bling" in t
         or "ja nao vale no bling" in t
     )
+
+
+def _erro_interno_bling(texto: str | None) -> bool:
+    if _texto_refresh_recusado(texto):
+        return True
+    t = (texto or "").lower()
+    return any(
+        x in t
+        for x in (
+            "bling oauth",
+            "bling api ",
+            "refresh token",
+            "access token",
+            "invalid_grant",
+            "invalid refresh",
+            "client_secret",
+        )
+    )
+
+
+def mensagem_publica_bling(exc: BaseException, *, contexto: str) -> str:
+    """Erro de token fica no e-mail do dev. O usuário recebe uma frase curta."""
+    bruto = str(exc).strip()
+    if not _erro_interno_bling(bruto):
+        return bruto[:400]
+    try:
+        from api.brevo.srotas_brevo import enviar_email
+
+        enviar_email(
+            [_EMAIL_DEV_BLING],
+            "DropNexo — falha interna no Bling",
+            (
+                f"<p>{html.escape(contexto)}</p>"
+                f"<p>{html.escape(bruto[:1500])}</p>"
+            ),
+            tag="dropnexo_bling_interno",
+        )
+    except Exception:
+        _log.warning("e-mail de falha interna do Bling não enviado")
+    return MSG_USUARIO_BLING
+
+
+def sanitizar_motivos_bling(falhas: list | None, *, contexto: str) -> None:
+    avisou = False
+    for item in falhas or []:
+        if not isinstance(item, dict):
+            continue
+        motivo = str(item.get("motivo") or "")
+        if not _erro_interno_bling(motivo):
+            continue
+        if not avisou:
+            mensagem_publica_bling(RuntimeError(motivo), contexto=contexto)
+            avisou = True
+        item["motivo"] = MSG_USUARIO_BLING
 
 
 def _revoke_urls() -> tuple[str, ...]:
