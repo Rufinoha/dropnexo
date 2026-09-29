@@ -103,7 +103,13 @@
         {# Depois do cabeçalho: com table-layout:fixed a 1ª linha define as colunas #}
         <tr class="Cat_BulkHeadRow" id="ob_bulkRow" hidden>
           <th colspan="11" class="Cat_BulkHeadCell">
-            <div class="Cat_BulkActions" id="ob_bulkActions" aria-label="Ações em lote"></div>
+            <div class="Cat_BulkBar" id="ob_bulkBar" aria-label="Ações em lote">
+              <div class="Cat_BulkLead">
+                <span class="Cat_BulkCount" id="ob_bulkCount">0 selecionados</span>
+                <button type="button" class="Cat_BulkClear" id="ob_bulkClear">Limpar seleção</button>
+              </div>
+              <div class="Cat_BulkActions" id="ob_bulkActions"></div>
+            </div>
           </th>
         </tr>
       </thead>
@@ -147,5 +153,5 @@
 {% endblock %}
 
 {% block page_js %}
-<script defer src="{{ url_for('vd_meus_produtos.static', filename='script/Svd_meus_produtos_lista.js') }}?v=15"></script>
+<script defer src="{{ url_for('vd_meus_produtos.static', filename='script/Svd_meus_produtos_lista.js') }}?v=16"></script>
 {% endblock %}

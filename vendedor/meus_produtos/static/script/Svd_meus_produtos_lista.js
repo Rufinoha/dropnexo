@@ -34,6 +34,8 @@
     btnToggleExpandTodos: document.getElementById("ob_btnToggleExpandTodos"),
     chkTodos: document.getElementById("ob_chkTodos"),
     bulkRow: document.getElementById("ob_bulkRow"),
+    bulkCount: document.getElementById("ob_bulkCount"),
+    bulkClear: document.getElementById("ob_bulkClear"),
     bulkActions: document.getElementById("ob_bulkActions"),
     tbody: document.getElementById("ob_listaProdutos"),
     paginaAtual: document.getElementById("ob_paginaAtual"),
@@ -185,6 +187,9 @@
   function syncBulkBar() {
     const n = selecionados.size;
     if (el.bulkRow) el.bulkRow.hidden = n === 0;
+    if (el.bulkCount) {
+      el.bulkCount.textContent = n === 1 ? "1 selecionado" : `${n} selecionados`;
+    }
     if (n > 0) window.Util?.gerarIconeTech?.refresh?.();
     syncTheadStickyOffset();
     if (!el.chkTodos) return;
@@ -338,41 +343,68 @@
     posicionarMenuIntegracoes(btn);
   }
 
+  function _bulkBtn({ acao, icon, label, title, danger }) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = `Cat_BulkBtn${danger ? " Cat_BulkBtn--danger" : ""}`;
+    btn.dataset.bulk = acao;
+    btn.title = title || label;
+    btn.setAttribute("aria-label", title || label);
+    const ico = document.createElement("span");
+    ico.className = "Cat_BulkBtnIco";
+    ico.setAttribute("aria-hidden", "true");
+    window.Util?.gerarIconeTech?.({ dest: ico, nome: icon });
+    const txt = document.createElement("span");
+    txt.className = "Cat_BulkBtnTxt";
+    txt.textContent = label;
+    btn.appendChild(ico);
+    btn.appendChild(txt);
+    return btn;
+  }
+
   function initBulkActions() {
     if (!el.bulkActions || el.bulkActions.dataset.ready) return;
     el.bulkActions.dataset.ready = "1";
 
-    const btnCat = document.createElement("button");
-    btnCat.type = "button";
-    btnCat.className = "Cl_BtnAcao Cat_BulkBtn";
-    btnCat.dataset.bulk = "categoria";
-    btnCat.title = "Associar categoria";
-    btnCat.setAttribute("aria-label", "Associar categoria");
-    window.Util?.gerarIconeTech?.({ dest: btnCat, nome: "categorias" });
-    el.bulkActions.appendChild(btnCat);
+    el.bulkActions.appendChild(
+      _bulkBtn({
+        acao: "categoria",
+        icon: "categorias",
+        label: "Categoria",
+        title: "Associar categoria",
+      })
+    );
 
     const wrapInt = document.createElement("div");
     wrapInt.className = "Cat_BulkIntWrap";
-    const btnInt = document.createElement("button");
-    btnInt.type = "button";
-    btnInt.className = "Cl_BtnAcao Cat_BulkBtn";
-    btnInt.dataset.bulk = "integrar";
-    btnInt.title = "Integrar marketplaces";
-    btnInt.setAttribute("aria-label", "Integrar marketplaces");
+    const btnInt = _bulkBtn({
+      acao: "integrar",
+      icon: "vincular_clientes",
+      label: "Integrar",
+      title: "Integrar marketplaces",
+    });
     btnInt.setAttribute("aria-haspopup", "menu");
     btnInt.setAttribute("aria-expanded", "false");
-    window.Util?.gerarIconeTech?.({ dest: btnInt, nome: "vincular_clientes" });
     wrapInt.appendChild(btnInt);
     el.bulkActions.appendChild(wrapInt);
 
-    const btnExc = document.createElement("button");
-    btnExc.type = "button";
-    btnExc.className = "Cl_BtnAcao Cat_BulkBtn Cat_BulkBtn--danger";
-    btnExc.dataset.bulk = "excluir";
-    btnExc.title = "Excluir selecionados";
-    btnExc.setAttribute("aria-label", "Excluir selecionados");
-    window.Util?.gerarIconeTech?.({ dest: btnExc, nome: "excluir" });
-    el.bulkActions.appendChild(btnExc);
+    el.bulkActions.appendChild(
+      _bulkBtn({
+        acao: "excluir",
+        icon: "excluir",
+        label: "Excluir",
+        title: "Excluir selecionados",
+        danger: true,
+      })
+    );
+
+    if (el.bulkClear) {
+      el.bulkClear.addEventListener("click", () => {
+        selecionados.clear();
+        renderTabela();
+        syncBulkBar();
+      });
+    }
 
     el.bulkActions.addEventListener("click", async (ev) => {
       const intBtn = ev.target.closest('[data-bulk="integrar"]');
