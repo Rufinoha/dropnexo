@@ -470,7 +470,7 @@
       const em = banner.getAttribute("data-vinculo-em") || "";
       const key = "dn_vinculo_banner_hide:" + id + ":" + st + ":" + em;
       try {
-        if (sessionStorage.getItem(key) === "1") {
+        if (localStorage.getItem(key) === "1") {
           banner.remove();
           return;
         }
@@ -482,13 +482,15 @@
       if (!btn) return;
       btn.addEventListener("click", function () {
         try {
-          sessionStorage.setItem(key, "1");
+          localStorage.setItem(key, "1");
         } catch (_) {
           /* ignore */
         }
         banner.remove();
+        if (!wrap.querySelector(".fg-vinculo-banner")) wrap.remove();
       });
     });
+    if (!wrap.querySelector(".fg-vinculo-banner")) wrap.remove();
   }
 
   document.addEventListener("DOMContentLoaded", function () {
