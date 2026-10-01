@@ -86,7 +86,7 @@
   ];
 
   function presetInicial() {
-    const p = PRESETS.find((x) => x.id === "mes_hoje");
+    const p = PRESETS.find((x) => x.id === "7");
     const [ini, fim] = p.range();
     return { ini, fim, preset: p.id };
   }
