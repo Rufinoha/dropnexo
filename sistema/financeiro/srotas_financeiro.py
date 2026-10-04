@@ -1,9 +1,10 @@
 # sistema/financeiro/srotas_financeiro.py — módulo Financeiro
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
-from flask import Blueprint, jsonify, render_template, request, session
+from flask import Blueprint, jsonify, render_template, request, send_file, session
 
 from global_utils import Var_ConectarBanco, login_obrigatorio
 from sistema.financeiro.cobranca import (
@@ -39,18 +40,26 @@ def init_app(app):
         try:
             conn = Var_ConectarBanco()
             cur = conn.cursor()
-            alerta = fatura_aberta_alerta(cur, int(session["id_tenant"]))
+            tid = int(session["id_tenant"])
+            alerta = fatura_aberta_alerta(cur, tid)
+            from sistema.financeiro.comissao import comissao_menu_visivel
+
+            tipo = (session.get("tenant_tipo_negocio") or "").strip().lower()
+            menu = tipo in ("fornecedor", "hibrido") and comissao_menu_visivel(cur, tid)
+            conn.commit()
             conn.close()
+            base = {"comissao_menu": menu}
             if not alerta:
-                return {"financeiro_alerta": None}
+                return {**base, "financeiro_alerta": None}
             return {
+                **base,
                 "financeiro_alerta": {
                     **alerta,
                     "dias_graca": DIAS_GRACA_INADIMPLENCIA,
-                }
+                },
             }
         except Exception:
-            return {"financeiro_alerta": None}
+            return {"financeiro_alerta": None, "comissao_menu": False}
 
 
 def _pode_financeiro() -> bool:
@@ -302,3 +311,126 @@ def api_efi_logs():
         return jsonify(success=False, message=str(e)), 500
     finally:
         conn.close()
+
+
+def _pode_comissoes() -> bool:
+    tipo = (session.get("tenant_tipo_negocio") or "").strip().lower()
+    if tipo not in ("fornecedor", "hibrido"):
+        return False
+    return _pode_financeiro()
+
+
+@financeiro_bp.get("/comissoes")
+@login_obrigatorio()
+def pagina_comissoes():
+    if not _pode_comissoes():
+        return render_template("frm_comissoes.html", sem_acesso=True, comissao_off=False)
+    tid = _id_tenant()
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        from sistema.financeiro.comissao import comissao_menu_visivel
+
+        ligado = bool(tid and comissao_menu_visivel(cur, int(tid)))
+        conn.commit()
+    finally:
+        conn.close()
+    if not ligado:
+        return render_template("frm_comissoes.html", sem_acesso=False, comissao_off=True)
+    return render_template("frm_comissoes.html", sem_acesso=False, comissao_off=False)
+
+
+@financeiro_bp.get("/api/comissoes/painel")
+@login_obrigatorio()
+def api_comissoes_painel():
+    if not _pode_comissoes():
+        return jsonify(success=False, message="Sem permissão."), 403
+    tid = _id_tenant()
+    if not tid:
+        return jsonify(success=False, message="Sessão inválida."), 403
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        from sistema.financeiro.comissao import painel_comissoes
+
+        data = painel_comissoes(cur, tid)
+        conn.commit()
+        return jsonify(success=True, **data)
+    except Exception as e:
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
+@financeiro_bp.post("/api/comissoes/fechar")
+@login_obrigatorio()
+def api_comissoes_fechar():
+    if not _pode_comissoes():
+        return jsonify(success=False, message="Sem permissão."), 403
+    tid = _id_tenant()
+    if not tid:
+        return jsonify(success=False, message="Sessão inválida."), 403
+    arq = request.files.get("nf")
+    if not arq or not (arq.filename or "").lower().endswith(".pdf"):
+        return jsonify(success=False, message="Anexe a nota fiscal em PDF."), 400
+    pasta = _MOD.parents[2] / "upload" / f"tenant{tid}" / "comissoes"
+    pasta.mkdir(parents=True, exist_ok=True)
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        from sistema.financeiro.comissao import fechar_comissoes
+
+        nome = Path(arq.filename or "nota.pdf").name
+        try:
+            ids = json.loads(request.form.get("ids") or "[]")
+        except Exception:
+            ids = []
+        if not isinstance(ids, list):
+            return jsonify(success=False, message="Seleção inválida."), 400
+        res = fechar_comissoes(cur, tid, nf_nome=nome, nf_caminho="pendente", ids=ids)
+        destino = pasta / f"{res['id']}.pdf"
+        arq.save(destino)
+        rel = f"upload/tenant{tid}/comissoes/{destino.name}"
+        cur.execute(
+            "UPDATE tbl_comissao_fechamento SET nf_caminho = %s, nf_nome = %s WHERE id = %s",
+            (rel, nome, res["id"]),
+        )
+        conn.commit()
+        return jsonify(success=True, message="Faturamento registrado.", **res)
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 400
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
+@financeiro_bp.get("/api/comissoes/fechamento/<int:id_fechamento>/nf")
+@login_obrigatorio()
+def api_comissoes_nf(id_fechamento: int):
+    if not _pode_comissoes() and not session.get("eh_desenvolvedor"):
+        return jsonify(success=False, message="Sem permissão."), 403
+    tid = _id_tenant()
+    if session.get("eh_desenvolvedor"):
+        alt = request.args.get("tenant")
+        if alt and str(alt).isdigit():
+            tid = int(alt)
+    if not tid:
+        return jsonify(success=False, message="Sessão inválida."), 403
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        from sistema.financeiro.comissao import caminho_nf_fechamento
+
+        achou = caminho_nf_fechamento(cur, id_fechamento, int(tid))
+    finally:
+        conn.close()
+    if not achou:
+        return jsonify(success=False, message="Nota não encontrada."), 404
+    rel, nome = achou
+    path = _MOD.parents[2] / rel
+    if not path.is_file():
+        return jsonify(success=False, message="Arquivo da nota não encontrado."), 404
+    return send_file(path, as_attachment=False, download_name=nome, mimetype="application/pdf")

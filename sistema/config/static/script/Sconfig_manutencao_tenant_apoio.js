@@ -19,6 +19,10 @@
     limparSeg: document.getElementById("limpar_segmentos"),
     wrapLimpar: document.getElementById("wrap_limpar_seg"),
     contato: document.getElementById("contato"),
+    cidadeValor: document.getElementById("cidade_valor"),
+    ufValor: document.getElementById("uf_valor"),
+    wrapSegmentos: document.getElementById("wrap_segmentos"),
+    segmentosValor: document.getElementById("segmentos_valor"),
     linkWhatsapp: document.getElementById("link_whatsapp"),
     whatsappVazio: document.getElementById("whatsapp_vazio"),
     linkEmail: document.getElementById("link_email"),
@@ -31,6 +35,8 @@
     tabs: document.getElementById("cfg_mt_tabs"),
     paneTenant: document.getElementById("cfg_pane_tenant"),
     paneDono: document.getElementById("cfg_pane_dono"),
+    paneComissao: document.getElementById("cfg_pane_comissao"),
+    tabComissao: document.getElementById("cfg_tab_comissao"),
     donoVazio: document.getElementById("dono_vazio"),
     donoDados: document.getElementById("dono_dados"),
     donoId: document.getElementById("dono_id"),
@@ -75,13 +81,17 @@
   };
 
   function pickTab(tab) {
-    const t = tab === "dono" ? "dono" : "tenant";
+    const t = tab === "dono" || tab === "comissao" ? tab : "tenant";
     el.tabs?.querySelectorAll(".CfgMt_Tab").forEach((b) => {
       b.classList.toggle("is-active", b.dataset.tab === t);
     });
     if (el.paneTenant) el.paneTenant.hidden = t !== "tenant";
     if (el.paneDono) el.paneDono.hidden = t !== "dono";
+    if (el.paneComissao) el.paneComissao.hidden = t !== "comissao";
     if (el.btnSalvar) el.btnSalvar.hidden = t !== "tenant";
+    if (t === "comissao") {
+      document.dispatchEvent(new CustomEvent("cfg-comissao-abrir"));
+    }
   }
 
   function formatarDataHora(iso) {
@@ -230,6 +240,16 @@
     if (el.limparSeg && vaiVendedor && mudou && tipoOriginal === "fornecedor") {
       el.limparSeg.checked = true;
     }
+    const tipoAtual = el.tipo?.value || "";
+    const mostraSeg =
+      tipoAtual === "fornecedor" ||
+      tipoAtual === "hibrido" ||
+      tipoOriginal === "fornecedor" ||
+      tipoOriginal === "hibrido";
+    if (el.wrapSegmentos) el.wrapSegmentos.hidden = !mostraSeg;
+    const mostraCom = tipoAtual === "fornecedor" || tipoAtual === "hibrido";
+    if (el.tabComissao) el.tabComissao.hidden = !mostraCom;
+    if (!mostraCom && el.paneComissao && !el.paneComissao.hidden) pickTab("tenant");
   }
 
   function preencher(t) {
@@ -248,6 +268,10 @@
         : "starter";
     }
     if (el.documento) el.documento.value = t.documento || "";
+    if (el.cidadeValor) el.cidadeValor.textContent = (t.cidade || "").trim() || "—";
+    if (el.ufValor) el.ufValor.textContent = (t.uf || "").trim() || "—";
+    const segs = Array.isArray(t.segmentos) ? t.segmentos.filter(Boolean) : [];
+    if (el.segmentosValor) el.segmentosValor.textContent = segs.length ? segs.join(", ") : "Nenhum segmento";
     if (el.ativo) el.ativo.checked = !!t.ativo;
     preencherContato(t);
     preencherDono(t);

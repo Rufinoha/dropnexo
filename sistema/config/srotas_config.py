@@ -1658,6 +1658,29 @@ def _tenant_payload(cur, id_tenant: int) -> dict | None:
     dono_whatsapp = dono.get("whatsapp") or ""
     dono_nome = dono.get("nome") or ""
 
+    segmentos: list[str] = []
+    if (row[3] or "").strip().lower() in ("fornecedor", "hibrido"):
+        try:
+            cur.execute("SAVEPOINT sp_segmentos_tenant")
+            cur.execute(
+                """
+                SELECT s.nome
+                FROM tbl_fornecedor_segmento fs
+                JOIN tbl_segmento s ON s.id = fs.id_segmento
+                WHERE fs.id_tenant = %s
+                ORDER BY s.ordem, s.nome
+                """,
+                (id_tenant,),
+            )
+            segmentos = [(r[0] or "").strip() for r in cur.fetchall() if (r[0] or "").strip()]
+            cur.execute("RELEASE SAVEPOINT sp_segmentos_tenant")
+        except Exception:
+            segmentos = []
+            try:
+                cur.execute("ROLLBACK TO SAVEPOINT sp_segmentos_tenant")
+            except Exception:
+                pass
+
     email = email_comercial or dono_email
     whatsapp = dono_whatsapp or telefone_comercial
 
@@ -1673,6 +1696,7 @@ def _tenant_payload(cur, id_tenant: int) -> dict | None:
         "nome_completo": row[8] or "",
         "cidade": row[9] or "",
         "uf": row[10] or "",
+        "segmentos": segmentos,
         "email_comercial": email_comercial,
         "telefone_comercial": telefone_comercial,
         "email": email,
@@ -1723,6 +1747,216 @@ def manutencao_tenant_apoio():
         if not tenant:
             return jsonify(success=False, message="Tenant não encontrado."), 404
         return jsonify(success=True, tenant=tenant)
+    finally:
+        conn.close()
+
+
+@config_bp.get(f"{MANUTENCAO_TENANT_PREFIX}/<int:id_tenant>/comissao")
+@login_obrigatorio()
+def manutencao_comissao_dados(id_tenant: int):
+    if (r := _exigir_dev()) is not None:
+        return r
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        from sistema.financeiro.comissao import dados_config_comissao
+
+        data = dados_config_comissao(cur, id_tenant)
+        conn.commit()
+        return jsonify(success=True, **data)
+    except Exception as e:
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
+@config_bp.get(f"{MANUTENCAO_TENANT_PREFIX}/<int:id_tenant>/comissao/busca")
+@login_obrigatorio()
+def manutencao_comissao_busca(id_tenant: int):
+    if (r := _exigir_dev()) is not None:
+        return r
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        from sistema.financeiro.comissao import buscar_fornecedores_comissao
+
+        itens = buscar_fornecedores_comissao(cur, id_tenant, request.args.get("q") or "")
+        conn.commit()
+        return jsonify(success=True, itens=itens)
+    finally:
+        conn.close()
+
+
+@config_bp.post(f"{MANUTENCAO_TENANT_PREFIX}/<int:id_tenant>/comissao")
+@login_obrigatorio()
+def manutencao_comissao_salvar(id_tenant: int):
+    if (r := _exigir_dev()) is not None:
+        return r
+    body = request.get_json(silent=True) or {}
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        from sistema.financeiro.comissao import dados_config_comissao, salvar_config_comissao
+
+        salvar_config_comissao(cur, id_tenant, body)
+        conn.commit()
+        return jsonify(success=True, message="Comissão salva.", **dados_config_comissao(cur, id_tenant))
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 400
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
+COMISSOES_BAIXA_PREFIX = "/configuracoes/comissoes-baixa"
+
+
+@config_bp.get(COMISSOES_BAIXA_PREFIX)
+@login_obrigatorio()
+def comissoes_baixa_pagina():
+    if not session.get("eh_desenvolvedor"):
+        return redirect(url_for("dashboard.index"))
+    return render_template("frm_config_comissoes_baixa.html", nav_ativo="config")
+
+
+@config_bp.get(f"{COMISSOES_BAIXA_PREFIX}/dados")
+@login_obrigatorio()
+def comissoes_baixa_dados():
+    if (r := _exigir_dev()) is not None:
+        return r
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        from sistema.financeiro.comissao import listar_baixas_comissao
+
+        data = listar_baixas_comissao(cur, request.args.get("status") or "aguardando")
+        return jsonify(success=True, **data)
+    except Exception as e:
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
+_EXT_COMPROVANTE = {
+    ".pdf": "application/pdf",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".webp": "image/webp",
+}
+
+
+@config_bp.post(f"{COMISSOES_BAIXA_PREFIX}/<int:id_fechamento>/comprovante")
+@login_obrigatorio()
+def comissoes_baixa_anexar(id_fechamento: int):
+    if (r := _exigir_dev()) is not None:
+        return r
+    arq = request.files.get("comprovante")
+    nome = Path(arq.filename or "").name if arq else ""
+    ext = Path(nome).suffix.lower()
+    if not arq or ext not in _EXT_COMPROVANTE:
+        return jsonify(success=False, message="Anexe o comprovante em PDF ou imagem."), 400
+    arq.seek(0, 2)
+    tamanho = arq.tell()
+    arq.seek(0)
+    if tamanho <= 0 or tamanho > 8 * 1024 * 1024:
+        return jsonify(success=False, message="O comprovante deve ter até 8 MB."), 400
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT id_tenant_fornecedor FROM tbl_comissao_fechamento WHERE id = %s AND status = 'aguardando'",
+            (id_fechamento,),
+        )
+        row = cur.fetchone()
+        if not row:
+            return jsonify(success=False, message="Fechamento não encontrado ou já pago."), 404
+        tid = int(row[0])
+        pasta = _MOD_DIR.parents[1] / "upload" / f"tenant{tid}" / "comissoes"
+        pasta.mkdir(parents=True, exist_ok=True)
+        destino = pasta / f"{id_fechamento}-comprovante{ext}"
+        from sistema.financeiro.comissao import gravar_comprovante_fechamento
+
+        rel = f"upload/tenant{tid}/comissoes/{destino.name}"
+        gravar_comprovante_fechamento(cur, id_fechamento, nome, rel)
+        arq.save(destino)
+        conn.commit()
+        return jsonify(success=True, message="Comprovante anexado.")
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 400
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
+@config_bp.get(f"{COMISSOES_BAIXA_PREFIX}/<int:id_fechamento>/comprovante")
+@login_obrigatorio()
+def comissoes_baixa_ver_comprovante(id_fechamento: int):
+    if (r := _exigir_dev()) is not None:
+        return r
+    from flask import send_file
+
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        from sistema.financeiro.comissao import caminho_comprovante_fechamento
+
+        achou = caminho_comprovante_fechamento(cur, id_fechamento)
+    finally:
+        conn.close()
+    if not achou:
+        return jsonify(success=False, message="Comprovante não encontrado."), 404
+    rel, nome = achou
+    path = _MOD_DIR.parents[1] / rel
+    if not path.is_file():
+        return jsonify(success=False, message="Arquivo do comprovante não encontrado."), 404
+    return send_file(
+        path,
+        as_attachment=False,
+        download_name=nome,
+        mimetype=_EXT_COMPROVANTE.get(path.suffix.lower(), "application/octet-stream"),
+    )
+
+
+@config_bp.post(f"{COMISSOES_BAIXA_PREFIX}/baixa")
+@login_obrigatorio()
+def comissoes_baixa_confirmar():
+    if (r := _exigir_dev()) is not None:
+        return r
+    body = request.get_json(silent=True) or {}
+    try:
+        fid = int(body.get("id_fechamento") or 0)
+    except (TypeError, ValueError):
+        fid = 0
+    if fid <= 0:
+        return jsonify(success=False, message="Fechamento inválido."), 400
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT id_tenant_fornecedor FROM tbl_comissao_fechamento WHERE id = %s",
+            (fid,),
+        )
+        row = cur.fetchone()
+        if not row:
+            return jsonify(success=False, message="Fechamento não encontrado."), 404
+        from sistema.financeiro.comissao import dar_baixa_fechamento
+
+        dar_baixa_fechamento(cur, int(row[0]), fid)
+        conn.commit()
+        return jsonify(success=True, message="Pagamento baixado.")
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 400
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 500
     finally:
         conn.close()
 

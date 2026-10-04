@@ -56,6 +56,17 @@
   font-size: 0.85rem;
 }
 
+.CfgMt_ContatoValor {
+  color: #1c2e3b;
+  font-weight: 600;
+  font-size: 0.9rem;
+  word-break: break-word;
+}
+
+.CfgMt_ContatoItem--full {
+  grid-column: 1 / -1;
+}
+
 @media (max-width: 520px) {
   .CfgMt_Contato {
     grid-template-columns: 1fr;
@@ -775,3 +786,87 @@ button.CfgMt_KpiMini:hover {
   font-size: 0.82rem;
   color: #64748b;
 }
+
+.CfgMt_ComSwitch { margin: 0 0 0.9rem; }
+.CfgMt_ComBloco {
+  margin-top: 1rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid #e2e8f0;
+}
+.CfgMt_ComBloco > strong {
+  display: block;
+  margin-bottom: 0.35rem;
+  color: #1c2e3b;
+}
+.CfgMt_ComBlocoHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.45rem;
+}
+.CfgMt_ComBlocoHead strong { color: #1c2e3b; }
+#com_corpo.is-off { opacity: 0.45; pointer-events: none; }
+.CfgMt_Imposto {
+  display: grid;
+  grid-template-columns: 1fr 7rem auto;
+  gap: 0.45rem;
+  margin-bottom: 0.4rem;
+}
+.CfgMt_Imposto input {
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 0.88rem;
+}
+.CfgMt_ComLista {
+  list-style: none;
+  margin: 0.45rem 0 0;
+  padding: 0;
+}
+.CfgMt_ComLista li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem 0.75rem;
+  padding: 0.45rem 0;
+  border-bottom: 1px solid #eef2f7;
+  font-size: 0.88rem;
+}
+.CfgMt_ComLista li.is-empty { color: #94a3b8; border: 0; }
+.CfgMt_ComLista label { display: flex; align-items: center; gap: 0.45rem; }
+.CfgMt_ComLista em { color: #64748b; font-style: normal; font-size: 0.75rem; }
+.CfgMt_ComLista small { color: #9a3412; }
+.CfgMt_ComLista button {
+  border: 0;
+  background: transparent;
+  color: #021F81;
+  font-weight: 700;
+  cursor: pointer;
+}
+#com_busca {
+  width: 100%;
+  margin-top: 0.45rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+}
+.CfgMt_ComBusca {
+  margin-top: 0.3rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fff;
+}
+.CfgMt_ComBusca button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  padding: 0.45rem 0.65rem;
+  cursor: pointer;
+}
+.CfgMt_ComBusca button:hover { background: #f8fafc; }
+.CfgMt_ComAcoes { margin-top: 1rem; }

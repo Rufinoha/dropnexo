@@ -990,6 +990,7 @@ from global_utils import (
     obter_base_url,
     valida_email,
 )
+from fornecedor.parametros.requisitos import salvar_visivel_rede_vendedor
 from fornecedor.segmentos.segmentos import listar_segmentos_plataforma, salvar_segmentos_fornecedor
 from core.dominio import consultar_cnpj
 from sistema.planos.fornecedor_fundador import (
@@ -1309,6 +1310,7 @@ def api_cadastro_novo():
                 except (TypeError, ValueError):
                     continue
             salvar_segmentos_fornecedor(cur, id_tenant, ids_parsed, exigir_minimo=True)
+            salvar_visivel_rede_vendedor(cur, id_tenant, True)
             sistema_erp = (dados.get("sistema_erp") or "").strip() or None
             fundador_res = tentar_reservar_no_cadastro(cur, id_tenant, sistema_erp=sistema_erp)
         else:

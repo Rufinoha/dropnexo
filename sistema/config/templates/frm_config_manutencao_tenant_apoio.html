@@ -6,7 +6,7 @@
   {% include "partials/marca_favicon.html" %}
   <link rel="stylesheet" href="{{ url_for('static', filename='style/global_utils.css') }}" />
   <link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_crud.css') }}?v=3" />
-  <link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_manutencao_tenant.css') }}?v=8" />
+  <link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_manutencao_tenant.css') }}?v=10" />
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </head>
 <body class="CfgApoio_Body">
@@ -23,6 +23,7 @@
     <nav class="CfgMt_Tabs" id="cfg_mt_tabs" aria-label="Seções do tenant">
       <button type="button" class="CfgMt_Tab is-active" data-tab="tenant">Tenant</button>
       <button type="button" class="CfgMt_Tab" data-tab="dono">Dono</button>
+      <button type="button" class="CfgMt_Tab" data-tab="comissao" id="cfg_tab_comissao" hidden>Comissão</button>
     </nav>
 
     <div id="cfg_pane_tenant" class="CfgMt_Pane">
@@ -74,6 +75,21 @@
         </label>
       </div>
 
+      <div class="CfgMt_Contato" id="local_seg">
+        <div class="CfgMt_ContatoItem">
+          <span class="CfgMt_ContatoLbl">Cidade</span>
+          <span class="CfgMt_ContatoValor" id="cidade_valor">—</span>
+        </div>
+        <div class="CfgMt_ContatoItem">
+          <span class="CfgMt_ContatoLbl">UF</span>
+          <span class="CfgMt_ContatoValor" id="uf_valor">—</span>
+        </div>
+        <div class="CfgMt_ContatoItem CfgMt_ContatoItem--full" id="wrap_segmentos" hidden>
+          <span class="CfgMt_ContatoLbl">Segmentos</span>
+          <span class="CfgMt_ContatoValor" id="segmentos_valor">—</span>
+        </div>
+      </div>
+
       <div class="CfgMt_Contato" id="contato" hidden>
         <div class="CfgMt_ContatoItem">
           <span class="CfgMt_ContatoLbl">WhatsApp</span>
@@ -89,6 +105,57 @@
 
       <div class="CfgMt_Counts" id="counts" hidden></div>
       <p class="CfgMt_Warn" id="warn" hidden></p>
+    </div>
+
+    <div id="cfg_pane_comissao" class="CfgMt_Pane" hidden>
+      <p class="CfgMt_DonoVazio" id="com_pai" hidden></p>
+      <label class="Cl_Switch CfgMt_ComSwitch">
+        <input type="checkbox" id="com_ativo" />
+        <span class="Cl_SwitchSlider"></span>
+        <span>Comissão ativa</span>
+      </label>
+      <div id="com_corpo">
+        <div class="CfgApoio_Grid CfgApoio_Grid--3">
+          <div class="Cl_FormCampo">
+            <label for="com_proprio">% dos vendedores dele</label>
+            <input type="number" id="com_proprio" min="0" max="100" step="0.01" />
+          </div>
+          <div class="Cl_FormCampo">
+            <label for="com_indicado">% dos vendedores indicados</label>
+            <input type="number" id="com_indicado" min="0" max="100" step="0.01" />
+          </div>
+          <div class="Cl_FormCampo">
+            <label for="com_base">Base</label>
+            <select id="com_base">
+              <option value="faturamento">Faturamento</option>
+              <option value="liquido">Líquido, sem os impostos</option>
+            </select>
+          </div>
+        </div>
+        <div class="CfgMt_ComBloco">
+          <div class="CfgMt_ComBlocoHead">
+            <strong>Impostos</strong>
+            <button type="button" class="Cl_BtnAuxiliar" id="com_add_imposto">Incluir</button>
+          </div>
+          <div id="com_impostos"></div>
+          <p class="CfgMt_MigrarHint" id="com_preview"></p>
+        </div>
+        <div class="CfgMt_ComBloco">
+          <strong>Fornecedores indicados</strong>
+          <p class="CfgMt_MigrarHint">A comissão nova deles vem para esta conta. Quem é indicado não recebe enquanto estiver aqui.</p>
+          <input type="search" id="com_busca" placeholder="Buscar fornecedor" autocomplete="off" />
+          <div id="com_busca_lista" class="CfgMt_ComBusca" hidden></div>
+          <ul id="com_indicados" class="CfgMt_ComLista"></ul>
+        </div>
+        <div class="CfgMt_ComBloco">
+          <strong>Quem recebe a comissão</strong>
+          <p class="CfgMt_MigrarHint">Marque os vendedores desta rede. Se já estiver em outro fornecedor, a marca muda para cá.</p>
+          <ul id="com_vendedores" class="CfgMt_ComLista"></ul>
+        </div>
+        <div class="CfgMt_ComAcoes">
+          <button type="button" class="Cl_BtnSalvar" id="com_salvar">Salvar comissão</button>
+        </div>
+      </div>
     </div>
 
     <div id="cfg_pane_dono" class="CfgMt_Pane" hidden>
@@ -160,6 +227,7 @@
   </div>
 
   <script src="{{ url_for('static', filename='script/global_utils.js') }}"></script>
-  <script src="{{ url_for('config.static', filename='script/Sconfig_manutencao_tenant_apoio.js') }}?v=6"></script>
+  <script src="{{ url_for('config.static', filename='script/Sconfig_manutencao_tenant_apoio.js') }}?v=8"></script>
+  <script src="{{ url_for('config.static', filename='script/Sconfig_comissao_tenant.js') }}?v=2"></script>
 </body>
 </html>

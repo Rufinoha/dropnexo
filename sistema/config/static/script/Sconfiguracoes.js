@@ -22,6 +22,12 @@
       iconeTech: "configuracoes",
     },
     {
+      titulo: "Baixa de comissões",
+      texto: "Fila dos fechamentos aguardando depósito, com a nota fiscal e a baixa do pagamento.",
+      rota: "/configuracoes/comissoes-baixa",
+      iconeTech: "shopping-bag",
+    },
+    {
       titulo: "Mala direta",
       texto: "Disparo de e-mail para tenants (vendedor/fornecedor), com dashboard de aberturas e erros via Brevo.",
       rota: "/configuracoes/mala-direta",

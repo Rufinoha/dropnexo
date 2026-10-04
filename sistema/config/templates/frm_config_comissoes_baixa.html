@@ -1,0 +1,45 @@
+{% extends "frm_base.html" %}
+{% block title %}Baixa de comissões — {{ MARCA_NOME }}{% endblock %}
+{% set nav_ativo = 'config' %}
+{% block topbar_title %}Baixa de comissões{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_comissoes_baixa.css') }}?v=2" />
+{% endblock %}
+{% block content %}
+<div class="Cl_ContainerApoio cl-page-principal">
+  <div class="cl-page-title">
+    <h2>Baixa de comissões</h2>
+    <p class="cl-page-desc">Fechamentos enviados pelos fornecedores. Abra a nota, anexe o comprovante do depósito e só então dê a baixa.</p>
+  </div>
+  <p class="CfgCup_Aviso">
+    <a class="Cl_BtnLink" href="{{ url_for('config.configuracoes') }}">← Voltar às Configurações</a>
+  </p>
+  <nav class="CfgBx_Tabs" id="bx_tabs" aria-label="Situação">
+    <button type="button" class="CfgBx_Tab is-active" data-aba="aguardando">Aguardando<em id="bx_n_ag">0</em></button>
+    <button type="button" class="CfgBx_Tab" data-aba="pago">Pagos<em id="bx_n_pg">0</em></button>
+  </nav>
+  <div class="Cl_TabelaPrincipal CfgBx_Tabela">
+    <table>
+      <thead>
+        <tr>
+          <th>Fornecedor</th>
+          <th>Fechado em</th>
+          <th>Vencimento</th>
+          <th>Valor</th>
+          <th>PIX</th>
+          <th>Nota</th>
+          <th>Comprovante</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="bx_tbody">
+        <tr><td colspan="8">Carregando…</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <input type="file" id="bx_arquivo" hidden accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp" />
+</div>
+{% endblock %}
+{% block page_js %}
+<script src="{{ url_for('config.static', filename='script/Sconfig_comissoes_baixa.js') }}?v=2"></script>
+{% endblock %}

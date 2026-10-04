@@ -43,6 +43,43 @@
 .Fin_Table th { color: #64748b; font-weight: 600; font-size: 0.78rem; text-transform: uppercase; }
 .Fin_Empty { color: #94a3b8; text-align: center !important; padding: 1.5rem !important; }
 
+.Fin_ComLink {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: #021F81;
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.Fin_ComLink:hover { color: #1636a8; }
+
+.Fin_ContaSub {
+  margin: 0 0 12px;
+  color: #64748b;
+  font-size: 0.88rem;
+  text-align: left;
+}
+.Fin_ContaLinha {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 0;
+  border-bottom: 1px solid #eef2f7;
+  color: #334155;
+  font-size: 0.92rem;
+  text-align: left;
+}
+.Fin_ContaLinha strong { font-weight: 700; color: #0f172a; }
+.Fin_ContaLinha.is-total {
+  border-bottom: 0;
+  margin-top: 4px;
+  font-size: 1rem;
+}
+.Fin_ContaLinha.is-total strong { color: #021F81; }
+
 .Fin_Badge {
   display: inline-block;
   padding: 0.15rem 0.5rem;
@@ -57,6 +94,161 @@
 
 .Fin_Acoes { display: flex; flex-wrap: wrap; gap: 0.35rem; }
 .Fin_Pag { margin: 0.75rem 0 0; font-size: 0.85rem; color: #64748b; }
+
+.Fin_Resumo {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.85rem;
+  margin-bottom: 1rem;
+}
+.Fin_ResumoCard {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 0.9rem 1rem;
+}
+.Fin_ResumoCard span {
+  display: block;
+  color: #64748b;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.Fin_ResumoCard strong {
+  display: block;
+  margin-top: 0.35rem;
+  color: #021F81;
+  font-size: 1.15rem;
+  font-weight: 700;
+  word-break: break-word;
+}
+.Fin_Tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0 0 0.75rem;
+  padding: 0;
+  background: transparent;
+  border: 0;
+}
+.Fin_Tab {
+  flex: 0 1 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  color: #475569;
+  font-size: 0.88rem;
+  font-weight: 700;
+  padding: 0.42rem 0.55rem 0.42rem 0.9rem;
+  border-radius: 999px;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+.Fin_Tab em {
+  font-style: normal;
+  min-width: 1.4rem;
+  height: 1.4rem;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  background: #eef2f7;
+  color: #475569;
+  font-size: 0.75rem;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.Fin_Tab:hover { border-color: #c7d2fe; color: #021F81; }
+.Fin_Tab.is-active {
+  background: #021F81;
+  color: #fff;
+  border-color: #021F81;
+  box-shadow: 0 8px 18px rgba(2, 31, 129, 0.22);
+}
+.Fin_Tab.is-active em {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+.Fin_Table tr.is-marcada td { background: #f4f7ff; }
+.Fin_Sel {
+  width: 2.25rem;
+  min-width: 2.25rem;
+  text-align: center;
+  padding-left: 0.35rem !important;
+  padding-right: 0.35rem !important;
+}
+.Fin_Chk {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  cursor: pointer;
+  accent-color: #021f81;
+}
+.Fin_CardTabela { padding-bottom: 0; }
+.Fin_Fechar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.85rem;
+  margin: 0.35rem -1.2rem 0;
+  padding: 0.85rem 1.2rem 1rem;
+  border-top: 1px solid #e2e8f0;
+  background: #f8fafc;
+  border-radius: 0 0 12px 12px;
+}
+.Fin_Fechar.is-ativa {
+  background: linear-gradient(90deg, #eef3ff 0%, #fff 62%);
+  border-top-color: #c7d2fe;
+}
+.Fin_FecharAcao {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-left: auto;
+}
+.Fin_SelResumo {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  min-width: 7.5rem;
+}
+.Fin_SelQtd {
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+.Fin_SelValor {
+  font-size: 1.45rem;
+  line-height: 1.05;
+  font-weight: 800;
+  color: #cbd5e1;
+  letter-spacing: -0.02em;
+}
+.Fin_Fechar.is-ativa .Fin_SelQtd { color: #021F81; }
+.Fin_Fechar.is-ativa .Fin_SelValor { color: #021F81; }
+.Fin_Fechar .Cl_botaoprimario {
+  min-height: 48px;
+  padding: 0 1.4rem;
+  font-weight: 700;
+  font-size: 15px;
+}
+.Fin_Fechar.is-ativa .Cl_botaoprimario:not(:disabled) {
+  box-shadow: 0 10px 22px color-mix(in srgb, var(--marca-primary, #7B2CFF) 30%, transparent);
+}
+.Fin_Fechar .Cl_botaoprimario:disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; transform: none; }
+.Fin_Nf { display: flex; flex-direction: column; gap: 0.3rem; color: #475569; font-size: 0.85rem; }
+.Fin_Nf input { font-size: 0.85rem; }
+@media (max-width: 800px) {
+  .Fin_Resumo { grid-template-columns: 1fr; }
+  .Fin_FecharAcao { width: 100%; justify-content: space-between; }
+  .Fin_SelResumo { align-items: flex-start; }
+}
 
 .Fin_DevBadge {
   display: inline-block;

@@ -1056,6 +1056,15 @@ def aplicar_pagamento_fatura(cur, id_fatura: int, *, origem: str = "webhook") ->
     fat2 = obter_fatura(cur, id_tenant, id_fatura)
     if fat2:
         _enviar_email_fatura(cur, id_tenant, fat2, tipo="pago")
+    cur.execute("SAVEPOINT comissao_fatura")
+    try:
+        from sistema.financeiro.comissao import registrar_comissao_fatura
+
+        registrar_comissao_fatura(cur, id_fatura)
+        cur.execute("RELEASE SAVEPOINT comissao_fatura")
+    except Exception:
+        cur.execute("ROLLBACK TO SAVEPOINT comissao_fatura")
+        log.exception("Comissão da fatura %s não gerada", id_fatura)
     return {"ok": True, "id_tenant": id_tenant, "plano": plano_slug, "fatura": fat2}
 
 

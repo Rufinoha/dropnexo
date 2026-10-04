@@ -214,12 +214,15 @@
 
   function agruparItensIntegracao(itens) {
     const conectados = [];
-    const outros = [];
+    const naoConectados = [];
+    const emBreve = [];
     for (const item of itens || []) {
-      if (itemConectado(item)) conectados.push(item);
-      else outros.push(item);
+      const slug = item.slug || "";
+      if (!INTEGRACOES_ATIVAS.has(slug)) emBreve.push(item);
+      else if (itemConectado(item)) conectados.push(item);
+      else naoConectados.push(item);
     }
-    return { conectados, outros };
+    return { conectados, naoConectados, emBreve };
   }
 
   function grupoHtml(rotulo, itens) {
@@ -270,17 +273,18 @@
     if (elTitulo) elTitulo.textContent = cat.titulo || cat.rotulo;
     if (elSubtitulo) elSubtitulo.textContent = cat.subtitulo || "";
 
-    const { conectados, outros } = agruparItensIntegracao(cat.itens);
-    const total = conectados.length + outros.length;
-    if (!total) {
+    const { conectados, naoConectados, emBreve } = agruparItensIntegracao(cat.itens);
+    const blocos = [
+      grupoHtml("Conectados", conectados),
+      grupoHtml("Não conectados", naoConectados),
+      grupoHtml("Novas integrações em breve", emBreve),
+    ].filter(Boolean);
+    if (!blocos.length) {
       elGrid.innerHTML = '<p class="FnInt_Subtitulo">Nenhuma integração nesta categoria.</p>';
       elGrid.classList.remove("FnInt_Grid--grouped");
-    } else if (!conectados.length || !outros.length) {
-      elGrid.classList.remove("FnInt_Grid--grouped");
-      elGrid.innerHTML = [...conectados, ...outros].map(cardHtml).join("");
     } else {
       elGrid.classList.add("FnInt_Grid--grouped");
-      elGrid.innerHTML = grupoHtml("Conectados", conectados) + grupoHtml("Não conectados", outros);
+      elGrid.innerHTML = blocos.join("");
     }
 
     renderSubnav();
