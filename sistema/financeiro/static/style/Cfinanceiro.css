@@ -2,6 +2,39 @@
 .Fin_Page .pt-page-title h2 { margin: 0 0 0.35rem; font-size: 1.35rem; color: #1c2e3b; }
 .Fin_Page .pt-page-desc { margin: 0; color: #64748b; font-size: 0.9rem; }
 
+.Fin_Frase {
+  margin: 0 0 0.85rem;
+  color: #1c2e3b;
+  font-size: 0.98rem;
+  font-weight: 700;
+  line-height: 1.45;
+}
+.Fin_Filtro {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.85rem;
+}
+.Fin_Filtro label {
+  color: #64748b;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.Fin_Select {
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid #d6dee6;
+  padding: 0 10px;
+  font-size: 14px;
+  background: #fff;
+  color: #1c2e3c;
+}
+.Fin_FiltroNota { margin: 0 0 0.85rem; }
+.Fin_Lote { cursor: pointer; }
+.Fin_Lote:hover td { background: #f8fafc; }
 .Fin_Aviso {
   background: #fff7ed;
   border: 1px solid #fdba74;

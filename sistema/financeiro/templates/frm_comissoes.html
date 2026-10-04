@@ -2,7 +2,7 @@
 {% block title %}Comissões — {{ MARCA_NOME }}{% endblock %}
 {% block topbar_title %}Comissões{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('financeiro.static', filename='style/Cfinanceiro.css') }}?v=5" />
+<link rel="stylesheet" href="{{ url_for('financeiro.static', filename='style/Cfinanceiro.css') }}?v=6" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio Cl_PainelPagina Fin_Page">
@@ -16,26 +16,14 @@
   {% elif comissao_off %}
   <div class="Fin_Card"><p>A comissão desta conta ainda não está ativa.</p></div>
   {% else %}
-  <div class="Fin_Resumo" id="com_resumo">
-    <article class="Fin_ResumoCard">
-      <span>Em aberto</span>
-      <strong id="com_total">—</strong>
-    </article>
-    <article class="Fin_ResumoCard">
-      <span>Fechamento</span>
-      <strong id="com_janela">—</strong>
-    </article>
-    <article class="Fin_ResumoCard">
-      <span>PIX do depósito</span>
-      <strong id="com_pix">—</strong>
-    </article>
-  </div>
+  <p class="Fin_Frase" id="com_frase"></p>
   <p class="Fin_Aviso" id="com_aviso" hidden></p>
 
   <nav class="Fin_Tabs" id="com_tabs" aria-label="Situação">
-    <button type="button" class="Fin_Tab is-active" data-aba="aberto">Em aberto<em id="com_n_aberto">0</em></button>
+    <button type="button" class="Fin_Tab is-active" data-aba="previsao">Faturamento ativo<em id="com_n_prev">0</em></button>
+    <button type="button" class="Fin_Tab" data-aba="aberto">Em aberto<em id="com_n_aberto">0</em></button>
     <button type="button" class="Fin_Tab" data-aba="faturado">Faturado<em id="com_n_faturado">0</em></button>
-    <button type="button" class="Fin_Tab" data-aba="inadimplente">Inadimplentes<em id="com_n_inad">0</em></button>
+    <button type="button" class="Fin_Tab" data-aba="inadimplente">Inadimplência<em id="com_n_inad">0</em></button>
   </nav>
   <div class="Fin_Card Fin_CardTabela">
     <div id="com_painel"></div>
@@ -45,6 +33,6 @@
 {% endblock %}
 {% block page_js %}
 {% if not sem_acesso and not comissao_off %}
-<script defer src="{{ url_for('financeiro.static', filename='script/Scomissoes.js') }}?v=5"></script>
+<script defer src="{{ url_for('financeiro.static', filename='script/Scomissoes.js') }}?v=6"></script>
 {% endif %}
 {% endblock %}

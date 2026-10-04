@@ -1,7 +1,11 @@
 (function () {
   let dados = null;
-  let aba = "aberto";
+  let aba = "previsao";
+  let ano = 0;
+  let mes = 0;
+  let anoFaturado = 0;
 
+  const MESES = ["", "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
   const painel = document.getElementById("com_painel");
   const tabs = document.getElementById("com_tabs");
 
@@ -23,33 +27,23 @@
   }
 
   function resumo() {
-    const total = document.getElementById("com_total");
-    const janela = document.getElementById("com_janela");
-    const pix = document.getElementById("com_pix");
+    const frase = document.getElementById("com_frase");
     const aviso = document.getElementById("com_aviso");
     if (!dados) return;
+    const nPrev = document.getElementById("com_n_prev");
     const nAberto = document.getElementById("com_n_aberto");
     const nFat = document.getElementById("com_n_faturado");
     const nInad = document.getElementById("com_n_inad");
+    if (nPrev) nPrev.textContent = String((dados.previsoes || []).length);
     if (nAberto) nAberto.textContent = String((dados.abertos || []).length);
     if (nFat) nFat.textContent = String((dados.faturados || []).length);
     if (nInad) nInad.textContent = String((dados.inadimplentes || []).length);
-    if (total) total.textContent = brl(dados.total_aberto_centavos);
-    if (janela) {
-      janela.textContent = dados.janela_aberta
-        ? `Aberto até dia 10 · vence ${dataBr(dados.vencimento_se_fechar)}`
-        : "De 1 a 10 do mês";
-    }
-    if (pix) pix.textContent = dados.pix_ok ? dados.pix_chave : "PIX Manual desconectado";
+    if (frase) frase.textContent = dados.frase || "";
     if (aviso) {
-      const msgs = [];
-      if (dados.pai_nome) {
-        msgs.push(`Novas comissões vão para ${dados.pai_nome}. Aqui ficam só os valores que já estavam em aberto.`);
-      }
-      if (!dados.pix_ok) msgs.push("Conecte o PIX Manual em Integrações para conseguir faturar.");
-      if (!dados.janela_aberta) msgs.push("Fora da janela, os abertos continuam aqui até o próximo dia 1.");
-      aviso.hidden = !msgs.length;
-      aviso.textContent = msgs.join(" ");
+      aviso.hidden = !dados.pai_nome;
+      aviso.textContent = dados.pai_nome
+        ? `Novas comissões vão para ${dados.pai_nome}. Aqui ficam só os valores que já estavam em aberto.`
+        : "";
     }
   }
 
@@ -60,12 +54,60 @@
       .join("")}</tr></thead><tbody>${rows.join("")}</tbody></table></div>`;
   }
 
+  function viaDe(i) {
+    return i.via ? ` <span class="Fin_Meta">via ${esc(i.via)}</span>` : "";
+  }
+
+  function htmlFiltroPeriodo() {
+    const anos = dados.anos_periodo || [];
+    const optsMes = MESES.slice(1)
+      .map((nome, i) => `<option value="${i + 1}"${i + 1 === Number(dados.mes) ? " selected" : ""}>${nome}</option>`)
+      .join("");
+    const optsAno = anos
+      .map((y) => `<option value="${y}"${Number(y) === Number(dados.ano) ? " selected" : ""}>${y}</option>`)
+      .join("");
+    return `<div class="Fin_Filtro" id="com_filtro">
+      <label for="com_mes">Período</label>
+      <select class="Fin_Select" id="com_mes">${optsMes}</select>
+      <select class="Fin_Select" id="com_ano" aria-label="Ano">${optsAno}</select>
+    </div>`;
+  }
+
+  function htmlFiltroAno() {
+    const anos = dados.anos_faturado || [];
+    const atual = Number(dados.ano_faturado || 0);
+    const opts = [`<option value="0"${atual === 0 ? " selected" : ""}>Últimos 12 meses</option>`]
+      .concat(anos.map((y) => `<option value="${y}"${Number(y) === atual ? " selected" : ""}>${y}</option>`))
+      .join("");
+    return `<div class="Fin_Filtro" id="com_filtro">
+      <label for="com_ano_fat">Ano</label>
+      <select class="Fin_Select" id="com_ano_fat">${opts}</select>
+    </div>`;
+  }
+
+  function htmlPrevisao() {
+    const rows = (dados.previsoes || []).map((i, idx) => {
+      return `<tr>
+        <td>${esc(i.vendedor)}${viaDe(i)}</td>
+        <td>${esc(i.plano || "—")}</td>
+        <td>${dataBr(i.vencimento_em)}</td>
+        <td>${brl(i.valor_pago_centavos)}</td>
+        <td><button type="button" class="Fin_ComLink" data-prev="${idx}">${brl(i.valor_comissao_centavos)}</button></td>
+      </tr>`;
+    });
+    const [hy, hm] = String(dados.hoje || "").slice(0, 7).split("-").map(Number);
+    const passado = Number(dados.ano) < hy || (Number(dados.ano) === hy && Number(dados.mes) < hm);
+    const vazio = passado
+      ? "Nenhuma previsão neste mês. Os vencimentos já passaram."
+      : "Nenhum vencimento previsto neste mês.";
+    return htmlFiltroPeriodo() + tabela(["Vendedor", "Plano", "Vencimento", "Mensalidade", "Previsão"], rows, vazio);
+  }
+
   function htmlAberto() {
     const rows = (dados.abertos || []).map((i, idx) => {
-      const via = i.via ? ` <span class="Fin_Meta">via ${esc(i.via)}</span>` : "";
       return `<tr>
         <td class="Fin_Sel"><input type="checkbox" class="Fin_Chk com_sel" data-id="${Number(i.id)}" data-valor="${Number(i.valor_comissao_centavos || 0)}" aria-label="Selecionar ${esc(i.referencia || i.vendedor)}" /></td>
-        <td>${esc(i.vendedor)}${via}</td>
+        <td>${esc(i.vendedor)}${viaDe(i)}</td>
         <td>${esc(i.referencia || "—")}</td>
         <td>${dataBr(i.pago_em)}</td>
         <td>${brl(i.valor_pago_centavos)}</td>
@@ -75,11 +117,12 @@
     });
     const cabeca = `<input type="checkbox" class="Fin_Chk" id="com_sel_todos" aria-label="Selecionar todos" />`;
     return `
+      <p class="Fin_Meta Fin_FiltroNota">Todos os meses ainda não faturados.</p>
       ${tabela([cabeca, "Vendedor", "Referência", "Pago em", "Mensalidade", "%", "Comissão"], rows, "Nenhuma comissão em aberto.")}
       <div class="Fin_Fechar" id="com_fechar_bar">
         <label class="Fin_Nf">
           <span>Nota fiscal do período (PDF)</span>
-          <input type="file" id="com_nf" accept="application/pdf,.pdf" />
+          <input type="file" id="com_nf" accept="application/pdf,.pdf" ${dados.pode_faturar ? "" : "disabled"} />
         </label>
         <div class="Fin_FecharAcao">
           <div class="Fin_SelResumo" id="com_sel_info">
@@ -97,32 +140,35 @@
       const badge = pago
         ? `<span class="Fin_Badge Fin_Badge--ok">Pago</span>`
         : `<span class="Fin_Badge Fin_Badge--warn">Aguardando</span>`;
-      return `<tr>
+      return `<tr class="Fin_Lote" data-lote="${Number(f.id)}" tabindex="0">
         <td>${dataBr(f.criado_em)}</td>
         <td>${dataBr(f.vencimento_em)}</td>
         <td>${brl(f.valor_centavos)}</td>
         <td>${badge}</td>
-        <td>${f.nf_nome ? `<a href="/api/comissoes/fechamento/${f.id}/nf" target="_blank" rel="noopener">${esc(f.nf_nome)}</a>` : "—"}</td>
       </tr>`;
     });
-    return tabela(["Fechado em", "Vencimento", "Valor", "Situação", "Nota"], rows, "Nenhum fechamento ainda.");
+    const vazio = Number(dados.ano_faturado)
+      ? `Nenhum lote em ${dados.ano_faturado}.`
+      : "Nenhum lote nos últimos 12 meses.";
+    return htmlFiltroAno() + tabela(["Fechado em", "Vencimento", "Valor", "Situação"], rows, vazio);
   }
 
   function htmlInad() {
     const rows = (dados.inadimplentes || []).map((i) => {
-      const via = i.via ? ` <span class="Fin_Meta">via ${esc(i.via)}</span>` : "";
       return `<tr>
-        <td>${esc(i.vendedor)}${via}</td>
-        <td>${esc(i.referencia || "—")}</td>
+        <td>${esc(i.vendedor)}${viaDe(i)}</td>
         <td>${esc(i.plano || "—")}</td>
         <td>${dataBr(i.vencimento_em)}</td>
         <td>${brl(i.valor_centavos)}</td>
       </tr>`;
     });
-    return tabela(
-      ["Vendedor", "Referência", "Plano", "Vencimento", "Valor"],
-      rows,
-      "Nenhum vendedor inadimplente."
+    return (
+      htmlFiltroPeriodo() +
+      tabela(
+        ["Vendedor", "Plano", "Vencimento", "Mensalidade"],
+        rows,
+        "Nenhum vencimento passou sem pagamento neste mês."
+      )
     );
   }
 
@@ -130,16 +176,24 @@
     if (!painel || !dados) return;
     resumo();
     tabs?.querySelectorAll(".Fin_Tab").forEach((b) => b.classList.toggle("is-active", b.dataset.aba === aba));
-    if (aba === "faturado") painel.innerHTML = htmlFaturado();
+    if (aba === "previsao") painel.innerHTML = htmlPrevisao();
+    else if (aba === "faturado") painel.innerHTML = htmlFaturado();
     else if (aba === "inadimplente") painel.innerHTML = htmlInad();
     else painel.innerHTML = htmlAberto();
   }
 
   async function carregar() {
-    const r = await fetch("/api/comissoes/painel", { credentials: "same-origin" });
+    const p = new URLSearchParams();
+    if (ano) p.set("ano", String(ano));
+    if (mes) p.set("mes", String(mes));
+    p.set("ano_faturado", String(anoFaturado || 0));
+    const r = await fetch(`/api/comissoes/painel?${p.toString()}`, { credentials: "same-origin" });
     const j = await r.json().catch(() => ({}));
     if (!r.ok || !j.success) throw new Error(j.message || "Falha ao carregar.");
     dados = j;
+    ano = Number(j.ano || ano || 0);
+    mes = Number(j.mes || mes || 0);
+    anoFaturado = Number(j.ano_faturado || 0);
     render();
   }
 
@@ -168,7 +222,7 @@
       impostos.reduce((s, t) => s + Number(t.percentual || 0), 0)
     );
     const liquido = i.base === "liquido";
-    const linhas = [["Mensalidade paga", brl(pago)]];
+    const linhas = [[i.previsao ? "Mensalidade prevista" : "Mensalidade paga", brl(pago)]];
     let base = pago;
     if (liquido) {
       base = arred((pago * (100 - taxa)) / 100);
@@ -203,17 +257,45 @@
       )
       .join("");
     const origem = i.origem === "indicado" ? "Percentual de indicado" : "Percentual próprio";
-    return `<p class="Fin_ContaSub">${esc(origem)} · plano ${esc(i.plano || "—")}</p>${corpo}`;
+    const aviso = i.previsao ? `<p class="Fin_ContaSub">Previsão com o percentual de agora. O valor fecha no pagamento.</p>` : "";
+    return `${aviso}<p class="Fin_ContaSub">${esc(origem)} · plano ${esc(i.plano || "—")}</p>${corpo}`;
   }
 
   function abrirDetalhe(i) {
     if (!i) return;
     Swal.fire({
-      title: brl(i.valor_comissao_centavos),
+      title: i.previsao ? "Previsão" : brl(i.valor_comissao_centavos),
       html: htmlDetalhe(i),
       confirmButtonText: "Fechar",
       confirmButtonColor: "#021F81",
       width: 440,
+    });
+  }
+
+  async function abrirLote(id) {
+    Swal.fire({ title: "Carregando…", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    const r = await fetch(`/api/comissoes/fechamento/${id}`, { credentials: "same-origin" });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.success) throw new Error(j.message || "Falha ao abrir o lote.");
+    const linhas = (j.itens || [])
+      .map((i) => {
+        const via = i.via ? ` <span class="Fin_Meta">via ${esc(i.via)}</span>` : "";
+        return `<tr><td>${esc(i.vendedor)}${via}</td><td>${dataBr(i.pago_em)}</td><td>${brl(i.valor_pago_centavos)}</td><td>${brl(i.valor_comissao_centavos)}</td></tr>`;
+      })
+      .join("");
+    const corpo = linhas
+      ? `<div class="Fin_TableWrap"><table class="Fin_Table"><thead><tr><th>Vendedor</th><th>Pago em</th><th>Mensalidade</th><th>Comissão</th></tr></thead><tbody>${linhas}</tbody></table></div>`
+      : `<p class="Fin_Empty">Este lote não tem itens.</p>`;
+    const nota = j.nf_nome
+      ? `<p class="Fin_ContaSub"><a href="/api/comissoes/fechamento/${id}/nf" target="_blank" rel="noopener">${esc(j.nf_nome)}</a></p>`
+      : `<p class="Fin_ContaSub">Sem nota anexada.</p>`;
+    const situacao = j.status === "pago" ? "Pago" : "Aguardando";
+    await Swal.fire({
+      title: brl(j.valor_centavos),
+      html: `<p class="Fin_ContaSub">Fechado em ${dataBr(j.criado_em)} · vence ${dataBr(j.vencimento_em)} · ${situacao}</p>${nota}${corpo}`,
+      confirmButtonText: "Fechar",
+      confirmButtonColor: "#021F81",
+      width: 640,
     });
   }
 
@@ -230,10 +312,10 @@
       todos.indeterminate = on.length > 0 && on.length < boxes.length;
     }
     const btn = document.getElementById("com_fechar");
-    if (btn) btn.disabled = !(dados?.janela_aberta && dados?.pix_ok && on.length);
+    if (btn) btn.disabled = !(dados?.pode_faturar && on.length);
     boxes.forEach((cb) => cb.closest("tr")?.classList.toggle("is-marcada", cb.checked));
     const bar = document.getElementById("com_fechar_bar");
-    if (bar) bar.classList.toggle("is-ativa", on.length > 0);
+    if (bar) bar.classList.toggle("is-ativa", on.length > 0 && !!dados?.pode_faturar);
     const qtd = document.querySelector("#com_sel_info .Fin_SelQtd");
     const valor = document.querySelector("#com_sel_info .Fin_SelValor");
     if (!qtd || !valor) return;
@@ -248,6 +330,10 @@
   }
 
   async function fechar() {
+    if (!dados?.pode_faturar) {
+      await Swal.fire("Atenção", dados?.frase || "O fechamento não está disponível.", "warning");
+      return;
+    }
     const file = document.getElementById("com_nf")?.files?.[0];
     const on = marcados();
     if (!on.length) {
@@ -277,31 +363,65 @@
     const j = await r.json().catch(() => ({}));
     if (!r.ok || !j.success) throw new Error(j.message || "Falha ao faturar.");
     aba = "faturado";
+    anoFaturado = 0;
     await carregar();
-    await Swal.fire({ icon: "success", title: "Faturamento registrado", confirmButtonColor: "#021F81" });
+    const restou = Number(j.qtd_restante || 0);
+    await Swal.fire({
+      icon: "success",
+      title: "Faturamento registrado",
+      text: restou ? `${restou} item(ns) ficaram em aberto para o próximo mês.` : "",
+      confirmButtonColor: "#021F81",
+    });
   }
 
   tabs?.addEventListener("click", (ev) => {
     const btn = ev.target.closest(".Fin_Tab");
     if (!btn) return;
-    aba = btn.dataset.aba || "aberto";
+    aba = btn.dataset.aba || "previsao";
     render();
   });
   painel?.addEventListener("click", (ev) => {
+    const prev = ev.target.closest("[data-prev]");
+    if (prev) {
+      abrirDetalhe((dados?.previsoes || [])[Number(prev.dataset.prev)]);
+      return;
+    }
     const link = ev.target.closest(".Fin_ComLink");
     if (link) {
       abrirDetalhe((dados?.abertos || [])[Number(link.dataset.idx)]);
       return;
     }
+    const lote = ev.target.closest("[data-lote]");
+    if (lote) {
+      abrirLote(Number(lote.dataset.lote)).catch((e) => Swal.fire("Erro", e.message, "error"));
+      return;
+    }
     if (ev.target.closest("#com_fechar")) fechar().catch((e) => Swal.fire("Erro", e.message, "error"));
   });
   painel?.addEventListener("change", (ev) => {
+    if (ev.target.id === "com_mes" || ev.target.id === "com_ano") {
+      mes = Number(document.getElementById("com_mes")?.value || mes);
+      ano = Number(document.getElementById("com_ano")?.value || ano);
+      carregar().catch((e) => Swal.fire("Erro", e.message, "error"));
+      return;
+    }
+    if (ev.target.id === "com_ano_fat") {
+      anoFaturado = Number(ev.target.value || 0);
+      carregar().catch((e) => Swal.fire("Erro", e.message, "error"));
+      return;
+    }
     if (ev.target.id === "com_sel_todos") {
       painel.querySelectorAll(".com_sel").forEach((cb) => {
         cb.checked = ev.target.checked;
       });
     }
     if (ev.target.id === "com_sel_todos" || ev.target.classList.contains("com_sel")) atualizarSelecao();
+  });
+  painel?.addEventListener("keydown", (ev) => {
+    if (ev.key !== "Enter") return;
+    const lote = ev.target.closest("[data-lote]");
+    if (!lote) return;
+    abrirLote(Number(lote.dataset.lote)).catch((e) => Swal.fire("Erro", e.message, "error"));
   });
 
   carregar().catch((e) => Swal.fire("Erro", e.message, "error"));

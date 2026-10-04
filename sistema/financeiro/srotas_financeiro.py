@@ -353,7 +353,13 @@ def api_comissoes_painel():
         cur = conn.cursor()
         from sistema.financeiro.comissao import painel_comissoes
 
-        data = painel_comissoes(cur, tid)
+        data = painel_comissoes(
+            cur,
+            tid,
+            ano=request.args.get("ano", type=int),
+            mes=request.args.get("mes", type=int),
+            ano_faturado=request.args.get("ano_faturado", type=int),
+        )
         conn.commit()
         return jsonify(success=True, **data)
     except Exception as e:
@@ -405,6 +411,31 @@ def api_comissoes_fechar():
         return jsonify(success=False, message=str(e)), 500
     finally:
         conn.close()
+
+
+@financeiro_bp.get("/api/comissoes/fechamento/<int:id_fechamento>")
+@login_obrigatorio()
+def api_comissoes_fechamento(id_fechamento: int):
+    if not _pode_comissoes() and not session.get("eh_desenvolvedor"):
+        return jsonify(success=False, message="Sem permissão."), 403
+    tid = _id_tenant()
+    if session.get("eh_desenvolvedor"):
+        alt = request.args.get("tenant")
+        if alt and str(alt).isdigit():
+            tid = int(alt)
+    if not tid:
+        return jsonify(success=False, message="Sessão inválida."), 403
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        from sistema.financeiro.comissao import detalhe_fechamento
+
+        data = detalhe_fechamento(cur, int(tid), id_fechamento)
+    finally:
+        conn.close()
+    if not data:
+        return jsonify(success=False, message="Fechamento não encontrado."), 404
+    return jsonify(success=True, **data)
 
 
 @financeiro_bp.get("/api/comissoes/fechamento/<int:id_fechamento>/nf")
