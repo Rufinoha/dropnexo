@@ -155,22 +155,9 @@ def registrar_comissao_fatura(cur, id_fatura: int) -> None:
         return
 
     id_vendedor = int(fat[1])
-    cur.execute(
-        """
-        SELECT a.id_tenant_fornecedor
-        FROM tbl_comissao_atribuicao a
-        JOIN tbl_vinculo_vendedor_fornecedor v
-          ON v.id_tenant_vendedor = a.id_tenant_vendedor
-         AND v.id_tenant_fornecedor = a.id_tenant_fornecedor
-         AND v.status = 'ativo'
-        WHERE a.id_tenant_vendedor = %s
-        """,
-        (id_vendedor,),
-    )
-    marca = cur.fetchone()
-    if not marca:
+    origem_id = _fornecedor_primeiro_vinculo(cur, id_vendedor)
+    if not origem_id:
         return
-    origem_id = int(marca[0])
     pai = pai_da_indicacao(cur, origem_id)
     if pai:
         cfg = _config_row(cur, pai)
@@ -221,6 +208,22 @@ def registrar_comissao_fatura(cur, id_fatura: int) -> None:
     )
 
 
+def _fornecedor_primeiro_vinculo(cur, id_vendedor: int) -> int | None:
+    """Entre os vínculos ativos, a comissão fica com o fornecedor a que o vendedor se conectou primeiro."""
+    cur.execute(
+        """
+        SELECT id_tenant_fornecedor
+        FROM tbl_vinculo_vendedor_fornecedor
+        WHERE id_tenant_vendedor = %s AND status = 'ativo'
+        ORDER BY COALESCE(respondido_em, solicitado_em), id
+        LIMIT 1
+        """,
+        (int(id_vendedor),),
+    )
+    row = cur.fetchone()
+    return int(row[0]) if row else None
+
+
 def _nome(cur, id_tenant: int) -> str:
     cur.execute(f"SELECT {_nome_tenant_sql()} FROM tbl_tenant WHERE id = %s", (int(id_tenant),))
     row = cur.fetchone()
@@ -248,41 +251,11 @@ def dados_config_comissao(cur, id_tenant: int) -> dict:
         (int(id_tenant),),
     )
     indicados = [{"id": int(r[0]), "nome": r[1]} for r in cur.fetchall()]
-    cur.execute(
-        """
-        SELECT v.id_tenant_vendedor,
-               COALESCE(NULLIF(TRIM(t.nome_fantasia), ''), NULLIF(TRIM(t.nome), ''), 'Conta'),
-               v.status,
-               a.id_tenant_fornecedor,
-               COALESCE(NULLIF(TRIM(tf.nome_fantasia), ''), NULLIF(TRIM(tf.nome), ''), '')
-        FROM tbl_vinculo_vendedor_fornecedor v
-        JOIN tbl_tenant t ON t.id = v.id_tenant_vendedor
-        LEFT JOIN tbl_comissao_atribuicao a ON a.id_tenant_vendedor = v.id_tenant_vendedor
-        LEFT JOIN tbl_tenant tf ON tf.id = a.id_tenant_fornecedor
-        WHERE v.id_tenant_fornecedor = %s
-        ORDER BY 2
-        """,
-        (int(id_tenant),),
-    )
-    vendedores = []
-    for r in cur.fetchall():
-        marcado = int(r[3]) if r[3] else None
-        vendedores.append(
-            {
-                "id": int(r[0]),
-                "nome": r[1],
-                "vinculo": r[2] or "",
-                "recebe_aqui": marcado == int(id_tenant),
-                "marcado_em": marcado,
-                "marcado_nome": r[4] or "",
-            }
-        )
     return {
         **cfg,
         "pai_id": pai,
         "pai_nome": _nome(cur, pai) if pai else "",
         "indicados": indicados,
-        "vendedores": vendedores,
         "preview": {
             "faturamento": calcular_comissao_centavos(
                 10000, base="faturamento", percentual=cfg["percentual_proprio"], impostos=cfg["impostos"]
@@ -385,45 +358,6 @@ def salvar_config_comissao(cur, id_tenant: int, body: dict) -> None:
             ON CONFLICT (id_tenant) DO UPDATE SET ativo = FALSE, atualizado_em = NOW()
             """,
             (entrar,),
-        )
-
-    marcados = []
-    for x in body.get("vendedores") or []:
-        try:
-            n = int(x)
-        except (TypeError, ValueError):
-            continue
-        if n > 0:
-            marcados.append(n)
-    cur.execute(
-        """
-        SELECT id_tenant_vendedor FROM tbl_vinculo_vendedor_fornecedor
-        WHERE id_tenant_fornecedor = %s
-        """,
-        (id_tenant,),
-    )
-    da_rede = {int(r[0]) for r in cur.fetchall()}
-    querer = {n for n in marcados if n in da_rede}
-    cur.execute(
-        "SELECT id_tenant_vendedor FROM tbl_comissao_atribuicao WHERE id_tenant_fornecedor = %s",
-        (id_tenant,),
-    )
-    meus = {int(r[0]) for r in cur.fetchall()}
-    for sair in meus - querer:
-        cur.execute(
-            "DELETE FROM tbl_comissao_atribuicao WHERE id_tenant_vendedor = %s AND id_tenant_fornecedor = %s",
-            (sair, id_tenant),
-        )
-    for entrar in querer:
-        cur.execute(
-            """
-            INSERT INTO tbl_comissao_atribuicao (id_tenant_vendedor, id_tenant_fornecedor, atualizado_em)
-            VALUES (%s, %s, NOW())
-            ON CONFLICT (id_tenant_vendedor) DO UPDATE SET
-              id_tenant_fornecedor = EXCLUDED.id_tenant_fornecedor,
-              atualizado_em = NOW()
-            """,
-            (entrar, id_tenant),
         )
 
 
@@ -615,20 +549,26 @@ def painel_comissoes(cur, id_tenant: int) -> dict:
         """
         SELECT f.id, f.referencia, f.plano_slug, f.valor_centavos, f.vencimento_em, f.status,
                COALESCE(NULLIF(TRIM(tv.nome_fantasia), ''), NULLIF(TRIM(tv.nome), ''), 'Vendedor'),
-               CASE WHEN a.id_tenant_fornecedor = %s THEN '' ELSE
+               CASE WHEN prim.id_tenant_fornecedor = %s THEN '' ELSE
                  COALESCE(NULLIF(TRIM(tf.nome_fantasia), ''), NULLIF(TRIM(tf.nome), ''), '')
                END
         FROM tbl_fatura f
-        JOIN tbl_comissao_atribuicao a ON a.id_tenant_vendedor = f.id_tenant
+        JOIN LATERAL (
+          SELECT v.id_tenant_fornecedor
+          FROM tbl_vinculo_vendedor_fornecedor v
+          WHERE v.id_tenant_vendedor = f.id_tenant AND v.status = 'ativo'
+          ORDER BY COALESCE(v.respondido_em, v.solicitado_em), v.id
+          LIMIT 1
+        ) prim ON TRUE
         JOIN tbl_tenant tv ON tv.id = f.id_tenant
-        LEFT JOIN tbl_tenant tf ON tf.id = a.id_tenant_fornecedor
+        LEFT JOIN tbl_tenant tf ON tf.id = prim.id_tenant_fornecedor
         WHERE f.status IN ('pendente', 'vencido')
           AND f.vencimento_em IS NOT NULL
           AND f.vencimento_em::date < (NOW() AT TIME ZONE 'America/Sao_Paulo')::date
           AND COALESCE(f.plano_slug, '') NOT IN ('', 'starter')
           AND (
-            a.id_tenant_fornecedor = %s
-            OR a.id_tenant_fornecedor IN (
+            prim.id_tenant_fornecedor = %s
+            OR prim.id_tenant_fornecedor IN (
               SELECT id_tenant_indicado FROM tbl_comissao_indicacao WHERE id_tenant_pai = %s
             )
           )

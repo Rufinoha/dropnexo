@@ -15,7 +15,6 @@
     busca: document.getElementById("com_busca"),
     buscaLista: document.getElementById("com_busca_lista"),
     indicados: document.getElementById("com_indicados"),
-    vendedores: document.getElementById("com_vendedores"),
     pai: document.getElementById("com_pai"),
     salvar: document.getElementById("com_salvar"),
     add: document.getElementById("com_add_imposto"),
@@ -89,25 +88,6 @@
       : `<li class="is-empty">Nenhum indicado.</li>`;
   }
 
-  function renderVendedores(lista) {
-    if (!el.vendedores) return;
-    el.vendedores.innerHTML = lista.length
-      ? lista
-          .map((v) => {
-            const outro = v.marcado_em && !v.recebe_aqui ? `Comissão com ${v.marcado_nome}` : "";
-            return `<li>
-              <label>
-                <input type="checkbox" data-vend="${v.id}" ${v.recebe_aqui ? "checked" : ""} />
-                <span>${esc(v.nome)}</span>
-                <em>${esc(v.vinculo || "")}</em>
-              </label>
-              ${outro ? `<small>${esc(outro)}</small>` : ""}
-            </li>`;
-          })
-          .join("")
-      : `<li class="is-empty">Nenhum vendedor vinculado.</li>`;
-  }
-
   function preencher(j) {
     if (el.ativo) el.ativo.checked = !!j.ativo;
     if (el.proprio) el.proprio.value = j.percentual_proprio ?? 0;
@@ -124,7 +104,6 @@
     if (el.ativo) el.ativo.disabled = !!j.pai_id;
     renderImpostos();
     renderIndicados();
-    renderVendedores(j.vendedores || []);
     syncCorpo();
   }
 
@@ -140,10 +119,6 @@
   async function salvar() {
     const id = tid();
     if (!id) return;
-    const vendedores = [];
-    el.vendedores?.querySelectorAll("[data-vend]").forEach((c) => {
-      if (c.checked) vendedores.push(Number(c.dataset.vend));
-    });
     const body = {
       ativo: !!el.ativo?.checked,
       base: el.base?.value || "faturamento",
@@ -151,7 +126,6 @@
       percentual_indicado: Number(el.indicado?.value || 0),
       impostos: lerImpostos(),
       indicados: indicados.map((i) => i.id),
-      vendedores,
     };
     Swal.fire({ title: "Salvando…", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
     const r = await fetch(`${BASE}/${id}/comissao`, {
