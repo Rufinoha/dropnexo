@@ -321,7 +321,101 @@ def _url_logo_tenant(caminho_db: str | None) -> str:
     return url_for("perfil.api_minha_empresa_logo_arquivo", _external=False)
 
 
-def _tenant_row_para_dict(row, inscricoes: list) -> dict:
+def _tabela_ie(cur) -> bool:
+    cur.execute(
+        """
+        SELECT 1 FROM information_schema.tables
+         WHERE table_schema = 'public' AND table_name = 'tbl_tenant_ie'
+        """
+    )
+    return cur.fetchone() is not None
+
+
+def _normalizar_ies(bruto) -> list[dict]:
+    if not isinstance(bruto, list):
+        return []
+    vistos = set()
+    saida = []
+    for item in bruto:
+        if not isinstance(item, dict):
+            continue
+        uf = (item.get("uf") or "").strip().upper()
+        ie = (item.get("inscricao_estadual") or "").strip()
+        if not uf and not ie:
+            continue
+        if not _valida_uf(uf):
+            raise ValueError("Escolha um estado válido para cada inscrição estadual.")
+        if not ie:
+            raise ValueError(f"Informe a inscrição estadual de {uf}.")
+        if uf in vistos:
+            raise ValueError(f"Já existe uma inscrição estadual para {uf}.")
+        vistos.add(uf)
+        saida.append({
+            "uf": uf,
+            "inscricao_estadual": ie[:20],
+            "padrao": bool(item.get("padrao")),
+        })
+    if len(saida) == 1:
+        saida[0]["padrao"] = True
+    elif saida and not any(item["padrao"] for item in saida):
+        saida[0]["padrao"] = True
+    elif saida:
+        marcado = False
+        for item in saida:
+            if item["padrao"] and not marcado:
+                marcado = True
+            else:
+                item["padrao"] = False
+    return saida
+
+
+def _ler_ies(cur, id_tenant: int, ie_coluna: str, uf_empresa: str) -> list[dict]:
+    if _tabela_ie(cur):
+        cur.execute(
+            """
+            SELECT uf, inscricao_estadual, padrao
+              FROM tbl_tenant_ie
+             WHERE id_tenant = %s
+             ORDER BY padrao DESC, id
+            """,
+            (id_tenant,),
+        )
+        rows = [
+            {"uf": r[0], "inscricao_estadual": r[1], "padrao": bool(r[2])}
+            for r in cur.fetchall()
+        ]
+        if rows:
+            return rows
+    if ie_coluna:
+        return [{
+            "uf": (uf_empresa or "").strip().upper(),
+            "inscricao_estadual": ie_coluna,
+            "padrao": True,
+        }]
+    return []
+
+
+def _gravar_ies(cur, id_tenant: int, lista: list[dict]) -> str | None:
+    if not _tabela_ie(cur):
+        if len(lista) > 1:
+            raise ValueError(
+                "Rode o SQL das inscrições estaduais neste banco antes de gravar mais de uma IE."
+            )
+        return lista[0]["inscricao_estadual"] if lista else None
+    cur.execute("DELETE FROM tbl_tenant_ie WHERE id_tenant = %s", (id_tenant,))
+    for item in lista:
+        cur.execute(
+            """
+            INSERT INTO tbl_tenant_ie (id_tenant, uf, inscricao_estadual, padrao)
+            VALUES (%s, %s, %s, %s)
+            """,
+            (id_tenant, item["uf"], item["inscricao_estadual"], item["padrao"]),
+        )
+    padrao = next((item for item in lista if item["padrao"]), None)
+    return padrao["inscricao_estadual"] if padrao else None
+
+
+def _tenant_row_para_dict(row, inscricoes: list, inscricoes_ie: list | None = None) -> dict:
     return {
         "tipo_pessoa": row[0],
         "documento": row[1],
@@ -358,6 +452,7 @@ def _tenant_row_para_dict(row, inscricoes: list) -> dict:
         "plano": row[32],
         "tipo_negocio": row[33] or "",
         "inscricoes_st": inscricoes,
+        "inscricoes_ie": inscricoes_ie or [],
     }
 
 
@@ -385,6 +480,9 @@ def _carregar_tenant_empresa(cur, id_tenant: int) -> dict | None:
     )
     inscricoes = [{"uf": r[0], "inscricao_estadual": r[1]} for r in cur.fetchall()]
     dados = _tenant_row_para_dict(row, inscricoes)
+    dados["inscricoes_ie"] = _ler_ies(
+        cur, id_tenant, dados.get("inscricao_estadual") or "", dados.get("uf") or ""
+    )
     from sistema.fiscal.nfe_servico import codigo_municipio_tenant
 
     dados["codigo_municipio"] = codigo_municipio_tenant(cur, id_tenant)
@@ -850,6 +948,11 @@ def api_minha_empresa_salvar():
             tipo_final = "J"
             documento_final = documento_solicitado
 
+        lista_ie = _normalizar_ies(dados.get("inscricoes_ie") or [])
+        ie_padrao = _gravar_ies(cur, id_tenant, lista_ie)
+        if ie_padrao is None:
+            ie_padrao = (dados.get("inscricao_estadual") or "").strip() or None
+
         cur.execute(
             """
             UPDATE tbl_tenant SET
@@ -874,7 +977,7 @@ def api_minha_empresa_salvar():
                 nome_fantasia,
                 tipo_final,
                 documento_final,
-                (dados.get("inscricao_estadual") or "").strip() or None,
+                ie_padrao,
                 (dados.get("inscricao_municipal") or "").strip() or None,
                 bool(dados.get("ie_isento")),
                 (dados.get("cnae_principal") or "").strip() or None,

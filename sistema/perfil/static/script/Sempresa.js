@@ -8,6 +8,8 @@
   let dadosOriginais = null;
   let exigeNichos = false;
   let conversaoPjAtiva = false;
+  let ies = [];
+  const UFS = ["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"];
 
   function el(id) {
     return document.getElementById(id);
@@ -174,6 +176,145 @@
     SegNichos.bind(box);
   }
 
+  function abrirPainel(nome) {
+    document.querySelectorAll("#emp_shell [data-emp]").forEach(function (btn) {
+      btn.classList.toggle("is-active", btn.getAttribute("data-emp") === nome);
+    });
+    document.querySelectorAll("#emp_shell [data-emp-pane]").forEach(function (pane) {
+      pane.hidden = pane.getAttribute("data-emp-pane") !== nome;
+    });
+  }
+
+  function iePadrao() {
+    if (!ies.length) return null;
+    return ies.find(function (i) { return i.padrao; }) || ies[0];
+  }
+
+  function pintarIe() {
+    const campo = el("emp-ie");
+    const hint = el("emp-ie-hint");
+    const padrao = iePadrao();
+    if (campo) campo.value = padrao ? padrao.inscricao_estadual : "";
+    if (!hint) return;
+    if (!padrao) {
+      hint.textContent = "Clique em + para incluir uma inscrição por estado.";
+      return;
+    }
+    if (ies.length === 1) {
+      hint.textContent = "Padrão · " + padrao.uf;
+      return;
+    }
+    hint.textContent = "Padrão · " + padrao.uf + " · " + ies.length + " inscrições";
+  }
+
+  function esc(valor) {
+    return String(valor || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function opcoesUf(atual) {
+    const vazio = '<option value="">UF</option>';
+    return vazio + UFS.map(function (uf) {
+      return '<option value="' + uf + '"' + (uf === atual ? " selected" : "") + ">" + uf + "</option>";
+    }).join("");
+  }
+
+  function desenharModalIe() {
+    const box = el("emp-ie-lista");
+    if (!box) return;
+    box.innerHTML = "";
+    const lista = ies.length ? ies : [{ uf: "", inscricao_estadual: "", padrao: true }];
+    lista.forEach(function (item) {
+      const row = document.createElement("div");
+      row.className = "Emp_IeRow";
+      row.innerHTML =
+        '<div class="filter-group"><label>UF</label><select class="emp-ie-uf">' + opcoesUf(item.uf) + "</select></div>" +
+        '<div class="filter-group"><label>Inscrição estadual</label><input type="text" class="emp-ie-num" maxlength="20" value="' +
+        esc(item.inscricao_estadual) +
+        '" /></div>' +
+        '<label class="Emp_IePadrao"><input type="radio" name="emp-ie-padrao" ' + (item.padrao ? "checked" : "") + " /> Padrão</label>" +
+        '<button type="button" class="mp-st-del" title="Remover" aria-label="Remover">✕</button>';
+      row.querySelector(".mp-st-del").addEventListener("click", function () {
+        row.remove();
+        if (!box.querySelector(".Emp_IeRow")) {
+          ies = [];
+          desenharModalIe();
+        }
+      });
+      box.appendChild(row);
+    });
+  }
+
+  function coletarModalAberto() {
+    const out = [];
+    document.querySelectorAll("#emp-ie-lista .Emp_IeRow").forEach(function (row) {
+      out.push({
+        uf: (row.querySelector(".emp-ie-uf")?.value || "").trim().toUpperCase(),
+        inscricao_estadual: (row.querySelector(".emp-ie-num")?.value || "").trim(),
+        padrao: !!row.querySelector("input[type=radio]")?.checked,
+      });
+    });
+    return out;
+  }
+
+  let iesAntesModal = null;
+
+  function abrirModalIe() {
+    iesAntesModal = ies.map(function (i) {
+      return { uf: i.uf, inscricao_estadual: i.inscricao_estadual, padrao: i.padrao };
+    });
+    desenharModalIe();
+    const modal = el("emp_ie_modal");
+    if (modal) modal.hidden = false;
+  }
+
+  function fecharModalIe(descartar) {
+    if (descartar && iesAntesModal) ies = iesAntesModal;
+    iesAntesModal = null;
+    const modal = el("emp_ie_modal");
+    if (modal) modal.hidden = true;
+  }
+
+  function aplicarModalIe() {
+    const linhas = [];
+    const vistos = {};
+    let temPadrao = false;
+    const rows = document.querySelectorAll("#emp-ie-lista .Emp_IeRow");
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const uf = (row.querySelector(".emp-ie-uf")?.value || "").trim().toUpperCase();
+      const ie = (row.querySelector(".emp-ie-num")?.value || "").trim();
+      const padrao = !!row.querySelector("input[type=radio]")?.checked;
+      if (!ie && !uf) continue;
+      if (!uf || !ie) {
+        if (typeof Swal !== "undefined") Swal.fire("Atenção", "Preencha o estado e a inscrição de cada linha.", "warning");
+        return;
+      }
+      if (vistos[uf]) {
+        if (typeof Swal !== "undefined") Swal.fire("Atenção", "Já existe uma inscrição para " + uf + ".", "warning");
+        return;
+      }
+      vistos[uf] = true;
+      if (padrao) temPadrao = true;
+      linhas.push({ uf: uf, inscricao_estadual: ie, padrao: padrao });
+    }
+    if (linhas.length === 1) linhas[0].padrao = true;
+    else if (linhas.length > 1 && !temPadrao) linhas[0].padrao = true;
+    else if (linhas.length > 1) {
+      let marcado = false;
+      linhas.forEach(function (item) {
+        if (item.padrao && !marcado) marcado = true;
+        else item.padrao = false;
+      });
+    }
+    ies = linhas;
+    iesAntesModal = null;
+    pintarIe();
+    fecharModalIe(false);
+  }
+
   function preencher(d) {
     dadosOriginais = d;
     conversaoPjAtiva = false;
@@ -181,7 +322,17 @@
     el("emp-tipo-pessoa").value = d.tipo_pessoa || "J";
     el("emp-documento").value = formatarDocumento(d.documento || "", d.tipo_pessoa || "F");
     el("emp-razao").value = d.nome_completo || d.razao_social || "";
-    el("emp-ie").value = d.inscricao_estadual || "";
+    ies = (d.inscricoes_ie || []).map(function (i) {
+      return {
+        uf: (i.uf || "").toUpperCase(),
+        inscricao_estadual: i.inscricao_estadual || "",
+        padrao: !!i.padrao,
+      };
+    }).filter(function (i) { return i.inscricao_estadual; });
+    if (!ies.length && d.inscricao_estadual) {
+      ies = [{ uf: (d.uf || "").toUpperCase(), inscricao_estadual: d.inscricao_estadual, padrao: true }];
+    }
+    pintarIe();
     el("emp-ie-isento").checked = !!d.ie_isento;
     el("emp-im").value = d.inscricao_municipal || "";
     el("emp-cnae").value = d.cnae_principal || "";
@@ -292,8 +443,29 @@
       const err = el("emp-seg-erro");
       if (!SegNichos.validarMinimo(boxSeg, "Selecione ao menos um segmento (nicho) em que sua empresa atua.")) {
         if (err) err.hidden = false;
+        abrirPainel("segmentos");
         return;
       }
+    }
+    function falta(id, painel, mensagem) {
+      const campo = el(id);
+      if (campo && !String(campo.value || "").trim()) {
+        abrirPainel(painel);
+        campo.focus();
+        if (typeof Swal !== "undefined") Swal.fire("Atenção", mensagem, "warning");
+        return true;
+      }
+      return false;
+    }
+
+    if (falta("emp-nome", "dados", "Informe o apelido da empresa.")
+      || falta("emp-razao", "dados", "Informe a razão social.")
+      || falta("emp-cep", "endereco", "Informe o CEP.")
+      || falta("emp-uf", "endereco", "Informe a UF.")
+      || falta("emp-cidade", "endereco", "Informe a cidade.")
+      || falta("emp-numero", "endereco", "Informe o número.")
+      || falta("emp-regime", "fiscais", "Informe o regime tributário.")) {
+      return;
     }
     const apelido = el("emp-nome").value.trim();
     const tipoSel = (el("emp-tipo-pessoa")?.value || tipoOriginal()).toUpperCase();
@@ -303,7 +475,8 @@
       razao_social: el("emp-razao").value.trim(),
       nome_fantasia: apelido,
       tipo_pessoa: tipoSel,
-      inscricao_estadual: el("emp-ie").value.trim(),
+      inscricao_estadual: (iePadrao() || {}).inscricao_estadual || "",
+      inscricoes_ie: ies,
       inscricao_municipal: el("emp-im").value.trim(),
       ie_isento: el("emp-ie-isento").checked,
       cnae_principal: el("emp-cnae").value.trim(),
@@ -391,6 +564,27 @@
     el("emp-btn-cep")?.addEventListener("click", buscarCep);
     el("emp-st-add")?.addEventListener("click", function () {
       el("emp-st-lista")?.appendChild(linhaSt("", ""));
+    });
+    document.querySelectorAll("#emp_shell [data-emp]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        abrirPainel(btn.getAttribute("data-emp"));
+      });
+    });
+    el("emp-ie-add")?.addEventListener("click", abrirModalIe);
+    el("emp-ie-nova")?.addEventListener("click", function () {
+      ies = coletarModalAberto();
+      ies.push({ uf: "", inscricao_estadual: "", padrao: ies.length === 0 });
+      desenharModalIe();
+    });
+    el("emp_ie_aplicar")?.addEventListener("click", aplicarModalIe);
+    el("emp_ie_fechar")?.addEventListener("click", function () { fecharModalIe(true); });
+    el("emp_ie_cancelar")?.addEventListener("click", function () { fecharModalIe(true); });
+    el("emp_ie_modal")?.addEventListener("click", function (ev) {
+      if (ev.target === el("emp_ie_modal")) fecharModalIe(true);
+    });
+    document.addEventListener("keydown", function (ev) {
+      const modal = el("emp_ie_modal");
+      if (ev.key === "Escape" && modal && !modal.hidden) fecharModalIe(true);
     });
     el("emp-btn-cancelar")?.addEventListener("click", function () {
       if (dadosOriginais) preencher(dadosOriginais);

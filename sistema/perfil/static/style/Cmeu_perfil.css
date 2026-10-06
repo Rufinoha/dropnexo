@@ -594,6 +594,191 @@
   padding-top: 0.25rem;
 }
 
+.mp-form-empresa .Emp_Pane[hidden] { display: none !important; }
+
+.Emp_Shell {
+  display: flex;
+  min-height: 520px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.Emp_Nav {
+  width: 252px;
+  flex-shrink: 0;
+  background: #f8fafc;
+  border-right: 1px solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  padding: 0.65rem 0;
+}
+
+.Emp_NavItem {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.7rem;
+  width: 100%;
+  padding: 0.7rem 0.85rem;
+  border: none;
+  border-left: 3px solid transparent;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  color: #334155;
+  font-family: inherit;
+}
+
+.Emp_NavNum {
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  font-weight: 800;
+  background: #e2e8f0;
+  color: #475569;
+}
+
+.Emp_NavTxt { display: flex; flex-direction: column; gap: 0.08rem; min-width: 0; }
+.Emp_NavItem strong { font-size: 0.86rem; font-weight: 700; }
+.Emp_NavItem small { font-size: 0.7rem; color: #64748b; }
+.Emp_NavItem:hover { background: #f1f5f9; }
+.Emp_NavItem.is-active { background: #fff; border-left-color: #f5a623; }
+.Emp_NavItem.is-active .Emp_NavNum { background: #1c2e3b; color: #f5a623; }
+
+.Emp_Main {
+  flex: 1;
+  min-width: 0;
+  padding: 1.15rem 1.35rem 1.1rem;
+}
+
+.Emp_Sub { margin-top: 1.1rem; }
+.Emp_Lead { margin: 0 0 0.85rem; }
+
+.Emp_IeLinha {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.Emp_IeLinha input { flex: 1; min-width: 0; background: #f8fafc; }
+
+.Emp_IeMais {
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  font-size: 1.25rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.Emp_IeRow {
+  display: grid;
+  grid-template-columns: 88px 1fr auto auto;
+  gap: 0.55rem;
+  align-items: end;
+  margin-bottom: 0.65rem;
+  padding: 0.75rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.Emp_IeRow:has(input[type="radio"]:checked) {
+  border-color: #f5a623;
+  background: #fffbeb;
+}
+
+.Emp_IePadrao {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  height: 38px;
+  margin: 0;
+  padding: 0 0.55rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #334155;
+  white-space: nowrap;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+}
+
+.Emp_IeRow:has(input[type="radio"]:checked) .Emp_IePadrao {
+  background: #1c2e3b;
+  color: #fff;
+  border-color: #1c2e3b;
+}
+
+.Emp_Modal[hidden] { display: none !important; }
+
+.Emp_Modal {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem;
+}
+
+.Emp_ModalBox {
+  width: min(720px, 100%);
+  max-height: min(640px, 100%);
+  background: #fff;
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.28);
+}
+
+.Emp_ModalHead {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.15rem;
+  background: #0f2744;
+  color: #fff;
+}
+
+.Emp_ModalHead h3 { margin: 0; font-size: 1.05rem; }
+.Emp_ModalHead span { display: block; margin-top: 0.2rem; font-size: 0.8rem; color: #cbd5e1; }
+
+.Emp_ModalClose {
+  border: none;
+  background: transparent;
+  color: #fff;
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.Emp_ModalBody { padding: 1rem 1.15rem; overflow: auto; }
+.Emp_ModalFoot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding: 0.85rem 1.15rem;
+  border-top: 1px solid #e2e8f0;
+}
+
+@media (max-width: 860px) {
+  .Emp_Shell { flex-direction: column; }
+  .Emp_Nav { width: 100%; flex-direction: row; overflow-x: auto; border-right: none; border-bottom: 1px solid #e2e8f0; }
+  .Emp_NavItem { width: auto; min-width: 180px; border-left: none; border-bottom: 3px solid transparent; }
+  .Emp_NavItem.is-active { border-bottom-color: #f5a623; }
+  .Emp_IeRow { grid-template-columns: 1fr 1fr; }
+}
+
 .mp-st-lista { margin-bottom: 0.5rem; }
 
 .mp-st-row {
