@@ -246,6 +246,93 @@ def _novidade_tem_publico(cur) -> bool:
     return "publico" in cols and "link" in cols
 
 
+def _aviso_tabela_ok(cur) -> bool:
+    cur.execute(
+        """
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_name = 'tbl_aviso_lido'
+          AND table_schema IN (current_schema(), 'public')
+        LIMIT 1
+        """
+    )
+    return cur.fetchone() is not None
+
+
+def _chaves_lidas(cur, id_usuario: int, chaves: list[str]) -> set[str]:
+    if not chaves or not _aviso_tabela_ok(cur):
+        return set()
+    cur.execute(
+        """
+        SELECT chave FROM tbl_aviso_lido
+        WHERE id_usuario = %s AND chave = ANY(%s)
+        """,
+        (int(id_usuario), chaves),
+    )
+    return {r[0] for r in cur.fetchall()}
+
+
+def _montar_avisos(cur, id_tenant: int) -> list[dict]:
+    """Vínculo, fatura e Bling. A leitura fica em tbl_aviso_lido, não na página."""
+    import hashlib
+
+    from api.bling.cliente import bling_precisa_reconectar
+    from core.dominio import listar_alertas_vinculo_tenant
+    from sistema.financeiro.cobranca import DIAS_GRACA_INADIMPLENCIA, fatura_aberta_alerta
+
+    itens: list[dict] = []
+    for a in listar_alertas_vinculo_tenant(cur, id_tenant):
+        titulo = "Vínculo pausado" if a.get("status") == "pausado" else "Vínculo encerrado"
+        quando = a.get("alterado_em") or ""
+        itens.append(
+            {
+                "chave": f"vinculo:{a['id']}:{a['status']}:{quando}"[:180],
+                "titulo": titulo,
+                "descricao": a.get("texto") or titulo,
+                "link": "/fornecedores" if a.get("sou_vendedor") else "/fornecedor/vendedores",
+                "emissao": quando or None,
+            }
+        )
+    fat = fatura_aberta_alerta(cur, id_tenant)
+    if fat:
+        estado = "vencida" if fat.get("status") == "vencido" else "emitida / pendente"
+        itens.append(
+            {
+                "chave": f"fatura:{fat.get('id')}:{fat.get('status')}"[:180],
+                "titulo": "Financeiro",
+                "descricao": (
+                    f"Fatura {fat.get('referencia') or ''} está {estado} "
+                    f"({fat.get('valor_formatado')}). "
+                    f"Sem pagamento do boleto em até {DIAS_GRACA_INADIMPLENCIA} dias úteis, "
+                    "o plano pode voltar ao gratuito."
+                ),
+                "link": "/financeiro",
+                "emissao": fat.get("vencimento_em") or fat.get("criado_em"),
+            }
+        )
+    cur.execute(
+        """
+        SELECT status, COALESCE(ultimo_erro, '')
+        FROM tbl_integracao_bling
+        WHERE id_tenant = %s
+        """,
+        (int(id_tenant),),
+    )
+    row = cur.fetchone()
+    if row and bling_precisa_reconectar(row[0], row[1]):
+        marca = hashlib.sha1((row[1] or "").encode("utf-8")).hexdigest()[:12]
+        itens.append(
+            {
+                "chave": f"bling:{marca}",
+                "titulo": "Bling",
+                "descricao": "A conexão com o Bling precisa da sua autorização.",
+                "link": "/api/integracoes/bling/oauth/iniciar",
+                "emissao": None,
+            }
+        )
+    return itens
+
+
 def _filtro_publico_novidade() -> tuple[str, tuple]:
     tipo = (session.get("tenant_tipo_negocio") or "").strip().lower()
     if tipo == "hibrido":
@@ -319,8 +406,24 @@ def api_novidades_listar():
                     "lida": r[0] <= ultima_lida,
                 }
             )
-        nao_lidas = sum(1 for n in novidades if not n["lida"])
-        return jsonify(novidades=novidades, nao_lidas=nao_lidas)
+        avisos = []
+        tid = session.get("id_tenant")
+        if tid:
+            try:
+                cur.execute("SAVEPOINT sp_avisos")
+                brutos = _montar_avisos(cur, int(tid))
+                lidas = _chaves_lidas(cur, int(id_usuario), [a["chave"] for a in brutos])
+                for a in brutos:
+                    avisos.append({**a, "lida": a["chave"] in lidas})
+                cur.execute("RELEASE SAVEPOINT sp_avisos")
+            except Exception:
+                try:
+                    cur.execute("ROLLBACK TO SAVEPOINT sp_avisos")
+                except Exception:
+                    conn.rollback()
+                avisos = []
+        nao_lidas = sum(1 for n in novidades if not n["lida"]) + sum(1 for a in avisos if not a["lida"])
+        return jsonify(novidades=novidades, avisos=avisos, nao_lidas=nao_lidas)
     finally:
         conn.close()
 
@@ -331,16 +434,36 @@ def api_novidades_marcar_lidas():
     id_usuario = session.get("id_usuario")
     if not id_usuario:
         return jsonify(erro="Não autenticado."), 403
-    ultimo_id = int((request.get_json(silent=True) or {}).get("ultimo_id") or 0)
-    if not ultimo_id:
-        return jsonify(erro="ultimo_id não informado."), 400
+    corpo = request.get_json(silent=True) or {}
+    ultimo_id = int(corpo.get("ultimo_id") or 0)
+    chaves = []
+    for chave in corpo.get("chaves") or []:
+        texto = str(chave or "").strip()[:180]
+        if texto and texto not in chaves:
+            chaves.append(texto)
+    if not ultimo_id and not chaves:
+        return jsonify(erro="Nada para marcar."), 400
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
-        cur.execute(
-            "UPDATE tbl_usuario SET id_ultima_novidade_lida = %s WHERE id = %s",
-            (ultimo_id, id_usuario),
-        )
+        if ultimo_id:
+            cur.execute(
+                """
+                UPDATE tbl_usuario
+                SET id_ultima_novidade_lida = GREATEST(COALESCE(id_ultima_novidade_lida, 0), %s)
+                WHERE id = %s
+                """,
+                (ultimo_id, id_usuario),
+            )
+        if chaves and _aviso_tabela_ok(cur):
+            cur.executemany(
+                """
+                INSERT INTO tbl_aviso_lido (id_usuario, chave)
+                VALUES (%s, %s)
+                ON CONFLICT (id_usuario, chave) DO NOTHING
+                """,
+                [(int(id_usuario), chave) for chave in chaves],
+            )
         conn.commit()
         return jsonify(ok=True)
     except Exception as e:

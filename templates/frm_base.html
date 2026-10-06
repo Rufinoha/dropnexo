@@ -15,7 +15,7 @@
   <script defer src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <script defer src="{{ url_for('static', filename='script/global_utils.js') }}"></script>
-  <script defer src="{{ url_for('static', filename='script/app_shell.js') }}?v=7"></script>
+  <script defer src="{{ url_for('static', filename='script/app_shell.js') }}?v=8"></script>
 </head>
 <body class="fg-app">
   {% set nome_usuario = session.get('nome', 'Usuário') %}
@@ -238,59 +238,6 @@
       </header>
 
       <main class="fg-content">
-        {% if session.get('id_usuario') and bling_precisa_reconectar %}
-        <div class="fg-bling-banner" role="status">
-          <div class="fg-fin-banner-inner">
-            <div class="fg-fin-banner-text">
-              A conexão com o Bling precisa da sua autorização.
-              <a href="{{ url_for('bling.oauth_iniciar') }}">Reconectar</a>
-            </div>
-          </div>
-        </div>
-        {% endif %}
-        {% if session.get('id_usuario') and financeiro_alerta %}
-        <div
-          class="fg-fin-banner"
-          id="fg_fin_banner"
-          role="status"
-          data-fin-ref="{{ financeiro_alerta.referencia }}"
-          data-fin-status="{{ financeiro_alerta.status }}"
-          hidden
-        >
-          <div class="fg-fin-banner-inner">
-            <div class="fg-fin-banner-text">
-              <strong>Financeiro:</strong>
-              fatura {{ financeiro_alerta.referencia }} está
-              {% if financeiro_alerta.status == 'vencido' %}vencida{% else %}emitida / pendente{% endif %}
-              ({{ financeiro_alerta.valor_formatado }}).
-              Sem pagamento do boleto em até {{ financeiro_alerta.dias_graca }} dias úteis, o plano pode voltar ao gratuito.
-              <a href="{{ url_for('financeiro.pagina') }}">Abrir Financeiro</a>
-            </div>
-            <button type="button" class="fg-fin-banner-close" id="fg_fin_banner_close" aria-label="Fechar aviso" title="Fechar">×</button>
-          </div>
-        </div>
-        {% endif %}
-        {% if session.get('id_usuario') and vinculo_alertas %}
-        <div class="fg-vinculo-banners" id="fg_vinculo_banners">
-          {% for a in vinculo_alertas %}
-          <div
-            class="fg-vinculo-banner {% if a.status == 'pausado' %}is-pausado{% else %}is-encerrado{% endif %}"
-            data-vinculo-id="{{ a.id }}"
-            data-vinculo-status="{{ a.status }}"
-            data-vinculo-em="{{ a.alterado_em }}"
-            hidden
-          >
-            <div class="fg-fin-banner-inner">
-              <div class="fg-fin-banner-text">
-                <strong>{% if a.status == 'pausado' %}Vínculo pausado:{% else %}Vínculo encerrado:{% endif %}</strong>
-                {{ a.texto }}
-              </div>
-              <button type="button" class="fg-fin-banner-close fg-vinculo-banner-close" aria-label="Fechar aviso" title="Fechar">×</button>
-            </div>
-          </div>
-          {% endfor %}
-        </div>
-        {% endif %}
         {% block content %}{% endblock %}
         <footer class="fg-page-footer">© {{ MARCA_NOME }} · {{ MARCA_FAMILIA }}</footer>
       </main>
@@ -298,7 +245,7 @@
   </div>
   {% block page_js %}{% endblock %}
   {% if session.get('id_usuario') %}
-  <script defer src="{{ url_for('static', filename='script/Cnovidades.js') }}?v=2"></script>
+  <script defer src="{{ url_for('static', filename='script/Cnovidades.js') }}?v=3"></script>
   {% endif %}
 </body>
 </html>

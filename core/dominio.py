@@ -732,6 +732,7 @@ def listar_alertas_vinculo_tenant(cur, id_tenant: int) -> list[dict]:
                 "alterado_em": row[3].isoformat() if row[3] else "",
                 "por_lado": lado_ator or "",
                 "parceiro": outro_nome,
+                "sou_vendedor": sou_vendedor,
             }
         )
     return out

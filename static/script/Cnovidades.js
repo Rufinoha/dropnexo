@@ -68,11 +68,19 @@
     });
   }
 
-  function abrirLink(ev) {
+  async function abrirLink(ev) {
     const card = ev.target.closest("[data-link]");
     if (!card) return;
     const link = card.getAttribute("data-link") || "";
     if (!link) return;
+    const chave = card.getAttribute("data-chave") || "";
+    if (chave) {
+      await fetch("/api/novidades/marcar-lidas", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chaves: [chave] }),
+      }).catch(() => {});
+    }
     if (/^https?:\/\//i.test(link)) window.open(link, "_blank", "noopener");
     else window.location.href = link;
   }
@@ -95,7 +103,7 @@
       const r = await fetch("/api/novidades");
       const j = await r.json();
       if (!r.ok) return;
-      dados = j.novidades || [];
+      dados = montarItens(j);
       naoLidas = j.nao_lidas || 0;
       renderLista();
       renderBadges();
@@ -109,7 +117,7 @@
       const r = await fetch("/api/novidades");
       const j = await r.json();
       if (!r.ok) return;
-      dados = j.novidades || [];
+      dados = montarItens(j);
       naoLidas = j.nao_lidas || 0;
       renderBadges();
       if (aberto) renderLista();
@@ -131,6 +139,21 @@
     }
   }
 
+  function montarItens(j) {
+    const avisos = (j.avisos || []).map((a) => ({
+      tipo: "aviso",
+      id: 0,
+      chave: a.chave || "",
+      modulo: a.titulo || "Aviso",
+      descricao: a.descricao || "",
+      link: a.link || "",
+      lida: !!a.lida,
+      emissao: a.emissao || "",
+    }));
+    const novidades = (j.novidades || []).map((n) => ({ ...n, tipo: "novidade", chave: "" }));
+    return avisos.concat(novidades);
+  }
+
   function renderLista() {
     if (!EL.lista) return;
     if (!dados.length) {
@@ -143,8 +166,14 @@
         const link = n.link ? String(n.link) : "";
         const cls = `nv-card${n.lida ? "" : " nv-nao-lida"}${link ? " nv-card--link" : ""}`;
         const abrir = link ? `<div class="nv-card-link">Abrir</div>` : "";
+        const attrs = [
+          link ? `data-link="${esc(link)}" role="link" tabindex="0"` : "",
+          n.chave ? `data-chave="${esc(n.chave)}"` : "",
+        ]
+          .filter(Boolean)
+          .join(" ");
         return `
-        <div class="${cls}"${link ? ` data-link="${esc(link)}" role="link" tabindex="0"` : ""}>
+        <div class="${cls}"${attrs ? ` ${attrs}` : ""}>
           <div class="nv-card-icone">${ini}</div>
           <div class="nv-card-corpo">
             <div class="nv-card-modulo">${esc(n.modulo)}</div>
@@ -159,11 +188,22 @@
 
   async function marcarLidas() {
     if (!dados.length) return;
-    const maxId = Math.max(...dados.map((n) => n.id));
+    const ids = dados.filter((n) => n.tipo !== "aviso" && n.id).map((n) => Number(n.id));
+    const maxId = ids.length ? Math.max(...ids) : 0;
+    const chaves = dados.filter((n) => n.tipo === "aviso" && n.chave && !n.lida).map((n) => n.chave);
+    if (!maxId && !chaves.length) {
+      dados.forEach((n) => {
+        n.lida = true;
+      });
+      naoLidas = 0;
+      renderLista();
+      renderBadges();
+      return;
+    }
     await fetch("/api/novidades/marcar-lidas", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ultimo_id: maxId }),
+      body: JSON.stringify({ ultimo_id: maxId, chaves }),
     });
     dados.forEach((n) => { n.lida = true; });
     naoLidas = 0;

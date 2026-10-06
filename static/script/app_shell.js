@@ -435,67 +435,7 @@
     });
   }
 
-  function initFinBannerDismiss() {
-    const banner = document.getElementById("fg_fin_banner");
-    const btn = document.getElementById("fg_fin_banner_close");
-    if (!banner || !btn) return;
-    const ref = banner.getAttribute("data-fin-ref") || "";
-    const st = banner.getAttribute("data-fin-status") || "";
-    const key = "dn_fin_banner_hide:" + ref + ":" + st;
-    try {
-      if (sessionStorage.getItem(key) === "1") {
-        banner.remove();
-        return;
-      }
-    } catch (_) {
-      /* ignore */
-    }
-    banner.hidden = false;
-    btn.addEventListener("click", function () {
-      try {
-        sessionStorage.setItem(key, "1");
-      } catch (_) {
-        /* ignore */
-      }
-      banner.remove();
-    });
-  }
-
-  function initVinculoBannerDismiss() {
-    const wrap = document.getElementById("fg_vinculo_banners");
-    if (!wrap) return;
-    wrap.querySelectorAll(".fg-vinculo-banner").forEach(function (banner) {
-      const id = banner.getAttribute("data-vinculo-id") || "";
-      const st = banner.getAttribute("data-vinculo-status") || "";
-      const em = banner.getAttribute("data-vinculo-em") || "";
-      const key = "dn_vinculo_banner_hide:" + id + ":" + st + ":" + em;
-      try {
-        if (localStorage.getItem(key) === "1") {
-          banner.remove();
-          return;
-        }
-      } catch (_) {
-        /* ignore */
-      }
-      banner.hidden = false;
-      const btn = banner.querySelector(".fg-vinculo-banner-close");
-      if (!btn) return;
-      btn.addEventListener("click", function () {
-        try {
-          localStorage.setItem(key, "1");
-        } catch (_) {
-          /* ignore */
-        }
-        banner.remove();
-        if (!wrap.querySelector(".fg-vinculo-banner")) wrap.remove();
-      });
-    });
-    if (!wrap.querySelector(".fg-vinculo-banner")) wrap.remove();
-  }
-
   document.addEventListener("DOMContentLoaded", function () {
     carregarAvatarHeader();
-    initFinBannerDismiss();
-    initVinculoBannerDismiss();
   });
 })();
