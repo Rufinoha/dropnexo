@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from flask import Blueprint, jsonify, render_template, request, session
+from flask import Blueprint, jsonify, redirect, request, session, url_for
 
 from global_utils import Var_ConectarBanco, exigir_modulo, exigir_permissao, login_obrigatorio
 from sistema.plataforma.sessao import MODULO_VENDEDOR
@@ -37,17 +37,17 @@ def _vendedor():
 @vd_parametros_bp.get("/vendedor/parametros")
 @login_obrigatorio()
 @exigir_modulo(MODULO_VENDEDOR)
-@exigir_permissao(codigo="vd_parametros.ver")
+@exigir_permissao(codigo="vd_notas.ver")
 def parametros_pagina():
     if (r := _vendedor()) is not None:
         return r
-    return render_template("frm_vd_parametros.html", nav_ativo="vd_parametros")
+    return redirect(url_for("vd_notas.notas_pagina", aba="parametros"))
 
 
 @vd_parametros_bp.get("/vendedor/parametros/fiscal")
 @login_obrigatorio()
 @exigir_modulo(MODULO_VENDEDOR)
-@exigir_permissao(codigo="vd_parametros.ver")
+@exigir_permissao(codigo="vd_notas.ver")
 def fiscal_dados():
     if (r := _vendedor()) is not None:
         return r
@@ -68,7 +68,7 @@ def fiscal_dados():
 @vd_parametros_bp.post("/vendedor/parametros/fiscal")
 @login_obrigatorio()
 @exigir_modulo(MODULO_VENDEDOR)
-@exigir_permissao(codigo="vd_parametros.ver")
+@exigir_permissao(codigo="vd_notas.ver")
 def fiscal_salvar():
     if (r := _vendedor()) is not None:
         return r
@@ -86,7 +86,10 @@ def fiscal_salvar():
         from sistema.fiscal.nfe_servico import salvar_config, sincronizar_empresa
 
         cur = conn.cursor()
-        dados = salvar_config(cur, tid, body, arquivo, senha)
+        dados = salvar_config(
+            cur, tid, body, arquivo, senha,
+            editar_regras=bool(session.get("eh_desenvolvedor")),
+        )
         conn.commit()
         aviso = ""
         if dados.get("tem_certificado") and dados.get("token_configurado"):

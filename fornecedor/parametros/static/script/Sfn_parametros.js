@@ -99,5 +99,16 @@
     }
   });
 
+  document.querySelectorAll("[data-fnpar]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const nome = btn.dataset.fnpar;
+      document.querySelectorAll("[data-fnpar]").forEach((b) => b.classList.toggle("is-active", b === btn));
+      const comercial = document.getElementById("fnpar_comercial");
+      const nota = document.getElementById("fnpar_nota");
+      if (comercial) comercial.hidden = nome !== "comercial";
+      if (nota) nota.hidden = nome !== "nota";
+    });
+  });
+
   carregarRede();
 })();

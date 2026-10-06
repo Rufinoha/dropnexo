@@ -383,6 +383,7 @@ _PERMISSAO_PARA_NAVS: dict[str, tuple[str, ...]] = {
     "fn_categorias": ("fn_categorias", "az_categorias"),
     "fn_variacoes": ("fn_variacoes",),
     "fn_parametros": ("fn_parametros",),
+    "fn_notas": ("fn_notas",),
     "fn_segmentos": ("fn_parametros",),
     "fn_vendedores": ("fn_vendedores", "az_vendedores"),
     "fn_usuarios": ("fn_usuarios",),

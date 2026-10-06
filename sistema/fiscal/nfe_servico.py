@@ -130,6 +130,15 @@ def _config_padrao() -> dict:
         "cofins_situacao": "49",
         "certificado_nome": "",
         "tem_certificado": False,
+        "certificado": {
+            "instalado": False,
+            "titular": "",
+            "emissor": "",
+            "valido_de": "",
+            "valido_ate": "",
+            "dias": None,
+            "situacao": "ausente",
+        },
         "focus_empresa_id": "",
         "token_configurado": False,
     }
@@ -172,6 +181,7 @@ def ler_config(cur, id_tenant: int) -> dict:
         "cofins_situacao": row[10] or "49",
         "certificado_nome": row[11] or "",
         "tem_certificado": bool(row[12]),
+        "certificado": info_certificado(cur, id_tenant),
         "focus_empresa_id": row[13] or "",
         "token_configurado": token_configurado(ambiente),
     }
@@ -182,15 +192,42 @@ def _cfop4(valor, padrao: str) -> str:
     return d if len(d) == 4 else padrao
 
 
-def salvar_config(cur, id_tenant: int, body: dict, arquivo: tuple[str, bytes] | None, senha: str) -> dict:
+def salvar_config(
+    cur,
+    id_tenant: int,
+    body: dict,
+    arquivo: tuple[str, bytes] | None,
+    senha: str,
+    editar_regras: bool = False,
+) -> dict:
     _exigir_tabelas(cur)
     atual = ler_config(cur, id_tenant)
-    ambiente = (body.get("ambiente") or atual["ambiente"] or "homologacao").strip().lower()
-    if ambiente not in ("homologacao", "producao"):
-        ambiente = "homologacao"
-    natureza = (body.get("natureza_operacao") or "Venda de mercadoria").strip()[:80]
-    serie = max(1, int(body.get("serie") or atual["serie"] or 1))
-    proximo = max(1, int(body.get("proximo_numero") or atual["proximo_numero"] or 1))
+    if editar_regras:
+        ambiente = (body.get("ambiente") or atual["ambiente"] or "homologacao").strip().lower()
+        if ambiente not in ("homologacao", "producao"):
+            ambiente = "homologacao"
+        natureza = (body.get("natureza_operacao") or "Venda de mercadoria").strip()[:80]
+        serie = max(1, int(body.get("serie") or atual["serie"] or 1))
+        proximo = max(1, int(body.get("proximo_numero") or atual["proximo_numero"] or 1))
+        cfop_int = _cfop4(body.get("cfop_interno"), "5102")
+        cfop_ie = _cfop4(body.get("cfop_interestadual"), "6102")
+        cfop_cf = _cfop4(body.get("cfop_consumidor_interestadual"), "6108")
+        icms = (_digitos(body.get("icms_situacao")) or "102")[:4]
+        aliq = body.get("icms_aliquota") if body.get("icms_aliquota") not in (None, "") else None
+        pis = (_digitos(body.get("pis_situacao")) or "49")[:2]
+        cofins = (_digitos(body.get("cofins_situacao")) or "49")[:2]
+    else:
+        ambiente = atual["ambiente"] if atual["ambiente"] in ("homologacao", "producao") else "homologacao"
+        natureza = (atual["natureza_operacao"] or "Venda de mercadoria")[:80]
+        serie = max(1, int(atual["serie"] or 1))
+        proximo = max(1, int(atual["proximo_numero"] or 1))
+        cfop_int = atual["cfop_interno"] or "5102"
+        cfop_ie = atual["cfop_interestadual"] or "6102"
+        cfop_cf = atual["cfop_consumidor_interestadual"] or "6108"
+        icms = atual["icms_situacao"] or "102"
+        aliq = atual["icms_aliquota"]
+        pis = atual["pis_situacao"] or "49"
+        cofins = atual["cofins_situacao"] or "49"
     caminho = None
     nome = atual.get("certificado_nome") or ""
     senha_cifrada = None
@@ -232,13 +269,13 @@ def salvar_config(cur, id_tenant: int, body: dict, arquivo: tuple[str, bytes] | 
             serie,
             proximo,
             natureza,
-            _cfop4(body.get("cfop_interno"), "5102"),
-            _cfop4(body.get("cfop_interestadual"), "6102"),
-            _cfop4(body.get("cfop_consumidor_interestadual"), "6108"),
-            (_digitos(body.get("icms_situacao")) or "102")[:4],
-            body.get("icms_aliquota") if body.get("icms_aliquota") not in (None, "") else None,
-            (_digitos(body.get("pis_situacao")) or "49")[:2],
-            (_digitos(body.get("cofins_situacao")) or "49")[:2],
+            cfop_int,
+            cfop_ie,
+            cfop_cf,
+            icms,
+            aliq,
+            pis,
+            cofins,
         ]
         if caminho:
             sets += ["certificado_caminho = %s", "certificado_nome = %s"]
@@ -267,19 +304,78 @@ def salvar_config(cur, id_tenant: int, body: dict, arquivo: tuple[str, bytes] | 
                 serie,
                 proximo,
                 natureza,
-                _cfop4(body.get("cfop_interno"), "5102"),
-                _cfop4(body.get("cfop_interestadual"), "6102"),
-                _cfop4(body.get("cfop_consumidor_interestadual"), "6108"),
-                (_digitos(body.get("icms_situacao")) or "102")[:4],
-                body.get("icms_aliquota") if body.get("icms_aliquota") not in (None, "") else None,
-                (_digitos(body.get("pis_situacao")) or "49")[:2],
-                (_digitos(body.get("cofins_situacao")) or "49")[:2],
+                cfop_int,
+                cfop_ie,
+                cfop_cf,
+                icms,
+                aliq,
+                pis,
+                cofins,
                 caminho,
                 nome or None,
                 senha_cifrada,
             ),
         )
     return ler_config(cur, id_tenant)
+
+
+def _nome_cert(obj, oid) -> str:
+    attrs = obj.get_attributes_for_oid(oid)
+    return str(attrs[0].value) if attrs else ""
+
+
+def info_certificado(cur, id_tenant: int) -> dict:
+    """Dados públicos do A1. A senha não sai daqui."""
+    vazio = {
+        "instalado": False,
+        "titular": "",
+        "emissor": "",
+        "valido_de": "",
+        "valido_ate": "",
+        "dias": None,
+        "situacao": "ausente",
+    }
+    try:
+        dados, senha = _ler_senha(cur, id_tenant)
+    except ValueError as e:
+        msg = str(e)
+        if "senha" in msg.lower():
+            return {**vazio, "instalado": True, "situacao": "sem_senha"}
+        if "não está mais" in msg:
+            return {**vazio, "situacao": "arquivo"}
+        return vazio
+    try:
+        from cryptography.hazmat.primitives.serialization import pkcs12
+        from cryptography.x509.oid import NameOID
+
+        _chave, cert, _extras = pkcs12.load_key_and_certificates(dados, senha.encode())
+    except Exception:
+        return {**vazio, "instalado": True, "situacao": "ilegivel"}
+    if cert is None:
+        return {**vazio, "instalado": True, "situacao": "ilegivel"}
+    ini = getattr(cert, "not_valid_before_utc", None) or cert.not_valid_before
+    fim = getattr(cert, "not_valid_after_utc", None) or cert.not_valid_after
+    if ini.tzinfo is None:
+        ini = ini.replace(tzinfo=ZoneInfo("UTC"))
+    if fim.tzinfo is None:
+        fim = fim.replace(tzinfo=ZoneInfo("UTC"))
+    agora = datetime.now(ZoneInfo("UTC"))
+    dias = (fim.date() - agora.date()).days
+    if dias < 0:
+        situacao = "vencido"
+    elif dias <= 30:
+        situacao = "vence"
+    else:
+        situacao = "valido"
+    return {
+        "instalado": True,
+        "titular": _nome_cert(cert.subject, NameOID.COMMON_NAME),
+        "emissor": _nome_cert(cert.issuer, NameOID.COMMON_NAME),
+        "valido_de": ini.astimezone(_TZ).strftime("%d/%m/%Y"),
+        "valido_ate": fim.astimezone(_TZ).strftime("%d/%m/%Y"),
+        "dias": dias,
+        "situacao": situacao,
+    }
 
 
 def _ler_senha(cur, id_tenant: int) -> tuple[bytes, str]:

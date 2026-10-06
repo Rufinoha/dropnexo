@@ -5,6 +5,11 @@
     return document.getElementById(id);
   }
 
+  function nfBase() {
+    const n = document.querySelector("[data-nf-base]");
+    return ((n && n.getAttribute("data-nf-base")) || "/vendedor").replace(/\/$/, "");
+  }
+
   function esc(s) {
     return String(s ?? "")
       .replaceAll("&", "&amp;")
@@ -26,21 +31,21 @@
 
   async function carregar() {
     const tbody = el("nf_tbody");
-    const r = await fetch("/vendedor/notas/listar", { credentials: "same-origin" });
+    const r = await fetch(`${nfBase()}/notas/listar`, { credentials: "same-origin" });
     const j = await r.json().catch(() => ({}));
     if (!r.ok || !j.success) throw new Error(j.message || "Falha ao listar.");
     const notas = j.notas || [];
     if (!notas.length) {
-      tbody.innerHTML = `<tr><td colspan="7">Nenhuma nota emitida.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="7" class="Fin_Empty">Nenhuma nota emitida.</td></tr>`;
       return;
     }
     tbody.innerHTML = notas
       .map((n) => {
         const danfe = n.tem_danfe
-          ? `<a class="Cl_BtnLink" href="/vendedor/notas/${n.id}/arquivo/pdf" target="_blank" rel="noopener">DANFE</a>`
+          ? `<a class="Cl_BtnLink" href="${nfBase()}/notas/${n.id}/arquivo/pdf" target="_blank" rel="noopener">DANFE</a>`
           : "";
         const xml = n.tem_xml
-          ? `<a class="Cl_BtnLink" href="/vendedor/notas/${n.id}/arquivo/xml">XML</a>`
+          ? `<a class="Cl_BtnLink" href="${nfBase()}/notas/${n.id}/arquivo/xml">XML</a>`
           : "";
         return `<tr>
           <td>${esc(n.numero || "—")}</td>
@@ -58,25 +63,73 @@
       .join("");
   }
 
+  function ligarSidebar(root) {
+    root?.addEventListener("click", (ev) => {
+      const btn = ev.target.closest("[data-nf-tab]");
+      if (!btn || !root.contains(btn)) return;
+      const nome = btn.dataset.nfTab;
+      root.querySelectorAll("[data-nf-tab]").forEach((b) => b.classList.toggle("is-active", b === btn));
+      root.querySelectorAll("[data-nf-pane]").forEach((p) => {
+        p.hidden = p.dataset.nfPane !== nome;
+      });
+    });
+  }
+
+  function abrirModal() {
+    const modal = el("nf_modal");
+    if (!modal) return;
+    modal.hidden = false;
+    document.body.style.overflow = "hidden";
+    const shell = el("nf_modal_shell");
+    shell?.querySelector("[data-nf-tab='cliente']")?.click();
+    el("nf_nome")?.focus();
+  }
+
+  function fecharModal() {
+    const modal = el("nf_modal");
+    if (modal) modal.hidden = true;
+    document.body.style.overflow = "";
+  }
+
+  async function buscarCep() {
+    const cep = (el("nf_cep")?.value || "").replace(/\D/g, "");
+    if (cep.length !== 8) {
+      if (window.Swal) Swal.fire("CEP", "Informe um CEP com 8 dígitos.", "warning");
+      return false;
+    }
+    const btn = el("nf_btnCep");
+    if (btn) btn.disabled = true;
+    try {
+      const via = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+      const end = await via.json();
+      if (!via.ok || end.erro) throw new Error("CEP não encontrado.");
+      if (el("nf_logr")) el("nf_logr").value = end.logradouro || "";
+      if (el("nf_bairro")) el("nf_bairro").value = end.bairro || "";
+      if (el("nf_cidade")) el("nf_cidade").value = end.localidade || "";
+      if (el("nf_uf")) el("nf_uf").value = end.uf || "";
+      if (el("nf_ibge")) el("nf_ibge").value = end.ibge || "";
+      el("nf_num")?.focus();
+    } catch (e) {
+      if (window.Swal) Swal.fire("CEP", e.message || "Não foi possível buscar o CEP.", "error");
+      return false;
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+    return true;
+  }
+
   async function emitirAvulsa() {
     const cep = (el("nf_cep")?.value || "").replace(/\D/g, "");
     if (cep.length === 8 && !el("nf_ibge")?.value) {
-      const via = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
-      const end = await via.json();
-      if (!end.erro) {
-        if (el("nf_logr") && !el("nf_logr").value) el("nf_logr").value = end.logradouro || "";
-        if (el("nf_bairro") && !el("nf_bairro").value) el("nf_bairro").value = end.bairro || "";
-        if (el("nf_cidade")) el("nf_cidade").value = end.localidade || el("nf_cidade").value;
-        if (el("nf_uf")) el("nf_uf").value = end.uf || el("nf_uf").value;
-        if (el("nf_ibge")) el("nf_ibge").value = end.ibge || "";
-      }
+      const ok = await buscarCep();
+      if (!ok) return;
     }
     const body = {
       destinatario: {
         nome: el("nf_nome")?.value,
         documento: el("nf_doc")?.value,
         email: el("nf_email")?.value,
-        indicador_ie: el("nf_ind")?.value,
+        indicador_ie: el("nf_ind_ie")?.value,
         ie: el("nf_ie")?.value,
         cep: el("nf_cep")?.value,
         logradouro: el("nf_logr")?.value,
@@ -99,7 +152,7 @@
       ],
     };
     if (window.Swal) Swal.fire({ title: "Emitindo…", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-    const r = await fetch("/vendedor/notas/emitir", {
+    const r = await fetch(`${nfBase()}/notas/emitir`, {
       method: "POST",
       credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
@@ -108,16 +161,26 @@
     const j = await r.json().catch(() => ({}));
     if (!r.ok || !j.success) throw new Error(j.message || "Falha ao emitir.");
     if (window.Swal) Swal.fire("Nota", j.nota?.status === "autorizado" ? "Nota autorizada." : "Nota enviada. Atualize o status em instantes.", "success");
-    el("nf_form").hidden = true;
+    fecharModal();
     await carregar();
   }
 
-  el("nf_btnNova")?.addEventListener("click", () => {
-    el("nf_form").hidden = false;
+  el("nf_btnNova")?.addEventListener("click", abrirModal);
+  el("nf_btnFechar")?.addEventListener("click", fecharModal);
+  el("nf_btnFechar2")?.addEventListener("click", fecharModal);
+  el("nf_btnCep")?.addEventListener("click", () => {
+    buscarCep().catch((e) => {
+      if (window.Swal) Swal.fire("CEP", e.message || "Não foi possível buscar o CEP.", "error");
+    });
   });
-  el("nf_btnFechar")?.addEventListener("click", () => {
-    el("nf_form").hidden = true;
+  el("nf_modal")?.addEventListener("click", (ev) => {
+    if (ev.target === el("nf_modal")) fecharModal();
   });
+  document.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape" && el("nf_modal") && !el("nf_modal").hidden) fecharModal();
+  });
+  ligarSidebar(el("nf_par_shell"));
+  ligarSidebar(el("nf_modal_shell"));
   el("nf_btnEmitir")?.addEventListener("click", () => {
     emitirAvulsa().catch((e) => {
       if (window.Swal) Swal.fire("Nota", e.message || "Falha ao emitir.", "error");
@@ -126,7 +189,7 @@
   el("nf_tbody")?.addEventListener("click", (ev) => {
     const btn = ev.target.closest("[data-atualizar]");
     if (!btn) return;
-    fetch(`/vendedor/notas/${btn.dataset.atualizar}/atualizar`, { method: "POST", credentials: "same-origin" })
+    fetch(`${nfBase()}/notas/${btn.dataset.atualizar}/atualizar`, { method: "POST", credentials: "same-origin" })
       .then((r) => r.json())
       .then((j) => {
         if (!j.success) throw new Error(j.message || "Falha ao atualizar.");
@@ -136,6 +199,22 @@
         if (window.Swal) Swal.fire("Nota", e.message || "Falha ao atualizar.", "error");
       });
   });
+
+  function abrirAba(nome) {
+    document.querySelectorAll(".Fin_Tab").forEach((btn) => {
+      btn.classList.toggle("is-active", btn.dataset.aba === nome);
+    });
+    const notas = el("nf_aba_notas");
+    const param = el("nf_aba_parametros");
+    if (notas) notas.hidden = nome !== "notas";
+    if (param) param.hidden = nome !== "parametros";
+    if (nome !== "notas") fecharModal();
+  }
+
+  document.querySelectorAll(".Fin_Tab").forEach((btn) => {
+    btn.addEventListener("click", () => abrirAba(btn.dataset.aba || "notas"));
+  });
+  if (new URLSearchParams(window.location.search).get("aba") === "parametros") abrirAba("parametros");
 
   carregar().catch((e) => {
     const tbody = el("nf_tbody");

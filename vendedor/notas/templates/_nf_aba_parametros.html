@@ -1,0 +1,88 @@
+<form id="nf_aba_parametros" class="Nf_Pane" {% if not nf_form_aberto %}hidden{% endif %}>
+  <p id="nf_par_status" class="Fin_Aviso" hidden></p>
+  <div class="Nf_Shell" id="nf_par_shell">
+    <nav class="Nf_Nav" aria-label="Parâmetros">
+      <button type="button" class="Nf_NavItem is-active" data-nf-tab="cert">
+        <strong>Certificado A1</strong>
+        <small>Arquivo da empresa</small>
+      </button>
+      <button type="button" class="Nf_NavItem" data-nf-tab="num">
+        <strong>Numeração</strong>
+        <small>{% if session.get('eh_desenvolvedor') %}Edição{% else %}Somente consulta{% endif %}</small>
+      </button>
+      <button type="button" class="Nf_NavItem" data-nf-tab="regras">
+        <strong>Regras da nota</strong>
+        <small>{% if session.get('eh_desenvolvedor') %}Edição{% else %}Somente consulta{% endif %}</small>
+      </button>
+    </nav>
+    <div class="Nf_Main">
+      <section data-nf-pane="cert">
+        <h3>Certificado A1</h3>
+        <p class="Fin_Meta">O arquivo fica nesta conta. A senha não volta para a tela.</p>
+        <div class="Nf_Grid">
+          <div class="filter-group">
+            <label for="nf_cert">Arquivo .pfx</label>
+            <div class="Nf_Arquivo">
+              <input type="file" id="nf_cert" name="certificado" accept=".pfx,.p12">
+              <label for="nf_cert" class="Nf_ArquivoBtn">Escolher arquivo</label>
+              <span id="nf_cert_nome">Nenhum arquivo escolhido</span>
+            </div>
+          </div>
+          <div class="filter-group">
+            <label>Senha do certificado</label>
+            <input type="password" id="nf_senha" name="senha_certificado" autocomplete="new-password">
+          </div>
+        </div>
+        <div id="nf_cert_box" class="Nf_CertOk" hidden>
+          <h4 id="nf_cert_titulo"></h4>
+          <div id="nf_cert_corpo"></div>
+        </div>
+        <div class="Nf_Acoes">
+          <button type="submit" class="Cl_botaoprimario" id="nf_par_salvar">Salvar</button>
+        </div>
+      </section>
+      <section data-nf-pane="num" class="{% if not session.get('eh_desenvolvedor') %}Nf_Lock{% endif %}" hidden>
+        <h3>Numeração</h3>
+        <p class="Fin_Meta">{% if session.get('eh_desenvolvedor') %}Só o desenvolvedor altera estes valores. Número, série ou ambiente errados rejeitam a nota ou emitem de verdade.{% else %}Somente consulta. Só o desenvolvedor altera.{% endif %}</p>
+        <div class="Nf_Grid">
+          <div class="filter-group">
+            <label>Ambiente</label>
+            <select id="nf_ambiente" {% if session.get('eh_desenvolvedor') %}name="ambiente"{% else %}disabled{% endif %}>
+              <option value="homologacao">Homologação</option>
+              <option value="producao">Produção</option>
+            </select>
+            {% if not session.get('eh_desenvolvedor') %}
+            <input type="hidden" name="ambiente" id="nf_ambiente_val" value="homologacao">
+            {% endif %}
+          </div>
+          <div class="filter-group"><label>Série</label><input type="number" id="nf_serie" name="serie" min="1" value="1" {% if not session.get('eh_desenvolvedor') %}readonly{% endif %}></div>
+          <div class="filter-group"><label>Próximo número</label><input type="number" id="nf_numero" name="proximo_numero" min="1" value="1" {% if not session.get('eh_desenvolvedor') %}readonly{% endif %}></div>
+          <div class="filter-group"><label>Natureza da operação</label><input type="text" id="nf_natureza" name="natureza_operacao" maxlength="80" value="Venda de mercadoria" {% if not session.get('eh_desenvolvedor') %}readonly{% endif %}></div>
+        </div>
+        {% if session.get('eh_desenvolvedor') %}
+        <div class="Nf_Acoes">
+          <button type="submit" class="Cl_botaoprimario">Salvar</button>
+        </div>
+        {% endif %}
+      </section>
+      <section data-nf-pane="regras" class="{% if not session.get('eh_desenvolvedor') %}Nf_Lock{% endif %}" hidden>
+        <h3>Regras da nota</h3>
+        <p class="Fin_Meta">{% if session.get('eh_desenvolvedor') %}Só o desenvolvedor altera. Valem quando o produto não tiver CFOP ou imposto próprio.{% else %}Somente consulta. Só o desenvolvedor altera.{% endif %}</p>
+        <div class="Nf_Grid">
+          <div class="filter-group"><label>CFOP venda interna</label><input type="text" id="nf_cfop_int" name="cfop_interno" maxlength="4" value="5102" {% if not session.get('eh_desenvolvedor') %}readonly{% endif %}></div>
+          <div class="filter-group"><label>CFOP outro estado, contribuinte</label><input type="text" id="nf_cfop_ie" name="cfop_interestadual" maxlength="4" value="6102" {% if not session.get('eh_desenvolvedor') %}readonly{% endif %}></div>
+          <div class="filter-group"><label>CFOP outro estado, consumidor</label><input type="text" id="nf_cfop_cf" name="cfop_consumidor_interestadual" maxlength="4" value="6108" {% if not session.get('eh_desenvolvedor') %}readonly{% endif %}></div>
+          <div class="filter-group"><label>ICMS</label><input type="text" id="nf_icms" name="icms_situacao" maxlength="4" value="102" {% if not session.get('eh_desenvolvedor') %}readonly{% endif %}></div>
+          <div class="filter-group"><label>Alíquota ICMS</label><input type="text" id="nf_aliq" name="icms_aliquota" inputmode="decimal" {% if not session.get('eh_desenvolvedor') %}readonly{% endif %}></div>
+          <div class="filter-group"><label>PIS</label><input type="text" id="nf_pis" name="pis_situacao" maxlength="2" value="49" {% if not session.get('eh_desenvolvedor') %}readonly{% endif %}></div>
+          <div class="filter-group"><label>COFINS</label><input type="text" id="nf_cofins" name="cofins_situacao" maxlength="2" value="49" {% if not session.get('eh_desenvolvedor') %}readonly{% endif %}></div>
+        </div>
+        {% if session.get('eh_desenvolvedor') %}
+        <div class="Nf_Acoes">
+          <button type="submit" class="Cl_botaoprimario">Salvar</button>
+        </div>
+        {% endif %}
+      </section>
+    </div>
+  </div>
+</form>

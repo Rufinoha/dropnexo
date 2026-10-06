@@ -1,73 +1,142 @@
-{% extends "frm_base.html" %}
-{% set nav_ativo = 'vd_notas' %}
-{% block title %}Nota Fiscal — {{ MARCA_NOME }}{% endblock %}
-{% block topbar_title %}Nota Fiscal{% endblock %}
+{% extends 'frm_base.html' %}
+
+{% block title %}Nota Fiscal{% endblock %}
+
 {% block head_extra %}
-<script defer src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<link rel="stylesheet" href="{{ url_for('static', filename='style/Csweetalert.css') }}">
+<link rel="stylesheet" href="{{ url_for('financeiro.static', filename='style/Cfinanceiro.css') }}?v=6">
+<link rel="stylesheet" href="{{ url_for('vd_notas.static', filename='style/Cvd_notas.css') }}?v=5">
 {% endblock %}
+
 {% block content %}
-<main class="content">
-  <div class="Cl_ConfigContainer">
+<div class="Cl_ContainerApoio Cl_PainelPagina Fin_Page Nf_Page" data-nf-base="{{ nf_base|default('/vendedor') }}">
+  <div class="pt-page-title">
     <h2>Nota Fiscal</h2>
-    <p class="dem-subtitulo">Notas de venda dos seus produtos. A emissão usa o certificado da aba Fiscal, em Parâmetros.</p>
+    <p class="pt-page-desc">Notas de venda dos seus produtos. O certificado e as regras ficam na aba Parâmetros.</p>
+  </div>
 
-    <div class="Cl_botaoIncluir">
-      <button type="button" id="nf_btnNova" class="Cl_BtnIncluir">+ Nova nota</button>
-    </div>
+  <nav class="Fin_Tabs" aria-label="Nota fiscal">
+    <button type="button" class="Fin_Tab is-active" data-aba="notas">Nota fiscal</button>
+    <button type="button" class="Fin_Tab" data-aba="parametros">Parâmetros</button>
+  </nav>
 
-    <section id="nf_form" class="filter-panel" hidden>
-      <div class="filter-panel-fields">
-        <div class="filter-group"><label for="nf_nome">Nome do cliente</label><input id="nf_nome" class="Cl_Input" /></div>
-        <div class="filter-group"><label for="nf_doc">CPF/CNPJ</label><input id="nf_doc" class="Cl_Input" /></div>
-        <div class="filter-group"><label for="nf_email">E-mail</label><input id="nf_email" class="Cl_Input" /></div>
-        <div class="filter-group">
-          <label for="nf_ind">Inscrição estadual</label>
-          <select id="nf_ind" class="Cl_Input">
-            <option value="9">Não contribuinte</option>
-            <option value="2">Isento</option>
-            <option value="1">Contribuinte</option>
-          </select>
+  <div id="nf_aba_notas" class="Nf_Pane">
+    <section class="Fin_Card">
+      <div class="Fin_CardHead">
+        <div>
+          <h3>Notas emitidas</h3>
+          <p class="Fin_Meta">A nota do pedido continua no botão Emitir NFe, dentro do pedido.</p>
         </div>
-        <div class="filter-group"><label for="nf_ie">IE do cliente</label><input id="nf_ie" class="Cl_Input" /></div>
-        <div class="filter-group"><label for="nf_cep">CEP</label><input id="nf_cep" class="Cl_Input" maxlength="9" /></div>
-        <div class="filter-group"><label for="nf_logr">Logradouro</label><input id="nf_logr" class="Cl_Input" /></div>
-        <div class="filter-group"><label for="nf_num">Número</label><input id="nf_num" class="Cl_Input" /></div>
-        <div class="filter-group"><label for="nf_bairro">Bairro</label><input id="nf_bairro" class="Cl_Input" /></div>
-        <div class="filter-group"><label for="nf_cidade">Cidade</label><input id="nf_cidade" class="Cl_Input" /></div>
-        <div class="filter-group"><label for="nf_uf">UF</label><input id="nf_uf" class="Cl_Input" maxlength="2" /></div>
-        <div class="filter-group"><label for="nf_desc">Descrição do item</label><input id="nf_desc" class="Cl_Input" /></div>
-        <div class="filter-group"><label for="nf_ncm">NCM</label><input id="nf_ncm" class="Cl_Input" maxlength="8" /></div>
-        <div class="filter-group"><label for="nf_qtd">Quantidade</label><input id="nf_qtd" class="Cl_Input" type="number" min="1" value="1" /></div>
-        <div class="filter-group"><label for="nf_valor">Valor unitário</label><input id="nf_valor" class="Cl_Input" type="number" min="0" step="0.01" /></div>
+        <button type="button" class="Cl_botaoprimario" id="nf_btnNova">Nova nota</button>
       </div>
-      <input type="hidden" id="nf_ibge" />
-      <div class="filter-panel-actions">
-        <button type="button" id="nf_btnEmitir" class="btn btn-primary">Emitir NFe</button>
-        <button type="button" id="nf_btnFechar" class="btn btn-secondary">Fechar</button>
+      <div class="Fin_TableWrap">
+        <table class="Fin_Table">
+          <thead>
+            <tr>
+              <th>Número</th>
+              <th>Cliente</th>
+              <th>Valor</th>
+              <th>Status</th>
+              <th>Pedido</th>
+              <th>Emissão</th>
+              <th>Ações</th>
+            </tr>
+          </thead>
+          <tbody id="nf_tbody">
+            <tr><td colspan="7" class="Fin_Empty">Carregando…</td></tr>
+          </tbody>
+        </table>
       </div>
     </section>
+  </div>
 
-    <div class="Cl_TabelaPrincipal">
-      <table aria-label="Notas fiscais">
-        <thead>
-          <tr>
-            <th>Número</th>
-            <th>Cliente</th>
-            <th>Valor</th>
-            <th>Status</th>
-            <th>Pedido</th>
-            <th>Emissão</th>
-            <th class="col-acoes">Ações</th>
-          </tr>
-        </thead>
-        <tbody id="nf_tbody">
-          <tr class="Cl_Carregando"><td colspan="7">Carregando notas…</td></tr>
-        </tbody>
-      </table>
+  {% include "_nf_aba_parametros.html" %}
+
+  <div id="nf_modal" class="Nf_Modal" hidden>
+    <div class="Nf_ModalInner" role="dialog" aria-modal="true" aria-labelledby="nf_modalTitulo">
+      <header class="Nf_ModalHead">
+        <div>
+          <h3 id="nf_modalTitulo">Nova nota</h3>
+          <span>Nota avulsa, sem pedido</span>
+        </div>
+        <button type="button" class="Nf_ModalClose" id="nf_btnFechar" aria-label="Fechar">×</button>
+      </header>
+      <div class="Nf_Shell Nf_Shell--modal" id="nf_modal_shell">
+        <nav class="Nf_Nav" aria-label="Nova nota">
+          <button type="button" class="Nf_NavItem is-active" data-nf-tab="cliente">
+            <strong>Cliente</strong>
+            <small>Quem recebe a nota</small>
+          </button>
+          <button type="button" class="Nf_NavItem" data-nf-tab="entrega">
+            <strong>Local de entrega</strong>
+            <small>Endereço do destinatário</small>
+          </button>
+          <button type="button" class="Nf_NavItem" data-nf-tab="item">
+            <strong>Item</strong>
+            <small>O que está sendo vendido</small>
+          </button>
+        </nav>
+        <div class="Nf_Main">
+          <section data-nf-pane="cliente">
+            <h3>Cliente</h3>
+            <p class="Fin_Meta">Dados de quem vai receber a nota.</p>
+            <div class="Nf_Grid">
+              <div class="filter-group Nf_Span2"><label>Nome</label><input type="text" id="nf_nome" maxlength="180"></div>
+              <div class="filter-group"><label>CPF/CNPJ</label><input type="text" id="nf_doc" maxlength="18"></div>
+              <div class="filter-group"><label>E-mail</label><input type="email" id="nf_email" maxlength="180"></div>
+              <div class="filter-group">
+                <label>Inscrição estadual</label>
+                <select id="nf_ind_ie">
+                  <option value="9">Não contribuinte</option>
+                  <option value="2">Isento</option>
+                  <option value="1">Contribuinte</option>
+                </select>
+              </div>
+              <div class="filter-group"><label>IE do cliente</label><input type="text" id="nf_ie" maxlength="20"></div>
+            </div>
+          </section>
+          <section data-nf-pane="entrega" hidden>
+            <h3>Local de entrega</h3>
+            <p class="Fin_Meta">O CEP preenche logradouro, bairro, cidade e UF.</p>
+            <div class="Nf_Grid">
+              <div class="filter-group Nf_Span2">
+                <label>CEP</label>
+                <div class="Nf_CepLinha">
+                  <button type="button" class="Cl_botaoFiltro" id="nf_btnCep">Buscar CEP</button>
+                  <input type="text" id="nf_cep" maxlength="9" inputmode="numeric" placeholder="00000-000">
+                </div>
+              </div>
+              <div class="filter-group Nf_Span2"><label>Logradouro</label><input type="text" id="nf_logr" maxlength="180"></div>
+              <div class="filter-group"><label>Número</label><input type="text" id="nf_num" maxlength="20"></div>
+              <div class="filter-group"><label>Bairro</label><input type="text" id="nf_bairro" maxlength="80"></div>
+              <div class="filter-group"><label>Cidade</label><input type="text" id="nf_cidade" maxlength="80"></div>
+              <div class="filter-group"><label>UF</label><input type="text" id="nf_uf" maxlength="2"></div>
+              <input type="hidden" id="nf_ibge">
+            </div>
+          </section>
+          <section data-nf-pane="item" hidden>
+            <h3>Item</h3>
+            <p class="Fin_Meta">Um item nesta nota avulsa.</p>
+            <div class="Nf_Grid">
+              <div class="filter-group Nf_Span2"><label>Descrição</label><input type="text" id="nf_desc" maxlength="180"></div>
+              <div class="filter-group"><label>NCM</label><input type="text" id="nf_ncm" maxlength="8"></div>
+              <div class="filter-group"><label>Quantidade</label><input type="number" id="nf_qtd" min="1" step="1" value="1"></div>
+              <div class="filter-group"><label>Valor unitário</label><input type="text" id="nf_valor" inputmode="decimal"></div>
+            </div>
+          </section>
+        </div>
+      </div>
+      <footer class="Nf_ModalFoot">
+        <button type="button" class="Cl_BtnCancelar" id="nf_btnFechar2">Fechar</button>
+        <button type="button" class="Cl_botaoprimario" id="nf_btnEmitir">Emitir NFe</button>
+      </footer>
     </div>
   </div>
-</main>
+</div>
 {% endblock %}
+
 {% block page_js %}
-<script src="{{ url_for('vd_notas.static', filename='script/Svd_notas.js') }}?v=1"></script>
+<script src="{{ url_for('static', filename='script/Jsweetalert.js') }}"></script>
+<script src="{{ url_for('vd_notas.static', filename='script/Svd_notas.js') }}?v=5"></script>
+<script src="{{ url_for('vd_parametros.static', filename='script/Svd_parametros.js') }}?v=7"></script>
 {% endblock %}

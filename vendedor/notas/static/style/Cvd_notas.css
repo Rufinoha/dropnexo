@@ -1,0 +1,297 @@
+.Nf_Page .Nf_Pane[hidden],
+.Nf_Page [data-nf-pane][hidden] { display: none !important; }
+
+.Nf_Page .Nf_Grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem 1rem;
+}
+
+.Nf_Page .Nf_Grid .filter-group {
+  flex: none;
+  max-width: none;
+  min-width: 0;
+}
+
+.Nf_Page .Nf_Span2 { grid-column: 1 / -1; }
+
+.Nf_Page .Nf_Ok {
+  margin: 0 0 1rem;
+  color: #166534;
+  background: #f0fdf4;
+  border: 1px solid #86efac;
+  border-radius: 10px;
+  padding: 0.9rem 1rem;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.Nf_Shell {
+  display: flex;
+  min-height: 440px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.Nf_Nav {
+  width: 230px;
+  flex-shrink: 0;
+  background: #f8fafc;
+  border-right: 1px solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  padding: 0.65rem 0;
+}
+
+.Nf_NavItem {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  width: 100%;
+  padding: 0.8rem 1rem;
+  border: none;
+  border-left: 3px solid transparent;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  color: #334155;
+}
+
+.Nf_NavItem strong {
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.Nf_NavItem small {
+  font-size: 0.72rem;
+  color: #64748b;
+}
+
+.Nf_NavItem:hover { background: #f1f5f9; }
+
+.Nf_NavItem.is-active {
+  background: #fff;
+  border-left-color: #f5a623;
+}
+
+.Nf_Main {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  padding: 1.15rem 1.35rem 1.25rem;
+}
+
+.Nf_Main h3 {
+  margin: 0 0 0.25rem;
+  font-size: 1.05rem;
+  color: #1c2e3b;
+}
+
+.Nf_Main .Fin_Meta { margin: 0 0 1rem; }
+
+.Nf_Lock input,
+.Nf_Lock select {
+  background: #f8fafc;
+  color: #475569;
+  pointer-events: none;
+}
+
+.Nf_CertOk {
+  margin-top: 1.15rem;
+  padding: 1rem 1.15rem;
+  border-radius: 12px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #14532d;
+}
+
+.Nf_CertOk h4 {
+  margin: 0 0 0.35rem;
+  font-size: 0.98rem;
+  color: inherit;
+}
+
+.Nf_CertOk p {
+  margin: 0.15rem 0;
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.Nf_CertOk.is-vence {
+  background: #fffbeb;
+  border-color: #fde68a;
+  color: #92400e;
+}
+
+.Nf_CertOk.is-vencido {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #991b1b;
+}
+
+.Nf_CertOk.is-off {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+  color: #475569;
+}
+
+.Nf_Acoes {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1.1rem;
+}
+
+.Nf_Arquivo {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 0 10px 0 4px;
+  border: 1px solid rgba(75, 85, 99, 0.9);
+  border-radius: 6px;
+  background: #fff;
+}
+
+.Nf_Page .Nf_Arquivo input[type="file"] {
+  position: absolute;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+}
+
+.Nf_Page .Nf_ArquivoBtn {
+  flex-shrink: 0;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 10px;
+  border-radius: 5px;
+  background: var(--marca-primary, #7B2CFF);
+  color: #fff !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0 !important;
+  text-transform: none !important;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.Nf_ArquivoBtn:hover {
+  background: var(--marca-hover, #6922E6);
+}
+
+.Nf_Arquivo span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: #6f6361;
+}
+
+.Nf_CepLinha {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.Nf_CepLinha .Cl_botaoFiltro {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.Nf_CepLinha input { flex: 1; min-width: 0; }
+
+.Nf_Modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  box-sizing: border-box;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem;
+}
+
+.Nf_Modal[hidden] { display: none !important; }
+
+.Nf_ModalInner {
+  background: #fff;
+  border-radius: 14px;
+  width: min(980px, 100%);
+  height: min(640px, 100%);
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.18);
+}
+
+.Nf_ModalHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.85rem 1.25rem;
+  background: linear-gradient(135deg, #021f81 0%, #0a3a9e 100%);
+  color: #fff;
+}
+
+.Nf_ModalHead h3 { margin: 0; font-size: 1.05rem; color: #fff; }
+
+.Nf_ModalHead span {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.78rem;
+  opacity: 0.85;
+}
+
+.Nf_ModalClose {
+  border: none;
+  background: transparent;
+  color: #fff;
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.Nf_Shell--modal {
+  flex: 1;
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+.Nf_ModalFoot {
+  padding: 0.9rem 1.25rem;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  background: #fafbfc;
+}
+
+@media (max-width: 800px) {
+  .Nf_Shell { flex-direction: column; min-height: 0; }
+  .Nf_Nav {
+    width: auto;
+    flex-direction: row;
+    overflow-x: auto;
+    border-right: 0;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  .Nf_NavItem { border-left: 0; border-bottom: 3px solid transparent; }
+  .Nf_NavItem.is-active { border-bottom-color: #f5a623; }
+  .Nf_Page .Nf_Grid { grid-template-columns: 1fr; }
+  .Nf_Page .Nf_Span2 { grid-column: auto; }
+}

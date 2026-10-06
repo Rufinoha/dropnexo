@@ -1159,6 +1159,7 @@ def _menu_sidebar_fallback(mod_ativo: str = "vendedor") -> list[dict]:
     if mod_ativo == MODULO_FORNECEDOR:
         return comum + [
             {"nome": "Pedidos", "url": url_for("fn_pedidos.pedidos"), "icone_svg": _ICONES_SVG["shopping-bag"], "nav_codigo": "fn_pedidos"},
+            {"nome": "Nota Fiscal", "url": url_for("fn_notas.notas_pagina"), "icone_svg": _ICONES_SVG["file"], "nav_codigo": "fn_notas"},
             {"nome": "Catálogo", "url": url_for("fn_catalogo.pagina"), "icone_svg": _ICONES_SVG["package"], "nav_codigo": "catalogos"},
         ]
     if mod_ativo == MODULO_ARMAZEM:
@@ -1178,7 +1179,6 @@ def _menu_sidebar_fallback(mod_ativo: str = "vendedor") -> list[dict]:
         {"nome": "Meus produtos", "url": url_for("vd_meus_produtos.pagina"), "icone_svg": _ICONES_SVG["shopping-bag"], "nav_codigo": "produtos"},
         {"nome": "Loja Virtual", "url": url_for("vd_loja_virtual.pagina"), "icone_svg": _ICONES_SVG["store"], "nav_codigo": "vd_loja_virtual"},
         {"nome": "Nota Fiscal", "url": url_for("vd_notas.notas_pagina"), "icone_svg": _ICONES_SVG["file"], "nav_codigo": "vd_notas"},
-        {"nome": "Parâmetros", "url": url_for("vd_parametros.parametros_pagina"), "icone_svg": _ICONES_SVG["settings"], "nav_codigo": "vd_parametros"},
     ]
 
 

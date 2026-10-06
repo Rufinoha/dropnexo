@@ -1,4 +1,6 @@
 .FnPar_Wrap { max-width: none; width: 100%; }
+.FnPar_Tabs { margin: 0 0 1rem; }
+.FnPar_Pane[hidden] { display: none !important; }
 
 .FnPar_RedePainel {
   margin-top: 16px;
