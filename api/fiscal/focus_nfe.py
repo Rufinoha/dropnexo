@@ -1,5 +1,4 @@
-# Cliente do hub H74. Se HUB_NFE_URL estiver vazio, continua na Focus.
-# O JSON e os caminhos /v2/empresas e /v2/nfe são os mesmos nos dois.
+# Cliente do hub H74 de NF-e modelo 55. Este sistema não fala com a SEFAZ.
 from __future__ import annotations
 
 import os
@@ -18,44 +17,48 @@ def _hub() -> str:
     return (os.getenv("HUB_NFE_URL") or "").strip().rstrip("/")
 
 
-def token_configurado(ambiente: str) -> bool:
-    return bool(_token(ambiente))
+def token_configurado(ambiente: str = "") -> bool:
+    return bool(_hub() and _token())
 
 
-def _token(ambiente: str) -> str:
-    if _hub():
-        return (os.getenv("HUB_NFE_TOKEN") or "").strip()
-    if (ambiente or "").strip().lower() == "producao":
-        return (os.getenv("FOCUS_NFE_TOKEN") or "").strip()
-    return (os.getenv("FOCUS_NFE_TOKEN_HOMOLOGACAO") or os.getenv("FOCUS_NFE_TOKEN") or "").strip()
+def _token() -> str:
+    return (os.getenv("HUB_NFE_TOKEN") or "").strip()
 
 
-def _base(ambiente: str) -> str:
-    hub = _hub()
-    if hub:
-        return hub
-    if (ambiente or "").strip().lower() == "producao":
-        return "https://api.focusnfe.com.br"
-    return "https://homologacao.focusnfe.com.br"
+def _ambiente(ambiente: str) -> str:
+    return "producao" if (ambiente or "").strip().lower() == "producao" else "homologacao"
+
+
+def _exigir_config() -> str:
+    if not _hub():
+        raise FocusNfeError("Defina HUB_NFE_URL no .env do servidor.")
+    if not _token():
+        raise FocusNfeError("Defina HUB_NFE_TOKEN no .env do servidor.")
+    return _token()
 
 
 def _cabecalhos(ambiente: str) -> dict:
-    cab = {"Accept": "application/json"}
-    if not _hub():
-        return cab
-    amb = "producao" if (ambiente or "").strip().lower() == "producao" else "homologacao"
-    cab["X-Ambiente"] = amb
-    cab["X-Sistema"] = "dropnexo"
-    return cab
+    return {
+        "Accept": "application/json",
+        "X-Ambiente": _ambiente(ambiente),
+        "X-Sistema": "dropnexo",
+    }
 
 
 def _mensagem(resp: requests.Response) -> str:
+    if resp.status_code == 401:
+        return (
+            "O hub recusou o acesso. Confira o token no .env e se o sistema dropnexo "
+            "está ligado nesse token."
+        )
     try:
         body = resp.json()
     except Exception:
         body = None
     if isinstance(body, dict):
-        partes = [str(body.get("mensagem") or body.get("message") or "").strip()]
+        partes = [
+            str(body.get("mensagem_sefaz") or body.get("mensagem") or body.get("message") or "").strip()
+        ]
         erros = body.get("erros")
         if isinstance(erros, list):
             for item in erros:
@@ -69,7 +72,7 @@ def _mensagem(resp: requests.Response) -> str:
         if texto:
             return texto[:800]
     texto = (resp.text or "").strip()
-    return texto[:400] or f"Focus NFe respondeu {resp.status_code}."
+    return texto[:400] or f"O hub de NF-e respondeu {resp.status_code}."
 
 
 def request_json(
@@ -81,17 +84,8 @@ def request_json(
     json_body: dict | None = None,
     timeout: int = 60,
 ) -> tuple[int, Any]:
-    token = _token(ambiente)
-    if not token:
-        if _hub():
-            raise FocusNfeError(
-                "Falta o token do hub de NF-e no servidor. Defina HUB_NFE_TOKEN."
-            )
-        raise FocusNfeError(
-            "A plataforma ainda não tem o token da Focus NFe. "
-            "Defina FOCUS_NFE_TOKEN no ambiente do servidor."
-        )
-    url = _base(ambiente).rstrip("/") + "/" + path.lstrip("/")
+    token = _exigir_config()
+    url = _hub() + "/" + path.lstrip("/")
     try:
         resp = requests.request(
             method.upper(),
@@ -103,8 +97,7 @@ def request_json(
             headers=_cabecalhos(ambiente),
         )
     except requests.RequestException as e:
-        origem = "o hub de NF-e" if _hub() else "a Focus NFe"
-        raise FocusNfeError(f"Sem resposta de {origem}: {e}") from e
+        raise FocusNfeError(f"Sem resposta do hub de NF-e: {e}") from e
     if resp.status_code >= 400:
         raise FocusNfeError(_mensagem(resp), resp.status_code)
     if not resp.content:
@@ -116,17 +109,12 @@ def request_json(
 
 
 def baixar(ambiente: str, path: str) -> bytes:
-    token = _token(ambiente)
-    if not token:
-        if _hub():
-            raise FocusNfeError("Falta o token do hub de NF-e no servidor. Defina HUB_NFE_TOKEN.")
-        raise FocusNfeError("A plataforma ainda não tem o token da Focus NFe.")
-    url = _base(ambiente).rstrip("/") + "/" + path.lstrip("/")
+    token = _exigir_config()
+    url = _hub() + "/" + path.lstrip("/")
     try:
         resp = requests.get(url, auth=(token, ""), timeout=60, headers=_cabecalhos(ambiente))
     except requests.RequestException as e:
-        origem = "o hub de NF-e" if _hub() else "a Focus NFe"
-        raise FocusNfeError(f"Sem resposta de {origem}: {e}") from e
+        raise FocusNfeError(f"Sem resposta do hub de NF-e: {e}") from e
     if resp.status_code >= 400:
         raise FocusNfeError(_mensagem(resp), resp.status_code)
     return resp.content or b""

@@ -1,8 +1,9 @@
-# Emissão de NF-e do vendedor (Focus NFe) e os dados fiscais que ela usa.
+# Emissão de NF-e do tenant pelo hub H74. O hub assina e fala com a SEFAZ.
 from __future__ import annotations
 
 import base64
 import hashlib
+import json
 import os
 import re
 from datetime import datetime
@@ -244,8 +245,10 @@ def salvar_config(
         caminho = f"upload/tenant{int(id_tenant)}/fiscal/certificado.pfx"
         nome = Path(nome_arq).name[:180]
         senha_cifrada = _cifrar(senha.strip())
+        _marcar_cert_pendente(id_tenant)
     elif (senha or "").strip() and atual.get("tem_certificado"):
         senha_cifrada = _cifrar(senha.strip())
+        _marcar_cert_pendente(id_tenant)
 
     cur.execute("SELECT 1 FROM tbl_fiscal_config WHERE id_tenant = %s", (int(id_tenant),))
     existe = cur.fetchone() is not None
@@ -445,10 +448,77 @@ def _empresa(cur, id_tenant: int) -> dict:
     }
 
 
+def _pasta_fiscal(id_tenant: int) -> Path:
+    return _RAIZ / "upload" / f"tenant{int(id_tenant)}" / "fiscal"
+
+
+def _marcar_cert_pendente(id_tenant: int) -> None:
+    pasta = _pasta_fiscal(id_tenant)
+    pasta.mkdir(parents=True, exist_ok=True)
+    (pasta / ".cert_pendente").write_text("1", encoding="utf-8")
+
+
+def _cert_pendente(id_tenant: int) -> bool:
+    return (_pasta_fiscal(id_tenant) / ".cert_pendente").is_file()
+
+
+def _limpar_cert_pendente(id_tenant: int) -> None:
+    marca = _pasta_fiscal(id_tenant) / ".cert_pendente"
+    if marca.is_file():
+        marca.unlink()
+
+
+def _ids_hub(texto: str) -> dict:
+    bruto = (texto or "").strip()
+    if not bruto.startswith("{"):
+        return {}
+    try:
+        data = json.loads(bruto)
+    except Exception:
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    saida = {}
+    for amb in ("homologacao", "producao"):
+        valor = str(data.get(amb) or "").strip()
+        if valor:
+            saida[amb] = valor
+    return saida
+
+
+def _listar_empresas_hub(ambiente: str) -> list:
+    _, body = request_json(ambiente, "GET", "/v2/empresas")
+    if isinstance(body, list):
+        return body
+    if isinstance(body, dict):
+        data = body.get("data") if isinstance(body.get("data"), list) else []
+        return data
+    return []
+
+
+def _id_na_lista(lista: list, empresa_id: str, cnpj: str) -> str:
+    cnpj = _digitos(cnpj)
+    por_cnpj = ""
+    for item in lista:
+        if not isinstance(item, dict):
+            continue
+        atual = str(item.get("id") or "").strip()
+        if not atual:
+            continue
+        if empresa_id and atual == empresa_id:
+            return atual
+        if cnpj and _digitos(item.get("cnpj")) == cnpj and not por_cnpj:
+            por_cnpj = atual
+    return por_cnpj
+
+
 def sincronizar_empresa(cur, id_tenant: int) -> dict:
     _exigir_tabelas(cur)
     cfg = ler_config(cur, id_tenant)
     emp = _empresa(cur, id_tenant)
+    if not (emp.get("inscricao_estadual") or "").strip():
+        raise ValueError("Informe a inscrição estadual ou marque isento em Minha empresa.")
+    ambiente = cfg["ambiente"] if cfg["ambiente"] in ("homologacao", "producao") else "homologacao"
     conteudo, senha = _ler_senha(cur, id_tenant)
     payload = {
         "nome": emp["nome"][:60],
@@ -467,15 +537,25 @@ def sincronizar_empresa(cur, id_tenant: int) -> dict:
         "uf": emp["uf"],
         "codigo_municipio": emp["codigo_municipio"],
         "habilita_nfe": True,
-        "arquivo_certificado_base64": base64.b64encode(conteudo).decode(),
-        "senha_certificado": senha,
         "discrimina_impostos": True,
         "enviar_email_destinatario": False,
     }
     if emp["inscricao_municipal"]:
         payload["inscricao_municipal"] = emp["inscricao_municipal"]
-    ambiente = cfg["ambiente"]
-    empresa_id = (cfg.get("focus_empresa_id") or "").strip()
+    enviar_cert = True
+    try:
+        lista = _listar_empresas_hub(ambiente)
+    except FocusNfeError as e:
+        raise ValueError(str(e)) from e
+    mapa = _ids_hub(cfg.get("focus_empresa_id") or "")
+    legado = (cfg.get("focus_empresa_id") or "").strip()
+    candidato = mapa.get(ambiente) or ("" if legado.startswith("{") else legado)
+    empresa_id = _id_na_lista(lista, candidato, emp["cnpj"])
+    if empresa_id:
+        enviar_cert = _cert_pendente(id_tenant)
+    if enviar_cert:
+        payload["arquivo_certificado_base64"] = base64.b64encode(conteudo).decode()
+        payload["senha_certificado"] = senha
     try:
         if empresa_id:
             status, body = request_json(ambiente, "PUT", f"/v2/empresas/{empresa_id}", json_body=payload)
@@ -483,34 +563,27 @@ def sincronizar_empresa(cur, id_tenant: int) -> dict:
             status, body = request_json(ambiente, "POST", "/v2/empresas", json_body=payload)
     except FocusNfeError as e:
         if e.status == 422 and not empresa_id:
-            empresa_id = _achar_empresa(ambiente, emp["cnpj"])
+            empresa_id = _id_na_lista(_listar_empresas_hub(ambiente), "", emp["cnpj"])
             if not empresa_id:
                 raise ValueError(str(e)) from e
+            if not _cert_pendente(id_tenant):
+                payload.pop("arquivo_certificado_base64", None)
+                payload.pop("senha_certificado", None)
             status, body = request_json(ambiente, "PUT", f"/v2/empresas/{empresa_id}", json_body=payload)
         else:
             raise ValueError(str(e)) from e
-    if isinstance(body, dict):
-        empresa_id = str(body.get("id") or empresa_id or "")
-    if empresa_id:
-        cur.execute(
-            "UPDATE tbl_fiscal_config SET focus_empresa_id = %s, atualizado_em = NOW() WHERE id_tenant = %s",
-            (empresa_id, int(id_tenant)),
-        )
+    if isinstance(body, dict) and body.get("id"):
+        empresa_id = str(body.get("id"))
+    if not empresa_id:
+        raise ValueError("O hub não devolveu o id da empresa.")
+    mapa[ambiente] = empresa_id
+    cur.execute(
+        "UPDATE tbl_fiscal_config SET focus_empresa_id = %s, atualizado_em = NOW() WHERE id_tenant = %s",
+        (json.dumps(mapa), int(id_tenant)),
+    )
+    if enviar_cert:
+        _limpar_cert_pendente(id_tenant)
     return {"focus_empresa_id": empresa_id, "status": status}
-
-
-def _achar_empresa(ambiente: str, cnpj: str) -> str:
-    try:
-        _, body = request_json(ambiente, "GET", "/v2/empresas")
-    except FocusNfeError:
-        return ""
-    lista = body if isinstance(body, list) else (body.get("data") if isinstance(body, dict) else [])
-    if not isinstance(lista, list):
-        return ""
-    for item in lista:
-        if isinstance(item, dict) and _digitos(item.get("cnpj")) == cnpj:
-            return str(item.get("id") or "")
-    return ""
 
 
 def ler_tributacao_produto(cur, id_produto: int) -> dict:
@@ -853,30 +926,30 @@ def _baixar_danfe_xml(ambiente: str, ref: str, id_tenant: int, id_nfe: int) -> t
 
 
 def _aplicar_retorno(cur, id_nfe: int, body: dict, pdf_rel: str = "", xml_rel: str = "") -> None:
-    status = str(body.get("status") or "processando_autorizacao")
+    status = str(body.get("status") or "erro")
+    numero = int(body["numero"]) if str(body.get("numero") or "").isdigit() else None
+    serie = int(body["serie"]) if str(body.get("serie") or "").isdigit() else None
+    chave = (body.get("chave_nfe") or body.get("chave") or "")[:44] or None
+    mensagem = (body.get("mensagem_sefaz") or body.get("mensagem") or "")[:500] or None
+    protocolo = (body.get("protocolo") or "")[:30] or None
+    sets = [
+        "status = %s",
+        "numero = COALESCE(%s, numero)",
+        "serie = COALESCE(%s, serie)",
+        "chave = COALESCE(%s, chave)",
+        "mensagem = %s",
+        "xml_caminho = COALESCE(NULLIF(%s, ''), xml_caminho)",
+        "danfe_caminho = COALESCE(NULLIF(%s, ''), danfe_caminho)",
+        "atualizado_em = NOW()",
+    ]
+    valores = [status[:40], numero, serie, chave, mensagem, xml_rel, pdf_rel]
+    if protocolo and _tem_coluna(cur, "tbl_nfe", "protocolo"):
+        sets.insert(4, "protocolo = COALESCE(%s, protocolo)")
+        valores.insert(4, protocolo)
+    valores.append(int(id_nfe))
     cur.execute(
-        """
-        UPDATE tbl_nfe SET
-          status = %s,
-          numero = COALESCE(%s, numero),
-          serie = COALESCE(%s, serie),
-          chave = COALESCE(%s, chave),
-          mensagem = %s,
-          xml_caminho = COALESCE(NULLIF(%s, ''), xml_caminho),
-          danfe_caminho = COALESCE(NULLIF(%s, ''), danfe_caminho),
-          atualizado_em = NOW()
-        WHERE id = %s
-        """,
-        (
-            status[:40],
-            int(body["numero"]) if str(body.get("numero") or "").isdigit() else None,
-            int(body["serie"]) if str(body.get("serie") or "").isdigit() else None,
-            (body.get("chave_nfe") or body.get("chave") or "")[:44] or None,
-            (body.get("mensagem_sefaz") or body.get("mensagem") or "")[:500] or None,
-            xml_rel,
-            pdf_rel,
-            int(id_nfe),
-        ),
+        f"UPDATE tbl_nfe SET {', '.join(sets)} WHERE id = %s",
+        valores,
     )
 
 
@@ -890,10 +963,9 @@ def emitir(conn, id_tenant: int, dest: dict, itens: list[dict], *, frete: float 
     _validar_destinatario(dest)
     if not itens:
         raise ValueError("A nota precisa de ao menos um item.")
-    if not cfg.get("focus_empresa_id"):
-        sincronizar_empresa(cur, id_tenant)
-        conn.commit()
-        cfg = ler_config(cur, id_tenant)
+    sincronizar_empresa(cur, id_tenant)
+    conn.commit()
+    cfg = ler_config(cur, id_tenant)
     numero = int(cfg["proximo_numero"] or 1)
     cur.execute(
         """
@@ -932,12 +1004,17 @@ def emitir(conn, id_tenant: int, dest: dict, itens: list[dict], *, frete: float 
         raise ValueError(str(e)) from e
     if not isinstance(body, dict):
         body = {}
-    if status_http == 202 and body.get("status") in (None, "", "processando_autorizacao"):
+    status_nota = str(body.get("status") or "")
+    if status_http == 202 and status_nota in ("", "processando_autorizacao"):
         try:
             body = _consultar_remoto(cfg["ambiente"], ref) or body
         except FocusNfeError:
             body.setdefault("status", "processando_autorizacao")
-    status_nota = str(body.get("status") or ("autorizado" if status_http == 201 else "processando_autorizacao"))
+        status_nota = str(body.get("status") or "processando_autorizacao")
+    if status_http == 201 and status_nota == "autorizado":
+        pass
+    elif status_nota != "processando_autorizacao":
+        status_nota = status_nota or "erro_autorizacao"
     pdf_rel = xml_rel = ""
     if status_nota == "autorizado":
         pdf_rel, xml_rel = _baixar_danfe_xml(cfg["ambiente"], ref, id_tenant, id_nfe)
