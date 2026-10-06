@@ -3,7 +3,7 @@
 {% set nav_ativo = 'demandas' %}
 {% block topbar_title %}Central de Chamados{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('demandas.static', filename='style/Cdemandas.css') }}?v=2" />
+<link rel="stylesheet" href="{{ url_for('demandas.static', filename='style/Cdemandas.css') }}?v=3" />
 <script defer src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 {% endblock %}
 {% block content %}
@@ -79,5 +79,5 @@
 
   </div>
 </main>
-<script defer src="{{ url_for('demandas.static', filename='script/Sdemandas.js') }}?v=3"></script>
+<script defer src="{{ url_for('demandas.static', filename='script/Sdemandas.js') }}?v=4"></script>
 {% endblock %}

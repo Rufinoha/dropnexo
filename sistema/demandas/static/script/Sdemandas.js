@@ -175,6 +175,13 @@
       this.atualizarPaginacaoUI();
     },
 
+    badgeStatus(c) {
+      const cod = String(c.status || "").toLowerCase();
+      const conhecidos = ["aberto", "em_atendimento", "aguardando_cliente", "fechado", "cancelado"];
+      const cls = conhecidos.indexOf(cod) >= 0 ? cod : "outro";
+      return `<span class="Dem_Badge Dem_Badge--${cls}">${esc(c.status_label || c.status || "—")}</span>`;
+    },
+
     renderTabela() {
       const tbody = el("dem_tbody");
       if (!tbody) return;
@@ -200,7 +207,7 @@
           ${conta}
           <td title="${esc(titulo)}">${esc(titulo)}</td>
           <td>${esc(c.categoria_label || c.categoria || "—")}</td>
-          <td>${esc(c.status_label || c.status || "—")}</td>
+          <td class="Dem_Status">${this.badgeStatus(c)}</td>
           <td>${esc(c.prioridade_label || c.prioridade || "—")}</td>
           <td>${fmtData(c.data_abertura)}</td>
           <td>${fmtData(c.data_ultima_interacao || c.updated_at)}</td>
