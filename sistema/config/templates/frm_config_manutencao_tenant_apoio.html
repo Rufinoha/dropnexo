@@ -114,6 +114,12 @@
         <span class="Cl_SwitchSlider"></span>
         <span>Comissão ativa</span>
       </label>
+      <label class="Cl_Switch CfgMt_ComSwitch">
+        <input type="checkbox" id="com_chamados" />
+        <span class="Cl_SwitchSlider"></span>
+        <span>Acesso aos chamados de todas as contas</span>
+      </label>
+      <p class="CfgMt_MigrarHint">Somente o usuário dono desta conta vê e responde. A resposta aparece como Suporte DropNexo.</p>
       <div id="com_corpo">
         <div class="CfgApoio_Grid CfgApoio_Grid--3">
           <div class="Cl_FormCampo">
@@ -223,6 +229,6 @@
 
   <script src="{{ url_for('static', filename='script/global_utils.js') }}"></script>
   <script src="{{ url_for('config.static', filename='script/Sconfig_manutencao_tenant_apoio.js') }}?v=8"></script>
-  <script src="{{ url_for('config.static', filename='script/Sconfig_comissao_tenant.js') }}?v=3"></script>
+  <script src="{{ url_for('config.static', filename='script/Sconfig_comissao_tenant.js') }}?v=4"></script>
 </body>
 </html>

@@ -303,11 +303,49 @@ def _row_para_chamado(cols, row) -> dict:
         "data_ultima_interacao": _fmt_data_iso(d.get("ultima_interacao_em") or d.get("atualizado_em")),
         "ultima_interacao_preview": d.get("ultima_interacao_preview") or "",
         "id_usuario": d.get("id_usuario"),
+        "tenant_nome": d.get("tenant_nome") or "",
     }
 
 
+NOME_SUPORTE = "Suporte DropNexo"
+_NOME_CONTA = "COALESCE(NULLIF(TRIM(t.nome_fantasia), ''), NULLIF(TRIM(t.nome), ''), 'Conta')"
+
+
+def _operador_suporte(cur, id_usuario: int, id_tenant: int) -> bool:
+    """Dono de fornecedor/híbrido com o interruptor ligado vê os chamados de todas as contas."""
+    try:
+        from flask import has_request_context
+
+        if not has_request_context():
+            return False
+    except Exception:
+        return False
+    if (session.get("perfil_codigo") or "").strip().lower() != "dono":
+        return False
+    if (session.get("tenant_tipo_negocio") or "").strip().lower() not in ("fornecedor", "hibrido"):
+        return False
+    if int(session.get("id_tenant") or 0) != int(id_tenant):
+        return False
+    cur.execute(
+        """
+        SELECT 1
+        FROM tbl_usuario_tenant ut
+        JOIN tbl_perfil p ON p.id = ut.id_perfil
+        WHERE ut.id_usuario = %s AND ut.id_tenant = %s AND ut.ativo = TRUE
+          AND lower(p.codigo) = 'dono'
+        LIMIT 1
+        """,
+        (int(id_usuario), int(id_tenant)),
+    )
+    if not cur.fetchone():
+        return False
+    from sistema.financeiro.comissao import acesso_chamados_ativo
+
+    return acesso_chamados_ativo(cur, id_tenant)
+
+
 def _chamado_autorizado(conn, id_usuario: int, id_tenant: int, external_id: str) -> bool:
-    """Isolamento forte: chamado só é acessível se pertencer ao tenant da sessão."""
+    """Chamado do próprio tenant, ou de qualquer conta se o dono for operador de suporte."""
     cur = conn.cursor()
     cur.execute(
         """
@@ -322,7 +360,7 @@ def _chamado_autorizado(conn, id_usuario: int, id_tenant: int, external_id: str)
     if not row:
         return False
     if int(row[1]) != int(id_tenant):
-        return False
+        return _operador_suporte(cur, id_usuario, id_tenant)
     if int(row[0]) == int(id_usuario):
         return True
     return _usuario_ver_todos_do_tenant()
@@ -336,13 +374,16 @@ def listar_chamados_tenant(
     page: int = 1,
     per_page: int = 20,
 ) -> dict:
-    """Lista apenas chamados do tenant da sessão."""
+    """Lista os chamados do tenant da sessão. O operador de suporte vê todas as contas."""
     page = max(1, int(page or 1))
-    per_page = min(50, max(5, int(per_page or 20)))
     cur = conn.cursor()
+    operador = _operador_suporte(cur, id_usuario, id_tenant)
+    per_page = min(200 if operador else 50, max(5, int(per_page or 20)))
     ver_todos = _usuario_ver_todos_do_tenant()
 
-    if ver_todos:
+    if operador:
+        cur.execute("SELECT COUNT(*) FROM tbl_hubsupport_chamado")
+    elif ver_todos:
         cur.execute(
             "SELECT COUNT(*) FROM tbl_hubsupport_chamado WHERE id_tenant = %s",
             (int(id_tenant),),
@@ -358,20 +399,34 @@ def listar_chamados_tenant(
     total = int(cur.fetchone()[0] or 0)
     offset = (page - 1) * per_page
 
-    cols_sql = """
-        SELECT external_id, protocolo, titulo, categoria, prioridade, status,
-               ultima_interacao_preview, criado_em, ultima_interacao_em, atualizado_em, id_usuario
-        FROM tbl_hubsupport_chamado
-    """
-    order = " ORDER BY atualizado_em DESC NULLS LAST LIMIT %s OFFSET %s"
-
-    if ver_todos:
-        cur.execute(cols_sql + " WHERE id_tenant = %s" + order, (int(id_tenant), per_page, offset))
-    else:
+    if operador:
         cur.execute(
-            cols_sql + " WHERE id_tenant = %s AND id_usuario = %s" + order,
-            (int(id_tenant), int(id_usuario), per_page, offset),
+            f"""
+            SELECT c.external_id, c.protocolo, c.titulo, c.categoria, c.prioridade, c.status,
+                   c.ultima_interacao_preview, c.criado_em, c.ultima_interacao_em,
+                   c.atualizado_em, c.id_usuario, {_NOME_CONTA} AS tenant_nome
+            FROM tbl_hubsupport_chamado c
+            JOIN tbl_tenant t ON t.id = c.id_tenant
+            ORDER BY CASE WHEN c.status IN ('fechado', 'cancelado') THEN 1 ELSE 0 END,
+                     c.atualizado_em DESC NULLS LAST
+            LIMIT %s OFFSET %s
+            """,
+            (per_page, offset),
         )
+    else:
+        cols_sql = """
+            SELECT external_id, protocolo, titulo, categoria, prioridade, status,
+                   ultima_interacao_preview, criado_em, ultima_interacao_em, atualizado_em, id_usuario
+            FROM tbl_hubsupport_chamado
+        """
+        order = " ORDER BY atualizado_em DESC NULLS LAST LIMIT %s OFFSET %s"
+        if ver_todos:
+            cur.execute(cols_sql + " WHERE id_tenant = %s" + order, (int(id_tenant), per_page, offset))
+        else:
+            cur.execute(
+                cols_sql + " WHERE id_tenant = %s AND id_usuario = %s" + order,
+                (int(id_tenant), int(id_usuario), per_page, offset),
+            )
 
     cols = [c[0] for c in cur.description]
     chamados = [_row_para_chamado(cols, r) for r in cur.fetchall()]
@@ -381,6 +436,7 @@ def listar_chamados_tenant(
         "per_page": per_page,
         "total": total,
         "fonte": "local",
+        "operador": operador,
     }
 
 
@@ -637,14 +693,15 @@ def detalhar_chamado(conn, id_usuario: int, id_tenant: int, external_id: str) ->
 
     cur = conn.cursor()
     cur.execute(
-        """
-        SELECT protocolo, titulo, categoria, prioridade, status,
-               id_usuario, criado_em, ultima_interacao_em
-        FROM tbl_hubsupport_chamado
-        WHERE external_id = %s AND id_tenant = %s
+        f"""
+        SELECT c.protocolo, c.titulo, c.categoria, c.prioridade, c.status,
+               c.id_usuario, c.criado_em, c.ultima_interacao_em, {_NOME_CONTA}
+        FROM tbl_hubsupport_chamado c
+        LEFT JOIN tbl_tenant t ON t.id = c.id_tenant
+        WHERE c.external_id = %s
         LIMIT 1
         """,
-        (external_id, int(id_tenant)),
+        (external_id,),
     )
     row = cur.fetchone()
     if not row:
@@ -693,6 +750,8 @@ def detalhar_chamado(conn, id_usuario: int, id_tenant: int, external_id: str) ->
         "prioridade_label": PRIORIDADE_LABEL.get(prioridade, prioridade),
         "pode_responder": status not in STATUS_SEM_RESPOSTA,
         "solicitante_nome": solicitante_nome,
+        "tenant_nome": row[8] or "",
+        "operador": _operador_suporte(cur, id_usuario, id_tenant),
         "data_abertura": _fmt_data_iso(row[6]),
         "data_ultima_interacao": _fmt_data_iso(row[7]),
         "interacoes": thread,
@@ -738,7 +797,9 @@ def responder_chamado(
     garantir_provisionamento(conn, id_usuario, id_tenant)
     usuario = _carregar_usuario(conn, id_usuario)
     client = HubSupportClient(conn=conn)
-    nome_autor = (usuario.get("nome") or "").strip() or "Você"
+    operador = _operador_suporte(conn.cursor(), id_usuario, id_tenant)
+    nome_autor = NOME_SUPORTE if operador else ((usuario.get("nome") or "").strip() or "Você")
+    tipo_autor = "agente" if operador else "cliente"
 
     if corpo:
         try:
@@ -766,7 +827,7 @@ def responder_chamado(
         {
             "interacao_id": _extrair_hubsupport_id(resp if isinstance(resp, dict) else {})
             or str(uuid.uuid4()),
-            "tipo_autor": "cliente",
+            "tipo_autor": tipo_autor,
             "nome_autor": nome_autor,
             "corpo": corpo,
             "anexos": anexos_meta,
@@ -783,9 +844,9 @@ def responder_chamado(
             ultima_interacao_preview = %s,
             ultima_interacao_em = NOW(),
             atualizado_em = NOW()
-        WHERE external_id = %s AND id_tenant = %s
+        WHERE external_id = %s
         """,
-        (str(preview)[:240], external_id, int(id_tenant)),
+        (str(preview)[:240], external_id),
     )
     _log_api(conn, "responder_chamado", True, external_id, 200)
     return {"ok": True, "external_id": external_id, "anexos": anexos_meta}

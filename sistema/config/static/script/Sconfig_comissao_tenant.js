@@ -6,6 +6,7 @@
 
   const el = {
     ativo: document.getElementById("com_ativo"),
+    chamados: document.getElementById("com_chamados"),
     corpo: document.getElementById("com_corpo"),
     proprio: document.getElementById("com_proprio"),
     indicado: document.getElementById("com_indicado"),
@@ -90,6 +91,7 @@
 
   function preencher(j) {
     if (el.ativo) el.ativo.checked = !!j.ativo;
+    if (el.chamados) el.chamados.checked = !!j.acesso_chamados;
     if (el.proprio) el.proprio.value = j.percentual_proprio ?? 0;
     if (el.indicado) el.indicado.value = j.percentual_indicado ?? 0;
     if (el.base) el.base.value = j.base === "liquido" ? "liquido" : "faturamento";
@@ -121,6 +123,7 @@
     if (!id) return;
     const body = {
       ativo: !!el.ativo?.checked,
+      acesso_chamados: !!el.chamados?.checked,
       base: el.base?.value || "faturamento",
       percentual_proprio: Number(el.proprio?.value || 0),
       percentual_indicado: Number(el.indicado?.value || 0),

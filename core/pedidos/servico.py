@@ -1078,6 +1078,9 @@ def _parse_cliente_entrega(body: dict) -> dict:
         "entrega_cidade": (e.get("cidade") or body.get("entrega_cidade") or "").strip() or None,
         "entrega_uf": ((e.get("uf") or body.get("entrega_uf") or "").strip() or None),
         "observacoes": (body.get("observacoes") or "").strip() or None,
+        "indicador_ie": str(c.get("indicador_ie") or body.get("indicador_ie") or "9"),
+        "inscricao_estadual": (c.get("ie") or body.get("cliente_ie") or "").strip(),
+        "codigo_municipio": (e.get("codigo_municipio") or body.get("codigo_municipio") or "").strip(),
     }
 
 
@@ -1312,6 +1315,9 @@ def salvar_rascunho(
         pedidos_ids.append(id_pedido)
 
     num_grupo = _atualizar_numero_grupo(cur, id_grupo)
+    from sistema.fiscal.nfe_servico import gravar_pedido_fiscal
+
+    gravar_pedido_fiscal(cur, pedidos_ids, dados_cli)
     return {"id_grupo": id_grupo, "numero_grupo": num_grupo, "pedidos_ids": pedidos_ids}
 
 
@@ -3339,6 +3345,9 @@ def _montar_contexto_pedidos(
                 }
             )
 
+    from sistema.fiscal.nfe_servico import ler_pedido_fiscal
+
+    fiscal_ped = ler_pedido_fiscal(cur, int(ref["id"]))
     statuses = {p["status_vendedor"] for p in pedidos}
     editavel = statuses == {STATUS_RASCUNHO}
     frete_editavel = any(_frete_editavel_status(p["status_vendedor"]) for p in pedidos)
@@ -3360,6 +3369,8 @@ def _montar_contexto_pedidos(
             "documento": ref["cliente_documento"],
             "email": ref["cliente_email"],
             "telefone": ref["cliente_telefone"],
+            "indicador_ie": fiscal_ped["indicador_ie"],
+            "ie": fiscal_ped["inscricao_estadual"],
         },
         "entrega": {
             "cep": ref["entrega_cep"],
@@ -3369,6 +3380,7 @@ def _montar_contexto_pedidos(
             "bairro": ref["entrega_bairro"],
             "cidade": ref["entrega_cidade"],
             "uf": ref["entrega_uf"],
+            "codigo_municipio": fiscal_ped["codigo_municipio"],
         },
         "itens": itens,
         "pedidos": pedidos,

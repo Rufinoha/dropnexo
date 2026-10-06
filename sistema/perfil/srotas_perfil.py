@@ -384,7 +384,11 @@ def _carregar_tenant_empresa(cur, id_tenant: int) -> dict | None:
         (id_tenant,),
     )
     inscricoes = [{"uf": r[0], "inscricao_estadual": r[1]} for r in cur.fetchall()]
-    return _tenant_row_para_dict(row, inscricoes)
+    dados = _tenant_row_para_dict(row, inscricoes)
+    from sistema.fiscal.nfe_servico import codigo_municipio_tenant
+
+    dados["codigo_municipio"] = codigo_municipio_tenant(cur, id_tenant)
+    return dados
 
 
 def _garantir_cobranca_tenant(cur, id_tenant: int):
@@ -898,6 +902,9 @@ def api_minha_empresa_salvar():
                 id_tenant,
             ),
         )
+        from sistema.fiscal.nfe_servico import gravar_codigo_municipio
+
+        gravar_codigo_municipio(cur, id_tenant, dados.get("codigo_municipio") or "")
         cur.execute("DELETE FROM tbl_tenant_inscricao_st WHERE id_tenant = %s", (id_tenant,))
         for ins in inscricoes:
             if not isinstance(ins, dict):
@@ -980,6 +987,7 @@ def api_minha_empresa_cep(cep: str):
                 "bairro": data.get("bairro") or "",
                 "cidade": data.get("localidade") or "",
                 "uf": data.get("uf") or "",
+                "codigo_municipio": data.get("ibge") or "",
             },
         )
     except Exception as e:

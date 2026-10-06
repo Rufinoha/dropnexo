@@ -275,6 +275,22 @@
             </select>
           </div>
           <div class="Cl_FormCampo">
+            <label for="cfop">CFOP</label>
+            <input type="text" id="cfop" maxlength="4" placeholder="Vazio usa o padrão fiscal" />
+          </div>
+          <div class="Cl_FormCampo">
+            <label for="icms_situacao">ICMS</label>
+            <input type="text" id="icms_situacao" maxlength="4" placeholder="CSOSN ou CST" />
+          </div>
+          <div class="Cl_FormCampo">
+            <label for="pis_situacao">PIS</label>
+            <input type="text" id="pis_situacao" maxlength="2" />
+          </div>
+          <div class="Cl_FormCampo">
+            <label for="cofins_situacao">COFINS</label>
+            <input type="text" id="cofins_situacao" maxlength="2" />
+          </div>
+          <div class="Cl_FormCampo">
             <label for="volumes">Volumes</label>
             <input type="number" id="volumes" min="0" step="1" />
           </div>
@@ -353,6 +369,6 @@
   {% endif %}
   <script src="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.js"></script>
   <script src="{{ url_for('fn_catalogo.static', filename='script/Scatalogo_descricao_editor.js') }}?v=1"></script>
-  <script src="{{ url_for('fn_catalogo.static', filename='script/Scatalogo_apoio.js') }}?v=36"></script>
+  <script src="{{ url_for('fn_catalogo.static', filename='script/Scatalogo_apoio.js') }}?v=37"></script>
 </body>
 </html>

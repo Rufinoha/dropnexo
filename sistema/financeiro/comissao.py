@@ -102,10 +102,39 @@ def calcular_comissao_centavos(
     return max(0, int(com))
 
 
-def _config_row(cur, id_tenant: int) -> dict | None:
+def _tem_coluna_acesso_chamados(cur) -> bool:
     cur.execute(
         """
-        SELECT ativo, base, percentual_proprio, percentual_indicado, impostos
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'tbl_comissao_config'
+          AND column_name = 'acesso_chamados'
+        """
+    )
+    return cur.fetchone() is not None
+
+
+def acesso_chamados_ativo(cur, id_tenant: int) -> bool:
+    if not _tem_coluna_acesso_chamados(cur):
+        return False
+    cur.execute(
+        """
+        SELECT COALESCE(acesso_chamados, FALSE)
+        FROM tbl_comissao_config WHERE id_tenant = %s
+        """,
+        (int(id_tenant),),
+    )
+    row = cur.fetchone()
+    return bool(row and row[0])
+
+
+def _config_row(cur, id_tenant: int) -> dict | None:
+    tem = _tem_coluna_acesso_chamados(cur)
+    extra = ", COALESCE(acesso_chamados, FALSE)" if tem else ""
+    cur.execute(
+        f"""
+        SELECT ativo, base, percentual_proprio, percentual_indicado, impostos{extra}
         FROM tbl_comissao_config WHERE id_tenant = %s
         """,
         (int(id_tenant),),
@@ -119,6 +148,7 @@ def _config_row(cur, id_tenant: int) -> dict | None:
         "percentual_proprio": float(row[2] or 0),
         "percentual_indicado": float(row[3] or 0),
         "impostos": _impostos_limpos(row[4]),
+        "acesso_chamados": bool(row[5]) if tem else False,
     }
 
 
@@ -252,6 +282,7 @@ def dados_config_comissao(cur, id_tenant: int) -> dict:
         "percentual_proprio": 0.0,
         "percentual_indicado": 0.0,
         "impostos": [],
+        "acesso_chamados": False,
     }
     pai = pai_da_indicacao(cur, id_tenant)
     cur.execute(
@@ -300,21 +331,52 @@ def salvar_config_comissao(cur, id_tenant: int, body: dict) -> None:
         raise ValueError("A soma dos impostos não pode passar de 100%.")
     proprio = _pct(body.get("percentual_proprio"))
     indicado = _pct(body.get("percentual_indicado"))
-    cur.execute(
-        """
-        INSERT INTO tbl_comissao_config (
-          id_tenant, ativo, base, percentual_proprio, percentual_indicado, impostos, atualizado_em
-        ) VALUES (%s,%s,%s,%s,%s,%s::jsonb, NOW())
-        ON CONFLICT (id_tenant) DO UPDATE SET
-          ativo = EXCLUDED.ativo,
-          base = EXCLUDED.base,
-          percentual_proprio = EXCLUDED.percentual_proprio,
-          percentual_indicado = EXCLUDED.percentual_indicado,
-          impostos = EXCLUDED.impostos,
-          atualizado_em = NOW()
-        """,
-        (id_tenant, ativo and not pai, base, proprio, indicado, json.dumps(impostos, ensure_ascii=False)),
+    acesso = bool(body.get("acesso_chamados"))
+    tem_acesso = _tem_coluna_acesso_chamados(cur)
+    if acesso and not tem_acesso:
+        raise ValueError("A coluna de acesso aos chamados ainda não existe neste banco.")
+    valores = (
+        id_tenant,
+        ativo and not pai,
+        base,
+        proprio,
+        indicado,
+        json.dumps(impostos, ensure_ascii=False),
     )
+    if tem_acesso:
+        cur.execute(
+            """
+            INSERT INTO tbl_comissao_config (
+              id_tenant, ativo, base, percentual_proprio, percentual_indicado, impostos,
+              acesso_chamados, atualizado_em
+            ) VALUES (%s,%s,%s,%s,%s,%s::jsonb,%s, NOW())
+            ON CONFLICT (id_tenant) DO UPDATE SET
+              ativo = EXCLUDED.ativo,
+              base = EXCLUDED.base,
+              percentual_proprio = EXCLUDED.percentual_proprio,
+              percentual_indicado = EXCLUDED.percentual_indicado,
+              impostos = EXCLUDED.impostos,
+              acesso_chamados = EXCLUDED.acesso_chamados,
+              atualizado_em = NOW()
+            """,
+            (*valores, acesso),
+        )
+    else:
+        cur.execute(
+            """
+            INSERT INTO tbl_comissao_config (
+              id_tenant, ativo, base, percentual_proprio, percentual_indicado, impostos, atualizado_em
+            ) VALUES (%s,%s,%s,%s,%s,%s::jsonb, NOW())
+            ON CONFLICT (id_tenant) DO UPDATE SET
+              ativo = EXCLUDED.ativo,
+              base = EXCLUDED.base,
+              percentual_proprio = EXCLUDED.percentual_proprio,
+              percentual_indicado = EXCLUDED.percentual_indicado,
+              impostos = EXCLUDED.impostos,
+              atualizado_em = NOW()
+            """,
+            valores,
+        )
 
     ids_ind = []
     for x in body.get("indicados") or []:

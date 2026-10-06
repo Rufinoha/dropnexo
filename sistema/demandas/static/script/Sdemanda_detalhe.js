@@ -73,6 +73,7 @@
       document.getElementById("dem_meta").textContent = [
         j.categoria_label || j.categoria,
         j.prioridade_label || j.prioridade,
+        j.operador && j.tenant_nome ? "Conta " + j.tenant_nome : "",
         j.solicitante_nome ? "Aberto por " + j.solicitante_nome : "",
         j.data_abertura ? "em " + fmtData(j.data_abertura) : "",
       ]

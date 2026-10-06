@@ -174,7 +174,11 @@
       if (el("dem_campoCategoria")) el("dem_campoCategoria").value = j.categoria_label || j.categoria || "";
       if (el("dem_campoAbertura")) el("dem_campoAbertura").value = fmtData(j.data_abertura);
       if (el("dem_campoUltima")) el("dem_campoUltima").value = fmtData(j.data_ultima_interacao);
-      if (el("dem_campoSolicitante")) el("dem_campoSolicitante").value = j.solicitante_nome || "—";
+      if (el("dem_campoSolicitante")) {
+        const quem = j.solicitante_nome || "—";
+        el("dem_campoSolicitante").value =
+          j.operador && j.tenant_nome ? `${quem} · ${j.tenant_nome}` : quem;
+      }
       if (el("dem_apoio_status")) el("dem_apoio_status").textContent = j.status_label || j.status || "—";
 
       const nav = el("dem_navStatus");

@@ -967,6 +967,7 @@ _ICONES_SVG = {
     "store": '<path d="M3 9l1-4h16l1 4"/><path d="M3 9v11a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V9"/><path d="M3 9h18"/><path d="M10 13h4v8h-4z"/>',
     "plug": '<circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2"/>',
     "settings": '<circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2"/>',
+    "file": '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/>',
 }
 
 # Labels só para fallback de emergência (quando a query da sidebar falha).
@@ -1176,6 +1177,8 @@ def _menu_sidebar_fallback(mod_ativo: str = "vendedor") -> list[dict]:
         {"nome": "Fornecedores", "url": url_for("vd_fornecedores.pagina"), "icone_svg": _ICONES_SVG["users"], "nav_codigo": "fornecedores"},
         {"nome": "Meus produtos", "url": url_for("vd_meus_produtos.pagina"), "icone_svg": _ICONES_SVG["shopping-bag"], "nav_codigo": "produtos"},
         {"nome": "Loja Virtual", "url": url_for("vd_loja_virtual.pagina"), "icone_svg": _ICONES_SVG["store"], "nav_codigo": "vd_loja_virtual"},
+        {"nome": "Nota Fiscal", "url": url_for("vd_notas.notas_pagina"), "icone_svg": _ICONES_SVG["file"], "nav_codigo": "vd_notas"},
+        {"nome": "Parâmetros", "url": url_for("vd_parametros.parametros_pagina"), "icone_svg": _ICONES_SVG["settings"], "nav_codigo": "vd_parametros"},
     ]
 
 

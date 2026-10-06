@@ -508,6 +508,10 @@
     set("pd_cliDoc", c.documento);
     set("pd_cliEmail", c.email);
     set("pd_cliTel", c.telefone);
+    const ind = document.getElementById("pd_cliIndIe");
+    if (ind) ind.value = c.indicador_ie || "9";
+    set("pd_cliIe", c.ie);
+    set("pd_ibge", e.codigo_municipio);
     set("pd_cep", e.cep);
     set("pd_logradouro", e.logradouro);
     set("pd_numero", e.numero);
@@ -2615,6 +2619,7 @@
       set("pd_bairro", j.bairro);
       set("pd_cidade", j.localidade);
       set("pd_uf", j.uf);
+      set("pd_ibge", j.ibge);
       if (j.complemento) set("pd_compl", j.complemento);
       limparFreteLocal();
       atualizarNavResumos();
@@ -2639,6 +2644,8 @@
         documento: document.getElementById("pd_cliDoc")?.value,
         email: document.getElementById("pd_cliEmail")?.value,
         telefone: document.getElementById("pd_cliTel")?.value,
+        indicador_ie: document.getElementById("pd_cliIndIe")?.value,
+        ie: document.getElementById("pd_cliIe")?.value,
       },
       entrega: {
         cep: document.getElementById("pd_cep")?.value,
@@ -2648,6 +2655,7 @@
         bairro: document.getElementById("pd_bairro")?.value,
         cidade: document.getElementById("pd_cidade")?.value,
         uf: document.getElementById("pd_uf")?.value,
+        codigo_municipio: document.getElementById("pd_ibge")?.value,
       },
       itens: carrinho.map((i) => ({ id_variante: i.id_variante, quantidade: i.quantidade })),
     };
@@ -2891,6 +2899,31 @@
 
   document.getElementById("pd_btnNovo")?.addEventListener("click", abrirModal);
   document.getElementById("pd_btnFechar")?.addEventListener("click", fecharModal);
+  document.getElementById("pd_btnEmitirNfe")?.addEventListener("click", async () => {
+    const ped = (pedidosGrupo || []).find((p) => p.id);
+    if (!ped?.id) {
+      if (window.Swal) Swal.fire("Nota", "Salve o pedido antes de emitir a nota.", "warning");
+      return;
+    }
+    if (window.Swal) Swal.fire({ title: "Emitindo…", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    try {
+      if (editavelCampos) await salvar(false);
+      const r = await fetch("/vendedor/notas/emitir", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id_pedido: ped.id }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.success) throw new Error(j.message || "Falha ao emitir.");
+      const ok = j.nota?.status === "autorizado";
+      if (window.Swal) {
+        Swal.fire("Nota", ok ? "Nota autorizada. O DANFE foi anexado ao pedido." : "Nota enviada. Acompanhe em Nota Fiscal.", "success");
+      }
+    } catch (e) {
+      if (window.Swal) Swal.fire("Nota", e.message || "Falha ao emitir.", "error");
+    }
+  });
   elBtnCancelar?.addEventListener("click", () => {
     cancelarPedidos(
       pedidosGrupo.filter((p) => p.id && (p.origem || "manual") === "manual" && stV(p) !== "cancelado")

@@ -203,6 +203,15 @@
               <div class="filter-group"><label for="pd_cliDoc">CPF/CNPJ</label><input id="pd_cliDoc" type="text" /></div>
               <div class="filter-group"><label for="pd_cliEmail">E-mail</label><input id="pd_cliEmail" type="email" /></div>
               <div class="filter-group"><label for="pd_cliTel">Telefone</label><input id="pd_cliTel" type="text" /></div>
+              <div class="filter-group">
+                <label for="pd_cliIndIe">Inscrição estadual</label>
+                <select id="pd_cliIndIe">
+                  <option value="9">Não contribuinte</option>
+                  <option value="2">Isento</option>
+                  <option value="1">Contribuinte</option>
+                </select>
+              </div>
+              <div class="filter-group"><label for="pd_cliIe">IE do cliente</label><input id="pd_cliIe" type="text" /></div>
             </div>
           </div>
         </section>
@@ -230,6 +239,7 @@
               <div class="filter-group"><label for="pd_bairro">Bairro</label><input id="pd_bairro" type="text" /></div>
               <div class="filter-group"><label for="pd_cidade">Cidade</label><input id="pd_cidade" type="text" /></div>
               <div class="filter-group"><label for="pd_uf">UF</label><input id="pd_uf" type="text" maxlength="2" /></div>
+              <input type="hidden" id="pd_ibge" />
             </div>
           </div>
         </section>
@@ -248,6 +258,7 @@
               <p class="Pd_Hint">Salve o rascunho e informe o endereço para definir o envio.</p>
             </div>
             <p class="Pd_Hint Pd_FreteNota">Para expedir o fornecedor precisa de <strong>etiqueta</strong> (PDF) + <strong>NF ou declaração</strong> (PDF ou XML). O valor do frete não entra no pagamento ao fornecedor.</p>
+            <button type="button" class="Cl_botaoprimario" id="pd_btnEmitirNfe">Emitir NFe</button>
           </div>
         </section>
 
@@ -302,6 +313,6 @@
 {% endblock %}
 {% block page_js %}
 <script defer src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
-<script defer src="{{ url_for('vd_pedidos.static', filename='script/Svd_pedidos.js') }}?v=55"></script>
+<script defer src="{{ url_for('vd_pedidos.static', filename='script/Svd_pedidos.js') }}?v=56"></script>
 <script id="pd_cfg" type="application/json">{{ {"mp_icone": url_for("mercadopago.static", filename="imge/icone_mercadopago.png")}|tojson }}</script>
 {% endblock %}

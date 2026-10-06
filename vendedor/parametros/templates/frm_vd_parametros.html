@@ -1,0 +1,81 @@
+{% extends "frm_base.html" %}
+{% set nav_ativo = 'vd_parametros' %}
+{% block title %}Parâmetros — {{ MARCA_NOME }}{% endblock %}
+{% block topbar_title %}Parâmetros{% endblock %}
+{% block content %}
+<div class="Cl_ContainerApoio cl-page-principal">
+  <div class="cl-page-title">
+    <h2>Parâmetros</h2>
+    <p class="cl-page-desc">Certificado e regras usadas na emissão da nota fiscal de venda.</p>
+  </div>
+
+  <section class="filter-panel">
+    <h3>Fiscal</h3>
+    <p class="cl-page-desc" id="nf_par_status"></p>
+    <form id="nf_par_form">
+      <div class="filter-panel-fields">
+        <div class="filter-group">
+          <label for="nf_ambiente">Ambiente</label>
+          <select id="nf_ambiente" name="ambiente" class="Cl_Input">
+            <option value="homologacao">Homologação</option>
+            <option value="producao">Produção</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label for="nf_serie">Série</label>
+          <input id="nf_serie" name="serie" type="number" min="1" class="Cl_Input" value="1" />
+        </div>
+        <div class="filter-group">
+          <label for="nf_numero">Próximo número</label>
+          <input id="nf_numero" name="proximo_numero" type="number" min="1" class="Cl_Input" value="1" />
+        </div>
+        <div class="filter-group">
+          <label for="nf_natureza">Natureza da operação</label>
+          <input id="nf_natureza" name="natureza_operacao" class="Cl_Input" maxlength="80" value="Venda de mercadoria" />
+        </div>
+        <div class="filter-group">
+          <label for="nf_cfop_int">CFOP venda interna</label>
+          <input id="nf_cfop_int" name="cfop_interno" class="Cl_Input" maxlength="4" value="5102" />
+        </div>
+        <div class="filter-group">
+          <label for="nf_cfop_ie">CFOP outro estado, contribuinte</label>
+          <input id="nf_cfop_ie" name="cfop_interestadual" class="Cl_Input" maxlength="4" value="6102" />
+        </div>
+        <div class="filter-group">
+          <label for="nf_cfop_cf">CFOP outro estado, consumidor</label>
+          <input id="nf_cfop_cf" name="cfop_consumidor_interestadual" class="Cl_Input" maxlength="4" value="6108" />
+        </div>
+        <div class="filter-group">
+          <label for="nf_icms">ICMS (CSOSN ou CST)</label>
+          <input id="nf_icms" name="icms_situacao" class="Cl_Input" maxlength="4" value="102" />
+        </div>
+        <div class="filter-group">
+          <label for="nf_aliq">Alíquota ICMS</label>
+          <input id="nf_aliq" name="icms_aliquota" type="number" min="0" step="0.01" class="Cl_Input" />
+        </div>
+        <div class="filter-group">
+          <label for="nf_pis">PIS</label>
+          <input id="nf_pis" name="pis_situacao" class="Cl_Input" maxlength="2" value="49" />
+        </div>
+        <div class="filter-group">
+          <label for="nf_cofins">COFINS</label>
+          <input id="nf_cofins" name="cofins_situacao" class="Cl_Input" maxlength="2" value="49" />
+        </div>
+        <div class="filter-group">
+          <label for="nf_cert">Certificado A1 (.pfx)</label>
+          <input id="nf_cert" name="certificado" type="file" accept=".pfx,.p12" class="Cl_Input" />
+        </div>
+        <div class="filter-group">
+          <label for="nf_senha">Senha do certificado</label>
+          <input id="nf_senha" name="senha_certificado" type="password" class="Cl_Input" autocomplete="new-password" />
+        </div>
+      </div>
+      <p class="cl-page-desc">O certificado fica nesta aba. Os dados da empresa continuam em Meu perfil, Minha empresa.</p>
+      <button type="submit" class="Cl_botaoprimario">Salvar</button>
+    </form>
+  </section>
+</div>
+{% endblock %}
+{% block page_js %}
+<script src="{{ url_for('vd_parametros.static', filename='script/Svd_parametros.js') }}?v=1"></script>
+{% endblock %}

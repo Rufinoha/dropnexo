@@ -1607,6 +1607,10 @@ def catalogos_apoio():
                 conn.commit()
             except Exception:
                 pass
+        from sistema.fiscal.nfe_servico import ler_tributacao_produto
+
+        if _id:
+            dados.update(ler_tributacao_produto(cur, int(_id)))
         return jsonify(success=True, dados=dados)
     finally:
         conn.close()
@@ -1935,6 +1939,9 @@ def catalogos_salvar():
             sincronizar_total_variante(cur, vid)
             sync_pai_de_variante_padrao(cur, prod_id)
         aplicar_valor_drop_produto_e_variantes(cur, id_tenant, prod_id, publicar=False)
+        from sistema.fiscal.nfe_servico import gravar_tributacao_produto
+
+        gravar_tributacao_produto(cur, int(prod_id), body)
         conn.commit()
         ml_aviso = None
         try:

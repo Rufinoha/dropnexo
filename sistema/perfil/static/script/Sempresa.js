@@ -197,6 +197,7 @@
     el("emp-cep").value = d.cep || "";
     el("emp-uf").value = d.uf || "";
     el("emp-cidade").value = d.cidade || "";
+    if (el("emp-ibge")) el("emp-ibge").value = d.codigo_municipio || "";
     el("emp-bairro").value = d.bairro || "";
     el("emp-logradouro").value = d.logradouro || "";
     el("emp-numero").value = d.numero || "";
@@ -278,6 +279,7 @@
       if (e.bairro) el("emp-bairro").value = e.bairro;
       if (e.cidade) el("emp-cidade").value = e.cidade;
       if (e.uf) el("emp-uf").value = e.uf;
+      if (el("emp-ibge")) el("emp-ibge").value = e.codigo_municipio || "";
     } catch (err) {
       console.error(err);
     }
@@ -317,6 +319,7 @@
       cep: soDigitos(el("emp-cep").value),
       uf: el("emp-uf").value.trim().toUpperCase(),
       cidade: el("emp-cidade").value.trim(),
+      codigo_municipio: el("emp-ibge")?.value || "",
       bairro: el("emp-bairro").value.trim(),
       logradouro: el("emp-logradouro").value.trim(),
       numero: el("emp-numero").value.trim(),

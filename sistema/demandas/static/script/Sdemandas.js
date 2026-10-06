@@ -37,6 +37,11 @@
     paginaAtual: 1,
     porPagina: 20,
     totalPaginas: 1,
+    operador: false,
+
+    colspan() {
+      return this.operador ? 9 : 8;
+    },
 
     init() {
       this.bind();
@@ -125,7 +130,7 @@
     async carregar() {
       const tbody = el("dem_tbody");
       if (tbody) {
-        tbody.innerHTML = `<tr class="Cl_Carregando"><td colspan="8">Carregando chamados…</td></tr>`;
+        tbody.innerHTML = `<tr class="Cl_Carregando"><td colspan="${this.colspan()}">Carregando chamados…</td></tr>`;
       }
       try {
         const r = await fetch("/api/demandas/listar?page=1&per_page=200", {
@@ -134,12 +139,19 @@
         });
         const j = await r.json().catch(() => ({}));
         if (!r.ok || !j.success) throw new Error(j.message || `Erro ao carregar (${r.status}).`);
+        this.operador = !!j.operador;
+        const col = el("dem_colConta");
+        if (col) col.hidden = !this.operador;
+        const sub = el("dem_sub");
+        if (sub && this.operador) {
+          sub.textContent = "Chamados de todas as contas. A resposta sai como Suporte DropNexo.";
+        }
         this.cache = Array.isArray(j.chamados) ? j.chamados : [];
         this.paginaAtual = 1;
         this.aplicarFiltroPaginacao();
       } catch (e) {
         if (tbody) {
-          tbody.innerHTML = `<tr><td colspan="8">${esc(e.message || "Erro ao carregar.")}</td></tr>`;
+          tbody.innerHTML = `<tr><td colspan="${this.colspan()}">${esc(e.message || "Erro ao carregar.")}</td></tr>`;
         }
       }
     },
@@ -148,7 +160,13 @@
       const fAss = (el("dem_filtroAssunto")?.value || "").trim().toLowerCase();
       const fSt = (el("dem_filtroStatus")?.value || "").trim().toLowerCase();
       let lista = this.cache.slice();
-      if (fAss) lista = lista.filter((c) => String(c.titulo || "").toLowerCase().includes(fAss));
+      if (fAss) {
+        lista = lista.filter((c) => {
+          const titulo = String(c.titulo || "").toLowerCase();
+          const conta = String(c.tenant_nome || "").toLowerCase();
+          return titulo.includes(fAss) || conta.includes(fAss);
+        });
+      }
       if (fSt) lista = lista.filter((c) => String(c.status || "").toLowerCase() === fSt);
       this.filtrado = lista;
       this.totalPaginas = lista.length ? Math.ceil(lista.length / this.porPagina) : 1;
@@ -163,7 +181,11 @@
       tbody.innerHTML = "";
       if (!this.filtrado.length) {
         tbody.innerHTML =
-          `<tr><td colspan="8">Você ainda não abriu chamados. Clique em «+ Novo chamado».</td></tr>`;
+          `<tr><td colspan="${this.colspan()}">${
+            this.operador
+              ? "Nenhum chamado."
+              : "Você ainda não abriu chamados. Clique em «+ Novo chamado»."
+          }</td></tr>`;
         return;
       }
       const ini = (this.paginaAtual - 1) * this.porPagina;
@@ -172,8 +194,10 @@
         const uuid = c.uuid || "";
         const titulo = c.titulo || "Sem título";
         const tr = document.createElement("tr");
+        const conta = this.operador ? `<td>${esc(c.tenant_nome || "—")}</td>` : "";
         tr.innerHTML = `
           <td>${esc(c.protocolo || "—")}</td>
+          ${conta}
           <td title="${esc(titulo)}">${esc(titulo)}</td>
           <td>${esc(c.categoria_label || c.categoria || "—")}</td>
           <td>${esc(c.status_label || c.status || "—")}</td>

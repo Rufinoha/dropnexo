@@ -11,7 +11,7 @@
   <div class="Cl_ConfigContainer">
 
     <h2>Central de Chamados</h2>
-    <p class="dem-subtitulo">
+    <p class="dem-subtitulo" id="dem_sub">
       Abra chamados de dúvida, sugestão ou problema. Acompanhe as respostas da equipe de suporte.
     </p>
 
@@ -48,6 +48,7 @@
         <thead>
           <tr>
             <th>Protocolo</th>
+            <th id="dem_colConta" hidden>Conta</th>
             <th>Assunto</th>
             <th>Tipo</th>
             <th>Status</th>
@@ -78,5 +79,5 @@
 
   </div>
 </main>
-<script defer src="{{ url_for('demandas.static', filename='script/Sdemandas.js') }}?v=2"></script>
+<script defer src="{{ url_for('demandas.static', filename='script/Sdemandas.js') }}?v=3"></script>
 {% endblock %}

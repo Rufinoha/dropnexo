@@ -38,6 +38,10 @@
     ncm: document.getElementById("ncm"),
     cest: document.getElementById("cest"),
     origem_fiscal: document.getElementById("origem_fiscal"),
+    cfop: document.getElementById("cfop"),
+    icms_situacao: document.getElementById("icms_situacao"),
+    pis_situacao: document.getElementById("pis_situacao"),
+    cofins_situacao: document.getElementById("cofins_situacao"),
     volumes: document.getElementById("volumes"),
     producao: document.getElementById("producao"),
     frete_gratis: document.getElementById("frete_gratis"),
@@ -1371,6 +1375,10 @@
       const o = String(d.origem_fiscal ?? "").trim();
       el.origem_fiscal.value = /^[0-8]$/.test(o) ? o : "";
     }
+    if (el.cfop) el.cfop.value = d.cfop || "";
+    if (el.icms_situacao) el.icms_situacao.value = d.icms_situacao || "";
+    if (el.pis_situacao) el.pis_situacao.value = d.pis_situacao || "";
+    if (el.cofins_situacao) el.cofins_situacao.value = d.cofins_situacao || "";
     el.volumes.value = d.volumes ?? "";
     el.producao.value = d.producao || "";
     if (el.frete_gratis) el.frete_gratis.checked = !!d.frete_gratis;
@@ -1441,6 +1449,10 @@
           ncm: (el.ncm?.value || "").trim(),
           cest: (el.cest?.value || "").trim() || null,
           origem_fiscal: (el.origem_fiscal?.value || "").trim() || null,
+          cfop: (el.cfop?.value || "").trim(),
+          icms_situacao: (el.icms_situacao?.value || "").trim(),
+          pis_situacao: (el.pis_situacao?.value || "").trim(),
+          cofins_situacao: (el.cofins_situacao?.value || "").trim(),
           volumes: el.volumes?.value || null,
           producao: (el.producao?.value || "").trim() || null,
           frete_gratis: !!el.frete_gratis?.checked,
@@ -1514,6 +1526,10 @@
       ncm: (el.ncm?.value || "").trim(),
       cest: (el.cest?.value || "").trim() || null,
       origem_fiscal: (el.origem_fiscal?.value || "").trim() || null,
+      cfop: (el.cfop?.value || "").trim(),
+      icms_situacao: (el.icms_situacao?.value || "").trim(),
+      pis_situacao: (el.pis_situacao?.value || "").trim(),
+      cofins_situacao: (el.cofins_situacao?.value || "").trim(),
       volumes: el.volumes?.value || null,
       producao: (el.producao?.value || "").trim() || null,
       frete_gratis: !!el.frete_gratis?.checked,
