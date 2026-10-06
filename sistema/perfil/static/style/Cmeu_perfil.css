@@ -468,8 +468,8 @@
 
 .mp-brand-layout {
   display: grid;
-  grid-template-columns: 200px 1fr;
-  gap: 1.25rem;
+  grid-template-columns: 280px 1fr;
+  gap: 1.5rem;
   align-items: start;
 }
 
@@ -494,11 +494,14 @@
 }
 
 .mp-logo-frame {
-  width: 168px;
-  height: 72px;
+  width: 100%;
+  height: 168px;
+  padding: 16px;
   border: 2px dashed #cbd5e1;
-  border-radius: 10px;
-  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  border-radius: 14px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.65), rgba(255, 255, 255, 0.65)),
+    repeating-conic-gradient(#f1f5f9 0% 25%, #fff 0% 50%) 0 0 / 16px 16px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -509,8 +512,8 @@
 .mp-logo-frame:hover { border-color: #94a3b8; }
 
 .mp-logo-img {
-  max-width: 152px;
-  max-height: 64px;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
 }
 

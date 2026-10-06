@@ -130,11 +130,11 @@
     const row = document.createElement("div");
     row.className = "mp-st-row";
     row.innerHTML =
-      '<div class="filter-group"><label>UF</label><input type="text" class="emp-st-uf mp-input-uf" maxlength="2" value="' +
-      (uf || "") +
+      '<div class="filter-group"><label>Estado do ST</label><input type="text" class="emp-st-uf mp-input-uf" maxlength="2" placeholder="Ex.: PR" value="' +
+      esc(uf) +
       '" /></div>' +
-      '<div class="filter-group"><label>Inscrição estadual</label><input type="text" class="emp-st-ie" maxlength="20" value="' +
-      (ie || "") +
+      '<div class="filter-group"><label>Inscrição de ST</label><input type="text" class="emp-st-ie" maxlength="20" placeholder="Número do outro estado, não a IE da sede" value="' +
+      esc(ie) +
       '" /></div>' +
       '<button type="button" class="mp-st-del" title="Remover" aria-label="Remover">✕</button>';
     row.querySelector(".mp-st-del").addEventListener("click", function () {

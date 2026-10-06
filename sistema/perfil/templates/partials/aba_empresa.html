@@ -45,7 +45,7 @@
               Alterar imagem
             </label>
             <input type="file" id="emp-logo-input" accept="image/png,image/jpeg,image/webp" hidden />
-            <p class="mp-logo-hint">PNG, JPG ou WEBP · até 2 MB<br>Ideal: 120×56 px</p>
+            <p class="mp-logo-hint">PNG, JPG ou WEBP · até 2 MB<br>A prévia mostra o logotipo no tamanho real da tela.</p>
           </div>
           <div class="mp-brand-fields">
             <div class="mp-g12">
@@ -253,7 +253,10 @@
 
       <section class="Emp_Pane" data-emp-pane="st" hidden>
         <h3 class="mp-sec-title">Inscrições de substituto tributário</h3>
-        <p class="hint Emp_Lead">Use quando a empresa tem inscrição de ST em outro estado. A IE da sede fica em Dados fiscais.</p>
+        <p class="hint Emp_Lead">A IE da sede fica em Dados fiscais. Não repita esse número aqui.</p>
+        <div class="mp-aviso">
+          Exemplo: a empresa é de São Paulo e recolhe ICMS-ST no Paraná. Nesta linha, o estado é <strong>PR</strong> e o número é a inscrição que a Receita do Paraná entregou.
+        </div>
         <div id="emp-st-lista" class="mp-st-lista"></div>
         <button type="button" class="mp-btn mp-btn--ghost mp-btn--sm" id="emp-st-add">+ Adicionar inscrição</button>
       </section>
