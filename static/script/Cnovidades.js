@@ -62,6 +62,19 @@
     EL.btnFechar?.addEventListener("click", fechar);
     EL.overlay?.addEventListener("click", fechar);
     EL.btnLidas?.addEventListener("click", marcarLidas);
+    EL.lista?.addEventListener("click", abrirLink);
+    EL.lista?.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") abrirLink(ev);
+    });
+  }
+
+  function abrirLink(ev) {
+    const card = ev.target.closest("[data-link]");
+    if (!card) return;
+    const link = card.getAttribute("data-link") || "";
+    if (!link) return;
+    if (/^https?:\/\//i.test(link)) window.open(link, "_blank", "noopener");
+    else window.location.href = link;
   }
 
   function abrir() {
@@ -127,13 +140,16 @@
     EL.lista.innerHTML = dados
       .map((n) => {
         const ini = (n.modulo || "DN").substring(0, 2).toUpperCase();
-        const cls = n.lida ? "nv-card" : "nv-card nv-nao-lida";
+        const link = n.link ? String(n.link) : "";
+        const cls = `nv-card${n.lida ? "" : " nv-nao-lida"}${link ? " nv-card--link" : ""}`;
+        const abrir = link ? `<div class="nv-card-link">Abrir</div>` : "";
         return `
-        <div class="${cls}">
+        <div class="${cls}"${link ? ` data-link="${esc(link)}" role="link" tabindex="0"` : ""}>
           <div class="nv-card-icone">${ini}</div>
           <div class="nv-card-corpo">
             <div class="nv-card-modulo">${esc(n.modulo)}</div>
             <div class="nv-card-desc">${esc(n.descricao)}</div>
+            ${abrir}
             <div class="nv-card-data">${fmtData(n.emissao)}</div>
           </div>
         </div>`;
@@ -167,9 +183,10 @@
   }
 
   function esc(s) {
-    const d = document.createElement("div");
-    d.textContent = s || "";
-    return d.innerHTML;
+    return String(s ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/"/g, "&quot;");
   }
 
   if (document.readyState === "loading") {

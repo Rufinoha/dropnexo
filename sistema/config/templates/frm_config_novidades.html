@@ -11,7 +11,7 @@
     <h2>Novidades</h2>
     <a class="Cl_BtnLink" href="{{ url_for('config.configuracoes') }}">Voltar às Configurações</a>
   </div>
-  <p class="Cl_ConfigSub">Cards exibidos na lateral do sistema para os usuários.</p>
+  <p class="Cl_ConfigSub">Avisos do sistema no sino. Escolha quem vê e, se quiser, o link da página.</p>
 
   <div class="Cl_ConfigActions">
     <button type="button" class="Cl_BtnIncluir" id="ob_btnIncluir">Nova novidade</button>
@@ -24,6 +24,8 @@
           <th>ID</th>
           <th>Título</th>
           <th>Resumo</th>
+          <th>Quem vê</th>
+          <th>Link</th>
           <th>Ordem</th>
           <th>Ativo</th>
           <th>Publicado</th>
@@ -31,12 +33,12 @@
         </tr>
       </thead>
       <tbody id="ob_listaNovidades">
-        <tr><td colspan="7">Carregando…</td></tr>
+        <tr><td colspan="9">Carregando…</td></tr>
       </tbody>
     </table>
   </div>
 </div>
 {% endblock %}
 {% block page_js %}
-<script src="{{ url_for('config.static', filename='script/Sconfig_novidades.js') }}"></script>
+<script src="{{ url_for('config.static', filename='script/Sconfig_novidades.js') }}?v=2"></script>
 {% endblock %}

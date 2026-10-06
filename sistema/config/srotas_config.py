@@ -208,6 +208,53 @@ def config_usuarios_reenviar_convite():
 
 # ─── Novidades (painel lateral — API pública autenticada) ─────────────
 
+_PUBLICOS_NOVIDADE = ("ambos", "vendedor", "fornecedor")
+
+
+def _publico_novidade(raw) -> str:
+    p = (raw or "ambos").strip().lower()
+    return p if p in _PUBLICOS_NOVIDADE else "ambos"
+
+
+def _link_novidade(raw) -> str:
+    s = (raw or "").strip()
+    if not s:
+        return ""
+    if len(s) > 400:
+        raise ValueError("O link passou de 400 caracteres.")
+    baixo = s.lower()
+    if baixo.startswith(("javascript:", "data:")):
+        raise ValueError("Link inválido.")
+    if s.startswith("/") and not s.startswith("//"):
+        return s
+    if baixo.startswith(("https://", "http://")):
+        return s
+    raise ValueError("O link precisa começar com / ou com http.")
+
+
+def _novidade_tem_publico(cur) -> bool:
+    cur.execute(
+        """
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_name = 'tbl_novidade'
+          AND column_name IN ('publico', 'link')
+          AND table_schema IN (current_schema(), 'public')
+        """
+    )
+    cols = {r[0] for r in cur.fetchall()}
+    return "publico" in cols and "link" in cols
+
+
+def _filtro_publico_novidade() -> tuple[str, tuple]:
+    tipo = (session.get("tenant_tipo_negocio") or "").strip().lower()
+    if tipo == "hibrido":
+        return "", ()
+    if tipo in ("vendedor", "fornecedor"):
+        return "AND publico IN ('ambos', %s)", (tipo,)
+    return "AND publico = 'ambos'", ()
+
+
 @config_bp.get("/api/novidades")
 @login_obrigatorio()
 def api_novidades_listar():
@@ -224,27 +271,51 @@ def api_novidades_listar():
             )
             ultima_lida = int((cur.fetchone() or [0])[0] or 0)
         except Exception:
+            conn.rollback()
             ultima_lida = 0
 
-        cur.execute(
-            """
-            SELECT id, titulo, resumo, publicado_em
-            FROM tbl_novidade
-            WHERE ativo = TRUE
-            ORDER BY ordem, publicado_em DESC, id DESC
-            LIMIT 30
-            """
-        )
+        extra = ""
+        params: tuple = ()
+        if _novidade_tem_publico(cur):
+            extra, params = _filtro_publico_novidade()
+            cur.execute(
+                f"""
+                SELECT id, titulo, resumo, publicado_em, COALESCE(link, '')
+                FROM tbl_novidade
+                WHERE ativo = TRUE
+                  {extra}
+                ORDER BY ordem, publicado_em DESC, id DESC
+                LIMIT 30
+                """,
+                params,
+            )
+            linhas = cur.fetchall()
+            com_link = True
+        else:
+            cur.execute(
+                """
+                SELECT id, titulo, resumo, publicado_em
+                FROM tbl_novidade
+                WHERE ativo = TRUE
+                ORDER BY ordem, publicado_em DESC, id DESC
+                LIMIT 30
+                """
+            )
+            linhas = cur.fetchall()
+            com_link = False
         novidades = []
-        for r in cur.fetchall():
-            emissao = r[3].isoformat() if r[3] else None
+        for r in linhas:
+            try:
+                link = _link_novidade(r[4]) if com_link else ""
+            except ValueError:
+                link = ""
             novidades.append(
                 {
                     "id": r[0],
-                    "emissao": emissao,
+                    "emissao": r[3].isoformat() if r[3] else None,
                     "modulo": r[1],
                     "descricao": (r[2] or r[1] or "").strip(),
-                    "link": None,
+                    "link": link or None,
                     "lida": r[0] <= ultima_lida,
                 }
             )
@@ -370,85 +441,107 @@ def config_perfil_menus_salvar(id_perfil: int):
 
 @config_bp.get("/configuracoes/novidades")
 @login_obrigatorio()
-@exigir_permissao(codigo="configuracoes.ver")
 def config_novidades():
+    if not session.get("eh_desenvolvedor"):
+        return redirect(url_for("dashboard.index"))
     return render_template("frm_config_novidades.html", nav_ativo="config")
 
 
 @config_bp.get("/configuracoes/novidades/dados")
 @login_obrigatorio()
-@exigir_permissao(codigo="configuracoes.ver")
 def config_novidades_dados():
+    if not session.get("eh_desenvolvedor"):
+        return jsonify(success=False, message="Sem permissão."), 403
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
-        cur.execute(
-            """
-            SELECT id, titulo, resumo, conteudo, ordem, ativo, publicado_em
-            FROM tbl_novidade
-            ORDER BY ordem, id DESC
-            """
-        )
-        dados = [
-            {
-                "id": r[0],
-                "titulo": r[1],
-                "resumo": r[2] or "",
-                "conteudo": r[3] or "",
-                "ordem": r[4],
-                "ativo": r[5],
-                "publicado_em": r[6].isoformat() if r[6] else None,
-            }
-            for r in cur.fetchall()
-        ]
-        return jsonify(success=True, dados=dados)
+        tem = _novidade_tem_publico(cur)
+        if tem:
+            cur.execute(
+                """
+                SELECT id, titulo, resumo, conteudo, ordem, ativo, publicado_em,
+                       COALESCE(publico, 'ambos'), COALESCE(link, '')
+                FROM tbl_novidade
+                ORDER BY ordem, id DESC
+                """
+            )
+        else:
+            cur.execute(
+                """
+                SELECT id, titulo, resumo, conteudo, ordem, ativo, publicado_em
+                FROM tbl_novidade
+                ORDER BY ordem, id DESC
+                """
+            )
+        dados = []
+        for r in cur.fetchall():
+            dados.append(
+                {
+                    "id": r[0],
+                    "titulo": r[1],
+                    "resumo": r[2] or "",
+                    "conteudo": r[3] or "",
+                    "ordem": r[4],
+                    "ativo": r[5],
+                    "publicado_em": r[6].isoformat() if r[6] else None,
+                    "publico": r[7] if tem else "ambos",
+                    "link": r[8] if tem else "",
+                }
+            )
+        return jsonify(success=True, dados=dados, tem_publico=tem)
     finally:
         conn.close()
 
 
 @config_bp.post("/configuracoes/novidades/salvar")
 @login_obrigatorio()
-@exigir_permissao(codigo="configuracoes.editar")
 def config_novidades_salvar():
-    if (resp := _exigir_config_escrita()) is not None:
-        return resp
+    if not session.get("eh_desenvolvedor"):
+        return jsonify(success=False, message="Sem permissão."), 403
     b = request.get_json(silent=True) or {}
     titulo = (b.get("titulo") or "").strip()
     if not titulo:
         return jsonify(success=False, message="Informe o título."), 400
+    try:
+        link = _link_novidade(b.get("link"))
+    except ValueError as e:
+        return jsonify(success=False, message=str(e)), 400
+    publico = _publico_novidade(b.get("publico"))
 
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
+        if not _novidade_tem_publico(cur):
+            return jsonify(
+                success=False,
+                message="Falta a coluna de público e link na tabela de novidades.",
+            ), 400
         _id = b.get("id")
+        campos = (
+            titulo,
+            (b.get("resumo") or "").strip(),
+            (b.get("conteudo") or "").strip(),
+            int(b.get("ordem") or 0),
+            normalizar_bool(b.get("ativo"), True),
+            publico,
+            link or None,
+        )
         if _id:
             cur.execute(
                 """
-                UPDATE tbl_novidade SET titulo=%s, resumo=%s, conteudo=%s, ordem=%s, ativo=%s
+                UPDATE tbl_novidade
+                SET titulo=%s, resumo=%s, conteudo=%s, ordem=%s, ativo=%s, publico=%s, link=%s
                 WHERE id=%s
                 """,
-                (
-                    titulo,
-                    (b.get("resumo") or "").strip(),
-                    (b.get("conteudo") or "").strip(),
-                    int(b.get("ordem") or 0),
-                    normalizar_bool(b.get("ativo"), True),
-                    _id,
-                ),
+                campos + (_id,),
             )
         else:
             cur.execute(
                 """
-                INSERT INTO tbl_novidade (titulo, resumo, conteudo, ordem, ativo)
-                VALUES (%s,%s,%s,%s,%s) RETURNING id
+                INSERT INTO tbl_novidade (titulo, resumo, conteudo, ordem, ativo, publico, link)
+                VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING id
                 """,
-                (
-                    titulo,
-                    (b.get("resumo") or "").strip(),
-                    (b.get("conteudo") or "").strip(),
-                    int(b.get("ordem") or 0),
-                    normalizar_bool(b.get("ativo"), True),
-                ),
+                campos,
             )
         conn.commit()
         return jsonify(success=True, message="Novidade salva.")

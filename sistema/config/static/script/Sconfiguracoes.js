@@ -95,7 +95,7 @@
     },
     {
       titulo: "Novidades",
-      texto: "Gerencie os cards exibidos na lateral do sistema.",
+      texto: "Publique avisos do sistema no sino. Escolha vendedor, fornecedor ou os dois, e um link para abrir uma página.",
       rota: "/configuracoes/novidades",
       iconeTech: "novidades",
     },

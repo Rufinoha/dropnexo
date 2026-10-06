@@ -121,6 +121,15 @@
   background: #e8f0ff;
   border-left-color: #2c6bf3;
 }
+.nv-card--link { cursor: pointer; }
+.nv-card--link:hover { background: #eef3ff; }
+.nv-card-link {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #021f81;
+}
 .nv-card-icone {
   width: 36px;
   height: 36px;
