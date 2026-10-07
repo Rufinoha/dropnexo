@@ -257,6 +257,7 @@ def _slot_tipo() -> dict:
         "indefinido": 0,
         "encerramentos_solicitados": 0,
         "encerramentos_concluidos": 0,
+        "fundadores": 0,
     }
 
 
@@ -291,6 +292,32 @@ def metricas_tenants(cur) -> dict:
         pessoa_cls = _classificar_pessoa(tipo_pessoa, documento)
         slot[pessoa_cls] += 1
         pessoa[pessoa_cls] += 1
+
+    try:
+        cur.execute("SAVEPOINT sp_matriz_fundador")
+        cur.execute(
+            """
+            SELECT LOWER(COALESCE(NULLIF(TRIM(tipo_negocio), ''), 'vendedor'))
+            FROM tbl_tenant
+            WHERE COALESCE(eh_fornecedor_fundador, FALSE) = TRUE
+              AND COALESCE(fornecedor_fundador_ativo, FALSE) = TRUE
+            """
+        )
+        for (tipo_raw,) in cur.fetchall():
+            if tipo_raw in ("fornecedor", "hibrido"):
+                tipo = "fornecedor"
+            elif tipo_raw in por_tipo:
+                tipo = tipo_raw
+            else:
+                tipo = "vendedor"
+            por_tipo[tipo]["fundadores"] += 1
+        cur.execute("RELEASE SAVEPOINT sp_matriz_fundador")
+    except Exception:
+        try:
+            cur.execute("ROLLBACK TO SAVEPOINT sp_matriz_fundador")
+        except Exception:
+            pass
+        _log.exception("metricas_tenants: falha ao contar fornecedor fundador")
 
     total = ativos + inativos
     enc = {
@@ -562,6 +589,7 @@ _FILTROS_LISTA = frozenset(
         "encerr_solicitados",
         "encerr_concluidos",
         "ativacao_pendente",
+        "fundador",
     }
 )
 
@@ -585,8 +613,13 @@ def listar_tenants_metricas(cur, *, tipo: str | None = None, filtro: str = "tota
     where = ["TRUE"]
     params: list = []
     if tipo_n:
-        where.append("LOWER(COALESCE(NULLIF(TRIM(t.tipo_negocio), ''), 'vendedor')) = %s")
-        params.append(tipo_n)
+        if filtro_n == "fundador" and tipo_n == "fornecedor":
+            where.append(
+                "LOWER(COALESCE(NULLIF(TRIM(t.tipo_negocio), ''), 'vendedor')) IN ('fornecedor', 'hibrido')"
+            )
+        else:
+            where.append("LOWER(COALESCE(NULLIF(TRIM(t.tipo_negocio), ''), 'vendedor')) = %s")
+            params.append(tipo_n)
 
     joins = """
       FROM tbl_tenant t
@@ -643,6 +676,9 @@ def listar_tenants_metricas(cur, *, tipo: str | None = None, filtro: str = "tota
         """
         if filtro_n == "encerr_concluidos":
             where.append("(c.concluido_em IS NOT NULL OR COALESCE(c.etapa, 1) >= 3)")
+    elif filtro_n == "fundador":
+        where.append("COALESCE(t.eh_fornecedor_fundador, FALSE) = TRUE")
+        where.append("COALESCE(t.fornecedor_fundador_ativo, FALSE) = TRUE")
 
     cur.execute(
         f"""

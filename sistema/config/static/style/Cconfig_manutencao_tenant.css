@@ -552,7 +552,7 @@ button.CfgMt_KpiMini:hover {
 
 .CfgMt_Matrix {
   display: grid;
-  grid-template-columns: 7.5rem repeat(3, 1fr);
+  grid-template-columns: 8.4rem repeat(3, 1fr);
   gap: 0.4rem;
 }
 .CfgMt_MatrixHead {
@@ -570,6 +570,7 @@ button.CfgMt_KpiMini:hover {
   display: flex;
   align-items: center;
   padding: 0 0.25rem;
+  line-height: 1.15;
 }
 .CfgMt_MatrixCell {
   appearance: none;

@@ -492,6 +492,7 @@
     encerr_solicitados: "Encerramentos solicitados",
     encerr_concluidos: "Encerramentos concluídos",
     ativacao_pendente: "Não ativaram",
+    fundador: "Fornecedor Fundador",
   };
 
   function renderListaHtml(itens, { dataKey = "criado_em", dataPrefix = "cadastro" } = {}) {
@@ -601,6 +602,7 @@
       ["Inativos", "inativos", (s) => s.inativos],
       ["PF", "pf", (s) => s.pf],
       ["CNPJ", "cnpj", (s) => s.cnpj],
+      ["Fornecedor Fundador", "fundador", (s) => s.fundadores],
       ["Encerr. ped.", "encerr_solicitados", (s) => s.encerramentos_solicitados],
       ["Encerr. ok", "encerr_concluidos", (s) => s.encerramentos_concluidos],
     ];
