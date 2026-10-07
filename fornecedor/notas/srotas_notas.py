@@ -41,7 +41,12 @@ def _fornecedor():
 def notas_pagina():
     if (r := _fornecedor()) is not None:
         return r
-    return render_template("frm_vd_notas.html", nav_ativo="fn_notas", nf_base="/fornecedor")
+    return render_template(
+        "frm_vd_notas.html",
+        nav_ativo="fn_notas",
+        nf_base="/fornecedor",
+        nf_checa_cert=True,
+    )
 
 
 @fn_notas_bp.get("/fornecedor/notas/listar")
@@ -57,6 +62,23 @@ def notas_listar():
         from sistema.fiscal.nfe_servico import listar_nfe
 
         return jsonify(success=True, notas=listar_nfe(conn.cursor(), tid))
+    finally:
+        conn.close()
+
+
+@fn_notas_bp.get("/fornecedor/notas/pode-emitir")
+@login_obrigatorio()
+@exigir_modulo(MODULO_FORNECEDOR)
+@exigir_permissao(codigo="fn_notas.ver")
+def notas_pode_emitir():
+    if (r := _fornecedor()) is not None:
+        return r
+    conn = Var_ConectarBanco()
+    try:
+        from sistema.fiscal.nfe_servico import ler_config
+
+        cfg = ler_config(conn.cursor(), _tid())
+        return jsonify(success=True, plano_ok=True, tem_certificado=bool(cfg.get("tem_certificado")))
     finally:
         conn.close()
 

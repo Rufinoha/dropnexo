@@ -98,6 +98,7 @@
 
   document.addEventListener("DOMContentLoaded", function () {
     document.getElementById("mpl_mudar")?.addEventListener("click", abrirModal);
+    if (new URLSearchParams(window.location.search).get("escolher") === "1") abrirModal();
     document.getElementById("mpl_fechar")?.addEventListener("click", fecharModal);
     document.getElementById("mpl_modal")?.addEventListener("click", function (ev) {
       if (ev.target === this) fecharModal();

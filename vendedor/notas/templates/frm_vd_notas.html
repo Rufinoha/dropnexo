@@ -9,7 +9,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="Cl_ContainerApoio Cl_PainelPagina Fin_Page Nf_Page" data-nf-base="{{ nf_base|default('/vendedor') }}">
+<div class="Cl_ContainerApoio Cl_PainelPagina Fin_Page Nf_Page" data-nf-base="{{ nf_base|default('/vendedor') }}"{% if nf_planos %} data-nf-planos="{{ nf_planos }}"{% endif %}{% if nf_checa_cert %} data-nf-checa-cert="1"{% endif %}>
   <div class="pt-page-title">
     <h2>Nota Fiscal</h2>
     <p class="pt-page-desc">Notas de venda dos seus produtos. O certificado e as regras ficam na aba Parâmetros.</p>
@@ -137,6 +137,6 @@
 
 {% block page_js %}
 <script src="{{ url_for('static', filename='script/Jsweetalert.js') }}"></script>
-<script src="{{ url_for('vd_notas.static', filename='script/Svd_notas.js') }}?v=5"></script>
+<script src="{{ url_for('vd_notas.static', filename='script/Svd_notas.js') }}?v=7"></script>
 <script src="{{ url_for('vd_parametros.static', filename='script/Svd_parametros.js') }}?v=7"></script>
 {% endblock %}

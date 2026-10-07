@@ -75,6 +75,61 @@
     });
   }
 
+  function irCertificado() {
+    abrirAba("parametros");
+    el("nf_par_shell")?.querySelector("[data-nf-tab='cert']")?.click();
+    const url = new URL(window.location.href);
+    url.searchParams.set("aba", "parametros");
+    window.history.replaceState(null, "", url);
+    el("nf_aba_parametros")?.scrollIntoView({ block: "start" });
+  }
+
+  async function avisoEscolha(texto, acao) {
+    if (!window.Swal) return false;
+    const escolha = await Swal.fire({
+      icon: "info",
+      title: "Nota fiscal",
+      text: texto,
+      showCancelButton: true,
+      reverseButtons: true,
+      cancelButtonText: "OK",
+      confirmButtonText: acao,
+      confirmButtonColor: "#021F81",
+      cancelButtonColor: "#64748b",
+    });
+    return !!escolha.isConfirmed;
+  }
+
+  async function aoNovaNota() {
+    const raiz = document.querySelector("[data-nf-base]");
+    const planos = raiz?.getAttribute("data-nf-planos") || "";
+    const checaCert = !!planos || raiz?.hasAttribute("data-nf-checa-cert");
+    if (!checaCert) {
+      abrirModal();
+      return;
+    }
+    const r = await fetch(`${nfBase()}/notas/pode-emitir`, { credentials: "same-origin" });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.success) throw new Error(j.message || "Falha ao verificar a nota.");
+    if (planos && !j.plano_ok) {
+      const quer = await avisoEscolha(
+        "A emissão de nota começa no plano Crescer.",
+        "Mostrar plano"
+      );
+      if (quer) window.location.href = planos;
+      return;
+    }
+    if (!j.tem_certificado) {
+      const quer = await avisoEscolha(
+        "Não há certificado A1 cadastrado. Envie o arquivo para emitir a nota.",
+        "Incluir certificado"
+      );
+      if (quer) irCertificado();
+      return;
+    }
+    abrirModal();
+  }
+
   function abrirModal() {
     const modal = el("nf_modal");
     if (!modal) return;
@@ -165,7 +220,11 @@
     await carregar();
   }
 
-  el("nf_btnNova")?.addEventListener("click", abrirModal);
+  el("nf_btnNova")?.addEventListener("click", () => {
+    aoNovaNota().catch((e) => {
+      if (window.Swal) Swal.fire("Nota", e.message || "Falha ao abrir a nota.", "error");
+    });
+  });
   el("nf_btnFechar")?.addEventListener("click", fecharModal);
   el("nf_btnFechar2")?.addEventListener("click", fecharModal);
   el("nf_btnCep")?.addEventListener("click", () => {
