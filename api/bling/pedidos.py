@@ -971,6 +971,10 @@ def _limpar_doc(doc: str | None) -> str:
     return "".join(c for c in str(doc or "") if c.isdigit())
 
 
+def _nome_igual(a: str, b: str) -> bool:
+    return (a or "").strip().casefold() == (b or "").strip().casefold() and bool((a or "").strip())
+
+
 def _buscar_contato_bling(id_tenant: int, documento: str, nome: str) -> int | None:
     doc = _limpar_doc(documento)
     if doc:
@@ -1002,35 +1006,35 @@ def _buscar_contato_bling(id_tenant: int, documento: str, nome: str) -> int | No
                 for c in data:
                     if doc and _limpar_doc(c.get("numeroDocumento")) == doc:
                         return int(c["id"])
-                if data and data[0].get("id"):
-                    return int(data[0]["id"])
+                    if _nome_igual(c.get("nome") or "", nome):
+                        return int(c["id"])
         except Exception:
             pass
     return None
 
 
-def _criar_contato_bling(id_tenant: int, ped: dict) -> int:
-    doc = _limpar_doc(ped.get("cliente_documento"))
+def _criar_contato_bling(id_tenant: int, contato: dict) -> int:
+    doc = _limpar_doc(contato.get("documento"))
     payload: dict[str, Any] = {
-        "nome": (ped.get("cliente_nome") or "Cliente DropNexo")[:120],
+        "nome": (contato.get("nome") or "Vendedor DropNexo")[:120],
         "tipo": "J" if doc and len(doc) > 11 else "F",
         "situacao": "A",
     }
     if doc:
         payload["numeroDocumento"] = doc
-    if ped.get("cliente_email"):
-        payload["email"] = str(ped["cliente_email"])[:120]
-    if ped.get("cliente_telefone"):
-        payload["telefone"] = str(ped["cliente_telefone"])[:30]
+    if contato.get("email"):
+        payload["email"] = str(contato["email"])[:120]
+    if contato.get("telefone"):
+        payload["telefone"] = str(contato["telefone"])[:30]
 
     endereco = {
-        "endereco": (ped.get("entrega_logradouro") or "")[:120] or None,
-        "numero": (ped.get("entrega_numero") or "")[:20] or None,
-        "complemento": (ped.get("entrega_complemento") or "")[:60] or None,
-        "bairro": (ped.get("entrega_bairro") or "")[:60] or None,
-        "municipio": (ped.get("entrega_cidade") or "")[:60] or None,
-        "uf": (ped.get("entrega_uf") or "")[:2] or None,
-        "cep": _limpar_doc(ped.get("entrega_cep")) or None,
+        "endereco": (contato.get("logradouro") or "")[:120] or None,
+        "numero": (contato.get("numero") or "")[:20] or None,
+        "complemento": (contato.get("complemento") or "")[:60] or None,
+        "bairro": (contato.get("bairro") or "")[:60] or None,
+        "municipio": (contato.get("cidade") or "")[:60] or None,
+        "uf": (contato.get("uf") or "")[:2] or None,
+        "cep": _limpar_doc(contato.get("cep")) or None,
     }
     if any(endereco.values()):
         payload["endereco"] = {"geral": {k: v for k, v in endereco.items() if v}}
@@ -1043,15 +1047,48 @@ def _criar_contato_bling(id_tenant: int, ped: dict) -> int:
     return int(cid)
 
 
-def _garantir_contato_bling(id_tenant: int, ped: dict) -> int:
+def _contato_vendedor(cur, id_vendedor: int) -> dict:
+    """Quem compra do fornecedor: a conta vendedora, não o cliente final dela."""
+    cur.execute(
+        """
+        SELECT COALESCE(NULLIF(TRIM(nome_fantasia), ''), NULLIF(TRIM(razao_social), ''), NULLIF(TRIM(nome), '')),
+               COALESCE(documento, ''),
+               COALESCE(email_comercial, ''),
+               COALESCE(NULLIF(TRIM(telefone_comercial), ''), NULLIF(TRIM(celular_comercial), ''), ''),
+               COALESCE(logradouro, ''), COALESCE(numero, ''), COALESCE(complemento, ''),
+               COALESCE(bairro, ''), COALESCE(cidade, ''), COALESCE(uf, ''), COALESCE(cep, '')
+        FROM tbl_tenant
+        WHERE id = %s
+        """,
+        (int(id_vendedor),),
+    )
+    row = cur.fetchone()
+    if not row:
+        raise ValueError("Vendedor do pedido não encontrado.")
+    return {
+        "nome": (row[0] or "").strip() or "Vendedor DropNexo",
+        "documento": row[1] or "",
+        "email": row[2] or "",
+        "telefone": row[3] or "",
+        "logradouro": row[4] or "",
+        "numero": row[5] or "",
+        "complemento": row[6] or "",
+        "bairro": row[7] or "",
+        "cidade": row[8] or "",
+        "uf": row[9] or "",
+        "cep": row[10] or "",
+    }
+
+
+def _garantir_contato_bling(id_tenant: int, contato: dict) -> int:
     existente = _buscar_contato_bling(
         id_tenant,
-        ped.get("cliente_documento"),
-        ped.get("cliente_nome") or "",
+        contato.get("documento") or "",
+        contato.get("nome") or "",
     )
     if existente:
         return existente
-    return _criar_contato_bling(id_tenant, ped)
+    return _criar_contato_bling(id_tenant, contato)
 
 
 def _montar_itens_bling(cur, id_fornecedor: int, itens: list[dict]) -> list[dict]:
@@ -1064,7 +1101,7 @@ def _montar_itens_bling(cur, id_fornecedor: int, itens: list[dict]) -> list[dict
             id_bling = id_bling_produto(cur, id_fornecedor, int(id_prod), contexto="fornecedor")
         if not id_bling:
             raise ValueError(f"SKU «{sku or '?'}» sem vínculo no Bling. Importe o produto antes de exportar pedidos.")
-        valor = float(item.get("preco_venda") or item.get("valor_drop") or 0)
+        valor = round(float(item.get("valor_drop") or 0), 2)
         resultado.append(
             {
                 "produto": {"id": int(id_bling)},
@@ -1124,7 +1161,7 @@ def exportar_pedido_fornecedor_bling(
 
     itens = listar_itens_pedido(cur, id_pedido)
     itens_bling = _montar_itens_bling(cur, id_forn, itens)
-    contato_id = _garantir_contato_bling(id_forn, ped)
+    contato_id = _garantir_contato_bling(id_forn, _contato_vendedor(cur, int(ped["id_tenant_vendedor"])))
 
     data_ped = ped.get("pago_em") or ped.get("confirmado_em") or ped.get("criado_em")
     if data_ped:
@@ -1144,6 +1181,9 @@ def exportar_pedido_fornecedor_bling(
         "observacoes": " — ".join(obs_partes)[:1000],
         "itens": itens_bling,
     }
+    taxa = round(float(ped.get("valor_taxa_pedido") or 0), 2)
+    if taxa > 0:
+        payload["outrasDespesas"] = taxa
 
     transporte: dict[str, Any] = {}
     if ped.get("entrega_cep") or ped.get("entrega_logradouro"):
