@@ -2,6 +2,7 @@
   const badge = document.getElementById("bl_status_badge");
   const btnConectar = document.getElementById("bl_btn_conectar");
   const btnReconectar = document.getElementById("bl_btn_reconectar");
+  const notaReconectar = document.getElementById("bl_reconectar_nota");
   const btnDesconectar = document.getElementById("bl_btn_desconectar");
   const painelConfig = document.getElementById("bl_painel_config");
   const ctxInput = document.getElementById("bl_contexto_ativo");
@@ -1309,6 +1310,7 @@
     }
     definirVisivel(btnConectar, !on);
     definirVisivel(btnReconectar, on && !!data.precisa_reconectar);
+    definirVisivel(notaReconectar, on && !!data.precisa_reconectar);
     definirVisivel(btnDesconectar, on);
     definirVisivel(painelConfig, on);
 

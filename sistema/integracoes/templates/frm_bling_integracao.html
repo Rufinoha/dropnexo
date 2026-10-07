@@ -3,7 +3,7 @@
 {% block title %}Bling — Integrações — {{ MARCA_NOME }}{% endblock %}
 {% block topbar_title %}Integração Bling{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('static', filename='style/Cbling_integracao.css') }}?v=24" />
+<link rel="stylesheet" href="{{ url_for('static', filename='style/Cbling_integracao.css') }}?v=25" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal Bl_Wrap">
@@ -30,6 +30,7 @@
   </div>
 
   <section class="Bl_Card" id="bl_sec_conexao">
+    <p class="Bl_ReconectarNota" id="bl_reconectar_nota" hidden>A conexão com o Bling precisa da sua autorização. Use Reconectar e autorize a mesma empresa.</p>
     <div class="Bl_Actions">
       <a
         href="{{ url_for('bling.oauth_iniciar') }}"
@@ -536,5 +537,5 @@
 </div>
 {% endblock %}
 {% block page_js %}
-<script src="{{ url_for('static', filename='script/Sbling_integracao.js') }}?v=43"></script>
+<script src="{{ url_for('static', filename='script/Sbling_integracao.js') }}?v=44"></script>
 {% endblock %}

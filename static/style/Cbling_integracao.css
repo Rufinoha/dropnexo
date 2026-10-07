@@ -175,6 +175,18 @@
   accent-color: #7b2cff;
 }
 
+.Bl_ReconectarNota {
+  margin: 0 0 0.75rem;
+  padding: 0.65rem 0.8rem;
+  border-radius: 10px;
+  background: #fff7ed;
+  border: 1px solid #fdba74;
+  color: #9a3412;
+  font-size: 0.9rem;
+}
+
+.Bl_ReconectarNota[hidden] { display: none !important; }
+
 .Bl_Actions {
   display: flex;
   flex-wrap: wrap;

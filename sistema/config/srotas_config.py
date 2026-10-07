@@ -1903,6 +1903,32 @@ def _tenant_payload(cur, id_tenant: int) -> dict | None:
     email = email_comercial or dono_email
     whatsapp = dono_whatsapp or telefone_comercial
 
+    bling = {"conectado": False, "pede_reconectar": False}
+    try:
+        cur.execute("SAVEPOINT sp_bling_tenant")
+        cur.execute(
+            """
+            SELECT status, COALESCE(ultimo_erro, '')
+            FROM tbl_integracao_bling
+            WHERE id_tenant = %s
+            """,
+            (id_tenant,),
+        )
+        brow = cur.fetchone()
+        if brow:
+            from api.bling.cliente import bling_precisa_reconectar
+
+            bling = {
+                "conectado": (brow[0] or "") == "conectado",
+                "pede_reconectar": bling_precisa_reconectar(brow[0], brow[1]),
+            }
+        cur.execute("RELEASE SAVEPOINT sp_bling_tenant")
+    except Exception:
+        try:
+            cur.execute("ROLLBACK TO SAVEPOINT sp_bling_tenant")
+        except Exception:
+            pass
+
     return {
         "id": int(row[0]),
         "nome": row[1] or "",
@@ -1928,6 +1954,7 @@ def _tenant_payload(cur, id_tenant: int) -> dict | None:
         "tem_relacionamento": _tem_relacionamento(contagens),
         "eh_tenant_sessao": int(session.get("id_tenant") or 0) == int(row[0]),
         "protegido": slug_protegido(slug),
+        "bling": bling,
     }
 
 
@@ -2170,6 +2197,32 @@ def comissoes_baixa_confirmar():
         dar_baixa_fechamento(cur, int(row[0]), fid)
         conn.commit()
         return jsonify(success=True, message="Pagamento baixado.")
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 400
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
+@config_bp.post(f"{MANUTENCAO_TENANT_PREFIX}/<int:id_tenant>/bling-reconectar")
+@login_obrigatorio()
+def manutencao_tenant_bling_reconectar(id_tenant: int):
+    if (r := _exigir_dev()) is not None:
+        return r
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        from api.bling.cliente import marcar_pedido_reconexao_bling
+
+        marcar_pedido_reconexao_bling(cur, id_tenant)
+        conn.commit()
+        return jsonify(
+            success=True,
+            message="O tenant verá o aviso para reconectar o Bling.",
+        )
     except ValueError as e:
         conn.rollback()
         return jsonify(success=False, message=str(e)), 400

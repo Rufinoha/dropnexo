@@ -385,6 +385,18 @@ def oauth_callback():
             conn.commit()
         finally:
             conn.close()
+        try:
+            conn_exp = Var_ConectarBanco()
+            try:
+                cur_exp = conn_exp.cursor()
+                from api.bling.pedidos import exportar_pedidos_pendentes_fornecedor
+
+                exportar_pedidos_pendentes_fornecedor(cur_exp, int(id_tenant), dias=30)
+                conn_exp.commit()
+            finally:
+                conn_exp.close()
+        except Exception:
+            pass
         session.pop("bling_oauth_state", None)
         session.pop("bling_oauth_contexto", None)
         return redirect(url_for("integracoes.pagina", conectado="bling"))

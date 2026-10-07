@@ -52,6 +52,8 @@
     donoConvite: document.getElementById("dono_convite"),
     donoConviteStatus: document.getElementById("dono_convite_status"),
     donoReenviar: document.getElementById("dono_reenviar"),
+    blingEstado: document.getElementById("bling_estado"),
+    blingPedir: document.getElementById("bling_pedir"),
     donoConviteLog: document.getElementById("dono_convite_log"),
   };
 
@@ -310,6 +312,17 @@
       el.btnDesativar.disabled = bloqueado;
     }
     atualizarLimparSeg();
+    const bl = t.bling || {};
+    if (el.blingEstado) {
+      if (!bl.conectado) {
+        el.blingEstado.textContent = "Bling: esta conta não está conectada.";
+      } else if (bl.pede_reconectar) {
+        el.blingEstado.textContent = "Bling: o tenant já está com o aviso para reconectar.";
+      } else {
+        el.blingEstado.textContent = "Bling: conectado. O aviso de reconexão ainda não foi enviado.";
+      }
+    }
+    if (el.blingPedir) el.blingPedir.hidden = !bl.conectado;
   }
 
   async function carregarApoio(id) {
@@ -474,6 +487,36 @@
   el.donoReenviar?.addEventListener("click", () =>
     reenviarConvite().catch((e) => Swal.fire("Erro", e.message, "error"))
   );
+  el.blingPedir?.addEventListener("click", () =>
+    pedirReconexaoBling().catch((e) => Swal.fire("Erro", e.message, "error"))
+  );
+
+  async function pedirReconexaoBling() {
+    if (!idTenant) return;
+    const conf = await Swal.fire({
+      icon: "question",
+      title: "Pedir reconexão do Bling?",
+      text: "O tenant vê o aviso e o botão Reconectar. A autorização é feita por ele, na mesma empresa.",
+      showCancelButton: true,
+      confirmButtonText: "Enviar aviso",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#021F81",
+    });
+    if (!conf.isConfirmed) return;
+    const r = await fetch(`${BASE}/${idTenant}/bling-reconectar`, {
+      method: "POST",
+      credentials: "same-origin",
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.success) throw new Error(j.message || "Falha ao pedir reconexão.");
+    if (el.blingEstado) el.blingEstado.textContent = "Bling: o tenant já está com o aviso para reconectar.";
+    await Swal.fire({
+      icon: "success",
+      title: "Aviso enviado",
+      text: j.message || "O tenant verá o aviso para reconectar o Bling.",
+      confirmButtonColor: "#021F81",
+    });
+  }
 
   async function reenviarConvite() {
     if (!idTenant) return;

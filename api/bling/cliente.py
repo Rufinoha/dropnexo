@@ -139,6 +139,10 @@ _MSG_REFRESH_SEM_NOVO = (
     "O Bling aceitou a renovação sem devolver o refresh novo. "
     "O refresh anterior já não vale no Bling."
 )
+_MSG_TOKEN_ILEGIVEL = (
+    "O token do Bling está gravado, mas não pôde ser lido. "
+    "Autorize a integração de novo."
+)
 
 
 MSG_USUARIO_BLING = "Não foi possível falar com o Bling agora. Tente de novo mais tarde."
@@ -156,8 +160,36 @@ def _texto_refresh_recusado(texto: str | None) -> bool:
     )
 
 
+def _token_nao_abre(texto: str | None) -> bool:
+    t = (texto or "").lower()
+    return "não pôde ser lido" in t or "nao pode ser lido" in t
+
+
 def bling_precisa_reconectar(status: str | None, ultimo_erro: str | None) -> bool:
-    return (status or "") == "conectado" and _texto_refresh_recusado(ultimo_erro)
+    return (status or "") == "conectado" and (
+        _texto_refresh_recusado(ultimo_erro) or _token_nao_abre(ultimo_erro)
+    )
+
+
+def marcar_pedido_reconexao_bling(cur, id_tenant: int) -> None:
+    """DEV pede ao tenant que autorize o Bling de novo. Não chama a API do Bling."""
+    cur.execute(
+        "SELECT status FROM tbl_integracao_bling WHERE id_tenant = %s",
+        (int(id_tenant),),
+    )
+    row = cur.fetchone()
+    if not row:
+        raise ValueError("Este tenant não tem conta Bling.")
+    if (row[0] or "") != "conectado":
+        raise ValueError("O Bling deste tenant não está conectado.")
+    cur.execute(
+        """
+        UPDATE tbl_integracao_bling
+        SET ultimo_erro = %s, atualizado_em = %s
+        WHERE id_tenant = %s AND status = 'conectado'
+        """,
+        (_MSG_TOKEN_ILEGIVEL, agora_utc(), int(id_tenant)),
+    )
 
 
 def tenant_precisa_reconectar_bling(id_tenant: int | None) -> bool:
@@ -532,6 +564,28 @@ def _refresh_recusado_gravado(cur, id_tenant: int) -> bool:
     return "Resposta do Bling:" in (texto or "")
 
 
+def _gravar_token_ilegivel(cur, id_tenant: int) -> None:
+    cur.execute(
+        """
+        UPDATE tbl_integracao_bling
+        SET ultimo_erro = %s, atualizado_em = %s
+        WHERE id_tenant = %s AND status = 'conectado'
+          AND NULLIF(access_token_enc, '') IS NOT NULL
+        """,
+        (_MSG_TOKEN_ILEGIVEL, agora_utc(), int(id_tenant)),
+    )
+
+
+def _exigir_access_lido(cur, conn, id_tenant: int, dados: dict[str, Any] | None) -> dict[str, Any]:
+    if dados and (dados.get("access_token") or "").strip():
+        return dados
+    if dados is not None:
+        _gravar_token_ilegivel(cur, id_tenant)
+        conn.commit()
+        raise RuntimeError(_MSG_TOKEN_ILEGIVEL)
+    raise RuntimeError("Conta Bling não conectada para este tenant.")
+
+
 def _gravar_refresh_recusado(cur, id_tenant: int, mensagem: str) -> None:
     cur.execute(
         """
@@ -548,17 +602,13 @@ def obter_access_token_valido(id_tenant: int, *, forcar: bool = False) -> str:
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
-        dados = _carregar_tokens(cur, id_tenant)
-        if not dados or not dados["access_token"]:
-            raise RuntimeError("Conta Bling não conectada para este tenant.")
+        dados = _exigir_access_lido(cur, conn, id_tenant, _carregar_tokens(cur, id_tenant))
         if not forcar and _access_ainda_vale(dados):
             return dados["access_token"]
 
         cur.execute("SELECT pg_advisory_lock(%s, %s)", (_BLING_LOCK_NS, int(id_tenant)))
         try:
-            dados = _carregar_tokens(cur, id_tenant)
-            if not dados or not dados["access_token"]:
-                raise RuntimeError("Conta Bling não conectada para este tenant.")
+            dados = _exigir_access_lido(cur, conn, id_tenant, _carregar_tokens(cur, id_tenant))
             if not forcar and _access_ainda_vale(dados):
                 return dados["access_token"]
 
@@ -645,7 +695,7 @@ def detalhe_excecao_bling(exc: BaseException) -> str:
             partes.append(texto)
         vistos.add(id(causa))
         causa = causa.__cause__
-    if len(partes) == 1:
+    if len(partes) == 1 and _texto_refresh_recusado(partes[0]):
         partes.append(
             "O Bling não foi consultado de novo: a recusa deste refresh já estava gravada."
         )
