@@ -2,7 +2,7 @@
 {% block title %}Vendedores — {{ MARCA_NOME }}{% endblock %}
 {% block topbar_title %}Vendedores parceiros{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('fn_vendedores.static', filename='style/Cfn_vendedores.css') }}?v=7" />
+<link rel="stylesheet" href="{{ url_for('fn_vendedores.static', filename='style/Cfn_vendedores.css') }}?v=8" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal VdParceiros_Page">
@@ -47,6 +47,15 @@
           <option value="ativo">Vinculado</option>
         </select>
       </div>
+      <div class="filter-group" style="flex:1.15;min-width:14rem">
+        <label for="vd_fFollow">Follow-up</label>
+        <select id="vd_fFollow">
+          <option value="" selected>Todos</option>
+          <option value="sem">Sem contato</option>
+          <option value="7">Retorno nos próximos 7 dias</option>
+          <option value="vencido">Retorno vencido</option>
+        </select>
+      </div>
     </div>
     <div class="filter-panel-actions">
       <button type="button" class="Cl_BtnSalvar" id="vd_btnFiltrar">Filtrar</button>
@@ -71,5 +80,5 @@
 {% endblock %}
 {% block page_js %}
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-<script src="{{ url_for('fn_vendedores.static', filename='script/Sfn_vendedores.js') }}?v=13"></script>
+<script src="{{ url_for('fn_vendedores.static', filename='script/Sfn_vendedores.js') }}?v=14"></script>
 {% endblock %}

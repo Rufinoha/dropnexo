@@ -86,7 +86,26 @@
     }
   }
 
+  function abrirModal() {
+    const modal = document.getElementById("mpl_modal");
+    if (modal) modal.hidden = false;
+  }
+
+  function fecharModal() {
+    const modal = document.getElementById("mpl_modal");
+    if (modal) modal.hidden = true;
+  }
+
   document.addEventListener("DOMContentLoaded", function () {
+    document.getElementById("mpl_mudar")?.addEventListener("click", abrirModal);
+    document.getElementById("mpl_fechar")?.addEventListener("click", fecharModal);
+    document.getElementById("mpl_modal")?.addEventListener("click", function (ev) {
+      if (ev.target === this) fecharModal();
+    });
+    document.addEventListener("keydown", function (ev) {
+      const modal = document.getElementById("mpl_modal");
+      if (ev.key === "Escape" && modal && !modal.hidden) fecharModal();
+    });
     document.querySelectorAll(".mpl-btn-assinar").forEach(function (btn) {
       btn.addEventListener("click", function () {
         assinar(

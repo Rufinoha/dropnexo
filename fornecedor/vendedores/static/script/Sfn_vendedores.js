@@ -10,6 +10,7 @@
   const fRazao = document.getElementById("vd_fRazao");
   const fDoc = document.getElementById("vd_fDoc");
   const fStatus = document.getElementById("vd_fStatus");
+  const fFollow = document.getElementById("vd_fFollow");
   const btnFiltrar = document.getElementById("vd_btnFiltrar");
   const btnLimpar = document.getElementById("vd_btnLimparFiltro");
 
@@ -126,10 +127,22 @@
     const razaoQ = (fRazao?.value || "").trim();
     const docQ = soDigitos(fDoc?.value || "");
     const stQ = (fStatus?.value || "").trim();
+    const folQ = (fFollow?.value || "").trim();
+    const hoje = hojeSP();
+    const limite7 = somaDias(hoje, 7);
 
     const filtrados = dadosCache.filter((v) => {
       if (!STATUS_VISIVEIS.includes(v.status)) return false;
       if (stQ && v.status !== stQ) return false;
+      if (folQ === "sem" && v.follow_contato) return false;
+      if (folQ === "7") {
+        const ret = v.follow_retorno || "";
+        if (!ret || ret < hoje || ret > limite7) return false;
+      }
+      if (folQ === "vencido") {
+        const ret = v.follow_retorno || "";
+        if (!ret || ret >= hoje) return false;
+      }
       if (nomeQ) {
         const okNome = contem(v.nome, nomeQ) || contem(v.responsavel, nomeQ);
         if (!okNome) return false;
@@ -159,12 +172,25 @@
         const st = statusMap[v.status] || { cls: "", label: v.status };
         const loc = [v.cidade, v.uf].filter(Boolean).join(" / ") || "—";
         const resp = (v.responsavel || "").trim();
+        const contato = v.follow_contato ? fmtDia(v.follow_contato) : "";
+        let retorno = "";
+        if (v.follow_retorno) {
+          const clsRet =
+            v.follow_retorno < hojeSP()
+              ? " is-vencido"
+              : v.follow_retorno <= somaDias(hojeSP(), 7)
+                ? " is-proximo"
+                : "";
+          retorno = `<p class="VdParceiros_CardMeta${clsRet}">Retorno: ${esc(fmtDia(v.follow_retorno))}</p>`;
+        }
         return `
         <article class="VdParceiros_Card ${st.cls}" data-id="${v.id}" tabindex="0" title="Clique duas vezes para detalhes">
           <h3 class="VdParceiros_CardNome">${esc(v.nome)}</h3>
           ${resp ? `<p class="VdParceiros_CardMeta">Responsável: ${esc(resp)}</p>` : ""}
           <p class="VdParceiros_CardMeta">${esc(loc)}</p>
           <p class="VdParceiros_CardMeta">Solicitado: ${fmtData(v.solicitado_em)}</p>
+          ${contato ? `<p class="VdParceiros_CardMeta">Contato: ${esc(contato)}</p>` : ""}
+          ${retorno}
           <div class="VdParceiros_CardFoot">
             <span class="VdParceiros_Badge ${st.cls}">${esc(st.label)}</span>
             <button type="button" class="Cl_BtnLink VdParceiros_BtnDetalhe" data-acao="detalhe" data-id="${v.id}">Ver detalhes</button>
@@ -196,6 +222,29 @@
     if (d.length === 11) return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
     if (d.length === 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
     return String(raw || "").trim() || "—";
+  }
+
+  function hojeSP() {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Sao_Paulo",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date());
+  }
+
+  function somaDias(iso, n) {
+    const [y, m, d] = String(iso).split("-").map(Number);
+    const dt = new Date(Date.UTC(y, m - 1, d + n));
+    const mm = String(dt.getUTCMonth() + 1).padStart(2, "0");
+    const dd = String(dt.getUTCDate()).padStart(2, "0");
+    return dt.getUTCFullYear() + "-" + mm + "-" + dd;
+  }
+
+  function fmtDia(iso) {
+    const m = String(iso || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!m) return "";
+    return m[3] + "/" + m[2] + "/" + m[1];
   }
 
   function fmtDataCurta(iso) {
@@ -256,8 +305,14 @@
     if (v.tamanho_empresa) stats.push({ label: "Porte", value: v.tamanho_empresa });
     if (v.faturamento_ultimo_ano) stats.push({ label: "Faturamento", value: v.faturamento_ultimo_ano });
 
+    const hoje = hojeSP();
     modalBody.innerHTML = `
       <div class="VdDet">
+        <div class="VdDet_Tabs" role="tablist">
+          <button type="button" class="VdDet_Tab is-on" data-aba="dados" role="tab" aria-selected="true">Dados</button>
+          <button type="button" class="VdDet_Tab" data-aba="follow" role="tab" aria-selected="false">Follow-up</button>
+        </div>
+        <div class="VdDet_Painel" data-painel="dados">
         <section class="VdDet_Hero">
           <div class="VdDet_Avatar" aria-hidden="true">${esc(iniciais(nome))}</div>
           <div class="VdDet_HeroMain">
@@ -354,6 +409,30 @@
                 </div>
               </section>`
         }
+        </div>
+        <div class="VdDet_Painel" data-painel="follow" hidden>
+          <form class="VdFol_Form" id="vd_followForm">
+            <label class="VdFol_Campo">
+              <span>Data de contato</span>
+              <input type="date" id="vd_folData" required max="${esc(hoje)}" value="${esc(hoje)}" />
+            </label>
+            <label class="VdFol_Campo">
+              <span>Data retorno</span>
+              <input type="date" id="vd_folRetorno" />
+            </label>
+            <label class="VdFol_Campo VdFol_Campo--full">
+              <span>Descrição</span>
+              <textarea id="vd_folDesc" rows="3" maxlength="4000" required placeholder="O que foi conversado"></textarea>
+            </label>
+            <div class="VdFol_Acoes">
+              <button type="submit" class="Cl_BtnSalvar" id="vd_folSalvar">Registrar contato</button>
+            </div>
+          </form>
+          <section class="VdFol_Hist" aria-live="polite">
+            <h5>Histórico</h5>
+            <div id="vd_folLista"><p class="VdFol_Vazio">Carregando…</p></div>
+          </section>
+        </div>
       </div>`;
 
     if (modalFooter) {
@@ -410,7 +489,116 @@
         modalFooter.innerHTML = "";
       }
     }
+    document.querySelector(".VdParceiros_ModalInner")?.classList.remove("is-follow");
     abrir();
+  }
+
+  function pintarFollow(rows) {
+    const box = document.getElementById("vd_folLista");
+    if (!box) return;
+    if (!rows.length) {
+      box.innerHTML = '<p class="VdFol_Vazio">Nenhum contato registrado.</p>';
+      return;
+    }
+    box.innerHTML = `<ul class="VdFol_Lista">${rows
+      .map((item) => {
+        const ret = item.data_retorno
+          ? `<span>Retorno ${esc(fmtDia(item.data_retorno))}</span>`
+          : "";
+        return `<li>
+          <div class="VdFol_Quando"><strong>Contato ${esc(fmtDia(item.data_contato))}</strong>${ret}</div>
+          <p>${esc(item.descricao)}</p>
+        </li>`;
+      })
+      .join("")}</ul>`;
+  }
+
+  function aplicarFollowNoCard(id, contato, retorno) {
+    const item = dadosCache.find((v) => String(v.id) === String(id));
+    if (!item) return;
+    item.follow_contato = contato || "";
+    item.follow_retorno = retorno || "";
+    aplicarFiltros();
+  }
+
+  async function carregarFollow() {
+    if (!vinculoAtual) return;
+    const box = document.getElementById("vd_folLista");
+    if (box) box.innerHTML = '<p class="VdFol_Vazio">Carregando…</p>';
+    const r = await fetch("/fornecedor/vendedores/followup/" + vinculoAtual.id, { credentials: "same-origin" });
+    let j = {};
+    try {
+      j = await r.json();
+    } catch (_) {
+      j = { success: false, message: "Erro ao carregar o follow-up." };
+    }
+    if (!j.success) {
+      if (box) box.innerHTML = `<p class="VdFol_Vazio is-err">${esc(j.message || "Erro")}</p>`;
+      return;
+    }
+    pintarFollow(j.dados || []);
+  }
+
+  async function salvarFollow(ev) {
+    ev.preventDefault();
+    if (!vinculoAtual) return;
+    const dataContato = (document.getElementById("vd_folData")?.value || "").trim();
+    const descricao = (document.getElementById("vd_folDesc")?.value || "").trim();
+    const dataRetorno = (document.getElementById("vd_folRetorno")?.value || "").trim();
+    if (!dataContato) {
+      Swal?.fire("Atenção", "Informe a data de contato.", "warning");
+      return;
+    }
+    if (dataContato > hojeSP()) {
+      Swal?.fire("Atenção", "A data de contato não pode ser futura.", "warning");
+      return;
+    }
+    if (!descricao) {
+      Swal?.fire("Atenção", "Informe a descrição do contato.", "warning");
+      return;
+    }
+    const r = await fetch("/fornecedor/vendedores/followup", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: vinculoAtual.id,
+        data_contato: dataContato,
+        descricao,
+        data_retorno: dataRetorno,
+      }),
+    });
+    let j = {};
+    try {
+      j = await r.json();
+    } catch (_) {
+      j = { success: false, message: "Erro no servidor (" + r.status + ")." };
+    }
+    if (!j.success) {
+      if (window.Swal) Swal.fire("Erro", j.message || "Falha", "error");
+      else alert(j.message || "Falha");
+      return;
+    }
+    const desc = document.getElementById("vd_folDesc");
+    const ret = document.getElementById("vd_folRetorno");
+    if (desc) desc.value = "";
+    if (ret) ret.value = "";
+    pintarFollow(j.dados || []);
+    aplicarFollowNoCard(vinculoAtual.id, j.follow_contato, j.follow_retorno);
+    if (window.Swal) Swal.fire("OK", j.message || "Contato registrado.", "success");
+  }
+
+  function trocarAba(aba) {
+    modalBody?.querySelectorAll("[data-aba]").forEach((btn) => {
+      const on = btn.getAttribute("data-aba") === aba;
+      btn.classList.toggle("is-on", on);
+      btn.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    modalBody?.querySelectorAll("[data-painel]").forEach((painel) => {
+      painel.hidden = painel.getAttribute("data-painel") !== aba;
+    });
+    document.querySelector(".VdParceiros_ModalInner")?.classList.toggle("is-follow", aba === "follow");
+    if (aba === "follow") carregarFollow();
   }
 
   async function carregarDetalhe(id) {
@@ -580,6 +768,16 @@
     }
   });
 
+  modalBody?.addEventListener("click", (e) => {
+    const tab = e.target.closest("[data-aba]");
+    if (!tab) return;
+    trocarAba(tab.getAttribute("data-aba"));
+  });
+  modalBody?.addEventListener("submit", (e) => {
+    if (e.target?.id !== "vd_followForm") return;
+    salvarFollow(e);
+  });
+
   fecharModal?.addEventListener("click", fechar);
   modal?.addEventListener("click", (e) => {
     if (e.target === modal) fechar();
@@ -594,6 +792,7 @@
     if (fRazao) fRazao.value = "";
     if (fDoc) fDoc.value = "";
     if (fStatus) fStatus.value = "";
+    if (fFollow) fFollow.value = "";
     aplicarFiltros();
   });
   [fNome, fRazao, fDoc].forEach((el) => {
@@ -605,6 +804,7 @@
     });
   });
   fStatus?.addEventListener("change", aplicarFiltros);
+  fFollow?.addEventListener("change", aplicarFiltros);
 
   carregar();
 })();

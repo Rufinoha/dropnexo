@@ -4,7 +4,7 @@
 {% block topbar_title %}Meu Plano{% endblock %}
 
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('planos.static', filename='style/Cmeu_plano.css') }}?v=8" />
+<link rel="stylesheet" href="{{ url_for('planos.static', filename='style/Cmeu_plano.css') }}?v=12" />
 {% if pode_pagamento %}
 <link rel="stylesheet" href="{{ url_for('static', filename='style/Cefi_cartao.css') }}?v=8" />
 {% endif %}
@@ -12,48 +12,63 @@
 
 {% block content %}
 <div class="Cl_ContainerApoio Cl_PainelPagina mpl-page">
-  <div class="pt-page-title">
-    <h2>Meu plano</h2>
-    <p class="pt-page-desc">Assinatura, limites e uso da sua conta {{ MARCA_NOME }}.</p>
-  </div>
-
-  <section class="mpl-card mpl-atual">
-    <p class="mpl-kicker">Plano atual</p>
-    <div class="mpl-atual-row">
-      <div>
-        <h3 class="mpl-nome">{{ plano_atual.nome }}</h3>
-        <p class="mpl-meta">
-          {% if plano_atual.valor_centavos is not none %}
-            R$ {{ '%.2f'|format(plano_atual.valor_centavos / 100) }}
-            {% if plano_atual.periodicidade %}/ {{ plano_atual.periodicidade }}{% endif %}
-          {% else %}
-            Consulte a cobrança da sua conta
-          {% endif %}
-        </p>
-        {% if plano_atual.destaque %}
-        <p class="mpl-destaque">{{ plano_atual.destaque }}</p>
-        {% endif %}
-      </div>
-      <div class="mpl-atual-actions">
-        {% if pode_pagamento %}
-        <a href="{{ url_for('perfil.meu_perfil', aba='pagamento') }}" class="Cl_botaoprimario">Forma de pagamento</a>
-        {% endif %}
-        <a href="{{ url_for('perfil.meu_perfil') }}" class="Cl_botaosecundario">Meu perfil</a>
-      </div>
-    </div>
-    <dl class="mpl-resumo">
-      <div><dt>Perfil da conta</dt><dd>{{ tipo_rotulo }}</dd></div>
-      {% if plano_atual.email_cobranca %}
-      <div><dt>E-mail de cobrança</dt><dd>{{ plano_atual.email_cobranca }}</dd></div>
+  <div class="mpl-shell">
+    <aside class="mpl-conta">
+      <p class="mpl-kicker">Sua conta</p>
+      <p class="mpl-conta-plano">{{ plano_atual.nome }}</p>
+      <h2 class="mpl-conta-nome">{{ session.get('tenant_nome') or 'Sua empresa' }}</h2>
+      <p class="mpl-conta-tipo">{{ tipo_rotulo }}</p>
+      {% if pode_pagamento %}
+      <a class="mpl-conta-link" href="{{ url_for('perfil.meu_perfil', aba='pagamento') }}">Forma de pagamento</a>
       {% endif %}
-    </dl>
-  </section>
+      {% if plano_atual.valor_centavos == 0 %}
+      <p class="mpl-conta-nota">Plano gratuito — sem cobrança mensal.</p>
+      {% elif plano_atual.destaque %}
+      <p class="mpl-conta-nota">{{ plano_atual.destaque }}</p>
+      {% endif %}
+      {% if segmentos %}
+      <button type="button" class="mpl-mudar" id="mpl_mudar">Mudar plano</button>
+      {% endif %}
+    </aside>
+
+    <div class="mpl-main">
+      <p class="mpl-main-lead">
+        {% if plano_atual.valor_centavos == 0 %}
+          Plano gratuito — uso liberado sem cobrança mensal.
+        {% elif plano_atual.valor_centavos is not none %}
+          Assinatura {{ plano_atual.nome }} — R$ {{ '%.2f'|format(plano_atual.valor_centavos / 100) }}{% if plano_atual.periodicidade %} / {{ plano_atual.periodicidade }}{% endif %}.
+        {% else %}
+          Assinatura da conta {{ tipo_rotulo|lower }}.
+        {% endif %}
+      </p>
+      <div class="mpl-infos">
+        <article>
+          <span>Plano</span>
+          <strong>{{ plano_atual.nome }}</strong>
+        </article>
+        <article>
+          <span>Cobrança</span>
+          <strong>
+            {% if plano_atual.valor_centavos == 0 %}
+              Sem cobrança
+            {% elif plano_atual.valor_centavos is not none %}
+              R$ {{ '%.2f'|format(plano_atual.valor_centavos / 100) }}{% if plano_atual.periodicidade %} / {{ plano_atual.periodicidade }}{% endif %}
+            {% else %}
+              Consulte
+            {% endif %}
+          </strong>
+        </article>
+        <article>
+          <span>Observação</span>
+          <strong>{{ plano_atual.destaque or tipo_rotulo }}</strong>
+        </article>
+      </div>
 
   {% if uso_cotas %}
   {% for u in uso_cotas %}
   <section class="mpl-card mpl-uso">
-    <p class="mpl-kicker">Uso do plano · {{ u.papel_rotulo }}</p>
-    <h3 class="mpl-uso-title">{{ u.plano_nome }} — quanto você já usou</h3>
+    <h3 class="mpl-uso-title">Uso deste ciclo</h3>
+    <p class="mpl-sec-desc">O que o plano reserva e quanto a conta já consumiu{% if uso_cotas|length > 1 %} · {{ u.papel_rotulo }}{% endif %}.</p>
     <div class="mpl-uso-grid mpl-uso-grid--full">
       {% set chaves = ['pedidos', 'produtos', 'conexoes', 'usuarios'] %}
       {% if u.depositos %}{% set chaves = chaves + ['depositos'] %}{% endif %}
@@ -126,7 +141,92 @@
   {% endfor %}
   {% endif %}
 
+      {% macro mpl_ico(tipo) %}
+        {% if tipo == 'pessoas' %}
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M16 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"/><circle cx="9.5" cy="7" r="3"/><path d="M20 8v6M17 11h6"/></svg>
+        {% elif tipo == 'caixa' %}
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg>
+        {% elif tipo == 'disco' %}
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6"/><path d="M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg>
+        {% elif tipo == 'rede' %}
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>
+        {% elif tipo == 'pedido' %}
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 6h15l-1.5 9h-12z"/><path d="M6 6L5 3H2"/><circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/></svg>
+        {% elif tipo == 'chamado' %}
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 12a8 8 0 0 1 16 0"/><path d="M4 12v5a2 2 0 0 0 2 2h1v-7H6a2 2 0 0 0-2 2zM20 12v5a2 2 0 0 1-2 2h-1v-7h1a2 2 0 0 1 2 2z"/></svg>
+        {% else %}
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg>
+        {% endif %}
+      {% endmacro %}
+      {% for seg in segmentos %}
+      {% for p in seg.planos if p._eh_atual %}
+      {% set ficha = {
+        'pedidos/mês': ('Pedidos neste mês', 'pedidos', 'Pedidos que a conta pode registrar neste mês.'),
+        'fornecedor': ('Fornecedores', 'pessoas', 'Parceiros que você pode manter conectados ao mesmo tempo.'),
+        'fornecedores': ('Fornecedores', 'pessoas', 'Parceiros que você pode manter conectados ao mesmo tempo.'),
+        'produtos': ('Catálogo', 'caixa', 'Itens que cabem publicados neste plano.'),
+        'usuário': ('Equipe', 'pessoas', 'Pessoas com acesso à conta. Você já entra nessa conta.'),
+        'usuários': ('Equipe', 'pessoas', 'Pessoas com acesso à conta. Você já entra nessa conta.'),
+        'espaço': ('Armazenamento', 'disco', 'Arquivos, fotos e registros que a conta pode guardar.'),
+        'vendedores aprovados': ('Vendedores', 'pessoas', 'Revendedores que você pode manter aprovados.'),
+        'depósito': ('Depósitos', 'caixa', 'Pontos de estoque cadastrados na operação.'),
+        'depósitos': ('Depósitos', 'caixa', 'Pontos de estoque cadastrados na operação.')
+      } %}
+      <section class="mpl-incluso">
+        <h3 class="mpl-uso-title">O que está incluído{% if segmentos|length > 1 %} · {{ seg.titulo|replace('Planos para ', '') }}{% endif %}</h3>
+        <div class="mpl-feat-grid">
+          {% for lim in p.limites %}
+          {% set info = ficha.get(lim.rotulo, (lim.rotulo, 'lista', 'Limite liberado neste plano.')) %}
+          <article class="mpl-feat mpl-feat--{{ loop.index0 % 6 }}">
+            <div class="mpl-feat-top">
+              <span class="mpl-feat-ico" aria-hidden="true">{{ mpl_ico(info[1])|safe }}</span>
+              <span class="mpl-feat-badge">Incluído</span>
+            </div>
+            <h4>{{ info[0] }}</h4>
+            <strong class="mpl-feat-accent">Até {{ lim.valor }} {{ lim.rotulo }}</strong>
+            <p>{{ info[2] }}</p>
+          </article>
+          {% endfor %}
+          {% for r in p.recursos if r.on %}
+          <article class="mpl-feat mpl-feat--{{ (loop.index0 + (p.limites|length)) % 6 }}">
+            <div class="mpl-feat-top">
+              <span class="mpl-feat-ico" aria-hidden="true">{{ mpl_ico('rede' if 'Rede' in r.label or 'Catálogo' in r.label else ('pedido' if 'Pedidos' in r.label else 'chamado'))|safe }}</span>
+              <span class="mpl-feat-badge">Incluído</span>
+            </div>
+            <h4>{{ r.label }}</h4>
+            <strong class="mpl-feat-accent">Liberado neste plano</strong>
+            <p>{{ r.sub or 'Sem custo extra dentro do plano atual.' }}</p>
+          </article>
+          {% endfor %}
+        </div>
+        {% set fora = p.recursos|selectattr('on', 'equalto', false)|list %}
+        {% if fora %}
+        <div class="mpl-fora">
+          <h4>Entra nos planos pagos</h4>
+          <ul>
+            {% for r in fora %}
+            <li>{{ r.label }}</li>
+            {% endfor %}
+          </ul>
+        </div>
+        {% endif %}
+      </section>
+      {% endfor %}
+      {% endfor %}
+    </div>
+  </div>
+
   {% if segmentos %}
+  <div class="mpl-modal" id="mpl_modal" hidden>
+    <div class="mpl-modal-box" role="dialog" aria-modal="true" aria-labelledby="mpl_modal_titulo">
+      <header class="mpl-modal-head">
+        <div>
+          <h3 id="mpl_modal_titulo">Escolher plano</h3>
+          <p>O plano atual continua até a nova assinatura ser confirmada.</p>
+        </div>
+        <button type="button" class="mpl-modal-x" id="mpl_fechar" aria-label="Fechar">×</button>
+      </header>
+      <div class="mpl-modal-body">
   {% for seg in segmentos %}
   <section class="mpl-catalogo">
     <h3 class="mpl-sec-title">{{ seg.titulo }}</h3>
@@ -134,11 +234,17 @@
     {% if seg.url_espera and seg.modo_fornecedor == 'normal' %}
     <p class="mpl-sec-desc"><a href="{{ seg.url_espera }}">Lista de espera — Fornecedor Fundador</a></p>
     {% endif %}
-    <div class="mpl-grid">
+    {% set lin = namespace(n=0) %}
+    {% for p in seg.planos %}
+      {% if p.limites|length > lin.n %}{% set lin.n = p.limites|length %}{% endif %}
+    {% endfor %}
+    <div class="mpl-grid" style="--mpl-span: {{ 6 + lin.n }}">
       {% for p in seg.planos %}
       <article class="mpl-plan{% if p.slug == plano_atual.slug or p.featured %} is-featured{% endif %}{% if p.slug == plano_atual.slug or p._eh_atual %} is-atual{% endif %}">
-        {% if p.tag %}<span class="mpl-tag">{{ p.tag }}</span>{% endif %}
-        {% if p._eh_atual %}<span class="mpl-tag mpl-tag-atual">Seu plano</span>{% endif %}
+        <div class="mpl-plan-tag">
+          {% if p.tag %}<span class="mpl-tag">{{ p.tag }}</span>{% endif %}
+          {% if p._eh_atual %}<span class="mpl-tag mpl-tag-atual">Seu plano</span>{% endif %}
+        </div>
         <h4>{{ p.nome }}</h4>
         <p class="mpl-preco">
           {% if p.preco_mensal == 0 %}
@@ -147,17 +253,18 @@
             R$ {{ p.preco_mensal }}<span>/mês</span>
           {% endif %}
         </p>
-        {% if p.destaque %}<p class="mpl-plan-destaque">{{ p.destaque }}</p>{% endif %}
-        <ul class="mpl-limites">
-          {% for lim in p.limites %}
-          <li><strong>{{ lim.valor }}</strong> {{ lim.rotulo }}</li>
-          {% endfor %}
-        </ul>
+        <p class="mpl-plan-destaque">{{ p.destaque or '' }}</p>
+        {% for i in range(lin.n) %}
+        <div class="mpl-lim{% if loop.last %} is-last{% endif %}">
+          {% if i < p.limites|length %}<strong>{{ p.limites[i].valor }}</strong> {{ p.limites[i].rotulo }}{% endif %}
+        </div>
+        {% endfor %}
         <ul class="mpl-recursos">
           {% for r in p.recursos %}
           <li class="{% if r.on %}is-on{% else %}is-off{% endif %}">{{ r.label }}{% if r.sub %} <span>{{ r.sub }}</span>{% endif %}</li>
           {% endfor %}
         </ul>
+        <div class="mpl-plan-cta">
         {% if pode_pagamento and p.fundador and not p._eh_atual %}
         <button type="button" class="Cl_botaoprimario mpl-btn-assinar" data-plano="{{ p.slug }}" data-plano-nome="{{ p.nome }}" data-valor-centavos="0">Ativar Fornecedor Fundador</button>
         {% elif pode_pagamento and p.preco_mensal and p.preco_mensal > 0 and not p._eh_atual %}
@@ -165,14 +272,13 @@
         {% elif p._eh_atual %}
         <p class="mpl-atual-hint">Plano atual da conta</p>
         {% endif %}
+        </div>
       </article>
       {% endfor %}
     </div>
   </section>
   {% endfor %}
-  {% endif %}
-
-  <p class="mpl-nota">
+        <p class="mpl-nota">
     No boleto, o plano é liberado na hora. Sem confirmação de pagamento em até 7 dias úteis, a conta volta ao Explorar
     (integrações ficam conectadas, mas bloqueadas). No cartão, a liberação ocorre após a aprovação.
     Acompanhe em <a href="{{ url_for('financeiro.pagina') }}">Financeiro</a>.
@@ -180,7 +286,11 @@
     Configure e-mail de cobrança em
     <a href="{{ url_for('perfil.meu_perfil', aba='pagamento') }}">Forma de pagamento</a>.
     {% endif %}
-  </p>
+        </p>
+      </div>
+    </div>
+  </div>
+  {% endif %}
 </div>
 {% endblock %}
 {% block page_js %}
@@ -193,6 +303,6 @@
   "urlFinanceiro": url_for("financeiro.pagina")
 }|tojson }}</script>
 <script defer src="{{ url_for('static', filename='script/Sefi_cartao.js') }}?v=8"></script>
-<script defer src="{{ url_for('planos.static', filename='script/Smeu_plano.js') }}?v=7"></script>
 {% endif %}
+<script defer src="{{ url_for('planos.static', filename='script/Smeu_plano.js') }}?v=8"></script>
 {% endblock %}

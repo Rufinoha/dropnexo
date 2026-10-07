@@ -794,3 +794,174 @@
   padding: 0.65rem 1.15rem !important;
   margin: 0 !important;
 }
+
+.VdParceiros_CardMeta.is-vencido {
+  color: #be123c;
+  font-weight: 700;
+}
+
+.VdParceiros_CardMeta.is-proximo {
+  color: #b45309;
+  font-weight: 700;
+}
+
+.VdDet_Tabs {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.VdDet_Tab {
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  color: #475569;
+  border-radius: 999px;
+  padding: 0.35rem 0.9rem;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.VdDet_Tab.is-on {
+  background: #021f81;
+  border-color: #021f81;
+  color: #fff;
+}
+
+.VdDet_Painel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.95rem;
+}
+
+.VdDet_Painel[hidden] { display: none !important; }
+
+.VdParceiros_ModalInner.is-follow .VdParceiros_ModalFoot {
+  display: none;
+}
+
+.VdFol_Form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem 1rem;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  padding: 1rem 1.1rem;
+}
+
+.VdFol_Campo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.VdFol_Campo span {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.VdFol_Campo input,
+.VdFol_Campo textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 0.5rem 0.7rem;
+  font: inherit;
+  color: #0f172a;
+  background: #fff;
+}
+
+.VdFol_Campo textarea {
+  min-height: 88px;
+  resize: vertical;
+}
+
+.VdFol_Campo input:focus,
+.VdFol_Campo textarea:focus {
+  outline: none;
+  border-color: #64748b;
+  box-shadow: 0 0 0 3px rgba(100, 116, 139, 0.16);
+}
+
+.VdFol_Campo--full,
+.VdFol_Acoes {
+  grid-column: 1 / -1;
+}
+
+.VdFol_Acoes {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.VdFol_Hist {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  padding: 1rem 1.1rem;
+}
+
+.VdFol_Hist h5 {
+  margin: 0 0 0.75rem;
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.VdFol_Lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.VdFol_Lista li {
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.VdFol_Lista li:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.VdFol_Quando {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.8rem;
+  align-items: baseline;
+  margin-bottom: 0.25rem;
+}
+
+.VdFol_Quando strong {
+  color: #0f172a;
+  font-size: 0.9rem;
+}
+
+.VdFol_Quando span,
+.VdFol_Vazio {
+  color: #64748b;
+  font-size: 0.85rem;
+}
+
+.VdFol_Lista p {
+  margin: 0;
+  white-space: pre-wrap;
+  color: #334155;
+  font-size: 0.9rem;
+}
+
+.VdFol_Vazio { margin: 0; }
+.VdFol_Vazio.is-err { color: #b91c1c; }
+
+@media (max-width: 640px) {
+  .VdFol_Form { grid-template-columns: 1fr; }
+}

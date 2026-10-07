@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
+from zoneinfo import ZoneInfo
 
 from pathlib import Path
 
@@ -54,6 +55,72 @@ def _parse_snapshot(raw) -> dict:
     return {}
 
 
+_TZ_SP = ZoneInfo("America/Sao_Paulo")
+
+
+def _hoje_sp() -> date:
+    return datetime.now(_TZ_SP).date()
+
+
+def _followup_existe(cur) -> bool:
+    cur.execute(
+        """
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_schema = 'public'
+          AND table_name = 'tbl_vinculo_followup'
+        """
+    )
+    return cur.fetchone() is not None
+
+
+def _parse_dia(raw, *, obrigatorio: bool, campo: str) -> date | None:
+    texto = (raw or "").strip()
+    if not texto:
+        if obrigatorio:
+            raise ValueError(f"Informe {campo}.")
+        return None
+    try:
+        return date.fromisoformat(texto[:10])
+    except ValueError:
+        raise ValueError(f"{campo} inválida.") from None
+
+
+def _iso_dia(valor) -> str:
+    if not valor:
+        return ""
+    if isinstance(valor, datetime):
+        return valor.date().isoformat()
+    if isinstance(valor, date):
+        return valor.isoformat()
+    return str(valor)[:10]
+
+
+def _listar_followup(cur, id_vinculo: int, id_forn: int) -> list[dict]:
+    if not _followup_existe(cur):
+        return []
+    cur.execute(
+        """
+        SELECT id, data_contato, descricao, data_retorno
+        FROM tbl_vinculo_followup
+        WHERE id_vinculo = %s AND id_tenant_fornecedor = %s
+        ORDER BY data_contato DESC, id DESC
+        """,
+        (id_vinculo, id_forn),
+    )
+    saida = []
+    for row in cur.fetchall():
+        saida.append(
+            {
+                "id": row[0],
+                "data_contato": _iso_dia(row[1]),
+                "descricao": row[2] or "",
+                "data_retorno": _iso_dia(row[3]),
+            }
+        )
+    return saida
+
+
 def _tempo_na_plataforma(iso: str) -> str:
     if not iso:
         return "—"
@@ -101,6 +168,20 @@ def vendedores_dados():
         if status:
             where.append("v.status = %s")
             params.append(status)
+        follow_cols = "NULL::date, NULL::date"
+        follow_join = ""
+        if _followup_existe(cur):
+            follow_cols = "fu.data_contato, fu.data_retorno"
+            follow_join = """
+            LEFT JOIN LATERAL (
+                SELECT f.data_contato, f.data_retorno
+                FROM tbl_vinculo_followup f
+                WHERE f.id_vinculo = v.id
+                  AND f.id_tenant_fornecedor = v.id_tenant_fornecedor
+                ORDER BY f.data_contato DESC, f.id DESC
+                LIMIT 1
+            ) fu ON TRUE
+            """
         cur.execute(
             f"""
             SELECT v.id, v.status, v.solicitado_em, v.respondido_em,
@@ -108,9 +189,11 @@ def vendedores_dados():
                    t.email_comercial, t.telefone_comercial,
                    v.snapshot_vendedor, v.mensagem_solicitacao, v.mensagem_resposta,
                    COALESCE(t.razao_social, ''), COALESCE(t.documento, ''),
-                   COALESCE(t.nome_completo, '')
+                   COALESCE(t.nome_completo, ''),
+                   {follow_cols}
             FROM tbl_vinculo_vendedor_fornecedor v
             JOIN tbl_tenant t ON t.id = v.id_tenant_vendedor
+            {follow_join}
             WHERE {' AND '.join(where)}
             ORDER BY
                 CASE v.status
@@ -148,6 +231,8 @@ def vendedores_dados():
                     "razao_social": (row[12] or snap.get("razao_social") or "").strip(),
                     "documento": (row[13] or snap.get("documento") or "").strip(),
                     "responsavel": responsavel,
+                    "follow_contato": _iso_dia(row[15]),
+                    "follow_retorno": _iso_dia(row[16]),
                 }
             )
         return jsonify(success=True, dados=dados)
@@ -239,6 +324,108 @@ def vendedores_detalhe(id_vinculo: int):
                 "requisitos_aceitos": merged.get("requisitos_aceitos") or {},
             },
         )
+    finally:
+        conn.close()
+
+
+@fn_vendedores_bp.get("/fornecedor/vendedores/followup/<int:id_vinculo>")
+@login_obrigatorio()
+@exigir_modulo(MODULO_FORNECEDOR)
+@exigir_permissao(codigo="fn_vendedores.ver")
+def vendedores_followup_listar(id_vinculo: int):
+    if (r := _exigir_fornecedor_tenant()) is not None:
+        return r
+    id_forn = _id_tenant()
+    if not id_forn:
+        return jsonify(success=False, message="Sessão inválida."), 403
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT id FROM tbl_vinculo_vendedor_fornecedor
+            WHERE id = %s AND id_tenant_fornecedor = %s
+            """,
+            (id_vinculo, id_forn),
+        )
+        if not cur.fetchone():
+            return jsonify(success=False, message="Solicitação não encontrada."), 404
+        if not _followup_existe(cur):
+            return jsonify(success=True, dados=[])
+        return jsonify(success=True, dados=_listar_followup(cur, id_vinculo, id_forn))
+    finally:
+        conn.close()
+
+
+@fn_vendedores_bp.post("/fornecedor/vendedores/followup")
+@login_obrigatorio()
+@exigir_modulo(MODULO_FORNECEDOR)
+@exigir_permissao(codigo="fn_vendedores.ver")
+def vendedores_followup_registrar():
+    if (r := _exigir_fornecedor_tenant()) is not None:
+        return r
+    id_forn = _id_tenant()
+    if not id_forn:
+        return jsonify(success=False, message="Sessão inválida."), 403
+    body = request.get_json(silent=True) or {}
+    try:
+        id_vinculo = int(body.get("id"))
+    except (TypeError, ValueError):
+        return jsonify(success=False, message="Vínculo inválido."), 400
+    try:
+        data_contato = _parse_dia(body.get("data_contato"), obrigatorio=True, campo="a data de contato")
+        data_retorno = _parse_dia(body.get("data_retorno"), obrigatorio=False, campo="a data de retorno")
+    except ValueError as e:
+        return jsonify(success=False, message=str(e)), 400
+    if data_contato > _hoje_sp():
+        return jsonify(success=False, message="A data de contato não pode ser futura."), 400
+    descricao = (body.get("descricao") or "").strip()
+    if not descricao:
+        return jsonify(success=False, message="Informe a descrição do contato."), 400
+    if len(descricao) > 4000:
+        return jsonify(success=False, message="A descrição pode ter no máximo 4000 caracteres."), 400
+
+    uid = session.get("id_usuario")
+    uid_i = int(uid) if uid else None
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        if not _followup_existe(cur):
+            return jsonify(
+                success=False,
+                message="Follow-up ainda não está disponível. A tabela precisa ser criada neste ambiente.",
+            ), 503
+        cur.execute(
+            """
+            SELECT id FROM tbl_vinculo_vendedor_fornecedor
+            WHERE id = %s AND id_tenant_fornecedor = %s
+            """,
+            (id_vinculo, id_forn),
+        )
+        if not cur.fetchone():
+            return jsonify(success=False, message="Solicitação não encontrada."), 404
+        cur.execute(
+            """
+            INSERT INTO tbl_vinculo_followup (
+                id_vinculo, id_tenant_fornecedor, data_contato, descricao, data_retorno, id_usuario
+            )
+            VALUES (%s, %s, %s, %s, %s, %s)
+            """,
+            (id_vinculo, id_forn, data_contato, descricao, data_retorno, uid_i),
+        )
+        conn.commit()
+        dados = _listar_followup(cur, id_vinculo, id_forn)
+        vigente = dados[0] if dados else {}
+        return jsonify(
+            success=True,
+            message="Contato registrado.",
+            dados=dados,
+            follow_contato=vigente.get("data_contato") or "",
+            follow_retorno=vigente.get("data_retorno") or "",
+        )
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=f"Falha ao registrar o contato: {e}"), 500
     finally:
         conn.close()
 
