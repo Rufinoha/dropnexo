@@ -173,23 +173,23 @@
         const loc = [v.cidade, v.uf].filter(Boolean).join(" / ") || "—";
         const resp = (v.responsavel || "").trim();
         const contato = v.follow_contato ? fmtDia(v.follow_contato) : "";
-        let retorno = "";
-        if (v.follow_retorno) {
-          const clsRet =
-            v.follow_retorno < hojeSP()
-              ? " is-vencido"
-              : v.follow_retorno <= somaDias(hojeSP(), 7)
-                ? " is-proximo"
-                : "";
-          retorno = `<p class="VdParceiros_CardMeta${clsRet}">Retorno: ${esc(fmtDia(v.follow_retorno))}</p>`;
-        }
+        const clsRet = !v.follow_retorno
+          ? ""
+          : v.follow_retorno < hojeSP()
+            ? " is-vencido"
+            : v.follow_retorno <= somaDias(hojeSP(), 7)
+              ? " is-proximo"
+              : "";
+        const retorno = v.follow_retorno
+          ? `<p class="VdParceiros_CardMeta${clsRet}">Retorno: ${esc(fmtDia(v.follow_retorno))}</p>`
+          : "";
         return `
         <article class="VdParceiros_Card ${st.cls}" data-id="${v.id}" tabindex="0" title="Clique duas vezes para detalhes">
           <h3 class="VdParceiros_CardNome">${esc(v.nome)}</h3>
           ${resp ? `<p class="VdParceiros_CardMeta">Responsável: ${esc(resp)}</p>` : ""}
           <p class="VdParceiros_CardMeta">${esc(loc)}</p>
           <p class="VdParceiros_CardMeta">Solicitado: ${fmtData(v.solicitado_em)}</p>
-          ${contato ? `<p class="VdParceiros_CardMeta">Contato: ${esc(contato)}</p>` : ""}
+          ${contato ? `<p class="VdParceiros_CardMeta${clsRet}">Contato: ${esc(contato)}</p>` : ""}
           ${retorno}
           <div class="VdParceiros_CardFoot">
             <span class="VdParceiros_Badge ${st.cls}">${esc(st.label)}</span>
