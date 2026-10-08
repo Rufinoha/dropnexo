@@ -736,18 +736,27 @@ button.CfgMt_KpiMini:hover {
 .CfgMt_PaneFundador { padding-top: 0.5rem; }
 .Cl_TabelaPrincipal.Cat_TabelaScroll.CfgMt_TabelaFundador table {
   table-layout: auto;
+  width: max-content;
+  max-width: 100%;
 }
 .CfgMt_TabelaFundador th,
 .CfgMt_TabelaFundador td {
-  width: 1%;
+  width: auto;
   white-space: nowrap;
   overflow: visible;
   text-overflow: unset;
+  padding: 0.55rem 0.85rem;
 }
 .CfgMt_TabelaFundador .is-nome {
-  width: auto;
   white-space: normal;
+  max-width: 16rem;
 }
+.CfgMt_Wa {
+  color: #021F81;
+  font-weight: 650;
+  text-decoration: none;
+}
+.CfgMt_Wa:hover { text-decoration: underline; }
 .CfgMt_FundadorAcoes {
   display: flex;
   gap: 0.35rem;

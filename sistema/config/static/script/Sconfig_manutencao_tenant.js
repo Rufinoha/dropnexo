@@ -121,7 +121,7 @@
             <td>${ativo}</td>
             <td>${esc(t.sistema_erp || "—")}</td>
             <td>${t.produtos_publicados ?? 0}</td>
-            <td>${esc(t.whatsapp || "—")}</td>
+            <td>${celulaWhatsapp(t.whatsapp)}</td>
             <td><div class="CfgMt_FundadorAcoes">${btn}${excluir}</div></td>
           </tr>`;
         })
@@ -483,6 +483,21 @@
         formatter: (v) => (v ? v : ""),
       },
     };
+  }
+
+  function mascaraWhatsapp(fone) {
+    let d = String(fone || "").replace(/\D+/g, "");
+    if (!d) return "";
+    if (d.startsWith("55") && d.length > 11) d = d.slice(2);
+    if (window.Util?.formatarTelefone) return Util.formatarTelefone(d);
+    return d;
+  }
+
+  function celulaWhatsapp(fone) {
+    const href = linkWhatsapp(fone);
+    const texto = mascaraWhatsapp(fone);
+    if (!href || !texto) return "—";
+    return `<a class="CfgMt_Wa" href="${esc(href)}" target="_blank" rel="noopener">${esc(texto)}</a>`;
   }
 
   function linkWhatsapp(fone) {
