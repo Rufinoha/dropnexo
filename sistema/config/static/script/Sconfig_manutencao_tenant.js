@@ -116,7 +116,7 @@
             `<button type="button" class="CfgMt_BtnAcao CfgMt_BtnAcao--del cfgmt-fundador-excluir" data-id="${t.id}" data-nome="${esc(t.nome)}">Excluir</button>`;
           return `<tr>
             <td>${t.id}</td>
-            <td class="is-nome">${esc(t.nome)}</td>
+            <td class="is-nome" title="${esc(t.nome)}">${esc(t.nome)}</td>
             <td>${formatarDataHora(t.criado_em)}</td>
             <td>${ativo}</td>
             <td>${esc(t.sistema_erp || "—")}</td>

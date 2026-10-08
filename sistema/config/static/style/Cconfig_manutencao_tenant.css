@@ -734,22 +734,47 @@ button.CfgMt_KpiMini:hover {
 }
 
 .CfgMt_PaneFundador { padding-top: 0.5rem; }
-.Cl_TabelaPrincipal.Cat_TabelaScroll.CfgMt_TabelaFundador table {
-  table-layout: auto;
-  width: max-content;
-  max-width: 100%;
+.Cl_TabelaPrincipal.Cat_TabelaScroll.CfgMt_TabelaFundador {
+  width: 100%;
+  overflow-x: auto;
 }
+.Cl_TabelaPrincipal.Cat_TabelaScroll.CfgMt_TabelaFundador table {
+  table-layout: fixed;
+  width: 100%;
+  min-width: 980px;
+  max-width: none;
+}
+.CfgMt_TabelaFundador col.is-id { width: 6%; }
+.CfgMt_TabelaFundador col.is-nome { width: 24%; }
+.CfgMt_TabelaFundador col.is-cadastro { width: 13%; }
+.CfgMt_TabelaFundador col.is-ativo { width: 7%; }
+.CfgMt_TabelaFundador col.is-erp { width: 10%; }
+.CfgMt_TabelaFundador col.is-prod { width: 10%; }
+.CfgMt_TabelaFundador col.is-wa { width: 13%; }
+.CfgMt_TabelaFundador col.is-acoes { width: 17%; }
 .CfgMt_TabelaFundador th,
 .CfgMt_TabelaFundador td {
-  width: auto;
   white-space: nowrap;
-  overflow: visible;
-  text-overflow: unset;
-  padding: 0.55rem 0.85rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0.6rem 0.85rem;
 }
-.CfgMt_TabelaFundador .is-nome {
-  white-space: normal;
-  max-width: 16rem;
+.CfgMt_TabelaFundador td:nth-child(1) {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: #64748b;
+}
+.CfgMt_TabelaFundador th:nth-child(4),
+.CfgMt_TabelaFundador td:nth-child(4),
+.CfgMt_TabelaFundador th:nth-child(6),
+.CfgMt_TabelaFundador td:nth-child(6) {
+  text-align: center;
+}
+.CfgMt_TabelaFundador th:nth-child(8),
+.CfgMt_TabelaFundador td:nth-child(8) {
+  overflow: visible;
+  text-align: right;
+  text-overflow: clip;
 }
 .CfgMt_Wa {
   color: #021F81;
