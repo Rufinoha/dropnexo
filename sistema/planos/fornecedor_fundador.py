@@ -388,7 +388,7 @@ def listar_fundadores(cur) -> list[dict[str, Any]]:
         FROM tbl_tenant t
         WHERE t.eh_fornecedor_fundador = TRUE
           AND t.tipo_negocio IN ('fornecedor', 'hibrido')
-        ORDER BY t.fornecedor_fundador_ativo DESC, t.fornecedor_fundador_em NULLS LAST, t.id
+        ORDER BY t.criado_em DESC NULLS LAST, t.id DESC
         """
     )
     out = []
