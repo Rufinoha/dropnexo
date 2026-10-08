@@ -52,6 +52,7 @@
     donoConvite: document.getElementById("dono_convite"),
     donoConviteStatus: document.getElementById("dono_convite_status"),
     donoReenviar: document.getElementById("dono_reenviar"),
+    donoRedefinir: document.getElementById("dono_redefinir"),
     blingEstado: document.getElementById("bling_estado"),
     blingPedir: document.getElementById("bling_pedir"),
     donoConviteLog: document.getElementById("dono_convite_log"),
@@ -155,6 +156,7 @@
       el.donoConviteStatus.textContent = CONVITE_ROTULO[st] || st;
     }
     if (el.donoReenviar) el.donoReenviar.hidden = st === "ACEITO" || !d.email;
+    if (el.donoRedefinir) el.donoRedefinir.hidden = st !== "ACEITO" || !d.email;
     const itens = Array.isArray(d.convite_log) ? d.convite_log : [];
     if (!el.donoConviteLog) return;
     if (!itens.length) {
@@ -487,6 +489,9 @@
   el.donoReenviar?.addEventListener("click", () =>
     reenviarConvite().catch((e) => Swal.fire("Erro", e.message, "error"))
   );
+  el.donoRedefinir?.addEventListener("click", () =>
+    redefinirSenha().catch((e) => Swal.fire("Erro", e.message, "error"))
+  );
   el.blingPedir?.addEventListener("click", () =>
     pedirReconexaoBling().catch((e) => Swal.fire("Erro", e.message, "error"))
   );
@@ -514,6 +519,37 @@
       icon: "success",
       title: "Aviso enviado",
       text: j.message || "O tenant verá o aviso para reconectar o Bling.",
+      confirmButtonColor: "#021F81",
+    });
+  }
+
+  async function redefinirSenha() {
+    if (!idTenant) return;
+    const email = (el.donoEmail?.value || "").trim();
+    const conf = await Swal.fire({
+      icon: "question",
+      title: "Enviar redefinição de senha?",
+      text: email
+        ? `O link vai para ${email}. A senha atual continua valendo até a pessoa concluir.`
+        : "A senha atual continua valendo até a pessoa concluir.",
+      showCancelButton: true,
+      confirmButtonText: "Enviar",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#021F81",
+    });
+    if (!conf.isConfirmed) return;
+    Swal.fire({ title: "Enviando…", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    const r = await fetch(`${BASE}/${idTenant}/redefinir-senha`, {
+      method: "POST",
+      credentials: "same-origin",
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.success) throw new Error(j.message || "Falha ao enviar.");
+    if (j.tenant) preencher(j.tenant);
+    await Swal.fire({
+      icon: "success",
+      title: "E-mail enviado",
+      text: "O link de redefinição foi enviado. A senha só muda quando a pessoa abrir o link.",
       confirmButtonColor: "#021F81",
     });
   }

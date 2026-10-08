@@ -1726,7 +1726,7 @@ def _log_convite_email(cur, email: str) -> list[dict]:
             FROM tbl_email_destinatario d
             JOIN tbl_email_envio e ON e.id_envio = d.id_envio
             WHERE lower(d.email) = %s
-              AND d.tag_email IN ('dropnexo_cadastro', 'dropnexo_convite_equipe')
+              AND d.tag_email IN ('dropnexo_cadastro', 'dropnexo_convite_equipe', 'dropnexo_redefinir_senha')
             ORDER BY COALESCE(d.dt_ultimo_evento, e.dt_envio) DESC, d.id_destinatario DESC
             LIMIT 8
             """,
@@ -2266,6 +2266,63 @@ def manutencao_tenant_reenviar_convite(id_tenant: int):
             message=payload.get("message") or "Convite reenviado.",
             tenant=tenant,
         )
+    finally:
+        conn.close()
+
+
+@config_bp.post(f"{MANUTENCAO_TENANT_PREFIX}/<int:id_tenant>/redefinir-senha")
+@login_obrigatorio()
+def manutencao_tenant_redefinir_senha(id_tenant: int):
+    if (r := _exigir_dev()) is not None:
+        return r
+    from sistema.acesso.srotas import _enviar_email_redefinicao_senha, gravar_token_redefinicao
+
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        tenant = _tenant_payload(cur, id_tenant)
+        if not tenant:
+            return jsonify(success=False, message="Tenant não encontrado."), 404
+        dono = tenant.get("dono") or {}
+        uid = int(dono.get("id") or 0)
+        if uid <= 0:
+            return jsonify(success=False, message="Este tenant não tem dono para receber o e-mail."), 400
+        if (dono.get("convite_status") or "") != "ACEITO":
+            return jsonify(
+                success=False,
+                message="Este dono ainda não definiu a senha. Reenvie o convite.",
+            ), 400
+        cur.execute(
+            "SELECT nome, email, senha_hash FROM tbl_usuario WHERE id = %s",
+            (uid,),
+        )
+        row = cur.fetchone()
+        if not row or not row[2]:
+            return jsonify(
+                success=False,
+                message="Este dono ainda não definiu a senha. Reenvie o convite.",
+            ), 400
+        email = (row[1] or "").strip()
+        if not email:
+            return jsonify(success=False, message="Este dono não tem e-mail."), 400
+        raw = gravar_token_redefinicao(cur, uid, sem_senha=False)
+        conn.commit()
+        ok, msg = _enviar_email_redefinicao_senha(
+            email=email,
+            nome_usuario=row[0] or "",
+            token_bruto=raw,
+        )
+        if not ok:
+            return jsonify(success=False, message=f"Não foi possível enviar o e-mail: {msg}"), 500
+        tenant = _tenant_payload(cur, id_tenant)
+        return jsonify(
+            success=True,
+            message="Enviamos o link para redefinir a senha.",
+            tenant=tenant,
+        )
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 500
     finally:
         conn.close()
 

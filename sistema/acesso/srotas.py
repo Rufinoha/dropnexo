@@ -439,6 +439,33 @@ def _email_links_auth() -> dict:
     }
 
 
+def gravar_token_redefinicao(cur, id_usuario: int, *, sem_senha: bool) -> str:
+    """Grava o mesmo token do Esqueci minha senha. Quem chama faz o commit."""
+    raw = secrets.token_urlsafe(32)
+    token_hash = gerar_hmac_token(raw)
+    horas = int(os.getenv("TOKEN_ATIVACAO_HORAS", "48"))
+    expira = agora_utc() + timedelta(hours=horas)
+    if sem_senha:
+        cur.execute(
+            """
+            UPDATE tbl_usuario
+            SET token_ativacao = %s, token_expira_em = %s, ativo = FALSE
+            WHERE id = %s
+            """,
+            (token_hash, expira, int(id_usuario)),
+        )
+    else:
+        cur.execute(
+            """
+            UPDATE tbl_usuario
+            SET token_ativacao = %s, token_expira_em = %s
+            WHERE id = %s
+            """,
+            (token_hash, expira, int(id_usuario)),
+        )
+    return raw
+
+
 def _enviar_email_redefinicao_senha(
     *,
     email: str,
@@ -507,31 +534,7 @@ def api_solicitar_redefinicao():
             ), 404
 
         id_u, nome, senha_hash, _ativo = row
-        raw = secrets.token_urlsafe(32)
-        token_hash = gerar_hmac_token(raw)
-        horas = int(os.getenv("TOKEN_ATIVACAO_HORAS", "48"))
-        expira = agora_utc() + timedelta(hours=horas)
-
-        if senha_hash:
-            # Redefinição: mantém senha atual até o usuário concluir o fluxo.
-            cur.execute(
-                """
-                UPDATE tbl_usuario
-                SET token_ativacao = %s, token_expira_em = %s
-                WHERE id = %s
-                """,
-                (token_hash, expira, id_u),
-            )
-        else:
-            # Conta ainda sem senha (ativação pendente): renova o token de ativação.
-            cur.execute(
-                """
-                UPDATE tbl_usuario
-                SET token_ativacao = %s, token_expira_em = %s, ativo = FALSE
-                WHERE id = %s
-                """,
-                (token_hash, expira, id_u),
-            )
+        raw = gravar_token_redefinicao(cur, int(id_u), sem_senha=not senha_hash)
         conn.commit()
 
         modo_email = "redefinicao" if senha_hash else "ativacao"
