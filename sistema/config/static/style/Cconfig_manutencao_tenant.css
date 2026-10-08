@@ -734,6 +734,25 @@ button.CfgMt_KpiMini:hover {
 }
 
 .CfgMt_PaneFundador { padding-top: 0.5rem; }
+.Cl_TabelaPrincipal.Cat_TabelaScroll.CfgMt_TabelaFundador table {
+  table-layout: auto;
+}
+.CfgMt_TabelaFundador th,
+.CfgMt_TabelaFundador td {
+  width: 1%;
+  white-space: nowrap;
+  overflow: visible;
+  text-overflow: unset;
+}
+.CfgMt_TabelaFundador .is-nome {
+  width: auto;
+  white-space: normal;
+}
+.CfgMt_FundadorAcoes {
+  display: flex;
+  gap: 0.35rem;
+  justify-content: flex-end;
+}
 .CfgMt_FundadorHead {
   display: flex;
   flex-wrap: wrap;

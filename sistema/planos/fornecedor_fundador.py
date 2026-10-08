@@ -265,6 +265,52 @@ def desativar_fundador(cur, id_tenant: int, *, obs: str | None = None) -> dict[s
     }
 
 
+def excluir_do_programa_fundador(cur, id_tenant: int, *, obs: str | None = None) -> dict[str, Any]:
+    """Tira a conta do programa. O tenant permanece. Se a vaga estava ocupada, ela é liberada."""
+    garantir_colunas_fundador(cur)
+    tid = int(id_tenant)
+    nota = (obs or "").strip() or "Retirado do programa Fornecedor Fundador."
+    cur.execute(
+        """
+        SELECT COALESCE(fornecedor_fundador_ativo, FALSE)
+        FROM tbl_tenant
+        WHERE id = %s
+          AND COALESCE(eh_fornecedor_fundador, FALSE) = TRUE
+          AND tipo_negocio IN ('fornecedor', 'hibrido')
+        """,
+        (tid,),
+    )
+    row = cur.fetchone()
+    if not row:
+        return {"ok": False, "message": "Esta conta não está no programa Fornecedor Fundador."}
+    era_ativo = bool(row[0])
+    cur.execute(
+        """
+        UPDATE tbl_tenant SET
+          eh_fornecedor_fundador = FALSE,
+          fornecedor_fundador_ativo = FALSE,
+          plano = CASE WHEN %s THEN 'starter' ELSE plano END,
+          fornecedor_fundador_obs = TRIM(BOTH FROM COALESCE(fornecedor_fundador_obs, '') || E'\n' || %s)
+        WHERE id = %s
+        """,
+        (era_ativo, nota, tid),
+    )
+    if era_ativo:
+        cur.execute(
+            """
+            UPDATE tbl_tenant_cobranca
+            SET plano_slug = 'starter', plano_slug_pendente = NULL, atualizado_em = NOW()
+            WHERE id_tenant = %s
+            """,
+            (tid,),
+        )
+    return {
+        "ok": True,
+        "message": "Conta retirada do programa. O tenant continua.",
+        "vagas_restantes": vagas_restantes(cur),
+    }
+
+
 def tentar_reservar_no_cadastro(
     cur,
     id_tenant: int,

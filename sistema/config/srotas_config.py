@@ -3818,6 +3818,34 @@ def manutencao_tenant_fundador_toggle():
         conn.close()
 
 
+@config_bp.post(f"{MANUTENCAO_TENANT_PREFIX}/fundador/excluir")
+@login_obrigatorio()
+def manutencao_tenant_fundador_excluir():
+    if (r := _exigir_dev()) is not None:
+        return r
+    from sistema.planos.fornecedor_fundador import excluir_do_programa_fundador
+
+    body = request.get_json(silent=True) or {}
+    try:
+        id_tenant = int(body.get("id") or 0)
+    except (TypeError, ValueError):
+        return jsonify(success=False, message="Tenant inválido."), 400
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        res = excluir_do_programa_fundador(cur, id_tenant, obs=(body.get("obs") or "").strip() or None)
+        if not res.get("ok"):
+            conn.rollback()
+            return jsonify(success=False, message=res.get("message") or "Falha."), 400
+        conn.commit()
+        return jsonify(success=True, **res)
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
 @config_bp.get(f"{MANUTENCAO_TENANT_PREFIX}/fundador/candidatos")
 @login_obrigatorio()
 def manutencao_tenant_fundador_candidatos():

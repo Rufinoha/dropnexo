@@ -91,7 +91,7 @@
 
   async function carregarFundadores() {
     if (!el.fundadorLista) return;
-    el.fundadorLista.innerHTML = '<tr><td colspan="7">Carregando…</td></tr>';
+    el.fundadorLista.innerHTML = '<tr><td colspan="8">Carregando…</td></tr>';
     try {
       const r = await fetch(BASE + "/fundador", { credentials: "same-origin" });
       const j = await r.json();
@@ -103,7 +103,7 @@
       }
       const itens = j.itens || [];
       if (!itens.length) {
-        el.fundadorLista.innerHTML = '<tr><td colspan="7">Nenhum Fundador cadastrado.</td></tr>';
+        el.fundadorLista.innerHTML = '<tr><td colspan="8">Nenhum Fundador cadastrado.</td></tr>';
         return;
       }
       el.fundadorLista.innerHTML = itens
@@ -112,19 +112,22 @@
           const btn = t.fornecedor_fundador_ativo
             ? `<button type="button" class="Cl_BtnCancelar cfgmt-fundador-toggle" data-id="${t.id}" data-ativo="0">Desativar</button>`
             : `<button type="button" class="Cl_botaoprimario cfgmt-fundador-toggle" data-id="${t.id}" data-ativo="1">Ativar</button>`;
+          const excluir =
+            `<button type="button" class="CfgMt_BtnAcao CfgMt_BtnAcao--del cfgmt-fundador-excluir" data-id="${t.id}" data-nome="${esc(t.nome)}">Excluir</button>`;
           return `<tr>
             <td>${t.id}</td>
-            <td>${esc(t.nome)}</td>
+            <td class="is-nome">${esc(t.nome)}</td>
+            <td>${formatarDataHora(t.criado_em)}</td>
             <td>${ativo}</td>
             <td>${esc(t.sistema_erp || "—")}</td>
             <td>${t.produtos_publicados ?? 0}</td>
             <td>${esc(t.whatsapp || "—")}</td>
-            <td>${btn}</td>
+            <td><div class="CfgMt_FundadorAcoes">${btn}${excluir}</div></td>
           </tr>`;
         })
         .join("");
     } catch (err) {
-      el.fundadorLista.innerHTML = `<tr><td colspan="7">${esc(err.message || "Erro")}</td></tr>`;
+      el.fundadorLista.innerHTML = `<tr><td colspan="8">${esc(err.message || "Erro")}</td></tr>`;
     }
   }
 
@@ -156,7 +159,56 @@
     return j;
   }
 
+  async function excluirDoPrograma(id, nome) {
+    const ask = await Swal.fire({
+      icon: "warning",
+      title: "Tirar do programa?",
+      html: `<p style="margin:0">A conta <strong>${esc(nome)}</strong> continua. Ela só sai do Fornecedor Fundador e a vaga fica livre.</p>`,
+      showCancelButton: true,
+      confirmButtonText: "Excluir do programa",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#dc2626",
+      cancelButtonColor: "#64748b",
+    });
+    if (!ask.isConfirmed) return { cancelled: true };
+    const r = await fetch(BASE + "/fundador/excluir", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ id }),
+    });
+    const j = await r.json();
+    if (!j.success) throw new Error(j.message || "Falha");
+    return j;
+  }
+
   el.fundadorLista?.addEventListener("click", async (e) => {
+    const sair = e.target.closest(".cfgmt-fundador-excluir");
+    if (sair) {
+      const id = parseInt(sair.dataset.id, 10);
+      sair.disabled = true;
+      try {
+        const j = await excluirDoPrograma(id, sair.dataset.nome || "");
+        if (j?.cancelled) return;
+        await carregarFundadores();
+        await Swal.fire({
+          icon: "success",
+          title: "Fora do programa",
+          text: j.message || "A conta saiu do Fornecedor Fundador.",
+          confirmButtonColor: "#021F81",
+        });
+      } catch (err) {
+        await Swal.fire({
+          icon: "error",
+          title: "Erro",
+          text: err.message || "Erro",
+          confirmButtonColor: "#021F81",
+        });
+      } finally {
+        sair.disabled = false;
+      }
+      return;
+    }
     const btn = e.target.closest(".cfgmt-fundador-toggle");
     if (!btn) return;
     const id = parseInt(btn.dataset.id, 10);
