@@ -44,6 +44,26 @@ _MOD_FORNECEDOR = [MODULO_FORNECEDOR, MODULO_ARMAZEM]
 
 CATEGORIAS_INTEGRACOES = [
     {
+        "id": "catalogo",
+        "rotulo": "Catálogo e ERP",
+        "titulo": "Catálogo e ERP",
+        "subtitulo": "Sincronize produtos, estoque, categorias e NF-e.",
+        "modulos": _MOD_FORNECEDOR,
+        "itens": [
+            {
+                "slug": "bling",
+                "nome": "Bling",
+                "descricao": "Importe produtos, estoque e categorias do seu Bling.",
+                "cor": "#28A745",
+                "iniciais": "BL",
+                "modulos": _MOD_FORNECEDOR,
+                "papel": "catalogo",
+            },
+            {"slug": "olist", "nome": "Olist", "descricao": "Hub Olist para marketplaces e lojas.", "cor": "#6C2EB9", "iniciais": "OL", "modulos": _MOD_FORNECEDOR},
+            {"slug": "conta-azul", "nome": "Conta Azul", "descricao": "Gestão financeira e emissão de notas.", "cor": "#0080FF", "iniciais": "CA", "modulos": _MOD_FORNECEDOR},
+        ],
+    },
+    {
         "id": "financeiro",
         "rotulo": "Recebimentos",
         "titulo": "Recebimentos",
@@ -71,26 +91,6 @@ CATEGORIAS_INTEGRACOES = [
             {"slug": "asaas", "nome": "Asaas", "descricao": "Cobranças e recebimentos Asaas.", "cor": "#0030B9", "iniciais": "AS", "modulos": _MOD_FORNECEDOR},
             {"slug": "pagar-me", "nome": "Pagar.me", "descricao": "Gateway Pagar.me.", "cor": "#65A300", "iniciais": "PM", "modulos": _MOD_FORNECEDOR},
             {"slug": "paypal", "nome": "PayPal", "descricao": "Pagamentos PayPal.", "cor": "#003087", "iniciais": "PP", "modulos": _MOD_FORNECEDOR},
-        ],
-    },
-    {
-        "id": "catalogo",
-        "rotulo": "Catálogo e ERP",
-        "titulo": "Catálogo e ERP",
-        "subtitulo": "Sincronize produtos, estoque, categorias e NF-e.",
-        "modulos": _MOD_FORNECEDOR,
-        "itens": [
-            {
-                "slug": "bling",
-                "nome": "Bling",
-                "descricao": "Importe produtos, estoque e categorias do seu Bling.",
-                "cor": "#28A745",
-                "iniciais": "BL",
-                "modulos": _MOD_FORNECEDOR,
-                "papel": "catalogo",
-            },
-            {"slug": "olist", "nome": "Olist", "descricao": "Hub Olist para marketplaces e lojas.", "cor": "#6C2EB9", "iniciais": "OL", "modulos": _MOD_FORNECEDOR},
-            {"slug": "conta-azul", "nome": "Conta Azul", "descricao": "Gestão financeira e emissão de notas.", "cor": "#0080FF", "iniciais": "CA", "modulos": _MOD_FORNECEDOR},
         ],
     },
     {

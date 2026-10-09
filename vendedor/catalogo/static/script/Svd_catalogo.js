@@ -13,6 +13,10 @@
     catNav: document.getElementById("vdCatCategorias"),
     stats: document.getElementById("vdCatStats"),
     statTotal: document.getElementById("vdCatStatTotal"),
+    selTodos: document.getElementById("vdCatSelTodos"),
+    selCount: document.getElementById("vdCatSelCount"),
+    selLimpar: document.getElementById("vdCatSelLimpar"),
+    btnIntegrar: document.getElementById("vdCatBtnIntegrar"),
     modal: document.getElementById("vdCatModal"),
     backdrop: document.getElementById("vdCatModalBackdrop"),
     modalFechar: document.getElementById("vdCatModalFechar"),
@@ -25,6 +29,7 @@
   if (!el.grid) return;
 
   let produtosCache = [];
+  const selecionados = new Set();
   let produtoAberto = null;
   let categoriaAtiva = "";
   let fornecedoresCache = [];
@@ -75,6 +80,24 @@
     return "";
   }
 
+  function idsIntegraveis() {
+    return produtosCache.filter((p) => !p.ativado).map((p) => Number(p.id_produto));
+  }
+
+  function atualizarSelecao() {
+    const vis = idsIntegraveis();
+    const marcados = vis.filter((id) => selecionados.has(id)).length;
+    if (el.selCount) {
+      el.selCount.textContent = marcados === 1 ? "1 selecionado" : `${marcados} selecionados`;
+    }
+    if (el.btnIntegrar) el.btnIntegrar.disabled = marcados === 0;
+    if (el.selTodos) {
+      el.selTodos.disabled = vis.length === 0;
+      el.selTodos.checked = vis.length > 0 && marcados === vis.length;
+      el.selTodos.indeterminate = marcados > 0 && marcados < vis.length;
+    }
+  }
+
   function renderCard(p) {
     const img = p.imagem_url
       ? `<img src="${esc(p.imagem_url)}" alt="" loading="lazy" />`
@@ -82,9 +105,15 @@
     const catOverlay = p.categoria_nome
       ? `<span class="VdCat_CardCat">${esc(p.categoria_nome)}</span>`
       : "";
+    const id = Number(p.id_produto);
+    const marcado = !p.ativado && selecionados.has(id);
+    const sel = p.ativado
+      ? ""
+      : `<input type="checkbox" class="VdCat_Sel" data-produto="${id}" ${marcado ? "checked" : ""} aria-label="Selecionar ${esc(p.nome)}" />`;
     return `
-      <article class="VdCat_Card${p.ativado ? " is-ativo" : ""}" data-produto="${p.id_produto}" tabindex="0">
+      <article class="VdCat_Card${p.ativado ? " is-ativo" : ""}${marcado ? " is-marcado" : ""}" data-produto="${id}" tabindex="0">
         <div class="VdCat_CardImg">
+          ${sel}
           ${badgeCard(p)}
           ${img}
           ${catOverlay}
@@ -115,15 +144,21 @@
 
   function renderGrid(produtos) {
     produtosCache = produtos || [];
+    const vivos = new Set(idsIntegraveis());
+    for (const id of [...selecionados]) {
+      if (!vivos.has(id)) selecionados.delete(id);
+    }
     if (!produtosCache.length) {
       el.grid.innerHTML = "";
       if (el.vazio) el.vazio.hidden = false;
       atualizarStats(0);
+      atualizarSelecao();
       return;
     }
     if (el.vazio) el.vazio.hidden = true;
     el.grid.innerHTML = produtosCache.map(renderCard).join("");
     atualizarStats(produtosCache.length);
+    atualizarSelecao();
   }
 
   function renderFornecedores(lista) {
@@ -300,6 +335,54 @@
     renderDetalhe(p);
   }
 
+  async function integrarSelecionados() {
+    const ids = idsIntegraveis().filter((id) => selecionados.has(id));
+    if (!ids.length) return;
+    const titulo = ids.length === 1 ? "Integrar 1 produto?" : `Integrar ${ids.length} produtos?`;
+    if (window.Swal) {
+      const ask = await Swal.fire({
+        title: titulo,
+        text: "Eles entram juntos em Meus produtos, com as variações de cada um.",
+        icon: "question",
+        showCancelButton: true,
+        confirmButtonText: "Integrar",
+        cancelButtonText: "Cancelar",
+        confirmButtonColor: "#021F81",
+      });
+      if (!ask.isConfirmed) return;
+      Swal.fire({
+        title: "Integrando…",
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        didOpen: () => Swal.showLoading(),
+      });
+    }
+    let j = {};
+    try {
+      const r = await fetch("/vendedor/catalogo/ativar-lote", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      });
+      j = await r.json();
+    } catch {
+      j = { success: false, message: "Não foi possível integrar agora." };
+    }
+    if (window.Swal) {
+      await Swal.fire(
+        j.success ? (j.limite ? "Atenção" : "Sucesso") : "Erro",
+        j.message || "Não foi possível integrar.",
+        j.success ? (j.limite ? "warning" : "success") : "error"
+      );
+    } else {
+      alert(j.message || "Não foi possível integrar.");
+    }
+    if (!j.success && !j.integrados) return;
+    selecionados.clear();
+    await carregar();
+  }
+
   async function ativarProduto(idProduto) {
     const r = await fetch("/vendedor/catalogo/ativar-produto", {
       method: "POST",
@@ -384,19 +467,54 @@
   });
 
   el.grid.addEventListener("click", (e) => {
-    if (e.target.closest("button")) return;
+    if (e.target.closest("button, .VdCat_Sel")) return;
     const card = e.target.closest(".VdCat_Card");
     if (!card) return;
     abrirProduto(card.getAttribute("data-produto"));
   });
 
+  el.grid.addEventListener("change", (e) => {
+    const chk = e.target.closest(".VdCat_Sel");
+    if (!chk) return;
+    const id = Number(chk.getAttribute("data-produto"));
+    if (chk.checked) selecionados.add(id);
+    else selecionados.delete(id);
+    chk.closest(".VdCat_Card")?.classList.toggle("is-marcado", chk.checked);
+    atualizarSelecao();
+  });
+
   el.grid.addEventListener("keydown", (e) => {
     if (e.key !== "Enter" && e.key !== " ") return;
+    if (e.target.closest(".VdCat_Sel")) return;
     const card = e.target.closest(".VdCat_Card");
     if (!card) return;
     e.preventDefault();
     abrirProduto(card.getAttribute("data-produto"));
   });
+
+  el.selTodos?.addEventListener("change", () => {
+    const vis = idsIntegraveis();
+    if (el.selTodos.checked) vis.forEach((id) => selecionados.add(id));
+    else vis.forEach((id) => selecionados.delete(id));
+    el.grid.querySelectorAll(".VdCat_Sel").forEach((chk) => {
+      const id = Number(chk.getAttribute("data-produto"));
+      const on = selecionados.has(id);
+      chk.checked = on;
+      chk.closest(".VdCat_Card")?.classList.toggle("is-marcado", on);
+    });
+    atualizarSelecao();
+  });
+
+  el.selLimpar?.addEventListener("click", () => {
+    selecionados.clear();
+    el.grid.querySelectorAll(".VdCat_Sel").forEach((chk) => {
+      chk.checked = false;
+      chk.closest(".VdCat_Card")?.classList.remove("is-marcado");
+    });
+    atualizarSelecao();
+  });
+
+  el.btnIntegrar?.addEventListener("click", () => integrarSelecionados());
 
   el.modalFoot?.addEventListener("click", (e) => {
     const btn = e.target.closest(".VdCat_BtnAtivarPai");

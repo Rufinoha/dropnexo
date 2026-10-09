@@ -495,6 +495,61 @@ def produto_detalhe(id_produto: int):
         conn.close()
 
 
+def _integrar_produto_vendedor(cur, id_vendedor: int, id_produto: int) -> int:
+    """Integra o pai e as variações ativas. ValueError = limite do plano."""
+    cur.execute(
+        """
+        SELECT v.id, p.id, p.id_tenant,
+               COALESCE(NULLIF(v.valor_drop, 0), NULLIF(p.valor_drop, 0), v.preco) AS preco_drop,
+               p.id_categoria
+        FROM tbl_produto_variante v
+        JOIN tbl_produto p ON p.id = v.id_produto
+        JOIN tbl_vinculo_vendedor_fornecedor vinc
+            ON vinc.id_tenant_fornecedor = p.id_tenant
+           AND vinc.id_tenant_vendedor = %s AND vinc.status = 'ativo'
+           AND """ + SQL_MATCH_VINCULO_PRODUTO + """
+        WHERE p.id = %s AND p.publicado = TRUE AND v.ativo = TRUE
+        """,
+        (id_vendedor, id_produto),
+    )
+    rows = cur.fetchall()
+    if not rows:
+        raise LookupError("Produto indisponível ou fornecedor não aprovado.")
+
+    id_fornecedor = int(rows[0][2])
+    from sistema.planos.limites import exigir_novo_produto_vendedor
+    from vendedor.meus_produtos.servico_meus_produtos import espelhar_depositos_fornecedor
+
+    exigir_novo_produto_vendedor(cur, int(id_vendedor), int(id_produto))
+    espelhar_depositos_fornecedor(cur, int(id_vendedor), id_fornecedor, id_produto=id_produto)
+
+    ativados = 0
+    for row in rows:
+        preco_forn = float(row[3] or 0)
+        preco_venda = precificar_na_integracao(
+            cur, int(id_vendedor), int(row[2]), row[4], preco_forn
+        )
+        cur.execute(
+            """
+            INSERT INTO tbl_produto_vendedor
+                (id_tenant_vendedor, id_tenant_fornecedor, id_variante, id_produto,
+                 preco_fornecedor, preco_venda, ativo, estoque_vitrine)
+            VALUES (%s, %s, %s, %s, %s, %s, TRUE, 0)
+            ON CONFLICT (id_tenant_vendedor, id_variante) DO UPDATE SET
+                ativo = TRUE, preco_fornecedor = EXCLUDED.preco_fornecedor,
+                preco_venda = CASE WHEN tbl_produto_vendedor.preco_manual THEN tbl_produto_vendedor.preco_venda
+                              ELSE EXCLUDED.preco_venda END,
+                atualizado_em = NOW()
+            """,
+            (id_vendedor, row[2], row[0], row[1], preco_forn, preco_venda),
+        )
+        ativados += 1
+    return ativados
+
+
+_LOTE_MAX = 500
+
+
 @vd_catalogo_bp.post("/vendedor/catalogo/ativar-produto")
 @login_obrigatorio()
 @exigir_modulo(MODULO_VENDEDOR)
@@ -511,57 +566,12 @@ def ativar_produto():
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
-        cur.execute(
-            """
-            SELECT v.id, p.id, p.id_tenant,
-                   COALESCE(NULLIF(v.valor_drop, 0), NULLIF(p.valor_drop, 0), v.preco) AS preco_drop,
-                   p.id_categoria
-            FROM tbl_produto_variante v
-            JOIN tbl_produto p ON p.id = v.id_produto
-            JOIN tbl_vinculo_vendedor_fornecedor vinc
-                ON vinc.id_tenant_fornecedor = p.id_tenant
-               AND vinc.id_tenant_vendedor = %s AND vinc.status = 'ativo'
-               AND """ + SQL_MATCH_VINCULO_PRODUTO + """
-            WHERE p.id = %s AND p.publicado = TRUE AND v.ativo = TRUE
-            """,
-            (id_vendedor, id_produto),
-        )
-        rows = cur.fetchall()
-        if not rows:
-            return jsonify(success=False, message="Produto indisponível ou fornecedor não aprovado."), 404
-
-        id_fornecedor = int(rows[0][2])
-        from sistema.planos.limites import exigir_novo_produto_vendedor
-        from vendedor.meus_produtos.servico_meus_produtos import espelhar_depositos_fornecedor
-
         try:
-            exigir_novo_produto_vendedor(cur, int(id_vendedor), int(id_produto))
+            ativados = _integrar_produto_vendedor(cur, int(id_vendedor), id_produto)
+        except LookupError as e:
+            return jsonify(success=False, message=str(e)), 404
         except ValueError as e:
             return jsonify(success=False, message=str(e)), 403
-
-        espelhar_depositos_fornecedor(cur, int(id_vendedor), id_fornecedor, id_produto=id_produto)
-
-        ativados = 0
-        for row in rows:
-            preco_forn = float(row[3] or 0)
-            preco_venda = precificar_na_integracao(
-                cur, int(id_vendedor), int(row[2]), row[4], preco_forn
-            )
-            cur.execute(
-                """
-                INSERT INTO tbl_produto_vendedor
-                    (id_tenant_vendedor, id_tenant_fornecedor, id_variante, id_produto,
-                     preco_fornecedor, preco_venda, ativo, estoque_vitrine)
-                VALUES (%s, %s, %s, %s, %s, %s, TRUE, 0)
-                ON CONFLICT (id_tenant_vendedor, id_variante) DO UPDATE SET
-                    ativo = TRUE, preco_fornecedor = EXCLUDED.preco_fornecedor,
-                    preco_venda = CASE WHEN tbl_produto_vendedor.preco_manual THEN tbl_produto_vendedor.preco_venda
-                                  ELSE EXCLUDED.preco_venda END,
-                    atualizado_em = NOW()
-                """,
-                (id_vendedor, row[2], row[0], row[1], preco_forn, preco_venda),
-            )
-            ativados += 1
         conn.commit()
         msg = (
             f"Produto integrado com {ativados} variação(ões) em Meus produtos."
@@ -569,6 +579,79 @@ def ativar_produto():
             else "Produto integrado em Meus produtos."
         )
         return jsonify(success=True, message=msg, ativados=ativados)
+    finally:
+        conn.close()
+
+
+@vd_catalogo_bp.post("/vendedor/catalogo/ativar-lote")
+@login_obrigatorio()
+@exigir_modulo(MODULO_VENDEDOR)
+@exigir_permissao(codigo="vd_catalogo.editar")
+def ativar_lote():
+    """Integra vários produtos pai. Para no limite do plano e grava os que já entraram."""
+    id_vendedor = session.get("id_tenant")
+    body = request.get_json(silent=True) or {}
+    ids: list[int] = []
+    vistos: set[int] = set()
+    for bruto in body.get("ids") or []:
+        try:
+            pid = int(bruto)
+        except (TypeError, ValueError):
+            continue
+        if pid > 0 and pid not in vistos:
+            vistos.add(pid)
+            ids.append(pid)
+    if not ids:
+        return jsonify(success=False, message="Selecione ao menos um produto."), 400
+    if len(ids) > _LOTE_MAX:
+        return jsonify(success=False, message=f"Selecione no máximo {_LOTE_MAX} produtos por vez."), 400
+
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        integrados = 0
+        ignorados = 0
+        aviso = ""
+        for pid in ids:
+            cur.execute("SAVEPOINT sp_cat_lote")
+            try:
+                _integrar_produto_vendedor(cur, int(id_vendedor), pid)
+            except LookupError:
+                cur.execute("ROLLBACK TO SAVEPOINT sp_cat_lote")
+                ignorados += 1
+            except ValueError as e:
+                cur.execute("ROLLBACK TO SAVEPOINT sp_cat_lote")
+                aviso = str(e)
+                break
+            else:
+                cur.execute("RELEASE SAVEPOINT sp_cat_lote")
+                integrados += 1
+        conn.commit()
+        if integrados == 0 and aviso:
+            return jsonify(success=False, message=aviso, integrados=0, ignorados=ignorados), 403
+        if integrados == 0:
+            return jsonify(
+                success=False,
+                message="Nenhum produto pôde ser integrado.",
+                integrados=0,
+                ignorados=ignorados,
+            ), 404
+        if aviso:
+            msg = (
+                f"{integrados} produto(s) integrado(s) em Meus produtos. "
+                f"Os demais não entraram: {aviso}"
+            )
+        elif integrados == 1:
+            msg = "1 produto integrado em Meus produtos."
+        else:
+            msg = f"{integrados} produtos integrados em Meus produtos."
+        return jsonify(
+            success=True,
+            message=msg,
+            integrados=integrados,
+            ignorados=ignorados,
+            limite=bool(aviso),
+        )
     finally:
         conn.close()
 

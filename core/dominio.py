@@ -758,8 +758,116 @@ def _formatar_documento(doc: str | None, tipo: str | None) -> str:
     return doc or ""
 
 
+def _id_usuario_int(valor) -> int | None:
+    try:
+        if valor is None or valor == "":
+            return None
+        n = int(valor)
+    except (TypeError, ValueError):
+        return None
+    return n if n > 0 else None
+
+
+def _id_dono_tenant(cur, id_tenant: int, *, excluir_dev: bool) -> int | None:
+    filtro = "AND COALESCE(u.eh_desenvolvedor, FALSE) = FALSE" if excluir_dev else ""
+    cur.execute(
+        f"""
+        SELECT u.id
+        FROM tbl_usuario_tenant ut
+        JOIN tbl_usuario u ON u.id = ut.id_usuario
+        JOIN tbl_perfil pf ON pf.id = ut.id_perfil
+        WHERE ut.id_tenant = %s
+          AND ut.ativo = TRUE
+          AND lower(pf.codigo) = 'dono'
+          {filtro}
+        ORDER BY ut.id
+        LIMIT 1
+        """,
+        (int(id_tenant),),
+    )
+    row = cur.fetchone()
+    return int(row[0]) if row else None
+
+
+def resolver_usuario_contato_tenant(cur, id_tenant: int, id_usuario: int | None) -> int | None:
+    """Quem figura como responsável do vendedor no vínculo.
+
+    Usuário DEV só permanece se for dono real desta conta (cadastro de teste).
+    Em conta de terceiro, entra o dono da conta.
+    """
+    uid = _id_usuario_int(id_usuario)
+    if uid:
+        cur.execute(
+            """
+            SELECT COALESCE(u.eh_desenvolvedor, FALSE),
+                   lower(COALESCE(pf.codigo, ''))
+            FROM tbl_usuario u
+            LEFT JOIN tbl_usuario_tenant ut
+              ON ut.id_usuario = u.id
+             AND ut.id_tenant = %s
+             AND ut.ativo = TRUE
+            LEFT JOIN tbl_perfil pf ON pf.id = ut.id_perfil
+            WHERE u.id = %s
+            """,
+            (int(id_tenant), uid),
+        )
+        row = cur.fetchone()
+        if row and (not bool(row[0]) or (row[1] or "") == "dono"):
+            return uid
+    dono = _id_dono_tenant(cur, int(id_tenant), excluir_dev=True)
+    if dono:
+        return dono
+    return _id_dono_tenant(cur, int(id_tenant), excluir_dev=False)
+
+
+def sanear_contato_snapshot(cur, id_vinculo: int, id_tenant: int, snap: dict) -> tuple[dict, bool]:
+    """Troca contato DEV que não é dono pelo dono da conta e grava o snapshot."""
+    if not isinstance(snap, dict):
+        snap = {}
+    uid_snap = _id_usuario_int(snap.get("id_usuario"))
+    if not uid_snap:
+        return snap, False
+    cur.execute(
+        "SELECT COALESCE(eh_desenvolvedor, FALSE) FROM tbl_usuario WHERE id = %s",
+        (uid_snap,),
+    )
+    flag = cur.fetchone()
+    if not flag or not bool(flag[0]):
+        return snap, False
+    uid = resolver_usuario_contato_tenant(cur, id_tenant, uid_snap)
+    if uid == uid_snap:
+        return snap, False
+    novo = dict(snap)
+    novo["id_usuario"] = uid
+    if uid:
+        cur.execute(
+            "SELECT nome, email, COALESCE(whatsapp, '') FROM tbl_usuario WHERE id = %s",
+            (uid,),
+        )
+        u = cur.fetchone()
+        novo["usuario_nome"] = (u[0] if u else "") or ""
+        novo["usuario_email"] = (u[1] if u else "") or ""
+        novo["usuario_whatsapp"] = (u[2] if u else "") or ""
+    else:
+        novo["usuario_nome"] = ""
+        novo["usuario_email"] = ""
+        novo["usuario_whatsapp"] = ""
+    import json
+
+    cur.execute(
+        """
+        UPDATE tbl_vinculo_vendedor_fornecedor
+        SET snapshot_vendedor = %s::jsonb
+        WHERE id = %s
+        """,
+        (json.dumps(novo, ensure_ascii=False), int(id_vinculo)),
+    )
+    return novo, True
+
+
 def montar_snapshot_vendedor(cur, id_vendedor: int, id_usuario: int | None) -> dict:
     """Snapshot completo gravado na solicitação de vínculo (dados para decisão do fornecedor)."""
+    id_usuario = resolver_usuario_contato_tenant(cur, id_vendedor, id_usuario)
     base: dict = {"id_tenant": id_vendedor, "id_usuario": id_usuario}
     cur.execute(
         """

@@ -202,6 +202,65 @@
   min-width: 0;
 }
 
+.VdCat_Bulk {
+  justify-content: flex-start;
+  margin-bottom: 0.75rem;
+  padding: 0.55rem 0.75rem;
+  background: #fff;
+  border: 1px solid var(--vd-cat-border);
+  border-radius: 12px;
+}
+
+.VdCat_BulkAll {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #0f172a;
+  cursor: pointer;
+  user-select: none;
+}
+
+.VdCat_BulkAll input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: #021f81;
+  cursor: pointer;
+}
+
+.VdCat_Bulk .Cl_botaoprimario {
+  margin-left: auto;
+  min-height: 2rem;
+  padding: 0.28rem 0.85rem;
+  white-space: nowrap;
+}
+
+.VdCat_Bulk .Cl_botaoprimario:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.VdCat_Sel {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: #021f81;
+  cursor: pointer;
+  background: #fff;
+  border-radius: 4px;
+}
+
+.VdCat_Card.is-marcado {
+  border-color: #021f81;
+  box-shadow: 0 0 0 2px rgba(2, 31, 129, 0.22);
+}
+
 .VdCat_Grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));

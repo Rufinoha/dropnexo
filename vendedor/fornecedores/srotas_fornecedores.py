@@ -1586,13 +1586,14 @@ def solicitar_vinculo():
                     notificar_solicitacao_vinculo,
                 )
 
+                id_contato = snap.get("id_usuario") or id_usuario
                 if auto_aprovar:
                     notificar_aprovacao_vinculo(
-                        cur, id_vinculo_novo, criado_por=id_usuario
+                        cur, id_vinculo_novo, criado_por=id_contato
                     )
                 else:
                     notificar_solicitacao_vinculo(
-                        cur, id_vinculo_novo, criado_por=id_usuario
+                        cur, id_vinculo_novo, criado_por=id_contato
                     )
             except Exception:
                 pass

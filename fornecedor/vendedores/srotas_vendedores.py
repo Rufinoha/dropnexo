@@ -14,6 +14,7 @@ from core.dominio import (
     encerrar_vinculo,
     montar_snapshot_vendedor,
     pausar_vinculo,
+    sanear_contato_snapshot,
 )
 from sistema.plataforma.sessao import MODULO_FORNECEDOR
 
@@ -208,8 +209,13 @@ def vendedores_dados():
             params,
         )
         dados = []
+        alterou_contato = False
         for row in cur.fetchall():
             snap = _parse_snapshot(row[9])
+            id_vd = snap.get("id_tenant")
+            if id_vd:
+                snap, mudou = sanear_contato_snapshot(cur, int(row[0]), int(id_vd), snap)
+                alterou_contato = alterou_contato or mudou
             responsavel = (
                 (snap.get("usuario_nome") or "").strip()
                 or (row[14] or "").strip()
@@ -235,6 +241,8 @@ def vendedores_dados():
                     "follow_retorno": _iso_dia(row[16]),
                 }
             )
+        if alterou_contato:
+            conn.commit()
         return jsonify(success=True, dados=dados)
     finally:
         conn.close()
@@ -274,6 +282,9 @@ def vendedores_detalhe(id_vinculo: int):
 
         id_vendedor = row[7]
         snap = _parse_snapshot(row[6])
+        snap, mudou_contato = sanear_contato_snapshot(cur, int(row[0]), int(id_vendedor), snap)
+        if mudou_contato:
+            conn.commit()
         live = montar_snapshot_vendedor(cur, id_vendedor, snap.get("id_usuario"))
 
         merged = {**live, **{k: v for k, v in snap.items() if v not in (None, "")}}

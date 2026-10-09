@@ -3,7 +3,7 @@
 {% block topbar_title %}Catálogo (fornecedores aprovados){% endblock %}
 {% block head_extra %}
 <link rel="stylesheet" href="{{ url_for('fn_catalogo.static', filename='style/Ccatalogos.css') }}?v=8" />
-<link rel="stylesheet" href="{{ url_for('vd_catalogo.static', filename='style/Cvd_catalogo.css') }}?v=9" />
+<link rel="stylesheet" href="{{ url_for('vd_catalogo.static', filename='style/Cvd_catalogo.css') }}?v=10" />
 {% endblock %}
 {% block content %}
 <div class="cl-page-principal VdCat_Page">
@@ -54,6 +54,15 @@
     </aside>
 
     <main class="VdCat_Main">
+      <div class="VdCat_Bulk Cat_BulkBar" id="vdCatBulk" aria-label="Integrar em lote">
+        <label class="VdCat_BulkAll" for="vdCatSelTodos">
+          <input type="checkbox" id="vdCatSelTodos" />
+          <span>Selecionar desta lista</span>
+        </label>
+        <span class="Cat_BulkCount" id="vdCatSelCount">0 selecionados</span>
+        <button type="button" class="Cat_BulkClear" id="vdCatSelLimpar">Limpar seleção</button>
+        <button type="button" class="Cl_botaoprimario" id="vdCatBtnIntegrar" disabled>Integrar selecionados</button>
+      </div>
       <div id="vdCatGrid" class="VdCat_Grid" aria-live="polite"></div>
       <div id="vdCatVazio" class="VdCat_Empty" hidden>
         <div class="VdCat_EmptyIcon" aria-hidden="true">📦</div>
@@ -81,5 +90,5 @@
 {% endblock %}
 {% block page_js %}
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-<script src="{{ url_for('vd_catalogo.static', filename='script/Svd_catalogo.js') }}?v=8"></script>
+<script src="{{ url_for('vd_catalogo.static', filename='script/Svd_catalogo.js') }}?v=9"></script>
 {% endblock %}
