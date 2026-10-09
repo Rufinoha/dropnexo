@@ -526,6 +526,11 @@
   font-size: 0.75rem;
 }
 
+.mp-logo-img[hidden],
+.mp-logo-ph[hidden] {
+  display: none;
+}
+
 .mp-logo-hint {
   margin: 0;
   font-size: 0.72rem;
