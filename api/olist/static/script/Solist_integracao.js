@@ -70,11 +70,11 @@
     const exp = document.getElementById("ol_pedidos_exportar");
     const auto = document.getElementById("ol_pedidos_exportar_auto");
     if (exp) exp.checked = op.pedidos_exportar !== undefined ? !!op.pedidos_exportar : true;
-    if (auto) auto.checked = !!op.pedidos_exportar_auto;
+    if (auto) auto.checked = op.pedidos_exportar_auto !== undefined ? !!op.pedidos_exportar_auto : true;
     const rec = document.getElementById("ol_estoque_receber");
     const baixa = document.getElementById("ol_estoque_baixa");
     if (rec) rec.checked = op.estoque_importar_olist !== undefined ? !!op.estoque_importar_olist : true;
-    if (baixa) baixa.checked = !!op.estoque_baixa_pedido;
+    if (baixa) baixa.checked = op.estoque_baixa_pedido !== undefined ? !!op.estoque_baixa_pedido : true;
     const arm = document.getElementById("ol_armazenamento_hint");
     if (arm) {
       const bytes = Number(estado.armazenamento?.bytes_imagens || 0);
@@ -242,7 +242,13 @@
     const tb = document.getElementById("ol_tbl_categorias");
     if (!tb) return;
     tb.innerHTML = '<tr><td colspan="5">Buscando categorias no Olist…</td></tr>';
-    const data = await jsonFetch("/api/integracoes/olist/categorias");
+    let data;
+    try {
+      data = await jsonFetch("/api/integracoes/olist/categorias");
+    } catch (e) {
+      tb.innerHTML = `<tr><td colspan="5">${esc(e.message)}</td></tr>`;
+      throw e;
+    }
     const segs = data.segmentos || [];
     const locais = data.dropnexo || [];
     if (!(data.olist || []).length) {

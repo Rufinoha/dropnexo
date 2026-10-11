@@ -193,9 +193,39 @@ def vincular_deposito(cur, id_tenant: int, id_olist: str, nome: str, id_deposito
     )
 
 
+def _achatar_arvore(nos: Any, pai: str = "") -> list[dict]:
+    if isinstance(nos, dict):
+        if nos.get("id") or nos.get("descricao") or nos.get("nome"):
+            nos = [nos]
+        else:
+            nos = nos.get("filhas") or nos.get("itens") or nos.get("categorias") or []
+    saida: list[dict] = []
+    for no in nos or []:
+        if not isinstance(no, dict):
+            continue
+        nome = str(no.get("descricao") or no.get("nome") or "").strip()
+        id_olist = str(no.get("id") or "").strip()
+        caminho = f"{pai} > {nome}" if pai and nome else nome
+        if id_olist:
+            saida.append({"id": id_olist, "descricao": nome or id_olist, "caminho": caminho or nome or id_olist})
+        filhas = no.get("filhas") if isinstance(no.get("filhas"), list) else no.get("nodes")
+        if isinstance(filhas, list) and filhas:
+            saida.extend(_achatar_arvore(filhas, caminho or pai))
+    return saida
+
+
 def listar_categorias(cur, id_tenant: int) -> dict[str, Any]:
     garantir_tabelas(cur)
-    remotos = _buscar_lista(id_tenant, ["/categorias/todas", "/categorias"])
+    try:
+        bruto = api_request(id_tenant, "GET", "/categorias/todas")
+    except RuntimeError as e:
+        texto = str(e)
+        if "403" in texto:
+            raise RuntimeError(
+                "O Olist recusou a lista de categorias. No aplicativo Dropnexo, deixe Categorias em Leitura e conecte de novo para autorizar essa permissão."
+            ) from e
+        raise
+    remotos = _achatar_arvore(bruto)
     cur.execute(
         """
         SELECT id_olist, acao, id_segmento, id_categoria
@@ -231,9 +261,8 @@ def listar_categorias(cur, id_tenant: int) -> dict[str, Any]:
         id_olist = str(cat.get("id") or "").strip()
         if not id_olist:
             continue
-        pai = str(cat.get("idPai") or cat.get("idCategoriaPai") or "").strip()
-        nome = nomes.get(id_olist) or id_olist
-        caminho = f"{nomes.get(pai)} > {nome}" if pai and nomes.get(pai) else nome
+        nome = nomes.get(id_olist) or str(cat.get("caminho") or id_olist)
+        caminho = str(cat.get("caminho") or nome)
         salvo = mapa.get(id_olist) or {}
         itens.append(
             {

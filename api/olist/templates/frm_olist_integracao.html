@@ -114,7 +114,7 @@
             <small>Quando o pedido aparece para você no DropNexo, envia automaticamente ao Olist.</small>
           </span>
           <span class="Cl_Switch">
-            <input type="checkbox" id="ol_pedidos_exportar_auto" />
+            <input type="checkbox" id="ol_pedidos_exportar_auto" checked />
             <span class="Cl_SwitchSlider"></span>
           </span>
         </label>
@@ -166,7 +166,7 @@
               <small>Envia a quantidade vendida para o Olist quando o pedido for confirmado.</small>
             </span>
             <span class="Cl_Switch">
-              <input type="checkbox" id="ol_estoque_baixa" />
+              <input type="checkbox" id="ol_estoque_baixa" checked />
               <span class="Cl_SwitchSlider"></span>
             </span>
           </label>
@@ -234,5 +234,5 @@
 </div>
 {% endblock %}
 {% block page_js %}
-<script src="{{ url_for('olist.static', filename='script/Solist_integracao.js') }}?v=2"></script>
+<script src="{{ url_for('olist.static', filename='script/Solist_integracao.js') }}?v=5"></script>
 {% endblock %}
