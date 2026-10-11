@@ -10,7 +10,7 @@ from flask import render_template
 
 from api.brevo.srotas_brevo import enviar_email
 from global_utils import obter_base_url
-from sistema.planos.limites import limites_plano
+from sistema.planos.limites import limites_plano_tenant
 
 log = logging.getLogger(__name__)
 
@@ -150,19 +150,8 @@ def _tenant_meta(cur, id_tenant: int) -> dict:
     }
 
 
-def _tipo_limites(tipo_negocio: str | None, papel: str) -> str:
-    t = (tipo_negocio or "").strip().lower()
-    if t in ("vendedor", "fornecedor"):
-        return t
-    return papel if papel in ("vendedor", "fornecedor") else "vendedor"
-
-
 def tenant_pode_email_pedidos(cur, id_tenant: int, papel: str) -> bool:
-    meta = _tenant_meta(cur, id_tenant)
-    lim = limites_plano(
-        plano=meta.get("plano"),
-        tipo_negocio=_tipo_limites(meta.get("tipo_negocio"), papel),
-    )
+    lim = limites_plano_tenant(cur, int(id_tenant), papel)
     return bool(lim.get("email_pedidos"))
 
 

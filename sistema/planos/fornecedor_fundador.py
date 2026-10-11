@@ -171,8 +171,15 @@ def atribuir_fundador(
     obs: str | None = None,
 ) -> dict[str, Any]:
     """Marca tenant como Fundador ativo (limites = Hub). Reserva vaga se houver."""
+    from sistema.planos.limites import eh_conta_teste_fornecedor
+
     garantir_colunas_fundador(cur)
     tid = int(id_tenant)
+    if eh_conta_teste_fornecedor(tid):
+        return {
+            "ok": False,
+            "message": "A conta de teste H74 SISTEMAS não entra no programa Fornecedor Fundador.",
+        }
     cur.execute(
         """
         SELECT tipo_negocio, eh_fornecedor_fundador, fornecedor_fundador_ativo
@@ -349,8 +356,12 @@ def listar_candidatos_fundador(cur) -> list[dict[str, Any]]:
         ORDER BY t.nome ASC, t.id ASC
         """
     )
+    from sistema.planos.limites import eh_conta_teste_fornecedor
+
     out: list[dict[str, Any]] = []
     for r in cur.fetchall():
+        if eh_conta_teste_fornecedor(r[0]):
+            continue
         out.append(
             {
                 "id": int(r[0]),

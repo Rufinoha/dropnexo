@@ -9,6 +9,10 @@ from global_utils import plano_slug_banco
 
 # Banco: starter | professional | scale | enterprise
 
+# Fornecedor de teste H74 SISTEMAS. Acesso comercial ilimitado, sem plano.
+# Não entra no programa Fornecedor Fundador.
+ID_TENANT_TESTE_FORNECEDOR = 2
+
 
 _MB = 1024 * 1024
 _GB = 1024 * _MB
@@ -161,6 +165,33 @@ _POR_TIPO_BANCO = {
 }
 
 
+def eh_conta_teste_fornecedor(id_tenant: int | str | None) -> bool:
+    try:
+        return int(id_tenant or 0) == ID_TENANT_TESTE_FORNECEDOR
+    except (TypeError, ValueError):
+        return False
+
+
+def _limites_conta_teste(tipo: str) -> dict[str, Any]:
+    papel = tipo if tipo in ("vendedor", "fornecedor") else "fornecedor"
+    return {
+        "slug_comercial": "teste",
+        "nome": "Teste",
+        "gratuito": False,
+        "pedidos_mes": None,
+        "conexoes": None,
+        "produtos": None,
+        "usuarios": None,
+        "integracao": True,
+        "importacao_planilha": True,
+        "email_pedidos": True,
+        "armazenamento_bytes": None,
+        "depositos": None,
+        "plano_banco": "teste",
+        "tipo_negocio": papel,
+    }
+
+
 def tipo_negocio_sessao() -> str:
     t = (session.get("tenant_tipo_negocio") or session.get("tipo_negocio") or "").strip().lower()
     if t == "hibrido":
@@ -179,10 +210,12 @@ def limites_plano(
     tipo_negocio: str | None = None,
 ) -> dict[str, Any]:
     """Retorna limites/flags do plano do tenant (sessão ou parâmetros)."""
-    slug = plano_slug_banco(plano if plano is not None else session.get("tenant_plano"))
     tipo = (tipo_negocio or tipo_negocio_sessao()).strip().lower()
     if tipo not in ("vendedor", "fornecedor"):
         tipo = "vendedor"
+    if plano is None and eh_conta_teste_fornecedor(session.get("id_tenant")):
+        return _limites_conta_teste(tipo)
+    slug = plano_slug_banco(plano if plano is not None else session.get("tenant_plano"))
     factory = _POR_TIPO_BANCO[tipo].get(slug) or _POR_TIPO_BANCO[tipo]["starter"]
     lim = dict(factory())
     lim["plano_banco"] = slug
@@ -270,10 +303,10 @@ def limites_plano_tenant(cur, id_tenant: int, papel: str) -> dict[str, Any]:
     row = cur.fetchone()
     plano = row[0] if row else None
     tipo_negocio = row[1] if row else None
-    return limites_plano(
-        plano=plano,
-        tipo_negocio=_tipo_limites_tenant(tipo_negocio, papel),
-    )
+    papel_lim = _tipo_limites_tenant(tipo_negocio, papel)
+    if eh_conta_teste_fornecedor(id_tenant):
+        return _limites_conta_teste(papel_lim)
+    return limites_plano(plano=plano, tipo_negocio=papel_lim)
 
 
 def _inicio_fim_mes_atual_sql() -> tuple[str, str]:
@@ -420,10 +453,9 @@ def exigir_novo_produto_catalogo(cur, id_tenant: int) -> None:
         (int(id_tenant),),
     )
     row = cur.fetchone()
-    plano = row[0] if row else None
     tipo = ((row[1] if row else None) or "fornecedor").strip().lower()
     papel = "vendedor" if tipo == "vendedor" else "fornecedor"
-    lim = limites_plano(plano=plano, tipo_negocio=papel)
+    lim = limites_plano_tenant(cur, int(id_tenant), papel)
     limite = lim.get("produtos")
     if limite is None:
         return

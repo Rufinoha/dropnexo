@@ -42,6 +42,15 @@ def _pode_emitir_nota(cur, id_tenant: int) -> dict:
     from global_utils import plano_slug_banco
     from sistema.fiscal.nfe_servico import ler_config
 
+    from sistema.planos.limites import eh_conta_teste_fornecedor
+
+    if eh_conta_teste_fornecedor(id_tenant):
+        cfg = ler_config(cur, int(id_tenant))
+        return {
+            "plano_ok": True,
+            "tem_certificado": bool(cfg.get("tem_certificado")),
+        }
+
     slug = plano_slug_banco(session.get("tenant_plano"))
     try:
         cur.execute("SAVEPOINT sp_plano_nota")
