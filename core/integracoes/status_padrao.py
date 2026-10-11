@@ -311,9 +311,93 @@ def seed_ml_se_vazio(cur) -> None:
         )
 
 
+def seed_olist_se_vazio(cur) -> None:
+    """Amarração padrão fornecedor DropNexo → situações do Olist. Somente leitura na tela."""
+    garantir_tabela(cur)
+    cur.execute(
+        "SELECT COUNT(*) FROM tbl_integracao_status_padrao WHERE aplicacao = 'olist'"
+    )
+    if int(cur.fetchone()[0] or 0) > 0:
+        return
+    rows = [
+        (
+            "olist",
+            "fornecedor",
+            "aguardando_pagamento",
+            "Aguardando pagamento",
+            "criar",
+            "Em aberto",
+            "[]",
+            "outbound",
+            "Pedido chegou — cria o pedido de venda no Olist.",
+            10,
+        ),
+        (
+            "olist",
+            "fornecedor",
+            "pago",
+            "Pago",
+            "pago",
+            "Aprovado",
+            '["Faturado"]',
+            "outbound",
+            "Vendedor quitou com você (comprovante anexado).",
+            20,
+        ),
+        (
+            "olist",
+            "fornecedor",
+            "em_expedicao",
+            "Expedido",
+            "expedido",
+            "Enviado",
+            '["Preparando envio","Pronto para envio"]',
+            "outbound",
+            "Você imprimiu a etiqueta no DropNexo.",
+            30,
+        ),
+        (
+            "olist",
+            "fornecedor",
+            "entregue",
+            "Entregue",
+            "entregue",
+            "Entregue",
+            "[]",
+            "outbound",
+            "Entregue ao destinatário final.",
+            40,
+        ),
+        (
+            "olist",
+            "fornecedor",
+            "cancelado",
+            "Cancelado",
+            "cancelado",
+            "Cancelado",
+            "[]",
+            "outbound",
+            "Pedido cancelado — espelha no Olist.",
+            50,
+        ),
+    ]
+    for r in rows:
+        cur.execute(
+            """
+            INSERT INTO tbl_integracao_status_padrao (
+              aplicacao, contexto, status_dn, status_dn_label, evento,
+              status_externo, aliases, direcao, descricao, ordem
+            ) VALUES (%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s,%s)
+            ON CONFLICT (aplicacao, contexto, evento) DO NOTHING
+            """,
+            r,
+        )
+
+
 def seed_padrao_se_vazio(cur) -> None:
     seed_bling_se_vazio(cur)
     seed_ml_se_vazio(cur)
+    seed_olist_se_vazio(cur)
 
 
 def listar_status_padrao(

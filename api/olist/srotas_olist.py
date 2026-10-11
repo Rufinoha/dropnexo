@@ -16,6 +16,15 @@ from api.olist.cliente import (
     url_autorizacao,
     gerar_state_oauth,
 )
+from api.olist.painel import (
+    ler_config,
+    listar_categorias,
+    listar_depositos,
+    listar_logs,
+    salvar_categoria,
+    salvar_config,
+    vincular_deposito,
+)
 from api.olist.produtos import importar_lote
 from global_utils import Var_ConectarBanco, login_obrigatorio, usuario_tem_permissao
 from sistema.plataforma.sessao import MODULO_ARMAZEM, MODULO_FORNECEDOR, garantir_modulo_sessao
@@ -68,7 +77,6 @@ def pagina():
     id_tenant = session.get("id_tenant")
     conectado = False
     conta = ""
-    logs = []
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
@@ -81,25 +89,6 @@ def pagina():
             )
             row = cur.fetchone()
             conta = (row[0] or "") if row else ""
-            cur.execute(
-                """
-                SELECT status, resumo, detalhe, criado_em
-                FROM tbl_integracao_log
-                WHERE id_tenant = %s AND provedor = 'olist'
-                ORDER BY id DESC
-                LIMIT 12
-                """,
-                (int(id_tenant),),
-            )
-            for item in cur.fetchall():
-                logs.append(
-                    {
-                        "status": item[0],
-                        "resumo": item[1] or "",
-                        "detalhe": item[2] or "",
-                        "quando": item[3].strftime("%d/%m/%Y %H:%M") if item[3] else "",
-                    }
-                )
         conn.commit()
     finally:
         conn.close()
@@ -109,8 +98,8 @@ def pagina():
         nav_codigo="integracoes",
         olist_conectado=conectado,
         olist_conta=conta,
-        olist_logs=logs,
         olist_configurado=olist_configurado(),
+        eh_dev=bool(session.get("eh_desenvolvedor")),
         icone_olist=url_icone_integracao("olist"),
     )
 
@@ -237,3 +226,173 @@ def api_importar():
         return jsonify(success=True, **resultado)
     finally:
         conn.close()
+
+
+def _tenant_ok():
+    if not _pode() or not _modulo_catalogo():
+        return None, (jsonify(success=False, message="Sem permissão."), 403)
+    id_tenant = session.get("id_tenant")
+    if not id_tenant:
+        return None, (jsonify(success=False, message="Sessão sem empresa."), 400)
+    return int(id_tenant), None
+
+
+@olist_bp.get("/api/integracoes/olist/status")
+@login_obrigatorio()
+def api_status():
+    id_tenant, erro = _tenant_ok()
+    if erro:
+        return erro
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        garantir_tabelas(cur)
+        conectado = olist_conectado(cur, id_tenant)
+        cur.execute(
+            "SELECT conta_nome FROM tbl_integracao_olist WHERE id_tenant = %s",
+            (id_tenant,),
+        )
+        row = cur.fetchone()
+        from fornecedor.catalogo.catalogo import obter_bytes_imagens_tenant
+
+        try:
+            bytes_img = int(obter_bytes_imagens_tenant(cur, id_tenant) or 0)
+        except Exception:
+            bytes_img = 0
+        cfg = ler_config(cur, id_tenant)
+        logs = listar_logs(cur, id_tenant)
+        conn.commit()
+        return jsonify(
+            success=True,
+            conectado=conectado,
+            conta_nome=(row[0] if row else "") or "",
+            config=cfg,
+            logs=logs,
+            armazenamento={"bytes_imagens": bytes_img},
+        )
+    finally:
+        conn.close()
+
+
+@olist_bp.post("/api/integracoes/olist/config/salvar")
+@login_obrigatorio()
+def api_salvar_config():
+    id_tenant, erro = _tenant_ok()
+    if erro:
+        return erro
+    body = request.get_json(silent=True) or {}
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        salvar_config(cur, id_tenant, body)
+        conn.commit()
+    finally:
+        conn.close()
+    return jsonify(success=True, message="Configuração salva.")
+
+
+@olist_bp.get("/api/integracoes/olist/status-padrao")
+@login_obrigatorio()
+def api_status_padrao():
+    id_tenant, erro = _tenant_ok()
+    if erro:
+        return erro
+    from core.integracoes.status_padrao import listar_status_padrao
+
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        linhas = listar_status_padrao(cur, aplicacao="olist", contexto="fornecedor")
+        conn.commit()
+    finally:
+        conn.close()
+    return jsonify(success=True, linhas=linhas, precisa_migrar=False)
+
+
+@olist_bp.get("/api/integracoes/olist/depositos")
+@login_obrigatorio()
+def api_depositos():
+    id_tenant, erro = _tenant_ok()
+    if erro:
+        return erro
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        if not olist_conectado(cur, id_tenant):
+            return jsonify(success=False, message="Conecte o Olist antes."), 400
+        dados = listar_depositos(cur, id_tenant)
+        conn.commit()
+        return jsonify(success=True, **dados)
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)[:240]), 502
+    finally:
+        conn.close()
+
+
+@olist_bp.post("/api/integracoes/olist/depositos/vincular")
+@login_obrigatorio()
+def api_vincular_deposito():
+    id_tenant, erro = _tenant_ok()
+    if erro:
+        return erro
+    body = request.get_json(silent=True) or {}
+    id_olist = str(body.get("id_olist") or "").strip()
+    if not id_olist:
+        return jsonify(success=False, message="Depósito do Olist inválido."), 400
+    bruto = body.get("id_deposito")
+    id_deposito = None
+    if bruto not in (None, ""):
+        try:
+            id_deposito = int(bruto)
+        except (TypeError, ValueError):
+            return jsonify(success=False, message="Depósito DropNexo inválido."), 400
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        vincular_deposito(cur, id_tenant, id_olist, str(body.get("nome") or ""), id_deposito)
+        conn.commit()
+    finally:
+        conn.close()
+    return jsonify(success=True, message="Vínculo salvo.")
+
+
+@olist_bp.get("/api/integracoes/olist/categorias")
+@login_obrigatorio()
+def api_categorias():
+    id_tenant, erro = _tenant_ok()
+    if erro:
+        return erro
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        if not olist_conectado(cur, id_tenant):
+            return jsonify(success=False, message="Conecte o Olist antes."), 400
+        dados = listar_categorias(cur, id_tenant)
+        conn.commit()
+        return jsonify(success=True, **dados)
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)[:240]), 502
+    finally:
+        conn.close()
+
+
+@olist_bp.post("/api/integracoes/olist/categorias/salvar")
+@login_obrigatorio()
+def api_salvar_categoria():
+    id_tenant, erro = _tenant_ok()
+    if erro:
+        return erro
+    body = request.get_json(silent=True) or {}
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        salvar_categoria(cur, id_tenant, body)
+        conn.commit()
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 400
+    finally:
+        conn.close()
+    return jsonify(success=True, message="Categoria salva.")

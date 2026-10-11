@@ -109,6 +109,59 @@ def garantir_tabelas(cur) -> None:
             )
             """
         )
+    cur.execute("SELECT to_regclass('public.tbl_integracao_olist_config')")
+    if not cur.fetchone()[0]:
+        cur.execute(
+            """
+            CREATE TABLE tbl_integracao_olist_config (
+                id_tenant INTEGER NOT NULL,
+                contexto VARCHAR(20) NOT NULL DEFAULT 'fornecedor',
+                fonte_principal VARCHAR(20) NOT NULL DEFAULT 'olist',
+                modo_imagem VARCHAR(20) NOT NULL DEFAULT 'download',
+                produtos_modo VARCHAR(20) NOT NULL DEFAULT 'importar',
+                estoque_modo VARCHAR(20) NOT NULL DEFAULT 'importar',
+                pedidos_modo VARCHAR(20) NOT NULL DEFAULT 'exportar',
+                opcoes JSONB NOT NULL DEFAULT '{}'::jsonb,
+                ultima_sync_produtos TIMESTAMPTZ,
+                ultima_sync_estoque TIMESTAMPTZ,
+                ultima_sync_pedidos TIMESTAMPTZ,
+                atualizado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                PRIMARY KEY (id_tenant, contexto)
+            )
+            """
+        )
+    cur.execute("SELECT to_regclass('public.tbl_integracao_olist_deposito')")
+    if not cur.fetchone()[0]:
+        cur.execute(
+            """
+            CREATE TABLE tbl_integracao_olist_deposito (
+                id SERIAL PRIMARY KEY,
+                id_tenant INTEGER NOT NULL,
+                id_olist VARCHAR(40) NOT NULL,
+                nome VARCHAR(180),
+                id_deposito INTEGER,
+                atualizado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                UNIQUE (id_tenant, id_olist)
+            )
+            """
+        )
+    cur.execute("SELECT to_regclass('public.tbl_integracao_olist_categoria')")
+    if not cur.fetchone()[0]:
+        cur.execute(
+            """
+            CREATE TABLE tbl_integracao_olist_categoria (
+                id SERIAL PRIMARY KEY,
+                id_tenant INTEGER NOT NULL,
+                id_olist VARCHAR(40) NOT NULL,
+                nome VARCHAR(180),
+                acao VARCHAR(20) NOT NULL DEFAULT 'ignorar',
+                id_segmento INTEGER,
+                id_categoria INTEGER,
+                atualizado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                UNIQUE (id_tenant, id_olist)
+            )
+            """
+        )
     cur.execute("SELECT to_regclass('public.tbl_integracao_olist_mapa')")
     if not cur.fetchone()[0]:
         cur.execute(
