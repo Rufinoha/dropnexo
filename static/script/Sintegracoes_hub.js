@@ -54,6 +54,11 @@
       config_url: "/integracoes/amazon",
       oauth_url: "/api/integracoes/amazon/oauth/iniciar",
     },
+    olist: {
+      conectado: false,
+      config_url: "/integracoes/olist",
+      oauth_url: "/api/integracoes/olist/oauth/iniciar",
+    },
   };
 
   const ICONES_CATEGORIA = {
@@ -74,6 +79,7 @@
     if (item.slug === "mercado-livre") return st.config_url || "/integracoes/mercado-livre";
     if (item.slug === "tiktok") return st.config_url || "/integracoes/tiktok";
     if (item.slug === "amazon") return st.config_url || "/integracoes/amazon";
+    if (item.slug === "olist") return st.config_url || "/integracoes/olist";
     return st.config_url || `/integracoes/${item.slug}`;
   }
 
@@ -85,6 +91,7 @@
     "mercado-livre",
     "tiktok",
     "amazon",
+    "olist",
   ]);
 
   function seloEmBreveHtml() {
@@ -340,7 +347,8 @@
       slug === "melhor-envio" ||
       slug === "mercado-livre" ||
       slug === "tiktok" ||
-      slug === "amazon"
+      slug === "amazon" ||
+      slug === "olist"
     ) {
       window.location.href = configUrlIntegracao(item);
       return;

@@ -1,0 +1,70 @@
+{% set nav_ativo = nav_codigo %}
+{% extends "frm_base.html" %}
+{% block title %}Olist — Integrações — {{ MARCA_NOME }}{% endblock %}
+{% block topbar_title %}Integração Olist{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('static', filename='style/Cbling_integracao.css') }}?v=25" />
+{% endblock %}
+{% block content %}
+<div class="Cl_ContainerApoio cl-page-principal Bl_Wrap">
+  <div class="cl-page-title Bl_PageHead">
+    <div class="Bl_PageHeadMain">
+      <a href="{{ url_for('integracoes.pagina') }}" class="Bl_BackLink">
+        <i data-lucide="arrow-left"></i> Integrações
+      </a>
+      <div class="Bl_TitleRow">
+        <img src="{{ icone_olist }}" alt="" class="Bl_Logo" width="40" height="40" />
+        <div>
+          <h2>Olist ERP</h2>
+          <p class="cl-page-desc">
+            Importa produtos do Olist para o catálogo. A foto é baixada e gravada no servidor, no mesmo caminho do Bling.
+          </p>
+        </div>
+      </div>
+    </div>
+    <div class="Bl_ConnBadge {{ 'is-on' if olist_conectado else 'is-off' }}">
+      {{ 'Conectado' if olist_conectado else 'Desconectado' }}
+    </div>
+  </div>
+
+  {% if request.args.get('erro') %}
+  <section class="Bl_Card"><p class="Bl_Hint">{{ request.args.get('erro') }}</p></section>
+  {% endif %}
+
+  <section class="Bl_Card">
+    {% if olist_conta %}
+    <p class="Bl_Hint">Conta: <strong>{{ olist_conta }}</strong></p>
+    {% endif %}
+    <div class="Bl_Actions">
+      {% if not olist_conectado %}
+      <a href="{{ url_for('olist.oauth_iniciar') }}" class="Cl_botaoprimario">Conectar</a>
+      {% else %}
+      <button type="button" class="Cl_botaoprimario" id="ol_btn_importar">Importar produtos</button>
+      <button type="button" class="Cl_BtnCancelar" id="ol_btn_desconectar">Desconectar</button>
+      {% endif %}
+    </div>
+    {% if not olist_configurado %}
+    <p class="Bl_Hint">As chaves do aplicativo Olist ainda não estão no servidor.</p>
+    {% endif %}
+  </section>
+
+  <section class="Bl_Card">
+    <h3>Como a foto entra</h3>
+    <p class="Bl_Hint">Cada anexo do produto é baixado e salvo na galeria local. A URL do Olist fica só como origem. O cadastro grava nome, SKU, GTIN, NCM, preço, custo, marca, peso, medidas e variações.</p>
+  </section>
+
+  {% if olist_logs %}
+  <section class="Bl_Card">
+    <h3>Últimos logs</h3>
+    <ul class="Bl_Hint">
+      {% for log in olist_logs %}
+      <li>{{ log.quando }} — {{ log.resumo }}{% if log.detalhe %} — {{ log.detalhe }}{% endif %}</li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+</div>
+{% endblock %}
+{% block page_js %}
+<script src="{{ url_for('olist.static', filename='script/Solist_integracao.js') }}?v=1"></script>
+{% endblock %}

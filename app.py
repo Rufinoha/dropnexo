@@ -8,6 +8,7 @@ from flask import Flask, request
 from flask.json.provider import DefaultJSONProvider
 
 from api.bling.srotas_bling import init_app as api_bling_init
+from api.olist.srotas_olist import init_app as api_olist_init
 from api.mercadopago.srotas_mercadopago import init_app as api_mercadopago_init
 from api.pix_manual.srotas_pix_manual import init_app as api_pix_manual_init
 from api.melhor_envio.srotas_melhor_envio import init_app as api_melhor_envio_init
@@ -66,6 +67,7 @@ api_brevo_init(app)
 api_whatsapp_init(app)
 api_efi_init(app)
 api_bling_init(app)
+api_olist_init(app)
 api_mercadopago_init(app)
 api_pix_manual_init(app)
 api_melhor_envio_init(app)

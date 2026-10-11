@@ -59,7 +59,7 @@ CATEGORIAS_INTEGRACOES = [
                 "modulos": _MOD_FORNECEDOR,
                 "papel": "catalogo",
             },
-            {"slug": "olist", "nome": "Olist", "descricao": "Hub Olist para marketplaces e lojas.", "cor": "#6C2EB9", "iniciais": "OL", "modulos": _MOD_FORNECEDOR},
+            {"slug": "olist", "nome": "Olist", "descricao": "Importe produtos e fotos do Olist ERP para o catálogo.", "cor": "#6C2EB9", "iniciais": "OL", "modulos": _MOD_FORNECEDOR},
             {"slug": "conta-azul", "nome": "Conta Azul", "descricao": "Gestão financeira e emissão de notas.", "cor": "#0080FF", "iniciais": "CA", "modulos": _MOD_FORNECEDOR},
         ],
     },
@@ -593,12 +593,14 @@ def hub_status():
     if modulo in (MODULO_FORNECEDOR, MODULO_ARMAZEM):
         mp_ok = False
         pix_ok = False
+        olist_ok = False
         conn = Var_ConectarBanco()
         try:
             cur = conn.cursor()
             if id_tenant:
                 from api.mercadopago.mercadopago import mp_conectado
                 from api.pix_manual.pix_manual import pix_manual_ativo
+                from api.olist.cliente import olist_conectado
 
                 try:
                     mp_ok = mp_conectado(cur, int(id_tenant))
@@ -608,12 +610,21 @@ def hub_status():
                     pix_ok = pix_manual_ativo(cur, int(id_tenant))
                 except Exception:
                     pix_ok = False
+                try:
+                    olist_ok = olist_conectado(cur, int(id_tenant))
+                except Exception:
+                    olist_ok = False
         finally:
             conn.close()
         integracoes["bling"] = {
             "conectado": bling_conectado,
             "config_url": url_for("integracoes.pagina_bling", papel="catalogo"),
             "oauth_url": url_for("bling.oauth_iniciar"),
+        }
+        integracoes["olist"] = {
+            "conectado": olist_ok,
+            "config_url": url_for("olist.pagina"),
+            "oauth_url": url_for("olist.oauth_iniciar"),
         }
         integracoes["mercado-pago"] = {
             "conectado": mp_ok,

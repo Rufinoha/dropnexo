@@ -310,6 +310,10 @@ _HOSTS_PAGINA_IMAGEM = (
 _HOSTS_CDN_IMAGEM = (
     "i.postimg.cc",
     "i.ibb.co",
+    "tiny.com.br",
+    "olist.com",
+    "googleapis.com",
+    "googleusercontent.com",
 )
 _EXT_ARQUIVO_IMAGEM = (".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp")
 _PROXY_MEM_CACHE: dict[str, tuple[float, bytes, str]] = {}
