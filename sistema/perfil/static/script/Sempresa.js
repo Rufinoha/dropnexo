@@ -556,6 +556,7 @@
   document.addEventListener("DOMContentLoaded", function () {
     if (!el("form-empresa")) return;
     el("form-empresa")?.addEventListener("submit", salvar);
+    el("emp-btn-salvar")?.addEventListener("click", salvar);
     el("emp-tipo-pessoa")?.addEventListener("change", onTipoPessoaChange);
     el("emp-documento")?.addEventListener("input", function () {
       if (conversaoPjAtiva) this.value = mascaraCnpj(this.value);

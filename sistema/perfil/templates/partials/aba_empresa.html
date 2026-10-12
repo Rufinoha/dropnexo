@@ -51,7 +51,7 @@
             <div class="mp-g12">
               <div class="filter-group mp-c12">
                 <label for="emp-nome">Apelido — nome de exibição ou fantasia <span class="ch-req">*</span></label>
-                <input type="text" id="emp-nome" required maxlength="120" />
+                <input type="text" id="emp-nome" maxlength="120" />
               </div>
               <div class="filter-group mp-c4">
                 <label for="emp-tipo-pessoa">Tipo</label>
@@ -80,7 +80,7 @@
                   </span>
                   <span class="mp-label-text">Razão social <span class="ch-req">*</span></span>
                 </label>
-                <input type="text" id="emp-razao" required maxlength="255" />
+                <input type="text" id="emp-razao" maxlength="255" />
               </div>
             </div>
           </div>
@@ -93,7 +93,7 @@
           <div class="filter-group mp-c4">
             <label for="emp-cep">CEP <span class="ch-req">*</span></label>
             <div class="mp-input-btn">
-              <input type="text" id="emp-cep" maxlength="9" required class="mp-input-cep" placeholder="00000-000" />
+              <input type="text" id="emp-cep" maxlength="9" class="mp-input-cep" placeholder="00000-000" />
               <button type="button" class="mp-btn mp-btn--icon" id="emp-btn-cep" title="Buscar CEP" aria-label="Buscar CEP">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
               </button>
@@ -101,11 +101,11 @@
           </div>
           <div class="filter-group mp-c2">
             <label for="emp-uf">UF <span class="ch-req">*</span></label>
-            <input type="text" id="emp-uf" maxlength="2" required class="mp-input-uf" />
+            <input type="text" id="emp-uf" maxlength="2" class="mp-input-uf" />
           </div>
           <div class="filter-group mp-c6">
             <label for="emp-cidade">Cidade <span class="ch-req">*</span></label>
-            <input type="text" id="emp-cidade" required maxlength="120" />
+            <input type="text" id="emp-cidade" maxlength="120" />
             <input type="hidden" id="emp-ibge" />
           </div>
           <div class="filter-group mp-c5">
@@ -118,7 +118,7 @@
           </div>
           <div class="filter-group mp-c2">
             <label for="emp-numero">Nº <span class="ch-req">*</span></label>
-            <input type="text" id="emp-numero" required maxlength="20" />
+            <input type="text" id="emp-numero" maxlength="20" />
           </div>
           <div class="filter-group mp-c3">
             <label for="emp-complemento">Complemento</label>
@@ -207,7 +207,7 @@
           </div>
           <div class="filter-group mp-c3">
             <label for="emp-regime">Regime tributário <span class="ch-req">*</span></label>
-            <select id="emp-regime" required>
+            <select id="emp-regime">
               <option value="">Selecione</option>
               <option value="simples">Simples Nacional</option>
               <option value="presumido">Lucro Presumido</option>
@@ -262,7 +262,7 @@
       </section>
 
       <div class="mp-form-actions mp-form-actions--foot">
-        <button type="submit" class="mp-btn mp-btn--primary">Salvar alterações</button>
+        <button type="button" class="mp-btn mp-btn--primary" id="emp-btn-salvar">Salvar alterações</button>
         <button type="button" class="mp-btn mp-btn--ghost" id="emp-btn-cancelar">Descartar</button>
       </div>
     </div>
