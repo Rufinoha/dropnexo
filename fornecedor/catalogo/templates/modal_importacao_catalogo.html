@@ -1,0 +1,336 @@
+{# Modal de importação — padrão BARACAT, embutido na tela de catálogo #}
+<div id="impModal" class="imp-modal" aria-hidden="true" data-modulo="catalogo_produto">
+  <div class="imp-backdrop" data-acao="fechar"></div>
+  <div class="imp-dialog" role="dialog" aria-modal="true" aria-label="Importação">
+    <div class="imp-header">
+      <div class="imp-title">
+        <h2>Importação</h2>
+        <span class="imp-sub" id="impSubtitulo">Catálogo de produtos</span>
+      </div>
+      <button type="button" class="imp-btn-close" data-acao="fechar" aria-label="Fechar">✕</button>
+    </div>
+
+    <div class="imp-body">
+      <section class="imp-tabs" role="tablist">
+        <button type="button" class="imp-tab" data-tab="bling" id="impTabBling" hidden>Bling</button>
+        <button type="button" class="imp-tab" data-tab="olist" id="impTabOlist" {% if not olist_conectado %}hidden{% endif %}>Olist</button>
+        <button type="button" class="imp-tab ativa" data-tab="nova" id="impTabNova">Arquivo</button>
+        <button type="button" class="imp-tab" data-tab="manutencao">Manutenção</button>
+        <button type="button" class="imp-tab" data-tab="layout">Layout</button>
+      </section>
+
+      <section class="imp-content">
+        <div class="filter-panel" id="impPaneBling">
+          <div class="imp-bling-status" id="impBlingStatus">
+            <span class="imp-pulse" aria-hidden="true"></span>
+            <div class="imp-bling-status-text">
+              <strong id="impBlingStatusTitulo">Conectado ao Bling</strong>
+              <span class="imp-hint" id="impBlingStatusSub">Configure estoque em <a href="/integracoes/bling?aba=estoque" target="_blank" rel="noopener">Integrações → Bling → Estoque</a></span>
+            </div>
+          </div>
+
+          <section class="imp-bling-block">
+            <h3 class="imp-bling-block-title">Importar produtos</h3>
+            <div class="imp-form imp-form-bling">
+              <div class="imp-row imp-row-bling">
+                <div class="imp-field imp-field-grow">
+                  <div class="imp-bling-scope-row">
+                    <div class="imp-bling-scope-col">
+                      <label>Escopo</label>
+                      <div class="imp-radio-row">
+                        <label><input type="radio" name="imp_bling_modo" value="todos" checked /> Todos os produtos</label>
+                        <label><input type="radio" name="imp_bling_modo" value="categorias" /> Por categorias</label>
+                      </div>
+                    </div>
+                    <div id="impBlingCatsWrap" class="imp-cat-wrap imp-cat-wrap--side" hidden>
+                      <label class="imp-cat-label" for="impCatTrigger">Categorias do Bling</label>
+                      <div class="imp-cat-inline-row">
+                        <div class="imp-cat-picker" id="impCatPicker">
+                          <button type="button" class="imp-cat-trigger" id="impCatTrigger" aria-expanded="false">
+                            <span class="imp-cat-trigger-text" id="impCatTriggerText">Selecione as categorias…</span>
+                            <span class="imp-cat-trigger-caret" aria-hidden="true"></span>
+                          </button>
+                          <div class="imp-cat-panel" id="impCatPanel" hidden>
+                            <input type="search" class="imp-cat-search" id="impCatSearch" placeholder="Buscar categoria…" autocomplete="off" />
+                            <div class="imp-cat-list" id="impCatList" role="listbox" aria-multiselectable="true"></div>
+                          </div>
+                        </div>
+                        <div class="Cl_SwitchGroup imp-cat-sub-switch">
+                          <span class="Cl_SwitchLabel">Incluir subcategorias</span>
+                          <label class="Cl_Switch">
+                            <input type="checkbox" id="impBlingSub" checked />
+                            <span class="Cl_SwitchSlider"></span>
+                          </label>
+                        </div>
+                      </div>
+                      <div class="imp-cat-chips" id="impCatChips"></div>
+                    </div>
+                  </div>
+                </div>
+                <div class="imp-actions">
+                  <button type="button" class="Cl_botaoprimario" id="impBtnBling">Importar</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="imp-cards" id="impCardsBling">
+              <div class="imp-card">
+                <div class="imp-card-title">Total processado</div>
+                <div class="imp-card-value" id="impBlingResTotal">—</div>
+              </div>
+              <div class="imp-card">
+                <div class="imp-card-title">Inseridos</div>
+                <div class="imp-card-value" id="impBlingResInseridas">—</div>
+              </div>
+              <div class="imp-card imp-card-click" data-card="erros" data-scope="bling">
+                <div class="imp-card-title">Com erros</div>
+                <div class="imp-card-value" id="impBlingResErros">—</div>
+                <div class="imp-card-foot">Duplo clique — manutenção</div>
+              </div>
+              <div class="imp-card imp-card-click" data-card="lote" data-scope="bling">
+                <div class="imp-card-title">Lote</div>
+                <div class="imp-card-value imp-card-value--lote" id="impBlingResLote">—</div>
+                <div class="imp-card-foot">Duplo clique — erros</div>
+              </div>
+            </div>
+            <div class="imp-last" id="impBlingResObs">Nenhuma importação via Bling ainda.</div>
+          </section>
+        </div>
+
+        <div class="filter-panel" id="impPaneOlist">
+          <div class="imp-bling-status" id="impOlistStatus">
+            <span class="imp-pulse" aria-hidden="true"></span>
+            <div class="imp-bling-status-text">
+              <strong id="impOlistStatusTitulo">Conectado ao Olist</strong>
+              <span class="imp-hint" id="impOlistStatusSub">Configure produtos em <a href="/integracoes/olist?aba=produtos" target="_blank" rel="noopener">Integrações → Olist → Produtos</a></span>
+            </div>
+          </div>
+
+          <section class="imp-bling-block">
+            <h3 class="imp-bling-block-title">Importar produtos</h3>
+            <div class="imp-form imp-form-bling">
+              <div class="imp-row imp-row-bling">
+                <div class="imp-field imp-field-grow">
+                  <div class="imp-bling-scope-row">
+                    <div class="imp-bling-scope-col">
+                      <label>Escopo</label>
+                      <div class="imp-radio-row">
+                        <label><input type="radio" name="imp_olist_modo" value="todos" checked /> Todos os produtos</label>
+                        <label><input type="radio" name="imp_olist_modo" value="categorias" /> Por categorias</label>
+                      </div>
+                    </div>
+                    <div id="impOlistCatsWrap" class="imp-cat-wrap imp-cat-wrap--side" hidden>
+                      <label class="imp-cat-label" for="impOlistCatTrigger">Categorias do Olist</label>
+                      <div class="imp-cat-inline-row">
+                        <div class="imp-cat-picker" id="impOlistCatPicker">
+                          <button type="button" class="imp-cat-trigger" id="impOlistCatTrigger" aria-expanded="false">
+                            <span class="imp-cat-trigger-text" id="impOlistCatTriggerText">Selecione as categorias…</span>
+                            <span class="imp-cat-trigger-caret" aria-hidden="true"></span>
+                          </button>
+                          <div class="imp-cat-panel" id="impOlistCatPanel" hidden>
+                            <input type="search" class="imp-cat-search" id="impOlistCatSearch" placeholder="Buscar categoria…" autocomplete="off" />
+                            <div class="imp-cat-list" id="impOlistCatList" role="listbox" aria-multiselectable="true"></div>
+                          </div>
+                        </div>
+                        <div class="Cl_SwitchGroup imp-cat-sub-switch">
+                          <span class="Cl_SwitchLabel">Incluir subcategorias</span>
+                          <label class="Cl_Switch">
+                            <input type="checkbox" id="impOlistSub" checked />
+                            <span class="Cl_SwitchSlider"></span>
+                          </label>
+                        </div>
+                      </div>
+                      <div class="imp-cat-chips" id="impOlistCatChips"></div>
+                    </div>
+                  </div>
+                </div>
+                <div class="imp-actions">
+                  <button type="button" class="Cl_botaoprimario" id="impBtnOlist">Importar</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="imp-cards" id="impCardsOlist">
+              <div class="imp-card">
+                <div class="imp-card-title">Total processado</div>
+                <div class="imp-card-value" id="impOlistResTotal">—</div>
+              </div>
+              <div class="imp-card">
+                <div class="imp-card-title">Inseridos</div>
+                <div class="imp-card-value" id="impOlistResInseridas">—</div>
+              </div>
+              <div class="imp-card imp-card-click" data-card="erros" data-scope="olist">
+                <div class="imp-card-title">Com erros</div>
+                <div class="imp-card-value" id="impOlistResErros">—</div>
+                <div class="imp-card-foot">Duplo clique — manutenção</div>
+              </div>
+              <div class="imp-card imp-card-click" data-card="lote" data-scope="olist">
+                <div class="imp-card-title">Lote</div>
+                <div class="imp-card-value imp-card-value--lote" id="impOlistResLote">—</div>
+                <div class="imp-card-foot">Duplo clique — erros</div>
+              </div>
+            </div>
+            <div class="imp-last" id="impOlistResObs">Nenhuma importação via Olist ainda.</div>
+          </section>
+        </div>
+
+        <div class="filter-panel ativa" id="impPaneNova">
+          <section class="imp-form">
+            <div class="imp-row">
+              <div class="imp-field">
+                <label for="impArquivo">Arquivo</label>
+                <input type="file" id="impArquivo" accept=".csv,text/csv" />
+                <div class="imp-hint">Arquivo .csv (separador ; ou ,)</div>
+              </div>
+              <div class="imp-field">
+                <label for="impLayout">Layout</label>
+                <select id="impLayout"></select>
+                <div class="imp-hint imp-hint-spacer">&nbsp;</div>
+              </div>
+              <div class="imp-actions">
+                <button type="button" class="Cl_botaoprimario" id="impBtnArquivo">Importar</button>
+              </div>
+            </div>
+          </section>
+
+          <div class="imp-cards" id="impCards">
+            <div class="imp-card">
+              <div class="imp-card-title">Total processado</div>
+              <div class="imp-card-value" id="impResTotal">—</div>
+            </div>
+            <div class="imp-card">
+              <div class="imp-card-title">Inseridos</div>
+              <div class="imp-card-value" id="impResInseridas">—</div>
+            </div>
+            <div class="imp-card imp-card-click" data-card="erros" data-scope="arquivo">
+              <div class="imp-card-title">Com erros</div>
+              <div class="imp-card-value" id="impResErros">—</div>
+              <div class="imp-card-foot">Duplo clique — manutenção</div>
+            </div>
+            <div class="imp-card imp-card-click" data-card="lote" data-scope="arquivo">
+              <div class="imp-card-title">Lote</div>
+              <div class="imp-card-value imp-card-value--lote" id="impResLote">—</div>
+              <div class="imp-card-foot">Duplo clique — erros</div>
+            </div>
+          </div>
+          <div class="imp-last" id="impResObs">Nenhuma importação registrada ainda.</div>
+        </div>
+
+        <div class="imp-pane-tab" id="impPaneManutencao">
+          <div class="filter-panel imp-filter-only">
+            <div class="filter-panel-fields">
+              <div class="filter-group">
+                <label for="impFiltroDe">De</label>
+                <input type="date" id="impFiltroDe" />
+              </div>
+              <div class="filter-group">
+                <label for="impFiltroAte">Até</label>
+                <input type="date" id="impFiltroAte" />
+              </div>
+              <div class="filter-panel-actions">
+                <button type="button" class="Cl_botaoFiltro" id="impBtnFiltrar">Filtrar</button>
+                <button type="button" class="btn-secundario" id="impBtnLimpar">Limpar filtro</button>
+              </div>
+            </div>
+          </div>
+          <div class="Cl_TabelaPrincipal imp-table-wrap">
+            <table class="imp-table imp-table--lotes">
+              <thead>
+                <tr>
+                  <th>Lote</th>
+                  <th>Origem</th>
+                  <th>Arquivo</th>
+                  <th>Data</th>
+                  <th>Inseridos</th>
+                  <th>Erros</th>
+                  <th class="col-acoes Cl_TableActions">Ações</th>
+                </tr>
+              </thead>
+              <tbody id="impTblLotes"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="imp-pane-tab" id="impPaneLayout">
+          <div class="filter-panel imp-filter-only">
+            <div class="filter-panel-fields">
+              <div class="filter-group">
+                <label for="impLayoutFiltroNome">Nome</label>
+                <input type="text" id="impLayoutFiltroNome" placeholder="Filtrar por nome…" />
+              </div>
+              <div class="filter-group">
+                <label for="impLayoutFiltroStatus">Status</label>
+                <select id="impLayoutFiltroStatus">
+                  <option value="">Todos</option>
+                  <option value="ativo">Ativo</option>
+                  <option value="inativo">Inativo</option>
+                </select>
+              </div>
+              <div class="filter-group">
+                <label for="impLayoutFiltroPadrao">Padrão</label>
+                <select id="impLayoutFiltroPadrao">
+                  <option value="">Todos</option>
+                  <option value="sim">Sim</option>
+                  <option value="nao">Não</option>
+                </select>
+              </div>
+              <div class="filter-panel-actions">
+                <button type="button" class="Cl_botaoFiltro" id="impBtnLayoutFiltrar">Filtrar</button>
+                <button type="button" class="btn-secundario" id="impBtnLayoutLimpar">Limpar filtro</button>
+              </div>
+            </div>
+          </div>
+          <button type="button" class="Cl_BtnIncluir imp-btn-novo-layout" id="impBtnNovoLayout">+ Novo layout</button>
+          <p class="imp-hint imp-layout-rule">Regra: no máximo <strong>3 layouts</strong> por módulo (ativos ou não).</p>
+          <div class="Cl_TabelaPrincipal imp-table-wrap">
+            <table class="imp-table imp-table--layouts">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Layout</th>
+                  <th>Descrição</th>
+                  <th>Padrão</th>
+                  <th>Status</th>
+                  <th class="col-acoes Cl_TableActions">Ações</th>
+                </tr>
+              </thead>
+              <tbody id="impTblLayouts"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+
+{# Modal mapeamento categorias Bling — não fecha ao clicar fora #}
+<div id="impCatMapModal" class="imp-catmap-modal" aria-hidden="true">
+  <div class="imp-catmap-backdrop" aria-hidden="true"></div>
+  <div class="imp-catmap-dialog" role="dialog" aria-modal="true" aria-labelledby="impCatMapTitulo">
+    <div class="imp-catmap-header">
+      <div>
+        <h2 id="impCatMapTitulo">Mapeamento de categorias</h2>
+        <p class="imp-hint" id="impCatMapSub">Revise os vínculos antes de importar os produtos.</p>
+      </div>
+    </div>
+    <div class="imp-catmap-body">
+      <section class="imp-catmap-sec" id="impCatMapSecMapeadas" hidden>
+        <h3>Mapeadas automaticamente</h3>
+        <p class="imp-hint imp-catmap-hint">Confira se os vínculos por nome estão corretos. Mapas já salvos não podem ser alterados aqui.</p>
+        <div class="imp-catmap-list" id="impCatMapListaMapeadas"></div>
+      </section>
+      <section class="imp-catmap-sec" id="impCatMapSecPendentes" hidden>
+        <h3>Sem mapeamento</h3>
+        <p class="imp-hint imp-catmap-hint">Escolha criar uma categoria nova ou vincular a uma existente. Sem escolha, será criada automaticamente.</p>
+        <div class="imp-catmap-list" id="impCatMapListaPendentes"></div>
+      </section>
+    </div>
+    <div class="imp-catmap-footer">
+      <span class="imp-hint" id="impCatMapResumo"></span>
+      <div class="Cl_BotoesApoio imp-catmap-foot-actions">
+        <button type="button" class="Cl_botaoprimario" id="impCatMapContinuar">Continuar importação</button>
+        <button type="button" class="Cl_BtnExcluir" id="impCatMapCancel">Cancelar</button>
+      </div>
+    </div>
+  </div>
+</div>
