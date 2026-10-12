@@ -154,23 +154,25 @@ def _detalhe(id_tenant: int, id_olist: str) -> dict:
     return dados if isinstance(dados, dict) else {}
 
 
-def _variacoes(id_tenant: int, id_olist: str) -> list[dict]:
-    try:
-        dados = api_request(id_tenant, "GET", f"/produtos/{id_olist}/variacoes")
-    except Exception:
-        return []
-    if isinstance(dados, dict):
-        dados = dados.get("itens") or dados.get("variacoes") or []
-    if not isinstance(dados, list):
+def _variacoes_do_produto(produto: dict) -> list[dict]:
+    """Variações já vêm em GET /produtos/{id}. Esse caminho não tem GET de lista."""
+    bruto = produto.get("variacoes") if isinstance(produto, dict) else None
+    if isinstance(bruto, dict):
+        bruto = bruto.get("itens") or bruto.get("variacoes") or []
+    if not isinstance(bruto, list):
         return []
     saida = []
-    for var in dados:
+    for var in bruto:
         if not isinstance(var, dict):
             continue
         payload = para_payload_bling(var)
         nome_grade = _grade_nome(var)
+        if not nome_grade and isinstance(var.get("variacao"), dict):
+            nome_grade = _grade_nome(var["variacao"])
         if nome_grade:
             payload["variacao"] = {"nome": nome_grade}
+            if not _s(payload.get("nome")) or _s(payload.get("nome")) == _s(payload.get("codigo")):
+                payload["nome"] = nome_grade.replace(":", " ")
         if payload.get("codigo"):
             saida.append(payload)
     return saida
@@ -274,7 +276,8 @@ def importar_lote(
         try:
             detalhe = _detalhe(id_tenant, id_olist)
             tipo_var = _s(detalhe.get("tipoVariacao") or item.get("tipoVariacao")).upper()
-            if tipo_var == "V":
+            variacoes = _variacoes_do_produto(detalhe) or _variacoes_do_produto(item)
+            if tipo_var == "V" and not variacoes:
                 cur.execute("RELEASE SAVEPOINT sp_olist_prod")
                 ignorados += 1
                 continue
@@ -297,11 +300,13 @@ def importar_lote(
             if acao_cat != "vincular":
                 id_cat_drop = None
             sku = _s(pai.get("codigo"))
+            if not sku and variacoes:
+                sku = _s(variacoes[0].get("codigo"))
+                pai["codigo"] = sku
             if not sku:
                 raise ValueError("Produto sem SKU no Olist.")
             existente = _id_existente(cur, id_tenant, id_olist, sku)
             criando = existente is None
-            variacoes = _variacoes(id_tenant, id_olist) if tipo_var == "P" else []
             midia = _anexos_midia(id_tenant, id_olist)
             vistos = {m["url"] for m in midia}
             for var in variacoes:
