@@ -836,29 +836,57 @@
 /* Largura das colunas */
 
 
-#content-area-Principal table th:nth-child(5),
-#content-area-Principal table td:nth-child(5) {
+.Cat_ColOrigem {
+  width: 88px;
+  text-align: center;
+}
+
+.Cat_Origem {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 22px;
+}
+
+.Cat_OrigemLogo {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+  border-radius: 4px;
+  display: block;
+}
+
+.Cat_Origem--manual {
+  font-size: 11px;
+  font-weight: 700;
+  color: #64748b;
+  line-height: 1;
+}
+
+#content-area-Principal table th:nth-child(6),
+#content-area-Principal table td:nth-child(6) {
   width: 160px;
   text-align: left;
 }
 
 
-#content-area-Principal table th:nth-child(6),
-#content-area-Principal table td:nth-child(6) {
+#content-area-Principal table th:nth-child(7),
+#content-area-Principal table td:nth-child(7) {
   width: 60px;
   text-align: center;
 }
 
-#content-area-Principal table th:nth-child(7),
-#content-area-Principal table td:nth-child(7) {
+#content-area-Principal table th:nth-child(8),
+#content-area-Principal table td:nth-child(8) {
   width: 120px;
   text-align: right;
 }
 
-#content-area-Principal table th:nth-child(8),
-#content-area-Principal table td:nth-child(8),
 #content-area-Principal table th:nth-child(9),
-#content-area-Principal table td:nth-child(9) {
+#content-area-Principal table td:nth-child(9),
+#content-area-Principal table th:nth-child(10),
+#content-area-Principal table td:nth-child(10) {
   width: 100px;
   text-align: center;
 }

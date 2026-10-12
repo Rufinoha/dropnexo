@@ -7,7 +7,7 @@
 {% block topbar_title %}{{ cat_topbar_title|default('Catálogos') }}{% endblock %}
 
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('fn_catalogo.static', filename='style/Ccatalogos.css') }}?v=20" />
+<link rel="stylesheet" href="{{ url_for('fn_catalogo.static', filename='style/Ccatalogos.css') }}?v=21" />
 <link rel="stylesheet" href="{{ url_for('fn_importacao.static', filename='style/Cimportacao.css') }}?v=9" />
 {% endblock %}
 
@@ -77,6 +77,7 @@
           </th>
           <th class="Cat_ColImg">Imagem</th>
           <th>produto</th>
+          <th class="Cat_ColOrigem">Origem</th>
           <th>SKU</th>
           <th>Unidade</th>
           <th>Preço venda</th>
@@ -85,7 +86,7 @@
         </tr>
         {# Depois do cabeçalho: com table-layout:fixed a 1ª linha define as colunas #}
         <tr class="Cat_BulkHeadRow" id="ob_bulkRow" hidden>
-          <th colspan="9" class="Cat_BulkHeadCell">
+          <th colspan="10" class="Cat_BulkHeadCell">
             <div class="Cat_BulkBar" id="ob_bulkBar" aria-label="Ações em lote">
               <div class="Cat_BulkLead">
                 <span class="Cat_BulkCount" id="ob_bulkCount">0 selecionados</span>
@@ -97,7 +98,7 @@
         </tr>
       </thead>
       <tbody id="ob_listaProdutos">
-        <tr><td colspan="9">Carregando…</td></tr>
+        <tr><td colspan="10">Carregando…</td></tr>
       </tbody>
     </table>
   </div>
@@ -126,10 +127,11 @@
   window.CAT_BLING_CONECTADO = {{ 'true' if bling_conectado else 'false' }};
   window.CAT_OLIST_CONECTADO = {{ 'true' if olist_conectado else 'false' }};
   window.CAT_BLING_ICON = {{ url_for('static', filename='imge/icone_api/icone_bling.png')|tojson }};
+  window.CAT_OLIST_ICON = {{ url_for('static', filename='imge/icone_api/icone_olist.png')|tojson }};
   window.CAT_CONTEXTO_ARMAZEM = {{ 'true' if (cat_contexto_armazem or session.get('tenant_tipo_negocio') == 'armazem' or session.get('modulo_ativo') == 'armazem') else 'false' }};
 </script>
 {% if not cat_ocultar_import_export %}
 <script defer src="{{ url_for('fn_importacao.static', filename='script/Simportacao.js') }}?v=16"></script>
 {% endif %}
-<script defer src="{{ url_for('fn_catalogo.static', filename='script/Scatalogos.js') }}?v=27"></script>
+<script defer src="{{ url_for('fn_catalogo.static', filename='script/Scatalogos.js') }}?v=28"></script>
 {% endblock %}

@@ -1127,6 +1127,7 @@ def _catalogo_montar_linhas_pai(
                     "publicado": p.get("publicado", False),
                     "imagem_url": p["imagem_url"],
                     "armazem_fornecedor_nome": p.get("armazem_fornecedor_nome") or "",
+                    "integracoes": list(p.get("integracoes") or []),
                 }
             )
             for i, v in enumerate(vars_p):
@@ -1147,6 +1148,7 @@ def _catalogo_montar_linhas_pai(
                         "ultima_variante": i == len(vars_p) - 1,
                         "primeira_variante": i == 0,
                         "imagem_url": v.get("imagem_url") or p["imagem_url"],
+                        "integracoes": list(p.get("integracoes") or []),
                     }
                 )
             continue
@@ -1169,9 +1171,73 @@ def _catalogo_montar_linhas_pai(
                 "publicado": p.get("publicado", False),
                 "imagem_url": p["imagem_url"],
                 "armazem_fornecedor_nome": p.get("armazem_fornecedor_nome") or "",
+                "integracoes": list(p.get("integracoes") or []),
             }
         )
     return linhas
+
+
+def _integracoes_por_produto(cur, id_tenant: int, ids: list[int]) -> dict[int, list[str]]:
+    """Bling e Olist pelo vínculo do produto, ou pelo lote de importação."""
+    out: dict[int, list[str]] = {}
+    if not ids:
+        return out
+
+    def add(pid, slug: str) -> None:
+        lista = out.setdefault(int(pid), [])
+        if slug not in lista:
+            lista.append(slug)
+
+    cur.execute("SELECT to_regclass('public.tbl_integracao_map')")
+    if cur.fetchone()[0]:
+        cur.execute(
+            """
+            SELECT id_dropnexo
+            FROM tbl_integracao_map
+            WHERE id_tenant = %s AND provedor = 'bling' AND entidade = 'produto'
+              AND id_dropnexo = ANY(%s)
+            """,
+            (id_tenant, ids),
+        )
+        for (pid,) in cur.fetchall():
+            if pid:
+                add(pid, "bling")
+
+    cur.execute("SELECT to_regclass('public.tbl_integracao_olist_mapa')")
+    if cur.fetchone()[0]:
+        cur.execute(
+            """
+            SELECT id_produto
+            FROM tbl_integracao_olist_mapa
+            WHERE id_tenant = %s AND id_produto = ANY(%s)
+            """,
+            (id_tenant, ids),
+        )
+        for (pid,) in cur.fetchall():
+            if pid:
+                add(pid, "olist")
+
+    cur.execute("SELECT to_regclass('public.tbl_importacao_lote')")
+    if cur.fetchone()[0]:
+        try:
+            cur.execute("SAVEPOINT sp_origem_lote")
+            cur.execute(
+                """
+                SELECT p.id, l.provedor
+                FROM tbl_produto p
+                JOIN tbl_importacao_lote l ON l.id = p.id_importacao_lote
+                WHERE p.id_tenant = %s AND p.id = ANY(%s)
+                  AND l.provedor IN ('bling', 'olist')
+                """,
+                (id_tenant, ids),
+            )
+            for pid, prov in cur.fetchall():
+                if pid and prov:
+                    add(pid, str(prov))
+            cur.execute("RELEASE SAVEPOINT sp_origem_lote")
+        except Exception:
+            cur.execute("ROLLBACK TO SAVEPOINT sp_origem_lote")
+    return out
 
 
 def _filtro_publicado_arg(raw: str | None) -> str:
@@ -1259,9 +1325,15 @@ def catalogos_dados():
                     "estoque": int(r[6] or 0),
                     "ativo": bool(r[5]),
                     "imagem_url": _imagem_url_lista(r[7]),
+                    "integracoes": [],
                 }
                 for r in cur.fetchall()
             ]
+            origens_var = _integracoes_por_produto(
+                cur, int(id_tenant), [int(l["id_produto"]) for l in linhas]
+            )
+            for l in linhas:
+                l["integracoes"] = origens_var.get(int(l["id_produto"]), [])
             total_paginas = max(1, (total + por_pagina - 1) // por_pagina)
             return jsonify(
                 success=True,
@@ -1377,9 +1449,13 @@ def catalogos_dados():
                 "imagem_url": _imagem_url_lista(r[11]),
                 "id_armazem_fornecedor": int(r[12]) if eh_az and len(r) > 12 and r[12] else None,
                 "armazem_fornecedor_nome": (r[13] if eh_az and len(r) > 13 else "") or "",
+                "integracoes": [],
             }
             for r in cur.fetchall()
         ]
+        origens = _integracoes_por_produto(cur, int(id_tenant), [int(p["id"]) for p in dados])
+        for p in dados:
+            p["integracoes"] = origens.get(int(p["id"]), [])
 
         expandir_variantes = filtro_tipo in ("", "com_variacoes")
         variantes_por_produto: dict[int, list] = {}

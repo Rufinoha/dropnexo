@@ -1032,6 +1032,26 @@
     if (el.btnUltimo) el.btnUltimo.disabled = paginaAtual >= totalPaginas;
   }
 
+  function renderOrigem(l) {
+    const lista = Array.isArray(l.integracoes) ? l.integracoes : [];
+    const bling = window.CAT_BLING_ICON || "/static/imge/icone_api/icone_bling.png";
+    const olist = window.CAT_OLIST_ICON || "/static/imge/icone_api/icone_olist.png";
+    if (!lista.length) {
+      return '<span class="Cat_Origem Cat_Origem--manual" title="Cadastro manual">Manual</span>';
+    }
+    const bits = [];
+    if (lista.includes("bling")) {
+      bits.push(`<img class="Cat_OrigemLogo" src="${bling}" alt="Bling" title="Bling" width="22" height="22">`);
+    }
+    if (lista.includes("olist")) {
+      bits.push(`<img class="Cat_OrigemLogo" src="${olist}" alt="Olist" title="Olist" width="22" height="22">`);
+    }
+    if (!bits.length) {
+      return '<span class="Cat_Origem Cat_Origem--manual" title="Cadastro manual">Manual</span>';
+    }
+    return `<span class="Cat_Origem">${bits.join("")}</span>`;
+  }
+
   function renderLinha(l, u) {
     const isVar = l.tipo === "variante";
     const isPaiVar = produtoTemVariacoes(l);
@@ -1054,6 +1074,7 @@
         : fmtMoeda(l.preco);
 
     const nomeCell = isVar ? renderNomeVar(l) : renderNomePai(l);
+    const origemCell = renderOrigem(l);
     const expandCell = isVar ? '<span class="Cat_ExpandSpacer Cat_ExpandSpacer--var" aria-hidden="true"></span>' : renderExpand(l);
 
     const acoes = isVar
@@ -1066,6 +1087,7 @@
       <td class="Cat_ColExpand">${expandCell}</td>
       <td class="Cat_ColImg">${thumb(l.imagem_url)}</td>
       <td class="Cat_ColNome">${nomeCell}</td>
+      <td class="Cat_ColOrigem">${origemCell}</td>
       <td class="Cat_ColSku">${escapeHtml(l.sku || "—")}</td>
       <td>${escapeHtml(l.unidade || "UN")}</td>
       <td class="Cat_Preco">${preco}</td>
@@ -1077,7 +1099,7 @@
   function renderTabela() {
     const linhas = linhasVisiveis();
     if (!linhas.length) {
-      el.tbody.innerHTML = '<tr><td colspan="9">Nenhum produto encontrado.</td></tr>';
+      el.tbody.innerHTML = '<tr><td colspan="10">Nenhum produto encontrado.</td></tr>';
       atualizarBtnExpandTodos();
       syncBulkBar();
       renderPaginacao();
