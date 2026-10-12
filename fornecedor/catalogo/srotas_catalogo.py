@@ -1066,6 +1066,7 @@ def _sincronizar_imagem_principal(cur, id_produto: int) -> None:
 def pagina():
     id_tenant = session.get("id_tenant")
     bling_conectado = False
+    olist_conectado = False
     if id_tenant:
         conn = Var_ConectarBanco()
         try:
@@ -1076,12 +1077,16 @@ def pagina():
             )
             row = cur.fetchone()
             bling_conectado = bool(row and row[0] == "conectado")
+            from api.olist.cliente import olist_conectado as olist_esta_conectado
+
+            olist_conectado = olist_esta_conectado(cur, int(id_tenant))
         finally:
             conn.close()
     return render_template(
         "frm_catalogos.html",
         nav_ativo="catalogos",
         bling_conectado=bling_conectado,
+        olist_conectado=olist_conectado,
     )
 
 

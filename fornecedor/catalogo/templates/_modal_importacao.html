@@ -13,7 +13,7 @@
     <div class="imp-body">
       <section class="imp-tabs" role="tablist">
         <button type="button" class="imp-tab" data-tab="bling" id="impTabBling" hidden>Bling</button>
-        <button type="button" class="imp-tab" data-tab="olist" id="impTabOlist" hidden>Olist</button>
+        <button type="button" class="imp-tab" data-tab="olist" id="impTabOlist" {% if not olist_conectado %}hidden{% endif %}>Olist</button>
         <button type="button" class="imp-tab ativa" data-tab="nova" id="impTabNova">Arquivo</button>
         <button type="button" class="imp-tab" data-tab="manutencao">Manutenção</button>
         <button type="button" class="imp-tab" data-tab="layout">Layout</button>

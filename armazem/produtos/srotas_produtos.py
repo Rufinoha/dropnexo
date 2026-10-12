@@ -59,6 +59,7 @@ def pagina():
         return r
     id_tenant = _id_tenant()
     bling_conectado = False
+    olist_conectado = False
     if id_tenant:
         conn = Var_ConectarBanco()
         try:
@@ -69,6 +70,9 @@ def pagina():
             )
             row = cur.fetchone()
             bling_conectado = bool(row and row[0] == "conectado")
+            from api.olist.cliente import olist_conectado as olist_esta_conectado
+
+            olist_conectado = olist_esta_conectado(cur, int(id_tenant))
         finally:
             conn.close()
     # Mesma UI do catálogo do fornecedor (tabela, variações, imagens, estoque).
@@ -76,6 +80,7 @@ def pagina():
         "frm_catalogos.html",
         nav_ativo="az_produtos",
         bling_conectado=bling_conectado,
+        olist_conectado=olist_conectado,
         cat_page_title="Produtos",
         cat_topbar_title="Produtos do armazém",
         cat_heading="Produtos",

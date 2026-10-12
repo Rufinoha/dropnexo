@@ -199,13 +199,13 @@
   }
 
   async function carregarDadosIniciais() {
-    const r = await fetch(`${BASE}/dados`, { credentials: "include" });
+    const r = await fetch(`${BASE}/dados`, { credentials: "include", cache: "no-store" });
     const j = await r.json();
     if (!r.ok || !j.success) throw new Error(j.message || "Falha ao carregar importação.");
 
     cfg = j;
-    cfg.olist_conectado = !!j.olist_conectado;
-    cfg.bling_conectado = !!j.bling_conectado;
+    cfg.olist_conectado = !!(j.olist_conectado || window.CAT_OLIST_CONECTADO);
+    cfg.bling_conectado = !!(j.bling_conectado || window.CAT_BLING_CONECTADO);
     renderTabsIntegracao();
 
     const sel = qs("#impLayout");

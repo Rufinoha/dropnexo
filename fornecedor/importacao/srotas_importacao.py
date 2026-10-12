@@ -292,7 +292,7 @@ def importacao_dados():
             integracoes.append({"id": "bling", "nome": "Bling", "conectado": True})
         if olist:
             integracoes.append({"id": "olist", "nome": "Olist", "conectado": True})
-        return jsonify(
+        resp = jsonify(
             success=True,
             modulo=MODULO_CATALOGO,
             bling_conectado=bling,
@@ -305,6 +305,8 @@ def importacao_dados():
             ultimo_lote_olist=ultimo_olist,
             pode_editar=_pode_importar(),
         )
+        resp.headers["Cache-Control"] = "no-store"
+        return resp
     finally:
         conn.close()
 
