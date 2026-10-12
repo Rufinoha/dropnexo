@@ -251,7 +251,8 @@ def importacao_cards():
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
-        dados = obter_cards_importacao(cur, id_tenant, id_lote, origem=origem)
+        provedor = (request.args.get("provedor") or "").strip() or None
+        dados = obter_cards_importacao(cur, id_tenant, id_lote, origem=origem, provedor=provedor)
         return jsonify(success=True, dados=dados)
     finally:
         conn.close()
@@ -272,21 +273,36 @@ def importacao_dados():
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
+        from api.olist.cliente import olist_conectado
+
         bling = _bling_conectado(cur, int(id_tenant))
+        olist = olist_conectado(cur, int(id_tenant))
         bling_config = _bling_config_fornecedor(cur, int(id_tenant)) if bling else None
         layouts = listar_layouts(cur, int(id_tenant))
         ultimo = ultimo_lote(cur, int(id_tenant))
-        ultimo_bling = ultimo_lote(cur, int(id_tenant), origem=ORIGEM_INTEGRACAO) if bling else None
+        ultimo_bling = (
+            ultimo_lote(cur, int(id_tenant), origem=ORIGEM_INTEGRACAO, provedor="bling") if bling else None
+        )
+        ultimo_olist = (
+            ultimo_lote(cur, int(id_tenant), origem=ORIGEM_INTEGRACAO, provedor="olist") if olist else None
+        )
         conn.commit()
+        integracoes = []
+        if bling:
+            integracoes.append({"id": "bling", "nome": "Bling", "conectado": True})
+        if olist:
+            integracoes.append({"id": "olist", "nome": "Olist", "conectado": True})
         return jsonify(
             success=True,
             modulo=MODULO_CATALOGO,
             bling_conectado=bling,
+            olist_conectado=olist,
             bling_config=bling_config,
-            integracoes=[{"id": "bling", "nome": "Bling", "conectado": bling}] if bling else [],
+            integracoes=integracoes,
             layouts=layouts,
             ultimo_lote=ultimo,
             ultimo_lote_bling=ultimo_bling,
+            ultimo_lote_olist=ultimo_olist,
             pode_editar=_pode_importar(),
         )
     finally:
@@ -770,6 +786,117 @@ def importacao_bling_iniciar():
 @login_obrigatorio()
 @exigir_permissao(codigo="catalogos.ver")
 def importacao_bling_progresso(id_lote: int):
+    id_tenant = int(session.get("id_tenant"))
+    progresso = obter_progresso_bling(id_tenant, id_lote)
+    if not progresso:
+        return jsonify(success=False, message="Lote não encontrado."), 404
+    return jsonify(success=True, progresso=progresso)
+
+
+def _parse_body_importacao_olist(body: dict) -> tuple[list[str] | None, bool]:
+    raw_ids = body.get("ids_categorias_olist")
+    if raw_ids is None:
+        raw_ids = body.get("ids_categorias_bling")
+    ids: list[str] | None = None
+    if isinstance(raw_ids, list):
+        ids = [str(c).strip() for c in raw_ids if str(c or "").strip()]
+    incluir_sub = body.get("incluir_subcategorias", True)
+    if isinstance(incluir_sub, str):
+        incluir_sub = incluir_sub.lower() in ("1", "true", "sim", "yes")
+    return ids, bool(incluir_sub)
+
+
+@fn_importacao_bp.post("/fornecedor/importacao/integracao/olist/categorias/pre-analise")
+@login_obrigatorio()
+def importacao_olist_categorias_pre_analise():
+    if (resp := _exigir_escrita()) is not None:
+        return resp
+    from api.olist.cliente import olist_conectado
+    from api.olist.importacao_catalogo import pre_analisar_importacao
+
+    body = request.get_json(silent=True) or {}
+    ids, incluir_sub = _parse_body_importacao_olist(body)
+    id_tenant = int(session.get("id_tenant"))
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        if not olist_conectado(cur, id_tenant):
+            return jsonify(success=False, message="Conecte o Olist antes de importar."), 400
+        dados = pre_analisar_importacao(
+            cur,
+            id_tenant,
+            ids_categorias=ids,
+            incluir_subcategorias=incluir_sub,
+        )
+        return jsonify(success=True, dados=dados)
+    except ValueError as e:
+        return jsonify(success=False, message=str(e)), 400
+    except Exception as e:
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
+@fn_importacao_bp.post("/fornecedor/importacao/integracao/olist/iniciar")
+@login_obrigatorio()
+def importacao_olist_iniciar():
+    if (resp := _exigir_escrita()) is not None:
+        return resp
+    from api.olist.cliente import olist_conectado
+    from api.olist.importacao_catalogo import iniciar_importacao_olist_async, pre_analisar_importacao
+
+    body = request.get_json(silent=True) or {}
+    ids, incluir_sub = _parse_body_importacao_olist(body)
+    id_tenant = int(session.get("id_tenant"))
+    id_usuario = session.get("id_usuario")
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        if not olist_conectado(cur, id_tenant):
+            return jsonify(success=False, message="Conecte o Olist antes de importar."), 400
+        dados = pre_analisar_importacao(
+            cur,
+            id_tenant,
+            ids_categorias=ids,
+            incluir_subcategorias=incluir_sub,
+        )
+        if not dados.get("importacao_liberada"):
+            return jsonify(
+                success=False,
+                message=(dados.get("validacao") or {}).get("mensagem") or "Importação bloqueada.",
+                validacao=dados.get("validacao"),
+            ), 400
+    except ValueError as e:
+        return jsonify(success=False, message=str(e)), 400
+    finally:
+        conn.close()
+
+    try:
+        iniciado = iniciar_importacao_olist_async(
+            current_app._get_current_object(),
+            id_tenant=id_tenant,
+            id_usuario=int(id_usuario) if id_usuario else None,
+            ids_categorias=ids,
+            incluir_subcategorias=incluir_sub,
+            ids_filtro=dados.get("ids_filtro"),
+            bootstrap=bool(dados.get("bootstrap")),
+        )
+        return jsonify(
+            success=True,
+            message="Importação iniciada.",
+            id_lote=iniciado["id_lote"],
+            numero=iniciado["numero"],
+        )
+    except Exception as e:
+        return jsonify(success=False, message=str(e)), 500
+
+
+@fn_importacao_bp.get("/fornecedor/importacao/integracao/olist/lote/<int:id_lote>/progresso")
+@login_obrigatorio()
+@exigir_permissao(codigo="catalogos.ver")
+def importacao_olist_progresso(id_lote: int):
+    from api.bling.sync_progresso import obter_progresso_bling
+
     id_tenant = int(session.get("id_tenant"))
     progresso = obter_progresso_bling(id_tenant, id_lote)
     if not progresso:

@@ -374,6 +374,9 @@
     }
   });
 
+  const aba = new URLSearchParams(window.location.search).get("aba");
+  if (aba && panes[aba]) pickTab(aba);
+
   carregarStatus().catch((e) => {
     Swal.fire({ icon: "error", title: "Olist", text: e.message, confirmButtonColor: "#021F81" });
   });

@@ -662,17 +662,22 @@ def ultimo_lote(
     id_tenant: int,
     modulo: str = MODULO_CATALOGO,
     origem: str | None = None,
+    provedor: str | None = None,
 ) -> dict | None:
-    filtro_origem = "AND l.origem = %s" if origem else ""
+    filtros = ""
     params: list = [id_tenant, modulo]
     if origem:
+        filtros += " AND l.origem = %s"
         params.append(origem)
+    if provedor:
+        filtros += " AND l.provedor = %s"
+        params.append(provedor)
     cur.execute(
         f"""
         SELECT {_LOTE_COLS}
         FROM tbl_importacao_lote l
         LEFT JOIN tbl_usuario u ON u.id = l.importado_por
-        WHERE l.id_tenant = %s AND l.modulo = %s {filtro_origem}
+        WHERE l.id_tenant = %s AND l.modulo = %s{filtros}
         ORDER BY l.importado_em DESC, l.id DESC
         LIMIT 1
         """,
@@ -1129,11 +1134,12 @@ def obter_cards_importacao(
     id_tenant: int,
     id_lote: int | None = None,
     origem: str | None = None,
+    provedor: str | None = None,
 ) -> dict:
     if id_lote:
         lote = obter_lote(cur, id_tenant, id_lote)
     else:
-        lote = ultimo_lote(cur, id_tenant, origem=origem)
+        lote = ultimo_lote(cur, id_tenant, origem=origem, provedor=provedor)
     if not lote:
         return {}
     cur.execute(

@@ -193,7 +193,7 @@ def vincular_deposito(cur, id_tenant: int, id_olist: str, nome: str, id_deposito
     )
 
 
-def _achatar_arvore(nos: Any, pai: str = "") -> list[dict]:
+def _achatar_arvore(nos: Any, pai: str = "", id_pai: str = "") -> list[dict]:
     if isinstance(nos, dict):
         if nos.get("id") or nos.get("descricao") or nos.get("nome"):
             nos = [nos]
@@ -207,10 +207,17 @@ def _achatar_arvore(nos: Any, pai: str = "") -> list[dict]:
         id_olist = str(no.get("id") or "").strip()
         caminho = f"{pai} > {nome}" if pai and nome else nome
         if id_olist:
-            saida.append({"id": id_olist, "descricao": nome or id_olist, "caminho": caminho or nome or id_olist})
+            saida.append(
+                {
+                    "id": id_olist,
+                    "descricao": nome or id_olist,
+                    "caminho": caminho or nome or id_olist,
+                    "id_pai": id_pai,
+                }
+            )
         filhas = no.get("filhas") if isinstance(no.get("filhas"), list) else no.get("nodes")
         if isinstance(filhas, list) and filhas:
-            saida.extend(_achatar_arvore(filhas, caminho or pai))
+            saida.extend(_achatar_arvore(filhas, caminho or pai, id_olist or id_pai))
     return saida
 
 
@@ -222,7 +229,8 @@ def listar_categorias(cur, id_tenant: int) -> dict[str, Any]:
         texto = str(e)
         if "403" in texto:
             raise RuntimeError(
-                "O Olist recusou a lista de categorias. No aplicativo Dropnexo, deixe Categorias em Leitura e conecte de novo para autorizar essa permissão."
+                "O Olist recusou a lista de categorias. Pode ser que ainda não exista nenhuma categoria no Olist. "
+                "Se já existir, deixe Categorias em Leitura no aplicativo Dropnexo e conecte de novo."
             ) from e
         raise
     remotos = _achatar_arvore(bruto)
@@ -272,6 +280,7 @@ def listar_categorias(cur, id_tenant: int) -> dict[str, Any]:
                 "acao": salvo.get("acao") or "",
                 "id_segmento": salvo.get("id_segmento"),
                 "id_categoria": salvo.get("id_categoria"),
+                "id_pai": str(cat.get("id_pai") or ""),
             }
         )
     return {"olist": itens, "segmentos": segmentos, "dropnexo": locais}

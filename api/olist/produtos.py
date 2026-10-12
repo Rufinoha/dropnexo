@@ -222,9 +222,42 @@ def _log(cur, id_tenant: int, status: str, resumo: str, detalhe: str = "") -> No
     )
 
 
-def importar_lote(cur, id_tenant: int, offset: int = 0) -> dict[str, Any]:
+def _id_categoria_olist(produto: dict) -> str:
+    cat = produto.get("categoria")
+    if isinstance(cat, dict):
+        return _s(cat.get("id"))
+    if cat not in (None, "", [], {}):
+        return _s(cat)
+    return _s(produto.get("idCategoria") or produto.get("categoriaId"))
+
+
+def _mapa_categorias(cur, id_tenant: int) -> dict[str, tuple[str, int | None]]:
+    cur.execute(
+        """
+        SELECT id_olist, acao, id_categoria
+        FROM tbl_integracao_olist_categoria
+        WHERE id_tenant = %s
+        """,
+        (int(id_tenant),),
+    )
+    mapa: dict[str, tuple[str, int | None]] = {}
+    for id_olist, acao, id_categoria in cur.fetchall():
+        mapa[str(id_olist)] = (str(acao or ""), int(id_categoria) if id_categoria else None)
+    return mapa
+
+
+def importar_lote(
+    cur,
+    id_tenant: int,
+    offset: int = 0,
+    *,
+    ids_categorias: set[str] | None = None,
+    id_importacao_lote: int | None = None,
+    respeitar_ignorar: bool = False,
+) -> dict[str, Any]:
     """Importa um lote curto. A foto segue aplicar_imagens_produto (download local)."""
     garantir_tabelas(cur)
+    mapa_cat = _mapa_categorias(cur, id_tenant)
     pagina = _listar(id_tenant, max(0, int(offset)))
     importados = 0
     atualizados = 0
@@ -251,6 +284,18 @@ def importar_lote(cur, id_tenant: int, offset: int = 0) -> dict[str, Any]:
                     if valor not in (None, "", [], {}):
                         base[chave] = valor
             pai = para_payload_bling(base)
+            id_cat_olist = _id_categoria_olist(base)
+            if ids_categorias is not None and id_cat_olist not in ids_categorias:
+                cur.execute("RELEASE SAVEPOINT sp_olist_prod")
+                ignorados += 1
+                continue
+            acao_cat, id_cat_drop = mapa_cat.get(id_cat_olist, ("", None))
+            if respeitar_ignorar and acao_cat == "ignorar":
+                cur.execute("RELEASE SAVEPOINT sp_olist_prod")
+                ignorados += 1
+                continue
+            if acao_cat != "vincular":
+                id_cat_drop = None
             sku = _s(pai.get("codigo"))
             if not sku:
                 raise ValueError("Produto sem SKU no Olist.")
@@ -274,6 +319,8 @@ def importar_lote(cur, id_tenant: int, offset: int = 0) -> dict[str, Any]:
                     pai=pai,
                     variacoes=variacoes,
                     id_produto_existente=existente,
+                    id_categoria=id_cat_drop,
+                    id_importacao_lote=id_importacao_lote,
                 )
             else:
                 prod_id = _salvar_produto(
@@ -281,6 +328,8 @@ def importar_lote(cur, id_tenant: int, offset: int = 0) -> dict[str, Any]:
                     id_tenant=id_tenant,
                     produto=pai,
                     id_produto_existente=existente,
+                    id_categoria=id_cat_drop,
+                    id_importacao_lote=id_importacao_lote,
                 )
             if midia:
                 _, arquivos = aplicar_imagens_produto(
@@ -308,6 +357,21 @@ def importar_lote(cur, id_tenant: int, offset: int = 0) -> dict[str, Any]:
             if isinstance(e, ValueError) and "limite" in str(e).lower():
                 raise
             erros.append(f"{id_olist}: {e}")
+            if id_importacao_lote:
+                from fornecedor.importacao.servico_importacao import MODULO_CATALOGO, registrar_erro_lote
+
+                registrar_erro_lote(
+                    cur,
+                    id_tenant=id_tenant,
+                    id_lote=int(id_importacao_lote),
+                    modulo=MODULO_CATALOGO,
+                    mensagem=str(e),
+                    ref_externa=id_olist,
+                    nome_registro=_s(item.get("descricao") or item.get("nome")),
+                    sku_registro=_s(item.get("sku") or item.get("codigo")),
+                    payload={"mensagem_tecnica": str(e)},
+                    origem="olist",
+                )
 
     proximo = int(offset) + len(pagina["itens"])
     if pagina.get("total_conhecido"):

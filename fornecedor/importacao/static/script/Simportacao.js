@@ -26,14 +26,25 @@
       obs: "#impBlingResObs",
       emptyObs: "Nenhuma importação via Bling ainda.",
     },
+    olist: {
+      total: "#impOlistResTotal",
+      inseridas: "#impOlistResInseridas",
+      erros: "#impOlistResErros",
+      lote: "#impOlistResLote",
+      obs: "#impOlistResObs",
+      emptyObs: "Nenhuma importação via Olist ainda.",
+    },
   };
 
-  let cfg = { bling_conectado: false, layouts: [], pode_editar: false, bling_config: null };
-  let loteSelecionado = { arquivo: null, bling: null };
+  let cfg = { bling_conectado: false, olist_conectado: false, layouts: [], pode_editar: false, bling_config: null };
+  let loteSelecionado = { arquivo: null, bling: null, olist: null };
   let tabAtiva = "nova";
   let blingCategorias = [];
+  let olistCategorias = [];
   const blingCatsSel = new Set();
+  const olistCatsSel = new Set();
   let catPickerAberto = false;
+  let olistCatPickerAberto = false;
 
   function esc(s) {
     return String(s ?? "")
@@ -87,15 +98,18 @@
     document.body.style.overflow = open ? "hidden" : "";
   }
 
-  function renderTabsBling(conectado) {
+  function renderTabsIntegracao() {
     const tabBling = qs("#impTabBling");
-    if (tabBling) tabBling.hidden = !conectado;
+    const tabOlist = qs("#impTabOlist");
+    if (tabBling) tabBling.hidden = !cfg.bling_conectado;
+    if (tabOlist) tabOlist.hidden = !cfg.olist_conectado;
   }
 
   function pickTab(tab) {
     tabAtiva = tab;
     qsa(".imp-tab").forEach((b) => b.classList.toggle("ativa", b.dataset.tab === tab));
     qs("#impPaneBling")?.classList.toggle("ativa", tab === "bling");
+    qs("#impPaneOlist")?.classList.toggle("ativa", tab === "olist");
     qs("#impPaneNova")?.classList.toggle("ativa", tab === "nova");
     qs("#impPaneManutencao")?.classList.toggle("ativa", tab === "manutencao");
     qs("#impPaneLayout")?.classList.toggle("ativa", tab === "layout");
@@ -144,7 +158,10 @@
   async function carregarCards(scope, idLote) {
     const params = new URLSearchParams();
     if (idLote) params.set("id_lote", String(idLote));
-    if (scope === "bling") params.set("origem", "integracao");
+    if (scope === "bling" || scope === "olist") {
+      params.set("origem", "integracao");
+      if (!idLote) params.set("provedor", scope);
+    }
     const r = await fetch(`${BASE}/cards?${params}`, { credentials: "include" });
     const j = await r.json();
     if (!r.ok || !j.success) {
@@ -172,7 +189,9 @@
     if (!r.ok || !j.success) throw new Error(j.message || "Falha ao carregar importação.");
 
     cfg = j;
-    renderTabsBling(!!j.bling_conectado);
+    cfg.olist_conectado = !!j.olist_conectado;
+    cfg.bling_conectado = !!j.bling_conectado;
+    renderTabsIntegracao();
 
     const sel = qs("#impLayout");
     if (sel) {
@@ -185,6 +204,10 @@
       await carregarCategoriasBling();
       atualizarStatusBling();
       await carregarCards("bling", j.ultimo_lote_bling?.id || null);
+    }
+    if (j.olist_conectado) {
+      await carregarCategoriasOlist();
+      await carregarCards("olist", j.ultimo_lote_olist?.id || null);
     }
 
     await carregarCards("arquivo", j.ultimo_lote?.id || null);
@@ -315,6 +338,270 @@
     const porCat = qs('input[name="imp_bling_modo"]:checked')?.value === "categorias";
     qs("#impBlingCatsWrap").hidden = !porCat;
     if (!porCat) fecharCatPicker();
+  }
+
+  async function carregarCategoriasOlist() {
+    try {
+      const r = await fetch("/api/integracoes/olist/categorias", { credentials: "include" });
+      const j = await r.json();
+      if (!j.success) return;
+      olistCategorias = (j.olist || []).map((c) => {
+        const caminho = c.caminho || c.nome || String(c.id);
+        return {
+          id: String(c.id),
+          nome: caminho,
+          depth: Math.max(0, String(caminho).split(" > ").length - 1),
+        };
+      });
+      renderOlistCatList();
+      renderOlistCatChips();
+      atualizarOlistCatTrigger();
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function renderOlistCatList(filtro = "") {
+    const list = qs("#impOlistCatList");
+    if (!list) return;
+    const termo = filtro.trim().toLowerCase();
+    const itens = olistCategorias.filter((c) => !termo || c.nome.toLowerCase().includes(termo));
+    if (!itens.length) {
+      list.innerHTML = `<div class="imp-cat-empty">${termo ? "Nenhuma categoria encontrada." : "Sem categorias no Olist."}</div>`;
+      return;
+    }
+    list.innerHTML = itens
+      .map((c) => {
+        const pad = c.depth > 0 ? `padding-left:${8 + c.depth * 14}px` : "";
+        const checked = olistCatsSel.has(c.id) ? "checked" : "";
+        const ativa = olistCatsSel.has(c.id) ? " ativa" : "";
+        return `<label class="imp-cat-item${ativa}" style="${pad}" data-id="${esc(c.id)}">
+          <input type="checkbox" value="${esc(c.id)}" ${checked} />
+          <span>${esc(c.nome)}</span>
+        </label>`;
+      })
+      .join("");
+  }
+
+  function renderOlistCatChips() {
+    const wrap = qs("#impOlistCatChips");
+    if (!wrap) return;
+    if (!olistCatsSel.size) {
+      wrap.innerHTML = "";
+      return;
+    }
+    const map = new Map(olistCategorias.map((c) => [c.id, c.nome]));
+    wrap.innerHTML = Array.from(olistCatsSel)
+      .map(
+        (id) => `<span class="imp-cat-chip">${esc(map.get(id) || id)}
+          <button type="button" data-rm-olist-cat="${esc(id)}" aria-label="Remover">×</button></span>`
+      )
+      .join("");
+  }
+
+  function atualizarOlistCatTrigger() {
+    const txt = qs("#impOlistCatTriggerText");
+    if (!txt) return;
+    const n = olistCatsSel.size;
+    txt.textContent = n
+      ? `${n} categoria${n > 1 ? "s" : ""} selecionada${n > 1 ? "s" : ""}`
+      : "Selecione as categorias…";
+  }
+
+  function toggleOlistCat(id, on) {
+    if (on) olistCatsSel.add(String(id));
+    else olistCatsSel.delete(String(id));
+    renderOlistCatList(qs("#impOlistCatSearch")?.value || "");
+    renderOlistCatChips();
+    atualizarOlistCatTrigger();
+  }
+
+  function fecharOlistCatPicker() {
+    olistCatPickerAberto = false;
+    qs("#impOlistCatPanel")?.setAttribute("hidden", "");
+    qs("#impOlistCatTrigger")?.setAttribute("aria-expanded", "false");
+  }
+
+  function abrirOlistCatPicker() {
+    olistCatPickerAberto = true;
+    qs("#impOlistCatPanel")?.removeAttribute("hidden");
+    qs("#impOlistCatTrigger")?.setAttribute("aria-expanded", "true");
+    qs("#impOlistCatSearch")?.focus();
+  }
+
+  function bindOlistCatPicker() {
+    qs("#impOlistCatTrigger")?.addEventListener("click", () => {
+      if (olistCatPickerAberto) fecharOlistCatPicker();
+      else abrirOlistCatPicker();
+    });
+    qs("#impOlistCatSearch")?.addEventListener("input", (ev) => {
+      renderOlistCatList(ev.target.value || "");
+    });
+    qs("#impOlistCatList")?.addEventListener("change", (ev) => {
+      const cb = ev.target.closest('input[type="checkbox"]');
+      if (!cb) return;
+      toggleOlistCat(cb.value, cb.checked);
+    });
+    qs("#impOlistCatChips")?.addEventListener("click", (ev) => {
+      const btn = ev.target.closest("[data-rm-olist-cat]");
+      if (btn) toggleOlistCat(btn.dataset.rmOlistCat, false);
+    });
+    document.addEventListener("click", (ev) => {
+      if (!olistCatPickerAberto) return;
+      if (ev.target.closest("#impOlistCatPicker")) return;
+      fecharOlistCatPicker();
+    });
+  }
+
+  function toggleOlistCats() {
+    const porCat = qs('input[name="imp_olist_modo"]:checked')?.value === "categorias";
+    const wrap = qs("#impOlistCatsWrap");
+    if (wrap) wrap.hidden = !porCat;
+    if (!porCat) fecharOlistCatPicker();
+  }
+
+  async function montarBodyOlist() {
+    const modo = qs('input[name="imp_olist_modo"]:checked')?.value || "todos";
+    const body = { contexto: "fornecedor" };
+    if (modo === "categorias") {
+      const ids = Array.from(olistCatsSel);
+      if (!ids.length) {
+        await Swal.fire({ icon: "warning", title: "Atenção", text: "Selecione ao menos uma categoria." });
+        return null;
+      }
+      body.ids_categorias_olist = ids;
+      body.incluir_subcategorias = qs("#impOlistSub")?.checked !== false;
+    }
+    return body;
+  }
+
+  function htmlProgressoOlist(p, totalPrevisto) {
+    const html = htmlProgressoBling(p, totalPrevisto);
+    return html
+      .replace("Preparando lista de produtos no Bling…", "Preparando lista de produtos no Olist…")
+      .replace("Importando produtos do Bling…", "Importando produtos do Olist…");
+  }
+
+  async function pollProgressoImportacaoOlist(idLote, totalPrevisto) {
+    const intervaloMs = 1500;
+    for (;;) {
+      const r = await fetch(`${BASE}/integracao/olist/lote/${idLote}/progresso`, {
+        credentials: "include",
+        headers: { Accept: "application/json" },
+      });
+      const j = await lerJsonResposta(r);
+      if (!r.ok || !j.success) throw new Error(j.message || "Falha ao consultar progresso.");
+      const p = j.progresso || {};
+      Swal.update({ html: htmlProgressoOlist(p, totalPrevisto) });
+      if (p.concluido) {
+        if (p.erro_fatal) throw new Error(p.erro_fatal);
+        return p;
+      }
+      await aguardar(intervaloMs);
+    }
+  }
+
+  async function executarImportacaoOlist(body, totalPrevisto = 0) {
+    Swal.fire({
+      title: "Importando do Olist",
+      html: htmlProgressoOlist({ processados: 0, total: totalPrevisto, percentual: 0 }, totalPrevisto),
+      allowOutsideClick: false,
+      showConfirmButton: false,
+      didOpen: () => Swal.showLoading(),
+    });
+    try {
+      const r = await fetch(`${BASE}/integracao/olist/iniciar`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify(body),
+        credentials: "include",
+      });
+      const j = await lerJsonResposta(r);
+      if (!r.ok || !j.success) throw new Error(j.message || "Falha ao iniciar importação.");
+      const progresso = await pollProgressoImportacaoOlist(j.id_lote, totalPrevisto);
+      Swal.close();
+      await carregarCards("olist", j.id_lote);
+      pickTab("olist");
+      const stImport = progresso.status_importacao || (progresso.erros > 0 ? "aviso" : "ok");
+      const icon = stImport === "erro" ? "error" : stImport === "aviso" || progresso.erros > 0 ? "warning" : "success";
+      const msg =
+        progresso.mensagem ||
+        (progresso.erros > 0
+          ? `Importação ${j.numero} concluída com ${progresso.erros} falha(s).`
+          : `Importação ${j.numero} concluída.`);
+      await Swal.fire({ icon, title: "Concluído", text: msg, confirmButtonColor: "#021F81" });
+      window.dispatchEvent(new CustomEvent("catalogo:importacao-concluida"));
+    } catch (e) {
+      Swal.close();
+      await Swal.fire("Erro", e.message, "error");
+    }
+  }
+
+  async function importarOlist() {
+    const body = await montarBodyOlist();
+    if (!body) return;
+    Swal.fire({ title: "Verificando categorias…", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    try {
+      const r = await fetch(`${BASE}/integracao/olist/categorias/pre-analise`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify(body),
+        credentials: "include",
+      });
+      const j = await lerJsonResposta(r);
+      Swal.close();
+      if (!r.ok || !j.success) throw new Error(j.message || "Falha na verificação.");
+      const dados = j.dados || {};
+      const val = dados.validacao || {};
+      if (!val.importacao_liberada) {
+        const pendCat = (val.categorias && val.categorias.pendentes) || [];
+        const pendDep = (val.depositos && val.depositos.pendentes) || [];
+        const listaCat = pendCat
+          .slice(0, 8)
+          .map((p) => esc(p.caminho_bling || p.nome_bling || p.id_bling))
+          .join("<br>");
+        const listaDep = pendDep
+          .slice(0, 8)
+          .map((p) => esc(p.nome_bling || p.id_bling))
+          .join("<br>");
+        const bloqueioDep = val.depositos && val.depositos.importacao_liberada === false;
+        const titulo = bloqueioDep && !(val.categorias && val.categorias.importacao_liberada === false)
+          ? "Depósitos não vinculados"
+          : "Mapeamento incompleto";
+        const link = bloqueioDep && !(val.categorias && val.categorias.importacao_liberada === false)
+          ? `<br><br><a href="/integracoes/olist?aba=depositos" style="color:#021F81;font-weight:600">Abrir Integrações › Olist › Depósitos</a>`
+          : `<br><br><a href="/integracoes/olist?aba=categorias" style="color:#021F81;font-weight:600">Abrir Integrações › Olist › Categorias</a>`;
+        await Swal.fire({
+          icon: "warning",
+          title: titulo,
+          html:
+            `${esc(val.mensagem || "Conclua o mapeamento antes de importar.")}` +
+            (listaCat ? `<br><br><small><b>Categorias</b><br>${listaCat}</small>` : "") +
+            (listaDep ? `<br><br><small><b>Depósitos</b><br>${listaDep}</small>` : "") +
+            link,
+          confirmButtonColor: "#021F81",
+        });
+        return;
+      }
+      if (val.bootstrap) {
+        const okBoot = await Swal.fire({
+          icon: "info",
+          title: "Bootstrap da estrutura",
+          html:
+            "Não há categorias nem depósitos no DropNexo. " +
+            "A importação criará as categorias do Olist e já fará o vínculo.",
+          showCancelButton: true,
+          confirmButtonText: "Continuar",
+          cancelButtonText: "Cancelar",
+          confirmButtonColor: "#021F81",
+        });
+        if (!okBoot.isConfirmed) return;
+      }
+      await executarImportacaoOlist(body, Number(dados.total_produtos_escopo || 0));
+    } catch (e) {
+      Swal.close();
+      await Swal.fire("Erro", e.message, "error");
+    }
   }
 
   async function importarArquivo() {
@@ -707,9 +994,15 @@
     }
   }
 
+  function seletorErros(scope) {
+    if (scope === "bling") return "#impBlingResErros";
+    if (scope === "olist") return "#impOlistResErros";
+    return "#impResErros";
+  }
+
   function abrirErrosManutencao(scope) {
     const idLote = loteSelecionado[scope];
-    const errosEl = scope === "bling" ? "#impBlingResErros" : "#impResErros";
+    const errosEl = seletorErros(scope);
     const erros = Number(qs(errosEl)?.textContent || 0);
 
     if (!idLote) {
@@ -750,7 +1043,7 @@
       .map((l) => {
         const data = l.importado_em ? new Date(l.importado_em).toLocaleString("pt-BR") : "—";
         return `<tr>
-          <td><button type="button" class="imp-btn-link" data-ver="${l.id}" data-origem="${esc(l.origem || "")}">${esc(l.numero || l.id)}</button></td>
+          <td><button type="button" class="imp-btn-link" data-ver="${l.id}" data-origem="${esc(l.origem || "")}" data-provedor="${esc(l.provedor || "")}">${esc(l.numero || l.id)}</button></td>
           <td>${esc(l.origem_rotulo || l.origem)}</td>
           <td>${esc(l.nome_arquivo || "—")}</td>
           <td>${data}</td>
@@ -765,10 +1058,15 @@
     aplicarIcones(tbody);
   }
 
-  async function verLote(id, origem) {
-    const scope = origem === "integracao" ? "bling" : "arquivo";
+  async function verLote(id, origem, provedor) {
+    let scope = "arquivo";
+    if (origem === "integracao") scope = provedor === "olist" ? "olist" : "bling";
     await carregarCards(scope, id);
-    pickTab(scope === "bling" && cfg.bling_conectado ? "bling" : "nova");
+    const abaOk =
+      scope === "arquivo" ||
+      (scope === "bling" && cfg.bling_conectado) ||
+      (scope === "olist" && cfg.olist_conectado);
+    pickTab(abaOk ? scope : "nova");
   }
 
   async function excluirLote(id) {
@@ -792,6 +1090,7 @@
     await carregarLotes();
     await carregarCards("arquivo", null);
     if (cfg.bling_conectado) await carregarCards("bling", null);
+    if (cfg.olist_conectado) await carregarCards("olist", null);
     window.dispatchEvent(new CustomEvent("catalogo:importacao-concluida"));
   }
 
@@ -941,7 +1240,7 @@
         const scope = card.dataset.scope || "arquivo";
         if (card.dataset.card === "erros") abrirErrosManutencao(scope);
         else if (card.dataset.card === "lote" && loteSelecionado[scope]) {
-          const errosEl = scope === "bling" ? "#impBlingResErros" : "#impResErros";
+          const errosEl = seletorErros(scope);
           const erros = Number(qs(errosEl)?.textContent || 0);
           if (erros > 0) abrirErrosManutencao(scope);
         }
@@ -954,6 +1253,7 @@
     qsa("[data-acao='fechar']").forEach((b) => b.addEventListener("click", () => setModalOpen(false)));
     qs("#impBtnArquivo")?.addEventListener("click", importarArquivo);
     qs("#impBtnBling")?.addEventListener("click", importarBling);
+    qs("#impBtnOlist")?.addEventListener("click", importarOlist);
     qs("#impBtnFiltrar")?.addEventListener("click", carregarLotes);
     qs("#impBtnLimpar")?.addEventListener("click", () => {
       qs("#impFiltroDe").value = "";
@@ -961,7 +1261,9 @@
       carregarLotes();
     });
     qsa('input[name="imp_bling_modo"]').forEach((r) => r.addEventListener("change", toggleBlingCats));
+    qsa('input[name="imp_olist_modo"]').forEach((r) => r.addEventListener("change", toggleOlistCats));
     bindCatPicker();
+    bindOlistCatPicker();
     bindLayoutTab();
     window.addEventListener("message", async (event) => {
       if (event.origin !== window.location.origin) return;
@@ -973,7 +1275,7 @@
     qs("#impTblLotes")?.addEventListener("click", (ev) => {
       const ver = ev.target.closest("[data-ver]");
       const del = ev.target.closest("[data-del]");
-      if (ver) verLote(Number(ver.dataset.ver), ver.dataset.origem || "");
+      if (ver) verLote(Number(ver.dataset.ver), ver.dataset.origem || "", ver.dataset.provedor || "");
       if (del) excluirLote(Number(del.dataset.del));
     });
     bindCardsInteracao();
@@ -984,7 +1286,7 @@
     setModalOpen(true);
     try {
       await carregarDadosIniciais();
-      pickTab(cfg.bling_conectado ? "bling" : "nova");
+      pickTab(cfg.bling_conectado ? "bling" : cfg.olist_conectado ? "olist" : "nova");
     } catch (e) {
       pickTab("nova");
       await Swal.fire("Erro", e.message, "error");

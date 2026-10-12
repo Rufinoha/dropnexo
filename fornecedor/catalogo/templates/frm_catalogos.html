@@ -128,7 +128,7 @@
   window.CAT_CONTEXTO_ARMAZEM = {{ 'true' if (cat_contexto_armazem or session.get('tenant_tipo_negocio') == 'armazem' or session.get('modulo_ativo') == 'armazem') else 'false' }};
 </script>
 {% if not cat_ocultar_import_export %}
-<script defer src="{{ url_for('fn_importacao.static', filename='script/Simportacao.js') }}?v=12"></script>
+<script defer src="{{ url_for('fn_importacao.static', filename='script/Simportacao.js') }}?v=13"></script>
 {% endif %}
 <script defer src="{{ url_for('fn_catalogo.static', filename='script/Scatalogos.js') }}?v=27"></script>
 {% endblock %}
