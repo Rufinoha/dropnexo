@@ -125,11 +125,17 @@
     const ins = Number(d.inseridas ?? 0);
     const rej = Number(d.erros ?? 0);
     const numero = d.numero != null ? String(d.numero) : "—";
+    const totalEl = qs(map.total);
+    const insEl = qs(map.inseridas);
+    const errEl = qs(map.erros);
+    const loteEl = qs(map.lote);
+    const obsEl = qs(map.obs);
+    if (!totalEl || !insEl || !errEl || !loteEl || !obsEl) return;
 
-    qs(map.total).textContent = String(total);
-    qs(map.inseridas).textContent = String(ins);
-    qs(map.erros).textContent = String(rej);
-    qs(map.lote).textContent = numero;
+    totalEl.textContent = String(total);
+    insEl.textContent = String(ins);
+    errEl.textContent = String(rej);
+    loteEl.textContent = numero;
 
     const obs = [];
     if (d.origem_rotulo) obs.push(d.origem_rotulo);
@@ -141,7 +147,7 @@
         /* ignore */
       }
     }
-    qs(map.obs).textContent = obs.length
+    obsEl.textContent = obs.length
       ? `Última importação: ${obs.join(" · ")}`
       : map.emptyObs;
 
@@ -175,7 +181,7 @@
     const status = qs("#impBlingStatus");
     const titulo = qs("#impBlingStatusTitulo");
     const sub = qs("#impBlingStatusSub");
-    if (!status || !cfg.bling_conectado) return;
+    if (!status || !titulo || !sub || !cfg.bling_conectado) return;
 
     status.classList.remove("inativo");
     titulo.textContent = "Conectado ao Bling";
