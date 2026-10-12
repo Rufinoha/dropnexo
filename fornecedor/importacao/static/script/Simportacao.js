@@ -105,7 +105,16 @@
     if (tabOlist) tabOlist.hidden = !cfg.olist_conectado;
   }
 
+  function paneDaAba(tab) {
+    if (tab === "bling") return qs("#impPaneBling");
+    if (tab === "olist") return qs("#impPaneOlist");
+    if (tab === "manutencao") return qs("#impPaneManutencao");
+    if (tab === "layout") return qs("#impPaneLayout");
+    return qs("#impPaneNova");
+  }
+
   function pickTab(tab) {
+    if (!paneDaAba(tab)) tab = "nova";
     tabAtiva = tab;
     qsa(".imp-tab").forEach((b) => b.classList.toggle("ativa", b.dataset.tab === tab));
     qs("#impPaneBling")?.classList.toggle("ativa", tab === "bling");
@@ -1292,7 +1301,12 @@
     setModalOpen(true);
     try {
       await carregarDadosIniciais();
-      pickTab(cfg.bling_conectado ? "bling" : cfg.olist_conectado ? "olist" : "nova");
+      const inicial = cfg.bling_conectado && qs("#impPaneBling")
+        ? "bling"
+        : cfg.olist_conectado && qs("#impPaneOlist")
+          ? "olist"
+          : "nova";
+      pickTab(inicial);
     } catch (e) {
       pickTab("nova");
       await Swal.fire("Erro", e.message, "error");
