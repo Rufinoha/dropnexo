@@ -3386,6 +3386,108 @@ def assinaturas_faturamento_dados():
         conn.close()
 
 
+@config_bp.post(f"{ASSINATURAS_PREFIX}/cancelar-fatura")
+@login_obrigatorio()
+def assinaturas_cancelar_fatura():
+    if (r := _exigir_dev()) is not None:
+        return r
+    from sistema.financeiro.cobranca import cancelar_fatura_admin
+
+    body = request.get_json(silent=True) or {}
+    try:
+        id_fatura = int(body.get("id_fatura") or 0)
+    except (TypeError, ValueError):
+        id_fatura = 0
+    try:
+        id_tenant = int(body.get("id_tenant") or 0) or None
+    except (TypeError, ValueError):
+        id_tenant = None
+    if id_fatura <= 0:
+        return jsonify(success=False, message="Fatura inválida."), 400
+
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        out = cancelar_fatura_admin(cur, id_fatura, id_tenant=id_tenant)
+        conn.commit()
+        return jsonify(success=True, **out)
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 400
+    except Exception:
+        conn.rollback()
+        _log.exception("cancelar fatura admin id=%s", id_fatura)
+        return jsonify(success=False, message="Não foi possível cancelar a cobrança."), 500
+    finally:
+        conn.close()
+
+
+@config_bp.get(f"{ASSINATURAS_PREFIX}/fatura/<int:id_fatura>")
+@login_obrigatorio()
+def assinaturas_detalhe_fatura(id_fatura: int):
+    if (r := _exigir_dev()) is not None:
+        return r
+    from sistema.financeiro.cobranca import detalhe_cobranca_admin
+
+    try:
+        id_tenant = int(request.args.get("id_tenant") or 0) or None
+    except (TypeError, ValueError):
+        id_tenant = None
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        detalhe = detalhe_cobranca_admin(cur, id_fatura, id_tenant=id_tenant)
+        return jsonify(success=True, fatura=detalhe)
+    except ValueError as e:
+        return jsonify(success=False, message=str(e)), 400
+    except Exception:
+        _log.exception("detalhe fatura id=%s", id_fatura)
+        return jsonify(success=False, message="Não foi possível abrir o detalhe."), 500
+    finally:
+        conn.close()
+
+
+@config_bp.post(f"{ASSINATURAS_PREFIX}/lembrete")
+@login_obrigatorio()
+def assinaturas_lembrete_fatura():
+    if (r := _exigir_dev()) is not None:
+        return r
+    from sistema.financeiro.cobranca import enviar_lembrete_fatura
+
+    body = request.get_json(silent=True) or {}
+    try:
+        id_fatura = int(body.get("id_fatura") or 0)
+    except (TypeError, ValueError):
+        id_fatura = 0
+    try:
+        id_tenant = int(body.get("id_tenant") or 0) or None
+    except (TypeError, ValueError):
+        id_tenant = None
+    if id_fatura <= 0:
+        return jsonify(success=False, message="Fatura inválida."), 400
+
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        out = enviar_lembrete_fatura(
+            cur,
+            id_fatura,
+            id_tenant=id_tenant,
+            id_usuario=session.get("id_usuario"),
+        )
+        conn.commit()
+        return jsonify(success=True, **out)
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 400
+    except Exception:
+        conn.rollback()
+        _log.exception("lembrete fatura id=%s", id_fatura)
+        return jsonify(success=False, message="Não foi possível enviar o lembrete."), 500
+    finally:
+        conn.close()
+
+
 # --- HubSupport (Central de Chamados) ---
 HS_PREFIX = "/configuracoes/hubsupport"
 

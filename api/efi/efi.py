@@ -409,4 +409,25 @@ def consultar_cobranca(charge_id: str) -> dict:
 
 def cancelar_cobranca(charge_id: str) -> dict:
     efi = _cliente()
-    return efi.cancel_charge(params={"id": int(charge_id)})
+    return _raise_resp(efi.cancel_charge(params={"id": int(charge_id)}))
+
+
+def cancelar_cobranca_pix(txid: str) -> dict:
+    """Encerra cobrança PIX imediata ainda ativa. PIX pago não é removido."""
+    efi = _cliente()
+    tx = (txid or "").strip()
+    if not tx:
+        raise RuntimeError("txid PIX ausente.")
+    det = _raise_resp(efi.pix_detail_charge(params={"txid": tx}))
+    corpo = det.get("data") if isinstance(det.get("data"), dict) else det
+    status = str((corpo or {}).get("status") or "").upper()
+    if status == "CONCLUIDA":
+        raise RuntimeError("PIX pago")
+    if status.startswith("REMOVIDA"):
+        return det
+    return _raise_resp(
+        efi.pix_update_charge(
+            params={"txid": tx},
+            body={"status": "REMOVIDA_PELO_USUARIO_RECEBEDOR"},
+        )
+    )

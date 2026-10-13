@@ -61,6 +61,25 @@ def _periodo_ok(raw: str | None) -> str:
     return p if p in PERIODOS else "mensal"
 
 
+def _anexar_lembretes(cur, linhas: list[dict]) -> None:
+    ids = [int(x["id_fatura"]) for x in linhas if x.get("id_fatura")]
+    mapa: dict[int, dict] = {}
+    if ids:
+        try:
+            cur.execute("SAVEPOINT sp_asf_lemb")
+            from sistema.financeiro.cobranca import resumo_lembretes
+
+            mapa = resumo_lembretes(cur, ids)
+            cur.execute("RELEASE SAVEPOINT sp_asf_lemb")
+        except Exception:
+            _rollback_sp(cur, "sp_asf_lemb")
+            mapa = {}
+    for linha in linhas:
+        info = mapa.get(int(linha["id_fatura"])) or {}
+        linha["lembrete_qtd"] = int(info.get("qtd") or 0)
+        linha["lembrete_rotulo"] = info.get("rotulo") or ""
+
+
 def _rollback_sp(cur, nome: str) -> None:
     try:
         cur.execute(f"ROLLBACK TO SAVEPOINT {nome}")
@@ -631,6 +650,9 @@ def painel_assinaturas(
                 "periodicidade_label": PERIODO_LABEL.get(periodo, periodo),
             }
         )
+
+    _anexar_lembretes(cur, em_atraso)
+    _anexar_lembretes(cur, em_aberto)
 
     return {
         "ativas": {

@@ -3,7 +3,7 @@
 {% set nav_ativo = 'config' %}
 {% block topbar_title %}Assinaturas e faturamento{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_assinaturas.css') }}?v=3" />
+<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_assinaturas.css') }}?v=5" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal Asf_Wrap">
@@ -80,10 +80,11 @@
               <th>Vencimento</th>
               <th>Valor</th>
               <th>Forma</th>
+              <th></th>
             </tr>
           </thead>
           <tbody id="asf_atraso_tbody">
-            <tr><td colspan="7" class="Asf_Empty">Carregando…</td></tr>
+            <tr><td colspan="8" class="Asf_Empty">Carregando…</td></tr>
           </tbody>
         </table>
       </div>
@@ -172,10 +173,11 @@
               <th>Status</th>
               <th>Forma</th>
               <th>Valor</th>
+              <th></th>
             </tr>
           </thead>
           <tbody id="asf_aberto_tbody">
-            <tr><td colspan="7" class="Asf_Empty">Carregando…</td></tr>
+            <tr><td colspan="8" class="Asf_Empty">Carregando…</td></tr>
           </tbody>
         </table>
       </div>
@@ -206,8 +208,25 @@
   </section>
 </div>
 
+<div class="Asf_Menu" id="asf_menu" hidden role="menu">
+  <button type="button" data-acao="lembrete" role="menuitem">Enviar lembrete</button>
+  <button type="button" data-acao="detalhe" role="menuitem">Ver detalhe</button>
+  <button type="button" data-acao="cancelar" class="is-perigo" role="menuitem">Cancelar cobrança</button>
+</div>
+
+<dialog class="Asf_Modal" id="asf_modal" aria-labelledby="asf_modal_titulo">
+  <div class="Asf_ModalHead">
+    <h3 id="asf_modal_titulo">Cobrança</h3>
+    <button type="button" class="Asf_ModalFechar" id="asf_modal_fechar" aria-label="Fechar">&times;</button>
+  </div>
+  <div class="Asf_ModalBody" id="asf_modal_body"></div>
+</dialog>
+
 <script type="application/json" id="asf_cfg">{{ {
-  "apiDados": url_for("config.assinaturas_faturamento_dados")
+  "apiDados": url_for("config.assinaturas_faturamento_dados"),
+  "apiCancelar": url_for("config.assinaturas_cancelar_fatura"),
+  "apiLembrete": url_for("config.assinaturas_lembrete_fatura"),
+  "apiDetalhe": url_for("config.assinaturas_faturamento_pagina") ~ "/fatura/"
 } | tojson }}</script>
-<script defer src="{{ url_for('config.static', filename='script/Sconfig_assinaturas.js') }}?v=4"></script>
+<script defer src="{{ url_for('config.static', filename='script/Sconfig_assinaturas.js') }}?v=6"></script>
 {% endblock %}

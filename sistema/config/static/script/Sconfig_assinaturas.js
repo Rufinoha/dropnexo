@@ -54,6 +54,13 @@
     return `<tr><td colspan="${cols}" class="Asf_Empty">${esc(msg)}</td></tr>`;
   }
 
+  function btnMenu(a) {
+    const pista = a.lembrete_rotulo
+      ? `<div class="Asf_Muted">${esc(a.lembrete_rotulo)}</div>`
+      : "";
+    return `<div class="Asf_Acoes"><button type="button" class="Asf_MenuBtn" data-asf-menu="1" aria-label="Ações da cobrança" aria-haspopup="menu" data-id="${esc(a.id_fatura)}" data-tenant="${esc(a.id_tenant)}" data-nome="${esc(a.nome)}" data-ref="${esc(a.referencia || a.id_fatura)}" data-valor="${esc(a.valor)}"><i></i><i></i><i></i></button>${pista}</div>`;
+  }
+
   function preencherAnos() {
     const sel = el("asf_ano");
     if (!sel || sel.options.length) return;
@@ -125,7 +132,7 @@
       : "Nenhum em atraso";
     const tba = el("asf_atraso_tbody");
     if (!atraso.length) {
-      tba.innerHTML = emptyRow(7, "Nenhuma assinatura paga em atraso.");
+      tba.innerHTML = emptyRow(8, "Nenhuma assinatura paga em atraso.");
     } else {
       tba.innerHTML = atraso
         .map((a) => {
@@ -139,6 +146,7 @@
           <td>${esc(a.vencimento_br)}</td>
           <td><strong>${esc(a.valor)}</strong></td>
           <td>${esc(a.forma_label)}</td>
+          <td>${btnMenu(a)}</td>
         </tr>`;
         })
         .join("");
@@ -243,7 +251,7 @@
       : "Nenhuma cobrança em aberto";
     const tba = el("asf_aberto_tbody");
     if (!abertos.length) {
-      tba.innerHTML = emptyRow(7, "Nenhuma fatura emitida/vencida em aberto.");
+      tba.innerHTML = emptyRow(8, "Nenhuma fatura emitida/vencida em aberto.");
     } else {
       tba.innerHTML = abertos
         .map((a) => {
@@ -258,6 +266,7 @@
           <td><span class="Asf_Badge ${badge}">${esc(a.status_label || a.status)}</span></td>
           <td>${esc(a.forma_label)}</td>
           <td><strong>${esc(a.valor)}</strong></td>
+          <td>${btnMenu(a)}</td>
         </tr>`;
         })
         .join("");
@@ -312,12 +321,235 @@
     }
   }
 
+  let cancelando = false;
+  let menuAlvo = null;
+  let menuAbertoEm = 0;
+
+  function fecharMenu() {
+    const menu = el("asf_menu");
+    if (!menu) return;
+    menu.hidden = true;
+    menuAlvo = null;
+  }
+
+  function abrirMenu(btn) {
+    const menu = el("asf_menu");
+    if (!menu) return;
+    menu.hidden = false;
+    menuAlvo = btn;
+    menuAbertoEm = Date.now();
+    const rect = btn.getBoundingClientRect();
+    const largura = menu.offsetWidth || 196;
+    const altura = menu.offsetHeight || 140;
+    let left = rect.right - largura;
+    let top = rect.bottom + 6;
+    if (left < 8) left = 8;
+    if (left + largura > window.innerWidth - 8) left = window.innerWidth - largura - 8;
+    if (top + altura > window.innerHeight - 8) top = Math.max(8, rect.top - altura - 6);
+    menu.style.top = `${top}px`;
+    menu.style.left = `${left}px`;
+  }
+
+  function linhaDetalhe(rotulo, valor) {
+    if (!valor) return "";
+    return `<dt>${esc(rotulo)}</dt><dd>${esc(valor)}</dd>`;
+  }
+
+  function htmlDetalhe(f) {
+    const lembretes = f.lembretes || [];
+    const hist = lembretes.length
+      ? lembretes
+          .map((l) => {
+            const evs = (l.eventos || [])
+              .map((ev) => `<div class="Asf_Evento">${esc(ev.quando)} · ${esc(ev.tipo)}</div>`)
+              .join("");
+            return `<article class="Asf_Lembrete"><strong>${esc(l.enviado_em)} · ${esc(l.status)}</strong><div class="Asf_Muted">${esc(l.email)}</div>${evs}</article>`;
+          })
+          .join("")
+      : `<p class="Asf_Hint">Nenhum lembrete enviado ainda.</p>`;
+    const boleto = f.link_boleto
+      ? `<p><a class="Cl_BtnLink" href="${esc(f.link_boleto)}" target="_blank" rel="noopener">Abrir boleto</a></p>`
+      : "";
+    const barras = f.codigo_barras ? `<p class="Asf_Codigo">${esc(f.codigo_barras)}</p>` : "";
+    const pix = f.pix_copia_cola ? `<p class="Asf_Codigo">${esc(f.pix_copia_cola)}</p>` : "";
+    const pago = f.link_pagamento && !f.link_boleto
+      ? `<p><a class="Cl_BtnLink" href="${esc(f.link_pagamento)}" target="_blank" rel="noopener">Link de pagamento</a></p>`
+      : "";
+    return `
+      <dl class="Asf_Detalhe">
+        ${linhaDetalhe("Tenant", `${f.nome || ""} #${f.id_tenant || ""}`)}
+        ${linhaDetalhe("Plano", f.plano_label)}
+        ${linhaDetalhe("Ciclo", f.periodicidade)}
+        ${linhaDetalhe("Fatura", f.referencia)}
+        ${linhaDetalhe("Status", f.status_label)}
+        ${linhaDetalhe("Valor", f.valor)}
+        ${linhaDetalhe("Valor cheio", f.valor_cheio)}
+        ${linhaDetalhe("Desconto do ciclo", f.desconto_periodo)}
+        ${linhaDetalhe("Desconto do cupom", f.desconto_cupom ? `${f.desconto_cupom}${f.cupom_codigo ? ` · ${f.cupom_codigo}` : ""}` : "")}
+        ${linhaDetalhe("Vencimento", f.vencimento)}
+        ${linhaDetalhe("Emitida em", f.criado_em)}
+        ${linhaDetalhe("Paga em", f.pago_em)}
+        ${linhaDetalhe("Forma", f.forma_label)}
+        ${linhaDetalhe("Cobrança na Efí", f.efi)}
+      </dl>
+      <div class="Asf_Bloco">
+        <h4>Pagamento</h4>
+        ${boleto || barras || pix || pago || `<p class="Asf_Hint">Sem link ou código de pagamento nesta fatura.</p>`}
+        ${boleto && barras ? barras : ""}
+        ${pix && (boleto || barras) ? pix : ""}
+      </div>
+      <div class="Asf_Bloco">
+        <h4>Lembretes</h4>
+        <p class="Asf_Hint">O status (entregue, aberto, clique) chega pelo Brevo.</p>
+        ${hist}
+      </div>`;
+  }
+
+  async function verDetalhe(btn) {
+    const id = parseInt(btn.getAttribute("data-id") || "0", 10);
+    const idTenant = parseInt(btn.getAttribute("data-tenant") || "0", 10);
+    if (!id) return;
+    const modal = el("asf_modal");
+    const body = el("asf_modal_body");
+    const titulo = el("asf_modal_titulo");
+    if (!modal || !body) return;
+    if (titulo) titulo.textContent = "Cobrança";
+    body.innerHTML = `<p class="Asf_Hint">Carregando…</p>`;
+    if (typeof modal.showModal === "function") modal.showModal();
+    else modal.hidden = false;
+    const url = new URL(`${cfg.apiDetalhe || ""}${id}`, window.location.origin);
+    if (idTenant) url.searchParams.set("id_tenant", String(idTenant));
+    const r = await fetch(url.toString(), { credentials: "include", headers: { Accept: "application/json" } });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.success) throw new Error(j.message || "Não foi possível abrir o detalhe.");
+    const f = j.fatura || {};
+    if (titulo) titulo.textContent = `Fatura ${f.referencia || id}`;
+    body.innerHTML = htmlDetalhe(f);
+  }
+
+  async function enviarLembrete(btn) {
+    const id = parseInt(btn.getAttribute("data-id") || "0", 10);
+    const idTenant = parseInt(btn.getAttribute("data-tenant") || "0", 10);
+    const nome = btn.getAttribute("data-nome") || "esta conta";
+    const ref = btn.getAttribute("data-ref") || String(id);
+    const valor = btn.getAttribute("data-valor") || "";
+    if (!id || !window.Swal) return;
+    const c = await Swal.fire({
+      title: "Enviar lembrete?",
+      html: `<p style="margin:0 0 8px"><strong>${esc(nome)}</strong></p><p style="margin:0">Fatura ${esc(ref)}${valor ? ` · ${esc(valor)}` : ""}</p><p style="margin:8px 0 0">O e-mail vai para o contato de cobrança e fica registrado, com abertura pelo Brevo.</p>`,
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonText: "Enviar lembrete",
+      cancelButtonText: "Voltar",
+      confirmButtonColor: "#021F81",
+    });
+    if (!c.isConfirmed) return;
+    Swal.fire({ title: "Enviando…", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    const r = await fetch(cfg.apiLembrete, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ id_fatura: id, id_tenant: idTenant }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.success) throw new Error(j.message || "Não foi possível enviar o lembrete.");
+    await Swal.fire({
+      icon: "success",
+      title: "Lembrete enviado",
+      text: j.message || "Enviado.",
+      confirmButtonColor: "#021F81",
+    });
+    await carregar();
+  }
+
+  async function cancelarCobranca(btn) {
+    if (cancelando) return;
+    const id = parseInt(btn.getAttribute("data-id") || "0", 10);
+    const idTenant = parseInt(btn.getAttribute("data-tenant") || "0", 10);
+    const nome = btn.getAttribute("data-nome") || "este tenant";
+    const ref = btn.getAttribute("data-ref") || String(id);
+    const valor = btn.getAttribute("data-valor") || "";
+    if (!id || !window.Swal) return;
+    const c = await Swal.fire({
+      title: "Cancelar esta cobrança?",
+      html: `<p style="margin:0 0 8px"><strong>${esc(nome)}</strong></p><p style="margin:0">Fatura ${esc(ref)}${valor ? ` · ${esc(valor)}` : ""}</p><p style="margin:8px 0 0">Sai desta lista e é cancelada na Efí. O plano do tenant permanece.</p>`,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Sim, cancelar cobrança",
+      cancelButtonText: "Voltar",
+      confirmButtonColor: "#E53935",
+    });
+    if (!c.isConfirmed) return;
+    cancelando = true;
+    document.querySelectorAll("[data-asf-cancelar]").forEach((b) => {
+      b.disabled = true;
+    });
+    Swal.fire({ title: "Cancelando…", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    try {
+      const r = await fetch(cfg.apiCancelar, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ id_fatura: id, id_tenant: idTenant }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.success) throw new Error(j.message || "Não foi possível cancelar a cobrança.");
+      await Swal.fire({ icon: "success", title: "Cobrança cancelada", text: j.message || "Cancelada.", confirmButtonColor: "#021F81" });
+      await carregar();
+    } catch (e) {
+      document.querySelectorAll("[data-asf-cancelar]").forEach((b) => {
+        b.disabled = false;
+      });
+      throw e;
+    } finally {
+      cancelando = false;
+    }
+  }
+
   document.addEventListener("DOMContentLoaded", () => {
     preencherAnos();
     document.querySelectorAll(".Asf_Tab").forEach((btn) => {
       btn.addEventListener("click", () => setTab(btn.getAttribute("data-tab")));
     });
     el("asf_btnAtualizar")?.addEventListener("click", carregar);
+    el("asf_modal_fechar")?.addEventListener("click", () => el("asf_modal")?.close());
+    el("asf_modal")?.addEventListener("click", (ev) => {
+      if (ev.target === el("asf_modal")) el("asf_modal").close();
+    });
+    document.addEventListener("click", (ev) => {
+      const menuBtn = ev.target.closest("[data-asf-menu]");
+      if (menuBtn) {
+        ev.stopPropagation();
+        if (menuAlvo === menuBtn && el("asf_menu") && !el("asf_menu").hidden) fecharMenu();
+        else abrirMenu(menuBtn);
+        return;
+      }
+      const acaoBtn = ev.target.closest("#asf_menu [data-acao]");
+      if (acaoBtn && menuAlvo) {
+        const alvo = menuAlvo;
+        const acao = acaoBtn.getAttribute("data-acao");
+        fecharMenu();
+        const falha = (e) => {
+          if (window.Swal) Swal.fire("Erro", e.message || "Não foi possível concluir.", "error");
+        };
+        if (acao === "lembrete") enviarLembrete(alvo).catch(falha);
+        else if (acao === "detalhe") verDetalhe(alvo).catch(falha);
+        else if (acao === "cancelar") cancelarCobranca(alvo).catch(falha);
+        return;
+      }
+      if (!ev.target.closest("#asf_menu")) fecharMenu();
+    });
+    document.addEventListener("keydown", (ev) => {
+      if (ev.key === "Escape") fecharMenu();
+    });
+    window.addEventListener(
+      "scroll",
+      () => {
+        if (Date.now() - menuAbertoEm < 250) return;
+        fecharMenu();
+      },
+      true
+    );
     el("asf_mes")?.addEventListener("change", carregar);
     el("asf_ano")?.addEventListener("change", carregar);
     setTab("ativas");

@@ -463,7 +463,14 @@ def _email_links() -> dict:
     }
 
 
-def _enviar_email_fatura(cur, id_tenant: int, fatura: dict, *, tipo: str) -> None:
+def _enviar_email_fatura(
+    cur,
+    id_tenant: int,
+    fatura: dict,
+    *,
+    tipo: str,
+    criado_por: int | None = None,
+) -> tuple[bool, int | None]:
     cli = _dados_cliente_cobranca(cur, id_tenant)
     email = cli["email_cobranca"]
     if not email or "@" not in email:
@@ -479,14 +486,15 @@ def _enviar_email_fatura(cur, id_tenant: int, fatura: dict, *, tipo: str) -> Non
         )
         r = cur.fetchone()
         email = (r[0] if r else "") or ""
-    if not email:
-        return
+    if not email or "@" not in email:
+        return False, None
     base = obter_base_url().rstrip("/")
     assuntos = {
         "emitida": f"Fatura {fatura['referencia']} emitida • DropNexo",
         "aviso": f"Fatura {fatura['referencia']} em atraso • DropNexo",
         "rebaixado": "Plano rebaixado para Explorar • DropNexo",
         "pago": f"Pagamento confirmado — fatura {fatura['referencia']} • DropNexo",
+        "lembrete": f"Lembrete — fatura {fatura['referencia']} • DropNexo",
     }
     mensagens = {
         "emitida": (
@@ -503,21 +511,45 @@ def _enviar_email_fatura(cur, id_tenant: int, fatura: dict, *, tipo: str) -> Non
             "Integrações permanecem conectadas, mas o acesso e as atualizações ficam bloqueados até assinar novamente."
         ),
         "pago": "Recebemos o pagamento. Seu plano permanece ativo.",
+        "lembrete": (
+            "Há uma cobrança em aberto na sua conta. "
+            "Se o pagamento já foi feito, desconsidere este lembrete."
+        ),
     }
+    tag = "dropnexo_fatura_lembrete" if tipo == "lembrete" else "dropnexo_financeiro"
+    link_boleto = (fatura.get("link_boleto") or "").strip()
+    link_acao = link_boleto or f"{base}/financeiro"
+    rotulo_acao = "Abrir boleto" if link_boleto else "Abrir Financeiro"
+    fatura_email = dict(fatura)
+    venc = fatura.get("vencimento_em")
+    if isinstance(venc, str) and len(venc) >= 10 and venc[4] == "-":
+        y, m, d = venc[:10].split("-")
+        fatura_email["vencimento_br"] = f"{d}/{m}/{y}"
     try:
         html = render_template(
             "financeiro/emails/fatura.html",
             titulo_email=assuntos.get(tipo, "Fatura • DropNexo"),
             nome_destinatario=cli["nome_cliente"],
             mensagem_principal=mensagens.get(tipo, ""),
-            fatura=fatura,
+            fatura=fatura_email,
             link_financeiro=f"{base}/financeiro",
+            link_acao=link_acao,
+            rotulo_acao=rotulo_acao,
             dias_graca=DIAS_GRACA_INADIMPLENCIA,
             **_email_links(),
         )
-        enviar_email([email], assuntos.get(tipo, "Fatura • DropNexo"), html, tag="dropnexo_financeiro")
+        ok, _msg, id_envio = enviar_email(
+            [email],
+            assuntos.get(tipo, "Fatura • DropNexo"),
+            html,
+            tag=tag,
+            criado_por=criado_por,
+            dest_meta=[{"email": email, "id_tenant": id_tenant, "nome_tenant": cli.get("nome_tenant") or ""}],
+        )
+        return bool(ok), int(id_envio) if id_envio else None
     except Exception:
         log.exception("E-mail financeiro falhou tenant=%s tipo=%s", id_tenant, tipo)
+        return False, None
 
 
 def _criar_cobranca_efi(
@@ -868,6 +900,555 @@ def assinar_plano(
         "fatura": fatura,
         "message": msg,
         "liberado": liberado,
+    }
+
+
+def _charge_id_numerico(valor) -> str | None:
+    s = str(valor or "").strip()
+    return s if s.isdigit() else None
+
+
+def _texto_efi(exc: BaseException) -> str:
+    return str(exc or "")[:400]
+
+
+def _efi_ja_cancelada(msg: str) -> bool:
+    t = (msg or "").lower()
+    return any(
+        m in t
+        for m in (
+            "já cancel",
+            "ja cancel",
+            "already cancel",
+            "already been cancel",
+            "cobrança cancelada",
+            "cobranca cancelada",
+        )
+    )
+
+
+def _efi_ja_paga(msg: str) -> bool:
+    t = (msg or "").lower()
+    return any(m in t for m in ("pix pago", "paid", "paga", "settled", "approved", "aprovad"))
+
+
+def _cancelar_charge_efi(cur, id_tenant: int, id_fatura: int, charge: str) -> str:
+    from api.efi.efi import cancelar_cobranca, consultar_cobranca
+
+    try:
+        det = consultar_cobranca(charge)
+    except Exception as e:
+        registrar_efi_log(
+            cur,
+            id_tenant=id_tenant,
+            id_fatura=id_fatura,
+            direcao="out",
+            operacao="consultar_charge",
+            ok=False,
+            efi_charge_id=charge,
+            response_resumo=_texto_efi(e),
+        )
+        raise ValueError("Não consultei a cobrança na Efí. A fatura continua na lista.") from e
+
+    st_efi = (det.get("status") or "").strip().lower()
+    if st_efi == "pago":
+        registrar_efi_log(
+            cur,
+            id_tenant=id_tenant,
+            id_fatura=id_fatura,
+            direcao="out",
+            operacao="cancelar_charge",
+            ok=False,
+            efi_charge_id=charge,
+            response_resumo="efi status pago",
+        )
+        raise ValueError("A Efí informa essa cobrança como paga. Ela continua na lista.")
+    if st_efi == "cancelado":
+        registrar_efi_log(
+            cur,
+            id_tenant=id_tenant,
+            id_fatura=id_fatura,
+            direcao="out",
+            operacao="cancelar_charge",
+            ok=True,
+            efi_charge_id=charge,
+            response_resumo="já cancelada na Efí",
+        )
+        return "A cobrança já estava cancelada na Efí."
+
+    try:
+        resp = cancelar_cobranca(charge)
+    except Exception as e:
+        msg = _texto_efi(e)
+        if _efi_ja_cancelada(msg):
+            registrar_efi_log(
+                cur,
+                id_tenant=id_tenant,
+                id_fatura=id_fatura,
+                direcao="out",
+                operacao="cancelar_charge",
+                ok=True,
+                efi_charge_id=charge,
+                response_resumo=msg,
+            )
+            return "A cobrança já estava cancelada na Efí."
+        if _efi_ja_paga(msg):
+            registrar_efi_log(
+                cur,
+                id_tenant=id_tenant,
+                id_fatura=id_fatura,
+                direcao="out",
+                operacao="cancelar_charge",
+                ok=False,
+                efi_charge_id=charge,
+                response_resumo=msg,
+            )
+            raise ValueError("A Efí informa essa cobrança como paga. Ela continua na lista.") from e
+        expirada = st_efi == "vencido" and any(
+            x in msg.lower()
+            for x in ("expir", "não pode ser cancel", "nao pode ser cancel", "cannot be cancel")
+        )
+        if expirada:
+            registrar_efi_log(
+                cur,
+                id_tenant=id_tenant,
+                id_fatura=id_fatura,
+                direcao="out",
+                operacao="cancelar_charge",
+                ok=True,
+                efi_charge_id=charge,
+                response_resumo=msg,
+            )
+            return "O boleto já estava expirado na Efí e não aceita mais pagamento."
+        registrar_efi_log(
+            cur,
+            id_tenant=id_tenant,
+            id_fatura=id_fatura,
+            direcao="out",
+            operacao="cancelar_charge",
+            ok=False,
+            efi_charge_id=charge,
+            response_resumo=msg,
+        )
+        raise ValueError("A Efí não cancelou a cobrança. A fatura continua na lista.") from e
+
+    registrar_efi_log(
+        cur,
+        id_tenant=id_tenant,
+        id_fatura=id_fatura,
+        direcao="out",
+        operacao="cancelar_charge",
+        ok=True,
+        efi_charge_id=charge,
+        response_resumo=_json_resumo(resp),
+    )
+    return "A cobrança foi cancelada na Efí."
+
+
+def _cancelar_pix_efi(cur, id_tenant: int, id_fatura: int, txid: str) -> str:
+    from api.efi.efi import cancelar_cobranca_pix
+
+    try:
+        resp = cancelar_cobranca_pix(txid)
+    except Exception as e:
+        msg = _texto_efi(e)
+        if _efi_ja_cancelada(msg) or "removida" in msg.lower():
+            registrar_efi_log(
+                cur,
+                id_tenant=id_tenant,
+                id_fatura=id_fatura,
+                direcao="out",
+                operacao="cancelar_pix",
+                ok=True,
+                response_resumo=msg,
+            )
+            return "O PIX já estava encerrado na Efí."
+        if _efi_ja_paga(msg):
+            registrar_efi_log(
+                cur,
+                id_tenant=id_tenant,
+                id_fatura=id_fatura,
+                direcao="out",
+                operacao="cancelar_pix",
+                ok=False,
+                response_resumo=msg,
+            )
+            raise ValueError("A Efí informa esse PIX como pago. A fatura continua na lista.") from e
+        registrar_efi_log(
+            cur,
+            id_tenant=id_tenant,
+            id_fatura=id_fatura,
+            direcao="out",
+            operacao="cancelar_pix",
+            ok=False,
+            response_resumo=msg,
+        )
+        raise ValueError("A Efí não cancelou o PIX. A fatura continua na lista.") from e
+
+    registrar_efi_log(
+        cur,
+        id_tenant=id_tenant,
+        id_fatura=id_fatura,
+        direcao="out",
+        operacao="cancelar_pix",
+        ok=True,
+        response_resumo=_json_resumo(resp),
+    )
+    return "O PIX foi cancelado na Efí."
+
+
+def cancelar_fatura_admin(cur, id_fatura: int, *, id_tenant: int | None = None) -> dict:
+    """Cancela a fatura local e a cobrança na Efí. Não altera o plano do tenant."""
+    if id_fatura <= 0:
+        raise ValueError("Fatura inválida.")
+    sql = f"SELECT {_FATURA_COLS}, id_tenant FROM tbl_fatura WHERE id = %s"
+    params: list[Any] = [id_fatura]
+    if id_tenant:
+        sql += " AND id_tenant = %s"
+        params.append(int(id_tenant))
+    cur.execute(sql, tuple(params))
+    row = cur.fetchone()
+    if not row:
+        raise ValueError("Fatura não encontrada.")
+    fat = fatura_dict(row)
+    tid = int(row[-1])
+    st = (fat.get("status") or "").strip().lower()
+    if st == "pago":
+        raise ValueError("Fatura já está paga. Cobrança paga não é cancelada.")
+    if st not in ("pendente", "vencido", "cancelado"):
+        raise ValueError("Essa fatura não está em aberto.")
+
+    charge = _charge_id_numerico(fat.get("efi_charge_id"))
+    txid = str(fat.get("efi_txid") or "").strip()
+    bruto = str(fat.get("efi_charge_id") or "").strip()
+    if not charge and bruto:
+        txid = txid or bruto
+
+    if charge:
+        efi_detalhe = _cancelar_charge_efi(cur, tid, id_fatura, charge)
+    elif txid:
+        efi_detalhe = _cancelar_pix_efi(cur, tid, id_fatura, txid)
+    else:
+        efi_detalhe = "Não havia cobrança na Efí."
+
+    if st != "cancelado":
+        cur.execute(
+            """
+            UPDATE tbl_fatura
+            SET status = 'cancelado', atualizado_em = NOW()
+            WHERE id = %s AND id_tenant = %s AND status IN ('pendente', 'vencido')
+            """,
+            (id_fatura, tid),
+        )
+        if cur.rowcount != 1:
+            raise ValueError("A fatura mudou de status antes do cancelamento. Atualize a lista.")
+
+    ref = fat.get("referencia") or str(id_fatura)
+    return {
+        "id_fatura": id_fatura,
+        "id_tenant": tid,
+        "message": f"Cobrança {ref} cancelada. {efi_detalhe} O plano do tenant não foi alterado.",
+    }
+
+
+def garantir_tabela_lembrete(cur) -> None:
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS tbl_fatura_lembrete (
+            id BIGSERIAL PRIMARY KEY,
+            id_fatura INTEGER NOT NULL,
+            id_tenant INTEGER NOT NULL,
+            id_envio INTEGER,
+            email_destino VARCHAR(255) NOT NULL,
+            enviado_em TIMESTAMP NOT NULL DEFAULT NOW(),
+            id_usuario INTEGER
+        )
+        """
+    )
+    cur.execute(
+        """
+        CREATE INDEX IF NOT EXISTS ix_fatura_lembrete_fatura
+            ON tbl_fatura_lembrete (id_fatura, enviado_em DESC)
+        """
+    )
+
+
+def _fmt_quando_br(v) -> str:
+    if isinstance(v, datetime):
+        return v.strftime("%d/%m/%Y %H:%M")
+    if isinstance(v, date):
+        return v.strftime("%d/%m/%Y")
+    return "—"
+
+
+def rotulo_evento_email(status: str | None) -> str:
+    s = (status or "").strip().lower().replace(" ", "")
+    if s in ("opened", "unique_opened", "uniqueopened", "first_opening", "proxy_open"):
+        return "Aberto"
+    if s in ("click", "clicks", "clicked"):
+        return "Clicou no link"
+    if s == "delivered":
+        return "Entregue"
+    if s in ("request", "enviado", "sent", "requests"):
+        return "Enviado"
+    if "bounce" in s or s in ("blocked", "invalid", "error", "spam", "falha", "deferred"):
+        return "Não entregue"
+    if s in ("unsubscribed", "unsubscribe"):
+        return "Descadastrado"
+    if not s:
+        return "Enviado"
+    return "Enviado"
+
+
+def _rotulo_resumo_lembrete(qtd: int, quando, status: str | None) -> str:
+    if qtd <= 0:
+        return ""
+    st = rotulo_evento_email(status)
+    dia = _fmt_quando_br(quando)
+    if qtd == 1:
+        return f"Lembrete {dia} · {st}"
+    return f"{qtd} lembretes · último {st.lower()} em {dia}"
+
+
+def resumo_lembretes(cur, ids: list[int]) -> dict[int, dict]:
+    if not ids:
+        return {}
+    cur.execute(
+        """
+        SELECT l.id_fatura, l.enviado_em, d.status_atual
+        FROM tbl_fatura_lembrete l
+        LEFT JOIN tbl_email_destinatario d
+          ON d.id_envio = l.id_envio
+         AND lower(d.email) = lower(l.email_destino)
+        WHERE l.id_fatura = ANY(%s)
+        ORDER BY l.enviado_em DESC, l.id DESC
+        """,
+        (ids,),
+    )
+    acc: dict[int, dict] = {}
+    for fid, quando, status in cur.fetchall():
+        item = acc.setdefault(int(fid), {"qtd": 0, "quando": None, "status": None})
+        item["qtd"] += 1
+        if item["quando"] is None:
+            item["quando"] = quando
+            item["status"] = status
+    out: dict[int, dict] = {}
+    for fid, item in acc.items():
+        out[fid] = {
+            "qtd": item["qtd"],
+            "rotulo": _rotulo_resumo_lembrete(item["qtd"], item["quando"], item["status"]),
+            "status": rotulo_evento_email(item["status"]) if item["qtd"] else "",
+        }
+    return out
+
+
+def _lembretes_da_fatura(cur, id_fatura: int, id_tenant: int) -> list[dict]:
+    cur.execute(
+        """
+        SELECT l.id, l.enviado_em, l.email_destino, d.id_destinatario, d.status_atual, d.dt_ultimo_evento
+        FROM tbl_fatura_lembrete l
+        LEFT JOIN tbl_email_destinatario d
+          ON d.id_envio = l.id_envio
+         AND lower(d.email) = lower(l.email_destino)
+        WHERE l.id_fatura = %s AND l.id_tenant = %s
+        ORDER BY l.enviado_em DESC, l.id DESC
+        """,
+        (id_fatura, id_tenant),
+    )
+    linhas = cur.fetchall()
+    dest_ids = [int(r[3]) for r in linhas if r[3]]
+    eventos: dict[int, list[dict]] = {}
+    if dest_ids:
+        cur.execute(
+            """
+            SELECT id_destinatario, tipo_evento, data_evento
+            FROM tbl_email_evento
+            WHERE id_destinatario = ANY(%s)
+            ORDER BY data_evento ASC, id_evento ASC
+            """,
+            (dest_ids,),
+        )
+        for id_dest, tipo, quando in cur.fetchall():
+            eventos.setdefault(int(id_dest), []).append(
+                {
+                    "tipo": rotulo_evento_email(tipo),
+                    "quando": _fmt_quando_br(quando),
+                }
+            )
+    saida = []
+    for row in linhas:
+        id_dest = int(row[3]) if row[3] else None
+        saida.append(
+            {
+                "enviado_em": _fmt_quando_br(row[1]),
+                "email": row[2] or "",
+                "status": rotulo_evento_email(row[4]),
+                "atualizado_em": _fmt_quando_br(row[5]) if row[5] else "",
+                "eventos": eventos.get(id_dest or 0, []),
+            }
+        )
+    return saida
+
+
+def detalhe_cobranca_admin(cur, id_fatura: int, *, id_tenant: int | None = None) -> dict:
+    if id_fatura <= 0:
+        raise ValueError("Fatura inválida.")
+    cols = ", ".join(f"f.{c.strip()}" for c in _FATURA_COLS.split(","))
+    sql = f"""
+        SELECT {cols}, f.id_tenant, t.nome, t.plano, t.tipo_negocio
+        FROM tbl_fatura f
+        JOIN tbl_tenant t ON t.id = f.id_tenant
+        WHERE f.id = %s
+    """
+    params: list[Any] = [id_fatura]
+    if id_tenant:
+        sql += " AND f.id_tenant = %s"
+        params.append(int(id_tenant))
+    cur.execute(sql, tuple(params))
+    row = cur.fetchone()
+    if not row:
+        raise ValueError("Fatura não encontrada.")
+    fat = fatura_dict(row)
+    tid = int(row[23])
+    from sistema.financeiro.assinaturas_painel import FORMA_LABEL, nome_plano_comercial
+    from sistema.financeiro.cupom import PERIODOS
+
+    periodo = (fat.get("periodicidade") or "mensal").strip().lower()
+    st = (fat.get("status") or "").strip().lower()
+    forma = (fat.get("forma_pagamento") or "").strip().lower()
+    charge = _charge_id_numerico(fat.get("efi_charge_id"))
+    txid = str(fat.get("efi_txid") or "").strip()
+    lembretes: list[dict] = []
+    try:
+        cur.execute("SAVEPOINT sp_det_lemb")
+        lembretes = _lembretes_da_fatura(cur, id_fatura, tid)
+        cur.execute("RELEASE SAVEPOINT sp_det_lemb")
+    except Exception:
+        try:
+            cur.execute("ROLLBACK TO SAVEPOINT sp_det_lemb")
+        except Exception:
+            pass
+        lembretes = []
+    venc = fat.get("vencimento_em")
+    venc_br = "—"
+    if isinstance(venc, str) and len(venc) >= 10 and venc[4] == "-":
+        y, m, d = venc[:10].split("-")
+        venc_br = f"{d}/{m}/{y}"
+    criado = fat.get("criado_em")
+    criado_br = criado[:16].replace("T", " ") if isinstance(criado, str) else "—"
+    pago = fat.get("pago_em")
+    pago_br = pago[:16].replace("T", " ") if isinstance(pago, str) else ""
+    return {
+        "id_fatura": id_fatura,
+        "id_tenant": tid,
+        "nome": (row[24] or "").strip() or f"Tenant #{tid}",
+        "plano_label": nome_plano_comercial(row[25], row[26]),
+        "referencia": fat.get("referencia") or "",
+        "status": st,
+        "status_label": STATUS_LABEL.get(st, st or "—"),
+        "valor": fat.get("valor_formatado") or "",
+        "valor_cheio": (
+            f"R$ {(int(fat['valor_cheio_centavos']) / 100):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+            if fat.get("valor_cheio_centavos")
+            else ""
+        ),
+        "desconto_periodo": (
+            f"R$ {(int(fat.get('desconto_periodo_centavos') or 0) / 100):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+            if int(fat.get("desconto_periodo_centavos") or 0) else ""
+        ),
+        "desconto_cupom": (
+            f"R$ {(int(fat.get('desconto_cupom_centavos') or 0) / 100):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+            if int(fat.get("desconto_cupom_centavos") or 0) else ""
+        ),
+        "cupom_codigo": fat.get("cupom_codigo") or "",
+        "vencimento": venc_br,
+        "criado_em": criado_br,
+        "pago_em": pago_br,
+        "forma_label": FORMA_LABEL.get(forma, forma or "—"),
+        "periodicidade": PERIODOS.get(periodo, {}).get("rotulo", periodo),
+        "efi": "Sim" if charge or txid else "Não",
+        "link_boleto": fat.get("link_boleto") or "",
+        "codigo_barras": fat.get("codigo_barras") or "",
+        "pix_copia_cola": fat.get("pix_copia_cola") or "",
+        "link_pagamento": fat.get("link_pagamento") or "",
+        "lembretes": lembretes,
+    }
+
+
+def enviar_lembrete_fatura(
+    cur,
+    id_fatura: int,
+    *,
+    id_tenant: int | None = None,
+    id_usuario: int | None = None,
+) -> dict:
+    if id_fatura <= 0:
+        raise ValueError("Fatura inválida.")
+    sql = f"SELECT {_FATURA_COLS}, id_tenant FROM tbl_fatura WHERE id = %s"
+    params: list[Any] = [id_fatura]
+    if id_tenant:
+        sql += " AND id_tenant = %s"
+        params.append(int(id_tenant))
+    cur.execute(sql, tuple(params))
+    row = cur.fetchone()
+    if not row:
+        raise ValueError("Fatura não encontrada.")
+    fat = fatura_dict(row)
+    tid = int(row[-1])
+    st = (fat.get("status") or "").strip().lower()
+    if st == "pago":
+        raise ValueError("Fatura já está paga. Lembrete não enviado.")
+    if st == "cancelado":
+        raise ValueError("Fatura cancelada. Lembrete não enviado.")
+    if st not in ("pendente", "vencido"):
+        raise ValueError("Essa fatura não está em aberto.")
+
+    ok, id_envio = _enviar_email_fatura(cur, tid, fat, tipo="lembrete", criado_por=id_usuario)
+    if not ok:
+        raise ValueError("O lembrete não foi enviado. Confira o e-mail de cobrança da conta.")
+
+    try:
+        garantir_tabela_lembrete(cur)
+    except Exception as e:
+        raise ValueError(
+            "O e-mail saiu, mas o registro do lembrete falhou. "
+            "Crie a tabela tbl_fatura_lembrete no banco."
+        ) from e
+
+    email_row = None
+    if id_envio:
+        cur.execute(
+            """
+            SELECT email FROM tbl_email_destinatario
+            WHERE id_envio = %s
+            ORDER BY id_destinatario DESC
+            LIMIT 1
+            """,
+            (id_envio,),
+        )
+        email_row = cur.fetchone()
+    email_dest = (email_row[0] if email_row else "") or ""
+    if not email_dest:
+        cli = _dados_cliente_cobranca(cur, tid)
+        email_dest = (cli.get("email_cobranca") or "").strip().lower()
+    if "@" not in email_dest:
+        raise ValueError("O lembrete não foi registrado: a conta não tem e-mail de cobrança.")
+
+    cur.execute(
+        """
+        INSERT INTO tbl_fatura_lembrete (id_fatura, id_tenant, id_envio, email_destino, id_usuario)
+        VALUES (%s, %s, %s, %s, %s)
+        """,
+        (id_fatura, tid, id_envio, email_dest[:255], id_usuario),
+    )
+    ref = fat.get("referencia") or str(id_fatura)
+    return {
+        "id_fatura": id_fatura,
+        "id_tenant": tid,
+        "message": (
+            f"Lembrete da fatura {ref} enviado. "
+            "A abertura aparece no detalhe quando o Brevo registrar."
+        ),
     }
 
 
