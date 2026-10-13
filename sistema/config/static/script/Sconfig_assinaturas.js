@@ -88,7 +88,7 @@
       : "Nenhum assinante pago ativo";
     const tb = el("asf_ativas_tbody");
     if (!itens.length) {
-      tb.innerHTML = emptyRow(7, "Nenhum tenant com plano pago ativo.");
+      tb.innerHTML = emptyRow(11, "Nenhum tenant com plano pago ativo.");
       return;
     }
     tb.innerHTML = itens
@@ -100,6 +100,10 @@
         <td>${esc(a.forma_label)}</td>
         <td><strong>${esc(a.mrr)}</strong></td>
         <td>${esc(a.ciclo)}</td>
+        <td>${esc(a.beneficio || "—")}</td>
+        <td>${esc(a.beneficio_prazo || "—")}</td>
+        <td><strong>${esc(a.cobrado_beneficio || a.ciclo)}</strong></td>
+        <td>${esc(a.efi_rotulo || "Não")}${a.efi_detalhe ? `<div class="Asf_Muted">${esc(a.efi_detalhe)}</div>` : ""}</td>
         <td>${esc(a.proxima_cobranca_br || "—")}</td>
       </tr>`
       )

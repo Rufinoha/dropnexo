@@ -838,6 +838,12 @@ def responder_chamado(
     )
     cur = conn.cursor()
     cur.execute(
+        "SELECT status FROM tbl_hubsupport_chamado WHERE external_id = %s",
+        (external_id,),
+    )
+    row_st = cur.fetchone()
+    status_antes = _normalizar_status(row_st[0] if row_st else None)
+    cur.execute(
         """
         UPDATE tbl_hubsupport_chamado
         SET status = CASE WHEN status IN ('aberto', 'aguardando_cliente') THEN 'em_atendimento' ELSE status END,
@@ -848,6 +854,8 @@ def responder_chamado(
         """,
         (str(preview)[:240], external_id),
     )
+    if status_antes in ("aberto", "aguardando_cliente"):
+        _notificar_status_chamado(conn, external_id, "em_atendimento")
     _log_api(conn, "responder_chamado", True, external_id, 200)
     return {"ok": True, "external_id": external_id, "anexos": anexos_meta}
 
@@ -873,6 +881,77 @@ def webhook_registrar_entrega(conn, delivery_id: str, evento: str, ext: str | No
     )
 
 
+def _normalizar_status(val: str | None) -> str | None:
+    s = (val or "").strip().lower().replace(" ", "_")
+    return s or None
+
+
+def _notificar_status_chamado(conn, external_id: str, status_novo: str) -> None:
+    """Avisa quem abriu o chamado. Falha de e-mail não desfaz a atualização do status."""
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT c.protocolo, c.titulo, c.id_tenant,
+                   COALESCE(u.nome, ''), COALESCE(u.email, ''),
+                   COALESCE(NULLIF(TRIM(t.nome_fantasia), ''), NULLIF(TRIM(t.nome), ''), '')
+            FROM tbl_hubsupport_chamado c
+            JOIN tbl_usuario u ON u.id = c.id_usuario
+            LEFT JOIN tbl_tenant t ON t.id = c.id_tenant
+            WHERE c.external_id = %s
+            """,
+            (external_id,),
+        )
+        row = cur.fetchone()
+        if not row:
+            return
+        protocolo, titulo, id_tenant, nome, email, conta = row
+        email = (email or "").strip()
+        if "@" not in email:
+            return
+        label = STATUS_LABEL.get(status_novo, status_novo.replace("_", " ").capitalize())
+        from datetime import datetime
+
+        from flask import render_template
+
+        from api.brevo.srotas_brevo import enviar_email
+        from global_utils import obter_base_url
+
+        base = obter_base_url().rstrip("/")
+        link = f"{base}/demandas"
+        prot = (protocolo or "").strip() or "—"
+        assunto = f"Chamado {prot} • {label} • DropNexo"
+        html = render_template(
+            "cadastro/emails/chamado_status.html",
+            titulo_email=assunto,
+            nome_usuario=(nome or "").strip() or "olá",
+            nome_conta=(conta or "").strip(),
+            protocolo=prot,
+            titulo_chamado=(titulo or "Chamado").strip(),
+            status_label=label,
+            link_chamado=link,
+            ano=datetime.now().year,
+            url_politica_privacidade=os.getenv("URL_POLITICA_PRIVACIDADE") or f"{base}/privacidade",
+            url_politica_interna=os.getenv("URL_POLITICA_INTERNA") or f"{base}/politica-interna",
+            url_dpo=os.getenv("URL_DPO") or f"{base}/dpo",
+        )
+        ok, _msg, _ = enviar_email(
+            [email],
+            assunto,
+            html,
+            tag="dropnexo_chamado_status",
+            dest_meta=[{
+                "email": email,
+                "id_tenant": int(id_tenant) if id_tenant else None,
+                "nome_tenant": (conta or "").strip(),
+            }],
+        )
+        if not ok:
+            logger.warning("E-mail de status do chamado não enviado. protocolo=%s", prot)
+    except Exception:
+        logger.exception("Falha ao notificar status do chamado")
+
+
 def _atualizar_chamado_webhook(
     conn,
     ext: str,
@@ -882,6 +961,15 @@ def _atualizar_chamado_webhook(
     preview: str | None = None,
 ) -> int:
     cur = conn.cursor()
+    novo = _normalizar_status(status)
+    anterior = None
+    if novo:
+        cur.execute(
+            "SELECT status FROM tbl_hubsupport_chamado WHERE external_id = %s",
+            (ext,),
+        )
+        row = cur.fetchone()
+        anterior = _normalizar_status(row[0] if row else None)
     cur.execute(
         """
         UPDATE tbl_hubsupport_chamado SET
@@ -893,13 +981,16 @@ def _atualizar_chamado_webhook(
         WHERE external_id = %s
         """,
         (
-            (status or None),
+            novo,
             (protocolo or None),
             (preview[:240] if preview else None),
             ext,
         ),
     )
-    return cur.rowcount or 0
+    alterou = cur.rowcount or 0
+    if alterou and novo and novo != anterior:
+        _notificar_status_chamado(conn, ext, novo)
+    return alterou
 
 
 def processar_webhook(

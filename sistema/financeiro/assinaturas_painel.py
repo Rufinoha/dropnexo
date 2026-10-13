@@ -61,6 +61,161 @@ def _periodo_ok(raw: str | None) -> str:
     return p if p in PERIODOS else "mensal"
 
 
+def _rollback_sp(cur, nome: str) -> None:
+    try:
+        cur.execute(f"ROLLBACK TO SAVEPOINT {nome}")
+    except Exception:
+        pass
+
+
+def _rotulo_desconto_cupom(cupom: dict) -> str:
+    tipo = (cupom.get("tipo_desconto") or "").lower()
+    valor = float(cupom.get("valor_desconto") or 0)
+    if tipo == "percentual":
+        txt = f"{valor:g}".replace(".", ",")
+        return f"{txt}%"
+    if tipo == "fixo":
+        return _fmt_reais(int(round(valor * 100)))
+    return ""
+
+
+def _prazo_beneficio(cupom: dict | None, restantes, periodo: str) -> str:
+    if not cupom:
+        return "—"
+    meta = PERIODOS.get((cupom.get("periodo") or periodo or "mensal"), PERIODOS["mensal"])
+    if cupom.get("beneficio_vitalicio") or restantes is None:
+        return "Vitalício"
+    n = max(0, int(restantes or 0))
+    if n <= 0:
+        return "Esgotado"
+    und = meta["unidade"] if n == 1 else meta["unidade_plural"]
+    return f"{n} {und} restante" if n == 1 else f"{n} {und} restantes"
+
+
+def _enriquecer_beneficios(cur, ativas: list[dict]) -> None:
+    """Cupom, Fornecedor Fundador, valor a cobrar e se a Efí já gerou cobrança."""
+    if not ativas:
+        return
+    ids = [int(a["id_tenant"]) for a in ativas]
+    fundador: dict[int, bool] = {}
+    cupom_vinc: dict[int, tuple] = {}
+    cupons: dict[int, dict] = {}
+    efi: dict[int, dict] = {}
+
+    try:
+        cur.execute("SAVEPOINT sp_asf_benef")
+        cur.execute(
+            """
+            SELECT t.id,
+                   COALESCE(t.eh_fornecedor_fundador, FALSE),
+                   COALESCE(t.fornecedor_fundador_ativo, FALSE),
+                   tc.id_cupom_beneficio,
+                   tc.cupom_ciclos_restantes
+            FROM tbl_tenant t
+            LEFT JOIN tbl_tenant_cobranca tc ON tc.id_tenant = t.id
+            WHERE t.id = ANY(%s)
+            """,
+            (ids,),
+        )
+        for row in cur.fetchall():
+            fundador[int(row[0])] = bool(row[1]) and bool(row[2])
+            cupom_vinc[int(row[0])] = (row[3], row[4])
+        cur.execute("RELEASE SAVEPOINT sp_asf_benef")
+    except Exception:
+        _rollback_sp(cur, "sp_asf_benef")
+
+    cupom_ids = [int(v[0]) for v in cupom_vinc.values() if v and v[0]]
+    if cupom_ids:
+        try:
+            cur.execute("SAVEPOINT sp_asf_cupom")
+            cur.execute(
+                """
+                SELECT id, codigo, tipo_desconto, valor_desconto, periodo,
+                       COALESCE(beneficio_vitalicio, FALSE),
+                       COALESCE(ciclos_beneficio, 1)
+                FROM tbl_cupom_desconto
+                WHERE id = ANY(%s)
+                """,
+                (cupom_ids,),
+            )
+            for row in cur.fetchall():
+                cupons[int(row[0])] = {
+                    "id": int(row[0]),
+                    "codigo": row[1] or "",
+                    "tipo_desconto": row[2],
+                    "valor_desconto": float(row[3] or 0),
+                    "periodo": row[4],
+                    "beneficio_vitalicio": bool(row[5]),
+                    "ciclos_beneficio": int(row[6] or 1),
+                }
+            cur.execute("RELEASE SAVEPOINT sp_asf_cupom")
+        except Exception:
+            _rollback_sp(cur, "sp_asf_cupom")
+
+    try:
+        cur.execute("SAVEPOINT sp_asf_efi")
+        cur.execute(
+            """
+            SELECT DISTINCT ON (f.id_tenant)
+                   f.id_tenant, f.referencia, f.status
+            FROM tbl_fatura f
+            WHERE f.id_tenant = ANY(%s)
+              AND (
+                NULLIF(TRIM(COALESCE(f.efi_charge_id, '')), '') IS NOT NULL
+                OR NULLIF(TRIM(COALESCE(f.efi_txid, '')), '') IS NOT NULL
+              )
+            ORDER BY f.id_tenant, f.id DESC
+            """,
+            (ids,),
+        )
+        for row in cur.fetchall():
+            efi[int(row[0])] = {
+                "referencia": row[1] or "",
+                "status": row[2] or "",
+            }
+        cur.execute("RELEASE SAVEPOINT sp_asf_efi")
+    except Exception:
+        _rollback_sp(cur, "sp_asf_efi")
+
+    for item in ativas:
+        tid = int(item["id_tenant"])
+        eh_fund = fundador.get(tid, False)
+        vinc = cupom_vinc.get(tid) or (None, None)
+        cupom = cupons.get(int(vinc[0])) if vinc[0] else None
+        partes = []
+        if eh_fund:
+            partes.append("Fornecedor Fundador")
+        if cupom:
+            desc = _rotulo_desconto_cupom(cupom)
+            partes.append(f"Cupom {cupom['codigo']}" + (f" · {desc}" if desc else ""))
+        item["beneficio"] = " · ".join(partes) if partes else "—"
+        if eh_fund:
+            item["beneficio_prazo"] = "Vitalício"
+            cobrado = 0
+        elif cupom:
+            item["beneficio_prazo"] = _prazo_beneficio(cupom, vinc[1], item.get("periodicidade") or "mensal")
+            preco = calcular_preco(
+                int(item.get("catalogo_mensal_centavos") or 0),
+                item.get("periodicidade") or "mensal",
+                cupom=cupom,
+            )
+            cobrado = int(preco["valor_final_centavos"])
+        else:
+            item["beneficio_prazo"] = "—"
+            cobrado = int(item.get("ciclo_centavos") or 0)
+        item["cobrado_beneficio_centavos"] = cobrado
+        item["cobrado_beneficio"] = _fmt_reais(cobrado)
+        info = efi.get(tid)
+        item["efi_gerada"] = bool(info)
+        item["efi_rotulo"] = "Sim" if info else "Não"
+        if info:
+            ref = info["referencia"] or "fatura"
+            st = info["status"] or ""
+            item["efi_detalhe"] = f"{ref} · {st}" if st else ref
+        else:
+            item["efi_detalhe"] = ""
+
+
 def _mrr_de_catalogo(valor_mensal_centavos: int, periodo: str) -> dict[str, int]:
     """Provisão sem cupom: valor do ciclo com desconto de período, normalizado /mês."""
     preco = calcular_preco(int(valor_mensal_centavos or 0), periodo, cupom=None)
@@ -182,12 +337,18 @@ def painel_assinaturas(
         }
         ativas.append(item)
 
+    _enriquecer_beneficios(cur, ativas)
+
+    for item in ativas:
+        plano = item["plano"]
+        periodo = item["periodicidade"]
+        meta_mrr = int(item["mrr_centavos"])
         bp = por_plano.setdefault(
             plano,
             {"plano": plano, "plano_label": item["plano_label"], "qtd": 0, "mrr_centavos": 0},
         )
         bp["qtd"] += 1
-        bp["mrr_centavos"] += meta["mrr_centavos"]
+        bp["mrr_centavos"] += meta_mrr
 
         pp = por_periodo.setdefault(
             periodo,
@@ -199,7 +360,7 @@ def painel_assinaturas(
             },
         )
         pp["qtd"] += 1
-        pp["mrr_centavos"] += meta["mrr_centavos"]
+        pp["mrr_centavos"] += meta_mrr
 
     for d in (por_plano, por_periodo):
         for v in d.values():

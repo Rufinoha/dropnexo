@@ -47,11 +47,15 @@
               <th>Forma</th>
               <th>MRR</th>
               <th>Ciclo (valor)</th>
+              <th>Benefício</th>
+              <th>Prazo</th>
+              <th>A cobrar</th>
+              <th>Efí</th>
               <th>Próx. cobrança</th>
             </tr>
           </thead>
           <tbody id="asf_ativas_tbody">
-            <tr><td colspan="7" class="Asf_Empty">Carregando…</td></tr>
+            <tr><td colspan="11" class="Asf_Empty">Carregando…</td></tr>
           </tbody>
         </table>
       </div>
@@ -205,5 +209,5 @@
 <script type="application/json" id="asf_cfg">{{ {
   "apiDados": url_for("config.assinaturas_faturamento_dados")
 } | tojson }}</script>
-<script defer src="{{ url_for('config.static', filename='script/Sconfig_assinaturas.js') }}?v=3"></script>
+<script defer src="{{ url_for('config.static', filename='script/Sconfig_assinaturas.js') }}?v=4"></script>
 {% endblock %}
