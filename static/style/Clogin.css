@@ -281,15 +281,31 @@ body.Dn_Login {
 
 .Dn_Login_Foot {
   margin: 1.35rem 0 0;
+  display: grid;
+  gap: 0.7rem;
+  justify-items: center;
   text-align: center;
   font-size: 0.88rem;
   color: #64748b;
 }
 
+.Dn_Login_Foot p {
+  margin: 0 0 0.15rem;
+}
+
 .Dn_Login_Foot a {
   color: #021f81;
-  font-weight: 600;
+  font-weight: 650;
   text-decoration: none;
+  line-height: 1.35;
+}
+
+.Dn_Login_Foot a span {
+  display: block;
+  margin-top: 0.1rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #64748b;
 }
 
 .Dn_Login_Foot a:hover {

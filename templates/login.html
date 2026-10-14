@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="{{ url_for('static', filename='style/Clogin.css') }}?v=1" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style/Clogin.css') }}?v=3" />
 </head>
 <body class="Dn_Login">
   <div class="Dn_Login_Stage">
@@ -66,12 +66,11 @@
           </form>
         </div>
 
-        <p class="Dn_Login_Foot">
-          Novo por aqui?
-          <a href="{{ url_for('cadastro.pagina_cadastro', tipo='fornecedor') }}">Fornecedor</a>
-          ·
-          <a href="{{ url_for('cadastro.pagina_cadastro', tipo='vendedor') }}">Vendedor</a>
-        </p>
+        <div class="Dn_Login_Foot">
+          <p>Novo por aqui?</p>
+          <a href="{{ url_for('cadastro.pagina_cadastro', tipo='vendedor') }}">Quero vender sem estoque <span>(vendedor)</span></a>
+          <a href="{{ url_for('cadastro.pagina_cadastro', tipo='fornecedor') }}">Tenho estoque e quero revendedores <span>(fornecedor)</span></a>
+        </div>
       </div>
     </main>
   </div>
@@ -180,15 +179,14 @@
           }
           let texto = j.message || "Não foi possível solicitar a redefinição.";
           if (j.pode_cadastrar) {
-            texto +=
-              " Você pode se cadastrar como Fornecedor ou Vendedor pelos links abaixo.";
+            texto += " Você pode criar a conta por um destes caminhos:";
             msgEsqueci.innerHTML =
               String(texto).replace(/</g, "&lt;") +
               ' <a href="' +
-              urlCadFornecedor +
-              '">Fornecedor</a> · <a href="' +
               urlCadVendedor +
-              '">Vendedor</a>';
+              '">Quero vender sem estoque</a> · <a href="' +
+              urlCadFornecedor +
+              '">Tenho estoque e quero revendedores</a>';
             msgEsqueci.hidden = false;
             msgEsqueci.className = "Dn_Login_Msg is-error";
             return;

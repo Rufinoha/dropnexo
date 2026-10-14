@@ -1,5 +1,9 @@
 /* Manutenção de tenant — badges / resumo (layout usa Cconfig_crud + global_utils) */
 
+.CfgMt_CampoLargo {
+  grid-column: 1 / -1;
+}
+
 .CfgMt_Counts {
   margin-top: 1rem;
   padding: 0.75rem;

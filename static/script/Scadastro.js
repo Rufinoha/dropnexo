@@ -132,14 +132,59 @@
       inpDoc.value = mascaraCnpj(inpDoc.value);
     });
 
-    document.getElementById("btn-buscar-cnpj")?.addEventListener("click", async () => {
+    let cnpjConsultado = "";
+    let cnpjBusca = 0;
+
+    function limparDadosCnpj() {
+      const elRazao = document.getElementById("nome_completo");
+      if (elRazao) elRazao.value = "";
+      if (inpCep) inpCep.value = "";
+      const logradouro = document.getElementById("logradouro");
+      const bairro = document.getElementById("bairro");
+      const cidade = document.getElementById("cidade");
+      const uf = document.getElementById("uf");
+      if (logradouro) logradouro.value = "";
+      if (bairro) bairro.value = "";
+      if (cidade) cidade.value = "";
+      if (uf) uf.value = "";
+      const numero = form.querySelector('[name="numero"]');
+      const complemento = form.querySelector('[name="complemento"]');
+      if (numero) numero.value = "";
+      if (complemento) complemento.value = "";
+      cnpjConsultado = "";
+    }
+
+    function aplicarDadosCnpj(d) {
+      const elRazao = document.getElementById("nome_completo");
+      if (elRazao) elRazao.value = d.razao_social || "";
+      if (inpCep) inpCep.value = d.cep ? mascaraCep(d.cep) : "";
+      const logradouro = document.getElementById("logradouro");
+      const bairro = document.getElementById("bairro");
+      const cidade = document.getElementById("cidade");
+      const uf = document.getElementById("uf");
+      if (logradouro) logradouro.value = d.logradouro || "";
+      if (bairro) bairro.value = d.bairro || "";
+      if (cidade) cidade.value = d.cidade || "";
+      if (uf) uf.value = d.uf || "";
+      const numero = form.querySelector('[name="numero"]');
+      const complemento = form.querySelector('[name="complemento"]');
+      if (numero) numero.value = d.numero || "";
+      if (complemento) complemento.value = d.complemento || "";
+    }
+
+    async function consultarCnpjAutomatico() {
       const doc = soDigitos(inpDoc?.value);
+      if (doc === cnpjConsultado && doc.length === 14) return;
       if (doc.length !== 14) {
-        mostrarMsg("Informe o CNPJ completo com 14 dígitos.", false);
+        if (cnpjConsultado) limparDadosCnpj();
         return;
       }
-      const btn = document.getElementById("btn-buscar-cnpj");
-      btn.disabled = true;
+      if (window.Util?.validarCNPJ && !window.Util.validarCNPJ(doc)) {
+        if (cnpjConsultado) limparDadosCnpj();
+        mostrarMsg("CNPJ inválido.", false);
+        return;
+      }
+      const busca = ++cnpjBusca;
       try {
         const r = await fetch(`${apiCnpjUrl}?cnpj=${encodeURIComponent(doc)}`, {
           headers: { Accept: "application/json" },
@@ -150,46 +195,35 @@
         } catch {
           throw new Error("Resposta inválida do servidor ao consultar CNPJ.");
         }
+        if (busca !== cnpjBusca || soDigitos(inpDoc?.value) !== doc) return;
         if (!r.ok || !j.success) {
           throw new Error(j.message || "Erro na consulta do CNPJ.");
         }
         const d = j.dados || {};
-        const elRazao = document.getElementById("nome_completo");
-        const elNome = document.getElementById("nome");
-        if (elRazao) elRazao.value = d.razao_social || "";
-        if (elNome) elNome.value = d.nome_fantasia || d.razao_social || "";
-        if (d.cep) {
-          inpCep.value = mascaraCep(d.cep);
+        if (!(d.razao_social || "").trim()) {
+          throw new Error("A consulta do CNPJ não retornou a razão social.");
         }
-        if (d.logradouro) document.getElementById("logradouro").value = d.logradouro;
-        if (d.numero) form.querySelector('[name="numero"]').value = d.numero;
-        if (d.complemento) form.querySelector('[name="complemento"]').value = d.complemento;
-        if (d.bairro) document.getElementById("bairro").value = d.bairro;
-        if (d.cidade) document.getElementById("cidade").value = d.cidade;
-        if (d.uf) document.getElementById("uf").value = d.uf;
+        aplicarDadosCnpj(d);
+        cnpjConsultado = doc;
         if (msgEl) msgEl.hidden = true;
-        if (window.Swal) {
-          await Swal.fire({
-            title: "Dados carregados",
-            text: "Razão social, fantasia e endereço foram preenchidos com base no CNPJ.",
-            icon: "success",
-            confirmButtonColor: "#021f81",
-          });
-        }
       } catch (err) {
-        const texto = err.message || "Não foi possível consultar o CNPJ.";
-        mostrarMsg(texto, false);
-        if (window.Swal) {
-          await Swal.fire({
-            title: "Consulta CNPJ",
-            text: texto,
-            icon: "warning",
-            confirmButtonColor: "#021f81",
-          });
-        }
-      } finally {
-        btn.disabled = false;
+        if (busca !== cnpjBusca) return;
+        limparDadosCnpj();
+        const texto = String(err.message || "Não foi possível consultar o CNPJ.")
+          .replace(/preencha os dados manualmente\.?/gi, "")
+          .replace(/ou preencha manualmente\.?/gi, "")
+          .replace(/\s{2,}/g, " ")
+          .trim();
+        const aviso = texto || "Não foi possível consultar este CNPJ. Confira os números.";
+        mostrarMsg(aviso, false);
       }
+    }
+
+    inpDoc?.addEventListener("input", () => {
+      consultarCnpjAutomatico();
+    });
+    inpDoc?.addEventListener("blur", () => {
+      consultarCnpjAutomatico();
     });
 
     async function carregarSegmentosCombobox() {
@@ -221,11 +255,22 @@
         return;
       }
 
+      const documento = soDigitos(fd.get("documento"));
+      const nomeCompleto = String(fd.get("nome_completo") || "").trim();
+      if (documento.length !== 14) {
+        mostrarMsg("Informe o CNPJ completo.", false);
+        return;
+      }
+      if (!nomeCompleto) {
+        mostrarMsg("A razão social ainda não veio do CNPJ. Confira o número.", false);
+        return;
+      }
+
       const body = {
         tipo_negocio: "fornecedor",
         tipo_pessoa: "J",
-        documento: soDigitos(fd.get("documento")),
-        nome_completo: String(fd.get("nome_completo") || "").trim(),
+        documento,
+        nome_completo: nomeCompleto,
         nome: String(fd.get("nome") || "").trim(),
         nome_usuario: String(fd.get("nome_usuario") || "").trim(),
         email: String(fd.get("email") || "").trim().toLowerCase(),

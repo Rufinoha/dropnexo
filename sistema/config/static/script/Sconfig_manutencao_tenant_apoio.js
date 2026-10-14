@@ -7,11 +7,13 @@
   let protegido = false;
   let ehSessao = false;
   let temRelacionamento = false;
+  let emailDonoOriginal = "";
 
   const el = {
     id: document.getElementById("id"),
     nome: document.getElementById("nome"),
-    slug: document.getElementById("slug"),
+    nomeFantasia: document.getElementById("nome_fantasia"),
+    razao: document.getElementById("razao_social"),
     tipo: document.getElementById("tipo_negocio"),
     plano: document.getElementById("plano"),
     documento: document.getElementById("documento"),
@@ -91,7 +93,7 @@
     if (el.paneTenant) el.paneTenant.hidden = t !== "tenant";
     if (el.paneDono) el.paneDono.hidden = t !== "dono";
     if (el.paneComissao) el.paneComissao.hidden = t !== "comissao";
-    if (el.btnSalvar) el.btnSalvar.hidden = t !== "tenant";
+    if (el.btnSalvar) el.btnSalvar.hidden = t === "comissao";
     if (t === "comissao") {
       document.dispatchEvent(new CustomEvent("cfg-comissao-abrir"));
     }
@@ -122,9 +124,13 @@
     const tem = !!(d && d.id);
     if (el.donoVazio) el.donoVazio.hidden = tem;
     if (el.donoDados) el.donoDados.hidden = !tem;
-    if (!tem) return;
+    if (!tem) {
+      emailDonoOriginal = "";
+      return;
+    }
     if (el.donoId) el.donoId.value = String(d.id);
     if (el.donoNome) el.donoNome.value = d.nome || "";
+    emailDonoOriginal = (d.email || "").trim().toLowerCase();
     if (el.donoEmail) el.donoEmail.value = d.email || "";
     if (el.donoWhatsapp) {
       el.donoWhatsapp.value = formatarWhatsappExibicao(d.whatsapp) || d.whatsapp || "";
@@ -264,7 +270,8 @@
     ehSessao = !!t.eh_tenant_sessao;
     if (el.id) el.id.value = String(idTenant || "");
     if (el.nome) el.nome.value = t.nome || "";
-    if (el.slug) el.slug.value = t.slug || "";
+    if (el.nomeFantasia) el.nomeFantasia.value = t.nome_fantasia || "";
+    if (el.razao) el.razao.value = t.razao_social || "";
     if (el.tipo) el.tipo.value = t.tipo_negocio || "vendedor";
     if (el.plano) {
       el.plano.value = ["starter", "professional", "scale", "enterprise"].includes(t.plano)
@@ -344,16 +351,34 @@
       await Swal.fire("Atenção", "Nenhum tenant carregado.", "warning");
       return;
     }
+    const emailDono = (el.donoEmail?.value || "").trim().toLowerCase();
     const body = {
       id: idTenant,
       nome: (el.nome?.value || "").trim(),
-      slug: (el.slug?.value || "").trim(),
+      slug: slugAtual,
+      nome_fantasia: (el.nomeFantasia?.value || "").trim(),
+      razao_social: (el.razao?.value || "").trim(),
       tipo_negocio: el.tipo?.value || "vendedor",
       plano: el.plano?.value || "starter",
       documento: (el.documento?.value || "").trim(),
       ativo: !!el.ativo?.checked,
       limpar_segmentos_fornecedor: !!el.limparSeg?.checked,
+      dono_email: emailDono,
     };
+    if (emailDonoOriginal && emailDono !== emailDonoOriginal) {
+      const confEmail = await Swal.fire({
+        icon: "warning",
+        title: "Alterar e-mail do dono?",
+        html:
+          `O login passa de <strong>${esc(emailDonoOriginal)}</strong> para <strong>${esc(emailDono)}</strong>.` +
+          `<br><small>Se a senha ainda não foi definida, o convite antigo deixa de valer. Depois use Reenviar convite.</small>`,
+        showCancelButton: true,
+        confirmButtonText: "Sim, alterar",
+        cancelButtonText: "Cancelar",
+        confirmButtonColor: "#021F81",
+      });
+      if (!confEmail.isConfirmed) return;
+    }
     if (!body.nome || body.nome.length < 2) {
       await Swal.fire("Atenção", "Informe o nome do tenant.", "warning");
       return;

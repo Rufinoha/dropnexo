@@ -6,7 +6,7 @@
   {% include "partials/marca_favicon.html" %}
   <link rel="stylesheet" href="{{ url_for('static', filename='style/global_utils.css') }}" />
   <link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_crud.css') }}?v=3" />
-  <link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_manutencao_tenant.css') }}?v=10" />
+  <link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_manutencao_tenant.css') }}?v=11" />
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </head>
 <body class="CfgApoio_Body">
@@ -33,8 +33,12 @@
           <input type="text" id="nome" maxlength="200" />
         </div>
         <div class="Cl_FormCampo">
-          <label for="slug">Slug</label>
-          <input type="text" id="slug" maxlength="80" />
+          <label for="nome_fantasia">Nome fantasia</label>
+          <input type="text" id="nome_fantasia" maxlength="255" />
+        </div>
+        <div class="Cl_FormCampo CfgMt_CampoLargo">
+          <label for="razao_social">Razão social</label>
+          <input type="text" id="razao_social" maxlength="255" />
         </div>
       </div>
 
@@ -182,7 +186,7 @@
         <div class="CfgApoio_Grid CfgApoio_Grid--2">
           <div class="Cl_FormCampo">
             <label>E-mail</label>
-            <input type="text" id="dono_email" readonly />
+            <input type="email" id="dono_email" autocomplete="off" />
           </div>
           <div class="Cl_FormCampo">
             <label>WhatsApp</label>
@@ -236,7 +240,7 @@
   </div>
 
   <script src="{{ url_for('static', filename='script/global_utils.js') }}"></script>
-  <script src="{{ url_for('config.static', filename='script/Sconfig_manutencao_tenant_apoio.js') }}?v=10"></script>
+  <script src="{{ url_for('config.static', filename='script/Sconfig_manutencao_tenant_apoio.js') }}?v=12"></script>
   <script src="{{ url_for('config.static', filename='script/Sconfig_comissao_tenant.js') }}?v=4"></script>
 </body>
 </html>

@@ -1802,7 +1802,8 @@ def _tenant_payload(cur, id_tenant: int) -> dict | None:
     cur.execute(
         """
         SELECT id, nome, slug, tipo_negocio, plano, ativo, documento,
-               tipo_pessoa, nome_completo, cidade, uf, email_comercial, telefone_comercial
+               tipo_pessoa, nome_completo, cidade, uf, email_comercial, telefone_comercial,
+               razao_social, nome_fantasia
         FROM tbl_tenant WHERE id = %s
         """,
         (id_tenant,),
@@ -1981,6 +1982,8 @@ def _tenant_payload(cur, id_tenant: int) -> dict | None:
         "documento": row[6] or "",
         "tipo_pessoa": row[7] or "",
         "nome_completo": row[8] or "",
+        "razao_social": (row[13] or "").strip() or (row[8] or "").strip(),
+        "nome_fantasia": (row[14] or "").strip(),
         "cidade": row[9] or "",
         "uf": row[10] or "",
         "segmentos": segmentos,
@@ -2506,10 +2509,8 @@ def manutencao_tenant_salvar():
     if not nome or len(nome) < 2:
         return jsonify(success=False, message="Informe o nome do tenant."), 400
 
-    slug = (body.get("slug") or "").strip().lower()
-    slug = re.sub(r"[^a-z0-9\-]+", "-", slug).strip("-")
-    if not slug or len(slug) < 2:
-        return jsonify(success=False, message="Slug inválido."), 400
+    razao_social = (body.get("razao_social") or "").strip()
+    nome_fantasia = (body.get("nome_fantasia") or "").strip()
 
     plano = plano_slug_banco(body.get("plano"))
     if plano not in _PLANOS_OK:
@@ -2523,20 +2524,14 @@ def manutencao_tenant_salvar():
     try:
         cur = conn.cursor()
         cur.execute(
-            "SELECT tipo_negocio FROM tbl_tenant WHERE id = %s FOR UPDATE",
+            "SELECT tipo_negocio, slug FROM tbl_tenant WHERE id = %s FOR UPDATE",
             (id_tenant,),
         )
         row = cur.fetchone()
         if not row:
             return jsonify(success=False, message="Tenant não encontrado."), 404
         tipo_antigo = (row[0] or "").lower()
-
-        cur.execute(
-            "SELECT id FROM tbl_tenant WHERE slug = %s AND id <> %s LIMIT 1",
-            (slug, id_tenant),
-        )
-        if cur.fetchone():
-            return jsonify(success=False, message="Slug já em uso por outro tenant."), 400
+        slug = (row[1] or "").strip().lower()
 
         if documento:
             cur.execute(
@@ -2583,10 +2578,24 @@ def manutencao_tenant_salvar():
                 tipo_negocio = %s,
                 plano = %s,
                 ativo = %s,
-                documento = NULLIF(%s, '')
+                documento = NULLIF(%s, ''),
+                razao_social = NULLIF(%s, ''),
+                nome_fantasia = NULLIF(%s, ''),
+                nome_completo = NULLIF(%s, '')
             WHERE id = %s
             """,
-            (nome, slug, tipo, plano, ativo, documento, id_tenant),
+            (
+                nome,
+                slug,
+                tipo,
+                plano,
+                ativo,
+                documento,
+                razao_social,
+                nome_fantasia,
+                razao_social,
+                id_tenant,
+            ),
         )
 
         segmentos_removidos = 0
@@ -2596,6 +2605,69 @@ def manutencao_tenant_salvar():
                 (id_tenant,),
             )
             segmentos_removidos = int(cur.rowcount or 0)
+
+        if "dono_email" in body:
+            dono_email_novo = (body.get("dono_email") or "").strip().lower()
+            cur.execute(
+                """
+                SELECT u.id, lower(COALESCE(u.email, '')), u.senha_hash
+                FROM tbl_usuario_tenant ut
+                JOIN tbl_usuario u ON u.id = ut.id_usuario
+                JOIN tbl_perfil pf ON pf.id = ut.id_perfil
+                WHERE ut.id_tenant = %s
+                  AND LOWER(pf.codigo) = 'dono'
+                ORDER BY ut.ativo DESC NULLS LAST, ut.id
+                LIMIT 1
+                """,
+                (id_tenant,),
+            )
+            dono_row = cur.fetchone()
+            if dono_row:
+                id_dono, email_atual, senha_hash = dono_row
+                if not dono_email_novo:
+                    conn.rollback()
+                    return jsonify(success=False, message="Informe o e-mail do dono."), 400
+                if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", dono_email_novo):
+                    conn.rollback()
+                    return jsonify(success=False, message="E-mail do dono inválido."), 400
+                if dono_email_novo != (email_atual or ""):
+                    cur.execute(
+                        """
+                        SELECT id FROM tbl_usuario
+                        WHERE lower(email) = %s AND id <> %s
+                        LIMIT 1
+                        """,
+                        (dono_email_novo, id_dono),
+                    )
+                    if cur.fetchone():
+                        conn.rollback()
+                        return jsonify(
+                            success=False,
+                            message="Este e-mail já está em outra conta.",
+                        ), 400
+                    if senha_hash:
+                        cur.execute(
+                            "UPDATE tbl_usuario SET email = %s WHERE id = %s",
+                            (dono_email_novo, id_dono),
+                        )
+                        avisos.append(
+                            "E-mail de login do dono alterado. O próximo acesso usa o novo endereço."
+                        )
+                    else:
+                        cur.execute(
+                            """
+                            UPDATE tbl_usuario
+                            SET email = %s, token_ativacao = NULL, token_expira_em = NULL
+                            WHERE id = %s
+                            """,
+                            (dono_email_novo, id_dono),
+                        )
+                        avisos.append(
+                            "E-mail do dono alterado. O convite anterior deixou de valer. "
+                            "Use Reenviar convite no novo endereço."
+                        )
+                    if int(session.get("id_usuario") or 0) == int(id_dono):
+                        session["email"] = dono_email_novo
 
         mig_az = None
         if tipo != tipo_antigo and tipo == "armazem" and tipo_antigo in ("fornecedor", "hibrido"):

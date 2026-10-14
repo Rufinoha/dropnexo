@@ -1219,6 +1219,16 @@ def api_cadastro_novo():
     if not _valida_documento(tipo_pessoa, documento):
         doc_label = "CPF" if tipo_pessoa == "F" else "CNPJ"
         return jsonify(success=False, message=f"{doc_label} inválido."), 400
+    if tipo_negocio == "fornecedor":
+        try:
+            dados_cnpj = consultar_cnpj(documento)
+        except ValueError as exc:
+            msg = str(exc)
+            msg = msg.replace(" Preencha os dados manualmente.", "").replace(" ou preencha manualmente.", ".")
+            return jsonify(success=False, message=msg.strip() or "Não foi possível consultar o CNPJ."), 400
+        nome_completo = (dados_cnpj.get("razao_social") or "").strip()
+        if len(nome_completo) < 2:
+            return jsonify(success=False, message="A consulta do CNPJ não retornou a razão social."), 400
     if len(nome_completo) < 2:
         return jsonify(success=False, message="Informe o nome completo ou razão social."), 400
 

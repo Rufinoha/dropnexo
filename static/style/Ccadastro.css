@@ -72,6 +72,17 @@
   display: none !important;
 }
 
+.cadastro-hint {
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--muted, #64748b);
+}
+
+.cadastro-field input[readonly] {
+  background: #f4f6fb;
+  color: #334155;
+}
+
 .cadastro-field input,
 .cadastro-field select {
   padding: 0.6rem 0.75rem;
