@@ -1566,7 +1566,7 @@ def manutencao_tenant_editar():
 def manutencao_tenant_dados():
     if (r := _exigir_dev()) is not None:
         return r
-        q = (request.args.get("q") or "").strip()
+    q = (request.args.get("q") or "").strip()
     tipo = (request.args.get("tipo") or "").strip().lower()
     ativo = (request.args.get("ativo") or "").strip().lower()
     conn = Var_ConectarBanco()
@@ -1699,6 +1699,8 @@ def manutencao_tenant_dados():
                 }
             )
         return jsonify(success=True, itens=itens)
+    except Exception as e:
+        return jsonify(success=False, message=str(e)[:400]), 500
     finally:
         conn.close()
 
