@@ -83,6 +83,20 @@
   color: #334155;
 }
 
+.cadastro-field input.is-invalid {
+  border-color: #dc2626;
+  background: #fff5f5;
+}
+
+#cnpj-erro {
+  color: #b91c1c;
+}
+
+#btn-cadastrar:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .cadastro-field input,
 .cadastro-field select {
   padding: 0.6rem 0.75rem;

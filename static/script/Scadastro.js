@@ -134,6 +134,44 @@
 
     let cnpjConsultado = "";
     let cnpjBusca = 0;
+    const btnCadastrar = document.getElementById("btn-cadastrar");
+    const cnpjErro = document.getElementById("cnpj-erro");
+
+    function cnpjEstaValido(doc) {
+      if (!window.Util?.validarCNPJ) return doc.length === 14;
+      return window.Util.validarCNPJ(doc);
+    }
+
+    function marcarCnpj(invalido) {
+      inpDoc?.classList.toggle("is-invalid", !!invalido);
+      inpDoc?.setAttribute("aria-invalid", invalido ? "true" : "false");
+    }
+
+    function mostrarErroCnpj(texto) {
+      marcarCnpj(true);
+      if (cnpjErro) {
+        cnpjErro.textContent = texto;
+        cnpjErro.hidden = false;
+      }
+      mostrarMsg(texto, false);
+      if (btnCadastrar) btnCadastrar.disabled = true;
+    }
+
+    function limparErroCnpj() {
+      marcarCnpj(false);
+      if (cnpjErro) {
+        cnpjErro.textContent = "";
+        cnpjErro.hidden = true;
+      }
+    }
+
+    function liberarCadastro() {
+      const doc = soDigitos(inpDoc?.value);
+      const razao = (document.getElementById("nome_completo")?.value || "").trim();
+      if (btnCadastrar) btnCadastrar.disabled = !(doc === cnpjConsultado && razao);
+    }
+
+    liberarCadastro();
 
     function limparDadosCnpj() {
       const elRazao = document.getElementById("nome_completo");
@@ -152,6 +190,7 @@
       if (numero) numero.value = "";
       if (complemento) complemento.value = "";
       cnpjConsultado = "";
+      liberarCadastro();
     }
 
     function aplicarDadosCnpj(d) {
@@ -177,13 +216,17 @@
       if (doc === cnpjConsultado && doc.length === 14) return;
       if (doc.length !== 14) {
         if (cnpjConsultado) limparDadosCnpj();
+        else liberarCadastro();
+        if (doc.length < 14) limparErroCnpj();
         return;
       }
-      if (window.Util?.validarCNPJ && !window.Util.validarCNPJ(doc)) {
+      if (!cnpjEstaValido(doc)) {
         if (cnpjConsultado) limparDadosCnpj();
-        mostrarMsg("CNPJ inválido.", false);
+        mostrarErroCnpj("CNPJ inválido. Confira os números para continuar.");
         return;
       }
+      if (cnpjConsultado && cnpjConsultado !== doc) limparDadosCnpj();
+      if (btnCadastrar) btnCadastrar.disabled = true;
       const busca = ++cnpjBusca;
       try {
         const r = await fetch(`${apiCnpjUrl}?cnpj=${encodeURIComponent(doc)}`, {
@@ -205,7 +248,9 @@
         }
         aplicarDadosCnpj(d);
         cnpjConsultado = doc;
+        limparErroCnpj();
         if (msgEl) msgEl.hidden = true;
+        liberarCadastro();
       } catch (err) {
         if (busca !== cnpjBusca) return;
         limparDadosCnpj();
@@ -215,7 +260,7 @@
           .replace(/\s{2,}/g, " ")
           .trim();
         const aviso = texto || "Não foi possível consultar este CNPJ. Confira os números.";
-        mostrarMsg(aviso, false);
+        mostrarErroCnpj(aviso);
       }
     }
 
@@ -257,12 +302,14 @@
 
       const documento = soDigitos(fd.get("documento"));
       const nomeCompleto = String(fd.get("nome_completo") || "").trim();
-      if (documento.length !== 14) {
-        mostrarMsg("Informe o CNPJ completo.", false);
+      if (!cnpjEstaValido(documento)) {
+        mostrarErroCnpj("CNPJ inválido. Confira os números para continuar.");
+        inpDoc?.focus();
         return;
       }
-      if (!nomeCompleto) {
-        mostrarMsg("A razão social ainda não veio do CNPJ. Confira o número.", false);
+      if (documento !== cnpjConsultado || !nomeCompleto) {
+        mostrarErroCnpj("O cadastro só continua depois que os dados da empresa forem encontrados.");
+        inpDoc?.focus();
         return;
       }
 

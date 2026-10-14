@@ -79,11 +79,27 @@ def _so_digitos(valor: str) -> str:
     return re.sub(r"\D", "", valor or "")
 
 
+def cnpj_valido(cnpj: str) -> bool:
+    """Confere o tamanho e os dígitos verificadores do CNPJ."""
+    doc = _so_digitos(cnpj)
+    if len(doc) != 14 or not doc.isdigit() or doc == doc[0] * 14:
+        return False
+
+    def _digito(base: str, pesos: tuple[int, ...]) -> str:
+        total = sum(int(n) * p for n, p in zip(base, pesos))
+        resto = total % 11
+        return "0" if resto < 2 else str(11 - resto)
+
+    d1 = _digito(doc[:12], (5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2))
+    d2 = _digito(doc[:12] + d1, (6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2))
+    return doc[-2:] == d1 + d2
+
+
 def consultar_cnpj(cnpj: str) -> dict:
     """Consulta dados públicos do CNPJ. Levanta ValueError se inválido/não encontrado."""
     doc = _so_digitos(cnpj)
-    if len(doc) != 14:
-        raise ValueError("CNPJ inválido.")
+    if not cnpj_valido(doc):
+        raise ValueError("CNPJ inválido. Confira os números.")
 
     try:
         r = requests.get(f"{_BRASIL_API}/{doc}", timeout=15)

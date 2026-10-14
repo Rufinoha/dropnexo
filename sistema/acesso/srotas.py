@@ -995,7 +995,7 @@ from global_utils import (
 )
 from fornecedor.parametros.requisitos import salvar_visivel_rede_vendedor
 from fornecedor.segmentos.segmentos import listar_segmentos_plataforma, salvar_segmentos_fornecedor
-from core.dominio import consultar_cnpj
+from core.dominio import cnpj_valido, consultar_cnpj
 from sistema.planos.fornecedor_fundador import (
     EMAIL_ESPERA,
     notificar_se_novo_fundador,
@@ -1107,7 +1107,7 @@ def _valida_documento(tipo_pessoa: str, documento: str) -> bool:
     if tipo_pessoa == "F":
         return len(documento) == 11
     if tipo_pessoa == "J":
-        return len(documento) == 14
+        return cnpj_valido(documento)
     return False
 
 
