@@ -202,6 +202,7 @@ def _enriquecer_beneficios(cur, ativas: list[dict]) -> None:
         vinc = cupom_vinc.get(tid) or (None, None)
         cupom = cupons.get(int(vinc[0])) if vinc[0] else None
         partes = []
+        item["eh_fundador"] = eh_fund
         if eh_fund:
             partes.append("Fornecedor Fundador")
         if cupom:
@@ -325,9 +326,6 @@ def painel_assinaturas(
         periodo = _periodo_ok(row[6])
         catalogo = int(row[10] or 0)
         meta = _mrr_de_catalogo(catalogo, periodo)
-        mrr_total += meta["mrr_centavos"]
-        # estimativa de caixa no próximo ciclo “médio” mensal ≈ MRR
-        ciclo_mes_estimado += meta["mrr_centavos"]
         plano = str(row[3] or "")
         forma = (row[8] or "").strip().lower()
         prox = _proxima_cobranca_estimada(row[7])
@@ -358,7 +356,20 @@ def painel_assinaturas(
 
     _enriquecer_beneficios(cur, ativas)
 
+    mrr_total = 0
+    ciclo_mes_estimado = 0
     for item in ativas:
+        if item.get("eh_fundador"):
+            item["mrr_centavos"] = 0
+            item["mrr"] = _fmt_reais(0)
+            item["ciclo_centavos"] = 0
+            item["ciclo"] = _fmt_reais(0)
+            item["cobrado_beneficio_centavos"] = 0
+            item["cobrado_beneficio"] = _fmt_reais(0)
+            item["proxima_cobranca"] = None
+            item["proxima_cobranca_br"] = "—"
+        mrr_total += int(item["mrr_centavos"])
+        ciclo_mes_estimado += int(item["mrr_centavos"])
         plano = item["plano"]
         periodo = item["periodicidade"]
         meta_mrr = int(item["mrr_centavos"])
