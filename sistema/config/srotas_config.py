@@ -2507,10 +2507,9 @@ def manutencao_tenant_salvar():
 
     nome = (body.get("nome") or "").strip()
     if not nome or len(nome) < 2:
-        return jsonify(success=False, message="Informe o nome do tenant."), 400
+        return jsonify(success=False, message="Informe o apelido."), 400
 
     razao_social = (body.get("razao_social") or "").strip()
-    nome_fantasia = (body.get("nome_fantasia") or "").strip()
 
     plano = plano_slug_banco(body.get("plano"))
     if plano not in _PLANOS_OK:
@@ -2580,7 +2579,6 @@ def manutencao_tenant_salvar():
                 ativo = %s,
                 documento = NULLIF(%s, ''),
                 razao_social = NULLIF(%s, ''),
-                nome_fantasia = NULLIF(%s, ''),
                 nome_completo = NULLIF(%s, '')
             WHERE id = %s
             """,
@@ -2592,7 +2590,6 @@ def manutencao_tenant_salvar():
                 ativo,
                 documento,
                 razao_social,
-                nome_fantasia,
                 razao_social,
                 id_tenant,
             ),

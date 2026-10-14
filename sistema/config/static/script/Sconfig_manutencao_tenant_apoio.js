@@ -12,7 +12,6 @@
   const el = {
     id: document.getElementById("id"),
     nome: document.getElementById("nome"),
-    nomeFantasia: document.getElementById("nome_fantasia"),
     razao: document.getElementById("razao_social"),
     tipo: document.getElementById("tipo_negocio"),
     plano: document.getElementById("plano"),
@@ -270,7 +269,6 @@
     ehSessao = !!t.eh_tenant_sessao;
     if (el.id) el.id.value = String(idTenant || "");
     if (el.nome) el.nome.value = t.nome || "";
-    if (el.nomeFantasia) el.nomeFantasia.value = t.nome_fantasia || "";
     if (el.razao) el.razao.value = t.razao_social || "";
     if (el.tipo) el.tipo.value = t.tipo_negocio || "vendedor";
     if (el.plano) {
@@ -356,7 +354,6 @@
       id: idTenant,
       nome: (el.nome?.value || "").trim(),
       slug: slugAtual,
-      nome_fantasia: (el.nomeFantasia?.value || "").trim(),
       razao_social: (el.razao?.value || "").trim(),
       tipo_negocio: el.tipo?.value || "vendedor",
       plano: el.plano?.value || "starter",
@@ -380,7 +377,7 @@
       if (!confEmail.isConfirmed) return;
     }
     if (!body.nome || body.nome.length < 2) {
-      await Swal.fire("Atenção", "Informe o nome do tenant.", "warning");
+      await Swal.fire("Atenção", "Informe o apelido.", "warning");
       return;
     }
     if (body.tipo_negocio !== tipoOriginal) {

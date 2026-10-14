@@ -29,14 +29,10 @@
     <div id="cfg_pane_tenant" class="CfgMt_Pane">
       <div class="CfgApoio_Grid CfgApoio_Grid--2">
         <div class="Cl_FormCampo">
-          <label for="nome">Nome</label>
+          <label for="nome">Apelido</label>
           <input type="text" id="nome" maxlength="200" />
         </div>
         <div class="Cl_FormCampo">
-          <label for="nome_fantasia">Nome fantasia</label>
-          <input type="text" id="nome_fantasia" maxlength="255" />
-        </div>
-        <div class="Cl_FormCampo CfgMt_CampoLargo">
           <label for="razao_social">Razão social</label>
           <input type="text" id="razao_social" maxlength="255" />
         </div>
@@ -240,7 +236,7 @@
   </div>
 
   <script src="{{ url_for('static', filename='script/global_utils.js') }}"></script>
-  <script src="{{ url_for('config.static', filename='script/Sconfig_manutencao_tenant_apoio.js') }}?v=12"></script>
+  <script src="{{ url_for('config.static', filename='script/Sconfig_manutencao_tenant_apoio.js') }}?v=13"></script>
   <script src="{{ url_for('config.static', filename='script/Sconfig_comissao_tenant.js') }}?v=4"></script>
 </body>
 </html>
