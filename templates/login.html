@@ -6,56 +6,75 @@
   <title>Entrar — {{ MARCA_NOME }}</title>
   <meta name="robots" content="noindex, nofollow" />
   {% include "partials/marca_favicon.html" %}
-  <link rel="stylesheet" href="{{ url_for('static', filename='style/global_utils.css') }}" />
-  <script defer src="{{ url_for('static', filename='script/global_utils.js') }}"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style/Clogin.css') }}?v=1" />
 </head>
-<body class="public-body">
-  <main class="auth-card-wrap">
-    <div class="auth-card">
-      <p class="auth-brand"><img src="{{ marca_logo_nome_url }}" alt="{{ MARCA_NOME }}" class="auth-brand-logo" /></p>
-
-      <div id="painel-login">
-        <h1>Entrar</h1>
-        <p class="muted">Painel do tenant — <a href="{{ url_for('public.home') }}">voltar ao site</a></p>
-        <form id="form-login" class="stack">
-          <input type="hidden" id="login-next" value="{{ next_url|e }}" />
-          <label>E-mail
-            <input type="email" name="email" id="login-email" required autocomplete="username" />
-          </label>
-          <label>Senha
-            <input type="password" name="senha" required autocomplete="current-password" />
-          </label>
-          <p class="auth-forgot">
-            <a href="#esqueci" id="link-esqueci">Esqueci minha senha</a>
-          </p>
-          <p class="form-msg" id="msg-login" hidden></p>
-          <button type="submit" class="btn btn-primary btn-block">Entrar</button>
-        </form>
+<body class="Dn_Login">
+  <div class="Dn_Login_Stage">
+    <section class="Dn_Login_Hero">
+      <div class="Dn_Login_Glow" aria-hidden="true"></div>
+      <div class="Dn_Login_HeroInner">
+        <a href="{{ url_for('public.home') }}" class="Dn_Login_Brand">
+          <img src="{{ marca_logo_nome_url }}" alt="{{ MARCA_NOME }}" />
+        </a>
+        <p class="Dn_Login_Kicker">Painel do tenant</p>
+        <h1 class="Dn_Login_Headline">Estoque, pedidos<br />e marketplaces.<br /><em>Um só sistema.</em></h1>
+        <p class="Dn_Login_Lead">Conecte fornecedores e vendedores no dropshipping nacional.</p>
       </div>
+    </section>
 
-      <div id="painel-esqueci" hidden>
-        <h1>Redefinir senha</h1>
-        <p class="muted">Informe o e-mail cadastrado. Enviaremos um link para criar uma nova senha.</p>
-        <form id="form-esqueci" class="stack">
-          <label>E-mail cadastrado
-            <input type="email" name="email" id="esqueci-email" required autocomplete="username" />
-          </label>
-          <p class="form-msg" id="msg-esqueci" hidden></p>
-          <button type="submit" class="btn btn-primary btn-block" id="btn-esqueci">
-            Redefinir senha
-          </button>
-          <button type="button" class="btn btn-secondary btn-block" id="link-voltar-login">Voltar ao login</button>
-        </form>
+    <main class="Dn_Login_Panel">
+      <div class="Dn_Login_Card">
+        <p class="Dn_Login_MobileBrand">
+          <img src="{{ marca_logo_nome_url }}" alt="{{ MARCA_NOME }}" />
+        </p>
+
+        <div id="painel-login">
+          <h2>Entrar</h2>
+          <p class="Dn_Login_Muted">Painel do tenant — <a href="{{ url_for('public.home') }}">voltar ao site</a></p>
+          <form id="form-login" class="Dn_Login_Form">
+            <input type="hidden" id="login-next" value="{{ next_url|e }}" />
+            <label>
+              <span>E-mail</span>
+              <input type="email" name="email" id="login-email" required autocomplete="username" />
+            </label>
+            <label>
+              <span>Senha</span>
+              <input type="password" name="senha" required autocomplete="current-password" />
+            </label>
+            <p class="Dn_Login_Forgot">
+              <a href="#esqueci" id="link-esqueci">Esqueci minha senha</a>
+            </p>
+            <p class="Dn_Login_Msg" id="msg-login" hidden></p>
+            <button type="submit" class="Dn_Login_Btn">Entrar</button>
+          </form>
+        </div>
+
+        <div id="painel-esqueci" hidden>
+          <h2>Redefinir senha</h2>
+          <p class="Dn_Login_Muted">Informe o e-mail cadastrado. Enviaremos um link para criar uma nova senha.</p>
+          <form id="form-esqueci" class="Dn_Login_Form">
+            <label>
+              <span>E-mail cadastrado</span>
+              <input type="email" name="email" id="esqueci-email" required autocomplete="username" />
+            </label>
+            <p class="Dn_Login_Msg" id="msg-esqueci" hidden></p>
+            <button type="submit" class="Dn_Login_Btn" id="btn-esqueci">Redefinir senha</button>
+            <button type="button" class="Dn_Login_Btn Dn_Login_Btn--ghost" id="link-voltar-login">Voltar ao login</button>
+          </form>
+        </div>
+
+        <p class="Dn_Login_Foot">
+          Novo por aqui?
+          <a href="{{ url_for('cadastro.pagina_cadastro', tipo='fornecedor') }}">Fornecedor</a>
+          ·
+          <a href="{{ url_for('cadastro.pagina_cadastro', tipo='vendedor') }}">Vendedor</a>
+        </p>
       </div>
-
-      <p class="small muted">
-        Novo por aqui?
-        <a href="{{ url_for('cadastro.pagina_cadastro', tipo='fornecedor') }}">Fornecedor</a>
-        ·
-        <a href="{{ url_for('cadastro.pagina_cadastro', tipo='vendedor') }}">Vendedor</a>
-      </p>
-    </div>
-  </main>
+    </main>
+  </div>
   <script>
     (function () {
       const painelLogin = document.getElementById("painel-login");
@@ -72,7 +91,7 @@
         if (!el) return;
         el.textContent = texto || "";
         el.hidden = !texto;
-        el.className = "form-msg " + (ok ? "is-ok" : "is-error");
+        el.className = "Dn_Login_Msg " + (ok ? "is-ok" : "is-error");
       }
 
       function irEsqueci(ev) {
@@ -171,7 +190,7 @@
               urlCadVendedor +
               '">Vendedor</a>';
             msgEsqueci.hidden = false;
-            msgEsqueci.className = "form-msg is-error";
+            msgEsqueci.className = "Dn_Login_Msg is-error";
             return;
           }
           mostrarMsg(msgEsqueci, texto, false);

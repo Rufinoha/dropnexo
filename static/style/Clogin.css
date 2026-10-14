@@ -1,0 +1,325 @@
+/* Login DropNexo — tela dividida, cores da marca */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body.Dn_Login {
+  margin: 0;
+  min-height: 100vh;
+  font-family: "Plus Jakarta Sans", system-ui, sans-serif;
+  color: #0f172a;
+  background: #01102e;
+}
+
+.Dn_Login_Stage {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+  min-height: 100vh;
+}
+
+.Dn_Login_Hero {
+  position: relative;
+  overflow: hidden;
+  padding: clamp(2rem, 5vw, 3.5rem);
+  background: linear-gradient(155deg, #0a3299 0%, #021f81 42%, #01102e 100%);
+  color: #fff;
+  display: flex;
+  align-items: stretch;
+}
+
+.Dn_Login_Glow {
+  position: absolute;
+  inset: -20% -10% auto auto;
+  width: 70%;
+  height: 70%;
+  background: radial-gradient(circle, rgba(160, 196, 255, 0.28), transparent 65%);
+  animation: Dn_Login_Glow 8s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+
+.Dn_Login_Hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: linear-gradient(180deg, #000 20%, transparent 90%);
+  pointer-events: none;
+}
+
+@keyframes Dn_Login_Glow {
+  from { transform: translate(0, 0) scale(1); opacity: 0.7; }
+  to { transform: translate(-8%, 10%) scale(1.12); opacity: 1; }
+}
+
+.Dn_Login_HeroInner {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  max-width: 460px;
+  animation: Dn_Login_Rise 0.7s ease both;
+}
+
+@keyframes Dn_Login_Rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.Dn_Login_Brand img {
+  height: 42px;
+  width: auto;
+  display: block;
+  filter: brightness(0) invert(1);
+}
+
+.Dn_Login_Kicker {
+  margin: 2.2rem 0 0.7rem;
+  font-size: 0.75rem;
+  font-weight: 650;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(214, 228, 255, 0.78);
+}
+
+.Dn_Login_Headline {
+  margin: 0;
+  font-family: "Outfit", "Plus Jakarta Sans", system-ui, sans-serif;
+  font-size: clamp(2.1rem, 4vw, 3rem);
+  font-weight: 700;
+  line-height: 1.12;
+  letter-spacing: -0.03em;
+}
+
+.Dn_Login_Headline em {
+  font-style: italic;
+  font-weight: 600;
+  color: #c5d8ff;
+}
+
+.Dn_Login_Lead {
+  margin: 1.1rem 0 0;
+  font-size: 1.02rem;
+  line-height: 1.55;
+  color: rgba(236, 243, 255, 0.84);
+  max-width: 36ch;
+}
+
+.Dn_Login_Panel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(1.5rem, 4vw, 3rem);
+  background:
+    radial-gradient(700px 400px at 90% 10%, rgba(44, 107, 243, 0.1), transparent 55%),
+    #f4f6fb;
+}
+
+.Dn_Login_Card {
+  width: min(420px, 100%);
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 20px;
+  padding: 2rem 1.85rem 1.7rem;
+  box-shadow: 0 24px 60px rgba(2, 31, 129, 0.1);
+  animation: Dn_Login_Rise 0.75s ease 0.08s both;
+}
+
+.Dn_Login_MobileBrand {
+  display: none;
+  margin: 0 0 1rem;
+}
+
+.Dn_Login_MobileBrand img {
+  height: 36px;
+  width: auto;
+}
+
+.Dn_Login_Card h2 {
+  margin: 0;
+  font-family: "Outfit", "Plus Jakarta Sans", system-ui, sans-serif;
+  font-size: 1.75rem;
+  color: #021f81;
+  letter-spacing: -0.02em;
+}
+
+.Dn_Login_Muted {
+  margin: 0.4rem 0 1.4rem;
+  color: #64748b;
+  font-size: 0.95rem;
+}
+
+.Dn_Login_Muted a {
+  color: #021f81;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.Dn_Login_Muted a:hover {
+  text-decoration: underline;
+}
+
+.Dn_Login_Form {
+  display: grid;
+  gap: 0.95rem;
+}
+
+.Dn_Login_Form label {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.Dn_Login_Form label span {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #334155;
+}
+
+.Dn_Login_Form input {
+  width: 100%;
+  padding: 0.78rem 0.9rem;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  font: inherit;
+  font-size: 0.98rem;
+  color: #0f172a;
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+}
+
+.Dn_Login_Form input:focus {
+  outline: none;
+  border-color: #2c6bf3;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(44, 107, 243, 0.16);
+}
+
+.Dn_Login_Btn {
+  margin-top: 0.25rem;
+  width: 100%;
+  padding: 0.9rem 1rem;
+  border: none;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #2c6bf3 0%, #021f81 100%);
+  color: #fff;
+  font: inherit;
+  font-size: 0.98rem;
+  font-weight: 650;
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s, filter 0.15s;
+  box-shadow: 0 10px 24px rgba(2, 31, 129, 0.28);
+}
+
+.Dn_Login_Btn:hover {
+  filter: brightness(1.06);
+  transform: translateY(-1px);
+}
+
+.Dn_Login_Btn:disabled {
+  opacity: 0.7;
+  cursor: wait;
+  transform: none;
+}
+
+.Dn_Login_Btn--ghost {
+  margin-top: 0.15rem;
+  background: #fff;
+  color: #021f81;
+  border: 1px solid rgba(2, 31, 129, 0.28);
+  box-shadow: none;
+}
+
+.Dn_Login_Btn--ghost:hover {
+  filter: none;
+  background: #e8f0ff;
+}
+
+.Dn_Login_Forgot {
+  margin: -0.25rem 0 0;
+  text-align: right;
+  font-size: 0.86rem;
+}
+
+.Dn_Login_Forgot a {
+  color: #021f81;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.Dn_Login_Forgot a:hover {
+  text-decoration: underline;
+}
+
+.Dn_Login_Msg {
+  margin: 0;
+  padding: 0.65rem 0.8rem;
+  border-radius: 10px;
+  font-size: 0.88rem;
+}
+
+.Dn_Login_Msg.is-error {
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+}
+
+.Dn_Login_Msg.is-ok {
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
+}
+
+.Dn_Login_Msg a {
+  color: #021f81;
+  font-weight: 600;
+}
+
+.Dn_Login_Foot {
+  margin: 1.35rem 0 0;
+  text-align: center;
+  font-size: 0.88rem;
+  color: #64748b;
+}
+
+.Dn_Login_Foot a {
+  color: #021f81;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.Dn_Login_Foot a:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 900px) {
+  .Dn_Login_Stage {
+    grid-template-columns: 1fr;
+  }
+
+  .Dn_Login_Hero {
+    min-height: 240px;
+    padding: 1.5rem 1.35rem 1.8rem;
+  }
+
+  .Dn_Login_Headline {
+    font-size: 1.85rem;
+  }
+
+  .Dn_Login_Lead {
+    display: none;
+  }
+
+  .Dn_Login_MobileBrand {
+    display: block;
+  }
+
+  .Dn_Login_Panel {
+    padding: 1.25rem;
+    align-items: flex-start;
+  }
+}
