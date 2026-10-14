@@ -1566,7 +1566,7 @@ def manutencao_tenant_editar():
 def manutencao_tenant_dados():
     if (r := _exigir_dev()) is not None:
         return r
-    q = (request.args.get("q") or "").strip()
+        q = (request.args.get("q") or "").strip()
     tipo = (request.args.get("tipo") or "").strip().lower()
     ativo = (request.args.get("ativo") or "").strip().lower()
     conn = Var_ConectarBanco()
@@ -1575,12 +1575,52 @@ def manutencao_tenant_dados():
         where = ["TRUE"]
         params: list = []
         if q:
-            where.append(
-                "(t.nome ILIKE %s OR t.slug ILIKE %s OR COALESCE(t.documento,'') ILIKE %s "
-                "OR CAST(t.id AS TEXT) = %s)"
-            )
             like = f"%{q}%"
-            params.extend([like, like, like, q])
+            digitos = "".join(ch for ch in q if ch.isdigit())
+            partes = [
+                "t.nome ILIKE %s",
+                "t.slug ILIKE %s",
+                "COALESCE(t.documento,'') ILIKE %s",
+                "CAST(t.id AS TEXT) = %s",
+                "COALESCE(t.email_comercial,'') ILIKE %s",
+                "COALESCE(t.telefone_comercial,'') ILIKE %s",
+                "COALESCE(t.celular_comercial,'') ILIKE %s",
+                """EXISTS (
+                    SELECT 1
+                    FROM tbl_usuario_tenant ut
+                    JOIN tbl_usuario u ON u.id = ut.id_usuario
+                    WHERE ut.id_tenant = t.id
+                      AND (
+                        COALESCE(u.email, '') ILIKE %s
+                        OR COALESCE(u.whatsapp, '') ILIKE %s
+                      )
+                )""",
+                """EXISTS (
+                    SELECT 1 FROM tbl_tenant_cobranca tc
+                    WHERE tc.id_tenant = t.id
+                      AND COALESCE(tc.email_cobranca, '') ILIKE %s
+                )""",
+            ]
+            params.extend([like, like, like, q, like, like, like, like, like, like])
+            if len(digitos) >= 8:
+                dlike = f"%{digitos}%"
+                partes.append(
+                    "regexp_replace(COALESCE(t.telefone_comercial, ''), '\\D', '', 'g') LIKE %s"
+                )
+                partes.append(
+                    "regexp_replace(COALESCE(t.celular_comercial, ''), '\\D', '', 'g') LIKE %s"
+                )
+                partes.append(
+                    """EXISTS (
+                        SELECT 1
+                        FROM tbl_usuario_tenant ut
+                        JOIN tbl_usuario u ON u.id = ut.id_usuario
+                        WHERE ut.id_tenant = t.id
+                          AND regexp_replace(COALESCE(u.whatsapp, ''), '\\D', '', 'g') LIKE %s
+                    )"""
+                )
+                params.extend([dlike, dlike, dlike])
+            where.append("(" + " OR ".join(partes) + ")")
         if tipo in _TIPOS_NEGOCIO_OK:
             where.append("t.tipo_negocio = %s")
             params.append(tipo)
