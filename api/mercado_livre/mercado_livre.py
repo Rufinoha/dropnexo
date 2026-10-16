@@ -1062,18 +1062,44 @@ def _texto_plano_ml(texto: str | None) -> str:
 def _caminhos_galeria_ml(
     cur,
     *,
+    id_tenant: int,
     id_produto: int,
     id_variante: int,
     imagem_fallback: str = "",
 ) -> list[str]:
-    from api.bling.imagens_export import coletar_caminhos_galeria_export
+    """Fotos de Meus produtos, na ordem da vitrine.
 
-    return coletar_caminhos_galeria_export(
-        cur,
-        id_produto=int(id_produto),
-        id_variante=int(id_variante),
-        imagem_fallback=imagem_fallback or "",
-    )
+    Se o vendedor personalizou uma ou todas, vale só essa galeria.
+    Se nunca mexeu, a lista já é a do fornecedor — a mesma que a tela mostra.
+    """
+    try:
+        from vendedor.meus_produtos.servico_meus_produtos import listar_imagens_vitrine
+
+        imgs, _ = listar_imagens_vitrine(cur, int(id_tenant), int(id_produto))
+    except Exception:
+        _log.warning(
+            "Galeria da vitrine indisponível no produto %s — usando galeria do cadastro.",
+            id_produto,
+            exc_info=True,
+        )
+        from api.bling.imagens_export import coletar_caminhos_galeria_export
+
+        return coletar_caminhos_galeria_export(
+            cur,
+            id_produto=int(id_produto),
+            id_variante=int(id_variante),
+            imagem_fallback=imagem_fallback or "",
+        )
+
+    caminhos: list[str] = []
+    for img in imgs or []:
+        c = (img.get("caminho") or "").strip()
+        if c and c not in caminhos:
+            caminhos.append(c)
+    if caminhos:
+        return caminhos
+    fb = (imagem_fallback or "").strip()
+    return [fb] if fb else []
 
 
 def _upload_picture_ml(cur, id_tenant: int, arquivo: Path) -> str | None:
@@ -1126,6 +1152,7 @@ def _coletar_pictures_ml(
     vistos: set[str] = set()
     for caminho in _caminhos_galeria_ml(
         cur,
+        id_tenant=int(id_tenant),
         id_produto=int(id_produto),
         id_variante=int(id_variante),
         imagem_fallback=imagem_fallback or "",
@@ -1318,8 +1345,23 @@ def _atualizar_anuncio_completo_ml(
                 json_body={"title": titulo_limpo},
             )
         except RuntimeError as e:
-            # User Products / moderação pode bloquear alteração de título.
-            _log.info("Título ML não atualizado em %s: %s", ml_item_id, e)
+            # Conta User Products não aceita title; o nome visível é family_name.
+            fam = _family_name_ml(titulo_limpo, "", "")
+            try:
+                api_request(
+                    cur,
+                    id_tenant,
+                    "PUT",
+                    f"/items/{ml_item_id}",
+                    json_body={"family_name": fam},
+                )
+            except RuntimeError as e2:
+                _log.info(
+                    "Título ML não atualizado em %s: %s | family_name: %s",
+                    ml_item_id,
+                    e,
+                    e2,
+                )
 
     texto = _texto_plano_ml(descricao)
     if texto:
@@ -2958,10 +3000,12 @@ def _criar_anuncio_ml(
         attrs_variacao_dn=attrs_variacao_dn or {},
     )
 
-    # Nome do anúncio = nome do produto (pai agrupa variações no modo UP).
-    familia_base = (nome_pai or titulo or "").strip()
-    titulo_anuncio = _normalizar_titulo_ml(familia_base or titulo, max_len=60)
-    family_name = _family_name_ml(familia_base, marca, familia_map)
+    # Nome do anúncio = título gravado em Meus produtos. O nome do fornecedor
+    # só entra se a vitrine estiver vazia. A marca segue como atributo, sem
+    # ser colada na frente do texto que o vendedor escreveu.
+    familia_base = (titulo or nome_pai or familia_map or "").strip()
+    titulo_anuncio = _normalizar_titulo_ml(familia_base or "Produto", max_len=60)
+    family_name = _family_name_ml(familia_base, "", "")
     usa_up = _seller_usa_user_products_ml(cur, id_tenant, ml_user_id, site_id)
 
     payload: dict[str, Any] = {
