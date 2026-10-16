@@ -1144,6 +1144,11 @@ def limpar_galeria_vitrine(cur, id_tenant_vendedor: int, id_produto: int) -> Non
     )
 
 
+def _caminho_vitrine_eh_url(caminho: str | None) -> bool:
+    c = (caminho or "").strip().lower()
+    return c.startswith("http://") or c.startswith("https://")
+
+
 def _dict_imagem_vitrine(
     *,
     id_img,
@@ -1154,15 +1159,19 @@ def _dict_imagem_vitrine(
     id_imagem_fornecedor=None,
 ) -> dict:
     cam = caminho or ""
+    ext = ""
+    if cam and not _caminho_vitrine_eh_url(cam):
+        ext = cam.rsplit(".", 1)[-1].lower() if "." in cam else ""
     return {
         "id": id_img,
         "caminho": cam,
-        "url": url_imagem_produto(cam) if cam and not cam.lower().startswith(("http://", "https://")) else cam,
+        "url": url_imagem_produto(cam) if cam and not _caminho_vitrine_eh_url(cam) else cam,
         "ordem": int(ordem or 0),
         "principal": bool(principal),
         "origem": origem or "fornecedor",
         "fonte": "fornecedor" if (origem or "").startswith("fornecedor") else "vendedor",
         "id_imagem_fornecedor": id_imagem_fornecedor,
+        "extensao": ext,
     }
 
 
@@ -1287,6 +1296,175 @@ def sincronizar_principal_vitrine(cur, id_tenant_vendedor: int, id_produto: int)
 def contar_imagens_vitrine(cur, id_tenant_vendedor: int, id_produto: int) -> int:
     imgs, _ = listar_imagens_vitrine(cur, id_tenant_vendedor, id_produto)
     return len(imgs)
+
+
+_MAX_BYTES_VITRINE = 2 * 1024 * 1024
+
+
+def _jpg_de_url_vitrine(url: str) -> bytes:
+    """Baixa o link e devolve JPEG pronto para gravar na conta do vendedor."""
+    from api.bling.imagens_export import normalizar_para_jpg
+    from fornecedor.catalogo.catalogo import proxy_bytes_imagem_remota, resolver_url_imagem_link
+
+    resolvida = resolver_url_imagem_link(url)
+    final = (resolvida.get("url") or "").strip()
+    if not final:
+        raise ValueError("URL de imagem inválida.")
+    data, _ct = proxy_bytes_imagem_remota(final)
+    if not data:
+        raise ValueError("Imagem remota vazia.")
+    jpg, _meta = normalizar_para_jpg(data, bloquear_pequena=True)
+    if len(jpg) > _MAX_BYTES_VITRINE:
+        raise ValueError("Imagem deve ter no máximo 2 MB.")
+    return jpg
+
+
+def _gravar_jpg_vitrine(
+    cur,
+    id_tenant_vendedor: int,
+    id_produto: int,
+    id_imagem: int,
+    jpg: bytes,
+) -> str:
+    from fornecedor.catalogo.catalogo import (
+        caminho_db_imagem_tenant,
+        gerar_thumb_imagem_local,
+        pasta_imagens_tenant,
+    )
+    from sistema.planos.armazenamento import exigir_capacidade_armazenamento
+
+    if len(jpg) > _MAX_BYTES_VITRINE:
+        raise ValueError("Imagem deve ter no máximo 2 MB.")
+    exigir_capacidade_armazenamento(
+        cur, int(id_tenant_vendedor), bytes_novos=len(jpg), papel="vendedor"
+    )
+    nome = f"vitrine_{int(id_produto)}_{int(id_imagem)}.jpg"
+    destino = pasta_imagens_tenant(id_tenant_vendedor) / nome
+    destino.write_bytes(jpg)
+    caminho_db = caminho_db_imagem_tenant(id_tenant_vendedor, nome)
+    try:
+        gerar_thumb_imagem_local(caminho_db)
+    except Exception:
+        pass
+    return caminho_db
+
+
+def materializar_urls_vitrine(cur, id_tenant_vendedor: int, id_produto: int) -> tuple[int, list[str]]:
+    """Troca links http(s) da vitrine por arquivo local. Uma falha não apaga as outras."""
+    garantir_tabela_produto_vendedor_imagem(cur)
+    if not galeria_vitrine_personalizada(cur, id_tenant_vendedor, id_produto):
+        return 0, []
+    cur.execute(
+        """
+        SELECT id, caminho
+        FROM tbl_produto_vendedor_imagem
+        WHERE id_tenant_vendedor = %s AND id_produto = %s
+        ORDER BY ordem ASC, id ASC
+        """,
+        (id_tenant_vendedor, id_produto),
+    )
+    convertidas = 0
+    falhas: list[str] = []
+    for id_img, caminho in cur.fetchall():
+        cam = (caminho or "").strip()
+        if not _caminho_vitrine_eh_url(cam):
+            continue
+        try:
+            jpg = _jpg_de_url_vitrine(cam)
+            novo = _gravar_jpg_vitrine(
+                cur, id_tenant_vendedor, id_produto, int(id_img), jpg
+            )
+        except ValueError as e:
+            falhas.append(str(e))
+            continue
+        except Exception:
+            falhas.append("Não foi possível baixar uma das imagens.")
+            continue
+        cur.execute(
+            """
+            UPDATE tbl_produto_vendedor_imagem
+            SET caminho = %s, origem = 'vendedor_upload'
+            WHERE id = %s AND id_tenant_vendedor = %s AND id_produto = %s
+            """,
+            (novo, int(id_img), id_tenant_vendedor, id_produto),
+        )
+        convertidas += 1
+    if convertidas:
+        sincronizar_principal_vitrine(cur, id_tenant_vendedor, id_produto)
+    return convertidas, falhas
+
+
+def adicionar_imagem_vitrine_de_url(
+    cur,
+    id_tenant_vendedor: int,
+    id_produto: int,
+    url: str,
+) -> dict:
+    """Baixa a URL e grava o arquivo na vitrine. O link externo não fica salvo."""
+    from fornecedor.catalogo.catalogo import descartar_arquivos_imagem_locais
+
+    materializar_galeria_vitrine(cur, id_tenant_vendedor, id_produto)
+    if contar_imagens_vitrine(cur, id_tenant_vendedor, id_produto) >= MAX_IMAGENS_VITRINE:
+        raise ValueError(f"Máximo de {MAX_IMAGENS_VITRINE} imagens por produto.")
+    cur.execute(
+        """
+        SELECT COALESCE(MAX(ordem), -1) + 1
+        FROM tbl_produto_vendedor_imagem
+        WHERE id_tenant_vendedor = %s AND id_produto = %s
+        """,
+        (id_tenant_vendedor, id_produto),
+    )
+    ordem = int(cur.fetchone()[0] or 0)
+    cur.execute(
+        """
+        INSERT INTO tbl_produto_vendedor_imagem (
+            id_tenant_vendedor, id_produto, caminho, ordem, principal, origem
+        ) VALUES (%s, %s, '', %s, %s, 'vendedor_upload')
+        RETURNING id
+        """,
+        (id_tenant_vendedor, id_produto, ordem, ordem == 0),
+    )
+    id_img = int(cur.fetchone()[0])
+    caminho_db = ""
+    try:
+        jpg = _jpg_de_url_vitrine(url)
+        caminho_db = _gravar_jpg_vitrine(
+            cur, id_tenant_vendedor, id_produto, id_img, jpg
+        )
+        cur.execute(
+            """
+            UPDATE tbl_produto_vendedor_imagem
+            SET caminho = %s
+            WHERE id = %s
+            """,
+            (caminho_db, id_img),
+        )
+    except Exception:
+        if caminho_db:
+            descartar_arquivos_imagem_locais([caminho_db])
+        cur.execute(
+            "DELETE FROM tbl_produto_vendedor_imagem WHERE id = %s",
+            (id_img,),
+        )
+        raise
+    sincronizar_principal_vitrine(cur, id_tenant_vendedor, id_produto)
+    cur.execute(
+        """
+        SELECT id, caminho, ordem, principal, origem, id_imagem_fornecedor
+        FROM tbl_produto_vendedor_imagem
+        WHERE id = %s
+        """,
+        (id_img,),
+    )
+    r = cur.fetchone()
+    return _dict_imagem_vitrine(
+        id_img=int(r[0]),
+        caminho=r[1] or "",
+        ordem=int(r[2] or 0),
+        principal=bool(r[3]),
+        origem=r[4] or "vendedor_upload",
+        id_imagem_fornecedor=int(r[5]) if r[5] else None,
+    )
 
 
 def adicionar_imagem_vitrine(

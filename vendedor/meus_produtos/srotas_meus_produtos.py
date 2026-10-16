@@ -53,6 +53,8 @@ from vendedor.meus_produtos.servico_meus_produtos import buscar_produtos_proprio
 from vendedor.meus_produtos.servico_meus_produtos import (
     CAMPOS_READONLY_INTEGRADO,
     adicionar_imagem_vitrine,
+    adicionar_imagem_vitrine_de_url,
+    materializar_urls_vitrine,
     avaliar_pausa_variante,
     estoque_efetivo,
     estoque_real_variante,
@@ -1721,6 +1723,13 @@ def imagens_lista_vitrine():
             return jsonify(success=False, message="Produto não está na sua vitrine."), 404
 
         if ctx["integrado"]:
+            avisos: list[str] = []
+            try:
+                _n, avisos = materializar_urls_vitrine(cur, id_tenant, id_produto)
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                avisos = []
             imagens, personalizada = listar_imagens_vitrine(cur, id_tenant, id_produto)
             modo = None
             if imagens:
@@ -1738,6 +1747,7 @@ def imagens_lista_vitrine():
                 personalizada=personalizada,
                 imagem_modo=modo,
                 regras_atributo=[],
+                avisos=avisos,
             )
 
         imagens = listar_imagens_galeria_pai(cur, id_produto)
@@ -1806,14 +1816,6 @@ def imagens_link_vitrine():
     if not url.lower().startswith(("http://", "https://")):
         return jsonify(success=False, message="URL inválida."), 400
 
-    try:
-        from fornecedor.catalogo.catalogo import resolver_url_imagem_link
-
-        resolvida = resolver_url_imagem_link(url)
-        url = resolvida["url"]
-    except ValueError as e:
-        return jsonify(success=False, message=str(e)), 400
-
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
@@ -1822,18 +1824,13 @@ def imagens_link_vitrine():
             return jsonify(success=False, message="Produto não está na sua vitrine."), 404
         if not ctx["integrado"]:
             return jsonify(success=False, message="Use o cadastro próprio para imagens."), 400
-        img = adicionar_imagem_vitrine(
-            cur, id_tenant, id_produto, caminho=url, origem="vendedor_url"
-        )
+        img = adicionar_imagem_vitrine_de_url(cur, id_tenant, id_produto, url)
         conn.commit()
-        msg = "Imagem incluída na vitrine."
-        if resolvida.get("convertida"):
-            msg = resolvida.get("aviso") or "Imagem incluída (link convertido para direto)."
         return jsonify(
             success=True,
-            message=msg,
+            message="Imagem baixada e salva no DropNexo.",
             imagem=img,
-            convertida=bool(resolvida.get("convertida")),
+            convertida=True,
         )
     except ValueError as e:
         conn.rollback()

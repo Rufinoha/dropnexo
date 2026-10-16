@@ -1349,13 +1349,13 @@
       <td class="Cat_ColImg">${thumb(l.imagem_url)}</td>
       <td class="Cat_ColNome">${nomeCell}</td>
       <td class="Cat_ColSku">${escapeHtml(l.sku || "—")}</td>
-      <td>${escapeHtml(l.unidade || "UN")}</td>
+      <td class="Cat_ColUm">${escapeHtml(l.unidade || "UN")}</td>
       <td class="Cat_ColCategoria">${renderCategoriaCell(l)}</td>
-      <td class="Cat_Preco">${preco}</td>
+      <td class="Cat_Preco Cat_ColPreco">${preco}</td>
       <td class="Cat_ColEstoque">${renderEstoque(l)}</td>
       <td class="Cat_ColIntegracoes">${renderIntegracoesCell(l)}</td>
       <td class="Cat_ColRessalvas">${renderRessalvasCell(l)}</td>
-      <td class="Cl_TableActions">${acoes}</td>
+      <td class="Cl_TableActions Cat_ColAcoes">${acoes}</td>
     </tr>`;
   }
 

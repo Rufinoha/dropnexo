@@ -1,5 +1,54 @@
+/* A tabela é fixed e ocupa 100%. Sem largura, Preço…Ações dividiam o espaço
+   que sobra e Ações ficava tão larga quanto o nome. O nome fica com o resto. */
+#content-area-Principal .Cat_ColProduto {
+  width: 100%;
+}
+
+#content-area-Principal .Cat_ColSku {
+  width: 4.6rem;
+}
+
+#content-area-Principal .Cat_ColUm {
+  width: 2.5rem;
+  text-align: center;
+}
+
+#content-area-Principal .Cat_ColCategoria {
+  width: 7rem;
+}
+
+#content-area-Principal .Cat_ColPreco,
+#content-area-Principal .Cat_ColEstoque,
+#content-area-Principal .Cat_ColIntegracoes,
+#content-area-Principal .Cat_ColRessalvas,
+#content-area-Principal .Cat_ColAcoes {
+  width: 6.5rem;
+  max-width: 6.5rem;
+  text-align: center;
+  padding-left: 2px;
+  padding-right: 2px;
+  box-sizing: border-box;
+}
+
+#content-area-Principal th.Cat_ColPreco,
+#content-area-Principal th.Cat_ColEstoque,
+#content-area-Principal th.Cat_ColIntegracoes,
+#content-area-Principal th.Cat_ColRessalvas,
+#content-area-Principal th.Cat_ColAcoes {
+  font-size: 12px;
+  letter-spacing: -0.01em;
+}
+
+#content-area-Principal .Cat_ColPreco {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+#content-area-Principal .Cat_ColAcoes {
+  overflow: visible;
+}
+
 .Cat_ColIntegracoes {
-  width: 5.5rem;
   text-align: center;
   white-space: nowrap;
 }
@@ -26,7 +75,6 @@
 }
 
 .Cat_ColRessalvas {
-  width: 5.5rem;
   text-align: center;
 }
 

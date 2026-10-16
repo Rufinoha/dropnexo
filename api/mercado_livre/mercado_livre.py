@@ -881,10 +881,15 @@ def _traduzir_causa_ml(code: str, message: str) -> str:
             "O Mercado Livre rejeitou o nome do anúncio. "
             "Ajuste o título em Meus produtos e confira se a categoria está mapeada."
         )
-    if any(p in low for p in ("picture", "pictures", "imagem")):
+    if "picture" in code_l or "pictures" in code_l or "picture" in low or "pictures" in low:
+        detalhe = (msg or "").strip()
+        if detalhe and detalhe.lower() not in (code_l, "validation_error") and len(detalhe) > 12:
+            if len(detalhe) > 280:
+                detalhe = detalhe[:277] + "…"
+            return f"O Mercado Livre não aceitou a foto. {detalhe}"
         return (
             "O Mercado Livre não aceitou a foto. "
-            "Em Meus produtos, use uma imagem que abra direto (arquivo .jpg ou .png), sem página de login."
+            "Ela precisa estar salva no DropNexo. Abra Imagens em Meus produtos e confira a foto."
         )
     if "description" in low and any(p in low for p in ("plain", "html", "type.invalid")):
         return (
@@ -1229,6 +1234,11 @@ def _upload_picture_ml(cur, id_tenant: int, arquivo: Path) -> str | None:
     return pid or None
 
 
+def _source_ml_dropnexo(url: str) -> bool:
+    """Link interno assinado. Link de ImgBB e outros hospedeiros não entra."""
+    return "/api/produto-imagem/publico" in (url or "").lower()
+
+
 def _coletar_pictures_ml(
     cur,
     id_tenant: int,
@@ -1239,11 +1249,22 @@ def _coletar_pictures_ml(
 ) -> list[dict[str, str]]:
     """
     Monta pictures do anúncio.
-    1) Normaliza JPG (pipeline compartilhado)
-    2) Prefere upload multipart do cache JPG
-    3) Fallback: source com URL pública assinada
+    1) Links da vitrine viram arquivo no DropNexo
+    2) Normaliza JPG e envia o arquivo ao Mercado Livre
+    3) Se o upload do arquivo falhar, usa o link interno assinado
     """
     from api.bling.imagens_export import caminho_arquivo_cache, preparar_imagem_export
+
+    try:
+        from vendedor.meus_produtos.servico_meus_produtos import materializar_urls_vitrine
+
+        materializar_urls_vitrine(cur, int(id_tenant), int(id_produto))
+    except Exception:
+        _log.warning(
+            "Falha ao guardar fotos da vitrine no produto %s.",
+            id_produto,
+            exc_info=True,
+        )
 
     pictures: list[dict[str, str]] = []
     vistos: set[str] = set()
@@ -1262,6 +1283,8 @@ def _coletar_pictures_ml(
         prep = preparar_imagem_export(caminho)
         if not prep.get("ok"):
             continue
+        if prep.get("fonte") == "remota_passthrough":
+            continue
 
         local = caminho_arquivo_cache(prep.get("cache"))
         if local is not None:
@@ -1273,7 +1296,7 @@ def _coletar_pictures_ml(
                 continue
 
         url = str(prep.get("url") or "").strip()
-        if not url or url in vistos:
+        if not url or url in vistos or not _source_ml_dropnexo(url):
             continue
         vistos.add(url)
         pictures.append({"source": url})
@@ -3158,8 +3181,8 @@ def _criar_anuncio_ml(
     )
     if not pictures and not variations:
         raise RuntimeError(
-            f"«{titulo}»: nenhuma foto disponível para o anúncio no ML "
-            "(verifique a galeria do produto)."
+            f"«{titulo}»: nenhuma foto disponível para o anúncio. "
+            "Abra Imagens em Meus produtos e confira se a foto está salva no DropNexo."
         )
 
     cfg = cfg or {}

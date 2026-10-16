@@ -757,6 +757,14 @@
     regrasAtributo = j.regras_atributo || [];
     // Não força o rádio: link/upload são só forma de incluir (ambos viram arquivo).
     renderGaleria();
+    const avisos = Array.isArray(j.avisos) ? j.avisos.filter(Boolean) : [];
+    if (avisos.length && typeof Swal !== "undefined") {
+      await Swal.fire({
+        icon: "warning",
+        title: "Algumas fotos não foram salvas",
+        text: avisos.join(" "),
+      });
+    }
   }
 
   function setImgBusy(busy, mensagem) {

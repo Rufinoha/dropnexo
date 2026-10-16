@@ -8,7 +8,7 @@
 
 {% block head_extra %}
 <link rel="stylesheet" href="{{ url_for('fn_catalogo.static', filename='style/Ccatalogos.css') }}?v=15" />
-<link rel="stylesheet" href="{{ url_for('vd_meus_produtos.static', filename='style/Cmeus_produtos_ml.css') }}?v=4" />
+<link rel="stylesheet" href="{{ url_for('vd_meus_produtos.static', filename='style/Cmeus_produtos_ml.css') }}?v=5" />
 {% endblock %}
 
 {% block content %}
@@ -91,15 +91,15 @@
             </button>
           </th>
           <th class="Cat_ColImg">Imagem</th>
-          <th>produto</th>
-          <th>SKU</th>
-          <th>UM</th>
-          <th>Categoria</th>
-          <th>Preço venda</th>
-          <th>Estoque</th>
+          <th class="Cat_ColProduto">produto</th>
+          <th class="Cat_ColSku">SKU</th>
+          <th class="Cat_ColUm">UM</th>
+          <th class="Cat_ColCategoria">Categoria</th>
+          <th class="Cat_ColPreco">Preço venda</th>
+          <th class="Cat_ColEstoque">Estoque</th>
           <th class="Cat_ColIntegracoes">Integrações</th>
           <th class="Cat_ColRessalvas">Ressalvas</th>
-          <th class="col-acoes Cl_TableActions">Ações</th>
+          <th class="col-acoes Cl_TableActions Cat_ColAcoes">Ações</th>
         </tr>
         {# Depois do cabeçalho: com table-layout:fixed a 1ª linha define as colunas #}
         <tr class="Cat_BulkHeadRow" id="ob_bulkRow" hidden>
@@ -154,5 +154,5 @@
 {% endblock %}
 
 {% block page_js %}
-<script defer src="{{ url_for('vd_meus_produtos.static', filename='script/Svd_meus_produtos_lista.js') }}?v=17"></script>
+<script defer src="{{ url_for('vd_meus_produtos.static', filename='script/Svd_meus_produtos_lista.js') }}?v=18"></script>
 {% endblock %}
