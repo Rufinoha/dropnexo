@@ -7,6 +7,20 @@ _PROVEDOR = "mercado_livre"
 
 
 def garantir_tabela_ressalva(cur) -> None:
+    """Cria a tabela só se ela ainda não existe.
+
+    Em produção o dono é o postgres, que rodou o SQL. O usuário da aplicação
+    não pode executar CREATE INDEX nessa tabela, mesmo com o índice já criado.
+    """
+    cur.execute(
+        """
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_name = 'tbl_produto_vendedor_ressalva'
+        """
+    )
+    if cur.fetchone():
+        return
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS tbl_produto_vendedor_ressalva (
