@@ -298,7 +298,10 @@ def api_request(
     except requests.RequestException as e:
         raise RuntimeError(f"Falha na API Mercado Livre: {e}") from e
     if r.status_code >= 400:
-        raise RuntimeError(_formatar_erro_ml(r.status_code, r.text))
+        raise ErroMercadoLivre(
+            _formatar_erro_ml(r.status_code, r.text),
+            _mensagens_usuario_ml(r.status_code, r.text),
+        )
     if not r.content:
         return {}
     return r.json()
@@ -818,7 +821,7 @@ def _formatar_erro_ml(status: int, text: str) -> str:
                 if p not in vistos:
                     vistos.add(p)
                     unicos.append(p)
-            return f"Mercado Livre ({status}): " + "; ".join(unicos[:3])
+            return f"Mercado Livre ({status}): " + "; ".join(unicos)
         msg = (data.get("message") or "").strip()
         if msg:
             return f"Mercado Livre ({status}): {msg}"
@@ -827,62 +830,156 @@ def _formatar_erro_ml(status: int, text: str) -> str:
     return f"Mercado Livre API ({status}): {(text or '')[:280]}"
 
 
-def _erro_ml_para_usuario(texto: str) -> str:
-    """Traduz erros técnicos da API ML para mensagens claras."""
-    t = (texto or "").strip()
-    if t.lower().startswith("mercado livre"):
-        partes = t.split(":", 1)
-        if len(partes) > 1:
-            t = partes[1].strip()
-    low = t.lower()
-    if "gtin" in low and ("required" in low or "missing" in low or "conditional" in low):
+class ErroMercadoLivre(RuntimeError):
+    """Falha da API. str() continua técnico (para retry); mensagens é o texto ao vendedor."""
+
+    def __init__(self, tecnico: str, mensagens: list[str] | None = None):
+        super().__init__(tecnico or "Não foi possível publicar este produto no Mercado Livre.")
+        limpas = [m.strip() for m in (mensagens or []) if (m or "").strip()]
+        self.mensagens = limpas or [str(self)]
+
+
+_RE_CAMPO_ML = re.compile(r'campo\s+"([^"]+)"', re.IGNORECASE)
+
+
+def _traduzir_causa_ml(code: str, message: str) -> str:
+    """Uma causa da API vira uma frase com o que fazer. Vazio = ignorar."""
+    code_l = (code or "").strip().lower()
+    msg = (message or "").strip()
+    if msg.lower() == "validation_error" or code_l == "validation_error":
+        return ""
+    low = f"{code_l} {msg}".lower()
+    campo = ""
+    achado = _RE_CAMPO_ML.search(msg)
+    if achado:
+        campo = achado.group(1).strip()
+
+    if "invalid_product_identifier" in code_l or "product_identifier" in low:
         return (
-            "Código GTIN/EAN obrigatório nesta categoria. "
+            "O código de barras não foi aceito. "
+            "O Mercado Livre informa que ele já está em anúncio de outra marca. "
+            "Confira o GTIN e a marca do produto."
+        )
+    if "missing_catalog_required" in code_l or (campo and "obrigat" in low):
+        nome = campo or "um atributo da categoria"
+        return (
+            f"O Mercado Livre exige o campo {nome} nesta categoria. "
+            f"Preencha {nome} e integre de novo."
+        )
+    if "gtin" in low and any(p in low for p in ("required", "missing", "conditional", "obrigat")):
+        return (
+            "O código GTIN/EAN é obrigatório nesta categoria. "
             "Cadastre o código de barras no produto ou informe que ele não possui GTIN."
         )
     if "family_name" in low or "family name" in low:
-        if "length" in low or "caracter" in low:
+        if any(p in low for p in ("length", "caracter", "longo")):
             return (
-                f"Nome da família muito longo (máx. {_ML_FAMILY_NAME_MAX} caracteres). "
-                "Encurte o nome do produto e tente de novo."
+                f"O nome do anúncio passou de {_ML_FAMILY_NAME_MAX} caracteres. "
+                "Encurte o nome em Meus produtos e integre de novo."
             )
         return (
-            "O Mercado Livre rejeitou o nome do anúncio (família/título). "
-            "Confira o nome do produto e se a categoria está mapeada."
+            "O Mercado Livre rejeitou o nome do anúncio. "
+            "Ajuste o título em Meus produtos e confira se a categoria está mapeada."
         )
-    if "properties [title]" in low or (
-        "title" in low and ("contain" in low or "required" in low or "missing" in low)
-    ):
+    if any(p in low for p in ("picture", "pictures", "imagem")):
+        return (
+            "O Mercado Livre não aceitou a foto. "
+            "Em Meus produtos, use uma imagem que abra direto (arquivo .jpg ou .png), sem página de login."
+        )
+    if "description" in low and any(p in low for p in ("plain", "html", "type.invalid")):
+        return (
+            "A descrição tem formatação que o Mercado Livre não aceita. "
+            "Deixe o texto simples em Meus produtos e integre de novo."
+        )
+    if "sale_term" in low or "warranty" in low or "garantia" in low:
+        return (
+            "A garantia não foi aceita. "
+            "Confira o tipo e o prazo e integre de novo."
+        )
+    if "video" in low or "youtube" in low:
+        return (
+            "O vídeo não foi aceito. "
+            "Confira o link do YouTube e integre de novo."
+        )
+    if "price" in low or "preço" in low or "preco" in low:
+        return (
+            "O preço de venda não foi aceito. "
+            "Confira se ele está acima do mínimo do Mercado Livre e integre de novo."
+        )
+    if "category" in low or "categoria" in low:
+        return (
+            "A categoria não foi aceita. "
+            "Associe uma categoria ao produto e mapeie em Integrações → Mercado Livre."
+        )
+    if "title" in low and any(p in low for p in ("contain", "required", "missing", "properties")):
         return (
             "O Mercado Livre exigiu o título do anúncio. "
-            "Tente exportar de novo; se persistir, reconecte a conta ML."
+            "Confira o nome em Meus produtos e integre de novo."
         )
-    if "description.type.invalid" in low or (
-        "description" in low and "plain text" in low
-    ):
-        return (
-            "A descrição do produto ainda tem formatação/HTML que o Mercado Livre não aceita. "
-            "Reexporte após a correção automática, ou edite a descrição em texto simples."
-        )
-    if "imagem" in low or "pictures" in low or "picture" in low:
-        return "Foto pública obrigatória. Adicione uma imagem ao produto antes de publicar."
-    if "preço" in low or "price" in low:
-        return "Preço de venda inválido ou abaixo do mínimo permitido pelo Mercado Livre."
-    if "categoria" in low or "category" in low:
-        return "Categoria não configurada. Associe ao produto e mapeie em Integrações → Mercado Livre."
-    if (
-        "mapeie" in low
-        or "mapear categorias" in low
-        or "associe uma categoria" in low
-        or "ainda não está mapeada" in low
-    ):
-        return t
-    if "validation_error" in low:
-        # remove ruído técnico
-        t = t.replace("validation_error;", "").replace("validation_error", "").strip(" ;")
-    if len(t) > 220:
-        t = t[:217] + "…"
-    return t or "Não foi possível publicar este produto no Mercado Livre."
+    return msg
+
+
+def _mensagens_usuario_ml(status: int, text: str) -> list[str]:
+    """Todas as causas da resposta, cada uma em frase própria."""
+    try:
+        data = json.loads(text) if text else {}
+    except (TypeError, ValueError, json.JSONDecodeError):
+        data = {}
+    if not isinstance(data, dict):
+        bruto = (text or "").strip()
+        return [bruto[:500]] if bruto else [
+            "Não foi possível publicar este produto no Mercado Livre."
+        ]
+    causas = data.get("cause") or []
+    if not isinstance(causas, list):
+        causas = [causas] if causas else []
+    msgs: list[str] = []
+    for causa in causas:
+        if isinstance(causa, str):
+            texto = _traduzir_causa_ml("", causa)
+        elif isinstance(causa, dict):
+            texto = _traduzir_causa_ml(
+                str(causa.get("code") or ""),
+                str(causa.get("message") or ""),
+            )
+        else:
+            continue
+        if texto and texto not in msgs:
+            msgs.append(texto)
+    if msgs:
+        return msgs
+    msg = str(data.get("message") or data.get("error") or "").strip()
+    if msg and msg.lower() != "validation_error":
+        texto = _traduzir_causa_ml("", msg)
+        if texto:
+            return [texto]
+    return ["Não foi possível publicar este produto no Mercado Livre."]
+
+
+def _erro_ml_para_usuario(erro) -> str:
+    """Texto ao vendedor. Cada causa em uma linha. Não troca o pacote inteiro por uma frase só."""
+    if isinstance(erro, ErroMercadoLivre):
+        return "\n".join(erro.mensagens)
+    texto = str(erro or "").strip()
+    if not texto:
+        return "Não foi possível publicar este produto no Mercado Livre."
+    if len(texto) > 1200:
+        texto = texto[:1197] + "…"
+    return texto
+
+
+def _publicacao_com_ressalvas(mensagem: str, ressalvas: list | None) -> tuple[str, list[str]]:
+    textos: list[str] = []
+    for item in ressalvas or []:
+        if isinstance(item, dict):
+            msg = str(item.get("mensagem") or "").strip()
+        else:
+            msg = str(item or "").strip()
+        if msg and msg not in textos:
+            textos.append(msg)
+    if not textos:
+        return mensagem, []
+    return mensagem.rstrip() + "\n" + "\n".join(textos), textos
 
 
 def _titulo_exibicao_ml(titulo: str, sku: str) -> str:
@@ -1244,8 +1341,8 @@ def _atualizar_anuncio_completo_ml(
     preco_custo: float | None = None,
     peso_liquido_kg: float | None = None,
     peso_bruto_kg: float | None = None,
-) -> None:
-    """Atualiza anúncio já vinculado: preço, estoque, fotos, descrição, attrs, garantia e vídeo."""
+) -> list[dict]:
+    """Atualiza anúncio já vinculado. Devolve ressalvas do que ficou de fora."""
     from api.mercado_livre.eco_estoque import registrar_eco_ml_pendente
 
     ml_item_id = (ml_item_id or "").strip()
@@ -1308,9 +1405,14 @@ def _atualizar_anuncio_completo_ml(
         quantidade_esperada=max(0, int(estoque or 0)),
         origem="dropnexo_export",
     )
+    ressalvas: list[dict] = []
+    resolvidas: set[str] = set()
+    garantia_recusada = False
     if payload:
         try:
             api_request(cur, id_tenant, "PUT", f"/items/{ml_item_id}", json_body=payload)
+            if payload.get("sale_terms") or not (gar_tipo or gar_tempo):
+                resolvidas.add("garantia")
         except RuntimeError as e:
             msg = str(e).lower()
             if payload.get("sale_terms") and (
@@ -1318,8 +1420,21 @@ def _atualizar_anuncio_completo_ml(
             ):
                 payload.pop("sale_terms", None)
                 api_request(cur, id_tenant, "PUT", f"/items/{ml_item_id}", json_body=payload)
+                garantia_recusada = True
             else:
                 raise
+    elif not (gar_tipo or gar_tempo):
+        resolvidas.add("garantia")
+    if garantia_recusada:
+        ressalvas.append(
+            {
+                "codigo": "garantia",
+                "mensagem": (
+                    "A garantia não entrou nesta atualização. "
+                    "O Mercado Livre recusou esse dado. Confira o tipo e o prazo e integre de novo."
+                ),
+            }
+        )
 
     video_id = _extrair_youtube_id_ml(video_youtube)
     if video_id:
@@ -1331,8 +1446,21 @@ def _atualizar_anuncio_completo_ml(
                 f"/items/{ml_item_id}",
                 json_body={"video_id": video_id},
             )
+            resolvidas.add("video")
         except RuntimeError as e:
             _log.info("Vídeo ML não atualizado em %s: %s", ml_item_id, e)
+            ressalvas.append(
+                {
+                    "codigo": "video",
+                    "mensagem": (
+                        "O vídeo não foi atualizado. "
+                        f"{_erro_ml_para_usuario(e)} "
+                        "Confira o link do YouTube e integre de novo."
+                    ),
+                }
+            )
+    else:
+        resolvidas.add("video")
 
     titulo_limpo = _normalizar_titulo_ml(titulo or "", max_len=60)
     if titulo_limpo and titulo_limpo != "Produto":
@@ -1344,8 +1472,8 @@ def _atualizar_anuncio_completo_ml(
                 f"/items/{ml_item_id}",
                 json_body={"title": titulo_limpo},
             )
+            resolvidas.add("titulo")
         except RuntimeError as e:
-            # Conta User Products não aceita title; o nome visível é family_name.
             fam = _family_name_ml(titulo_limpo, "", "")
             try:
                 api_request(
@@ -1355,6 +1483,7 @@ def _atualizar_anuncio_completo_ml(
                     f"/items/{ml_item_id}",
                     json_body={"family_name": fam},
                 )
+                resolvidas.add("titulo")
             except RuntimeError as e2:
                 _log.info(
                     "Título ML não atualizado em %s: %s | family_name: %s",
@@ -1362,12 +1491,38 @@ def _atualizar_anuncio_completo_ml(
                     e,
                     e2,
                 )
+                ressalvas.append(
+                    {
+                        "codigo": "titulo",
+                        "mensagem": (
+                            "O título não foi atualizado no Mercado Livre. "
+                            f"{_erro_ml_para_usuario(e2)} "
+                            "Ajuste o nome em Meus produtos e integre de novo."
+                        ),
+                    }
+                )
+    else:
+        resolvidas.add("titulo")
 
     texto = _texto_plano_ml(descricao)
     if texto:
-        _enviar_descricao_ml(cur, id_tenant, ml_item_id, texto)
+        try:
+            _enviar_descricao_ml(cur, id_tenant, ml_item_id, texto)
+            resolvidas.add("descricao")
+        except RuntimeError as e:
+            _log.info("Descrição ML não atualizada em %s: %s", ml_item_id, e)
+            ressalvas.append(
+                {
+                    "codigo": "descricao",
+                    "mensagem": (
+                        "A descrição não foi atualizada. "
+                        f"{_erro_ml_para_usuario(e)} "
+                        "Ajuste o texto em Meus produtos e integre de novo."
+                    ),
+                }
+            )
     else:
-        _log.info("ML item %s: descrição vazia no DropNexo — não enviada.", ml_item_id)
+        resolvidas.add("descricao")
 
     _salvar_map_produto_ml(
         cur, id_tenant, int(id_variante), int(id_produto), sku or "", ml_item_id
@@ -1391,13 +1546,44 @@ def _atualizar_anuncio_completo_ml(
                 peso_liquido_kg=peso_liquido_kg or peso_kg,
                 peso_bruto_kg=peso_bruto_kg or peso_kg,
             )
+            resolvidas.update(("fiscal", "ncm"))
         except RuntimeError as e:
             _log.warning("Dados fiscais ML não enviados para %s: %s", ml_item_id, e)
-            raise RuntimeError(
-                f"Anúncio atualizado, mas dados fiscais (NCM/CEST/origem) falharam: "
-                f"{_erro_ml_para_usuario(str(e)[:300])}. "
-                "Confira a aba Tributação e sincronize novamente."
-            ) from e
+            ressalvas.append(
+                {
+                    "codigo": "fiscal",
+                    "mensagem": (
+                        "Os dados fiscais não foram enviados. "
+                        f"{_erro_ml_para_usuario(e)} "
+                        "Confira NCM, CEST e origem na aba Tributação e integre de novo."
+                    ),
+                }
+            )
+    elif not _ncm_ml(ncm):
+        ressalvas.append(
+            {
+                "codigo": "ncm",
+                "mensagem": (
+                    "O anúncio está sem NCM. "
+                    "A nota fiscal não sai até preencher a aba Tributação e integrar de novo."
+                ),
+            }
+        )
+        resolvidas.add("fiscal")
+    else:
+        resolvidas.update(("fiscal", "ncm"))
+
+    from api.mercado_livre.ressalvas import aplicar_ressalvas_ml
+
+    aplicar_ressalvas_ml(
+        cur,
+        id_tenant,
+        int(id_produto),
+        [int(id_variante)],
+        ressalvas,
+        resolvidas,
+    )
+    return ressalvas
 
 
 def _item_ja_vinculado_ml(cur, id_tenant: int, id_variante: int) -> str | None:
@@ -2945,7 +3131,7 @@ def _criar_anuncio_ml(
     preco_custo: float | None = None,
     peso_liquido_kg: float | None = None,
     peso_bruto_kg: float | None = None,
-) -> str:
+) -> tuple[str, list[dict]]:
     titulo = _normalizar_titulo_ml(titulo or "Produto", max_len=60)
     if preco <= 0:
         raise RuntimeError(f"Preço inválido para «{titulo}».")
@@ -3072,6 +3258,8 @@ def _criar_anuncio_ml(
     if attrs:
         payload["attributes"] = attrs
 
+    video_recusado = False
+    garantia_recusada = False
     try:
         resp = api_request(cur, id_tenant, "POST", "/items", json_body=payload)
     except RuntimeError as e:
@@ -3079,12 +3267,14 @@ def _criar_anuncio_ml(
         retried = False
         if payload.get("video_id") and ("video" in msg or "youtube" in msg):
             payload.pop("video_id", None)
+            video_recusado = True
             retried = True
             _log.info("ML rejeitou video_id ao criar «%s» — republicando sem vídeo.", titulo)
         if payload.get("sale_terms") and (
             "sale_term" in msg or "warranty" in msg or "garantia" in msg
         ):
             payload.pop("sale_terms", None)
+            garantia_recusada = True
             retried = True
             _log.info("ML rejeitou sale_terms ao criar «%s» — republicando sem garantia.", titulo)
         # Conta clássica vs UP: troca o modo uma vez se title/family_name falhar.
@@ -3122,17 +3312,52 @@ def _criar_anuncio_ml(
     else:
         _salvar_map_produto_ml(cur, id_tenant, id_variante, id_produto, sku, item_id)
 
+    ressalvas: list[dict] = []
+    resolvidas: set[str] = {"titulo"}
+    if video_recusado:
+        ressalvas.append(
+            {
+                "codigo": "video",
+                "mensagem": (
+                    "O anúncio foi criado sem o vídeo. "
+                    "O Mercado Livre recusou o link. Confira o YouTube e integre de novo."
+                ),
+            }
+        )
+    else:
+        resolvidas.add("video")
+    if garantia_recusada:
+        ressalvas.append(
+            {
+                "codigo": "garantia",
+                "mensagem": (
+                    "O anúncio foi criado sem a garantia. "
+                    "O Mercado Livre recusou esse dado. Confira o tipo e o prazo e integre de novo."
+                ),
+            }
+        )
+    else:
+        resolvidas.add("garantia")
+
     texto_desc = _texto_plano_ml(descricao)
     if texto_desc:
         try:
             _enviar_descricao_ml(cur, id_tenant, item_id, texto_desc)
+            resolvidas.add("descricao")
         except RuntimeError as e:
             _log.warning("Descrição ML não enviada para %s: %s", item_id, e)
-            raise RuntimeError(
-                f"«{titulo}»: anúncio criado ({item_id}), mas a descrição falhou: "
-                f"{_erro_ml_para_usuario(str(e)[:300])}. "
-                "Use o mesmo botão novamente para reenviar a descrição."
-            ) from e
+            ressalvas.append(
+                {
+                    "codigo": "descricao",
+                    "mensagem": (
+                        "O anúncio foi criado, mas a descrição não entrou. "
+                        f"{_erro_ml_para_usuario(e)} "
+                        "Ajuste o texto em Meus produtos e integre de novo."
+                    ),
+                }
+            )
+    else:
+        resolvidas.add("descricao")
 
     if _ncm_ml(ncm) and (sku or "").strip():
         try:
@@ -3152,20 +3377,51 @@ def _criar_anuncio_ml(
                 peso_liquido_kg=peso_liquido_kg or peso_kg,
                 peso_bruto_kg=peso_bruto_kg or peso_kg,
             )
+            resolvidas.update(("fiscal", "ncm"))
         except RuntimeError as e:
             _log.warning("Dados fiscais ML não enviados para %s: %s", item_id, e)
-            raise RuntimeError(
-                f"«{titulo}»: anúncio criado ({item_id}), mas dados fiscais falharam: "
-                f"{_erro_ml_para_usuario(str(e)[:300])}. "
-                "Preencha NCM/CEST/origem na aba Tributação e sincronize de novo."
-            ) from e
+            ressalvas.append(
+                {
+                    "codigo": "fiscal",
+                    "mensagem": (
+                        "O anúncio foi criado, mas os dados fiscais não entraram. "
+                        f"{_erro_ml_para_usuario(e)} "
+                        "Confira NCM, CEST e origem na aba Tributação e integre de novo."
+                    ),
+                }
+            )
     elif not _ncm_ml(ncm):
         _log.warning(
             "ML item %s criado sem NCM — Faturador não emitirá NF-e até preencher Tributação.",
             item_id,
         )
+        ressalvas.append(
+            {
+                "codigo": "ncm",
+                "mensagem": (
+                    "O anúncio foi criado sem NCM. "
+                    "A nota fiscal não sai até preencher a aba Tributação e integrar de novo."
+                ),
+            }
+        )
+        resolvidas.add("fiscal")
+    else:
+        resolvidas.update(("fiscal", "ncm"))
 
-    return item_id
+    from api.mercado_livre.ressalvas import aplicar_ressalvas_ml
+
+    variantes_ressalva = [int(id_variante)]
+    if mapas_variacoes:
+        variantes_ressalva = [int(v[0]) for v in mapas_variacoes if int(v[0]) > 0] or variantes_ressalva
+    aplicar_ressalvas_ml(
+        cur,
+        id_tenant,
+        int(id_produto),
+        variantes_ressalva,
+        ressalvas,
+        resolvidas,
+    )
+    return item_id, ressalvas
 
 
 def _sql_produtos_vitrine_ml(ids_produtos: list[int] | None = None) -> tuple[str, list]:
@@ -3346,7 +3602,7 @@ def _criar_anuncios_ml_lote(cur, id_tenant: int, cfg: dict, linhas: list) -> dic
         if not ml_item_id:
             return
         try:
-            _atualizar_anuncio_completo_ml(
+            ressalvas = _atualizar_anuncio_completo_ml(
                 cur,
                 id_tenant,
                 ml_item_id,
@@ -3373,6 +3629,10 @@ def _criar_anuncios_ml_lote(cur, id_tenant: int, cfg: dict, linhas: list) -> dic
                 **_kwargs_fiscais_ml(d),
             )
             atualizados += 1
+            msg_ok, textos_res = _publicacao_com_ressalvas(
+                "Anúncio atualizado no Mercado Livre.",
+                ressalvas,
+            )
             resultados.append(
                 {
                     "id_produto": int(d["id_produto"]),
@@ -3380,15 +3640,13 @@ def _criar_anuncios_ml_lote(cur, id_tenant: int, cfg: dict, linhas: list) -> dic
                     "sku": d["sku"],
                     "status": "ok",
                     "acao": "atualizado",
-                    "mensagem": (
-                        "Anúncio atualizado no Mercado Livre "
-                        "(fotos, preço, estoque, variação, garantia, descrição e tributação)."
-                    ),
+                    "mensagem": msg_ok,
+                    "ressalvas": textos_res,
                     "ml_item_id": ml_item_id,
                 }
             )
         except RuntimeError as e:
-            msg_user = _erro_ml_para_usuario(str(e)[:400])
+            msg_user = _erro_ml_para_usuario(e)
             if msg_user not in erros:
                 erros.append(msg_user)
             resultados.append(
@@ -3425,7 +3683,7 @@ def _criar_anuncios_ml_lote(cur, id_tenant: int, cfg: dict, linhas: list) -> dic
                     "Vá em Integrações → Mercado Livre → Mapear categorias e salve o mapeamento."
                 )
         except RuntimeError as e:
-            msg_user = _erro_ml_para_usuario(str(e)[:400])
+            msg_user = _erro_ml_para_usuario(e)
             if msg_user not in erros:
                 erros.append(msg_user)
             resultados.append(
@@ -3439,7 +3697,7 @@ def _criar_anuncios_ml_lote(cur, id_tenant: int, cfg: dict, linhas: list) -> dic
             )
             return
         try:
-            ml_item_id = _criar_anuncio_ml(
+            ml_item_id, ressalvas_criacao = _criar_anuncio_ml(
                 cur,
                 id_tenant,
                 ml_user_id,
@@ -3472,6 +3730,10 @@ def _criar_anuncios_ml_lote(cur, id_tenant: int, cfg: dict, linhas: list) -> dic
             exportados += 1
             estado = _estado_anuncio_ml(cur, id_tenant, ml_item_id)
             cat_usada = estado.get("category_id") or ""
+            msg_ok, textos_res = _publicacao_com_ressalvas(
+                _mensagem_pos_publicacao_ml(estado, cat_usada),
+                ressalvas_criacao,
+            )
             resultados.append(
                 {
                     "id_produto": int(d["id_produto"]),
@@ -3479,7 +3741,8 @@ def _criar_anuncios_ml_lote(cur, id_tenant: int, cfg: dict, linhas: list) -> dic
                     "sku": d["sku"],
                     "status": "ok",
                     "acao": "criado",
-                    "mensagem": _mensagem_pos_publicacao_ml(estado, cat_usada),
+                    "mensagem": msg_ok,
+                    "ressalvas": textos_res,
                     "ml_item_id": ml_item_id,
                     "ml_category_id": cat_usada,
                     "ml_listing_type": estado.get("listing_type_id") or "",
@@ -3502,8 +3765,7 @@ def _criar_anuncios_ml_lote(cur, id_tenant: int, cfg: dict, linhas: list) -> dic
                             }
                         )
         except RuntimeError as e:
-            msg_tec = str(e)[:400]
-            msg_user = _erro_ml_para_usuario(msg_tec)
+            msg_user = _erro_ml_para_usuario(e)
             if msg_user not in erros:
                 erros.append(msg_user)
             resultados.append(
@@ -3740,7 +4002,7 @@ def exportar_produtos_ml(cur, id_tenant: int) -> dict:
             atualizados += 1
             vinculados += 1
         except RuntimeError as e:
-            msg_user = _erro_ml_para_usuario(str(e)[:400])
+            msg_user = _erro_ml_para_usuario(e)
             if msg_user not in erros:
                 erros.append(msg_user)
 
@@ -3855,7 +4117,7 @@ def publicar_produtos_ml(cur, id_tenant: int, ids_produtos: list[int]) -> dict:
             )
             continue
         try:
-            _atualizar_anuncio_completo_ml(
+            ressalvas = _atualizar_anuncio_completo_ml(
                 cur,
                 id_tenant,
                 ml_item,
@@ -3883,6 +4145,10 @@ def publicar_produtos_ml(cur, id_tenant: int, ids_produtos: list[int]) -> dict:
             )
             atualizados += 1
             vinculados += 1
+            msg_ok, textos_res = _publicacao_com_ressalvas(
+                "Anúncio atualizado no Mercado Livre.",
+                ressalvas,
+            )
             resultados.append(
                 {
                     "id_produto": int(d["id_produto"]),
@@ -3890,15 +4156,13 @@ def publicar_produtos_ml(cur, id_tenant: int, ids_produtos: list[int]) -> dict:
                     "sku": sku,
                     "status": "ok",
                     "acao": "atualizado",
-                    "mensagem": (
-                        "Anúncio atualizado no Mercado Livre "
-                        "(fotos, preço, estoque, variação, garantia e descrição)."
-                    ),
+                    "mensagem": msg_ok,
+                    "ressalvas": textos_res,
                     "ml_item_id": ml_item,
                 }
             )
         except RuntimeError as e:
-            msg_user = _erro_ml_para_usuario(str(e)[:400])
+            msg_user = _erro_ml_para_usuario(e)
             if msg_user not in erros:
                 erros.append(msg_user)
             resultados.append(

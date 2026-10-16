@@ -170,6 +170,9 @@ def _url_icone_integracao_produto(slug: str) -> str:
 
 def _enriquecer_integracoes_linhas(cur, id_tenant: int, linhas: list[dict]) -> None:
     enriquecer_linhas_integracoes(cur, id_tenant, linhas, _url_icone_integracao_produto)
+    from api.mercado_livre.ressalvas import anexar_ressalvas_linhas
+
+    anexar_ressalvas_linhas(cur, id_tenant, linhas)
 
 
 def _exigir_produto_vitrine(cur, id_tenant_vendedor: int, id_produto: int) -> dict | None:

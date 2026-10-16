@@ -614,14 +614,19 @@
       Number(jj.atualizados || 0);
     const ok = resultados.filter((r) => r.status === "ok").length || criados + atualizados;
     const erros = resultados.filter((r) => r.status === "erro").length || Number(jj.erros || 0);
+    const comRessalva = resultados.filter((r) => (r.ressalvas || []).length > 0).length;
     const parcial = ok > 0 && erros > 0;
 
     if (el.mlTitulo) {
       el.mlTitulo.textContent = parcial
         ? "Integração parcialmente concluída"
-        : ok > 0
-          ? "Integração concluída"
-          : "Não foi possível integrar";
+        : erros > 0
+          ? "Não foi possível integrar"
+          : comRessalva > 0
+            ? "Integração concluída com ressalvas"
+            : ok > 0
+              ? "Integração concluída"
+              : "Não foi possível integrar";
     }
     if (el.mlSubtitulo) {
       el.mlSubtitulo.textContent = jj.message || "Resultado da publicação no Mercado Livre.";
@@ -637,7 +642,7 @@
         <div class="Ob_MlResumoCard Ob_MlResumoCard--tot"><strong>${resultados.length || ok + erros}</strong><span>Total</span></div>`;
     }
 
-    const icones = { ok: "✓", erro: "!", ignorado: "·" };
+    const icones = { ok: "✓", erro: "!", ressalva: "!", ignorado: "·" };
     const itens =
       resultados.length > 0
         ? resultados
@@ -653,7 +658,9 @@
 
     el.mlLista.innerHTML = itens
       .map((r) => {
-        const st = r.status === "ok" || r.status === "erro" || r.status === "ignorado" ? r.status : "erro";
+        const temRessalva = Array.isArray(r.ressalvas) && r.ressalvas.length > 0;
+        let st = r.status === "ok" || r.status === "erro" || r.status === "ignorado" ? r.status : "erro";
+        if (st === "ok" && temRessalva) st = "ressalva";
         const acaoTxt =
           r.acao === "criado" ? "Criado" : r.acao === "atualizado" ? "Atualizado" : "";
         const meta = [
@@ -1223,6 +1230,13 @@
     return String(l.estoque ?? 0);
   }
 
+  function renderRessalvasCell(l) {
+    const lista = (l.ressalvas || []).map((item) => item.mensagem || item).filter(Boolean);
+    if (!lista.length) return '<span class="Cat_IntVazio">—</span>';
+    const payload = encodeURIComponent(JSON.stringify(lista));
+    return `<button type="button" class="Cat_BtnRessalva" data-ressalvas="${payload}" title="Ver ressalvas" aria-label="Ver ressalvas">!</button>`;
+  }
+
   function renderIntegracoesCell(l) {
     const ints = l.integracoes || [];
     if (!ints.length) return '<span class="Cat_IntVazio" title="Sem integração">—</span>';
@@ -1340,6 +1354,7 @@
       <td class="Cat_Preco">${preco}</td>
       <td class="Cat_ColEstoque">${renderEstoque(l)}</td>
       <td class="Cat_ColIntegracoes">${renderIntegracoesCell(l)}</td>
+      <td class="Cat_ColRessalvas">${renderRessalvasCell(l)}</td>
       <td class="Cl_TableActions">${acoes}</td>
     </tr>`;
   }
@@ -1347,7 +1362,7 @@
   function renderTabela() {
     const linhas = linhasVisiveis();
     if (!linhas.length) {
-      el.tbody.innerHTML = '<tr><td colspan="11">Nenhum produto encontrado.</td></tr>';
+      el.tbody.innerHTML = '<tr><td colspan="12">Nenhum produto encontrado.</td></tr>';
       atualizarBtnExpandTodos();
       syncBulkBar();
       renderPaginacao();
@@ -1633,6 +1648,22 @@
     const expandBtn = ev.target.closest(".Cat_ExpandBtn");
     if (expandBtn) {
       toggleProduto(Number(expandBtn.dataset.produto || 0));
+      return;
+    }
+    const btnRessalva = ev.target.closest(".Cat_BtnRessalva");
+    if (btnRessalva) {
+      let lista = [];
+      try {
+        lista = JSON.parse(decodeURIComponent(btnRessalva.dataset.ressalvas || "%5B%5D"));
+      } catch {
+        lista = [];
+      }
+      const html = lista.length
+        ? `<ul style="text-align:left;margin:0;padding-left:1.1rem;">${lista
+            .map((m) => `<li style="margin:0 0 0.55rem;">${escapeHtml(m)}</li>`)
+            .join("")}</ul>`
+        : "Nenhuma ressalva.";
+      await Swal.fire({ icon: "warning", title: "Ressalvas", html });
       return;
     }
     const btn = ev.target.closest("button");
