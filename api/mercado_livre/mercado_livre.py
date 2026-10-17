@@ -881,6 +881,13 @@ def _traduzir_causa_ml(code: str, message: str) -> str:
             "O Mercado Livre rejeitou o nome do anúncio. "
             "Ajuste o título em Meus produtos e confira se a categoria está mapeada."
         )
+    if "picture" in low and (
+        "not modifiable" in low or "not_modifiable" in low or "field_not_updatable" in code_l
+    ):
+        return (
+            "O Mercado Livre não deixa alterar a foto deste anúncio. "
+            "Anúncio de catálogo usa as fotos oficiais do catálogo."
+        )
     if "picture" in code_l or "pictures" in code_l or "picture" in low or "pictures" in low:
         detalhe = (msg or "").strip()
         if detalhe and detalhe.lower() not in (code_l, "validation_error") and len(detalhe) > 12:
@@ -1249,11 +1256,10 @@ def _coletar_pictures_ml(
 ) -> list[dict[str, str]]:
     """
     Monta pictures do anúncio.
-    1) Links da vitrine viram arquivo no DropNexo
-    2) Normaliza JPG e envia o arquivo ao Mercado Livre
-    3) Se o upload do arquivo falhar, usa o link interno assinado
+    A foto fica no DropNexo. O Mercado Livre recebe o link público assinado,
+    não o arquivo e não o link do ImgBB.
     """
-    from api.bling.imagens_export import caminho_arquivo_cache, preparar_imagem_export
+    from api.bling.imagens_export import preparar_imagem_export
 
     try:
         from vendedor.meus_produtos.servico_meus_produtos import materializar_urls_vitrine
@@ -1281,20 +1287,8 @@ def _coletar_pictures_ml(
         vistos.add(chave)
 
         prep = preparar_imagem_export(caminho)
-        if not prep.get("ok"):
+        if not prep.get("ok") or prep.get("fonte") == "remota_passthrough":
             continue
-        if prep.get("fonte") == "remota_passthrough":
-            continue
-
-        local = caminho_arquivo_cache(prep.get("cache"))
-        if local is not None:
-            pic_id = _upload_picture_ml(cur, id_tenant, local)
-            if pic_id:
-                pictures.append({"id": pic_id})
-                if len(pictures) >= _ML_MAX_PICTURES:
-                    break
-                continue
-
         url = str(prep.get("url") or "").strip()
         if not url or url in vistos or not _source_ml_dropnexo(url):
             continue
@@ -1379,14 +1373,15 @@ def _atualizar_anuncio_completo_ml(
         id_variante=int(id_variante),
         imagem_fallback=imagem or "",
     )
+    estado = _estado_anuncio_ml(cur, id_tenant, ml_item_id)
+    foto_catalogo = bool(pictures) and bool(estado.get("catalog_listing"))
+
     payload: dict[str, Any] = {}
     if preco and float(preco) > 0:
         payload["price"] = round(float(preco), 2)
     payload["available_quantity"] = max(0, int(estoque or 0))
-    if pictures:
+    if pictures and not foto_catalogo:
         payload["pictures"] = pictures
-
-    estado = _estado_anuncio_ml(cur, id_tenant, ml_item_id)
     category_id = str(estado.get("category_id") or "").strip()
     cat_attrs = _attrs_categoria_ml(cur, id_tenant, category_id) if category_id else []
 
@@ -1431,23 +1426,52 @@ def _atualizar_anuncio_completo_ml(
     ressalvas: list[dict] = []
     resolvidas: set[str] = set()
     garantia_recusada = False
+    foto_recusada = foto_catalogo
     if payload:
         try:
             api_request(cur, id_tenant, "PUT", f"/items/{ml_item_id}", json_body=payload)
             if payload.get("sale_terms") or not (gar_tipo or gar_tempo):
                 resolvidas.add("garantia")
+            if payload.get("pictures"):
+                resolvidas.add("foto")
         except RuntimeError as e:
             msg = str(e).lower()
+            repetir = False
+            if payload.get("pictures") and "picture" in msg:
+                payload.pop("pictures", None)
+                foto_recusada = True
+                repetir = True
             if payload.get("sale_terms") and (
                 "sale_term" in msg or "warranty" in msg or "garantia" in msg
             ):
                 payload.pop("sale_terms", None)
-                api_request(cur, id_tenant, "PUT", f"/items/{ml_item_id}", json_body=payload)
                 garantia_recusada = True
+                repetir = True
+            if repetir and payload:
+                api_request(cur, id_tenant, "PUT", f"/items/{ml_item_id}", json_body=payload)
+                if payload.get("sale_terms") or not (gar_tipo or gar_tempo):
+                    resolvidas.add("garantia")
+            elif repetir:
+                if not (gar_tipo or gar_tempo):
+                    resolvidas.add("garantia")
             else:
                 raise
     elif not (gar_tipo or gar_tempo):
         resolvidas.add("garantia")
+    if foto_recusada:
+        if foto_catalogo:
+            texto_foto = (
+                "As fotos não foram alteradas. Este anúncio é de catálogo: "
+                "o Mercado Livre usa as fotos oficiais e não deixa trocá-las pela integração."
+            )
+        else:
+            texto_foto = (
+                "As fotos não foram alteradas. O Mercado Livre recusou a troca de imagens "
+                "neste anúncio. Preço e estoque seguem na atualização."
+            )
+        ressalvas.append({"codigo": "foto", "mensagem": texto_foto})
+    elif pictures:
+        resolvidas.add("foto")
     if garantia_recusada:
         ressalvas.append(
             {
@@ -2535,6 +2559,7 @@ def _estado_anuncio_ml(cur, id_tenant: int, item_id: str) -> dict[str, Any]:
             "sub_status": data.get("sub_status") or [],
             "category_id": data.get("category_id") or "",
             "listing_type_id": data.get("listing_type_id") or "",
+            "catalog_listing": bool(data.get("catalog_listing")),
         }
     except RuntimeError:
         return {}
@@ -3903,6 +3928,30 @@ def _criar_anuncios_ml_lote(cur, id_tenant: int, cfg: dict, linhas: list) -> dic
     return out
 
 
+def _preferir_anuncio_proprio_ml(cur, id_tenant: int, ids: list[str]) -> str | None:
+    """Se o SKU existe em mais de um anúncio, fica no anúncio do vendedor.
+
+    O de catálogo (catalog_listing) não aceita troca de foto.
+    """
+    limpos: list[str] = []
+    for bruto in ids:
+        item_id = str(bruto or "").strip()
+        if item_id and item_id not in limpos:
+            limpos.append(item_id)
+    if not limpos:
+        return None
+    if len(limpos) == 1:
+        return limpos[0]
+    for item_id in limpos[:8]:
+        try:
+            data = api_request(cur, id_tenant, "GET", f"/items/{item_id}")
+        except RuntimeError:
+            continue
+        if isinstance(data, dict) and not data.get("catalog_listing"):
+            return str(data.get("id") or item_id)
+    return limpos[0]
+
+
 def _buscar_item_ml_por_sku(cur, id_tenant: int, ml_user_id: int, sku: str) -> str | None:
     """Retorna id do anúncio ML (ex. MLB123) que corresponde ao SKU do vendedor."""
     sku = (sku or "").strip()
@@ -3919,7 +3968,7 @@ def _buscar_item_ml_por_sku(cur, id_tenant: int, ml_user_id: int, sku: str) -> s
             )
             results = data.get("results") or []
             if results:
-                return str(results[0])
+                return _preferir_anuncio_proprio_ml(cur, id_tenant, [str(x) for x in results])
         except RuntimeError:
             continue
     return None
