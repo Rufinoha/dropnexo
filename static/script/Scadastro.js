@@ -134,6 +134,7 @@
 
     let cnpjConsultado = "";
     let cnpjBusca = 0;
+    let cnpjEmConsulta = "";
     const btnCadastrar = document.getElementById("btn-cadastrar");
     const cnpjErro = document.getElementById("cnpj-erro");
 
@@ -214,6 +215,7 @@
     async function consultarCnpjAutomatico() {
       const doc = soDigitos(inpDoc?.value);
       if (doc === cnpjConsultado && doc.length === 14) return;
+      if (doc.length === 14 && doc === cnpjEmConsulta) return;
       if (doc.length !== 14) {
         if (cnpjConsultado) limparDadosCnpj();
         else liberarCadastro();
@@ -228,6 +230,7 @@
       if (cnpjConsultado && cnpjConsultado !== doc) limparDadosCnpj();
       if (btnCadastrar) btnCadastrar.disabled = true;
       const busca = ++cnpjBusca;
+      cnpjEmConsulta = doc;
       try {
         const r = await fetch(`${apiCnpjUrl}?cnpj=${encodeURIComponent(doc)}`, {
           headers: { Accept: "application/json" },
@@ -261,6 +264,8 @@
           .trim();
         const aviso = texto || "Não foi possível consultar este CNPJ. Confira os números.";
         mostrarErroCnpj(aviso);
+      } finally {
+        if (cnpjEmConsulta === doc) cnpjEmConsulta = "";
       }
     }
 

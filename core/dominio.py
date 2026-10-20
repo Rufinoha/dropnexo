@@ -69,10 +69,27 @@ def flatten_arvore_com_caminho(raiz: list[dict], prefixo: str = "") -> list[dict
 # ── cnpj ──────────────────────────────────────────────
 
 import re
+import time
+from threading import Lock
 
 import requests
 
 _BRASIL_API = "https://brasilapi.com.br/api/cnpj/v1"
+_OPENCNPJ = "https://kitana.opencnpj.com/cnpj"
+_CNPJ_WS = "https://publica.cnpj.ws/cnpj"
+_CNPJ_HEADERS = {"Accept": "application/json", "User-Agent": "DropNexo/1.0"}
+_CNPJ_CACHE: dict[str, tuple[float, dict]] = {}
+_CNPJ_CACHE_TTL = 60 * 60 * 12
+_CNPJ_CACHE_MAX = 400
+_cnpj_cache_lock = Lock()
+
+
+class _CnpjFonteIndisponivel(Exception):
+    """A base pública não respondeu. A próxima fonte pode ser tentada."""
+
+
+class _CnpjNaoEncontrado(Exception):
+    pass
 
 
 def _so_digitos(valor: str) -> str:
@@ -95,45 +112,177 @@ def cnpj_valido(cnpj: str) -> bool:
     return doc[-2:] == d1 + d2
 
 
+def _pacote_cnpj(
+    doc: str,
+    *,
+    razao_social: str,
+    nome_fantasia: str = "",
+    situacao: str = "",
+    cnae: str = "",
+    cep: str = "",
+    logradouro: str = "",
+    numero: str = "",
+    complemento: str = "",
+    bairro: str = "",
+    cidade: str = "",
+    uf: str = "",
+) -> dict:
+    razao = (razao_social or "").strip()
+    return {
+        "cnpj": doc,
+        "razao_social": razao,
+        "nome_fantasia": (nome_fantasia or razao).strip(),
+        "situacao_cadastral": (situacao or "").strip(),
+        "cnae_principal": _so_digitos(str(cnae or "")),
+        "cep": _so_digitos(str(cep or "")),
+        "logradouro": (logradouro or "").strip(),
+        "numero": (numero or "").strip(),
+        "complemento": (complemento or "").strip(),
+        "bairro": (bairro or "").strip(),
+        "cidade": (cidade or "").strip(),
+        "uf": (uf or "").strip().upper(),
+    }
+
+
+def _ler_json_cnpj(url: str) -> dict:
+    try:
+        resposta = requests.get(url, timeout=8, headers=_CNPJ_HEADERS)
+    except requests.RequestException as exc:
+        raise _CnpjFonteIndisponivel(str(exc)) from exc
+    if resposta.status_code == 404:
+        raise _CnpjNaoEncontrado()
+    if resposta.status_code >= 400:
+        raise _CnpjFonteIndisponivel(f"HTTP {resposta.status_code}")
+    try:
+        data = resposta.json()
+    except ValueError as exc:
+        raise _CnpjFonteIndisponivel("resposta inválida") from exc
+    if not isinstance(data, dict):
+        raise _CnpjFonteIndisponivel("resposta inválida")
+    return data
+
+
+def _via_brasilapi(doc: str) -> dict:
+    data = _ler_json_cnpj(f"{_BRASIL_API}/{doc}")
+    return _pacote_cnpj(
+        doc,
+        razao_social=data.get("razao_social") or "",
+        nome_fantasia=data.get("nome_fantasia") or "",
+        situacao=data.get("descricao_situacao_cadastral") or "",
+        cnae=str(data.get("cnae_fiscal") or data.get("cnae") or ""),
+        cep=str(data.get("cep") or ""),
+        logradouro=data.get("logradouro") or "",
+        numero=data.get("numero") or "",
+        complemento=data.get("complemento") or "",
+        bairro=data.get("bairro") or "",
+        cidade=data.get("municipio") or "",
+        uf=data.get("uf") or "",
+    )
+
+
+def _via_opencnpj(doc: str) -> dict:
+    data = _ler_json_cnpj(f"{_OPENCNPJ}/{doc}")
+    if data.get("success") is False:
+        raise _CnpjNaoEncontrado()
+    corpo = data.get("data") if isinstance(data.get("data"), dict) else data
+    cnaes = corpo.get("cnaes") if isinstance(corpo.get("cnaes"), list) else []
+    cnae = ""
+    if cnaes and isinstance(cnaes[0], dict):
+        cnae = str(cnaes[0].get("cnae") or "")
+    return _pacote_cnpj(
+        doc,
+        razao_social=corpo.get("razaoSocial") or corpo.get("razao_social") or "",
+        nome_fantasia=corpo.get("nomeFantasia") or corpo.get("nome_fantasia") or "",
+        situacao=corpo.get("situacaoCadastral") or corpo.get("situacao_cadastral") or "",
+        cnae=cnae,
+        cep=str(corpo.get("cep") or ""),
+        logradouro=corpo.get("logradouro") or "",
+        numero=corpo.get("numero") or "",
+        complemento=corpo.get("complemento") or "",
+        bairro=corpo.get("bairro") or "",
+        cidade=corpo.get("municipio") or corpo.get("cidade") or "",
+        uf=corpo.get("uf") or "",
+    )
+
+
+def _via_cnpjws(doc: str) -> dict:
+    data = _ler_json_cnpj(f"{_CNPJ_WS}/{doc}")
+    est = data.get("estabelecimento") if isinstance(data.get("estabelecimento"), dict) else {}
+    if not est and not data.get("razao_social"):
+        raise _CnpjNaoEncontrado()
+    cidade = est.get("cidade") if isinstance(est.get("cidade"), dict) else {}
+    estado = est.get("estado") if isinstance(est.get("estado"), dict) else {}
+    atividade = est.get("atividade_principal") if isinstance(est.get("atividade_principal"), dict) else {}
+    tipo_log = (est.get("tipo_logradouro") or "").strip()
+    logradouro = (est.get("logradouro") or "").strip()
+    if tipo_log and logradouro:
+        logradouro = f"{tipo_log} {logradouro}"
+    return _pacote_cnpj(
+        doc,
+        razao_social=data.get("razao_social") or "",
+        nome_fantasia=est.get("nome_fantasia") or "",
+        situacao=est.get("situacao_cadastral") or "",
+        cnae=str(atividade.get("id") or ""),
+        cep=str(est.get("cep") or ""),
+        logradouro=logradouro,
+        numero=est.get("numero") or "",
+        complemento=est.get("complemento") or "",
+        bairro=est.get("bairro") or "",
+        cidade=cidade.get("nome") or "",
+        uf=estado.get("sigla") or "",
+    )
+
+
+def _cnpj_cache_ler(doc: str) -> dict | None:
+    with _cnpj_cache_lock:
+        item = _CNPJ_CACHE.get(doc)
+        if not item:
+            return None
+        quando, dados = item
+        if time.monotonic() - quando > _CNPJ_CACHE_TTL:
+            _CNPJ_CACHE.pop(doc, None)
+            return None
+        return dados
+
+
+def _cnpj_cache_gravar(doc: str, dados: dict) -> None:
+    with _cnpj_cache_lock:
+        _CNPJ_CACHE[doc] = (time.monotonic(), dados)
+        if len(_CNPJ_CACHE) <= _CNPJ_CACHE_MAX:
+            return
+        antigo = min(_CNPJ_CACHE, key=lambda chave: _CNPJ_CACHE[chave][0])
+        _CNPJ_CACHE.pop(antigo, None)
+
+
 def consultar_cnpj(cnpj: str) -> dict:
-    """Consulta dados públicos do CNPJ. Levanta ValueError se inválido/não encontrado."""
+    """Consulta dados públicos do CNPJ. Se a primeira base recusar, tenta outra."""
     doc = _so_digitos(cnpj)
     if not cnpj_valido(doc):
         raise ValueError("CNPJ inválido. Confira os números.")
 
-    try:
-        r = requests.get(f"{_BRASIL_API}/{doc}", timeout=15)
-    except requests.RequestException as exc:
-        raise ValueError(f"Não foi possível consultar o CNPJ: {exc}") from exc
+    em_cache = _cnpj_cache_ler(doc)
+    if em_cache:
+        return em_cache
 
-    if r.status_code == 404:
+    nao_achou = False
+    for fonte in (_via_brasilapi, _via_opencnpj, _via_cnpjws):
+        try:
+            dados = fonte(doc)
+        except _CnpjNaoEncontrado:
+            nao_achou = True
+            continue
+        except _CnpjFonteIndisponivel:
+            continue
+        if not (dados.get("razao_social") or "").strip():
+            continue
+        _cnpj_cache_gravar(doc, dados)
+        return dados
+
+    if nao_achou:
         raise ValueError("CNPJ não encontrado na base pública. Preencha os dados manualmente.")
-    if r.status_code == 429:
-        raise ValueError("Consulta de CNPJ temporariamente indisponível. Aguarde um minuto ou preencha manualmente.")
-    if r.status_code >= 400:
-        raise ValueError(
-            f"Serviço de consulta CNPJ indisponível (HTTP {r.status_code}). Preencha os dados manualmente."
-        )
-
-    data = r.json()
-    if not isinstance(data, dict):
-        raise ValueError("Resposta inválida da consulta CNPJ.")
-
-    cep = _so_digitos(str(data.get("cep") or ""))
-    return {
-        "cnpj": doc,
-        "razao_social": (data.get("razao_social") or "").strip(),
-        "nome_fantasia": (data.get("nome_fantasia") or data.get("razao_social") or "").strip(),
-        "situacao_cadastral": (data.get("descricao_situacao_cadastral") or "").strip(),
-        "cnae_principal": str(data.get("cnae_fiscal") or data.get("cnae") or "").strip(),
-        "cep": cep,
-        "logradouro": (data.get("logradouro") or "").strip(),
-        "numero": (data.get("numero") or "").strip(),
-        "complemento": (data.get("complemento") or "").strip(),
-        "bairro": (data.get("bairro") or "").strip(),
-        "cidade": (data.get("municipio") or "").strip(),
-        "uf": (data.get("uf") or "").strip().upper(),
-    }
+    raise ValueError(
+        "Consulta de CNPJ temporariamente indisponível. Aguarde um minuto ou preencha manualmente."
+    )
 
 
 # ── vinculos ──────────────────────────────────────────
