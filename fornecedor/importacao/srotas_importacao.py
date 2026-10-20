@@ -4,8 +4,12 @@ from __future__ import annotations
 import csv
 import io
 import json
+import logging
+import threading
 import traceback
 from pathlib import Path
+
+_log = logging.getLogger(__name__)
 
 from flask import Blueprint, current_app, jsonify, redirect, render_template, request, session, url_for
 
@@ -397,6 +401,33 @@ def importacao_bling_estoque():
         conn.close()
 
 
+def _baixar_imagens_importadas(id_tenant: int, jobs: list[dict]) -> None:
+    """As fotos saem da requisição. O gunicorn corta o pedido em 120 segundos."""
+    from fornecedor.importacao.motor_csv import aplicar_imagens_importacao
+
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        for job in jobs:
+            try:
+                aplicar_imagens_importacao(
+                    cur,
+                    id_tenant=id_tenant,
+                    id_produto=int(job["id_produto"]),
+                    sku=str(job.get("sku") or ""),
+                    urls=list(job.get("urls") or []),
+                )
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                _log.exception(
+                    "Falha ao gravar fotos do SKU %s na importação.",
+                    job.get("sku"),
+                )
+    finally:
+        conn.close()
+
+
 @fn_importacao_bp.post("/fornecedor/importacao/arquivo")
 @login_obrigatorio()
 def importacao_arquivo():
@@ -509,15 +540,28 @@ def importacao_arquivo():
             total_rejeitadas=rejeitadas,
         )
         conn.commit()
+        imagens = resultado.get("imagens_pendentes") or []
+        if imagens:
+            threading.Thread(
+                target=_baixar_imagens_importadas,
+                args=(id_tenant, imagens),
+                daemon=True,
+            ).start()
         lote = obter_lote(cur, id_tenant, id_lote)
         erros = listar_erros_lote(cur, id_tenant, id_lote)
+        aviso_fotos = (
+            " As fotos continuam sendo gravadas em segundo plano."
+            if imagens
+            else ""
+        )
         return jsonify(
             success=True,
             message=(
                 f"Importação {numero} concluída. "
                 f"{len(nao_publicados)} produto(s) ficaram fora da rede. O log foi baixado."
+                + aviso_fotos
                 if nao_publicados
-                else f"Importação {numero} concluída."
+                else f"Importação {numero} concluída.{aviso_fotos}"
             ),
             id_lote=id_lote,
             numero=numero,

@@ -697,6 +697,7 @@ def processar_linhas_csv(
     rejeitadas = 0
     erros: list[dict] = []
     nao_publicados: list[dict] = []
+    imagens_pendentes: list[dict] = []
 
     preparadas: list[dict] = []
     for num, row in rows:
@@ -735,12 +736,12 @@ def processar_linhas_csv(
                     valores, modo_imagens=modo_imagens, delimitador=delimitador_imagens
                 )
                 if urls:
-                    aplicar_imagens_importacao(
-                        cur,
-                        id_tenant=id_tenant,
-                        id_produto=_pai,
-                        sku=(valores.get("sku_pai") or "").strip(),
-                        urls=urls,
+                    imagens_pendentes.append(
+                        {
+                            "id_produto": int(_pai),
+                            "sku": (valores.get("sku_pai") or "").strip(),
+                            "urls": list(urls),
+                        }
                     )
             else:
                 urls = extrair_urls_imagem(
@@ -760,13 +761,14 @@ def processar_linhas_csv(
                 )
                 if motivos_rede:
                     nao_publicados.append(_linha_log_rede(valores, motivos_rede))
-                aplicar_imagens_importacao(
-                    cur,
-                    id_tenant=id_tenant,
-                    id_produto=prod_id,
-                    sku=(valores.get("sku") or "").strip() or f"P{prod_id}",
-                    urls=urls,
-                )
+                if urls:
+                    imagens_pendentes.append(
+                        {
+                            "id_produto": int(prod_id),
+                            "sku": (valores.get("sku") or "").strip() or f"P{prod_id}",
+                            "urls": list(urls),
+                        }
+                    )
                 if criado:
                     inseridos += 1
                 else:
@@ -781,5 +783,6 @@ def processar_linhas_csv(
         "rejeitadas": rejeitadas,
         "erros": erros,
         "nao_publicados": nao_publicados,
+        "imagens_pendentes": imagens_pendentes,
         "total_linhas": len(preparadas),
     }
