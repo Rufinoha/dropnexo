@@ -191,7 +191,13 @@
     const tb = document.getElementById("ol_tbl_depositos");
     if (!tb) return;
     tb.innerHTML = '<tr><td colspan="3">Carregando…</td></tr>';
-    const data = await jsonFetch("/api/integracoes/olist/depositos");
+    let data;
+    try {
+      data = await jsonFetch("/api/integracoes/olist/depositos");
+    } catch (e) {
+      tb.innerHTML = `<tr><td colspan="3">${esc(e.message)}</td></tr>`;
+      return;
+    }
     const alerta = document.getElementById("ol_estoque_alert_dep");
     if (alerta) alerta.hidden = Number(data.vinculados || 0) > 0;
     const locais = data.dropnexo || [];
@@ -311,49 +317,6 @@
       });
     });
   }
-
-  document.getElementById("ol_btn_importar")?.addEventListener("click", async () => {
-    const ok = await Swal.fire({
-      title: "Importar produtos do Olist?",
-      text: "Entra em lotes curtos. A foto é baixada para o servidor, como no Bling.",
-      icon: "question",
-      showCancelButton: true,
-      confirmButtonText: "Importar",
-      cancelButtonText: "Cancelar",
-      confirmButtonColor: "#021F81",
-    });
-    if (!ok.isConfirmed) return;
-    let offset = 0;
-    let novos = 0;
-    let atualizados = 0;
-    let erros = [];
-    Swal.fire({ title: "Importando", html: "Buscando o primeiro lote…", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-    try {
-      for (let i = 0; i < 400; i += 1) {
-        const data = await jsonFetch("/api/integracoes/olist/produtos/importar", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ offset }),
-        });
-        novos += data.importados || 0;
-        atualizados += data.atualizados || 0;
-        if (Array.isArray(data.erros)) erros = erros.concat(data.erros);
-        const el = Swal.getHtmlContainer();
-        if (el) el.textContent = `${novos + atualizados} produto(s) até agora.`;
-        if (data.fim) break;
-        offset = data.proximo_offset || offset + 5;
-      }
-      await Swal.fire({
-        icon: erros.length ? "warning" : "success",
-        title: "Importação concluída",
-        text: `${novos} novo(s), ${atualizados} atualizado(s).${erros.length ? ` ${erros.length} item(ns) ficaram de fora.` : ""}`,
-        confirmButtonColor: "#021F81",
-      });
-      await carregarStatus();
-    } catch (e) {
-      Swal.fire({ icon: "error", title: "Olist", text: e.message, confirmButtonColor: "#021F81" });
-    }
-  });
 
   btnSair?.addEventListener("click", async () => {
     const ok = await Swal.fire({

@@ -288,13 +288,8 @@
       <section class="Bl_EstoqueBlock">
         <h3 class="Bl_EstoqueBlockTitle">Produtos e estoque</h3>
         <p class="Bl_Hint">
-          Importe produtos do Bling para o DropNexo (após mapear categorias) e configure a sincronização de estoque.
+          A importação de produtos fica no Catálogo. Aqui você configura a sincronização de estoque.
         </p>
-
-        <div class="Bl_Actions Bl_Actions--inline Bl_Actions--produtos-fn">
-          <button type="button" class="Cl_botaoprimario" id="bl_btn_sync_produtos_fn">Importar produtos do Bling</button>
-          <span class="Bl_Hint Bl_Hint--inline">Use a aba Categorias para liberar a importação.</span>
-        </div>
 
         <p class="Bl_Meta" id="bl_ultima_sync"></p>
 
@@ -537,5 +532,5 @@
 </div>
 {% endblock %}
 {% block page_js %}
-<script src="{{ url_for('static', filename='script/Sbling_integracao.js') }}?v=44"></script>
+<script src="{{ url_for('static', filename='script/Sbling_integracao.js') }}?v=45"></script>
 {% endblock %}

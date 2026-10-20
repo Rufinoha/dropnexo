@@ -140,11 +140,7 @@
     <div id="ol_pane_produtos" hidden>
       <section class="Bl_EstoqueBlock">
         <h3 class="Bl_EstoqueBlockTitle">Produtos e estoque</h3>
-        <p class="Bl_Hint">Importe produtos do Olist para o DropNexo e configure a sincronização de estoque. A foto é baixada na hora, no mesmo caminho do Bling.</p>
-        <div class="Bl_Actions Bl_Actions--inline Bl_Actions--produtos-fn">
-          <button type="button" class="Cl_botaoprimario" id="ol_btn_importar">Importar produtos do Olist</button>
-          <span class="Bl_Hint Bl_Hint--inline">Use a aba Categorias para amarrar a árvore antes, se quiser.</span>
-        </div>
+        <p class="Bl_Hint">A importação de produtos fica no Catálogo. Aqui você configura a sincronização de estoque. A foto é baixada na hora, no mesmo caminho do Bling.</p>
         <p class="Bl_Meta" id="ol_ultima_sync"></p>
         <div class="Bl_SyncAlert" id="ol_estoque_alert_dep" hidden role="alert">
           Estoque não será sincronizado: nenhum depósito Olist vinculado. Vincule na aba Depósitos.
@@ -234,5 +230,5 @@
 </div>
 {% endblock %}
 {% block page_js %}
-<script src="{{ url_for('olist.static', filename='script/Solist_integracao.js') }}?v=6"></script>
+<script src="{{ url_for('olist.static', filename='script/Solist_integracao.js') }}?v=8"></script>
 {% endblock %}

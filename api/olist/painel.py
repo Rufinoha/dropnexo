@@ -144,7 +144,21 @@ def _buscar_lista(id_tenant: int, caminhos: list[str]) -> list[dict]:
 
 def listar_depositos(cur, id_tenant: int) -> dict[str, Any]:
     garantir_tabelas(cur)
-    remotos = _buscar_lista(id_tenant, ["/depositos"])
+    try:
+        remotos = _buscar_lista(id_tenant, ["/depositos"])
+    except RuntimeError as e:
+        texto = str(e)
+        if "respondeu 401" in texto:
+            raise RuntimeError(
+                "A conta no Olist não tem o módulo Depósitos ativado. "
+                "Ative Depósitos para o usuário que conectou o DropNexo e conecte de novo."
+            ) from e
+        if "respondeu 403" in texto:
+            raise RuntimeError(
+                "O Olist recusou a lista de depósitos. "
+                "Deixe Depósitos em Leitura no aplicativo Dropnexo e conecte de novo."
+            ) from e
+        raise
     cur.execute(
         """
         SELECT id_olist, id_deposito FROM tbl_integracao_olist_deposito
@@ -227,7 +241,12 @@ def listar_categorias(cur, id_tenant: int) -> dict[str, Any]:
         bruto = api_request(id_tenant, "GET", "/categorias/todas")
     except RuntimeError as e:
         texto = str(e)
-        if "403" in texto:
+        if "respondeu 401" in texto:
+            raise RuntimeError(
+                "A conta no Olist não tem o módulo Categorias ativado. "
+                "Ative Categorias para o usuário que conectou o DropNexo e conecte de novo."
+            ) from e
+        if "respondeu 403" in texto:
             raise RuntimeError(
                 "O Olist recusou a lista de categorias. Pode ser que ainda não exista nenhuma categoria no Olist. "
                 "Se já existir, deixe Categorias em Leitura no aplicativo Dropnexo e conecte de novo."

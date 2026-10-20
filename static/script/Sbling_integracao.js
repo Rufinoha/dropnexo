@@ -24,7 +24,6 @@
   const btnSalvarProdutos = document.getElementById("bl_btn_salvar_produtos");
   const btnSalvarEstoque = document.getElementById("bl_btn_salvar_estoque");
   const btnSyncProdutosVd = document.getElementById("bl_btn_sync_produtos_vd");
-  const btnSyncProdutosFn = document.getElementById("bl_btn_sync_produtos_fn");
   const btnExportPedidos = document.getElementById("bl_btn_export_pedidos");
   const paneConfig = document.getElementById("bl_pane_config");
   const panePedidos = document.getElementById("bl_pane_pedidos");
@@ -1815,34 +1814,6 @@
       Swal.fire({ icon: "error", title: "Erro", text: e.message, confirmButtonColor: "#021F81" });
     } finally {
       btnSyncProdutosVd.disabled = false;
-    }
-  });
-
-  btnSyncProdutosFn?.addEventListener("click", async () => {
-    const ok = await Swal.fire({
-      title: "Importar produtos do Bling?",
-      text: "Certifique-se de que as categorias estão mapeadas na aba Categorias.",
-      icon: "question",
-      showCancelButton: true,
-      confirmButtonText: "Importar",
-      cancelButtonText: "Cancelar",
-      confirmButtonColor: "#021F81",
-    });
-    if (!ok.isConfirmed) return;
-    btnSyncProdutosFn.disabled = true;
-    try {
-      const j = await syncProdutos("fornecedor");
-      await Swal.fire({
-        icon: "success",
-        title: "Importação concluída",
-        text: j.message || "Produtos importados.",
-        confirmButtonColor: "#021F81",
-      });
-      await carregarStatus();
-    } catch (e) {
-      Swal.fire({ icon: "error", title: "Erro", text: e.message, confirmButtonColor: "#021F81" });
-    } finally {
-      btnSyncProdutosFn.disabled = false;
     }
   });
 
