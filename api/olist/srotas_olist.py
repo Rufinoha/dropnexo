@@ -8,6 +8,7 @@ from flask import Blueprint, jsonify, redirect, render_template, request, sessio
 from api.olist.cliente import (
     MSG_USUARIO_SEM_PERMISSAO,
     consultar_conta,
+    colunas_aplicativo_ok,
     credenciais_da_conta,
     desconectar,
     garantir_tabelas,
@@ -279,11 +280,20 @@ def api_status():
         cur = conn.cursor()
         garantir_tabelas(cur)
         conectado = olist_conectado(cur, id_tenant)
-        cur.execute(
-            "SELECT conta_nome, client_id FROM tbl_integracao_olist WHERE id_tenant = %s",
-            (id_tenant,),
-        )
-        row = cur.fetchone()
+        if colunas_aplicativo_ok(cur):
+            cur.execute(
+                "SELECT conta_nome, client_id FROM tbl_integracao_olist WHERE id_tenant = %s",
+                (id_tenant,),
+            )
+            row = cur.fetchone()
+            client_id = (row[1] if row else "") or ""
+        else:
+            cur.execute(
+                "SELECT conta_nome FROM tbl_integracao_olist WHERE id_tenant = %s",
+                (id_tenant,),
+            )
+            row = cur.fetchone()
+            client_id = ""
         from fornecedor.catalogo.catalogo import obter_bytes_imagens_tenant
 
         try:
@@ -297,7 +307,7 @@ def api_status():
             success=True,
             conectado=conectado,
             conta_nome=(row[0] if row else "") or "",
-            client_id=(row[1] if row else "") or "",
+            client_id=client_id,
             config=cfg,
             logs=logs,
             armazenamento={"bytes_imagens": bytes_img},

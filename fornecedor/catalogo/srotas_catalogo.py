@@ -1077,9 +1077,13 @@ def pagina():
             )
             row = cur.fetchone()
             bling_conectado = bool(row and row[0] == "conectado")
-            from api.olist.cliente import olist_conectado as olist_esta_conectado
+            try:
+                from api.olist.cliente import olist_conectado as olist_esta_conectado
 
-            olist_conectado = olist_esta_conectado(cur, int(id_tenant))
+                olist_conectado = olist_esta_conectado(cur, int(id_tenant))
+            except Exception:
+                conn.rollback()
+                olist_conectado = False
         finally:
             conn.close()
     return render_template(

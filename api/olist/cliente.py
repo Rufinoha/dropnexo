@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import urlencode
 
+import psycopg2
 import requests
 
 from core.tokens import criptografar_token, descriptografar_token
@@ -44,6 +45,11 @@ def credenciais() -> tuple[str, str]:
 def credenciais_da_conta(cur, id_tenant: int) -> tuple[str, str]:
     """Cada conta Olist tem o próprio aplicativo. Sem essas chaves a API responde 401."""
     garantir_tabelas(cur)
+    if not colunas_aplicativo_ok(cur):
+        raise RuntimeError(
+            "Falta criar as colunas do aplicativo Olist no banco. "
+            "Rode o ALTER de client_id e client_secret_enc em tbl_integracao_olist."
+        )
     cur.execute(
         """
         SELECT client_id, client_secret_enc
@@ -65,6 +71,11 @@ def credenciais_da_conta(cur, id_tenant: int) -> tuple[str, str]:
 def salvar_aplicativo(cur, id_tenant: int, client_id: str, client_secret: str) -> bool:
     """Grava as chaves do aplicativo desta conta. Devolve True se a conexão anterior foi encerrada."""
     garantir_tabelas(cur)
+    if not colunas_aplicativo_ok(cur):
+        raise ValueError(
+            "Falta criar as colunas do aplicativo Olist no banco. "
+            "Rode o ALTER de client_id e client_secret_enc em tbl_integracao_olist."
+        )
     cid = (client_id or "").strip()
     sec = (client_secret or "").strip()
     if not cid:
@@ -181,13 +192,24 @@ def garantir_tabelas(cur) -> None:
             )
             """
         )
-    cur.execute(
-        """
-        ALTER TABLE tbl_integracao_olist
-            ADD COLUMN IF NOT EXISTS client_id VARCHAR(180),
-            ADD COLUMN IF NOT EXISTS client_secret_enc TEXT
-        """
-    )
+    # O dono da tabela em produção é postgres, não o usuário do app.
+    # Sem o savepoint, a falha de permissão derruba a página do catálogo.
+    cur.execute("SAVEPOINT sp_olist_app")
+    try:
+        cur.execute(
+            """
+            ALTER TABLE tbl_integracao_olist
+                ADD COLUMN IF NOT EXISTS client_id VARCHAR(180),
+                ADD COLUMN IF NOT EXISTS client_secret_enc TEXT
+            """
+        )
+    except psycopg2.Error:
+        cur.execute("ROLLBACK TO SAVEPOINT sp_olist_app")
+        _log.warning(
+            "tbl_integracao_olist: sem permissão para criar client_id. "
+            "O dono da tabela precisa rodar o ALTER."
+        )
+    cur.execute("RELEASE SAVEPOINT sp_olist_app")
     cur.execute("SELECT to_regclass('public.tbl_integracao_olist_config')")
     if not cur.fetchone()[0]:
         cur.execute(
@@ -291,8 +313,25 @@ def salvar_tokens(cur, id_tenant: int, payload: dict[str, Any], conta_nome: str 
     )
 
 
+def colunas_aplicativo_ok(cur) -> bool:
+    cur.execute(
+        """
+        SELECT COUNT(*)
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'tbl_integracao_olist'
+          AND column_name IN ('client_id', 'client_secret_enc')
+        """
+    )
+    return int((cur.fetchone() or [0])[0]) == 2
+
+
 def olist_conectado(cur, id_tenant: int) -> bool:
-    garantir_tabelas(cur)
+    cur.execute(
+        "SELECT to_regclass('public.tbl_integracao_olist')"
+    )
+    if not cur.fetchone()[0]:
+        return False
     cur.execute(
         "SELECT status FROM tbl_integracao_olist WHERE id_tenant = %s",
         (int(id_tenant),),
