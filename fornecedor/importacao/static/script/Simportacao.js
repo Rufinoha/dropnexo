@@ -635,6 +635,17 @@
     }
   }
 
+  function baixarTexto(texto, nome) {
+    const blob = new Blob([texto], { type: "text/plain;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = nome;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(a.href);
+  }
+
   async function importarArquivo() {
     const file = qs("#impArquivo")?.files?.[0];
     if (!file) {
@@ -652,6 +663,7 @@
       const j = await r.json();
       Swal.close();
       if (!r.ok || !j.success) throw new Error(j.message || "Falha na importação.");
+      if (j.log_rede) baixarTexto(j.log_rede, `importacao_${j.numero || "catalogo"}_nao_publicados.log`);
       await carregarCards("arquivo", j.id_lote);
       pickTab("nova");
       await Swal.fire({

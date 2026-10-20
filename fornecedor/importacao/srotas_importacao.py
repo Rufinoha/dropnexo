@@ -426,6 +426,7 @@ def importacao_arquivo():
         MAX_LINHAS_CSV,
         montar_mapa_colunas,
         processar_linhas_csv,
+        texto_log_nao_publicados,
     )
 
     texto = raw.decode("utf-8-sig", errors="replace")
@@ -495,6 +496,8 @@ def importacao_arquivo():
         atualizados = int(resultado.get("atualizados") or 0)
         rejeitadas = int(resultado.get("rejeitadas") or 0)
         total_linhas = int(resultado.get("total_linhas") or 0)
+        nao_publicados = resultado.get("nao_publicados") or []
+        log_rede = texto_log_nao_publicados(nao_publicados, filename)
         status = STATUS_ERRO if inseridos + atualizados == 0 else STATUS_CONCLUIDO
         finalizar_lote(
             cur,
@@ -510,12 +513,19 @@ def importacao_arquivo():
         erros = listar_erros_lote(cur, id_tenant, id_lote)
         return jsonify(
             success=True,
-            message=f"Importação {numero} concluída.",
+            message=(
+                f"Importação {numero} concluída. "
+                f"{len(nao_publicados)} produto(s) ficaram fora da rede. O log foi baixado."
+                if nao_publicados
+                else f"Importação {numero} concluída."
+            ),
             id_lote=id_lote,
             numero=numero,
             inseridos=inseridos,
             atualizados=atualizados,
             rejeitadas=rejeitadas,
+            nao_publicados=len(nao_publicados),
+            log_rede=log_rede,
             lote=lote,
             erros=erros,
         )

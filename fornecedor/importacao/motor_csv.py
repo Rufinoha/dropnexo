@@ -130,22 +130,53 @@ def extrair_urls_imagem(
     return limpos[:MAX_IMAGENS_IMPORT]
 
 
+_MEDIDAS_REDE = (
+    ("altura_cm", "Altura igual a 0"),
+    ("largura_cm", "Largura igual a 0"),
+    ("profundidade_cm", "Comprimento igual a 0"),
+)
+
+
+def motivos_fora_da_rede(valores: dict[str, str]) -> list[str]:
+    """Preço 0 ou medida 0 entra no cadastro e fica fora da rede."""
+    motivos: list[str] = []
+    preco = parse_decimal(valores.get("preco"))
+    if preco is None or preco <= 0:
+        motivos.append("Preço igual a 0")
+    for campo, rotulo in _MEDIDAS_REDE:
+        medida = parse_decimal(valores.get(campo))
+        if medida is None or medida <= 0:
+            motivos.append(rotulo)
+    return motivos
+
+
+def aplicar_publicacao(valores: dict[str, str]) -> list[str]:
+    motivos = motivos_fora_da_rede(valores)
+    if motivos:
+        valores["publicado"] = "nao"
+    elif not (valores.get("publicado") or "").strip():
+        valores["publicado"] = "sim"
+    return motivos
+
+
 def validar_linha_produto(valores: dict[str, str], urls: list[str]) -> list[str]:
     erros: list[str] = []
     regra = mapa_obrigatoriedade()
+    if not (valores.get("unidade") or "").strip():
+        valores["unidade"] = "UN"
+    if not (valores.get("descricao") or "").strip():
+        valores["descricao"] = (valores.get("nome") or "").strip()
     campos_produto = [
         "sku",
         "nome",
         "preco",
         "unidade",
         "descricao",
-        "categoria",
         "peso_bruto_kg",
         "altura_cm",
         "largura_cm",
         "profundidade_cm",
         "ncm",
-        "gtin",
         "origem_fiscal",
     ]
     for campo in campos_produto:
@@ -153,8 +184,6 @@ def validar_linha_produto(valores: dict[str, str], urls: list[str]) -> list[str]
             erros.append(f"Campo obrigatório ausente: {campo}")
     if parse_decimal(valores.get("preco")) is None:
         erros.append("preco inválido.")
-    if not urls:
-        erros.append("Informe ao menos 1 imagem (URL).")
     return erros
 
 
@@ -171,6 +200,42 @@ def validar_linha_variacao(valores: dict[str, str]) -> list[str]:
 
 def _eh_linha_variacao(valores: dict[str, str]) -> bool:
     return bool((valores.get("sku_pai") or "").strip())
+
+
+def _despublicar_produto(cur, id_produto: int) -> None:
+    cur.execute(
+        "UPDATE tbl_produto SET publicado = FALSE, atualizado_em = %s WHERE id = %s",
+        (agora_utc(), int(id_produto)),
+    )
+
+
+def _linha_log_rede(valores: dict[str, str], motivos: list[str]) -> dict[str, str]:
+    return {
+        "sku": (valores.get("sku") or "").strip(),
+        "nome": (valores.get("nome") or valores.get("nome_variacao") or "").strip(),
+        "motivo": "; ".join(motivos),
+    }
+
+
+def texto_log_nao_publicados(itens: list[dict], nome_arquivo: str = "") -> str:
+    linhas = [
+        "Produtos importados e não publicados na rede",
+        f"Arquivo: {nome_arquivo or 'importação'}",
+        f"Total: {len(itens)}",
+        "",
+    ]
+    if not itens:
+        linhas.append("Nenhum produto ficou fora da rede por preço ou medida.")
+        return "\n".join(linhas) + "\n"
+    for item in itens:
+        linhas.append(f"SKU: {item.get('sku') or ''}")
+        linhas.append(f"Nome: {item.get('nome') or ''}")
+        linhas.append(f"Motivo: {item.get('motivo') or ''}")
+        linhas.append("")
+    linhas.append(
+        "Quando a linha é uma variação, o produto pai também fica fora da rede."
+    )
+    return "\n".join(linhas) + "\n"
 
 
 def _contar_imagens_produto(cur, id_produto: int) -> int:
@@ -631,6 +696,7 @@ def processar_linhas_csv(
     atualizados = 0
     rejeitadas = 0
     erros: list[dict] = []
+    nao_publicados: list[dict] = []
 
     preparadas: list[dict] = []
     for num, row in rows:
@@ -647,6 +713,9 @@ def processar_linhas_csv(
         num = item["num"]
         valores = item["valores"]
         try:
+            if not (valores.get("descricao") or "").strip():
+                valores["descricao"] = (valores.get("nome") or "").strip()
+            motivos_rede = aplicar_publicacao(valores)
             if item["variacao"]:
                 errs = validar_linha_variacao(valores)
                 if errs:
@@ -654,6 +723,9 @@ def processar_linhas_csv(
                     erros.append({"linha": num, "erro": "; ".join(errs), "sku": valores.get("sku")})
                     continue
                 _pai, _vid, criada = _upsert_variacao(cur, id_tenant=id_tenant, valores=valores)
+                if motivos_rede:
+                    _despublicar_produto(cur, _pai)
+                    nao_publicados.append(_linha_log_rede(valores, motivos_rede))
                 if criada:
                     inseridos += 1
                 else:
@@ -686,6 +758,8 @@ def processar_linhas_csv(
                     id_lote=id_lote,
                     origem=origem,
                 )
+                if motivos_rede:
+                    nao_publicados.append(_linha_log_rede(valores, motivos_rede))
                 aplicar_imagens_importacao(
                     cur,
                     id_tenant=id_tenant,
@@ -706,5 +780,6 @@ def processar_linhas_csv(
         "atualizados": atualizados,
         "rejeitadas": rejeitadas,
         "erros": erros,
+        "nao_publicados": nao_publicados,
         "total_linhas": len(preparadas),
     }

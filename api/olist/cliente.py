@@ -18,6 +18,10 @@ _log = logging.getLogger(__name__)
 
 OLIST_AUTH = "https://accounts.tiny.com.br/realms/tiny/protocol/openid-connect"
 OLIST_API = "https://api.tiny.com.br/public-api/v3"
+MSG_USUARIO_SEM_PERMISSAO = (
+    "O usuário usado para conectar o Olist não tem permissão suficiente para a integração. "
+    "Conecte com o usuário dono, aquele que abriu a conta no Olist."
+)
 _TIMEOUT = (8, 40)
 _MARGEM = timedelta(minutes=5)
 
@@ -37,6 +41,70 @@ def credenciais() -> tuple[str, str]:
     return cid, sec
 
 
+def credenciais_da_conta(cur, id_tenant: int) -> tuple[str, str]:
+    """Cada conta Olist tem o próprio aplicativo. Sem essas chaves a API responde 401."""
+    garantir_tabelas(cur)
+    cur.execute(
+        """
+        SELECT client_id, client_secret_enc
+        FROM tbl_integracao_olist
+        WHERE id_tenant = %s
+        """,
+        (int(id_tenant),),
+    )
+    row = cur.fetchone()
+    cid = (row[0] or "").strip() if row else ""
+    sec = descriptografar_token(row[1]).strip() if row and row[1] else ""
+    if not cid or not sec:
+        raise RuntimeError(
+            "Crie o aplicativo na conta Olist desta empresa e salve o Client ID e o Client Secret antes de conectar."
+        )
+    return cid, sec
+
+
+def salvar_aplicativo(cur, id_tenant: int, client_id: str, client_secret: str) -> bool:
+    """Grava as chaves do aplicativo desta conta. Devolve True se a conexão anterior foi encerrada."""
+    garantir_tabelas(cur)
+    cid = (client_id or "").strip()
+    sec = (client_secret or "").strip()
+    if not cid:
+        raise ValueError("Informe o Client ID do aplicativo criado na conta Olist.")
+    cur.execute(
+        """
+        SELECT client_id, client_secret_enc, status
+        FROM tbl_integracao_olist
+        WHERE id_tenant = %s
+        """,
+        (int(id_tenant),),
+    )
+    atual = cur.fetchone()
+    if not sec:
+        mesmo = atual and (atual[0] or "").strip() == cid and atual[1]
+        if not mesmo:
+            raise ValueError("Informe o Client Secret do aplicativo.")
+        sec_enc = atual[1]
+    else:
+        sec_enc = criptografar_token(sec)
+    trocou = not atual or (atual[0] or "").strip() != cid
+    agora = agora_utc()
+    cur.execute(
+        """
+        INSERT INTO tbl_integracao_olist (
+            id_tenant, status, client_id, client_secret_enc, atualizado_em
+        ) VALUES (%s, 'desconectado', %s, %s, %s)
+        ON CONFLICT (id_tenant) DO UPDATE SET
+            client_id = EXCLUDED.client_id,
+            client_secret_enc = EXCLUDED.client_secret_enc,
+            atualizado_em = EXCLUDED.atualizado_em
+        """,
+        (int(id_tenant), cid[:180], sec_enc, agora),
+    )
+    if trocou and atual and atual[2] == "conectado":
+        desconectar(cur, id_tenant)
+        return True
+    return False
+
+
 def redirect_uri_oauth() -> str:
     return f"{obter_base_url().rstrip('/')}/api/integracoes/olist/oauth/callback"
 
@@ -45,8 +113,7 @@ def gerar_state_oauth() -> str:
     return secrets.token_urlsafe(24)
 
 
-def url_autorizacao(state: str) -> str:
-    client_id, _ = credenciais()
+def url_autorizacao(state: str, client_id: str) -> str:
     qs = urlencode(
         {
             "client_id": client_id,
@@ -59,8 +126,7 @@ def url_autorizacao(state: str) -> str:
     return f"{OLIST_AUTH}/auth?{qs}"
 
 
-def _token_request(data: dict[str, str]) -> dict[str, Any]:
-    client_id, client_secret = credenciais()
+def _token_request(data: dict[str, str], client_id: str, client_secret: str) -> dict[str, Any]:
     body = {"client_id": client_id, "client_secret": client_secret, **data}
     r = requests.post(
         f"{OLIST_AUTH}/token",
@@ -77,18 +143,24 @@ def _token_request(data: dict[str, str]) -> dict[str, Any]:
     return payload
 
 
-def trocar_code_por_tokens(code: str) -> dict[str, Any]:
+def trocar_code_por_tokens(code: str, client_id: str, client_secret: str) -> dict[str, Any]:
     return _token_request(
         {
             "grant_type": "authorization_code",
             "redirect_uri": redirect_uri_oauth(),
             "code": code,
-        }
+        },
+        client_id,
+        client_secret,
     )
 
 
-def renovar_access_token(refresh: str) -> dict[str, Any]:
-    return _token_request({"grant_type": "refresh_token", "refresh_token": refresh})
+def renovar_access_token(refresh: str, client_id: str, client_secret: str) -> dict[str, Any]:
+    return _token_request(
+        {"grant_type": "refresh_token", "refresh_token": refresh},
+        client_id,
+        client_secret,
+    )
 
 
 def garantir_tabelas(cur) -> None:
@@ -109,6 +181,13 @@ def garantir_tabelas(cur) -> None:
             )
             """
         )
+    cur.execute(
+        """
+        ALTER TABLE tbl_integracao_olist
+            ADD COLUMN IF NOT EXISTS client_id VARCHAR(180),
+            ADD COLUMN IF NOT EXISTS client_secret_enc TEXT
+        """
+    )
     cur.execute("SELECT to_regclass('public.tbl_integracao_olist_config')")
     if not cur.fetchone()[0]:
         cur.execute(
@@ -258,7 +337,8 @@ def obter_access_token_valido(id_tenant: int) -> str:
         refresh = (dados.get("refresh_token") or "").strip()
         if not refresh:
             raise RuntimeError("Não há refresh token do Olist. Conecte de novo.")
-        novo = renovar_access_token(refresh)
+        client_id, client_secret = credenciais_da_conta(cur, id_tenant)
+        novo = renovar_access_token(refresh, client_id, client_secret)
         salvar_tokens(cur, id_tenant, novo, dados.get("conta_nome") or "")
         conn.commit()
         return (novo.get("access_token") or "").strip()
@@ -285,6 +365,28 @@ def api_request(id_tenant: int, method: str, path: str, *, params: dict | None =
     if not r.content:
         return None
     return r.json()
+
+
+def mensagem_publica_olist(erro: BaseException) -> str:
+    texto = str(erro)
+    if "respondeu 401" in texto or "respondeu 403" in texto:
+        return MSG_USUARIO_SEM_PERMISSAO
+    return texto
+
+
+def validar_acessos_integracao(id_tenant: int) -> None:
+    """Produtos é obrigatório. Categorias e depósitos podem ficar desligados."""
+    try:
+        api_request(
+            id_tenant,
+            "GET",
+            "/produtos",
+            params={"situacao": "A", "limit": 1, "offset": 0},
+        )
+    except RuntimeError as e:
+        if mensagem_publica_olist(e) == MSG_USUARIO_SEM_PERMISSAO:
+            raise RuntimeError(MSG_USUARIO_SEM_PERMISSAO) from e
+        raise
 
 
 def consultar_conta(id_tenant: int) -> str:

@@ -6,14 +6,20 @@ from pathlib import Path
 from flask import Blueprint, jsonify, redirect, render_template, request, session, url_for
 
 from api.olist.cliente import (
+    MSG_USUARIO_SEM_PERMISSAO,
     consultar_conta,
+    credenciais_da_conta,
     desconectar,
     garantir_tabelas,
+    mensagem_publica_olist,
     olist_configurado,
     olist_conectado,
+    redirect_uri_oauth,
+    salvar_aplicativo,
     salvar_tokens,
     trocar_code_por_tokens,
     url_autorizacao,
+    validar_acessos_integracao,
     gerar_state_oauth,
 )
 from api.olist.painel import (
@@ -99,6 +105,7 @@ def pagina():
         olist_conectado=conectado,
         olist_conta=conta,
         olist_configurado=olist_configurado(),
+        olist_redirect=redirect_uri_oauth(),
         eh_dev=bool(session.get("eh_desenvolvedor")),
         icone_olist=url_icone_integracao("olist"),
     )
@@ -113,13 +120,22 @@ def oauth_iniciar():
         return redirect(url_for("integracoes.pagina", erro="Sem permissão para conectar o Olist."))
     if not limites_plano().get("integracao"):
         return redirect(url_for("integracoes.pagina", erro=mensagem_upgrade_integracao()))
-    if not olist_configurado():
-        return redirect(url_for("olist.pagina", erro="Integração Olist indisponível neste servidor."))
+    id_tenant = session.get("id_tenant")
+    if not id_tenant:
+        return redirect(url_for("integracoes.pagina", erro="sessao"))
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        client_id, _ = credenciais_da_conta(cur, int(id_tenant))
+    except RuntimeError as e:
+        return redirect(url_for("olist.pagina", erro=str(e)[:240]))
+    finally:
+        conn.close()
 
     state = gerar_state_oauth()
     session["olist_oauth_state"] = state
-    session["olist_oauth_tenant"] = session.get("id_tenant")
-    return redirect(url_autorizacao(state))
+    session["olist_oauth_tenant"] = int(id_tenant)
+    return redirect(url_autorizacao(state, client_id))
 
 
 @olist_bp.get("/api/integracoes/olist/oauth/callback")
@@ -141,19 +157,34 @@ def oauth_callback():
     if not id_tenant:
         return redirect(url_for("integracoes.pagina", erro="sessao"))
 
-    try:
-        tokens = trocar_code_por_tokens(code)
-    except Exception as e:
-        return redirect(url_for("olist.pagina", erro=str(e)[:240]))
-
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
         garantir_tabelas(cur)
+        try:
+            client_id, client_secret = credenciais_da_conta(cur, int(id_tenant))
+            tokens = trocar_code_por_tokens(code, client_id, client_secret)
+        except Exception as e:
+            return redirect(url_for("olist.pagina", erro=str(e)[:240]))
         salvar_tokens(cur, int(id_tenant), tokens)
         conn.commit()
     finally:
         conn.close()
+
+    try:
+        validar_acessos_integracao(int(id_tenant))
+    except RuntimeError as e:
+        if str(e) == MSG_USUARIO_SEM_PERMISSAO:
+            conn = Var_ConectarBanco()
+            try:
+                cur = conn.cursor()
+                desconectar(cur, int(id_tenant))
+                conn.commit()
+            finally:
+                conn.close()
+            session.pop("olist_oauth_state", None)
+            session.pop("olist_oauth_tenant", None)
+            return redirect(url_for("olist.pagina", erro=MSG_USUARIO_SEM_PERMISSAO))
 
     conta = ""
     try:
@@ -221,7 +252,7 @@ def api_importar():
             return jsonify(success=False, message=str(e), fim=True), 400
         except Exception as e:
             conn.rollback()
-            return jsonify(success=False, message=str(e)[:400]), 502
+            return jsonify(success=False, message=mensagem_publica_olist(e)[:400]), 502
         conn.commit()
         return jsonify(success=True, **resultado)
     finally:
@@ -249,7 +280,7 @@ def api_status():
         garantir_tabelas(cur)
         conectado = olist_conectado(cur, id_tenant)
         cur.execute(
-            "SELECT conta_nome FROM tbl_integracao_olist WHERE id_tenant = %s",
+            "SELECT conta_nome, client_id FROM tbl_integracao_olist WHERE id_tenant = %s",
             (id_tenant,),
         )
         row = cur.fetchone()
@@ -266,12 +297,40 @@ def api_status():
             success=True,
             conectado=conectado,
             conta_nome=(row[0] if row else "") or "",
+            client_id=(row[1] if row else "") or "",
             config=cfg,
             logs=logs,
             armazenamento={"bytes_imagens": bytes_img},
         )
     finally:
         conn.close()
+
+
+@olist_bp.post("/api/integracoes/olist/aplicativo")
+@login_obrigatorio()
+def api_salvar_aplicativo():
+    id_tenant, erro = _tenant_ok()
+    if erro:
+        return erro
+    body = request.get_json(silent=True) or {}
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        encerrou = salvar_aplicativo(
+            cur,
+            id_tenant,
+            str(body.get("client_id") or ""),
+            str(body.get("client_secret") or ""),
+        )
+        conn.commit()
+    except ValueError as e:
+        return jsonify(success=False, message=str(e)), 400
+    finally:
+        conn.close()
+    mensagem = "Aplicativo salvo."
+    if encerrou:
+        mensagem = "Aplicativo salvo. A conexão anterior foi encerrada. Conecte de novo com o usuário dono."
+    return jsonify(success=True, message=mensagem, desconectou=encerrou)
 
 
 @olist_bp.post("/api/integracoes/olist/config/salvar")

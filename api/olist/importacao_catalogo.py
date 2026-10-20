@@ -7,7 +7,7 @@ from typing import Any
 
 from flask import Flask
 
-from api.olist.cliente import api_request
+from api.olist.cliente import MSG_USUARIO_SEM_PERMISSAO, api_request, mensagem_publica_olist
 from api.olist.painel import listar_categorias, listar_depositos, salvar_categoria
 from api.olist.produtos import _id_categoria_olist, importar_lote
 from fornecedor.importacao.servico_importacao import (
@@ -158,8 +158,10 @@ def pre_analisar_importacao(
                 "A conta no Olist não tem o módulo Categorias ativado. "
                 "Importe todos os produtos. O vínculo fica para depois."
             ) from e
+        elif mensagem_publica_olist(e) == MSG_USUARIO_SEM_PERMISSAO:
+            raise ValueError(MSG_USUARIO_SEM_PERMISSAO) from e
         else:
-            raise ValueError(str(e)) from e
+            raise ValueError(mensagem_publica_olist(e)) from e
 
     cur.execute(
         """
@@ -349,7 +351,7 @@ def _worker_importacao(
             try:
                 conn.rollback()
                 cur = conn.cursor()
-                marcar_lote_erro_fatal(cur, id_lote, str(exc))
+                marcar_lote_erro_fatal(cur, id_lote, mensagem_publica_olist(exc))
                 conn.commit()
             except Exception:
                 _log.exception("Falha ao marcar lote Olist %s como erro", id_lote)
