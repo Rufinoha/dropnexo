@@ -106,6 +106,10 @@ def _contar_locais(cur, id_tenant: int) -> tuple[int, int]:
     return n_cat, n_dep
 
 
+def _modulo_olist_desligado(erro: BaseException) -> bool:
+    return "não tem o módulo" in str(erro)
+
+
 def escopo_categorias(
     cur,
     id_tenant: int,
@@ -136,6 +140,8 @@ def pre_analisar_importacao(
 ) -> dict[str, Any]:
     n_cat, n_dep = _contar_locais(cur, id_tenant)
     bootstrap = n_cat == 0 and n_dep == 0
+    sem_categorias_olist = False
+    sem_depositos_olist = False
     try:
         escopo, ids_filtro = escopo_categorias(
             cur,
@@ -144,7 +150,16 @@ def pre_analisar_importacao(
             incluir_subcategorias=incluir_subcategorias,
         )
     except RuntimeError as e:
-        raise ValueError(str(e)) from e
+        if _modulo_olist_desligado(e) and not ids_categorias:
+            escopo, ids_filtro = [], None
+            sem_categorias_olist = True
+        elif _modulo_olist_desligado(e):
+            raise ValueError(
+                "A conta no Olist não tem o módulo Categorias ativado. "
+                "Importe todos os produtos. O vínculo fica para depois."
+            ) from e
+        else:
+            raise ValueError(str(e)) from e
 
     cur.execute(
         """
@@ -171,6 +186,9 @@ def pre_analisar_importacao(
 
     try:
         deps = listar_depositos(cur, id_tenant)
+    except RuntimeError as e:
+        deps = {"olist": [], "dropnexo": []}
+        sem_depositos_olist = _modulo_olist_desligado(e)
     except Exception:
         deps = {"olist": [], "dropnexo": []}
     pend_dep = [d for d in (deps.get("olist") or []) if not d.get("id_deposito")]
@@ -186,6 +204,17 @@ def pre_analisar_importacao(
         msg = (
             f"Importação bloqueada: {len(pend_dep)} depósito(s) do Olist sem vínculo. "
             "Configure em Integrações › Olist › Depósitos."
+        )
+    elif sem_categorias_olist or sem_depositos_olist:
+        faltam = []
+        if sem_categorias_olist:
+            faltam.append("categorias")
+        if sem_depositos_olist:
+            faltam.append("depósitos")
+        msg = (
+            "Importação liberada sem "
+            + " e sem ".join(faltam)
+            + " do Olist. O vínculo fica para depois."
         )
     elif bootstrap:
         msg = "Importação liberada com bootstrap (estrutura local vazia)."
@@ -215,6 +244,8 @@ def pre_analisar_importacao(
         },
         "importacao_liberada": not bloqueio_cat and not bloqueio_dep,
         "bootstrap": bootstrap,
+        "sem_categorias_olist": sem_categorias_olist,
+        "sem_depositos_olist": sem_depositos_olist,
     }
 
 
@@ -244,12 +275,13 @@ def _worker_importacao(
     bootstrap: bool,
     ids_categorias: list[str] | None,
     incluir_subcategorias: bool,
+    sem_categorias_olist: bool = False,
 ) -> None:
     with app.app_context():
         conn = Var_ConectarBanco()
         try:
             cur = conn.cursor()
-            if bootstrap:
+            if bootstrap and not sem_categorias_olist:
                 escopo, _ = escopo_categorias(
                     cur,
                     id_tenant,
@@ -336,6 +368,7 @@ def iniciar_importacao_olist_async(
     incluir_subcategorias: bool,
     ids_filtro: list[str] | None,
     bootstrap: bool,
+    sem_categorias_olist: bool = False,
 ) -> dict[str, Any]:
     conn = Var_ConectarBanco()
     try:
@@ -369,6 +402,7 @@ def iniciar_importacao_olist_async(
             "bootstrap": bool(bootstrap),
             "ids_categorias": ids_categorias,
             "incluir_subcategorias": incluir_subcategorias,
+            "sem_categorias_olist": bool(sem_categorias_olist),
         },
         daemon=True,
         name=f"olist-import-{id_lote}",

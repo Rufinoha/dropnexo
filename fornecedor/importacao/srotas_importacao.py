@@ -882,6 +882,7 @@ def importacao_olist_iniciar():
             incluir_subcategorias=incluir_sub,
             ids_filtro=dados.get("ids_filtro"),
             bootstrap=bool(dados.get("bootstrap")),
+            sem_categorias_olist=bool(dados.get("sem_categorias_olist")),
         )
         return jsonify(
             success=True,

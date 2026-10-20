@@ -598,7 +598,23 @@
         });
         return;
       }
-      if (val.bootstrap) {
+      if (dados.sem_categorias_olist || dados.sem_depositos_olist) {
+        const faltam = [];
+        if (dados.sem_categorias_olist) faltam.push("categorias");
+        if (dados.sem_depositos_olist) faltam.push("depósitos");
+        const okSem = await Swal.fire({
+          icon: "info",
+          title: "Importar sem vínculo",
+          html:
+            "O Olist não tem " + faltam.join(" nem ") + " ativados. " +
+            "Os produtos entram assim mesmo. O vínculo fica para depois.",
+          showCancelButton: true,
+          confirmButtonText: "Importar",
+          cancelButtonText: "Cancelar",
+          confirmButtonColor: "#021F81",
+        });
+        if (!okSem.isConfirmed) return;
+      } else if (val.bootstrap) {
         const okBoot = await Swal.fire({
           icon: "info",
           title: "Bootstrap da estrutura",
