@@ -3,7 +3,7 @@
 {% set nav_ativo = 'demandas' %}
 {% block topbar_title %}Central de Chamados{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('demandas.static', filename='style/Cdemandas.css') }}?v=3" />
+<link rel="stylesheet" href="{{ url_for('demandas.static', filename='style/Cdemandas.css') }}?v=4" />
 <script defer src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 {% endblock %}
 {% block content %}
@@ -27,6 +27,7 @@
             <option value="">Todos</option>
             <option value="aberto">Aberto</option>
             <option value="em_atendimento">Em atendimento</option>
+            <option value="aguardando_suporte">Aguardando suporte</option>
             <option value="aguardando_cliente">Aguardando você</option>
             <option value="fechado">Fechado</option>
             <option value="cancelado">Cancelado</option>
@@ -79,5 +80,5 @@
 
   </div>
 </main>
-<script defer src="{{ url_for('demandas.static', filename='script/Sdemandas.js') }}?v=4"></script>
+<script defer src="{{ url_for('demandas.static', filename='script/Sdemandas.js') }}?v=5"></script>
 {% endblock %}

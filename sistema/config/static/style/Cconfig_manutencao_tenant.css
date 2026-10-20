@@ -159,6 +159,13 @@
   color: #334155;
   font-size: 0.88rem;
 }
+#dono_suporte .CfgMt_ConviteTopo {
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+#dono_suporte .CfgMt_ConviteTopo p {
+  flex: 1 1 220px;
+}
 .CfgMt_ConviteLog {
   list-style: none;
   margin: 0.65rem 0 0;

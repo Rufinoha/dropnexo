@@ -177,7 +177,7 @@
 
     badgeStatus(c) {
       const cod = String(c.status || "").toLowerCase();
-      const conhecidos = ["aberto", "em_atendimento", "aguardando_cliente", "fechado", "cancelado"];
+      const conhecidos = ["aberto", "em_atendimento", "aguardando_suporte", "aguardando_cliente", "fechado", "cancelado"];
       const cls = conhecidos.indexOf(cod) >= 0 ? cod : "outro";
       return `<span class="Dem_Badge Dem_Badge--${cls}">${esc(c.status_label || c.status || "—")}</span>`;
     },

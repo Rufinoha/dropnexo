@@ -33,6 +33,7 @@ PRIORIDADE_LABEL = {
 STATUS_LABEL = {
     "aberto": "Aberto",
     "em_atendimento": "Em atendimento",
+    "aguardando_suporte": "Aguardando suporte",
     "aguardando_cliente": "Aguardando você",
     "fechado": "Fechado",
     "cancelado": "Cancelado",
@@ -407,7 +408,11 @@ def listar_chamados_tenant(
                    c.atualizado_em, c.id_usuario, {_NOME_CONTA} AS tenant_nome
             FROM tbl_hubsupport_chamado c
             JOIN tbl_tenant t ON t.id = c.id_tenant
-            ORDER BY CASE WHEN c.status IN ('fechado', 'cancelado') THEN 1 ELSE 0 END,
+            ORDER BY CASE
+                       WHEN c.status = 'aguardando_suporte' THEN 0
+                       WHEN c.status IN ('fechado', 'cancelado') THEN 2
+                       ELSE 1
+                     END,
                      c.atualizado_em DESC NULLS LAST
             LIMIT %s OFFSET %s
             """,
@@ -843,18 +848,26 @@ def responder_chamado(
     )
     row_st = cur.fetchone()
     status_antes = _normalizar_status(row_st[0] if row_st else None)
+    if status_antes in STATUS_SEM_RESPOSTA:
+        status_novo = status_antes
+    elif operador:
+        status_novo = "em_atendimento"
+    elif status_antes == "aberto":
+        status_novo = "aberto"
+    else:
+        status_novo = "aguardando_suporte"
     cur.execute(
         """
         UPDATE tbl_hubsupport_chamado
-        SET status = CASE WHEN status IN ('aberto', 'aguardando_cliente') THEN 'em_atendimento' ELSE status END,
+        SET status = %s,
             ultima_interacao_preview = %s,
             ultima_interacao_em = NOW(),
             atualizado_em = NOW()
         WHERE external_id = %s
         """,
-        (str(preview)[:240], external_id),
+        (status_novo, str(preview)[:240], external_id),
     )
-    if status_antes in ("aberto", "aguardando_cliente"):
+    if status_novo != status_antes and status_novo == "em_atendimento":
         _notificar_status_chamado(conn, external_id, "em_atendimento")
     _log_api(conn, "responder_chamado", True, external_id, 200)
     return {"ok": True, "external_id": external_id, "anexos": anexos_meta}
@@ -959,6 +972,7 @@ def _atualizar_chamado_webhook(
     status: str | None = None,
     protocolo: str | None = None,
     preview: str | None = None,
+    preservar_aguardando_suporte: bool = True,
 ) -> int:
     cur = conn.cursor()
     novo = _normalizar_status(status)
@@ -970,6 +984,12 @@ def _atualizar_chamado_webhook(
         )
         row = cur.fetchone()
         anterior = _normalizar_status(row[0] if row else None)
+        if (
+            preservar_aguardando_suporte
+            and anterior == "aguardando_suporte"
+            and novo not in STATUS_SEM_RESPOSTA
+        ):
+            novo = None
     cur.execute(
         """
         UPDATE tbl_hubsupport_chamado SET
@@ -1092,9 +1112,10 @@ def processar_webhook(
         _atualizar_chamado_webhook(
             conn,
             ext,
-            status=data.get("status"),
+            status="em_atendimento",
             protocolo=data.get("protocolo"),
             preview=corpo or (anexos_meta[0].get("nome") if anexos_meta else None),
+            preservar_aguardando_suporte=False,
         )
         return {
             "message": "Resposta do suporte registrada.",

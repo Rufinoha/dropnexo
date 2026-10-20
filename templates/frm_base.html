@@ -150,15 +150,15 @@
             </svg>
             <span id="fg_novidadesBadge" class="fg-novidades-badge" hidden aria-hidden="true"></span>
           </button>
-          <div class="fg-tenant-switcher{% if session.get('eh_desenvolvedor') %} fg-tenant-switcher--dev{% endif %}" id="fg-tenant-switcher">
-            <button type="button" class="fg-tenant-chip" id="fg-tenant-trigger" aria-expanded="false" aria-haspopup="listbox" aria-controls="fg-tenant-dropdown" title="{% if session.get('eh_desenvolvedor') %}Entrar em tenant (DEV suporte){% else %}Trocar conta{% endif %}">
-              {% if session.get('eh_desenvolvedor') %}<span class="fg-tenant-chip-prefix">DEV</span>{% endif %}
+          <div class="fg-tenant-switcher{% if session.get('eh_desenvolvedor') or session.get('acesso_suporte') %} fg-tenant-switcher--dev{% endif %}" id="fg-tenant-switcher">
+            <button type="button" class="fg-tenant-chip" id="fg-tenant-trigger" aria-expanded="false" aria-haspopup="listbox" aria-controls="fg-tenant-dropdown" title="{% if session.get('eh_desenvolvedor') or session.get('acesso_suporte') %}Entrar em outra conta{% else %}Trocar conta{% endif %}">
+              {% if session.get('eh_desenvolvedor') %}<span class="fg-tenant-chip-prefix">DEV</span>{% elif session.get('acesso_suporte') %}<span class="fg-tenant-chip-prefix">Suporte</span>{% endif %}
               <span class="fg-tenant-chip-label" id="fg-tenant-chip-label">{{ session.get('tenant_nome', '') }}</span>
               <svg class="fg-tenant-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
             </button>
-            <div class="fg-tenant-dropdown" id="fg-tenant-dropdown" role="listbox" aria-label="{% if session.get('eh_desenvolvedor') %}Tenants disponíveis{% else %}Contas disponíveis{% endif %}" hidden>
-              <p class="fg-tenant-dropdown-title">{% if session.get('eh_desenvolvedor') %}Suporte — entrar no tenant{% else %}Suas contas{% endif %}</p>
-              {% if session.get('eh_desenvolvedor') %}
+            <div class="fg-tenant-dropdown" id="fg-tenant-dropdown" role="listbox" aria-label="{% if session.get('eh_desenvolvedor') or session.get('acesso_suporte') %}Tenants disponíveis{% else %}Contas disponíveis{% endif %}" hidden>
+              <p class="fg-tenant-dropdown-title">{% if session.get('eh_desenvolvedor') or session.get('acesso_suporte') %}Entrar no tenant{% else %}Suas contas{% endif %}</p>
+              {% if session.get('eh_desenvolvedor') or session.get('acesso_suporte') %}
               <p class="fg-tenant-dropdown-note">Só tenants (contas). Fornecedores locais do armazém ficam fora desta lista.</p>
               <div class="fg-tenant-filtros" id="fg-tenant-filtros" role="group" aria-label="Filtrar por tipo de tenant">
                 <button type="button" class="fg-tenant-filtro is-active" data-filtro="todos">Todos</button>

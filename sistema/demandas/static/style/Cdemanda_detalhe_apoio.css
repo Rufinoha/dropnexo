@@ -60,6 +60,11 @@ body.dem-det-body {
   border: 1px solid #bbf7d0;
 }
 
+.dem-nav-status.is-aguardando_suporte {
+  background: #f5f3ff;
+  border-color: #ddd6fe;
+}
+
 .dem-nav-status.is-aguardando_cliente {
   background: #fff7ed;
   border-color: #fed7aa;
@@ -81,6 +86,7 @@ body.dem-det-body {
   flex: 0 0 auto;
 }
 
+.dem-nav-status.is-aguardando_suporte .dem-nav-dot { background: #7c3aed; }
 .dem-nav-status.is-aguardando_cliente .dem-nav-dot { background: #ea580c; }
 .dem-nav-status.is-resolvido .dem-nav-dot,
 .dem-nav-status.is-fechado .dem-nav-dot,

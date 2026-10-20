@@ -50,6 +50,9 @@
     donoDev: document.getElementById("dono_dev"),
     donoCriado: document.getElementById("dono_criado"),
     donoAcesso: document.getElementById("dono_acesso"),
+    donoSuporte: document.getElementById("dono_suporte"),
+    donoSuporteStatus: document.getElementById("dono_suporte_status"),
+    donoSuporteBtn: document.getElementById("dono_suporte_btn"),
     donoConvite: document.getElementById("dono_convite"),
     donoConviteStatus: document.getElementById("dono_convite_status"),
     donoReenviar: document.getElementById("dono_reenviar"),
@@ -125,6 +128,7 @@
     if (el.donoDados) el.donoDados.hidden = !tem;
     if (!tem) {
       emailDonoOriginal = "";
+      if (el.donoSuporte) el.donoSuporte.hidden = true;
       return;
     }
     if (el.donoId) el.donoId.value = String(d.id);
@@ -142,9 +146,36 @@
     if (el.donoAtivo) el.donoAtivo.value = simNao(d.ativo);
     if (el.donoVinculo) el.donoVinculo.value = simNao(d.vinculo_ativo);
     if (el.donoDev) el.donoDev.value = simNao(!!d.eh_desenvolvedor);
+    pintarSuporte(d);
     if (el.donoCriado) el.donoCriado.value = formatarDataHora(d.criado_em);
     if (el.donoAcesso) el.donoAcesso.value = formatarDataHora(d.ultimo_acesso_em);
     pintarConvite(d);
+  }
+
+  function pintarSuporte(d) {
+    if (!el.donoSuporte) return;
+    el.donoSuporte.hidden = false;
+    const dev = !!d.eh_desenvolvedor;
+    const ativo = !!d.acesso_suporte;
+    if (el.donoSuporteStatus) {
+      if (dev) {
+        el.donoSuporteStatus.textContent =
+          "Este usuário já é desenvolvedor e entra em qualquer conta.";
+      } else if (ativo) {
+        el.donoSuporteStatus.textContent =
+          "Acesso de suporte ligado. No próximo login, o menu de todas as contas aparece.";
+      } else {
+        el.donoSuporteStatus.textContent =
+          "Acesso de suporte desligado. Esta pessoa só vê as contas dela.";
+      }
+    }
+    if (el.donoSuporteBtn) {
+      el.donoSuporteBtn.hidden = dev;
+      el.donoSuporteBtn.textContent = ativo
+        ? "Desativar acesso de suporte"
+        : "Ativar acesso de suporte";
+      el.donoSuporteBtn.dataset.ativo = ativo ? "1" : "0";
+    }
   }
 
   function rotuloBrevo(status) {
@@ -508,6 +539,9 @@
   el.btnDesativar?.addEventListener("click", () =>
     desativar().catch((e) => Swal.fire("Erro", e.message, "error"))
   );
+  el.donoSuporteBtn?.addEventListener("click", () =>
+    alternarSuporte().catch((e) => Swal.fire("Erro", e.message, "error"))
+  );
   el.donoReenviar?.addEventListener("click", () =>
     reenviarConvite().catch((e) => Swal.fire("Erro", e.message, "error"))
   );
@@ -541,6 +575,40 @@
       icon: "success",
       title: "Aviso enviado",
       text: j.message || "O tenant verá o aviso para reconectar o Bling.",
+      confirmButtonColor: "#021F81",
+    });
+  }
+
+  async function alternarSuporte() {
+    if (!idTenant) return;
+    const ligar = el.donoSuporteBtn?.dataset.ativo !== "1";
+    const nome = (el.donoNome?.value || "Esta pessoa").trim();
+    const conf = await Swal.fire({
+      icon: "question",
+      title: ligar ? "Ativar acesso de suporte?" : "Desativar acesso de suporte?",
+      text: ligar
+        ? `${nome} passa a ver o menu de todas as contas. Ao entrar numa conta, trabalha como dono. Não vira desenvolvedor. Vale no próximo login.`
+        : `${nome} deixa de ver o menu de todas as contas no próximo login.`,
+      showCancelButton: true,
+      confirmButtonText: ligar ? "Ativar" : "Desativar",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#021F81",
+    });
+    if (!conf.isConfirmed) return;
+    Swal.fire({ title: "Salvando…", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    const r = await fetch(`${BASE}/${idTenant}/acesso-suporte`, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      body: JSON.stringify({ ativo: ligar }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.success) throw new Error(j.message || "Falha ao salvar o acesso.");
+    if (j.tenant) preencher(j.tenant);
+    await Swal.fire({
+      icon: "success",
+      title: ligar ? "Acesso ativado" : "Acesso desativado",
+      text: j.message || "Concluído.",
       confirmButtonColor: "#021F81",
     });
   }

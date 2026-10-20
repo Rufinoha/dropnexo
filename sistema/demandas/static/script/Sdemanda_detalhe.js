@@ -69,7 +69,11 @@
       if (root) root.hidden = false;
       document.getElementById("dem_protocolo").textContent = j.protocolo || "Sem protocolo";
       document.getElementById("dem_titulo").textContent = j.titulo || "Chamado";
-      document.getElementById("dem_status").textContent = j.status_label || j.status || "—";
+      const badge = document.getElementById("dem_status");
+      const cod = String(j.status || "").toLowerCase();
+      const conhecidos = ["aberto", "em_atendimento", "aguardando_suporte", "aguardando_cliente", "fechado", "cancelado"];
+      badge.textContent = j.status_label || j.status || "—";
+      badge.className = "Dem_Badge" + (conhecidos.indexOf(cod) >= 0 ? " Dem_Badge--" + cod : "");
       document.getElementById("dem_meta").textContent = [
         j.categoria_label || j.categoria,
         j.prioridade_label || j.prioridade,
