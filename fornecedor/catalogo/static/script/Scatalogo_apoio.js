@@ -527,7 +527,7 @@
 
   document.querySelectorAll('input[name="img_modo"]').forEach((r) => {
     r.addEventListener("change", () => {
-      syncModoImagem();
+      syncAvisoImagens();
     });
   });
   syncModoImagem();

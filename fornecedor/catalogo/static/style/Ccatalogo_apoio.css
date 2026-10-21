@@ -689,6 +689,12 @@ html:has(.Cat_ApoioBody) body {
   opacity: 0.85;
   cursor: wait;
 }
+.Cat_ImgAddRow .Cl_BtnIncluir:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
 
 .Cat_Galeria {
   display: grid;
