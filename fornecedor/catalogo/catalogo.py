@@ -96,6 +96,7 @@ import requests
 from global_utils import agora_utc, url_imagem_produto
 
 MAX_IMAGENS_PRODUTO = 10
+MAX_IMAGENS_VARIANTE = 10
 HOSTS_BLING = ("bling.com.br", "orgbling.com.br", "orgbling.s3.amazonaws.com")
 MODOS_IMAGEM_BLING = frozenset({"link", "hibrido", "download"})
 _QUERY_ASSINADA = frozenset(
@@ -1733,6 +1734,8 @@ def salvar_imagens_variante(
             continue
         vistos.add(id_img)
         limpos.append(id_img)
+        if len(limpos) >= MAX_IMAGENS_VARIANTE:
+            break
 
     for ordem, id_img in enumerate(limpos):
         cur.execute(

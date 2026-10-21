@@ -776,6 +776,7 @@ from fornecedor.catalogo.catalogo import (
     url_exibicao,
     url_imagem_lista,
     validar_id_imagem_produto,
+    MAX_IMAGENS_VARIANTE,
     _limpar_arquivo_upload,
 )
 from fornecedor.catalogo.catalogo import promocao_variante_ativa
@@ -860,7 +861,6 @@ def _aplicar_id_armazem_fornecedor(cur, *, id_tenant: int, id_produto: int, id_f
 
 EXTENSOES_IMAGEM = frozenset({".png", ".jpg", ".jpeg", ".webp"})
 MAX_BYTES_IMAGEM = 2 * 1024 * 1024
-MAX_IMAGENS_PRODUTO = 10
 MAX_LINHAS_CSV = 500
 COLUNAS_CSV = (
     "sku",
@@ -987,19 +987,6 @@ def _extensao_de_caminho(caminho: str | None) -> str:
         return ext.lstrip(".") or "url"
     ext = Path(caminho).suffix.lower()
     return ext.lstrip(".") or ""
-
-
-def _contar_imagens_produto(cur, id_produto: int) -> int:
-    cur.execute(
-        "SELECT COUNT(*) FROM tbl_produto_imagem WHERE id_produto = %s AND id_variante IS NULL",
-        (id_produto,),
-    )
-    n = int(cur.fetchone()[0] or 0)
-    if n:
-        return n
-    cur.execute("SELECT imagem_url FROM tbl_produto WHERE id = %s", (id_produto,))
-    row = cur.fetchone()
-    return 1 if row and row[0] else 0
 
 
 def _tipo_de_caminho(caminho: str | None) -> str:
@@ -2694,8 +2681,6 @@ def catalogos_imagens_link():
             ), 400
 
         _exigir_tipo_imagem_compativel(cur, id_produto, "upload")
-        if _contar_imagens_produto(cur, id_produto) >= MAX_IMAGENS_PRODUTO:
-            return jsonify(success=False, message="Máximo de 10 imagens por produto."), 400
 
         cur.execute(
             """
@@ -2827,8 +2812,6 @@ def catalogos_imagens_upload():
                 message=f"Não foi possível converter imagens antigas por link: {e}",
             ), 400
         _exigir_tipo_imagem_compativel(cur, id_produto, "upload")
-        if _contar_imagens_produto(cur, id_produto) >= MAX_IMAGENS_PRODUTO:
-            return jsonify(success=False, message="Máximo de 10 imagens por produto."), 400
         from sistema.planos.armazenamento import exigir_capacidade_armazenamento
 
         exigir_capacidade_armazenamento(cur, int(id_tenant), bytes_novos=int(tamanho))
@@ -3730,6 +3713,8 @@ def variantes_salvar():
         ids_imagens = body.get("ids_imagens")
         if not isinstance(ids_imagens, list):
             ids_imagens = [id_imagem_principal] if id_imagem_principal else []
+        if not herda_pai and len(ids_imagens) > MAX_IMAGENS_VARIANTE:
+            raise ValueError("Cada variação pode ter no máximo 10 imagens.")
         salvar_imagens_variante(
             cur,
             id_variante=variant_id,

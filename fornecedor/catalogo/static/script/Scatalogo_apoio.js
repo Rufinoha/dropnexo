@@ -1,5 +1,4 @@
 (function () {
-  const MAX_IMAGENS = 10;
   let idProduto = null;
   let nivelModal = 1;
   let atributosProduto = [];
@@ -513,8 +512,7 @@
 
   function syncModoImagem() {
     // Link e upload são só formas de incluir — ambos gravam arquivo no DropNexo.
-    const cheio = galeriaImagens.length >= MAX_IMAGENS;
-    const podeIncluir = !!idProduto && !cheio;
+    const podeIncluir = !!idProduto;
     document.querySelectorAll('input[name="img_modo"]').forEach((r) => {
       const opt = r.closest(".Cat_ImgModoOpt");
       r.disabled = !podeIncluir;
@@ -642,7 +640,10 @@
 
   function renderGaleria() {
     if (!el.galeria_imagens) return;
-    if (el.imgContador) el.imgContador.textContent = `${galeriaImagens.length} / ${MAX_IMAGENS} imagens`;
+    if (el.imgContador) {
+      const n = galeriaImagens.length;
+      el.imgContador.textContent = n === 1 ? "1 imagem" : `${n} imagens`;
+    }
     syncImagemHidden();
     syncModoImagem();
     if (!galeriaImagens.length) {
@@ -801,8 +802,7 @@
     if (!el.avisoImgSalvar) return;
     el.avisoImgSalvar.style.display = idProduto ? "none" : "block";
     const modo = document.querySelector('input[name="img_modo"]:checked')?.value || "link";
-    const cheio = galeriaImagens.length >= MAX_IMAGENS;
-    const desabilitado = !idProduto || cheio || imgBusy;
+    const desabilitado = !idProduto || imgBusy;
     if (el.btnImgLink) el.btnImgLink.disabled = desabilitado || modo !== "link";
     if (el.btnImgUpload) el.btnImgUpload.disabled = desabilitado || modo !== "upload";
     if (!imgBusy) syncModoImagem();

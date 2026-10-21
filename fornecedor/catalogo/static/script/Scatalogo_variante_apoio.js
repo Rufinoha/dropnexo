@@ -5,6 +5,7 @@
   let nivelModal = 2;
   let dadosPai = null;
   let atributosCache = {};
+  const MAX_IMAGENS_VARIANTE = 10;
   let galeriaPai = [];
   let imagensVariante = [];
   let imgDragCtx = null;
@@ -344,6 +345,10 @@
     if (!id || idsVarianteSet().has(id)) return;
     const img = galeriaPai.find((i) => Number(i.id) === id);
     if (!img) return;
+    if (imagensVariante.length >= MAX_IMAGENS_VARIANTE) {
+      Swal.fire("Atenção", "Cada variação pode ter no máximo 10 imagens.", "warning");
+      return;
+    }
     const arr = imagensVariante.slice();
     const pos = Math.min(Math.max(0, toIdx ?? arr.length), arr.length);
     arr.splice(pos, 0, img);
