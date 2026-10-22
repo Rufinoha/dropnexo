@@ -854,33 +854,25 @@ def _ext_de_bytes_ou_url(data: bytes, url: str, content_type: str | None) -> str
     return ".jpg"
 
 
-def baixar_e_gravar_imagem_tenant(
+def gravar_bytes_imagem_tenant(
     *,
     id_tenant: int,
     id_produto: int,
     id_imagem: int,
-    url: str,
+    data: bytes,
+    content_type: str | None = None,
+    url_referencia: str = "",
     max_bytes: int = 2 * 1024 * 1024,
     leve: bool = False,
     cur=None,
 ) -> tuple[str, int]:
-    """
-    Resolve link (página→direct se preciso), baixa bytes e grava em
-    static/imge/produtos/{tenant}/. Retorna (caminho_db, tamanho_bytes).
+    """Normaliza bytes e grava em static/imge/produtos/{tenant}/.
 
-    leve=True (fila/import): baixa e grava; só re-encode se não for JPG ok.
+    Link, upload e Bling usam esta gravação. Retorna (caminho_db, tamanho_bytes).
+    leve=True (fila/import): JPG já válido não é reencodado.
     """
-    bruto = (url or "").strip()
-    # Direct link (.jpg/.png/…) → 1 HTTP. Página (Postimages etc.) → resolve depois baixa.
-    if _url_parece_arquivo_imagem(bruto):
-        _host_url_seguro(bruto)
-        final_url = bruto
-    else:
-        resolvida = resolver_url_imagem_link(bruto)
-        final_url = resolvida["url"]
-    data, ct = proxy_bytes_imagem_remota(final_url)
     if not data:
-        raise ValueError("Imagem remota vazia.")
+        raise ValueError("Imagem vazia.")
     if len(data) > max_bytes:
         raise ValueError("Imagem deve ter no máximo 2 MB.")
 
@@ -909,7 +901,6 @@ def baixar_e_gravar_imagem_tenant(
 
         if gravar is None:
             if leve and data.startswith(b"\xff\xd8\xff"):
-                # Import: aceita JPG grande sem re-encode caro; só bloqueia se minúscula.
                 gravar = data
             else:
                 valid = validar_imagem_upload_bytes(data)
@@ -921,7 +912,11 @@ def baixar_e_gravar_imagem_tenant(
     except Exception:
         gravar = data
 
-    ext = ".jpg" if gravar.startswith(b"\xff\xd8\xff") else _ext_de_bytes_ou_url(gravar, final_url, ct)
+    ext = (
+        ".jpg"
+        if gravar.startswith(b"\xff\xd8\xff")
+        else _ext_de_bytes_ou_url(gravar, url_referencia, content_type)
+    )
 
     if cur is not None:
         from sistema.planos.armazenamento import exigir_capacidade_armazenamento
@@ -936,6 +931,46 @@ def baixar_e_gravar_imagem_tenant(
     caminho_db = caminho_db_imagem_tenant(id_tenant, nome)
     gerar_thumb_imagem_local(caminho_db)
     return caminho_db, len(gravar)
+
+
+def baixar_e_gravar_imagem_tenant(
+    *,
+    id_tenant: int,
+    id_produto: int,
+    id_imagem: int,
+    url: str,
+    max_bytes: int = 2 * 1024 * 1024,
+    leve: bool = False,
+    cur=None,
+) -> tuple[str, int]:
+    """
+    Resolve link (página→direct se preciso), baixa bytes e grava em
+    static/imge/produtos/{tenant}/. Retorna (caminho_db, tamanho_bytes).
+
+    leve=True (fila/import): baixa e grava; só re-encode se não for JPG ok.
+    """
+    bruto = (url or "").strip()
+    # Direct link (.jpg/.png/…) → 1 HTTP. Página (Postimages etc.) → resolve depois baixa.
+    if _url_parece_arquivo_imagem(bruto):
+        _host_url_seguro(bruto)
+        final_url = bruto
+    else:
+        resolvida = resolver_url_imagem_link(bruto)
+        final_url = resolvida["url"]
+    data, ct = proxy_bytes_imagem_remota(final_url)
+    if not data:
+        raise ValueError("Imagem remota vazia.")
+    return gravar_bytes_imagem_tenant(
+        id_tenant=id_tenant,
+        id_produto=id_produto,
+        id_imagem=id_imagem,
+        data=data,
+        content_type=ct,
+        url_referencia=final_url,
+        max_bytes=max_bytes,
+        leve=leve,
+        cur=cur,
+    )
 
 
 def materializar_imagens_remotas_produto(

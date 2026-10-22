@@ -756,6 +756,7 @@ from fornecedor.catalogo.catalogo import (
 )
 from fornecedor.catalogo.catalogo import (
     baixar_e_gravar_imagem_tenant,
+    gravar_bytes_imagem_tenant,
     classificar_origem_manual,
     descartar_arquivos_imagem_locais,
     exigir_modo_compativel,
@@ -2777,19 +2778,6 @@ def catalogos_imagens_upload():
     bruto = arquivo.read()
     if not bruto:
         return jsonify(success=False, message="Arquivo vazio."), 400
-    try:
-        from api.bling.imagens_export import validar_imagem_upload_bytes
-
-        valid = validar_imagem_upload_bytes(bruto)
-    except ValueError as e:
-        return jsonify(success=False, message=str(e)), 400
-    except Exception:
-        valid = {"jpg": None, "aviso": None, "fraca": False}
-    # Preferimos gravar JPG normalizado (melhor para Bling/marketplaces).
-    gravar_jpg = valid.get("jpg") if isinstance(valid, dict) else None
-    if gravar_jpg:
-        ext = ".jpg"
-        tamanho = len(gravar_jpg)
     id_tenant = session.get("id_tenant")
     conn = Var_ConectarBanco()
     try:
@@ -2812,9 +2800,6 @@ def catalogos_imagens_upload():
                 message=f"Não foi possível converter imagens antigas por link: {e}",
             ), 400
         _exigir_tipo_imagem_compativel(cur, id_produto, "upload")
-        from sistema.planos.armazenamento import exigir_capacidade_armazenamento
-
-        exigir_capacidade_armazenamento(cur, int(id_tenant), bytes_novos=int(tamanho))
         cur.execute(
             """
             INSERT INTO tbl_produto_imagem (id_produto, caminho, ordem, principal, origem)
@@ -2823,16 +2808,27 @@ def catalogos_imagens_upload():
             """,
             (id_produto,),
         )
-        id_img = cur.fetchone()[0]
-        pasta = _pasta_imagens_tenant(int(id_tenant))
-        destino = pasta / f"{id_produto}_{id_img}{ext}"
-        caminho_db = f"imge/produtos/{id_tenant}/{id_produto}_{id_img}{ext}"
+        id_img = int(cur.fetchone()[0])
+        caminho_db = None
         try:
-            if gravar_jpg:
-                destino.write_bytes(gravar_jpg)
-            else:
-                destino.write_bytes(bruto)
-            gerar_thumb_imagem_local(caminho_db)
+            caminho_db, tamanho = gravar_bytes_imagem_tenant(
+                id_tenant=int(id_tenant),
+                id_produto=id_produto,
+                id_imagem=id_img,
+                data=bruto,
+                content_type=arquivo.mimetype,
+                url_referencia=arquivo.filename or "",
+                max_bytes=MAX_BYTES_IMAGEM,
+                cur=cur,
+            )
+        except ValueError as e:
+            cur.execute(
+                "DELETE FROM tbl_produto_imagem WHERE id = %s AND id_produto = %s",
+                (id_img, id_produto),
+            )
+            conn.rollback()
+            return jsonify(success=False, message=str(e)), 400
+        try:
             cur.execute(
                 "SELECT COALESCE(MAX(ordem), -1) + 1 FROM tbl_produto_imagem WHERE id_produto = %s AND id != %s",
                 (id_produto, id_img),
@@ -2859,11 +2855,11 @@ def catalogos_imagens_upload():
             raise
         img = _imagem_dict_row(row)
         img["tamanho_bytes"] = tamanho
-        msg = "Imagem enviada."
-        aviso = (valid or {}).get("aviso") if isinstance(valid, dict) else None
-        if aviso:
-            msg = f"Imagem enviada. Atenção: {aviso}"
-        return jsonify(success=True, message=msg, imagem=img, aviso=aviso)
+        return jsonify(
+            success=True,
+            message="Imagem enviada e salva no DropNexo.",
+            imagem=img,
+        )
     except ValueError as e:
         conn.rollback()
         return jsonify(success=False, message=str(e)), 400
