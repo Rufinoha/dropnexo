@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="description" content="Manual do usuário: como conectar o Olist ERP ao DropNexo e configurar cada aba." />
+  <meta name="description" content="Manual do usuário: como encontrar o Olist no DropNexo, conectar e ajustar cada aba." />
   <title>Como conectar o Olist · {{ MARCA_NOME }}</title>
   {% include "partials/marca_favicon.html" %}
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -20,9 +20,9 @@
       <img src="{{ marca_logo_nome_url }}" alt="{{ MARCA_NOME }}" height="32" />
     </a>
     <nav class="home-nav ajuda-bling-nav" aria-label="Manual Olist">
+      <a class="nav-link" href="#encontrar">Encontrar</a>
       <a class="nav-link" href="#conectar">Conectar</a>
-      <a class="nav-link" href="#abas">Abas</a>
-      <a class="nav-link" href="#status">Status</a>
+      <a class="nav-link" href="#parametros">Parâmetros</a>
       <a class="btn btn-ghost" href="{{ url_login }}">Entrar</a>
     </nav>
   </header>
@@ -30,65 +30,127 @@
   <main class="ajuda-bling-main">
     <header class="ajuda-bling-hero">
       <p class="home-kicker">Manual do usuário · Olist ERP</p>
-      <h1>Como conectar o Olist ao {{ MARCA_NOME }}</h1>
+      <h1>Como conectar o Olist no {{ MARCA_NOME }}</h1>
       <p class="lead">
-        Este manual é para o fornecedor. Ele cria o aplicativo na própria conta Olist,
-        cola as chaves no DropNexo e autoriza a conexão. As abas de configuração só aparecem depois disso.
+        Tudo acontece dentro do DropNexo. Você abre Integrações, clica em Conectar
+        e entra com o usuário e a senha da sua conta Olist. Depois ajusta as abas do jeito da sua operação.
       </p>
     </header>
 
     <article class="ajuda-bling-doc">
-      <section id="conectar" class="ajuda-bling-section">
-        <h2>1. Conectar no DropNexo</h2>
+      <section id="encontrar" class="ajuda-bling-section">
+        <h2>1. Onde encontrar o Olist</h2>
         <p class="ajuda-bling-intro">
-          Entre como fornecedor e abra <strong>Integrações → Olist ERP</strong>.
-          Clique em <strong>Conectar</strong> e autorize com o usuário que abriu a conta no Olist.
-          O selo fica <strong>Conectado</strong> e mostra o nome da conta. As abas abaixo só aparecem depois disso.
+          Entre como fornecedor. No menu lateral, abra <strong>Integrações</strong>.
+          Na aba <strong>Catálogo e ERP</strong>, o card <strong>Olist</strong> fica em Não conectados.
         </p>
+        <figure class="ajuda-bling-fig">
+          <img src="{{ imagens['01-encontrar.png'] }}" alt="Tela Integrações do DropNexo, com o card Olist em Não conectados" />
+          <figcaption>Integrações → Catálogo e ERP → card Olist.</figcaption>
+        </figure>
       </section>
 
-      <section id="abas" class="ajuda-bling-section">
-        <h2>3. Abas depois de conectar</h2>
+      <section id="conectar" class="ajuda-bling-section">
+        <h2>2. Clicar em Conectar</h2>
+        <p class="ajuda-bling-intro">
+          Abra o card. A tela mostra a conta e o botão <strong>Conectar</strong>.
+          Use o usuário que abriu a conta no Olist.
+        </p>
+        <figure class="ajuda-bling-fig">
+          <img src="{{ imagens['02-conectar.png'] }}" alt="Tela Olist ERP com o botão Conectar" />
+          <figcaption>Clique em Conectar.</figcaption>
+        </figure>
+
+        <h2>3. Entrar na conta Olist</h2>
+        <p class="ajuda-bling-intro">
+          Ao clicar em Conectar, abre a tela de login da Olist.
+          Informe o usuário e a senha da sua conta Olist e clique em <strong>Entrar</strong>.
+          O DropNexo não pede essas senhas de novo.
+        </p>
+        <figure class="ajuda-bling-fig">
+          <img src="{{ imagens['03-login-olist.png'] }}" alt="Tela de login da Olist pedindo usuário e senha" />
+          <figcaption>Login da Olist, aberto a partir do DropNexo.</figcaption>
+        </figure>
+      </section>
+
+      <section id="parametros" class="ajuda-bling-section">
+        <h2>4. Ajustar os parâmetros</h2>
+        <p class="ajuda-bling-intro">
+          Depois do login, o selo fica <strong>Conectado</strong> e a conta Olist aparece no topo.
+          As abas abaixo são o ajuste da integração. Escolha o que faz sentido para a sua operação e salve em cada aba.
+          <strong>Desconectar</strong> encerra a autorização. Os produtos já importados continuam no catálogo.
+        </p>
+        <figure class="ajuda-bling-fig">
+          <img src="{{ imagens['04-conectado.png'] }}" alt="Tela conectada do Olist no DropNexo, aba Configurações" />
+          <figcaption>Tela depois de conectar. A primeira aba é Configurações.</figcaption>
+        </figure>
 
         <article class="ajuda-bling-cfg">
           <header class="ajuda-bling-cfg__head"><h3>Configurações</h3></header>
-          <p class="ajuda-bling-cfg__desc">Preferências do catálogo. Clique em <strong>Salvar</strong> ao terminar.</p>
+          <p class="ajuda-bling-cfg__desc">Preferências do catálogo. Clique em <strong>Salvar</strong>.</p>
           <ul>
-            <li><strong>Modo das imagens:</strong> baixar para o DropNexo. Na importação a foto é gravada no DropNexo.</li>
+            <li><strong>Modo das imagens:</strong> baixar para o servidor. Na importação, a foto do Olist é gravada no DropNexo.</li>
             <li><strong>Fonte principal:</strong> Olist ou DropNexo.</li>
-            <li><strong>Produtos:</strong> Importar, Exportar ou Atualizar (os dois).</li>
-            <li><strong>Estoque:</strong> Importar, Exportar ou Atualizar (os dois).</li>
+            <li><strong>Produtos:</strong> Importar, Exportar ou Atualizar.</li>
+            <li><strong>Estoque:</strong> Importar, Exportar ou Atualizar.</li>
           </ul>
         </article>
 
         <article class="ajuda-bling-cfg">
           <header class="ajuda-bling-cfg__head"><h3>Pedidos</h3></header>
-          <p class="ajuda-bling-cfg__desc">Quando o pedido chega no DropNexo, o sistema pode criar o pedido de venda no Olist.</p>
+          <p class="ajuda-bling-cfg__desc">Quando o pedido chega no DropNexo, ele pode virar pedido de venda no Olist.</p>
           <ul>
             <li><strong>Exportar pedidos ao Olist:</strong> cria o pedido de venda no ERP.</li>
-            <li><strong>Exportação automática:</strong> envia sozinho quando o pedido aparece para o fornecedor.</li>
+            <li><strong>Exportação automática:</strong> envia sozinho quando o pedido aparece para você.</li>
           </ul>
-          <p>Clique em <strong>Salvar</strong>.</p>
+          <figure class="ajuda-bling-fig">
+            <img src="{{ imagens['05-pedidos.png'] }}" alt="Aba Pedidos com os interruptores de exportação" />
+            <figcaption>Aba Pedidos. Clique em Salvar.</figcaption>
+          </figure>
+        </article>
+
+        <article class="ajuda-bling-cfg">
+          <header class="ajuda-bling-cfg__head"><h3>Status</h3></header>
+          <p class="ajuda-bling-cfg__desc">Somente leitura. O DropNexo usa esta amarração ao criar ou atualizar o pedido no Olist.</p>
+          <ul>
+            <li><strong>Aguardando pagamento</strong> → Em aberto. O pedido chegou e o pedido de venda é criado no Olist.</li>
+            <li><strong>Pago</strong> → Aprovado. O vendedor quitou com você.</li>
+            <li><strong>Expedido</strong> → Enviado. Você imprimiu a etiqueta no DropNexo.</li>
+            <li><strong>Entregue</strong> → Entregue.</li>
+            <li><strong>Cancelado</strong> → Cancelado.</li>
+          </ul>
+          <figure class="ajuda-bling-fig">
+            <img src="{{ imagens['06-status.png'] }}" alt="Aba Status com o relacionamento entre DropNexo e Olist" />
+            <figcaption>Aba Status. Não há o que editar.</figcaption>
+          </figure>
         </article>
 
         <article class="ajuda-bling-cfg">
           <header class="ajuda-bling-cfg__head"><h3>Produtos</h3></header>
           <p class="ajuda-bling-cfg__desc">A importação do catálogo fica no <strong>Catálogo</strong>. Nesta aba fica o estoque.</p>
           <ul>
-            <li><strong>Receber do Olist:</strong> atualiza o saldo local com o saldo do Olist.</li>
+            <li><strong>Receber do Olist:</strong> atualiza o saldo do DropNexo com o saldo do Olist.</li>
             <li><strong>Baixa em pedidos:</strong> envia a quantidade vendida ao Olist quando o pedido é confirmado.</li>
           </ul>
           <p>Clique em <strong>Salvar estoque</strong>. Sem depósito vinculado, o estoque não sincroniza.</p>
+          <figure class="ajuda-bling-fig">
+            <img src="{{ imagens['07-produtos.png'] }}" alt="Aba Produtos com receber estoque e baixa em pedidos" />
+            <figcaption>Aba Produtos.</figcaption>
+          </figure>
         </article>
 
         <article class="ajuda-bling-cfg">
           <header class="ajuda-bling-cfg__head"><h3>Depósitos</h3></header>
-          <p class="ajuda-bling-cfg__desc">A tabela mostra o depósito do Olist e um depósito do DropNexo. Escolha o par e clique em <strong>Salvar</strong> na linha.</p>
+          <p class="ajuda-bling-cfg__desc">Cada depósito do Olist aponta para um depósito do DropNexo. Escolha o par e clique em <strong>Salvar</strong> na linha.</p>
+          <figure class="ajuda-bling-fig">
+            <img src="{{ imagens['08-depositos.png'] }}" alt="Aba Depósitos pareando o depósito Geral do Olist" />
+            <figcaption>Aba Depósitos.</figcaption>
+          </figure>
         </article>
 
         <article class="ajuda-bling-cfg">
           <header class="ajuda-bling-cfg__head"><h3>Imagens</h3></header>
-          <p class="ajuda-bling-cfg__desc">Não há botão. Na importação do produto, cada anexo do Olist é baixado e vira a foto do produto no DropNexo.</p>
+          <p class="ajuda-bling-cfg__desc">Não há botão. Na importação do produto, cada foto do Olist é baixada e gravada no DropNexo.</p>
         </article>
 
         <article class="ajuda-bling-cfg">
@@ -99,20 +161,11 @@
             <li><strong>Criar no DropNexo:</strong> cria a categoria no segmento escolhido.</li>
             <li><strong>Não importar:</strong> ignora essa categoria.</li>
           </ul>
+          <figure class="ajuda-bling-fig">
+            <img src="{{ imagens['09-categorias.png'] }}" alt="Aba Categorias com a árvore Moda do Olist" />
+            <figcaption>Aba Categorias.</figcaption>
+          </figure>
         </article>
-      </section>
-
-      <section id="status" class="ajuda-bling-section">
-        <h2>4. Status</h2>
-        <p class="ajuda-bling-intro">A aba Status é somente leitura. O DropNexo aplica esta amarração ao criar ou atualizar o pedido no Olist.</p>
-        <ul>
-          <li><strong>Aguardando pagamento</strong> → Em aberto. O pedido chegou e o pedido de venda é criado no Olist.</li>
-          <li><strong>Pago</strong> → Aprovado. O vendedor quitou com o fornecedor.</li>
-          <li><strong>Expedido</strong> → Enviado. A etiqueta foi impressa no DropNexo.</li>
-          <li><strong>Entregue</strong> → Entregue. Entregue ao destinatário.</li>
-          <li><strong>Cancelado</strong> → Cancelado. O cancelamento é espelhado no Olist.</li>
-        </ul>
-        <p><strong>Desconectar</strong> encerra a autorização. Os produtos já importados continuam no catálogo.</p>
       </section>
     </article>
   </main>

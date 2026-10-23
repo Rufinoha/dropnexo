@@ -1,9 +1,10 @@
 # api/olist/srotas_olist.py — OAuth e importação de produtos do Olist ERP
 from __future__ import annotations
 
+import mimetypes
 from pathlib import Path
 
-from flask import Blueprint, jsonify, redirect, render_template, request, session, url_for
+from flask import Blueprint, abort, jsonify, redirect, render_template, request, send_file, session, url_for
 
 from api.olist.cliente import (
     MSG_USUARIO_SEM_PERMISSAO,
@@ -50,20 +51,48 @@ def init_app(app):
     app.register_blueprint(olist_bp)
 
 
+_MANUAL_IMAGENS = {
+    "01-encontrar.png",
+    "02-conectar.png",
+    "03-login-olist.png",
+    "04-conectado.png",
+    "05-pedidos.png",
+    "06-status.png",
+    "07-produtos.png",
+    "08-depositos.png",
+    "09-categorias.png",
+}
+
+
 @olist_bp.get("/ajuda/olist")
 def ajuda_olist():
-    """Manual público — como o fornecedor conecta o Olist ERP."""
+    """Manual público — como o fornecedor conecta o Olist pelo DropNexo."""
     from global_utils import obter_url_site_publico
 
     base = obter_url_site_publico().rstrip("/")
+    imagens = {
+        nome: url_for("olist.ajuda_olist_imagem", nome=nome)
+        for nome in sorted(_MANUAL_IMAGENS)
+    }
     return render_template(
         "ajuda_olist.html",
         url_home=url_for("public.home"),
         url_login=url_for("auth.pagina_login"),
         url_manual=f"{base}/ajuda/olist",
-        url_redirect=f"{base}/api/integracoes/olist/oauth/callback",
+        imagens=imagens,
         css_url=url_for("bling.static", filename="style/ajuda_bling.css"),
     )
+
+
+@olist_bp.get("/ajuda/olist/imagens/<path:nome>")
+def ajuda_olist_imagem(nome: str):
+    if nome not in _MANUAL_IMAGENS:
+        abort(404)
+    arquivo = _MOD / "manual" / nome
+    if not arquivo.is_file():
+        abort(404)
+    mime, _ = mimetypes.guess_type(str(arquivo))
+    return send_file(arquivo, mimetype=mime or "image/png", max_age=86400)
 
 
 def _pode() -> bool:
