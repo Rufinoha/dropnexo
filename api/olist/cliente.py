@@ -376,7 +376,7 @@ def obter_access_token_valido(id_tenant: int) -> str:
         refresh = (dados.get("refresh_token") or "").strip()
         if not refresh:
             raise RuntimeError("Não há refresh token do Olist. Conecte de novo.")
-        client_id, client_secret = credenciais_da_conta(cur, id_tenant)
+        client_id, client_secret = credenciais()
         novo = renovar_access_token(refresh, client_id, client_secret)
         salvar_tokens(cur, id_tenant, novo, dados.get("conta_nome") or "")
         conn.commit()

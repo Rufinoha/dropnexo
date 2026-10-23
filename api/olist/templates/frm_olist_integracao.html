@@ -30,21 +30,8 @@
 
   <section class="Bl_Card" id="ol_sec_conexao">
     {% if olist_conta %}<p class="Bl_Hint" id="ol_conta">Conta: <strong>{{ olist_conta }}</strong></p>{% else %}<p class="Bl_Hint" id="ol_conta" hidden></p>{% endif %}
-    <p class="Bl_Hint">No Olist desta empresa, abra Configurações, aba Geral, Aplicativos, e crie um aplicativo. A URL de redirecionamento é esta, igual:</p>
-    <p class="Bl_Hint"><strong id="ol_redirect">{{ olist_redirect }}</strong></p>
-    <p class="Bl_Hint">Marque Produtos em Leitura. Categorias e depósitos ficam a critério da conta. Depois salve as chaves aqui e conecte com o usuário dono, aquele que abriu a conta.</p>
-    <div class="Bl_Grid2">
-      <label class="Bl_Field">
-        <span>Client ID</span>
-        <input type="text" id="ol_client_id" autocomplete="off" spellcheck="false" />
-      </label>
-      <label class="Bl_Field">
-        <span>Client Secret</span>
-        <input type="password" id="ol_client_secret" autocomplete="new-password" placeholder="Cole o segredo. Ele não aparece de novo." />
-      </label>
-    </div>
+    <p class="Bl_Hint">Conecte com o usuário que abriu a conta no Olist. As abas de configuração aparecem depois da autorização.</p>
     <div class="Bl_Actions">
-      <button type="button" class="Cl_botaoprimario" id="ol_btn_salvar_app">Salvar aplicativo</button>
       <a href="{{ url_for('olist.oauth_iniciar') }}" class="Cl_botaoprimario" id="ol_btn_conectar" {% if olist_conectado %}hidden{% endif %}>Conectar</a>
       <button type="button" class="Cl_BtnCancelar" id="ol_btn_desconectar" {% if not olist_conectado %}hidden{% endif %}>Desconectar</button>
     </div>
@@ -241,5 +228,5 @@
 </div>
 {% endblock %}
 {% block page_js %}
-<script src="{{ url_for('olist.static', filename='script/Solist_integracao.js') }}?v=10"></script>
+<script src="{{ url_for('olist.static', filename='script/Solist_integracao.js') }}?v=11"></script>
 {% endblock %}

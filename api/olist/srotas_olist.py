@@ -9,13 +9,11 @@ from api.olist.cliente import (
     MSG_USUARIO_SEM_PERMISSAO,
     consultar_conta,
     colunas_aplicativo_ok,
-    credenciais_da_conta,
+    credenciais,
     desconectar,
     garantir_tabelas,
     mensagem_publica_olist,
-    olist_configurado,
     olist_conectado,
-    redirect_uri_oauth,
     salvar_aplicativo,
     salvar_tokens,
     trocar_code_por_tokens,
@@ -121,8 +119,6 @@ def pagina():
         nav_codigo="integracoes",
         olist_conectado=conectado,
         olist_conta=conta,
-        olist_configurado=olist_configurado(),
-        olist_redirect=redirect_uri_oauth(),
         eh_dev=bool(session.get("eh_desenvolvedor")),
         icone_olist=url_icone_integracao("olist"),
     )
@@ -140,14 +136,10 @@ def oauth_iniciar():
     id_tenant = session.get("id_tenant")
     if not id_tenant:
         return redirect(url_for("integracoes.pagina", erro="sessao"))
-    conn = Var_ConectarBanco()
     try:
-        cur = conn.cursor()
-        client_id, _ = credenciais_da_conta(cur, int(id_tenant))
+        client_id, _ = credenciais()
     except RuntimeError as e:
         return redirect(url_for("olist.pagina", erro=str(e)[:240]))
-    finally:
-        conn.close()
 
     state = gerar_state_oauth()
     session["olist_oauth_state"] = state
@@ -179,7 +171,7 @@ def oauth_callback():
         cur = conn.cursor()
         garantir_tabelas(cur)
         try:
-            client_id, client_secret = credenciais_da_conta(cur, int(id_tenant))
+            client_id, client_secret = credenciais()
             tokens = trocar_code_por_tokens(code, client_id, client_secret)
         except Exception as e:
             return redirect(url_for("olist.pagina", erro=str(e)[:240]))

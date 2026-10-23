@@ -135,23 +135,6 @@
       conta.innerHTML = data.conta_nome ? `Conta: <strong>${esc(data.conta_nome)}</strong>` : "";
     }
     aplicarConfig();
-    const campoId = document.getElementById("ol_client_id");
-    if (campoId && document.activeElement !== campoId) campoId.value = data.client_id || "";
-  }
-
-  async function salvarAplicativo() {
-    const clientId = document.getElementById("ol_client_id")?.value || "";
-    const clientSecret = document.getElementById("ol_client_secret")?.value || "";
-    const data = await jsonFetch("/api/integracoes/olist/aplicativo", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ client_id: clientId, client_secret: clientSecret }),
-    });
-    const segredo = document.getElementById("ol_client_secret");
-    if (segredo) segredo.value = "";
-    await Swal.fire({ icon: "success", title: "Aplicativo salvo", text: data.message || "Aplicativo salvo.", confirmButtonColor: "#021F81" });
-    if (data.desconectou) window.location.reload();
-    else await carregarStatus();
   }
 
   async function salvar(extra) {
@@ -178,7 +161,6 @@
     await carregarStatus();
   }
 
-  document.getElementById("ol_btn_salvar_app")?.addEventListener("click", () => salvarAplicativo().catch((e) => Swal.fire({ icon: "error", title: "Olist", text: e.message, confirmButtonColor: "#021F81" })));
   document.getElementById("ol_btn_salvar")?.addEventListener("click", () => salvar().catch((e) => Swal.fire({ icon: "error", title: "Olist", text: e.message, confirmButtonColor: "#021F81" })));
   document.getElementById("ol_btn_salvar_pedidos")?.addEventListener("click", () => salvar().catch((e) => Swal.fire({ icon: "error", title: "Olist", text: e.message, confirmButtonColor: "#021F81" })));
   document.getElementById("ol_btn_salvar_estoque")?.addEventListener("click", () => salvar().catch((e) => Swal.fire({ icon: "error", title: "Olist", text: e.message, confirmButtonColor: "#021F81" })));
