@@ -32,6 +32,7 @@
     wrap_descricao: document.getElementById("wrapDescricaoVariante"),
     hint_descricao_herda: document.getElementById("hint_descricao_herda"),
     hint_atributos: document.getElementById("hint_atributos"),
+    variacao_rotulo: document.getElementById("variacao_rotulo"),
     ativo: document.getElementById("ativo"),
     preco: document.getElementById("preco"),
     valor_drop: document.getElementById("valor_drop"),
@@ -636,6 +637,28 @@
       .join(" · ");
   }
 
+  function renderRotuloVariacao(atributos) {
+    const box = el.variacao_rotulo;
+    if (!box) return;
+    box.replaceChildren();
+    const entries = Object.entries(atributos || {}).filter(([, v]) => String(v || "").trim());
+    if (!entries.length) {
+      box.hidden = true;
+      return;
+    }
+    entries.forEach(([nome, valor]) => {
+      const chip = document.createElement("span");
+      chip.className = "Cat_VarRotuloItem";
+      const forte = document.createElement("strong");
+      forte.textContent = nome;
+      const txt = document.createElement("span");
+      txt.textContent = String(valor);
+      chip.append(forte, txt);
+      box.append(chip);
+    });
+    box.hidden = false;
+  }
+
   async function carregarGaleriaPai() {
     if (!idProduto) return;
     const r = await fetch(`${apiBase()}/imagens/lista?id_produto=${idProduto}`);
@@ -657,6 +680,7 @@
     atributosCache = d.atributos || {};
     descricaoPropria = (d.descricao_propria || "").trim();
     setDescricaoValue((d.descricao || pai?.descricao || "").trim());
+    renderRotuloVariacao(d.atributos);
     if (el.hint_atributos) {
       const attrTxt = rotuloAttr(d.atributos);
       el.hint_atributos.textContent = attrTxt ? `Variação: ${attrTxt}` : "";

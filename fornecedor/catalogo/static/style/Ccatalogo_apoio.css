@@ -901,6 +901,40 @@ html:has(.Cat_ApoioBody) body {
   margin-top: 12px;
 }
 
+.Cat_VarTopo {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.Cat_VarTopoEsq {
+  min-width: 0;
+}
+.Cat_VarRotulo {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 2px;
+}
+.Cat_VarRotuloItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #1e3a8a;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.Cat_VarRotuloItem span {
+  font-weight: 600;
+  color: #334155;
+}
+
 .Cat_VarTag {
   display: inline-flex;
   align-items: center;

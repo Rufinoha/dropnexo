@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>Produto — {{ MARCA_NOME }}</title>
+  {% include "partials/marca_favicon.html" %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='style/global_utils.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_crud.css') }}" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.snow.css" />
+  <link rel="stylesheet" href="{{ url_for('fn_catalogo.static', filename='style/Ccatalogo_apoio.css') }}?v=16" />
+  <link rel="stylesheet" href="{{ url_for('fn_catalogo.static', filename='style/Ccatalogos.css') }}?v=17" />
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+</head>
+<body class="Cat_ApoioBody">
+  <input type="hidden" id="id" value="" />
+
+  <div class="Cl_ContainerApoio Cat_ApoioWrap">
+    <header class="Cat_Head">
+      <div class="Cl_FormCampo Cat_HeadNome">
+        <label for="nome">Nome *</label>
+        <input type="text" id="nome" placeholder="Nome do produto" />
+      </div>
+      <div class="Cat_HeadGrid">
+        <div class="Cl_FormCampo">
+          <label for="sku">SKU</label>
+          <input type="text" id="sku" />
+        </div>
+        <div class="Cl_FormCampo">
+          <label for="formato">Formato</label>
+          <select id="formato">
+            <option value="S" selected>Simples</option>
+            <option value="E">Com Variações</option>
+          </select>
+        </div>
+        <div class="Cl_FormCampo">
+          <label for="preco">Preço de venda (R$)</label>
+          <input type="number" id="preco" step="0.01" min="0" />
+        </div>
+        <div class="Cl_FormCampo Cat_ValorDropCampo">
+          <label for="valor_drop" class="Cat_LabelComTip">
+            Valor Drop (R$)
+            <span class="Cat_Tip" tabindex="0">
+              <span class="Cat_TipIcon" aria-hidden="true">?</span>
+              <span class="Cat_TipBubble" id="hintValorDrop" role="tooltip">
+                Calculado em Parâmetros → Precificação. Duplo clique para ajustar.
+              </span>
+            </span>
+          </label>
+          <input type="number" id="valor_drop" class="Cat_ValorDropInput" step="0.01" min="0" readonly
+            title="Duplo clique para editar manualmente" />
+        </div>
+        <div class="Cl_FormCampo">
+          <label for="preco_custo">Preço de custo (R$)</label>
+          <input type="number" id="preco_custo" step="0.01" min="0" />
+        </div>
+        <div class="Cl_FormCampo">
+          <label for="unidade">Unidade</label>
+          <input type="text" id="unidade" list="lista_unidades" placeholder="UN" />
+          <datalist id="lista_unidades"></datalist>
+        </div>
+        <div class="Cl_FormCampo">
+          <label for="condicao">Condição</label>
+          <select id="condicao">
+            <option value="" selected>Não especificado</option>
+            <option value="NOVO">Novo</option>
+            <option value="USADO">Usado</option>
+            <option value="RECONDICIONADO">Recondicionado</option>
+          </select>
+        </div>
+      </div>
+    </header>
+
+    <div class="Cat_TabShell">
+      <nav class="Cat_TabNav" role="tablist">
+        <button type="button" class="Cat_Tab is-active" data-tab="caracteristicas">Características</button>
+        <button type="button" class="Cat_Tab" data-tab="imagens">Imagens</button>
+        <button type="button" class="Cat_Tab" data-tab="estoque" id="tabEstoque">Estoque</button>
+        <button type="button" class="Cat_Tab" data-tab="fornecedor">Fornecedor</button>
+        <button type="button" class="Cat_Tab" data-tab="tributacao">Tributação</button>
+        <button type="button" class="Cat_Tab" data-tab="variacoes" id="tabVariacoes" hidden>Variações</button>
+      </nav>
+
+      <section class="Cat_TabPanel is-active" data-panel="caracteristicas">
+        <div class="Cl_FormCampo Cat_DescricaoCampo">
+          <div class="Cat_DescEditorWrap">
+            <div class="Cat_DescEditorLabelRow">
+              <label for="descricaoEditor">Descrição</label>
+              <div class="Cat_DescEditorActions">
+                <button type="button" id="btnDescCopyHtml" class="Cat_DescActionBtn" hidden title="Copiar HTML para outro sistema">
+                  Copiar HTML
+                </button>
+                <button type="button" id="btnDescModeToggle" class="Cat_DescActionBtn Cat_DescActionBtn--primary" title="Alternar entre editor visual e código HTML">
+                  Ver código HTML
+                </button>
+              </div>
+            </div>
+
+            <div id="descricaoVisualPane" class="Cat_DescVisualPane Cat_DescToolbarWrap">
+              <div id="descricaoEditor" class="Cat_DescQuill"></div>
+            </div>
+
+            <div id="descricaoHtmlPane" class="Cat_DescHtmlPane" hidden>
+              <p class="Cat_DescHtmlHint">Cole HTML de outro sistema à esquerda — a pré-visualização atualiza em tempo real. Volte ao editor visual quando quiser continuar formatando.</p>
+              <div class="Cat_DescHtmlSplit">
+                <div class="Cat_DescHtmlCode">
+                  <div class="Cat_DescPaneHead">Código HTML</div>
+                  <textarea id="descricaoHtml" spellcheck="false" placeholder="&lt;p&gt;Sua descrição em HTML…&lt;/p&gt;"></textarea>
+                </div>
+                <div class="Cat_DescHtmlPreview">
+                  <div class="Cat_DescPaneHead">Pré-visualização</div>
+                  <div id="descricaoPreview" class="Cat_DescPreviewBody"></div>
+                </div>
+              </div>
+            </div>
+
+            <input type="hidden" id="descricao" value="" />
+          </div>
+        </div>
+        <div class="Cat_Grid4">
+          <div class="Cl_FormCampo">
+            <label for="marca">Marca</label>
+            <input type="text" id="marca" />
+          </div>
+          <div class="Cl_FormCampo">
+            <label for="peso_liquido_kg">Peso líquido (kg)</label>
+            <input type="number" id="peso_liquido_kg" step="0.001" min="0" />
+          </div>
+          <div class="Cl_FormCampo">
+            <label for="peso_bruto_kg">Peso bruto c/ embalagem (kg)</label>
+            <input type="number" id="peso_bruto_kg" step="0.001" min="0" />
+          </div>
+          <div class="Cl_FormCampo">
+            <label for="largura_cm">Largura (cm)</label>
+            <input type="number" id="largura_cm" step="0.01" min="0" />
+          </div>
+          <div class="Cl_FormCampo">
+            <label for="altura_cm">Altura (cm)</label>
+            <input type="number" id="altura_cm" step="0.01" min="0" />
+          </div>
+          <div class="Cl_FormCampo">
+            <label for="profundidade_cm">Comprimento (cm)</label>
+            <input type="number" id="profundidade_cm" step="0.01" min="0" />
+          </div>
+          <div class="Cl_FormCampo">
+            <label for="itens_por_caixa">Itens por caixa</label>
+            <input type="number" id="itens_por_caixa" min="1" step="1" value="1" />
+          </div>
+          <div class="Cl_FormCampo">
+            <label for="gtin">GTIN/EAN</label>
+            <input type="text" id="gtin" />
+          </div>
+          <div class="Cl_FormCampo">
+            <label for="garantia_tipo">Garantia (tipo)</label>
+            <select id="garantia_tipo">
+              <option value="">— Não informar —</option>
+              <option value="Garantia do vendedor">Garantia do vendedor</option>
+              <option value="Garantia de fábrica">Garantia de fábrica</option>
+              <option value="Sem garantia">Sem garantia</option>
+            </select>
+          </div>
+          <div class="Cl_FormCampo">
+            <label for="garantia_tempo">Garantia (prazo)</label>
+            <select id="garantia_tempo">
+              <option value="">— Não informar —</option>
+              <option value="30 dias">30 dias</option>
+              <option value="90 dias">90 dias</option>
+              <option value="6 meses">6 meses</option>
+              <option value="12 meses">12 meses</option>
+              <option value="24 meses">24 meses</option>
+              <option value="3 anos">3 anos</option>
+            </select>
+          </div>
+          <div class="Cl_FormCampo">
+            <label for="video_youtube">Vídeo YouTube (URL ou ID)</label>
+            <input type="text" id="video_youtube" placeholder="https://youtu.be/... ou ID" maxlength="120" />
+          </div>
+        </div>
+        <div class="Cl_FormCampo Cat_CatCampo">
+          <label for="id_categoria">Categoria</label>
+          <select id="id_categoria"></select>
+        </div>
+      </section>
+
+      <section class="Cat_TabPanel" data-panel="imagens" hidden>
+        <div class="Cat_ImgModo">
+          <span class="Cat_ImgModoLabel">Adicionar imagem por:</span>
+          <label class="Cat_ImgModoOpt"><input type="radio" name="img_modo" value="link" checked /> Link</label>
+          <label class="Cat_ImgModoOpt"><input type="radio" name="img_modo" value="upload" /> Upload</label>
+          <span class="Cat_ImagemHint" id="imgContador">0 / 10 imagens</span>
+        </div>
+        <div id="painelImgLink" class="Cat_ImgAddRow">
+          <div class="Cl_FormCampo">
+            <label for="img_link_url">URL da imagem</label>
+            <input type="url" id="img_link_url" placeholder="https://… (Direct link .jpg/.png)" />
+            <p class="Cat_ImagemHint" style="margin:6px 0 0">O DropNexo <strong>baixa e guarda</strong> a imagem na sua conta (link interno público). Em Postimages use o <strong>Direct link</strong>.</p>
+          </div>
+          <button type="button" class="Cl_BtnIncluir" id="btnImgLink">Incluir</button>
+        </div>
+        <div id="painelImgUpload" class="Cat_ImgAddRow" hidden>
+          <div class="Cl_FormCampo">
+            <label for="arquivo_imagem">Arquivo</label>
+            <input type="file" id="arquivo_imagem" accept="image/png,image/jpeg,image/webp" />
+            <p class="Cat_ImagemHint">PNG, JPG ou WEBP — máx. 2 MB por arquivo.</p>
+          </div>
+          <button type="button" class="Cl_BtnIncluir" id="btnImgUpload">Enviar</button>
+        </div>
+        <p class="Cat_ImagemHint" id="avisoImgSalvar">Salve o produto antes de incluir imagens.</p>
+        <p class="Cat_ImagemHint" id="avisoImgOrdem" hidden>Arraste os cards para definir a ordem (principal, 2ª, 3ª…).</p>
+        <div id="galeria_imagens" class="Cat_Galeria"></div>
+        <input type="hidden" id="imagem_caminho" value="" />
+        <input type="hidden" id="imagem_url" value="" />
+      </section>
+
+      <section class="Cat_TabPanel" data-panel="estoque" hidden>
+        <p class="Cat_ImagemHint" id="avisoEstoqueCadastro" hidden>Salve o produto para gerenciar estoque por depósito.</p>
+        <p class="Cat_ImagemHint" id="avisoEstoqueVariacao" hidden>
+          Produto com variações: o estoque por depósito fica em cada SKU — abra a variação (ícone editar) → aba Estoque.
+        </p>
+        <p class="Cat_ImagemHint" id="avisoEstoqueDeposito">
+          Vincule depósitos Bling ↔ DropNexo em <strong>Integrações → Bling</strong> para importar saldos automaticamente.
+        </p>
+        <div id="painelEstoqueDepositos" class="Cat_EstoqueDepWrap" hidden>
+          <div id="gridEstoqueDepositos" class="Cat_EstoqueDepGrid"></div>
+          <p class="Cat_ImagemHint">Duplo clique no card para ver detalhes e editar o saldo.</p>
+        </div>
+        <input type="hidden" id="quantidade" value="0" />
+      </section>
+
+      <section class="Cat_TabPanel" data-panel="fornecedor" hidden>
+        <div id="painelFornecedorArmazem" class="Cat_FornPanel" hidden>
+          <p class="Cat_ImagemHint">
+            Associe o produto a um <strong>fornecedor local</strong> (cadastro do armazém).
+            Necessário no modo B da rede (vitrine por fornecedor).
+          </p>
+          <div class="Cl_FormCampo" style="max-width: 28rem;">
+            <label for="id_armazem_fornecedor">Fornecedor local</label>
+            <select id="id_armazem_fornecedor">
+              <option value="">Sem fornecedor</option>
+            </select>
+          </div>
+          <p class="Cat_ImagemHint">
+            Cadastre fornecedores em <strong>Armazém → Fornecedores</strong>.
+          </p>
+        </div>
+        <div id="painelFornecedorVendedor" class="Cat_FornPanel" aria-live="polite">
+          <div class="Cat_Placeholder Cat_FornPlaceholder">
+            <p>Carregando dados do fornecedor…</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="Cat_TabPanel" data-panel="tributacao" hidden>
+        <div class="Cat_Grid4">
+          <div class="Cl_FormCampo">
+            <label for="ncm">NCM</label>
+            <input type="text" id="ncm" maxlength="10" />
+          </div>
+          <div class="Cl_FormCampo">
+            <label for="cest">CEST</label>
+            <input type="text" id="cest" maxlength="10" />
+          </div>
+          <div class="Cl_FormCampo Cat_OrigemFiscalCampo">
+            <label for="origem_fiscal">Origem fiscal</label>
+            <select id="origem_fiscal">
+              <option value="">(selecione)</option>
+              <option value="0">0 - Nacional, exceto as indicadas nos códigos 3, 4, 5 e 8</option>
+              <option value="1">1 - Estrangeira - Importação direta, exceto a indicada no código 6</option>
+              <option value="2">2 - Estrangeira - Adquirida no mercado interno, exceto a indicada no código 7</option>
+              <option value="3">3 - Nacional, mercadoria ou bem com Conteúdo de Importação superior a 40% e inferior ou igual a 70%</option>
+              <option value="4">4 - Nacional, cuja produção tenha sido feita em conformidade com os processos produtivos básicos de que tratam as legislações citadas nos Ajustes</option>
+              <option value="5">5 - Nacional, mercadoria ou bem com Conteúdo de Importação inferior ou igual a 40%</option>
+              <option value="6">6 - Estrangeira - Importação direta, sem similar nacional, constante em lista da CAMEX</option>
+              <option value="7">7 - Estrangeira - Adquirida no mercado interno, sem similar nacional, constante em lista da CAMEX</option>
+              <option value="8">8 - Nacional, mercadoria ou bem com Conteúdo de Importação superior a 70%</option>
+            </select>
+          </div>
+          <div class="Cl_FormCampo">
+            <label for="cfop">CFOP</label>
+            <input type="text" id="cfop" maxlength="4" placeholder="Vazio usa o padrão fiscal" />
+          </div>
+          <div class="Cl_FormCampo">
+            <label for="icms_situacao">ICMS</label>
+            <input type="text" id="icms_situacao" maxlength="4" placeholder="CSOSN ou CST" />
+          </div>
+          <div class="Cl_FormCampo">
+            <label for="pis_situacao">PIS</label>
+            <input type="text" id="pis_situacao" maxlength="2" />
+          </div>
+          <div class="Cl_FormCampo">
+            <label for="cofins_situacao">COFINS</label>
+            <input type="text" id="cofins_situacao" maxlength="2" />
+          </div>
+          <div class="Cl_FormCampo">
+            <label for="volumes">Volumes</label>
+            <input type="number" id="volumes" min="0" step="1" />
+          </div>
+          <div class="Cl_FormCampo">
+            <label for="producao">Tipo produção</label>
+            <input type="text" id="producao" maxlength="20" placeholder="Própria / Terceiros" />
+          </div>
+          <div class="Cl_FormCampo Cat_CheckCampo">
+            <label class="Cl_Switch">
+              <input type="checkbox" id="frete_gratis" />
+              <span class="Cl_SwitchSlider"></span>
+              <span>Frete grátis</span>
+            </label>
+          </div>
+        </div>
+      </section>
+
+      <section class="Cat_TabPanel" data-panel="variacoes" hidden>
+        <p class="Cat_ImagemHint Cat_VarHint">Atributo + opções — se o nome existir em um modelo (<strong>Fornecedor → Variações</strong>), as opções são preenchidas. Digite o nome do modelo e clique em Adicionar para aplicar o modelo inteiro.</p>
+        <div id="painel_variantes" style="display:none;">
+          <div class="Cat_VarAttrLinha">
+            <div class="Cl_FormCampo">
+              <label for="attr_nome">Atributo</label>
+              <input type="text" id="attr_nome" list="attr_nome_sugestoes" placeholder="Cor ou nome do modelo" autocomplete="off" />
+              <datalist id="attr_nome_sugestoes"></datalist>
+            </div>
+            <div class="Cl_FormCampo">
+              <label for="attr_valores">Opções (vírgula)</label>
+              <input type="text" id="attr_valores" placeholder="Azul, Verde, Vermelho" />
+            </div>
+            <button type="button" class="Cl_BtnIncluir" id="btnAdicionarVariacao">Adicionar</button>
+          </div>
+          <div id="lista_atributos" class="Cat_VarAttrTags"></div>
+          <div class="Cat_VarListaHead">
+            <span class="Cat_VarListaTitulo">Variações cadastradas</span>
+            <button type="button" class="Cl_BtnLink" id="btnNovaVariante">+ Nova variante manual</button>
+          </div>
+          <div class="Cat_VarTabelaScroll">
+            <div class="Cl_TabelaPrincipal Cat_VarTabela">
+              <table>
+                <thead><tr><th>SKU</th><th>Variante</th><th>Atributos</th><th>Preço</th><th>Estoque</th><th>Pai</th><th class="Cl_TableActions">Ações</th></tr></thead>
+                <tbody id="lista_variantes"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <p id="avisoVariacoes" class="Cat_ImagemHint">Selecione <strong>Com Variações</strong> e salve o produto para habilitar.</p>
+      </section>
+    </div>
+  </div>
+
+  <footer class="Cat_FooterBar">
+    <label class="Cl_Switch">
+      <input type="checkbox" id="publicado" />
+      <span class="Cl_SwitchSlider"></span>
+      <span>Publicado na rede</span>
+    </label>
+    <div class="Cat_FooterBtns">
+      <button type="button" class="Cl_BtnSalvar" id="btnSalvar">Salvar</button>
+      <button type="button" class="Cl_BtnExcluir" id="btnExcluir">Excluir</button>
+    </div>
+  </footer>
+
+  <script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
+  <script src="{{ url_for('static', filename='script/global_utils.js') }}"></script>
+  {% if apoio_modo == 'vendedor' %}
+  <script>
+    window.CAT_APOIO_BASE = '/meus-produtos';
+    window.CAT_APOIO_MODO = 'vendedor';
+  </script>
+  {% else %}
+  <script>
+    window.CAT_TENANT_TIPO = {{ (session.get('tenant_tipo_negocio') or '')|tojson }};
+    window.CAT_MODULO_ATIVO = {{ (session.get('modulo_ativo') or '')|tojson }};
+  </script>
+  {% endif %}
+  <script src="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.js"></script>
+  <script src="{{ url_for('fn_catalogo.static', filename='script/Scatalogo_descricao_editor.js') }}?v=1"></script>
+  <script src="{{ url_for('fn_catalogo.static', filename='script/Scatalogo_apoio.js') }}?v=38"></script>
+</body>
+</html>

@@ -158,12 +158,13 @@
       '<p class="DnPay_CupomMsg" id="dnpay_cupom_msg"></p>' +
       "</div>" +
       '<div class="DnPay_Tabs" role="tablist">' +
-      '<button type="button" class="DnPay_Tab is-active" data-tab="cartao" role="tab">Cartão</button>' +
+      '<button type="button" class="DnPay_Tab is-active" data-tab="cartao" role="tab">Crédito</button>' +
       '<button type="button" class="DnPay_Tab" data-tab="boleto" role="tab">Boleto</button>' +
       '<button type="button" class="DnPay_Tab is-soon" data-tab="pix" role="tab">PIX<small>em breve</small></button>' +
       "</div>" +
       '<section class="DnPay_Pane is-active" data-pane="cartao">' +
       '<p class="DnPay_PaneTitle">Cartão de crédito</p>' +
+      '<p class="DnPay_Aviso">Aceitamos somente cartão de crédito. Cartão de débito não é cobrado e a fatura fica em aberto. Se o seu cartão for só de débito, use boleto.</p>' +
       '<p class="DnPay_PaneDesc">Tokenização na Efí — os dados do cartão não passam pelo DropNexo.</p>' +
       '<div class="EfiCard">' +
       '<div class="EfiCard_Visual" aria-hidden="true">' +
@@ -205,7 +206,7 @@
       '<div class="DnPay_Soon">' +
       '<div class="DnPay_SoonMark">PIX</div>' +
       "<h4>Quase lá</h4>" +
-      "<p>PIX estará disponível em breve neste mesmo checkout.<br>Por agora, use cartão ou boleto.</p>" +
+      "<p>PIX estará disponível em breve neste mesmo checkout.<br>Por agora, use cartão de crédito ou boleto.</p>" +
       "</div></section>" +
       '<section class="DnPay_Pane" data-pane="cortesia">' +
       '<div class="DnPay_Cortesia">' +
@@ -216,7 +217,7 @@
       "</div>" +
       '<p class="DnPay_Error" id="dnpay_error" aria-live="polite"></p>' +
       '<div class="DnPay_Actions">' +
-      '<button type="button" class="DnPay_Btn DnPay_Btn--primary" id="dnpay_submit">Pagar com cartão</button>' +
+      '<button type="button" class="DnPay_Btn DnPay_Btn--primary" id="dnpay_submit">Pagar com crédito</button>' +
       '<button type="button" class="DnPay_Btn DnPay_Btn--ghost" data-dnpay-close="1">Cancelar</button>' +
       '<p class="DnPay_Secure">Conexão segura · dados sensíveis só na Efí</p>' +
       "</div></main></div></div>"
@@ -431,7 +432,7 @@
         const submitBtn = root.querySelector("#dnpay_submit");
         const cupomMsg = root.querySelector("#dnpay_cupom_msg");
         const labels = {
-          cartao: "Pagar com cartão",
+          cartao: "Pagar com crédito",
           boleto: "Gerar boleto",
           pix: "PIX em breve",
         };
@@ -453,7 +454,7 @@
             });
             return;
           }
-          labels.cartao = "Pagar com cartão";
+          labels.cartao = "Pagar com crédito";
           labels.boleto = "Gerar boleto";
           labels.pix = "PIX em breve";
           root.querySelectorAll(".DnPay_Pane").forEach(function (pane) {

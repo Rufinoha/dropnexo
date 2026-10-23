@@ -6,7 +6,7 @@
   {% include "partials/marca_favicon.html" %}
   <link rel="stylesheet" href="{{ url_for('static', filename='style/global_utils.css') }}" />
   <link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_crud.css') }}" />
-  <link rel="stylesheet" href="{{ url_for('fn_catalogo.static', filename='style/Ccatalogo_apoio.css') }}?v=13" />
+  <link rel="stylesheet" href="{{ url_for('fn_catalogo.static', filename='style/Ccatalogo_apoio.css') }}?v=18" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.snow.css" />
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </head>
@@ -20,12 +20,17 @@
   <input type="hidden" id="id_produto" value="" />
 
   <div class="Cl_ContainerApoio Cat_ApoioWrap">
-    <label class="Cl_Switch Cat_HerdaPai">
-      <input type="checkbox" id="herda_pai" checked />
-      <span class="Cl_SwitchSlider"></span>
-      <span>Utilizar informações do produto pai</span>
-    </label>
-    <p class="Cat_ImagemHint" id="hint_herda">Preço, peso, GTIN, imagem e descrição seguem o cadastro do pai quando marcado.</p>
+    <div class="Cat_VarTopo">
+      <div class="Cat_VarTopoEsq">
+        <label class="Cl_Switch Cat_HerdaPai">
+          <input type="checkbox" id="herda_pai" checked />
+          <span class="Cl_SwitchSlider"></span>
+          <span>Utilizar informações do produto pai</span>
+        </label>
+        <p class="Cat_ImagemHint" id="hint_herda">Preço, peso, GTIN, imagem e descrição seguem o cadastro do pai quando marcado.</p>
+      </div>
+      <div id="variacao_rotulo" class="Cat_VarRotulo" hidden></div>
+    </div>
 
     <nav class="Cat_TabNav">
       <button type="button" class="Cat_Tab is-active" data-tab="ident">Identificação</button>
@@ -187,6 +192,6 @@
   {% endif %}
   <script src="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.js"></script>
   <script src="{{ url_for('fn_catalogo.static', filename='script/Scatalogo_descricao_editor.js') }}?v=2"></script>
-  <script src="{{ url_for('fn_catalogo.static', filename='script/Scatalogo_variante_apoio.js') }}?v=15"></script>
+  <script src="{{ url_for('fn_catalogo.static', filename='script/Scatalogo_variante_apoio.js') }}?v=16"></script>
 </body>
 </html>
