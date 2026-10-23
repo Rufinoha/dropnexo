@@ -52,6 +52,22 @@ def init_app(app):
     app.register_blueprint(olist_bp)
 
 
+@olist_bp.get("/ajuda/olist")
+def ajuda_olist():
+    """Manual público — como o fornecedor conecta o Olist ERP."""
+    from global_utils import obter_url_site_publico
+
+    base = obter_url_site_publico().rstrip("/")
+    return render_template(
+        "ajuda_olist.html",
+        url_home=url_for("public.home"),
+        url_login=url_for("auth.pagina_login"),
+        url_manual=f"{base}/ajuda/olist",
+        url_redirect=f"{base}/api/integracoes/olist/oauth/callback",
+        css_url=url_for("bling.static", filename="style/ajuda_bling.css"),
+    )
+
+
 def _pode() -> bool:
     return bool(
         session.get("eh_desenvolvedor")

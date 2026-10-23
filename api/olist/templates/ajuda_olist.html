@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Manual do usuário: como conectar o Olist ERP ao DropNexo e configurar cada aba." />
+  <title>Como conectar o Olist · {{ MARCA_NOME }}</title>
+  {% include "partials/marca_favicon.html" %}
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style/global_utils.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style/home.css') }}" />
+  <link rel="stylesheet" href="{{ css_url }}" />
+  {% include "partials/gtag_analytics.html" %}
+</head>
+<body class="public-body home-page ajuda-bling-page">
+  <header class="public-header ajuda-bling-header">
+    <a class="logo logo--img" href="{{ url_home }}">
+      <img src="{{ marca_logo_nome_url }}" alt="{{ MARCA_NOME }}" height="32" />
+    </a>
+    <nav class="home-nav ajuda-bling-nav" aria-label="Manual Olist">
+      <a class="nav-link" href="#conectar">Conectar</a>
+      <a class="nav-link" href="#abas">Abas</a>
+      <a class="nav-link" href="#status">Status</a>
+      <a class="btn btn-ghost" href="{{ url_login }}">Entrar</a>
+    </nav>
+  </header>
+
+  <main class="ajuda-bling-main">
+    <header class="ajuda-bling-hero">
+      <p class="home-kicker">Manual do usuário · Olist ERP</p>
+      <h1>Como conectar o Olist ao {{ MARCA_NOME }}</h1>
+      <p class="lead">
+        Este manual é para o fornecedor. Ele cria o aplicativo na própria conta Olist,
+        cola as chaves no DropNexo e autoriza a conexão. As abas de configuração só aparecem depois disso.
+      </p>
+    </header>
+
+    <article class="ajuda-bling-doc">
+      <section id="conectar" class="ajuda-bling-section">
+        <h2>1. Criar o aplicativo no Olist</h2>
+        <p class="ajuda-bling-intro">
+          No ERP da Olist, entre com o usuário que abriu a conta. Abra
+          <strong>Menu → Configurações → aba Geral → Aplicativos → + novo aplicativo</strong>.
+        </p>
+        <ul>
+          <li><strong>Nome:</strong> DropNexo.</li>
+          <li><strong>URL de redirecionamento:</strong> <code>{{ url_redirect }}</code></li>
+          <li><strong>Produtos:</strong> Leitura.</li>
+          <li><strong>Categorias</strong> e <strong>Depósitos:</strong> Leitura, se for usar essas abas.</li>
+          <li><strong>Pedidos:</strong> Incluir e editar, se for enviar pedidos de venda ao Olist.</li>
+        </ul>
+        <p>Salve, abra o aplicativo de novo e copie o <strong>Client ID</strong> e o <strong>Client Secret</strong>.</p>
+
+        <h2>2. Conectar no DropNexo</h2>
+        <p class="ajuda-bling-intro">
+          Entre como fornecedor e abra <strong>Integrações → Olist ERP</strong>.
+        </p>
+        <ol class="ajuda-bling-guia">
+          <li class="ajuda-bling-passo">
+            <div class="ajuda-bling-passo__head">
+              <span class="ajuda-bling-passo__num">1</span>
+              <h3>Salvar o aplicativo</h3>
+            </div>
+            <p class="ajuda-bling-passo__texto">Cole o Client ID e o Client Secret e clique em <strong>Salvar aplicativo</strong>. O segredo não aparece de novo.</p>
+          </li>
+          <li class="ajuda-bling-passo">
+            <div class="ajuda-bling-passo__head">
+              <span class="ajuda-bling-passo__num">2</span>
+              <h3>Conectar</h3>
+            </div>
+            <p class="ajuda-bling-passo__texto">Clique em <strong>Conectar</strong> e autorize com o mesmo usuário dono da conta Olist. O selo fica <strong>Conectado</strong> e mostra o nome da conta.</p>
+          </li>
+        </ol>
+      </section>
+
+      <section id="abas" class="ajuda-bling-section">
+        <h2>3. Abas depois de conectar</h2>
+
+        <article class="ajuda-bling-cfg">
+          <header class="ajuda-bling-cfg__head"><h3>Configurações</h3></header>
+          <p class="ajuda-bling-cfg__desc">Preferências do catálogo. Clique em <strong>Salvar</strong> ao terminar.</p>
+          <ul>
+            <li><strong>Modo das imagens:</strong> baixar para o DropNexo. Na importação a foto é gravada no DropNexo.</li>
+            <li><strong>Fonte principal:</strong> Olist ou DropNexo.</li>
+            <li><strong>Produtos:</strong> Importar, Exportar ou Atualizar (os dois).</li>
+            <li><strong>Estoque:</strong> Importar, Exportar ou Atualizar (os dois).</li>
+          </ul>
+        </article>
+
+        <article class="ajuda-bling-cfg">
+          <header class="ajuda-bling-cfg__head"><h3>Pedidos</h3></header>
+          <p class="ajuda-bling-cfg__desc">Quando o pedido chega no DropNexo, o sistema pode criar o pedido de venda no Olist.</p>
+          <ul>
+            <li><strong>Exportar pedidos ao Olist:</strong> cria o pedido de venda no ERP.</li>
+            <li><strong>Exportação automática:</strong> envia sozinho quando o pedido aparece para o fornecedor.</li>
+          </ul>
+          <p>Clique em <strong>Salvar</strong>.</p>
+        </article>
+
+        <article class="ajuda-bling-cfg">
+          <header class="ajuda-bling-cfg__head"><h3>Produtos</h3></header>
+          <p class="ajuda-bling-cfg__desc">A importação do catálogo fica no <strong>Catálogo</strong>. Nesta aba fica o estoque.</p>
+          <ul>
+            <li><strong>Receber do Olist:</strong> atualiza o saldo local com o saldo do Olist.</li>
+            <li><strong>Baixa em pedidos:</strong> envia a quantidade vendida ao Olist quando o pedido é confirmado.</li>
+          </ul>
+          <p>Clique em <strong>Salvar estoque</strong>. Sem depósito vinculado, o estoque não sincroniza.</p>
+        </article>
+
+        <article class="ajuda-bling-cfg">
+          <header class="ajuda-bling-cfg__head"><h3>Depósitos</h3></header>
+          <p class="ajuda-bling-cfg__desc">A tabela mostra o depósito do Olist e um depósito do DropNexo. Escolha o par e clique em <strong>Salvar</strong> na linha.</p>
+        </article>
+
+        <article class="ajuda-bling-cfg">
+          <header class="ajuda-bling-cfg__head"><h3>Imagens</h3></header>
+          <p class="ajuda-bling-cfg__desc">Não há botão. Na importação do produto, cada anexo do Olist é baixado e vira a foto do produto no DropNexo.</p>
+        </article>
+
+        <article class="ajuda-bling-cfg">
+          <header class="ajuda-bling-cfg__head"><h3>Categorias</h3></header>
+          <p class="ajuda-bling-cfg__desc">Para cada categoria do Olist, escolha o segmento, a ação e clique em <strong>Salvar</strong> na linha.</p>
+          <ul>
+            <li><strong>Vincular existente:</strong> usa uma categoria que já está no DropNexo.</li>
+            <li><strong>Criar no DropNexo:</strong> cria a categoria no segmento escolhido.</li>
+            <li><strong>Não importar:</strong> ignora essa categoria.</li>
+          </ul>
+        </article>
+      </section>
+
+      <section id="status" class="ajuda-bling-section">
+        <h2>4. Status</h2>
+        <p class="ajuda-bling-intro">A aba Status é somente leitura. O DropNexo aplica esta amarração ao criar ou atualizar o pedido no Olist.</p>
+        <ul>
+          <li><strong>Aguardando pagamento</strong> → Em aberto. O pedido chegou e o pedido de venda é criado no Olist.</li>
+          <li><strong>Pago</strong> → Aprovado. O vendedor quitou com o fornecedor.</li>
+          <li><strong>Expedido</strong> → Enviado. A etiqueta foi impressa no DropNexo.</li>
+          <li><strong>Entregue</strong> → Entregue. Entregue ao destinatário.</li>
+          <li><strong>Cancelado</strong> → Cancelado. O cancelamento é espelhado no Olist.</li>
+        </ul>
+        <p><strong>Desconectar</strong> encerra a autorização. Os produtos já importados continuam no catálogo.</p>
+      </section>
+    </article>
+  </main>
+
+  <footer class="home-footer">
+    <p>© {{ MARCA_NOME }} · <a href="{{ url_home }}">dropnexo.com.br</a> · <a href="{{ url_manual }}">Manual Olist</a></p>
+  </footer>
+</body>
+</html>
