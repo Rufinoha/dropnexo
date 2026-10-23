@@ -39,6 +39,8 @@ def registrar_modulos(app: Flask) -> None:
     raiz = Path(__file__).resolve().parent
     for pasta in ("fornecedor", "vendedor", "armazem", "sistema"):
         for arquivo in sorted((raiz / pasta).rglob("srotas_*.py")):
+            if "mesmonome" in arquivo.name:
+                continue
             mod_name = ".".join(arquivo.relative_to(raiz).with_suffix("").parts)
             mod = importlib.import_module(mod_name)
             init = getattr(mod, "init_app", None)
