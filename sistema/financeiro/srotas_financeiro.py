@@ -10,12 +10,14 @@ from global_utils import Var_ConectarBanco, login_obrigatorio
 from sistema.financeiro.cobranca import (
     DIAS_GRACA_INADIMPLENCIA,
     assinar_plano,
+    cancelar_plano_atual,
     fatura_aberta_alerta,
     garantir_cobranca_tenant,
     listar_efi_logs,
     listar_faturas,
     obter_fatura,
     regenerar_cobranca,
+    resumo_assinatura_tenant,
 )
 
 _MOD = Path(__file__).resolve().parent
@@ -120,6 +122,70 @@ def api_faturas():
         return jsonify(success=True, **data, dias_graca=DIAS_GRACA_INADIMPLENCIA)
     except Exception as e:
         return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
+@financeiro_bp.get("/api/financeiro/meu-plano")
+@login_obrigatorio()
+def api_meu_plano():
+    if not _pode_financeiro():
+        return jsonify(success=False, message="Sem permissão."), 403
+    tid = _id_tenant()
+    if not tid:
+        return jsonify(success=False, message="Sessão inválida."), 403
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        dados = resumo_assinatura_tenant(cur, tid)
+        conn.commit()
+        return jsonify(success=True, plano=dados)
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
+@financeiro_bp.post("/api/financeiro/cancelar-assinatura")
+@login_obrigatorio()
+def api_cancelar_assinatura():
+    if not _pode_financeiro():
+        return jsonify(success=False, message="Sem permissão."), 403
+    tid = _id_tenant()
+    if not tid:
+        return jsonify(success=False, message="Sessão inválida."), 403
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        res = cancelar_plano_atual(cur, tid)
+        conn.commit()
+        return jsonify(success=True, message=res["mensagem"])
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
+@financeiro_bp.get("/api/financeiro/faturas/<int:id_fatura>/nota")
+@login_obrigatorio()
+def api_nota_fatura(id_fatura: int):
+    if not _pode_financeiro():
+        return jsonify(success=False, message="Sem permissão."), 403
+    tid = _id_tenant()
+    if not tid:
+        return jsonify(success=False, message="Sessão inválida."), 403
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        fat = obter_fatura(cur, tid, id_fatura)
+        if not fat or fat.get("status") != "pago":
+            return jsonify(success=False, message="Nota fiscal disponível somente após o pagamento."), 404
+        return jsonify(
+            success=False,
+            message="A nota fiscal desta fatura ainda não foi emitida.",
+        ), 404
     finally:
         conn.close()
 

@@ -945,6 +945,12 @@
   border-color: #b91c1c !important;
 }
 
+a.mp-cancel-link {
+  display: inline-block;
+  margin-top: 0.35rem;
+  text-decoration: none;
+}
+
 @media (max-width: 800px) {
   .mp-cobranca-grid {
     grid-template-columns: repeat(2, 1fr);

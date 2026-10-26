@@ -303,8 +303,8 @@ def _montar_avisos(cur, id_tenant: int) -> list[dict]:
                 "descricao": (
                     f"Fatura {fat.get('referencia') or ''} está {estado} "
                     f"({fat.get('valor_formatado')}). "
-                    f"Sem pagamento do boleto em até {DIAS_GRACA_INADIMPLENCIA} dias úteis, "
-                    "o plano pode voltar ao gratuito."
+                    f"Sem pagamento em até {DIAS_GRACA_INADIMPLENCIA} dias depois do vencimento, "
+                    "o plano volta ao gratuito e a recorrência é cancelada."
                 ),
                 "link": "/financeiro",
                 "emissao": fat.get("vencimento_em") or fat.get("criado_em"),

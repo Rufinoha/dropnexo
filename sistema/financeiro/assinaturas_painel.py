@@ -665,6 +665,36 @@ def painel_assinaturas(
     _anexar_lembretes(cur, em_atraso)
     _anexar_lembretes(cur, em_aberto)
 
+    canceladas: list[dict] = []
+    try:
+        cur.execute("SAVEPOINT sp_asf_cancel")
+        cur.execute(
+            """
+            SELECT t.id,
+                   COALESCE(NULLIF(t.nome_fantasia, ''), NULLIF(t.nome, ''), ''),
+                   tc.plano_slug, tc.cancelado_em, tc.efi_subscription_id, t.tipo_negocio
+            FROM tbl_tenant_cobranca tc
+            JOIN tbl_tenant t ON t.id = tc.id_tenant
+            WHERE tc.assinatura_status = 'cancelada'
+            ORDER BY tc.cancelado_em DESC NULLS LAST
+            LIMIT 80
+            """
+        )
+        for row in cur.fetchall():
+            canceladas.append(
+                {
+                    "id_tenant": int(row[0]),
+                    "nome": (row[1] or "").strip() or f"Tenant #{row[0]}",
+                    "plano_label": nome_plano_comercial(row[2], row[5]),
+                    "cancelado_br": _fmt_data_br(row[3]),
+                    "efi": "Sim" if row[4] else "Não",
+                }
+            )
+        cur.execute("RELEASE SAVEPOINT sp_asf_cancel")
+    except Exception:
+        _rollback_sp(cur, "sp_asf_cancel")
+        canceladas = []
+
     return {
         "ativas": {
             "resumo": {
@@ -679,6 +709,7 @@ def painel_assinaturas(
                 "por_periodo": list(por_periodo.values()),
             },
             "itens": ativas,
+            "canceladas": canceladas,
         },
         "inadimplencia": {
             "resumo": {

@@ -60,6 +60,27 @@
         </table>
       </div>
     </div>
+    <div class="Asf_Card">
+      <div class="Asf_CardHead">
+        <h3>Quem cancelou o plano</h3>
+        <span class="Asf_Hint" id="asf_cancel_hint">Recorrência encerrada. O período já pago segue até o fim.</span>
+      </div>
+      <div class="Asf_TabelaWrap">
+        <table class="Asf_Tabela">
+          <thead>
+            <tr>
+              <th>Tenant</th>
+              <th>Plano</th>
+              <th>Cancelado em</th>
+              <th>Efí</th>
+            </tr>
+          </thead>
+          <tbody id="asf_cancel_tbody">
+            <tr><td colspan="4" class="Asf_Empty">Carregando…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
   </section>
 
   <section class="Asf_Panel" id="asf_tab_inadimplencia" data-tab-panel="inadimplencia" role="tabpanel" hidden>
@@ -228,5 +249,5 @@
   "apiLembrete": url_for("config.assinaturas_lembrete_fatura"),
   "apiDetalhe": url_for("config.assinaturas_faturamento_pagina") ~ "/fatura/"
 } | tojson }}</script>
-<script defer src="{{ url_for('config.static', filename='script/Sconfig_assinaturas.js') }}?v=6"></script>
+<script defer src="{{ url_for('config.static', filename='script/Sconfig_assinaturas.js') }}?v=7"></script>
 {% endblock %}

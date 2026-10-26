@@ -63,9 +63,28 @@ def _extrair_notification_token() -> str:
     return ""
 
 
+def _status_notificacao(valor) -> str:
+    """A Efí manda status como texto ou como {current, previous}."""
+    if isinstance(valor, dict):
+        return str(valor.get("current") or valor.get("current_status") or "").strip()
+    return str(valor or "").strip()
+
+
+def _charge_id_notificacao(item: dict) -> str:
+    """charge_id oficial fica em identifiers. O campo id é só a ordem do aviso."""
+    ident = item.get("identifiers") if isinstance(item.get("identifiers"), dict) else {}
+    bruto = (
+        ident.get("charge_id")
+        or item.get("charge_id")
+        or ident.get("txid")
+        or item.get("txid")
+        or ""
+    )
+    return str(bruto).strip()
+
+
 def _payload_da_notificacao(notif_data: dict) -> dict:
-    """Normaliza GET /notification/:token → charge_id + status."""
-    # Formatos comuns: data.charges[] ou data[]
+    """Normaliza GET /notification/:token → charge_id + status atual."""
     charges = []
     if isinstance(notif_data.get("charges"), list):
         charges = notif_data["charges"]
@@ -76,23 +95,19 @@ def _payload_da_notificacao(notif_data: dict) -> dict:
 
     if charges:
         last = charges[-1] if isinstance(charges[-1], dict) else {}
-        # às vezes vem aninhado em identifiers
-        charge_id = (
-            last.get("charge_id")
-            or last.get("id")
-            or (last.get("identifiers") or {}).get("charge_id")
-            or ""
-        )
-        status = last.get("status") or (last.get("current_status") or "")
-        return {"charge_id": str(charge_id), "status": str(status), "raw_notification": notif_data}
+    else:
+        last = notif_data if isinstance(notif_data, dict) else {}
 
-    charge_id = (
-        notif_data.get("charge_id")
-        or notif_data.get("id")
-        or ""
-    )
-    status = notif_data.get("status") or ""
-    return {"charge_id": str(charge_id), "status": str(status), "raw_notification": notif_data}
+    ident = last.get("identifiers") if isinstance(last.get("identifiers"), dict) else {}
+    custom = last.get("custom_id") or ident.get("custom_id") or ""
+    return {
+        "charge_id": _charge_id_notificacao(last),
+        "status": _status_notificacao(last.get("status") or last.get("current_status")),
+        "tipo": str(last.get("type") or "").strip().lower(),
+        "custom_id": str(custom).strip(),
+        "subscription_id": str(ident.get("subscription_id") or last.get("subscription_id") or "").strip(),
+        "raw_notification": notif_data,
+    }
 
 
 @efi_bp.route("/api/efi/webhook", methods=["GET", "POST"])
@@ -177,7 +192,7 @@ def webhook_efi():
 
 @efi_bp.post("/api/financeiro/job-diario")
 def job_diario_financeiro():
-    """Cron: marcar vencidas, avisar, rebaixar boleto sem pagamento (7 dias úteis), renovar."""
+    """Cron: marcar vencidas, avisar e, 30 dias após o vencimento, cancelar a recorrência."""
     secret = (os.getenv("CRON_SECRET") or os.getenv("EFI_WEBHOOK_SECRET") or "").strip()
     token = (request.headers.get("X-Cron-Token") or request.args.get("token") or "").strip()
     if not secret or token != secret:

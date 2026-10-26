@@ -41,41 +41,29 @@
     }
   }
 
+  function fecharMenus() {
+    document.querySelectorAll(".Fin_MenuLista").forEach(function (n) {
+      n.remove();
+    });
+  }
+
   function acoes(f) {
-    const parts = [];
-    if (f.link_boleto && (f.status === "pendente" || f.status === "vencido")) {
-      parts.push(
-        '<a class="Cl_botaoFiltro" href="' +
-          esc(f.link_boleto) +
-          '" target="_blank" rel="noopener">Boleto</a>'
-      );
-    }
-    if (f.pix_copia_cola && (f.status === "pendente" || f.status === "vencido")) {
-      parts.push(
-        '<button type="button" class="Cl_botaoFiltro" data-pix="' +
-          esc(f.pix_copia_cola) +
-          '">Copiar PIX</button>'
-      );
-    }
-    if (f.link_pagamento && (f.status === "pendente" || f.status === "vencido")) {
-      parts.push(
-        '<a class="Cl_botaoFiltro" href="' +
-          esc(f.link_pagamento) +
-          '" target="_blank" rel="noopener">Pagar</a>'
-      );
-    }
-    if (f.status === "pendente" || f.status === "vencido") {
-      parts.push(
-        '<button type="button" class="Cl_botaoFiltro" data-regen="' +
-          f.id +
-          '" data-valor="' +
-          (f.valor_centavos || 0) +
-          '" data-plano="' +
-          esc(f.plano_slug || "Plano") +
-          '">Gerar 2ª via</button>'
-      );
-    }
-    return parts.length ? '<div class="Fin_Acoes">' + parts.join("") + "</div>" : "—";
+    const aberto = f.status === "pendente" || f.status === "vencido";
+    const pago = f.status === "pago";
+    if (!aberto && !pago) return "—";
+    return (
+      '<button type="button" class="Fin_MenuBtn" data-menu="' +
+      f.id +
+      '" data-status="' +
+      esc(f.status) +
+      '" data-link="' +
+      esc(f.link_boleto || f.link_pagamento || "") +
+      '" data-valor="' +
+      (f.valor_centavos || 0) +
+      '" data-plano="' +
+      esc(f.plano_slug || "Plano") +
+      '" aria-label="Ações">⋮</button>'
+    );
   }
 
   async function carregar(page) {
@@ -117,23 +105,10 @@
         pag.hidden = !(j.total_paginas > 1);
         pag.textContent = "Página " + j.pagina + " de " + j.total_paginas;
       }
-      corpo.querySelectorAll("[data-pix]").forEach(function (btn) {
-        btn.addEventListener("click", async function () {
-          try {
-            await navigator.clipboard.writeText(btn.getAttribute("data-pix") || "");
-            if (window.Swal) Swal.fire({ icon: "success", title: "PIX copiado", timer: 1500, showConfirmButton: false });
-          } catch {
-            if (window.Swal) Swal.fire("PIX", btn.getAttribute("data-pix") || "", "info");
-          }
-        });
-      });
-      corpo.querySelectorAll("[data-regen]").forEach(function (btn) {
-        btn.addEventListener("click", function () {
-          regenerar(
-            +btn.getAttribute("data-regen"),
-            +btn.getAttribute("data-valor") || 0,
-            btn.getAttribute("data-plano") || "Fatura"
-          );
+      corpo.querySelectorAll("[data-menu]").forEach(function (btn) {
+        btn.addEventListener("click", function (ev) {
+          ev.stopPropagation();
+          abrirMenu(btn);
         });
       });
     } catch (e) {
@@ -241,8 +216,114 @@
     }
   }
 
+  function abrirMenu(btn) {
+    fecharMenus();
+    const status = btn.getAttribute("data-status");
+    const link = btn.getAttribute("data-link") || "";
+    const id = btn.getAttribute("data-menu");
+    const box = document.createElement("div");
+    box.className = "Fin_MenuLista";
+    if (status === "pendente" || status === "vencido") {
+      const pagar = document.createElement("button");
+      pagar.type = "button";
+      pagar.textContent = "Pagar agora";
+      pagar.addEventListener("click", function () {
+        fecharMenus();
+        if (link) window.open(link, "_blank", "noopener");
+        else
+          regenerar(
+            +id,
+            +btn.getAttribute("data-valor") || 0,
+            btn.getAttribute("data-plano") || "Fatura"
+          );
+      });
+      box.appendChild(pagar);
+    }
+    if (status === "pago") {
+      const nota = document.createElement("button");
+      nota.type = "button";
+      nota.textContent = "Baixar nota fiscal";
+      nota.addEventListener("click", async function () {
+        fecharMenus();
+        try {
+          const r = await fetch(cfg.apiRegenerarBase + "/" + id + "/nota", { headers: { Accept: "application/json" } });
+          const j = await r.json();
+          if (j.success && j.url) window.open(j.url, "_blank", "noopener");
+          else if (window.Swal) Swal.fire("Nota fiscal", j.message || "Ainda não disponível.", "info");
+        } catch (e) {
+          if (window.Swal) Swal.fire("Nota fiscal", e.message || "Ainda não disponível.", "info");
+        }
+      });
+      box.appendChild(nota);
+    }
+    document.body.appendChild(box);
+    const r = btn.getBoundingClientRect();
+    box.style.top = r.bottom + 4 + "px";
+    box.style.left = Math.max(8, r.right - box.offsetWidth) + "px";
+  }
+
+  async function carregarPlano() {
+    const box = document.getElementById("fin_plano_corpo");
+    if (!box || !cfg.apiMeuPlano) return;
+    try {
+      const r = await fetch(cfg.apiMeuPlano, { headers: { Accept: "application/json" } });
+      const j = await r.json();
+      if (!j.success) throw new Error(j.message || "Erro");
+      const p = j.plano || {};
+      const status = p.assinatura_status === "cancelada" ? "Cancelada" : p.recorrencia_efi ? "Ativa na Efí" : "Sem recorrência na Efí";
+      box.innerHTML =
+        "<p><strong>" + esc(p.plano_nome || p.plano_slug || "Explorar") + "</strong></p>" +
+        "<p>Ciclo: " + esc(p.periodicidade || "—") + "</p>" +
+        "<p>Forma: " + esc(p.forma_pagamento || "—") + "</p>" +
+        "<p>Valor do plano: " + esc(p.valor_formatado || "—") + "</p>" +
+        "<p>Recorrência: " + esc(status) + "</p>" +
+        (p.dia_vencimento ? "<p>Dia de vencimento: " + esc(p.dia_vencimento) + "</p>" : "");
+      const btn = document.getElementById("fin_btnCancelarPlano");
+      if (btn) btn.hidden = !p.pode_cancelar;
+    } catch (e) {
+      box.innerHTML = '<p class="Fin_Empty">' + esc(e.message || "Erro") + "</p>";
+    }
+  }
+
   document.addEventListener("DOMContentLoaded", function () {
     carregar(1);
     document.getElementById("fin_btnLogs")?.addEventListener("click", carregarLogs);
+    function abrirAba(nome) {
+      document.querySelectorAll("[data-fin-tab]").forEach(function (t) {
+        t.classList.toggle("is-active", t.getAttribute("data-fin-tab") === nome);
+      });
+      document.querySelectorAll("[data-fin-panel]").forEach(function (p) {
+        p.hidden = p.getAttribute("data-fin-panel") !== nome;
+      });
+      if (nome === "plano") carregarPlano();
+    }
+    document.querySelectorAll("[data-fin-tab]").forEach(function (tab) {
+      tab.addEventListener("click", function () {
+        abrirAba(tab.getAttribute("data-fin-tab"));
+      });
+    });
+    if ((location.hash || "").replace("#", "") === "plano") abrirAba("plano");
+    document.getElementById("fin_btnCancelarPlano")?.addEventListener("click", async function () {
+      const ok = window.Swal
+        ? await Swal.fire({
+            icon: "warning",
+            title: "Cancelar o plano atual?",
+            text: "Não haverá novas cobranças. O período já pago continua até o fim.",
+            showCancelButton: true,
+            confirmButtonText: "Cancelar plano",
+            cancelButtonText: "Voltar",
+            confirmButtonColor: "#021F81",
+          })
+        : { isConfirmed: confirm("Cancelar o plano atual?") };
+      if (!ok || !ok.isConfirmed) return;
+      const r = await fetch(cfg.apiCancelar, { method: "POST", headers: { Accept: "application/json" } });
+      const j = await r.json();
+      if (window.Swal) Swal.fire(j.success ? "Plano cancelado" : "Erro", j.message || "", j.success ? "success" : "error");
+      if (j.success) carregarPlano();
+    });
+    document.addEventListener("click", fecharMenus);
+    document.addEventListener("keydown", function (ev) {
+      if (ev.key === "Escape") fecharMenus();
+    });
   });
 })();

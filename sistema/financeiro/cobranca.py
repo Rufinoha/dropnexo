@@ -15,10 +15,11 @@ from sistema.planos.limites import limites_plano_tenant
 
 log = logging.getLogger(__name__)
 
-# Boleto: libera na emissão; sem pagamento → rebaixa após N dias úteis
-DIAS_UTEIS_GRACA_BOLETO = 7
-# Demais formas (ex.: cartão pendente): dias corridos após vencimento
-DIAS_GRACA_INADIMPLENCIA = DIAS_UTEIS_GRACA_BOLETO
+# Primeiro boleto não libera o plano. Cobrança seguinte mantém o plano.
+# 30 dias após o vencimento sem pagamento: volta ao gratuito e cancela a recorrência.
+DIAS_UTEIS_GRACA_BOLETO = 30
+DIAS_GRACA_INADIMPLENCIA = 30
+DIAS_ATRASO_CANCELA = 30
 PLANOS_PAGOS = ("professional", "scale", "enterprise")
 FORMAS = ("boleto", "pix", "cartao")
 
@@ -170,7 +171,34 @@ def _email_fallback_tenant(cur, id_tenant: int) -> str:
     return ((row[0] if row else "") or "").strip()
 
 
+def garantir_colunas_assinatura(cur) -> None:
+    cur.execute(
+        """
+        ALTER TABLE tbl_tenant_cobranca
+            ADD COLUMN IF NOT EXISTS efi_subscription_id VARCHAR(40),
+            ADD COLUMN IF NOT EXISTS efi_plan_id VARCHAR(40),
+            ADD COLUMN IF NOT EXISTS assinatura_status VARCHAR(20),
+            ADD COLUMN IF NOT EXISTS cancelado_em TIMESTAMP
+        """
+    )
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS tbl_efi_plano_assinatura (
+            id SERIAL PRIMARY KEY,
+            plano_slug VARCHAR(40) NOT NULL,
+            periodicidade VARCHAR(20) NOT NULL,
+            valor_centavos INTEGER NOT NULL,
+            intervalo_meses INTEGER NOT NULL,
+            efi_plan_id VARCHAR(40) NOT NULL,
+            criado_em TIMESTAMP DEFAULT NOW(),
+            UNIQUE (plano_slug, periodicidade, valor_centavos)
+        )
+        """
+    )
+
+
 def garantir_cobranca_tenant(cur, id_tenant: int) -> None:
+    garantir_colunas_assinatura(cur)
     cur.execute("SELECT 1 FROM tbl_tenant_cobranca WHERE id_tenant = %s", (id_tenant,))
     if cur.fetchone():
         return
@@ -496,21 +524,28 @@ def _enviar_email_fatura(
         "pago": f"Pagamento confirmado — fatura {fatura['referencia']} • DropNexo",
         "lembrete": f"Lembrete — fatura {fatura['referencia']} • DropNexo",
     }
+    forma_email = (fatura.get("forma_pagamento") or "").strip().lower()
+    if forma_email == "boleto":
+        texto_emitida = (
+            "Boleto emitido. O plano só é liberado quando o banco confirmar o pagamento. "
+            "Essa confirmação pode levar até 3 dias, conforme o banco em que o boleto foi pago."
+        )
+    else:
+        texto_emitida = (
+            "Fatura emitida. O plano será liberado quando o pagamento for confirmado."
+        )
     mensagens = {
-        "emitida": (
-            f"Sua fatura foi emitida e o plano já está liberado. "
-            f"Confirme o pagamento do boleto em até {DIAS_UTEIS_GRACA_BOLETO} dias úteis para mantê-lo ativo."
-        ),
+        "emitida": texto_emitida,
         "aviso": (
-            f"Sua fatura de boleto ainda não foi paga. Sem confirmação em até {DIAS_UTEIS_GRACA_BOLETO} dias úteis "
-            "após a emissão, o plano volta ao gratuito (Explorar) e as integrações ficam bloqueadas "
-            "(a conexão não é removida)."
+            f"Sua fatura ainda não foi paga. Se continuar em aberto por {DIAS_ATRASO_CANCELA} dias "
+            "depois do vencimento, o plano volta ao gratuito (Explorar), a recorrência é cancelada "
+            "e as integrações ficam bloqueadas (a conexão não é removida)."
         ),
         "rebaixado": (
-            "Sua conta voltou ao plano Explorar por falta de pagamento do boleto. "
+            "Sua conta voltou ao plano Explorar por falta de pagamento e a recorrência foi cancelada. "
             "Integrações permanecem conectadas, mas o acesso e as atualizações ficam bloqueados até assinar novamente."
         ),
-        "pago": "Recebemos o pagamento. Seu plano permanece ativo.",
+        "pago": "Recebemos o pagamento. Seu plano está liberado.",
         "lembrete": (
             "Há uma cobrança em aberto na sua conta. "
             "Se o pagamento já foi feito, desconsidere este lembrete."
@@ -552,6 +587,65 @@ def _enviar_email_fatura(
         return False, None
 
 
+def _intervalo_meses(periodo: str) -> int:
+    return {"mensal": 1, "semestral": 6, "anual": 12}.get((periodo or "").strip().lower(), 1)
+
+
+def _plan_id_assinatura(cur, *, plano_slug: str, periodo: str, valor_centavos: int, nome_plano: str) -> str:
+    intervalo = _intervalo_meses(periodo)
+    cur.execute(
+        """
+        SELECT efi_plan_id FROM tbl_efi_plano_assinatura
+        WHERE plano_slug = %s AND periodicidade = %s AND valor_centavos = %s
+        """,
+        (plano_slug, periodo, int(valor_centavos)),
+    )
+    row = cur.fetchone()
+    if row and row[0]:
+        return str(row[0])
+    from api.efi.efi import criar_plano_assinatura
+
+    nome = f"DropNexo {nome_plano} {periodo} {int(valor_centavos)}"
+    plan_id = criar_plano_assinatura(nome=nome, intervalo_meses=intervalo)
+    cur.execute(
+        """
+        INSERT INTO tbl_efi_plano_assinatura
+            (plano_slug, periodicidade, valor_centavos, intervalo_meses, efi_plan_id)
+        VALUES (%s, %s, %s, %s, %s)
+        ON CONFLICT (plano_slug, periodicidade, valor_centavos) DO UPDATE
+            SET efi_plan_id = EXCLUDED.efi_plan_id
+        RETURNING efi_plan_id
+        """,
+        (plano_slug, periodo, int(valor_centavos), intervalo, plan_id),
+    )
+    return str(cur.fetchone()[0])
+
+
+def _encerrar_assinatura_efi(cur, id_tenant: int) -> None:
+    garantir_colunas_assinatura(cur)
+    cur.execute(
+        "SELECT efi_subscription_id, assinatura_status FROM tbl_tenant_cobranca WHERE id_tenant = %s",
+        (id_tenant,),
+    )
+    row = cur.fetchone()
+    if not row or not row[0] or (row[1] or "") == "cancelada":
+        return
+    from api.efi.efi import cancelar_assinatura
+
+    try:
+        cancelar_assinatura(str(row[0]))
+    except Exception:
+        log.exception("Falha ao cancelar assinatura Efí tenant=%s", id_tenant)
+    cur.execute(
+        """
+        UPDATE tbl_tenant_cobranca
+        SET assinatura_status = 'cancelada', cancelado_em = NOW(), atualizado_em = NOW()
+        WHERE id_tenant = %s
+        """,
+        (id_tenant,),
+    )
+
+
 def _criar_cobranca_efi(
     cur,
     *,
@@ -567,36 +661,39 @@ def _criar_cobranca_efi(
     installments: int = 1,
     telefone: str | None = None,
     endereco: dict | None = None,
+    plano_slug: str | None = None,
+    periodo: str = "mensal",
+    nome_plano: str = "Plano",
 ) -> dict:
     from api.efi import efi as efi_mod
 
     if forma == "pix":
-        raise ValueError("PIX será liberado em breve. Use boleto ou cartão.")
-    if forma == "cartao":
-        if not payment_token:
-            raise ValueError("Token do cartão ausente. Preencha os dados do cartão novamente.")
-        cob = efi_mod.criar_cobranca_cartao(
-            nome_cliente=nome_cliente,
-            documento=documento,
-            email=email,
-            valor_centavos=valor_centavos,
-            descricao=descricao,
-            payment_token=payment_token,
-            installments=installments,
-            telefone=telefone,
-            endereco=endereco,
-        )
-    else:
-        cob = efi_mod.criar_cobranca_boleto(
-            nome_cliente=nome_cliente,
-            documento=documento,
-            email=email,
-            valor_centavos=valor_centavos,
-            descricao=descricao,
-            vencimento=vencimento,
-            telefone=telefone,
-            endereco=endereco,
-        )
+        raise ValueError("Use boleto ou cartão de crédito.")
+    if forma == "cartao" and not payment_token:
+        raise ValueError("Token do cartão ausente. Preencha os dados do cartão novamente.")
+    _encerrar_assinatura_efi(cur, id_tenant)
+    plan_id = _plan_id_assinatura(
+        cur,
+        plano_slug=plano_slug or "plano",
+        periodo=periodo,
+        valor_centavos=valor_centavos,
+        nome_plano=nome_plano,
+    )
+    venc_boleto = vencimento if vencimento and vencimento > date.today() else date.today() + timedelta(days=10)
+    cob = efi_mod.criar_assinatura_one_step(
+        plan_id=plan_id,
+        nome_cliente=nome_cliente,
+        documento=documento,
+        email=email,
+        valor_centavos=valor_centavos,
+        descricao=descricao,
+        custom_id=f"tn-{id_tenant}",
+        forma=forma,
+        vencimento=venc_boleto,
+        payment_token=payment_token,
+        telefone=telefone,
+        endereco=endereco,
+    )
 
     registrar_efi_log(
         cur,
@@ -728,6 +825,9 @@ def emitir_fatura(
             installments=installments,
             telefone=cli.get("telefone"),
             endereco=cli.get("endereco"),
+            plano_slug=plano_slug,
+            periodo=periodo,
+            nome_plano=plano["nome"],
         )
 
     status_ini = "pago" if cortesia or (forma == "cartao" and cob.get("pago")) else "pendente"
@@ -805,11 +905,19 @@ def emitir_fatura(
         """,
         (periodo, id_tenant),
     )
+    if cob.get("subscription_id"):
+        cur.execute(
+            """
+            UPDATE tbl_tenant_cobranca
+            SET efi_subscription_id = %s, efi_plan_id = %s,
+                assinatura_status = 'ativa', cancelado_em = NULL, atualizado_em = NOW()
+            WHERE id_tenant = %s
+            """,
+            (str(cob["subscription_id"]), str(cob.get("plan_id") or ""), id_tenant),
+        )
 
     if status_ini == "pago":
         aplicar_pagamento_fatura(cur, fid, origem="cartao_imediato" if not cortesia else "cortesia")
-    elif forma == "boleto":
-        liberar_plano_tenant(cur, id_tenant, plano_slug, forma=forma)
     else:
         cur.execute(
             """
@@ -882,17 +990,16 @@ def assinar_plano(
         periodicidade=periodo,
         cupom_codigo=cupom_codigo,
     )
-    if forma == "boleto" and fatura.get("status") in ("pendente", "vencido"):
-        liberar_plano_tenant(cur, id_tenant, slug, forma=forma)
-
     pago = fatura.get("status") == "pago"
-    liberado = pago or forma == "boleto"
-    if pago:
+    liberado = pago
+    if pago and forma == "cartao":
+        msg = "Pagamento confirmado. No cartão de crédito a liberação do plano é imediata."
+    elif pago:
         msg = "Pagamento confirmado. Plano liberado."
     elif forma == "boleto":
         msg = (
-            f"Boleto gerado e plano liberado. Sem pagamento em até {DIAS_UTEIS_GRACA_BOLETO} dias úteis, "
-            "a conta volta ao Explorar (gratuito)."
+            "Boleto gerado. O plano só é liberado quando o pagamento for confirmado. "
+            "A confirmação pode levar até 3 dias, conforme o banco."
         )
     else:
         msg = "Fatura emitida. O plano será liberado após a confirmação do pagamento."
@@ -1542,6 +1649,9 @@ def regenerar_cobranca(
         installments=installments,
         telefone=cli.get("telefone"),
         endereco=cli.get("endereco"),
+        plano_slug=plano_slug,
+        periodo=(fat.get("periodicidade") or "mensal"),
+        nome_plano=plano["nome"],
     )
     status_ini = "pago" if forma_n == "cartao" and cob.get("pago") else "pendente"
     cur.execute(
@@ -1577,6 +1687,16 @@ def regenerar_cobranca(
             id_tenant,
         ),
     )
+    if cob.get("subscription_id"):
+        cur.execute(
+            """
+            UPDATE tbl_tenant_cobranca
+            SET efi_subscription_id = %s, efi_plan_id = %s,
+                assinatura_status = 'ativa', cancelado_em = NULL, atualizado_em = NOW()
+            WHERE id_tenant = %s
+            """,
+            (str(cob["subscription_id"]), str(cob.get("plan_id") or ""), id_tenant),
+        )
     if status_ini == "pago":
         aplicar_pagamento_fatura(cur, id_fatura, origem="cartao_imediato")
     fat2 = obter_fatura(cur, id_tenant, id_fatura)
@@ -1666,6 +1786,89 @@ def _mapa_status_efi_local(status: str) -> str:
     }.get(s, "pendente")
 
 
+def _tenant_do_aviso(cur, payload: dict) -> int | None:
+    custom = str(payload.get("custom_id") or "").strip()
+    if custom.startswith("tn-") and custom[3:].isdigit():
+        return int(custom[3:])
+    sub = str(payload.get("subscription_id") or "").strip()
+    if not sub:
+        return None
+    garantir_colunas_assinatura(cur)
+    cur.execute(
+        "SELECT id_tenant FROM tbl_tenant_cobranca WHERE efi_subscription_id = %s",
+        (sub,),
+    )
+    row = cur.fetchone()
+    return int(row[0]) if row else None
+
+
+def _abrir_fatura_de_aviso(cur, id_tenant: int, charge_id: str) -> int | None:
+    """Grava a cobrança que a Efí emitiu sozinha no ciclo seguinte."""
+    cur.execute(
+        """
+        SELECT COALESCE(NULLIF(plano_slug, ''), 'professional'),
+               COALESCE(NULLIF(forma_pagamento, ''), 'boleto'),
+               COALESCE(NULLIF(periodicidade, ''), 'mensal')
+        FROM tbl_tenant_cobranca
+        WHERE id_tenant = %s
+        """,
+        (id_tenant,),
+    )
+    tc = cur.fetchone()
+    if not tc:
+        return None
+    plano_slug, forma, periodo = tc[0], tc[1], tc[2]
+    plano = obter_plano_db(cur, plano_slug) or {}
+    valor = int(plano.get("valor_centavos") or 0)
+    venc = date.today() if (forma or "").lower() == "cartao" else date.today() + timedelta(days=10)
+    link = None
+    try:
+        from api.efi.efi import consultar_cobranca
+
+        det = consultar_cobranca(charge_id)
+        raw = det.get("raw") or {}
+        payment = raw.get("payment") if isinstance(raw.get("payment"), dict) else {}
+        billet = payment.get("banking_billet") if isinstance(payment.get("banking_billet"), dict) else {}
+        exp = billet.get("expire_at") or raw.get("expire_at")
+        if exp:
+            venc = date.fromisoformat(str(exp)[:10])
+        pdf = billet.get("pdf") if isinstance(billet.get("pdf"), dict) else {}
+        link = billet.get("link") or billet.get("billet_link") or pdf.get("charge")
+        total = raw.get("total") or raw.get("value")
+        if total is not None and str(total).isdigit():
+            valor = int(total)
+    except Exception:
+        log.exception("Detalhe da cobrança Efí %s indisponível", charge_id)
+    ref = referencia_assinatura(periodo, venc)
+    cur.execute(
+        """
+        INSERT INTO tbl_fatura (
+            id_tenant, referencia, valor_centavos, status, forma_pagamento, plano_slug,
+            efi_charge_id, link_boleto, vencimento_em, atualizado_em,
+            periodicidade, meses_cobertos
+        ) VALUES (
+            %s, %s, %s, 'pendente', %s, %s,
+            %s, %s, %s, NOW(),
+            %s, %s
+        )
+        RETURNING id
+        """,
+        (
+            id_tenant,
+            ref,
+            valor,
+            forma,
+            plano_slug,
+            charge_id,
+            link,
+            venc,
+            periodo,
+            _intervalo_meses(periodo),
+        ),
+    )
+    return int(cur.fetchone()[0])
+
+
 def processar_webhook_efi(cur, payload: dict) -> dict:
     charge_id = str(
         payload.get("charge_id")
@@ -1689,10 +1892,23 @@ def processar_webhook_efi(cur, payload: dict) -> dict:
         efi_charge_id=charge_id or None,
         request_resumo=payload,
     )
-    if not charge_id:
-        return {"ok": False, "message": "charge_id ausente."}
-
     novo = _mapa_status_efi_local(str(status_raw))
+    tipo_aviso = str(payload.get("tipo") or payload.get("type") or "").strip().lower()
+    if not charge_id:
+        if novo == "cancelado" and _tenant_do_aviso(cur, payload):
+            id_tenant = _tenant_do_aviso(cur, payload)
+            cur.execute(
+                """
+                UPDATE tbl_tenant_cobranca
+                SET assinatura_status = 'cancelada',
+                    cancelado_em = COALESCE(cancelado_em, NOW()),
+                    atualizado_em = NOW()
+                WHERE id_tenant = %s
+                """,
+                (id_tenant,),
+            )
+            return {"ok": True, "status": "cancelado", "id_tenant": id_tenant}
+        return {"ok": False, "message": "charge_id ausente."}
     cur.execute(
         """
         SELECT id, id_tenant, status FROM tbl_fatura
@@ -1703,9 +1919,31 @@ def processar_webhook_efi(cur, payload: dict) -> dict:
     )
     row = cur.fetchone()
     if not row:
-        return {"ok": False, "message": "Fatura não encontrada para charge.", "charge_id": charge_id}
+        id_tenant_aviso = _tenant_do_aviso(cur, payload)
+        if not id_tenant_aviso:
+            return {"ok": True, "ignorado": True, "charge_id": charge_id}
+        novo_id = _abrir_fatura_de_aviso(cur, id_tenant_aviso, charge_id)
+        if not novo_id:
+            return {"ok": True, "ignorado": True, "charge_id": charge_id}
+        cur.execute(
+            "SELECT id, id_tenant, status FROM tbl_fatura WHERE id = %s",
+            (novo_id,),
+        )
+        row = cur.fetchone()
 
     id_fatura, id_tenant, st_atual = int(row[0]), int(row[1]), row[2]
+    if novo == "cancelado" and tipo_aviso == "subscription":
+        cur.execute(
+            """
+            UPDATE tbl_tenant_cobranca
+            SET assinatura_status = 'cancelada',
+                cancelado_em = COALESCE(cancelado_em, NOW()),
+                atualizado_em = NOW()
+            WHERE id_tenant = %s
+              AND COALESCE(assinatura_status, '') <> 'cancelada'
+            """,
+            (id_tenant,),
+        )
     registrar_efi_log(
         cur,
         id_tenant=id_tenant,
@@ -1751,8 +1989,9 @@ def rebaixar_tenant_starter(cur, id_tenant: int, *, id_fatura: int | None = None
 
 
 def job_financeiro_diario(cur) -> dict:
-    """Marca vencidas, avisa atraso, rebaixa boleto sem pagamento (7 dias úteis), renovações."""
+    """Marca vencidas, avisa atraso e, 30 dias após o vencimento, cancela a recorrência."""
     hoje = date.today()
+    garantir_colunas_assinatura(cur)
     res = {"vencidas": 0, "avisos": 0, "rebaixados": 0, "renovacoes": 0, "erros": []}
 
     cur.execute(
@@ -1792,43 +2031,61 @@ def job_financeiro_diario(cur) -> dict:
             cur.execute("UPDATE tbl_fatura SET avisado_em = NOW() WHERE id = %s", (fid,))
             res["avisos"] += 1
 
-    # Rebaixa: boleto sem pagamento após 7 dias úteis da emissão
-    cur.execute(
-        """
-        SELECT f.id, f.id_tenant, f.criado_em
-        FROM tbl_fatura f
-        JOIN tbl_tenant t ON t.id = f.id_tenant
-        WHERE f.status IN ('pendente', 'vencido')
-          AND lower(COALESCE(f.forma_pagamento, '')) = 'boleto'
-          AND f.rebaixado_em IS NULL
-          AND t.plano IS DISTINCT FROM 'starter'
-          AND f.criado_em::date <= %s
-        """,
-        (hoje - timedelta(days=DIAS_UTEIS_GRACA_BOLETO),),
-    )
-    for fid, tid, criado in cur.fetchall():
-        prazo = prazo_rebaixa_boleto(criado)
-        if prazo and hoje >= prazo:
-            rebaixar_tenant_starter(cur, int(tid), id_fatura=int(fid))
-            res["rebaixados"] += 1
-
-    # Demais formas: rebaixa por dias corridos após vencimento
-    limite = hoje - timedelta(days=DIAS_GRACA_INADIMPLENCIA)
+    # 30 dias após o vencimento sem pagamento: plano gratuito e cancela a recorrência.
+    limite = hoje - timedelta(days=DIAS_ATRASO_CANCELA)
     cur.execute(
         """
         SELECT f.id, f.id_tenant
         FROM tbl_fatura f
         JOIN tbl_tenant t ON t.id = f.id_tenant
-        WHERE f.status = 'vencido'
-          AND lower(COALESCE(f.forma_pagamento, '')) <> 'boleto'
+        WHERE f.status IN ('pendente', 'vencido')
           AND f.rebaixado_em IS NULL
+          AND f.vencimento_em IS NOT NULL
           AND f.vencimento_em <= %s
           AND t.plano IS DISTINCT FROM 'starter'
+        ORDER BY f.id
         """,
         (limite,),
     )
+    ja_rebaixou: set[int] = set()
     for fid, tid in cur.fetchall():
-        rebaixar_tenant_starter(cur, int(tid), id_fatura=int(fid))
+        tid_n = int(tid)
+        if tid_n in ja_rebaixou:
+            cur.execute(
+                "UPDATE tbl_fatura SET rebaixado_em = NOW(), atualizado_em = NOW() WHERE id = %s",
+                (int(fid),),
+            )
+            continue
+        _encerrar_assinatura_efi(cur, tid_n)
+        rebaixar_tenant_starter(cur, tid_n, id_fatura=int(fid))
+        ja_rebaixou.add(tid_n)
+        res["rebaixados"] += 1
+
+    # Assinatura já cancelada: o período pago segue até o fim, depois volta ao gratuito.
+    cur.execute(
+        """
+        SELECT tc.id_tenant
+        FROM tbl_tenant_cobranca tc
+        JOIN tbl_tenant t ON t.id = tc.id_tenant
+        WHERE tc.assinatura_status = 'cancelada'
+          AND t.plano IS DISTINCT FROM 'starter'
+        """
+    )
+    for (tid,) in cur.fetchall():
+        cur.execute(
+            """
+            SELECT COALESCE(pago_em, criado_em)::date, COALESCE(meses_cobertos, 1)
+            FROM tbl_fatura
+            WHERE id_tenant = %s AND status = 'pago'
+            ORDER BY pago_em DESC NULLS LAST, id DESC
+            LIMIT 1
+            """,
+            (tid,),
+        )
+        ultimo = cur.fetchone()
+        if ultimo and ultimo[0] and hoje < adicionar_meses(ultimo[0], max(1, int(ultimo[1] or 1))):
+            continue
+        rebaixar_tenant_starter(cur, int(tid))
         res["rebaixados"] += 1
 
     # renovação: no dia de vencimento, se a cobertura do ciclo anterior já acabou
@@ -1842,6 +2099,8 @@ def job_financeiro_diario(cur) -> dict:
         WHERE t.plano IN ('professional', 'scale', 'enterprise')
           AND p.valor_centavos > 0
           AND tc.dia_vencimento = %s
+          AND COALESCE(tc.efi_subscription_id, '') = ''
+          AND COALESCE(tc.assinatura_status, '') <> 'cancelada'
           AND NOT (
             COALESCE(t.eh_fornecedor_fundador, FALSE)
             AND COALESCE(t.fornecedor_fundador_ativo, FALSE)
@@ -1935,6 +2194,94 @@ def listar_efi_logs(cur, *, page: int = 1, por_pagina: int = 50, id_tenant: int 
         "total": total,
         "pagina": page,
         "total_paginas": max(1, (total + por_pagina - 1) // por_pagina),
+    }
+
+
+def conta_tem_assinatura_ativa(cur, id_tenant: int) -> bool:
+    """Plano pago ou recorrência na Efí ainda não cancelada."""
+    garantir_colunas_assinatura(cur)
+    cur.execute(
+        """
+        SELECT COALESCE(t.plano, 'starter'),
+               COALESCE(tc.assinatura_status, ''),
+               COALESCE(tc.efi_subscription_id, '')
+        FROM tbl_tenant t
+        LEFT JOIN tbl_tenant_cobranca tc ON tc.id_tenant = t.id
+        WHERE t.id = %s
+        """,
+        (id_tenant,),
+    )
+    row = cur.fetchone()
+    if not row:
+        return False
+    plano = (row[0] or "starter").strip().lower()
+    status = (row[1] or "").strip().lower()
+    if status == "cancelada":
+        return False
+    if plano in PLANOS_PAGOS:
+        return True
+    return bool((row[2] or "").strip())
+
+
+def resumo_assinatura_tenant(cur, id_tenant: int) -> dict:
+    garantir_cobranca_tenant(cur, id_tenant)
+    cur.execute(
+        """
+        SELECT t.plano, COALESCE(NULLIF(tc.plano_slug, ''), t.plano),
+               COALESCE(NULLIF(tc.periodicidade, ''), 'mensal'),
+               COALESCE(tc.forma_pagamento, ''),
+               COALESCE(tc.assinatura_status, ''),
+               tc.cancelado_em, tc.dia_vencimento, tc.efi_subscription_id,
+               t.tipo_negocio
+        FROM tbl_tenant t
+        LEFT JOIN tbl_tenant_cobranca tc ON tc.id_tenant = t.id
+        WHERE t.id = %s
+        """,
+        (id_tenant,),
+    )
+    row = cur.fetchone()
+    if not row:
+        return {}
+    slug = (row[1] or row[0] or "starter").strip().lower()
+    plano = obter_plano_db(cur, slug) or {}
+    from sistema.financeiro.assinaturas_painel import nome_plano_comercial
+
+    periodo = (row[2] or "mensal").strip().lower()
+    status = (row[4] or "").strip().lower()
+    return {
+        "plano_slug": slug,
+        "plano_nome": nome_plano_comercial(slug, row[8]),
+        "periodicidade": periodo,
+        "forma_pagamento": (row[3] or "").strip().lower(),
+        "assinatura_status": status or ("ativa" if row[7] else ""),
+        "cancelado_em": row[5].isoformat() if row[5] else None,
+        "dia_vencimento": row[6],
+        "recorrencia_efi": bool(row[7]),
+        "valor_formatado": f"R$ {int(plano.get('valor_centavos') or 0) / 100:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."),
+        "pode_cancelar": slug != "starter" and status != "cancelada",
+    }
+
+
+def cancelar_plano_atual(cur, id_tenant: int) -> dict:
+    """Encerra a recorrência na Efí. O período já pago segue até o fim."""
+    garantir_cobranca_tenant(cur, id_tenant)
+    _encerrar_assinatura_efi(cur, id_tenant)
+    cur.execute(
+        """
+        UPDATE tbl_tenant_cobranca
+        SET assinatura_status = 'cancelada',
+            cancelado_em = COALESCE(cancelado_em, NOW()),
+            atualizado_em = NOW()
+        WHERE id_tenant = %s
+        """,
+        (id_tenant,),
+    )
+    return {
+        "ok": True,
+        "mensagem": (
+            "Assinatura cancelada. Não haverá novas cobranças. "
+            "O período já pago continua até o fim e, depois disso, a conta volta ao Explorar."
+        ),
     }
 
 

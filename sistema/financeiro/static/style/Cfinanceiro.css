@@ -35,6 +35,59 @@
 .Fin_FiltroNota { margin: 0 0 0.85rem; }
 .Fin_Lote { cursor: pointer; }
 .Fin_Lote:hover td { background: #f8fafc; }
+.Fin_Tabs {
+  display: flex;
+  gap: 0.4rem;
+  margin-bottom: 0.85rem;
+}
+.Fin_Tab {
+  border: 1px solid #d6dee6;
+  background: #fff;
+  color: #1c2e3b;
+  border-radius: 999px;
+  padding: 0.4rem 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.Fin_Tab.is-active { background: #021F81; color: #fff; border-color: #021F81; }
+.Fin_PlanoAcoes { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1rem; }
+.Fin_MenuBtn {
+  border: 0;
+  background: transparent;
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0.15rem 0.45rem;
+  border-radius: 8px;
+}
+.Fin_MenuBtn:hover { background: #f1f5f9; }
+.Fin_MenuLista {
+  position: fixed;
+  z-index: 80;
+  min-width: 180px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+  padding: 0.3rem;
+}
+.Fin_MenuLista button,
+.Fin_MenuLista a {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  color: #1c2e3b;
+  padding: 0.45rem 0.6rem;
+  border-radius: 8px;
+  text-decoration: none;
+  font: inherit;
+  cursor: pointer;
+}
+.Fin_MenuLista button:hover,
+.Fin_MenuLista a:hover { background: #f8fafc; }
+
 .Fin_Aviso {
   background: #fff7ed;
   border: 1px solid #fdba74;

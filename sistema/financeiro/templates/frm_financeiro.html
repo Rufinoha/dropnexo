@@ -2,7 +2,7 @@
 {% block title %}Financeiro — {{ MARCA_NOME }}{% endblock %}
 {% block topbar_title %}Financeiro{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('financeiro.static', filename='style/Cfinanceiro.css') }}?v=1" />
+<link rel="stylesheet" href="{{ url_for('financeiro.static', filename='style/Cfinanceiro.css') }}?v=2" />
 {% if not sem_acesso %}
 <link rel="stylesheet" href="{{ url_for('static', filename='style/Cefi_cartao.css') }}?v=9" />
 {% endif %}
@@ -20,15 +20,21 @@
   </div>
   {% else %}
   <div class="Fin_Aviso">
-    <strong>Importante:</strong> no boleto o plano já é liberado na emissão. Sem pagamento em até
-    <strong>{{ dias_graca }} dias úteis</strong>, a conta volta ao <strong>Explorar (gratuito)</strong>.
-    Integrações <em>não são desconectadas</em>, mas o acesso e as atualizações/sync ficam bloqueados até regularizar.
+    <strong>Importante:</strong> no cartão o plano libera na aprovação. No primeiro boleto, só depois que o banco confirma
+    (até 3 dias). Os boletos seguintes não interrompem o plano. Se a cobrança seguir em aberto por
+    <strong>{{ dias_graca }} dias depois do vencimento</strong>, a conta volta ao <strong>Explorar (gratuito)</strong>
+    e a recorrência é cancelada.
   </div>
 
-  <div class="Fin_Card">
+  <nav class="Fin_Tabs" role="tablist">
+    <button type="button" class="Fin_Tab is-active" data-fin-tab="faturas">Faturas</button>
+    <button type="button" class="Fin_Tab" data-fin-tab="plano">Meu plano</button>
+  </nav>
+
+  <div class="Fin_Card" data-fin-panel="faturas">
     <div class="Fin_CardHead">
       <h3>Faturas</h3>
-      <span class="Fin_Meta" id="fin_metaEfi">{% if efi_ok %}Efi configurada{% else %}Efi não configurada no .env{% endif %}{% if efi_pix_ok %} · PIX ok{% else %} · PIX sem chave{% endif %}</span>
+      <span class="Fin_Meta" id="fin_metaEfi">{% if efi_ok %}Efí configurada{% else %}Efí não configurada no .env{% endif %}</span>
     </div>
     <div class="Fin_TableWrap">
       <table class="Fin_Table" id="fin_tabela">
@@ -49,6 +55,19 @@
       </table>
     </div>
     <p class="Fin_Pag" id="fin_paginacao" hidden></p>
+  </div>
+
+  <div class="Fin_Card" data-fin-panel="plano" hidden>
+    <div class="Fin_CardHead">
+      <h3>Meu plano</h3>
+    </div>
+    <div id="fin_plano_corpo">
+      <p class="Fin_Empty">Carregando…</p>
+    </div>
+    <div class="Fin_PlanoAcoes">
+      <a class="Cl_botaoFiltro" href="/meu-plano">Trocar de plano</a>
+      <button type="button" class="Cl_botaoFiltro" id="fin_btnCancelarPlano">Cancelar plano atual</button>
+    </div>
   </div>
 
   {% if eh_dev %}
@@ -73,9 +92,11 @@
   "apiLogs": url_for("financeiro.api_efi_logs") if eh_dev else "",
   "efiPayeeCode": efi_payee_code or "",
   "efiEnvironment": efi_environment or "sandbox",
-  "ehDev": eh_dev
+  "ehDev": eh_dev,
+  "apiMeuPlano": url_for("financeiro.api_meu_plano"),
+  "apiCancelar": url_for("financeiro.api_cancelar_assinatura")
 }|tojson }}</script>
-<script defer src="{{ url_for('static', filename='script/Sefi_cartao.js') }}?v=9"></script>
-<script defer src="{{ url_for('financeiro.static', filename='script/Sfinanceiro.js') }}?v=6"></script>
+<script defer src="{{ url_for('static', filename='script/Sefi_cartao.js') }}?v=11"></script>
+<script defer src="{{ url_for('financeiro.static', filename='script/Sfinanceiro.js') }}?v=8"></script>
 {% endif %}
 {% endblock %}

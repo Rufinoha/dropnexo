@@ -506,6 +506,47 @@ def _garantir_cobranca_tenant(cur, id_tenant: int):
     )
 
 
+_MSG_CANCELE_ASSINATURA = (
+    "Esta conta tem uma assinatura ativa. "
+    "Cancele a assinatura primeiro em Financeiro, na aba Meu plano. "
+    "Só depois disso é possível cancelar a conta."
+)
+
+
+def _assinatura_ativa_da_sessao() -> bool:
+    tid = session.get("id_tenant")
+    if not tid:
+        return False
+    conn = None
+    try:
+        conn = Var_ConectarBanco()
+        cur = conn.cursor()
+        from sistema.financeiro.cobranca import conta_tem_assinatura_ativa
+
+        ativa = conta_tem_assinatura_ativa(cur, int(tid))
+        conn.commit()
+        return ativa
+    except Exception:
+        if conn:
+            conn.rollback()
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+
+def _bloquear_se_assinatura_ativa(cur):
+    from sistema.financeiro.cobranca import conta_tem_assinatura_ativa
+
+    if conta_tem_assinatura_ativa(cur, int(session["id_tenant"])):
+        return jsonify(
+            success=False,
+            message=_MSG_CANCELE_ASSINATURA,
+            url="/financeiro#plano",
+        ), 409
+    return None
+
+
 @perfil_bp.get("/meu-perfil")
 @login_obrigatorio
 def meu_perfil():
@@ -513,7 +554,12 @@ def meu_perfil():
     aba = (request.args.get("aba") or "perfil").strip().lower()
     if aba not in abas or not abas.get(aba):
         aba = "perfil"
-    return render_template("frm_meu_perfil.html", abas=abas, aba_inicial=aba)
+    return render_template(
+        "frm_meu_perfil.html",
+        abas=abas,
+        aba_inicial=aba,
+        assinatura_ativa=_assinatura_ativa_da_sessao(),
+    )
 
 
 @perfil_bp.get("/api/meu-perfil")
@@ -1412,6 +1458,10 @@ def api_cancelar_conta_iniciar():
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
+        bloqueio_assinatura = _bloquear_se_assinatura_ativa(cur)
+        if bloqueio_assinatura:
+            conn.rollback()
+            return bloqueio_assinatura
         cur.execute(
             """
             INSERT INTO tbl_cancelamento_conta (id_tenant, id_usuario, etapa)
@@ -1443,6 +1493,10 @@ def api_cancelar_conta_confirmar():
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
+        bloqueio_assinatura = _bloquear_se_assinatura_ativa(cur)
+        if bloqueio_assinatura:
+            conn.rollback()
+            return bloqueio_assinatura
         cur.execute(
             """
             UPDATE tbl_cancelamento_conta SET etapa = 2, motivo = %s
@@ -1469,6 +1523,10 @@ def api_cancelar_conta_exportar():
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
+        bloqueio_assinatura = _bloquear_se_assinatura_ativa(cur)
+        if bloqueio_assinatura:
+            conn.rollback()
+            return bloqueio_assinatura
         cur.execute("SELECT nome, slug, plano, documento FROM tbl_tenant WHERE id = %s", (id_tenant,))
         tenant = cur.fetchone()
         cur.execute("SELECT COUNT(*) FROM tbl_usuario_tenant WHERE id_tenant = %s", (id_tenant,))
@@ -1508,6 +1566,10 @@ def api_cancelar_conta_concluir():
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
+        bloqueio_assinatura = _bloquear_se_assinatura_ativa(cur)
+        if bloqueio_assinatura:
+            conn.rollback()
+            return bloqueio_assinatura
         cur.execute(
             "SELECT etapa FROM tbl_cancelamento_conta WHERE id_tenant = %s",
             (id_tenant,),

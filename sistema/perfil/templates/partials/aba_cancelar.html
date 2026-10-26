@@ -1,9 +1,18 @@
 <div class="pt-page-title">
   <h2>Cancelar conta</h2>
-  <p class="pt-page-desc">Você pode cancelar sua conta DropNexo em 3 etapas.</p>
+  <p class="pt-page-desc">{% if assinatura_ativa %}Cancele a assinatura antes de encerrar a conta.{% else %}Você pode cancelar sua conta DropNexo em 3 etapas.{% endif %}</p>
 </div>
 
 <div class="mp-cancel-steps">
+  {% if assinatura_ativa %}
+  <div class="mp-cancel-step is-active" id="can-assinatura-ativa">
+    <div class="mp-cancel-icon" aria-hidden="true">⚠</div>
+    <h3>Cancele a assinatura antes de cancelar a conta</h3>
+    <p>Esta conta tem uma assinatura ativa. O cancelamento da conta só fica disponível depois que a assinatura for encerrada.</p>
+    <p>Abra <strong>Financeiro</strong>, aba <strong>Meu plano</strong>, e use <strong>Cancelar plano atual</strong>. Quando a assinatura estiver cancelada, volte aqui para cancelar a conta.</p>
+    <a class="Cl_botaoprimario mp-cancel-link" href="/financeiro#plano">Ir para o cancelamento da assinatura</a>
+  </div>
+  {% else %}
   <div class="mp-cancel-step is-active" id="can-step-1">
     <div class="mp-cancel-icon" aria-hidden="true">⚠</div>
     <h3>Etapa 01 — Veja o que acontece ao cancelar sua conta</h3>
@@ -35,4 +44,5 @@
     </label>
     <button type="button" class="Cl_botaoprimario mp-btn-danger" id="can-btn-concluir" disabled>Cancelar conta definitivamente</button>
   </div>
+  {% endif %}
 </div>

@@ -306,6 +306,51 @@ def criar_cobranca_pix(
     }
 
 
+def _motivo_recusa_cartao(data: dict) -> str:
+    reason = str((data or {}).get("reason") or "").strip()
+    if reason:
+        return reason
+    hist = (data or {}).get("history") or []
+    if isinstance(hist, list):
+        for item in reversed(hist):
+            if not isinstance(item, dict):
+                continue
+            msg = str(item.get("message") or "").strip()
+            baixo = msg.casefold()
+            if msg and ("recus" in baixo or "função crédito" in baixo or "funcao credito" in baixo):
+                return msg
+    return ""
+
+
+def _mensagem_recusa_cartao(reason: str) -> str:
+    baixo = (reason or "").casefold()
+    if "função crédito" in baixo or "funcao credito" in baixo:
+        return (
+            "Este cartão não tem função crédito. "
+            "Aceitamos somente cartão de crédito. "
+            "Se o seu cartão for só de débito, pague no boleto."
+        )
+    if reason:
+        return f"Cartão recusado: {reason}"
+    return (
+        "O pagamento não foi autorizado. "
+        "Aceitamos somente cartão de crédito. "
+        "Cartão de débito não é cobrado."
+    )
+
+
+def _motivo_da_cobranca(data: dict, charge_id: str) -> str:
+    reason = _motivo_recusa_cartao(data)
+    if reason or not charge_id.isdigit():
+        return reason
+    try:
+        det = _raise_resp(_cliente().detail_charge(params={"id": int(charge_id)}))
+    except Exception:
+        return reason
+    det_data = det.get("data") if isinstance(det, dict) else None
+    return _motivo_recusa_cartao(det_data if isinstance(det_data, dict) else {}) or reason
+
+
 def criar_cobranca_cartao(
     *,
     nome_cliente: str,
@@ -370,9 +415,8 @@ def criar_cobranca_cartao(
     charge_id = str(data.get("charge_id") or "")
     status = (data.get("status") or "").lower()
     pago = status in ("approved", "paid", "settled")
-    reason = data.get("reason") or ""
-    if status in ("unpaid", "canceled", "cancelled") and reason:
-        raise RuntimeError(f"Cartão recusado: {reason}")
+    if status in ("unpaid", "canceled", "cancelled"):
+        raise ValueError(_mensagem_recusa_cartao(_motivo_da_cobranca(data, charge_id)))
     return {
         "charge_id": charge_id,
         "pago": pago,
@@ -380,6 +424,131 @@ def criar_cobranca_cartao(
         "link_pagamento": None,
         "raw": resp,
     }
+
+
+def criar_plano_assinatura(*, nome: str, intervalo_meses: int) -> str:
+    """Plano Efí com repetição indefinida até o cancelamento."""
+    intervalo = max(1, min(24, int(intervalo_meses or 1)))
+    body = {"name": (nome or "DropNexo")[:255], "interval": intervalo, "repeats": None}
+    resp = _raise_resp(_cliente().create_plan(body=body))
+    data = resp.get("data") or {}
+    plan_id = str(data.get("plan_id") or "").strip()
+    if not plan_id:
+        raise RuntimeError("A Efí não devolveu o plano da assinatura.")
+    return plan_id
+
+
+def criar_assinatura_one_step(
+    *,
+    plan_id: str,
+    nome_cliente: str,
+    documento: str,
+    email: str,
+    valor_centavos: int,
+    descricao: str,
+    custom_id: str,
+    forma: str,
+    vencimento: date | None = None,
+    payment_token: str | None = None,
+    telefone: str | None = None,
+    endereco: dict | None = None,
+) -> dict:
+    """Cria a assinatura recorrente e a primeira cobrança."""
+    if valor_centavos <= 0:
+        raise ValueError("Valor da cobrança deve ser maior que zero.")
+    phone = "".join(c for c in (telefone or "") if c.isdigit())
+    if len(phone) < 10:
+        phone = "11999999999"
+    customer = _customer_efi(
+        nome_cliente=nome_cliente,
+        documento=documento,
+        email=email or "contato@dropnexo.com.br",
+        telefone=phone,
+    )
+    end = endereco or {}
+    street = (end.get("street") or end.get("logradouro") or "").strip()
+    number = (end.get("number") or end.get("numero") or "S/N").strip() or "S/N"
+    neighborhood = (end.get("neighborhood") or end.get("bairro") or "").strip()
+    zipcode = "".join(c for c in (end.get("zipcode") or end.get("cep") or "") if c.isdigit())
+    city = (end.get("city") or end.get("cidade") or "").strip()
+    state = (end.get("state") or end.get("uf") or "").strip().upper()[:2]
+    if street and neighborhood and len(zipcode) == 8 and city and state:
+        address = {
+            "street": street[:200],
+            "number": number[:40],
+            "neighborhood": neighborhood[:100],
+            "zipcode": zipcode,
+            "city": city[:100],
+            "state": state,
+            "complement": (end.get("complement") or end.get("complemento") or "")[:100] or "",
+        }
+        customer["address"] = address
+    else:
+        address = None
+
+    meta = {"custom_id": (custom_id or "")[:255], "notification_url": notification_url_efi()}
+    item = {"name": descricao[:255], "value": int(valor_centavos), "amount": 1}
+    if forma == "cartao":
+        token = (payment_token or "").strip()
+        if not token:
+            raise ValueError("payment_token obrigatório para cartão.")
+        credit: dict[str, Any] = {
+            "customer": customer,
+            "payment_token": token,
+        }
+        if address:
+            credit["billing_address"] = {k: v for k, v in address.items() if v}
+        payment = {"credit_card": credit}
+    else:
+        venc = vencimento or (date.today() + timedelta(days=10))
+        payment = {
+            "banking_billet": {
+                "customer": customer,
+                "expire_at": venc.isoformat(),
+                "message": "Mensalidade DropNexo",
+            }
+        }
+    body = {"items": [item], "metadata": meta, "payment": payment}
+    resp = _raise_resp(
+        _cliente().create_one_step_subscription(params={"id": int(plan_id)}, body=body)
+    )
+    data = resp.get("data") or {}
+    charge = data.get("charge") or {}
+    status = str(charge.get("status") or data.get("status") or "").lower()
+    pago = status in ("approved", "paid", "settled")
+    reason = str(data.get("reason") or charge.get("reason") or "").strip()
+    if status in ("unpaid", "canceled", "cancelled"):
+        sub_id = str(data.get("subscription_id") or "").strip()
+        if sub_id.isdigit():
+            try:
+                cancelar_assinatura(sub_id)
+            except Exception:
+                pass
+        raise ValueError(_mensagem_recusa_cartao(reason) if forma == "cartao" else (reason or "Cobrança não autorizada."))
+    pdf = data.get("pdf") if isinstance(data.get("pdf"), dict) else {}
+    link = data.get("billet_link") or data.get("link") or pdf.get("charge")
+    return {
+        "subscription_id": str(data.get("subscription_id") or ""),
+        "plan_id": str(plan_id),
+        "charge_id": str(charge.get("id") or ""),
+        "pago": pago,
+        "status": status,
+        "link_boleto": link,
+        "codigo_barras": data.get("barcode"),
+        "vencimento": data.get("expire_at"),
+        "txid": None,
+        "pix_copia_cola": None,
+        "pix_qrcode": None,
+        "link_pagamento": None,
+        "raw": resp,
+    }
+
+
+def cancelar_assinatura(subscription_id: str) -> dict:
+    sub = str(subscription_id or "").strip()
+    if not sub.isdigit():
+        raise RuntimeError("Assinatura Efí ausente.")
+    return _raise_resp(_cliente().cancel_subscription(params={"id": int(sub)}))
 
 
 def consultar_cobranca(charge_id: str) -> dict:

@@ -279,8 +279,8 @@
   </section>
   {% endfor %}
         <p class="mpl-nota">
-    No boleto, o plano é liberado na hora. Sem confirmação de pagamento em até 7 dias úteis, a conta volta ao Explorar
-    (integrações ficam conectadas, mas bloqueadas). No cartão, a liberação ocorre após a aprovação.
+    No cartão de crédito, a liberação do plano é imediata quando a operadora aprova.
+    No boleto, o plano só é liberado depois da confirmação, que pode levar até 3 dias conforme o banco.
     Acompanhe em <a href="{{ url_for('financeiro.pagina') }}">Financeiro</a>.
     {% if pode_pagamento %}
     Configure e-mail de cobrança em
@@ -302,7 +302,7 @@
   "efiEnvironment": efi_environment or "sandbox",
   "urlFinanceiro": url_for("financeiro.pagina")
 }|tojson }}</script>
-<script defer src="{{ url_for('static', filename='script/Sefi_cartao.js') }}?v=9"></script>
+<script defer src="{{ url_for('static', filename='script/Sefi_cartao.js') }}?v=11"></script>
 {% endif %}
 <script defer src="{{ url_for('planos.static', filename='script/Smeu_plano.js') }}?v=9"></script>
 {% endblock %}

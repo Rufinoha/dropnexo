@@ -27,10 +27,6 @@
     }
   }
 
-  function icone(nome) {
-    return window.Util?.gerarIconeTech?.(nome) ?? window.GlobalUtils?.gerarIconeTech?.(nome) ?? "";
-  }
-
   const Hub = {
     cache: [],
     filtrado: [],
@@ -40,7 +36,33 @@
     operador: false,
 
     colspan() {
-      return this.operador ? 9 : 8;
+      return this.operador ? 7 : 6;
+    },
+
+    fecharMenus() {
+      document.querySelectorAll(".Dem_MenuLista").forEach((menu) => {
+        menu.hidden = true;
+      });
+      document.querySelectorAll(".Dem_MenuBtn[aria-expanded='true']").forEach((btn) => {
+        btn.setAttribute("aria-expanded", "false");
+      });
+    },
+
+    abrirMenu(btn) {
+      const menu = btn.parentElement?.querySelector(".Dem_MenuLista");
+      if (!menu) return;
+      this.fecharMenus();
+      menu.hidden = false;
+      btn.setAttribute("aria-expanded", "true");
+      const rect = btn.getBoundingClientRect();
+      const largura = menu.offsetWidth || 168;
+      const altura = menu.offsetHeight || 44;
+      let left = rect.right - largura;
+      if (left < 8) left = 8;
+      let top = rect.bottom + 4;
+      if (top + altura > window.innerHeight - 8) top = Math.max(8, rect.top - altura - 4);
+      menu.style.left = left + "px";
+      menu.style.top = top + "px";
     },
 
     init() {
@@ -78,13 +100,30 @@
       });
 
       el("dem_tbody")?.addEventListener("click", (ev) => {
+        const menuBtn = ev.target.closest(".Dem_MenuBtn");
+        if (menuBtn) {
+          ev.stopPropagation();
+          if (menuBtn.getAttribute("aria-expanded") === "true") this.fecharMenus();
+          else this.abrirMenu(menuBtn);
+          return;
+        }
         const btn = ev.target.closest("button[data-acao]");
         if (!btn) return;
+        ev.stopPropagation();
         const uuid = btn.dataset.uuid || "";
+        this.fecharMenus();
         if (!uuid) return;
         if (btn.dataset.acao === "editar") {
           this.abrirDetalhe(uuid, btn.dataset.titulo || "");
         }
+      });
+
+      document.addEventListener("click", () => this.fecharMenus());
+      window.addEventListener("resize", () => this.fecharMenus());
+      document.querySelector(".fg-content")?.addEventListener("scroll", () => this.fecharMenus());
+      el("content-area-Demandas")?.addEventListener("scroll", () => this.fecharMenus());
+      document.addEventListener("keydown", (ev) => {
+        if (ev.key === "Escape") this.fecharMenus();
       });
 
       window.addEventListener("message", (ev) => {
@@ -201,21 +240,23 @@
         const uuid = c.uuid || "";
         const titulo = c.titulo || "Sem título";
         const tr = document.createElement("tr");
-        const conta = this.operador ? `<td>${esc(c.tenant_nome || "—")}</td>` : "";
+        const conta = this.operador
+          ? `<td class="dem-col-conta" title="${esc(c.tenant_nome || "")}">${esc(c.tenant_nome || "—")}</td>`
+          : "";
         tr.innerHTML = `
-          <td>${esc(c.protocolo || "—")}</td>
+          <td class="dem-col-proto">${esc(c.protocolo || "—")}</td>
           ${conta}
-          <td title="${esc(titulo)}">${esc(titulo)}</td>
-          <td>${esc(c.categoria_label || c.categoria || "—")}</td>
-          <td class="Dem_Status">${this.badgeStatus(c)}</td>
-          <td>${esc(c.prioridade_label || c.prioridade || "—")}</td>
-          <td>${fmtData(c.data_abertura)}</td>
-          <td>${fmtData(c.data_ultima_interacao || c.updated_at)}</td>
-          <td class="col-acoes">
-            <button type="button" class="Cl_BtnAcao" data-acao="editar" data-uuid="${esc(uuid)}"
-              data-titulo="${esc(titulo)}" title="Visualizar e responder" aria-label="Visualizar chamado">
-              ${icone("editar") || "👁"}
-            </button>
+          <td class="dem-col-assunto" title="${esc(titulo)}">${esc(titulo)}</td>
+          <td class="dem-col-status Dem_Status">${this.badgeStatus(c)}</td>
+          <td class="dem-col-data">${fmtData(c.data_abertura)}</td>
+          <td class="dem-col-data">${fmtData(c.data_ultima_interacao || c.updated_at)}</td>
+          <td class="dem-col-menu">
+            <div class="Dem_Menu">
+              <button type="button" class="Dem_MenuBtn" aria-label="Ações do chamado" aria-haspopup="menu" aria-expanded="false">⋮</button>
+              <div class="Dem_MenuLista" role="menu" hidden>
+                <button type="button" role="menuitem" data-acao="editar" data-uuid="${esc(uuid)}" data-titulo="${esc(titulo)}">Editar</button>
+              </div>
+            </div>
           </td>`;
         tbody.appendChild(tr);
       }

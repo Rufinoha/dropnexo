@@ -96,9 +96,7 @@
     const tb = el("asf_ativas_tbody");
     if (!itens.length) {
       tb.innerHTML = emptyRow(11, "Nenhum tenant com plano pago ativo.");
-      return;
-    }
-    tb.innerHTML = itens
+    } else tb.innerHTML = itens
       .map(
         (a) => `<tr>
         <td><strong>${esc(a.nome)}</strong><div class="Asf_Muted">#${esc(a.id_tenant)} · ${esc(a.slug || "—")}</div></td>
@@ -115,6 +113,28 @@
       </tr>`
       )
       .join("");
+    const canceladas = data?.canceladas || [];
+    const tbc = el("asf_cancel_tbody");
+    const hint = el("asf_cancel_hint");
+    if (hint) {
+      hint.textContent = canceladas.length
+        ? `${canceladas.length} assinatura(s) cancelada(s)`
+        : "Nenhum cancelamento registrado";
+    }
+    if (tbc) {
+      tbc.innerHTML = canceladas.length
+        ? canceladas
+            .map(
+              (a) => `<tr>
+        <td><strong>${esc(a.nome)}</strong><div class="Asf_Muted">#${esc(a.id_tenant)}</div></td>
+        <td>${esc(a.plano_label)}</td>
+        <td>${esc(a.cancelado_br || "—")}</td>
+        <td>${esc(a.efi || "—")}</td>
+      </tr>`
+            )
+            .join("")
+        : emptyRow(4, "Nenhum cancelamento de plano.");
+    }
   }
 
   function renderInad(data) {

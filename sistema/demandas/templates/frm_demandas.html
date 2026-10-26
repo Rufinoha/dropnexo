@@ -3,7 +3,7 @@
 {% set nav_ativo = 'demandas' %}
 {% block topbar_title %}Central de Chamados{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('demandas.static', filename='style/Cdemandas.css') }}?v=4" />
+<link rel="stylesheet" href="{{ url_for('demandas.static', filename='style/Cdemandas.css') }}?v=5" />
 <script defer src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 {% endblock %}
 {% block content %}
@@ -48,20 +48,18 @@
       <table aria-label="Chamados de suporte">
         <thead>
           <tr>
-            <th>Protocolo</th>
-            <th id="dem_colConta" hidden>Conta</th>
-            <th>Assunto</th>
-            <th>Tipo</th>
-            <th>Status</th>
-            <th>Prioridade</th>
-            <th>Abertura</th>
-            <th>Última atualização</th>
-            <th class="col-acoes">Ações</th>
+            <th class="dem-col-proto">Protocolo</th>
+            <th class="dem-col-conta" id="dem_colConta" hidden>Conta</th>
+            <th class="dem-col-assunto">Assunto</th>
+            <th class="dem-col-status">Status</th>
+            <th class="dem-col-data">Abertura</th>
+            <th class="dem-col-data">Última atualização</th>
+            <th class="dem-col-menu"><span class="Dem_Sr">Ações</span></th>
           </tr>
         </thead>
         <tbody id="dem_tbody">
           <tr class="Cl_Carregando">
-            <td colspan="8">Carregando chamados…</td>
+            <td colspan="6">Carregando chamados…</td>
           </tr>
         </tbody>
       </table>
@@ -80,5 +78,5 @@
 
   </div>
 </main>
-<script defer src="{{ url_for('demandas.static', filename='script/Sdemandas.js') }}?v=5"></script>
+<script defer src="{{ url_for('demandas.static', filename='script/Sdemandas.js') }}?v=6"></script>
 {% endblock %}

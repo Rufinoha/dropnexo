@@ -10,6 +10,24 @@
     return document.getElementById(id);
   }
 
+  function avisar(j) {
+    const msg = (j && j.message) || "Não foi possível continuar.";
+    if (typeof Swal === "undefined") {
+      alert(msg);
+      return;
+    }
+    if (j && j.url) {
+      Swal.fire({
+        icon: "info",
+        title: "Cancele a assinatura primeiro",
+        html: "<p>" + msg + '</p><p><a href="' + j.url + '">Ir para o cancelamento da assinatura</a></p>',
+        confirmButtonColor: "#021F81",
+      });
+      return;
+    }
+    Swal.fire("Erro", msg, "error");
+  }
+
   function showStep(n) {
     [1, 2, 3].forEach(function (i) {
       const s = el("can-step-" + i);
@@ -34,7 +52,7 @@
         const r = await fetch(cfg.apiCancelarIniciar, { method: "POST", headers: { Accept: "application/json" } });
         const j = await r.json();
         if (j.success) showStep(2);
-        else if (typeof Swal !== "undefined") Swal.fire("Erro", j.message, "error");
+        else avisar(j);
       } catch (e) {
         console.error(e);
       }
@@ -52,7 +70,7 @@
         });
         const j = await r.json();
         if (j.success) showStep(3);
-        else if (typeof Swal !== "undefined") Swal.fire("Erro", j.message, "error");
+        else avisar(j);
       } catch (e) {
         console.error(e);
       }
@@ -103,7 +121,8 @@
           window.location.href = j.redirect;
           return;
         }
-        if (typeof Swal !== "undefined") Swal.fire(j.success ? "Conta cancelada" : "Erro", j.message || "", j.success ? "success" : "error");
+        if (!j.success) avisar(j);
+        else if (typeof Swal !== "undefined") Swal.fire("Conta cancelada", j.message || "", "success");
       } catch (e) {
         console.error(e);
       }

@@ -1,5 +1,5 @@
 /**
- * DropNexo Pay — checkout único (cartão / boleto / PIX em breve) + tokenizador Efi.
+ * DropNexo Pay — checkout único (cartão de crédito e boleto) + tokenizador Efi.
  *
  * EfiPay.CreditCard é Proxy: nunca retornar CreditCard de Promise/async.
  *
@@ -160,11 +160,10 @@
       '<div class="DnPay_Tabs" role="tablist">' +
       '<button type="button" class="DnPay_Tab is-active" data-tab="cartao" role="tab">Crédito</button>' +
       '<button type="button" class="DnPay_Tab" data-tab="boleto" role="tab">Boleto</button>' +
-      '<button type="button" class="DnPay_Tab is-soon" data-tab="pix" role="tab">PIX<small>em breve</small></button>' +
       "</div>" +
       '<section class="DnPay_Pane is-active" data-pane="cartao">' +
       '<p class="DnPay_PaneTitle">Cartão de crédito</p>' +
-      '<p class="DnPay_Aviso">Aceitamos somente cartão de crédito. Cartão de débito não é cobrado e a fatura fica em aberto. Se o seu cartão for só de débito, use boleto.</p>' +
+      '<p class="DnPay_Aviso">Aceitamos somente cartão de crédito. A liberação do plano é imediata quando a operadora aprova. Cartão de débito não é cobrado. Se o seu cartão for só de débito, use boleto.</p>' +
       '<p class="DnPay_PaneDesc">Tokenização na Efí — os dados do cartão não passam pelo DropNexo.</p>' +
       '<div class="EfiCard">' +
       '<div class="EfiCard_Visual" aria-hidden="true">' +
@@ -194,20 +193,14 @@
       "</div></div></section>" +
       '<section class="DnPay_Pane" data-pane="boleto">' +
       '<p class="DnPay_PaneTitle">Boleto bancário</p>' +
-      '<p class="DnPay_PaneDesc">Geramos a cobrança agora. Você recebe o boleto para pagar no banco ou app.</p>' +
+      '<p class="DnPay_PaneDesc">Geramos o boleto agora. O plano só é liberado quando o pagamento for confirmado.</p>' +
       '<div class="DnPay_Boleto">' +
       '<div class="DnPay_Barcode" aria-hidden="true"></div>' +
       "<ul>" +
-      "<li>O plano é liberado assim que o boleto é gerado.</li>" +
-      "<li>Sem pagamento em até 7 dias úteis, a conta volta ao Explorar.</li>" +
+      "<li>A confirmação do boleto pode levar até 3 dias, conforme o banco em que ele foi pago.</li>" +
+      "<li>Se o boleto seguir em aberto por 30 dias depois do vencimento, o plano volta ao gratuito e a recorrência é cancelada.</li>" +
       "<li>Acompanhe status e 2ª via em Financeiro.</li>" +
       "</ul></div></section>" +
-      '<section class="DnPay_Pane" data-pane="pix">' +
-      '<div class="DnPay_Soon">' +
-      '<div class="DnPay_SoonMark">PIX</div>' +
-      "<h4>Quase lá</h4>" +
-      "<p>PIX estará disponível em breve neste mesmo checkout.<br>Por agora, use cartão de crédito ou boleto.</p>" +
-      "</div></section>" +
       '<section class="DnPay_Pane" data-pane="cortesia">' +
       '<div class="DnPay_Cortesia">' +
       '<div class="DnPay_CortesiaMark" aria-hidden="true">0</div>' +
