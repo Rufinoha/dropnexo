@@ -362,6 +362,7 @@ def criar_cobranca_cartao(
     installments: int = 1,
     telefone: str | None = None,
     endereco: dict | None = None,
+    custom_id: str | None = None,
 ) -> dict:
     """Cria cobrança one-step com cartão (payment_token do JS Efi)."""
     if valor_centavos <= 0:
@@ -405,9 +406,12 @@ def criar_cobranca_cartao(
         }
         credit["billing_address"] = {k: v for k, v in billing.items() if v is not None}
 
+    meta = {"notification_url": notification_url_efi()}
+    if (custom_id or "").strip():
+        meta["custom_id"] = str(custom_id).strip()[:255]
     body = {
         "items": [{"name": descricao[:255], "value": int(valor_centavos), "amount": 1}],
-        "metadata": {"notification_url": notification_url_efi()},
+        "metadata": meta,
         "payment": {"credit_card": credit},
     }
     resp = _raise_resp(_cliente().create_one_step_charge(params={}, body=body))
@@ -542,6 +546,75 @@ def criar_assinatura_one_step(
         "link_pagamento": None,
         "raw": resp,
     }
+
+
+def definir_forma_assinatura(
+    *,
+    subscription_id: str,
+    forma: str,
+    nome_cliente: str,
+    documento: str,
+    email: str,
+    telefone: str | None = None,
+    endereco: dict | None = None,
+    payment_token: str | None = None,
+    vencimento: date | None = None,
+) -> dict:
+    """Troca boleto/cartão da assinatura. Cobranças já emitidas não mudam."""
+    sub = str(subscription_id or "").strip()
+    if not sub.isdigit():
+        raise RuntimeError("Assinatura Efí ausente.")
+    phone = "".join(c for c in (telefone or "") if c.isdigit())
+    if len(phone) < 10:
+        phone = "11999999999"
+    customer = _customer_efi(
+        nome_cliente=nome_cliente,
+        documento=documento,
+        email=email or "contato@dropnexo.com.br",
+        telefone=phone,
+    )
+    end = endereco or {}
+    street = (end.get("street") or end.get("logradouro") or "").strip()
+    number = (end.get("number") or end.get("numero") or "S/N").strip() or "S/N"
+    neighborhood = (end.get("neighborhood") or end.get("bairro") or "").strip()
+    zipcode = "".join(c for c in (end.get("zipcode") or end.get("cep") or "") if c.isdigit())
+    city = (end.get("city") or end.get("cidade") or "").strip()
+    state = (end.get("state") or end.get("uf") or "").strip().upper()[:2]
+    address = None
+    if street and neighborhood and len(zipcode) == 8 and city and state:
+        address = {
+            "street": street[:200],
+            "number": number[:40],
+            "neighborhood": neighborhood[:100],
+            "zipcode": zipcode,
+            "city": city[:100],
+            "state": state,
+            "complement": (end.get("complement") or end.get("complemento") or "")[:100] or "",
+        }
+        customer["address"] = address
+    if forma == "cartao":
+        token = (payment_token or "").strip()
+        if not token:
+            raise ValueError("payment_token obrigatório para cartão.")
+        if "name" not in customer:
+            customer["name"] = (nome_cliente or "Cliente")[:255]
+        credit: dict[str, Any] = {"customer": customer, "payment_token": token}
+        if address:
+            credit["billing_address"] = {k: v for k, v in address.items() if v}
+        payment = {"credit_card": credit}
+    else:
+        venc = vencimento or (date.today() + timedelta(days=10))
+        payment = {
+            "banking_billet": {
+                "customer": customer,
+                "expire_at": venc.isoformat(),
+                "message": "Mensalidade DropNexo",
+            }
+        }
+    resp = _raise_resp(
+        _cliente().define_subscription_pay_method(params={"id": int(sub)}, body={"payment": payment})
+    )
+    return {"ok": True, "raw": resp}
 
 
 def cancelar_assinatura(subscription_id: str) -> dict:

@@ -16,8 +16,10 @@ from sistema.financeiro.cobranca import (
     listar_efi_logs,
     listar_faturas,
     obter_fatura,
+    pagar_fatura_aberta_no_cartao,
     regenerar_cobranca,
     resumo_assinatura_tenant,
+    trocar_forma_proximas_cobrancas,
 )
 
 _MOD = Path(__file__).resolve().parent
@@ -161,6 +163,56 @@ def api_cancelar_assinatura():
         res = cancelar_plano_atual(cur, tid)
         conn.commit()
         return jsonify(success=True, message=res["mensagem"])
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
+@financeiro_bp.post("/api/financeiro/trocar-forma")
+@login_obrigatorio()
+def api_trocar_forma():
+    if not _pode_financeiro():
+        return jsonify(success=False, message="Sem permissão."), 403
+    tid = _id_tenant()
+    if not tid:
+        return jsonify(success=False, message="Sessão inválida."), 403
+    body = request.get_json(silent=True) or {}
+    escopo = (body.get("escopo") or "proximas").strip().lower()
+    forma = (body.get("forma") or "").strip().lower()
+    token = (body.get("payment_token") or "").strip() or None
+    try:
+        installments = max(1, min(12, int(body.get("installments") or 1)))
+    except (TypeError, ValueError):
+        installments = 1
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        if escopo == "fatura":
+            try:
+                id_fatura = int(body.get("id_fatura") or 0)
+            except (TypeError, ValueError):
+                id_fatura = 0
+            res = pagar_fatura_aberta_no_cartao(
+                cur,
+                tid,
+                id_fatura,
+                payment_token=token or "",
+                installments=installments,
+            )
+        else:
+            res = trocar_forma_proximas_cobrancas(
+                cur,
+                tid,
+                forma or "boleto",
+                payment_token=token,
+            )
+        conn.commit()
+        return jsonify(success=True, message=res["mensagem"])
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 400
     except Exception as e:
         conn.rollback()
         return jsonify(success=False, message=str(e)), 500

@@ -314,8 +314,8 @@
     const exp = parseExpiry(root.querySelector("#efi_exp").value);
     const cvv = digits(root.querySelector("#efi_cvv").value);
     const doc = digits(root.querySelector("#efi_doc").value);
-    const installments =
-      parseInt(root.querySelector("#efi_installments").value || "1", 10) || 1;
+    const selParc = root.querySelector("#efi_installments");
+    const installments = parseInt((selParc && selParc.value) || "1", 10) || 1;
 
     if (!opts.payeeCode) {
       return Promise.reject(
@@ -431,7 +431,7 @@
         };
 
         function syncCortesiaUI() {
-          const isCortesia = state.valorFinal <= 0;
+          const isCortesia = state.valorFinal <= 0 && !opts.somenteCartao;
           root.classList.toggle("is-cortesia", isCortesia);
           if (isCortesia) {
             labels.cartao = "Aceitar cortesia";
@@ -612,6 +612,23 @@
         });
 
         atualizarPreco();
+        if (opts.somenteCartao) {
+          root.querySelector(".DnPay_Periodo")?.remove();
+          root.querySelector(".DnPay_Cupom")?.remove();
+          root.querySelector('.DnPay_Tab[data-tab="boleto"]')?.remove();
+          root.querySelector('[data-pane="boleto"]')?.remove();
+          const nota = root.querySelector("#dnpay_aside_note");
+          if (nota) nota.textContent = opts.nota || "Informe o cartão de crédito.";
+          if (opts.sufixo != null) {
+            const suf = root.querySelector("#dnpay_valor_sufixo");
+            if (suf) suf.textContent = opts.sufixo;
+          }
+          labels.cartao = opts.rotuloBotao || "Confirmar cartão";
+          submitBtn.textContent = labels.cartao;
+        }
+        if (opts.semParcelas) {
+          root.querySelector("#efi_installments")?.closest("label")?.remove();
+        }
 
         return new Promise(function (resolve) {
           let settled = false;
@@ -651,7 +668,7 @@
           submitBtn.addEventListener("click", function () {
             errEl.textContent = "";
             // Cortesia 100%: ativa sem meio de pagamento
-            if (state.valorFinal <= 0) {
+            if (state.valorFinal <= 0 && !opts.somenteCartao) {
               finish(payloadBase({ forma: "boleto" }));
               return;
             }

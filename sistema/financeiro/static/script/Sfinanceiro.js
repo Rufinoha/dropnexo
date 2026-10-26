@@ -12,6 +12,7 @@
   }
 
   let pagina = 1;
+  let planoAtual = null;
 
   function badge(st) {
     const map = {
@@ -262,6 +263,118 @@
     box.style.left = Math.max(8, r.right - box.offsetWidth) + "px";
   }
 
+  async function postTroca(body) {
+    const r = await fetch(cfg.apiTrocarForma, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify(body || {}),
+    });
+    const j = await r.json();
+    if (window.Swal) {
+      Swal.fire(j.success ? "Forma de pagamento" : "Erro", j.message || "", j.success ? "success" : "error");
+    }
+    if (j.success) {
+      carregarPlano();
+      carregar(pagina);
+    }
+  }
+
+  async function pedirCartao(opts) {
+    if (!window.DropNexoEfi || !DropNexoEfi.openCheckout) {
+      if (window.Swal) Swal.fire("Cartão", "O pagamento com cartão não carregou nesta página.", "error");
+      return null;
+    }
+    return DropNexoEfi.openCheckout(
+      Object.assign(
+        {
+          payeeCode: cfg.efiPayeeCode || "",
+          environment: cfg.efiEnvironment || "sandbox",
+          somenteCartao: true,
+        },
+        opts || {}
+      )
+    );
+  }
+
+  async function trocarForma() {
+    const p = planoAtual || {};
+    const proximas = !!p.pode_trocar_proximas;
+    const esta = !!p.pode_pagar_esta;
+    if (!proximas && !esta) return;
+    let escopo = proximas ? "proximas" : "fatura";
+    if (proximas && esta && window.Swal) {
+      const escolha = await Swal.fire({
+        title: "Trocar forma de pagamento",
+        text: "Daqui pra frente muda as próximas cobranças. Só esta fatura paga a que está em boleto no cartão e deixa as próximas no boleto.",
+        showDenyButton: true,
+        showCancelButton: true,
+        confirmButtonText: "Daqui pra frente",
+        denyButtonText: "Só esta fatura no cartão",
+        cancelButtonText: "Voltar",
+        confirmButtonColor: "#021F81",
+      });
+      if (escolha.isDenied) escopo = "fatura";
+      else if (!escolha.isConfirmed) return;
+    }
+    if (escopo === "fatura") {
+      const fat = p.fatura_aberta || {};
+      const pay = await pedirCartao({
+        valorCentavos: fat.valor_centavos || 0,
+        planoNome: fat.referencia || "Fatura em aberto",
+        titulo: "Pagar esta fatura no cartão",
+        nota: "As próximas cobranças continuam no boleto.",
+        sufixo: "",
+        rotuloBotao: "Pagar esta fatura",
+      });
+      if (!pay || pay.forma !== "cartao" || !pay.payment_token) return;
+      await postTroca({
+        escopo: "fatura",
+        id_fatura: fat.id,
+        payment_token: pay.payment_token,
+        installments: pay.installments || 1,
+      });
+      return;
+    }
+    let forma = "cartao";
+    if (window.Swal) {
+      const formaDlg = await Swal.fire({
+        title: "Próximas cobranças",
+        text: "A fatura que já está em aberto continua como está.",
+        input: "radio",
+        inputOptions: { cartao: "Cartão de crédito", boleto: "Boleto" },
+        inputValue: p.forma_pagamento === "boleto" ? "boleto" : "cartao",
+        inputValidator: function (v) {
+          if (!v) return "Escolha boleto ou cartão.";
+        },
+        showCancelButton: true,
+        confirmButtonText: "Continuar",
+        cancelButtonText: "Voltar",
+        confirmButtonColor: "#021F81",
+      });
+      if (!formaDlg.isConfirmed) return;
+      forma = formaDlg.value;
+    }
+    if (forma === "boleto") {
+      await postTroca({ escopo: "proximas", forma: "boleto" });
+      return;
+    }
+    const pay = await pedirCartao({
+      valorCentavos: p.valor_centavos || (p.fatura_aberta && p.fatura_aberta.valor_centavos) || 0,
+      planoNome: p.plano_nome || "Plano",
+      titulo: "Cartão das próximas cobranças",
+      nota: "As próximas cobranças usam este cartão. A fatura já em aberto não muda.",
+      sufixo: "",
+      semParcelas: true,
+      rotuloBotao: "Usar este cartão",
+    });
+    if (!pay || pay.forma !== "cartao" || !pay.payment_token) return;
+    await postTroca({
+      escopo: "proximas",
+      forma: "cartao",
+      payment_token: pay.payment_token,
+    });
+  }
+
   async function carregarPlano() {
     const box = document.getElementById("fin_plano_corpo");
     if (!box || !cfg.apiMeuPlano) return;
@@ -270,16 +383,23 @@
       const j = await r.json();
       if (!j.success) throw new Error(j.message || "Erro");
       const p = j.plano || {};
+      planoAtual = p;
       const status = p.assinatura_status === "cancelada" ? "Cancelada" : p.recorrencia_efi ? "Ativa na Efí" : "Sem recorrência na Efí";
+      const aberta = p.fatura_aberta;
       box.innerHTML =
         "<p><strong>" + esc(p.plano_nome || p.plano_slug || "Explorar") + "</strong></p>" +
         "<p>Ciclo: " + esc(p.periodicidade || "—") + "</p>" +
         "<p>Forma: " + esc(p.forma_pagamento || "—") + "</p>" +
         "<p>Valor do plano: " + esc(p.valor_formatado || "—") + "</p>" +
         "<p>Recorrência: " + esc(status) + "</p>" +
-        (p.dia_vencimento ? "<p>Dia de vencimento: " + esc(p.dia_vencimento) + "</p>" : "");
+        (p.dia_vencimento ? "<p>Dia de vencimento: " + esc(p.dia_vencimento) + "</p>" : "") +
+        (aberta
+          ? "<p>Fatura em aberto: " + esc(aberta.referencia) + " · boleto · " + esc(aberta.valor_formatado) + "</p>"
+          : "");
       const btn = document.getElementById("fin_btnCancelarPlano");
       if (btn) btn.hidden = !p.pode_cancelar;
+      const troca = document.getElementById("fin_btnTrocarForma");
+      if (troca) troca.hidden = !(p.pode_trocar_proximas || p.pode_pagar_esta);
     } catch (e) {
       box.innerHTML = '<p class="Fin_Empty">' + esc(e.message || "Erro") + "</p>";
     }
@@ -303,6 +423,7 @@
       });
     });
     if ((location.hash || "").replace("#", "") === "plano") abrirAba("plano");
+    document.getElementById("fin_btnTrocarForma")?.addEventListener("click", trocarForma);
     document.getElementById("fin_btnCancelarPlano")?.addEventListener("click", async function () {
       const ok = window.Swal
         ? await Swal.fire({

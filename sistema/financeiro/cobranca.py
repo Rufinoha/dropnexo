@@ -1786,6 +1786,21 @@ def _mapa_status_efi_local(status: str) -> str:
     }.get(s, "pendente")
 
 
+def _fatura_do_custom(cur, payload: dict):
+    """Cobrança avulsa desta fatura usa custom_id fat-{id}."""
+    custom = str(payload.get("custom_id") or "").strip()
+    if not custom.startswith("fat-") or not custom[4:].isdigit():
+        return None
+    cur.execute(
+        """
+        SELECT id, id_tenant, status, efi_charge_id
+        FROM tbl_fatura WHERE id = %s
+        """,
+        (int(custom[4:]),),
+    )
+    return cur.fetchone()
+
+
 def _tenant_do_aviso(cur, payload: dict) -> int | None:
     custom = str(payload.get("custom_id") or "").strip()
     if custom.startswith("tn-") and custom[3:].isdigit():
@@ -1919,6 +1934,35 @@ def processar_webhook_efi(cur, payload: dict) -> dict:
     )
     row = cur.fetchone()
     if not row:
+        presa = _fatura_do_custom(cur, payload)
+        if presa:
+            fid, _tid, _st, antiga = int(presa[0]), int(presa[1]), presa[2], presa[3]
+            if str(antiga or "") != charge_id:
+                cur.execute(
+                    """
+                    UPDATE tbl_fatura
+                    SET efi_charge_id = %s,
+                        forma_pagamento = 'cartao',
+                        link_boleto = NULL,
+                        codigo_barras = NULL,
+                        atualizado_em = NOW()
+                    WHERE id = %s AND status <> 'pago'
+                    """,
+                    (charge_id, fid),
+                )
+                if antiga and novo == "pago":
+                    try:
+                        from api.efi.efi import cancelar_cobranca
+
+                        cancelar_cobranca(str(antiga))
+                    except Exception:
+                        log.exception("Boleto %s da fatura %s não cancelado", antiga, fid)
+            cur.execute(
+                "SELECT id, id_tenant, status FROM tbl_fatura WHERE id = %s",
+                (fid,),
+            )
+            row = cur.fetchone()
+    if not row:
         id_tenant_aviso = _tenant_do_aviso(cur, payload)
         if not id_tenant_aviso:
             return {"ok": True, "ignorado": True, "charge_id": charge_id}
@@ -1956,6 +2000,8 @@ def processar_webhook_efi(cur, payload: dict) -> dict:
     )
 
     if novo == "pago":
+        if st_atual == "pago":
+            return {"ok": True, "status": "pago", "id_fatura": id_fatura}
         return aplicar_pagamento_fatura(cur, id_fatura, origem="webhook")
 
     cur.execute(
@@ -2223,6 +2269,169 @@ def conta_tem_assinatura_ativa(cur, id_tenant: int) -> bool:
     return bool((row[2] or "").strip())
 
 
+def _exigir_endereco_cartao(cli: dict) -> None:
+    end = cli.get("endereco") or {}
+    cep = "".join(c for c in (end.get("cep") or "") if c.isdigit())
+    uf = (end.get("uf") or "").strip()
+    if (
+        len(cep) != 8
+        or not (end.get("logradouro") or "").strip()
+        or not (end.get("bairro") or "").strip()
+        or not (end.get("cidade") or "").strip()
+        or len(uf) != 2
+    ):
+        raise ValueError(
+            "Para pagar com cartão, complete o endereço da empresa em Meu perfil → Empresa "
+            "(CEP, rua, bairro, cidade e UF)."
+        )
+
+
+def trocar_forma_proximas_cobrancas(
+    cur,
+    id_tenant: int,
+    forma: str,
+    *,
+    payment_token: str | None = None,
+) -> dict:
+    """A assinatura continua a mesma. A Efí passa a emitir os ciclos seguintes na forma nova."""
+    garantir_cobranca_tenant(cur, id_tenant)
+    forma_n = (forma or "").strip().lower()
+    if forma_n not in ("boleto", "cartao"):
+        raise ValueError("Escolha boleto ou cartão de crédito.")
+    cur.execute(
+        """
+        SELECT efi_subscription_id, COALESCE(assinatura_status, '')
+        FROM tbl_tenant_cobranca WHERE id_tenant = %s
+        """,
+        (id_tenant,),
+    )
+    row = cur.fetchone()
+    sub = (row[0] if row else "") or ""
+    status = (row[1] if row else "").strip().lower()
+    if not str(sub).strip() or status == "cancelada":
+        raise ValueError(
+            "Não há recorrência ativa para mudar as próximas cobranças. "
+            "Dá para pagar a fatura em aberto no cartão, se houver uma."
+        )
+    cli = _dados_cliente_cobranca(cur, id_tenant)
+    if forma_n == "cartao":
+        _exigir_endereco_cartao(cli)
+        if not (payment_token or "").strip():
+            raise ValueError("Informe o cartão de crédito.")
+    from api.efi.efi import definir_forma_assinatura
+
+    definir_forma_assinatura(
+        subscription_id=str(sub),
+        forma=forma_n,
+        nome_cliente=cli["nome_cliente"],
+        documento=cli["documento"],
+        email=cli["email_cobranca"],
+        telefone=cli.get("telefone"),
+        endereco=cli.get("endereco"),
+        payment_token=payment_token,
+        vencimento=proximo_vencimento(cli["dia_vencimento"]),
+    )
+    cur.execute(
+        """
+        UPDATE tbl_tenant_cobranca
+        SET forma_pagamento = %s, atualizado_em = NOW()
+        WHERE id_tenant = %s
+        """,
+        (forma_n, id_tenant),
+    )
+    registrar_efi_log(
+        cur,
+        id_tenant=id_tenant,
+        id_fatura=None,
+        direcao="out",
+        operacao="trocar_forma_assinatura",
+        ok=True,
+        response_resumo={"forma": forma_n},
+    )
+    if forma_n == "cartao":
+        texto = (
+            "As próximas cobranças saem no cartão de crédito. "
+            "A fatura que já está em aberto continua como está."
+        )
+    else:
+        texto = (
+            "As próximas cobranças saem no boleto. "
+            "A fatura que já está em aberto continua como está."
+        )
+    return {"mensagem": texto, "forma": forma_n}
+
+
+def pagar_fatura_aberta_no_cartao(
+    cur,
+    id_tenant: int,
+    id_fatura: int,
+    *,
+    payment_token: str,
+    installments: int = 1,
+) -> dict:
+    """Paga só esta fatura no cartão. A recorrência permanece no boleto."""
+    fat = obter_fatura(cur, id_tenant, id_fatura)
+    if not fat:
+        raise ValueError("Fatura não encontrada.")
+    if fat["status"] not in ("pendente", "vencido"):
+        raise ValueError("Esta fatura não está em aberto.")
+    if (fat.get("forma_pagamento") or "").strip().lower() != "boleto":
+        raise ValueError("Esta opção vale para a fatura que está em boleto.")
+    antiga = str(fat.get("efi_charge_id") or "").strip()
+    if not antiga.isdigit():
+        raise ValueError("Esta fatura não tem boleto na Efí para substituir.")
+    cli = _dados_cliente_cobranca(cur, id_tenant)
+    _exigir_endereco_cartao(cli)
+    from api.efi.efi import cancelar_cobranca, consultar_cobranca, criar_cobranca_cartao
+
+    det = consultar_cobranca(antiga)
+    if det.get("status") == "pago":
+        raise ValueError("Este boleto já foi pago.")
+    plano = obter_plano_db(cur, fat.get("plano_slug") or "") or {}
+    nome = plano.get("nome") or fat.get("plano_slug") or "Plano"
+    cob = criar_cobranca_cartao(
+        nome_cliente=cli["nome_cliente"],
+        documento=cli["documento"],
+        email=cli["email_cobranca"],
+        valor_centavos=int(fat["valor_centavos"] or 0),
+        descricao=f"DropNexo — {nome} ({fat.get('referencia') or id_fatura})",
+        payment_token=payment_token,
+        installments=installments,
+        telefone=cli.get("telefone"),
+        endereco=cli.get("endereco"),
+        custom_id=f"fat-{id_fatura}",
+    )
+    if not cob.get("pago"):
+        raise ValueError(
+            "O cartão ainda não foi aprovado. O boleto desta fatura continua valendo."
+        )
+    cur.execute("SELECT status FROM tbl_fatura WHERE id = %s AND id_tenant = %s", (id_fatura, id_tenant))
+    atual = cur.fetchone()
+    if not atual or atual[0] != "pago":
+        cur.execute(
+            """
+            UPDATE tbl_fatura
+            SET efi_charge_id = %s,
+                forma_pagamento = 'cartao',
+                link_boleto = NULL,
+                codigo_barras = NULL,
+                pix_copia_cola = NULL,
+                pix_qrcode = NULL,
+                atualizado_em = NOW()
+            WHERE id = %s AND id_tenant = %s
+            """,
+            (cob.get("charge_id"), id_fatura, id_tenant),
+        )
+        aplicar_pagamento_fatura(cur, id_fatura, origem="cartao_fatura")
+    texto = "Esta fatura foi paga no cartão. As próximas cobranças continuam no boleto."
+    try:
+        cancelar_cobranca(antiga)
+    except Exception:
+        log.exception("Boleto %s da fatura %s ficou em aberto após o cartão", antiga, id_fatura)
+        texto += " Se o boleto antigo ainda abrir, não pague: esta fatura já está paga no cartão."
+    return {"mensagem": texto}
+
+
 def resumo_assinatura_tenant(cur, id_tenant: int) -> dict:
     garantir_cobranca_tenant(cur, id_tenant)
     cur.execute(
@@ -2248,6 +2457,29 @@ def resumo_assinatura_tenant(cur, id_tenant: int) -> dict:
 
     periodo = (row[2] or "mensal").strip().lower()
     status = (row[4] or "").strip().lower()
+    cur.execute(
+        """
+        SELECT id, referencia, valor_centavos, vencimento_em
+        FROM tbl_fatura
+        WHERE id_tenant = %s
+          AND status IN ('pendente', 'vencido')
+          AND lower(COALESCE(forma_pagamento, '')) = 'boleto'
+        ORDER BY id DESC
+        LIMIT 1
+        """,
+        (id_tenant,),
+    )
+    aberta = cur.fetchone()
+    fatura_aberta = None
+    if aberta:
+        centavos = int(aberta[2] or 0)
+        fatura_aberta = {
+            "id": int(aberta[0]),
+            "referencia": aberta[1] or "",
+            "valor_centavos": centavos,
+            "valor_formatado": f"R$ {centavos / 100:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."),
+            "vencimento_em": aberta[3].isoformat() if aberta[3] else None,
+        }
     return {
         "plano_slug": slug,
         "plano_nome": nome_plano_comercial(slug, row[8]),
@@ -2257,8 +2489,12 @@ def resumo_assinatura_tenant(cur, id_tenant: int) -> dict:
         "cancelado_em": row[5].isoformat() if row[5] else None,
         "dia_vencimento": row[6],
         "recorrencia_efi": bool(row[7]),
+        "valor_centavos": int(plano.get("valor_centavos") or 0),
         "valor_formatado": f"R$ {int(plano.get('valor_centavos') or 0) / 100:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."),
         "pode_cancelar": slug != "starter" and status != "cancelada",
+        "pode_trocar_proximas": bool(row[7]) and status != "cancelada",
+        "fatura_aberta": fatura_aberta,
+        "pode_pagar_esta": fatura_aberta is not None,
     }
 
 

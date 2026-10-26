@@ -66,6 +66,7 @@
     </div>
     <div class="Fin_PlanoAcoes">
       <a class="Cl_botaoFiltro" href="/meu-plano">Trocar de plano</a>
+      <button type="button" class="Cl_botaoFiltro" id="fin_btnTrocarForma">Trocar forma de pagamento</button>
       <button type="button" class="Cl_botaoFiltro" id="fin_btnCancelarPlano">Cancelar plano atual</button>
     </div>
   </div>
@@ -94,9 +95,10 @@
   "efiEnvironment": efi_environment or "sandbox",
   "ehDev": eh_dev,
   "apiMeuPlano": url_for("financeiro.api_meu_plano"),
-  "apiCancelar": url_for("financeiro.api_cancelar_assinatura")
+  "apiCancelar": url_for("financeiro.api_cancelar_assinatura"),
+  "apiTrocarForma": url_for("financeiro.api_trocar_forma")
 }|tojson }}</script>
-<script defer src="{{ url_for('static', filename='script/Sefi_cartao.js') }}?v=11"></script>
-<script defer src="{{ url_for('financeiro.static', filename='script/Sfinanceiro.js') }}?v=8"></script>
+<script defer src="{{ url_for('static', filename='script/Sefi_cartao.js') }}?v=12"></script>
+<script defer src="{{ url_for('financeiro.static', filename='script/Sfinanceiro.js') }}?v=9"></script>
 {% endif %}
 {% endblock %}
