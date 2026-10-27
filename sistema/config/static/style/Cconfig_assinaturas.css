@@ -1,24 +1,32 @@
-.Asf_Wrap { max-width: 1200px; }
+.Asf_Wrap {
+  max-width: none;
+  width: 100%;
+  font-size: 0.84rem;
+}
+.Asf_Wrap .cl-page-title h2 { font-size: 1.25rem; }
+.Asf_Wrap .cl-page-desc { font-size: 0.82rem; line-height: 1.4; }
+
 .Asf_TitleRow {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 16px;
+  gap: 12px;
   flex-wrap: wrap;
 }
 
 .Asf_Tabs {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
-  margin: 8px 0 16px;
+  margin: 6px 0 12px;
 }
 .Asf_Tab {
   border: 1px solid #dbe3ee;
   background: #fff;
   color: #334155;
   border-radius: 999px;
-  padding: 8px 16px;
+  padding: 6px 12px;
+  font-size: 0.82rem;
   font-weight: 600;
   cursor: pointer;
 }
@@ -29,12 +37,12 @@
 }
 
 .Asf_Status {
-  margin: 0 0 14px;
-  font-size: 0.9rem;
+  margin: 0 0 10px;
+  font-size: 0.8rem;
   color: #64748b;
 }
 .Asf_Status.is-err { color: #b91c1c; }
-.Asf_Hint { color: #64748b; font-size: 0.88rem; }
+.Asf_Hint { color: #64748b; font-size: 0.78rem; }
 .Asf_Hint.is-err { color: #b91c1c; font-weight: 600; }
 
 .Asf_Panel { display: none; }
@@ -42,25 +50,25 @@
 
 .Asf_Kpis {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 12px;
-  margin-bottom: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
 }
 .Asf_Kpi {
   border: 1px solid #e2e8f0;
-  border-radius: 12px;
+  border-radius: 10px;
   background: #fff;
-  padding: 14px 16px;
+  padding: 10px 12px;
 }
 .Asf_Kpi strong {
   display: block;
-  font-size: 1.35rem;
+  font-size: 1.1rem;
   color: #0f172a;
-  margin-top: 6px;
+  margin-top: 4px;
   letter-spacing: -0.02em;
 }
 .Asf_Kpi span {
-  font-size: 0.75rem;
+  font-size: 0.65rem;
   color: #64748b;
   font-weight: 700;
   text-transform: uppercase;
@@ -72,24 +80,24 @@
 
 .Asf_Card {
   border: 1px solid #e5e7eb;
-  border-radius: 14px;
+  border-radius: 12px;
   background: #fff;
-  padding: 18px 18px 10px;
-  margin-bottom: 16px;
+  padding: 12px 12px 6px;
+  margin-bottom: 12px;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 .Asf_CardHead {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  gap: 12px;
-  margin-bottom: 12px;
-  padding-bottom: 10px;
+  gap: 10px;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
   border-bottom: 1px solid #f1f5f9;
 }
 .Asf_CardHead h3 {
   margin: 0;
-  font-size: 1.05rem;
+  font-size: 0.95rem;
   color: #1c2e3c;
 }
 
@@ -112,11 +120,11 @@
 
 .Asf_Tabela {
   width: 100% !important;
-  min-width: 980px;
+  min-width: 860px;
   border-collapse: separate;
   border-spacing: 0;
   table-layout: auto !important;
-  font-size: 0.92rem;
+  font-size: 0.8rem;
   background: transparent;
   border: none !important;
   border-radius: 0 !important;
@@ -126,26 +134,26 @@
   position: sticky;
   top: 0;
   z-index: 1;
-  padding: 10px 14px !important;
+  padding: 7px 8px !important;
   border: none !important;
   border-bottom: 1px solid #e2e8f0 !important;
   background: #f8fafc !important;
   color: #64748b !important;
-  font-size: 0.72rem !important;
+  font-size: 0.65rem !important;
   font-weight: 700 !important;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.03em;
   text-align: left;
   white-space: nowrap;
   box-shadow: none !important;
 }
 
 .Asf_Tabela tbody td {
-  padding: 14px !important;
+  padding: 8px !important;
   border: none !important;
   border-bottom: 1px solid #f1f5f9 !important;
   color: #1e293b !important;
-  font-size: 0.92rem !important;
+  font-size: 0.8rem !important;
   vertical-align: middle;
   white-space: nowrap;
   overflow: visible !important;
@@ -172,9 +180,9 @@
 
 .Asf_Tabela .Asf_Muted {
   display: block;
-  margin-top: 3px;
+  margin-top: 2px;
   color: #94a3b8;
-  font-size: 0.78rem;
+  font-size: 0.7rem;
   font-weight: 500;
   white-space: nowrap;
 }
@@ -192,9 +200,9 @@
 
 .Asf_Badge {
   display: inline-block;
-  padding: 4px 10px;
+  padding: 2px 7px;
   border-radius: 999px;
-  font-size: 0.75rem;
+  font-size: 0.68rem;
   font-weight: 700;
   background: #f1f5f9;
   color: #334155;
@@ -209,18 +217,18 @@
 }
 
 .Asf_MenuBtn {
-  min-width: 36px;
-  height: 36px;
+  min-width: 30px;
+  height: 30px;
   border: 1px solid #cbd5e1;
   background: #fff;
-  border-radius: 8px;
+  border-radius: 7px;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0 8px;
+  padding: 0 6px;
   color: #0f172a;
-  font-size: 1.25rem;
+  font-size: 1.1rem;
   font-weight: 700;
   line-height: 1;
   letter-spacing: 0.02em;
@@ -327,8 +335,8 @@
 .Asf_Badge.is-starter { background: #e2e8f0; color: #475569; }
 
 .Asf_ColAcoes {
-  width: 88px;
-  min-width: 88px;
+  width: 56px;
+  min-width: 56px;
   text-align: right !important;
   position: sticky;
   right: 0;
