@@ -529,6 +529,7 @@ def _montar_nota_fiscal(cur, ano_sel: int, mes_sel: int) -> dict[str, Any]:
             JOIN tbl_tenant t ON t.id = f.id_tenant
             WHERE f.status = 'pago'
               AND f.pago_em IS NOT NULL
+              AND COALESCE(f.valor_centavos, 0) > 0
               AND EXTRACT(YEAR FROM f.pago_em) = %s
               AND EXTRACT(MONTH FROM f.pago_em) = %s
             ORDER BY

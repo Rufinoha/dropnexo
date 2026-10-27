@@ -218,12 +218,231 @@
 .Asf_Acoes--nf {
   flex-wrap: wrap;
   justify-content: flex-end;
+  gap: 6px;
 }
-.Asf_BtnNf {
-  padding: 5px 10px;
+
+/* ── Aba Nota fiscal ───────────────────────────────────────── */
+.Asf_NfHero {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin: 0 0 14px;
+  padding: 16px 18px;
+  border-radius: 16px;
+  background:
+    radial-gradient(120% 140% at 100% 0%, rgba(2, 31, 129, 0.14), transparent 55%),
+    linear-gradient(135deg, #0f1c2e 0%, #1c2e3c 48%, #243b4d 100%);
+  color: #e8eef7;
+  box-shadow: 0 10px 28px rgba(15, 28, 46, 0.18);
+}
+.Asf_NfEyebrow {
+  margin: 0 0 4px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #93c5fd;
+}
+.Asf_NfHeroText h3 {
+  margin: 0 0 6px;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: -0.02em;
+}
+.Asf_NfHeroText p {
+  margin: 0;
+  max-width: 42rem;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: rgba(226, 232, 240, 0.88);
+}
+.Asf_NfHeroText em {
+  font-style: normal;
+  color: #bfdbfe;
+  font-weight: 600;
+}
+.Asf_NfHeroFiltros {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.Asf_NfHeroFiltros .form-campo label {
+  color: rgba(226, 232, 240, 0.75);
+}
+.Asf_NfHeroFiltros select {
+  min-width: 120px;
+  border-color: rgba(148, 163, 184, 0.35);
+  background: rgba(15, 23, 42, 0.35);
+  color: #f8fafc;
+}
+.Asf_Kpis--nf .Asf_Kpi {
+  border-radius: 12px;
+  background: linear-gradient(180deg, #fff 0%, #f8fafc 100%);
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.03);
+}
+.Asf_NfProgress {
+  position: relative;
+  height: 28px;
+  margin: 0 0 14px;
+  border-radius: 999px;
+  background: #e8eef5;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+}
+.Asf_NfProgressBar {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0;
+  background: linear-gradient(90deg, #021F81 0%, #3b82f6 100%);
+  border-radius: inherit;
+  transition: width 0.45s ease;
+}
+.Asf_NfProgressTxt {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  text-align: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #1e293b;
+  mix-blend-mode: difference;
+  color: #f8fafc;
+  text-shadow: 0 0 2px rgba(15, 23, 42, 0.35);
+}
+.Asf_Card--nf {
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  overflow: hidden;
+}
+.Asf_Filtros--nf .Asf_CampoGrow { flex: 1 1 220px; }
+.Asf_TabelaWrap--nf { border-radius: 0 0 14px 14px; }
+.Asf_Tabela--nf tbody tr.is-nf-pend td {
+  background: linear-gradient(90deg, rgba(255, 237, 213, 0.35), transparent 42%);
+}
+.Asf_Tabela--nf tbody tr.is-nf-ok td {
+  background: linear-gradient(90deg, rgba(220, 252, 231, 0.28), transparent 42%);
+}
+.Asf_Tabela--nf tbody tr:hover td {
+  background: #f1f5f9;
+}
+.Asf_NfTenant {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.Asf_NfTenant > span:last-child {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.Asf_NfAvatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
   font-size: 0.78rem;
-  white-space: nowrap;
+  font-weight: 800;
+  color: #021F81;
+  background: #dbeafe;
+  letter-spacing: -0.02em;
 }
+.Asf_RefPill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 0.76rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.Asf_NfValor {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+.Asf_NfStatus {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.Asf_NfStatus i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.65);
+}
+.Asf_NfStatus.is-pend {
+  background: #ffedd5;
+  color: #9a3412;
+}
+.Asf_NfStatus.is-ok {
+  background: #dcfce7;
+  color: #166534;
+}
+.Asf_NfStatusMeta {
+  margin-left: 2px;
+  font-weight: 600;
+  opacity: 0.75;
+}
+.Asf_ColDados {
+  width: 1%;
+  white-space: nowrap;
+  text-align: center;
+}
+.Asf_ChipBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 11px;
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+  background: #fff;
+  color: #0f172a;
+  font-size: 0.76rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+.Asf_ChipBtn:hover {
+  border-color: #021F81;
+  color: #021F81;
+  background: #eff6ff;
+  box-shadow: 0 1px 2px rgba(2, 31, 129, 0.08);
+}
+.Asf_ChipBtn.is-ghost {
+  background: transparent;
+  border-color: transparent;
+  color: #64748b;
+  box-shadow: none;
+}
+.Asf_ChipBtn.is-ghost:hover {
+  background: #f1f5f9;
+  border-color: #e2e8f0;
+  color: #0f172a;
+}
+.Asf_ChipIco {
+  font-size: 0.78rem;
+  line-height: 1;
+  opacity: 0.9;
+}
+
 .Asf_CopyGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -275,10 +494,14 @@
   font-size: 0.95rem;
   line-height: 1;
   padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 .Asf_CopyBtn:hover:not(:disabled) {
   border-color: #021F81;
   color: #021F81;
+  background: #eff6ff;
 }
 .Asf_CopyBtn:disabled {
   opacity: 0.4;
@@ -287,9 +510,49 @@
 .Asf_CopyBtn.is-ok {
   border-color: #16a34a;
   color: #16a34a;
+  background: #f0fdf4;
 }
 .Asf_Modal:has(.Asf_CopyGrid) {
-  width: min(760px, calc(100vw - 32px));
+  width: min(780px, calc(100vw - 32px));
+}
+.Asf_NfModalTop {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  margin: 0 0 14px;
+}
+.Asf_NfModalSub {
+  margin: 2px 0 0;
+  font-size: 0.82rem;
+  color: #64748b;
+}
+.Asf_NfAviso {
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: #fff7ed;
+  color: #9a3412;
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+.Asf_NfOk {
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: #ecfdf5;
+  color: #166534;
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+.Asf_Bloco--nf {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid #e2e8f0;
+}
+.Asf_Bloco--nf h4 {
+  margin: 0 0 10px;
 }
 
 .Asf_MenuBtn {

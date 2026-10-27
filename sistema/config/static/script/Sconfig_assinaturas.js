@@ -525,14 +525,33 @@
   function renderNotaFiscal(data) {
     const r = data?.resumo || {};
     const mesLbl = data?.filtros?.mes_label || `${String(filtroMes).padStart(2, "0")}/${filtroAno}`;
+    const qtd = Number(r.qtd || 0);
+    const com = Number(r.com_nf || 0);
+    const sem = Number(r.sem_nf || 0);
     const box = el("asf_nf_kpis");
     if (box) {
       box.innerHTML = kpisHtml([
-        { label: "Pagas no mês", value: String(r.qtd ?? 0) },
-        { label: "Sem NF", value: String(r.sem_nf ?? 0), cls: "is-warn" },
-        { label: "Com NF", value: String(r.com_nf ?? 0), cls: "is-ok" },
-        { label: "A emitir (R$)", value: r.valor_sem_nf || "R$ 0,00", cls: "is-warn" },
+        { label: "A emitir", value: String(sem), cls: "is-warn" },
+        { label: "Anexadas", value: String(com), cls: "is-ok" },
+        { label: "Pagas (com valor)", value: String(qtd) },
+        { label: "Valor pendente", value: r.valor_sem_nf || "R$ 0,00", cls: "is-warn" },
       ]);
+    }
+    const prog = el("asf_nf_progress");
+    const bar = el("asf_nf_progress_bar");
+    const progTxt = el("asf_nf_progress_txt");
+    if (prog && bar && progTxt) {
+      if (qtd > 0) {
+        const pct = Math.round((com / qtd) * 100);
+        prog.hidden = false;
+        bar.style.width = `${pct}%`;
+        progTxt.textContent =
+          pct >= 100
+            ? `Mês ${mesLbl} concluído — todas as notas anexadas`
+            : `${com} de ${qtd} anexada(s) · ${pct}% do mês ${mesLbl}`;
+      } else {
+        prog.hidden = true;
+      }
     }
     const todas = data?.itens || [];
     const filtradas = todas.filter((a) => {
@@ -545,44 +564,63 @@
     if (hint) {
       hint.textContent = todas.length
         ? filtroNfBusca || filtroNfStatus
-          ? `${filtradas.length} de ${todas.length} paga(s) em ${mesLbl}`
-          : `${todas.length} paga(s) em ${mesLbl}`
-        : `Nenhuma cobrança paga em ${mesLbl}`;
+          ? `${filtradas.length} de ${todas.length} · ${mesLbl}`
+          : `${todas.length} cobrança(s) · ${mesLbl}`
+        : `Nada a emitir em ${mesLbl}`;
     }
     const tb = el("asf_nf_tbody");
     if (!tb) return;
     if (!filtradas.length) {
       tb.innerHTML = emptyRow(
-        8,
-        todas.length ? "Nenhuma cobrança com esses filtros." : "Nenhuma cobrança paga neste mês."
+        9,
+        todas.length
+          ? "Nenhuma cobrança com esses filtros."
+          : "Nenhuma cobrança paga com valor neste mês."
       );
       return;
     }
     tb.innerHTML = filtradas
       .map((a) => {
         const badge = a.tem_nf
-          ? `<span class="Asf_Badge is-pago">Anexada</span><div class="Asf_Muted">${esc(a.nf_anexado_br || "")}</div>`
-          : `<span class="Asf_Badge is-pendente">Pendente</span>`;
-        const dadosBtn = `<button type="button" class="Cl_BtnLink" data-nf-dados="${esc(a.id_fatura)}">Dados NF</button>`;
-        const acoes = a.tem_nf
+          ? `<span class="Asf_NfStatus is-ok"><i></i>Anexada<span class="Asf_NfStatusMeta">${esc(a.nf_anexado_br || "")}</span></span>`
+          : `<span class="Asf_NfStatus is-pend"><i></i>Pendente</span>`;
+        const dados = `<button type="button" class="Asf_ChipBtn" data-nf-dados="${esc(a.id_fatura)}" title="Abrir dados para emissão na H74">
+            <span class="Asf_ChipIco" aria-hidden="true">⧉</span>
+            <span>Dados NF</span>
+          </button>`;
+        const pdf = a.tem_nf
           ? `<div class="Asf_Acoes Asf_Acoes--nf">
-              ${dadosBtn}
-              <button type="button" class="Cl_BtnLink" data-nf-ver="${esc(a.id_fatura)}">Ver PDF</button>
-              <button type="button" class="Cl_BtnLink" data-nf-anexar="${esc(a.id_fatura)}" data-nf-nome="${esc(a.nome)}">Trocar</button>
+              <button type="button" class="Asf_ChipBtn" data-nf-ver="${esc(a.id_fatura)}" title="Abrir PDF anexado">
+                <span class="Asf_ChipIco" aria-hidden="true">▣</span><span>Ver PDF</span>
+              </button>
+              <button type="button" class="Asf_ChipBtn is-ghost" data-nf-anexar="${esc(a.id_fatura)}" data-nf-nome="${esc(a.nome)}" title="Substituir PDF">
+                <span>Trocar</span>
+              </button>
             </div>`
           : `<div class="Asf_Acoes Asf_Acoes--nf">
-              ${dadosBtn}
-              <button type="button" class="Cl_BtnPrimario Asf_BtnNf" data-nf-anexar="${esc(a.id_fatura)}" data-nf-nome="${esc(a.nome)}">Anexar PDF</button>
+              <button type="button" class="Asf_ChipBtn" data-nf-anexar="${esc(a.id_fatura)}" data-nf-nome="${esc(a.nome)}" title="Anexar PDF da NFS-e">
+                <span class="Asf_ChipIco" aria-hidden="true">↑</span><span>Anexar PDF</span>
+              </button>
             </div>`;
-        return `<tr>
+        const inicial = esc(String(a.nome || "?").trim().charAt(0).toUpperCase() || "?");
+        return `<tr class="${a.tem_nf ? "is-nf-ok" : "is-nf-pend"}">
           <td><strong>${esc(a.pago_br || "—")}</strong></td>
-          <td><strong>${esc(a.nome)}</strong><div class="Asf_Muted">#${esc(a.id_tenant)}</div></td>
+          <td>
+            <div class="Asf_NfTenant">
+              <span class="Asf_NfAvatar" aria-hidden="true">${inicial}</span>
+              <span>
+                <strong>${esc(a.nome)}</strong>
+                <span class="Asf_Muted">#${esc(a.id_tenant)}</span>
+              </span>
+            </div>
+          </td>
           <td>${esc(a.plano_label)}</td>
-          <td>${esc(a.referencia || a.id_fatura)}</td>
+          <td><span class="Asf_RefPill">${esc(a.referencia || a.id_fatura)}</span></td>
           <td>${esc(a.forma_label)}</td>
-          <td><strong>${esc(a.valor)}</strong></td>
+          <td><strong class="Asf_NfValor">${esc(a.valor)}</strong></td>
           <td>${badge}</td>
-          <td class="Asf_ColAcoes">${acoes}</td>
+          <td class="Asf_ColDados">${dados}</td>
+          <td class="Asf_ColAcoes">${pdf}</td>
         </tr>`;
       })
       .join("");
@@ -592,11 +630,14 @@
     const v = String(valor ?? "");
     const vazio = !v.trim();
     const star = obrigatorio ? " *" : "";
+    const show = vazio ? "—" : v;
     return `<label class="Asf_CopyField${vazio ? " is-empty" : ""}">
       <span class="Asf_CopyLabel">${esc(label)}${star}</span>
       <span class="Asf_CopyRow">
-        <input type="text" readonly value="${esc(v)}" data-copy-val="${esc(v)}" />
-        <button type="button" class="Asf_CopyBtn" data-copy-btn title="Copiar ${esc(label)}" aria-label="Copiar ${esc(label)}" ${vazio ? "disabled" : ""}>⧉</button>
+        <input type="text" readonly value="${esc(show)}" data-copy-val="${esc(v)}" />
+        <button type="button" class="Asf_CopyBtn" data-copy-btn title="Copiar ${esc(label)}" aria-label="Copiar ${esc(label)}" ${vazio ? "disabled" : ""}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2" stroke="currentColor" stroke-width="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
       </span>
     </label>`;
   }
@@ -604,9 +645,18 @@
   function htmlDadosNf(item) {
     const t = item?.tomador || {};
     const s = item?.servico || {};
-    return `<p class="Asf_FiltroHint" style="margin-top:0">
-        Copie cada campo para colar na emissão da NFS-e na H74.
-      </p>
+    const faltando = ["documento", "nome", "cep", "endereco", "numero", "bairro", "cidade", "uf"]
+      .filter((k) => !String(t[k] || "").trim()).length;
+    const aviso = faltando
+      ? `<p class="Asf_NfAviso">Faltam ${faltando} dado(s) no cadastro do tenant — complete antes de emitir.</p>`
+      : `<p class="Asf_NfOk">Cadastro completo para colar na H74.</p>`;
+    return `<div class="Asf_NfModalTop">
+        <div>
+          <p class="Asf_NfEyebrow">Tomador · NFS-e</p>
+          <p class="Asf_NfModalSub">${esc(item.plano_label || "")} · ${esc(item.referencia || "")} · ${esc(item.valor || "")}</p>
+        </div>
+        ${aviso}
+      </div>
       <div class="Asf_CopyGrid">
         ${campoCopia("CPF / CNPJ", t.documento, true)}
         ${campoCopia("Nome / Razão social", t.nome, true)}
@@ -619,8 +669,8 @@
         ${campoCopia("Cidade", t.cidade, false)}
         ${campoCopia("UF", t.uf, false)}
       </div>
-      <div class="Asf_Bloco" style="margin-top:14px">
-        <h4>Serviço / valor</h4>
+      <div class="Asf_Bloco Asf_Bloco--nf">
+        <h4>Serviço</h4>
         <div class="Asf_CopyGrid">
           ${campoCopia("Discriminação", s.discriminacao || "", false)}
           ${campoCopia("Valor", s.valor || item.valor || "", true)}
@@ -662,11 +712,12 @@
         document.body.removeChild(ta);
       }
       if (btn) {
-        const old = btn.textContent;
-        btn.textContent = "✓";
         btn.classList.add("is-ok");
+        const prev = btn.getAttribute("data-label-html") || btn.innerHTML;
+        btn.setAttribute("data-label-html", prev);
+        btn.innerHTML = "✓";
         setTimeout(() => {
-          btn.textContent = old || "⧉";
+          btn.innerHTML = btn.getAttribute("data-label-html") || prev;
           btn.classList.remove("is-ok");
         }, 900);
       }
