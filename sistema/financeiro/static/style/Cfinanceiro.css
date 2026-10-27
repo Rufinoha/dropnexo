@@ -2,6 +2,66 @@
 .Fin_Page .pt-page-title h2 { margin: 0 0 0.35rem; font-size: 1.35rem; color: #1c2e3b; }
 .Fin_Page .pt-page-desc { margin: 0; color: #64748b; font-size: 0.9rem; }
 
+.Fin_Head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem 1.75rem;
+  margin-bottom: 1rem;
+}
+.Fin_HeadText { min-width: 0; flex: 1; }
+.Fin_HeadText h2 {
+  margin: 0 0 0.35rem;
+  font-size: 1.35rem;
+  color: #1c2e3b;
+}
+.Fin_Head .Fin_Frase { margin: 0.65rem 0 0; }
+.Fin_Head .Fin_Aviso { margin-top: 0.45rem; }
+
+.Fin_HeadResumo {
+  display: flex;
+  flex-shrink: 0;
+  gap: 0.65rem;
+  margin-top: 0.1rem;
+}
+.Fin_HeadResumoItem {
+  min-width: 9.5rem;
+  padding: 0.55rem 0.9rem 0.6rem;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.05;
+}
+.Fin_HeadResumoItem strong {
+  font-size: 1.2rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+.Fin_HeadResumoItem span {
+  margin-top: 0.28rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.Fin_HeadResumoItem.is-prev {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+}
+.Fin_HeadResumoItem.is-aberto {
+  background: #ecfdf5;
+  border-color: #6ee7b7;
+  color: #047857;
+}
+
+@media (max-width: 760px) {
+  .Fin_Head { flex-direction: column; }
+  .Fin_HeadResumo { width: 100%; }
+  .Fin_HeadResumoItem { flex: 1; min-width: 0; }
+}
+
 .Fin_Frase {
   margin: 0 0 0.85rem;
   color: #1c2e3b;

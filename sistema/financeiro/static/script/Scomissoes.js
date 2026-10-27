@@ -30,6 +30,10 @@
     return dados?.planos_ativos || dados?.previsoes || [];
   }
 
+  function somaCentavos(lista, campo) {
+    return (lista || []).reduce((s, i) => s + Number(i?.[campo] || 0), 0);
+  }
+
   function resumo() {
     const frase = document.getElementById("com_frase");
     const aviso = document.getElementById("com_aviso");
@@ -49,6 +53,16 @@
         ? `Novas comissões vão para ${dados.pai_nome}. Aqui ficam só os valores que já estavam em aberto.`
         : "";
     }
+    const elPrev = document.getElementById("com_total_prev");
+    const elAberto = document.getElementById("com_total_aberto");
+    const totalPrev =
+      Number(dados.total_previsto_centavos) ||
+      somaCentavos(planosAtivos(), "valor_comissao_centavos");
+    const totalAberto =
+      Number(dados.total_aberto_centavos) ||
+      somaCentavos(dados.abertos || [], "valor_comissao_centavos");
+    if (elPrev) elPrev.textContent = brl(totalPrev);
+    if (elAberto) elAberto.textContent = brl(totalAberto);
   }
 
   function tabela(cols, rows, vazio) {

@@ -500,6 +500,7 @@ def api_comissoes_painel():
             pix_ok=False,
             pode_faturar=False,
             total_aberto_centavos=0,
+            total_previsto_centavos=0,
             planos_ativos=[],
             previsoes=[],
             abertos=[],

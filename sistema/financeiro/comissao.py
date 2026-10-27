@@ -1216,6 +1216,9 @@ def painel_comissoes(
         "pix_tipo": pix.get("tipo") or "",
         "pix_chave": pix.get("chave") or "",
         "total_aberto_centavos": total_aberto,
+        "total_previsto_centavos": sum(
+            int(i.get("valor_comissao_centavos") or 0) for i in (planos_ativos or [])
+        ),
         "planos_ativos": planos_ativos,
         "previsoes": planos_ativos,
         "abertos": abertos,
