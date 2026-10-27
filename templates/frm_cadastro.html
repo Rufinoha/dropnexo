@@ -11,7 +11,7 @@
   <meta name="robots" content="noindex, nofollow" />
   {% include "partials/marca_favicon.html" %}
   <link rel="stylesheet" href="{{ url_for('static', filename='style/global_utils.css') }}" />
-  <link rel="stylesheet" href="{{ url_for('static', filename='style/Ccadastro.css') }}?v=3" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style/Ccadastro.css') }}?v=4" />
   {% if tipo_negocio != 'fornecedor' %}
   <link rel="stylesheet" href="{{ url_for('static', filename='style/Csegmentos_nichos.css') }}" />
   {% endif %}
@@ -59,8 +59,11 @@
               <span class="cadastro-hint">Preenchida automaticamente pelo CNPJ.</span>
             </label>
             <label class="cadastro-field">
-              <span>Apelido / nome fantasia</span>
-              <input type="text" name="nome" id="nome" required maxlength="120" />
+              <span>Nome fantasia</span>
+              <input type="text" name="nome" id="nome" required maxlength="120"
+                class="cadastro-upper" autocomplete="organization"
+                placeholder="NOME AMIGÁVEL DA EMPRESA" />
+              <span class="cadastro-hint">Nome de exibição. A razão social acima fica exatamente como na Receita.</span>
             </label>
           </div>
           <label class="cadastro-field cadastro-field-span2">
@@ -210,6 +213,6 @@
   {% if tipo_negocio != 'fornecedor' %}
   <script src="{{ url_for('static', filename='script/Ssegmentos_nichos.js') }}"></script>
   {% endif %}
-  <script src="{{ url_for('static', filename='script/Scadastro.js') }}?v=10"></script>
+  <script src="{{ url_for('static', filename='script/Scadastro.js') }}?v=11"></script>
 </body>
 </html>

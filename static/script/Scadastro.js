@@ -132,6 +132,16 @@
       inpDoc.value = mascaraCnpj(inpDoc.value);
     });
 
+    const inpNomeFantasia = document.getElementById("nome");
+    inpNomeFantasia?.addEventListener("input", () => {
+      const start = inpNomeFantasia.selectionStart;
+      const end = inpNomeFantasia.selectionEnd;
+      inpNomeFantasia.value = String(inpNomeFantasia.value || "").toLocaleUpperCase("pt-BR");
+      try {
+        inpNomeFantasia.setSelectionRange(start, end);
+      } catch (_) {}
+    });
+
     let cnpjConsultado = "";
     let cnpjBusca = 0;
     let cnpjEmConsulta = "";
@@ -197,6 +207,11 @@
     function aplicarDadosCnpj(d) {
       const elRazao = document.getElementById("nome_completo");
       if (elRazao) elRazao.value = d.razao_social || "";
+      const elFantasia = document.getElementById("nome");
+      if (elFantasia && !(elFantasia.value || "").trim()) {
+        const fantasia = String(d.nome_fantasia || "").trim();
+        if (fantasia) elFantasia.value = fantasia.toLocaleUpperCase("pt-BR");
+      }
       if (inpCep) inpCep.value = d.cep ? mascaraCep(d.cep) : "";
       const logradouro = document.getElementById("logradouro");
       const bairro = document.getElementById("bairro");

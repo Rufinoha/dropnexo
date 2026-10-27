@@ -944,7 +944,7 @@ def api_minha_empresa_salvar():
     nome_completo = (dados.get("nome_completo") or "").strip()
     nome_fantasia = nome or (dados.get("nome_fantasia") or "").strip() or None
     if len(nome) < 2 or len(nome_completo) < 2:
-        return jsonify(success=False, message="Informe o apelido e a razão social."), 400
+        return jsonify(success=False, message="Informe o nome fantasia e a razão social."), 400
 
     cep = _so_digitos(dados.get("cep") or "")
     uf = (dados.get("uf") or "").strip().upper()
@@ -964,13 +964,17 @@ def api_minha_empresa_salvar():
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
-        cur.execute("SELECT tipo_pessoa, documento FROM tbl_tenant WHERE id = %s", (id_tenant,))
+        cur.execute(
+            "SELECT tipo_pessoa, documento, tipo_negocio FROM tbl_tenant WHERE id = %s",
+            (id_tenant,),
+        )
         row_tipo = cur.fetchone()
         if not row_tipo:
             return jsonify(success=False, message="Empresa não encontrada."), 404
 
         tipo_atual = (row_tipo[0] or "F").strip().upper()
         documento_atual = _so_digitos(row_tipo[1] or "")
+        tipo_negocio = (row_tipo[2] or "").strip().lower()
         tipo_solicitado = (dados.get("tipo_pessoa") or tipo_atual).strip().upper()
         documento_solicitado = _so_digitos(dados.get("documento") or documento_atual)
 
@@ -993,6 +997,11 @@ def api_minha_empresa_salvar():
                 return jsonify(success=False, message="Este CNPJ já está cadastrado."), 409
             tipo_final = "J"
             documento_final = documento_solicitado
+
+        # Fornecedor PJ: nome fantasia em maiúsculas; razão social permanece como enviada/cadastrada.
+        if tipo_negocio == "fornecedor" and tipo_final == "J":
+            nome = nome.upper()
+            nome_fantasia = (nome_fantasia or nome).upper()
 
         lista_ie = _normalizar_ies(dados.get("inscricoes_ie") or [])
         ie_padrao = _gravar_ies(cur, id_tenant, lista_ie)

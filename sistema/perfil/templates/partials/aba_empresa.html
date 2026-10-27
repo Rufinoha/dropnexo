@@ -50,8 +50,14 @@
           <div class="mp-brand-fields">
             <div class="mp-g12">
               <div class="filter-group mp-c12">
-                <label for="emp-nome">Apelido — nome de exibição ou fantasia <span class="ch-req">*</span></label>
-                <input type="text" id="emp-nome" maxlength="120" />
+                <label for="emp-nome">
+                  <span id="emp-lbl-nome">Apelido — nome de exibição ou fantasia</span>
+                  <span class="ch-req">*</span>
+                </label>
+                <input type="text" id="emp-nome" maxlength="120" autocomplete="organization" />
+                <p class="hint" id="emp-nome-hint" hidden>
+                  Nome amigável da empresa (exibição). A razão social abaixo permanece conforme o cadastro na Receita.
+                </p>
               </div>
               <div class="filter-group mp-c4">
                 <label for="emp-tipo-pessoa">Tipo</label>

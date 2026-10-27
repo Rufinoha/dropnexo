@@ -46,6 +46,34 @@
     return (dadosOriginais?.tipo_pessoa || "F").toUpperCase();
   }
 
+  function ehFornecedorPj() {
+    const negocio = String(dadosOriginais?.tipo_negocio || cfg.tipoNegocio || "").toLowerCase();
+    const tipo = (el("emp-tipo-pessoa")?.value || tipoOriginal() || "F").toUpperCase();
+    return negocio === "fornecedor" && tipo === "J";
+  }
+
+  function paraMaiusculas(v) {
+    return String(v || "").toLocaleUpperCase("pt-BR");
+  }
+
+  function aplicarUiNomeFantasia() {
+    const lbl = el("emp-lbl-nome");
+    const inp = el("emp-nome");
+    const hint = el("emp-nome-hint");
+    const pjForn = ehFornecedorPj();
+    if (lbl) {
+      lbl.textContent = pjForn
+        ? "Nome fantasia"
+        : "Apelido — nome de exibição ou fantasia";
+    }
+    if (hint) hint.hidden = !pjForn;
+    if (inp) {
+      inp.classList.toggle("mp-input-upper", pjForn);
+      inp.placeholder = pjForn ? "NOME AMIGÁVEL DA EMPRESA" : "";
+      if (pjForn && inp.value) inp.value = paraMaiusculas(inp.value);
+    }
+  }
+
   function aplicarUiTipoPessoa() {
     const sel = el("emp-tipo-pessoa");
     const doc = el("emp-documento");
@@ -67,6 +95,7 @@
       doc.classList.add("mp-readonly");
       if (btnCnpj) btnCnpj.hidden = true;
       doc.value = formatarDocumento(dadosOriginais?.documento || doc.value, "J");
+      aplicarUiNomeFantasia();
       return;
     }
 
@@ -89,6 +118,7 @@
       if (btnCnpj) btnCnpj.hidden = true;
       doc.value = formatarDocumento(dadosOriginais?.documento || "", "F");
     }
+    aplicarUiNomeFantasia();
   }
 
   async function onTipoPessoaChange() {
@@ -318,10 +348,15 @@
   function preencher(d) {
     dadosOriginais = d;
     conversaoPjAtiva = false;
-    el("emp-nome").value = d.nome || d.nome_fantasia || "";
     el("emp-tipo-pessoa").value = d.tipo_pessoa || "J";
     el("emp-documento").value = formatarDocumento(d.documento || "", d.tipo_pessoa || "F");
     el("emp-razao").value = d.nome_completo || d.razao_social || "";
+    const fantasia = d.nome_fantasia || d.nome || "";
+    el("emp-nome").value =
+      String(d.tipo_negocio || "").toLowerCase() === "fornecedor" &&
+      String(d.tipo_pessoa || "").toUpperCase() === "J"
+        ? paraMaiusculas(fantasia)
+        : fantasia;
     ies = (d.inscricoes_ie || []).map(function (i) {
       return {
         uf: (i.uf || "").toUpperCase(),
@@ -392,7 +427,11 @@
       if (!r.ok || !j.success) throw new Error(j.message || "Erro na consulta do CNPJ.");
       const dados = j.dados || {};
       if (dados.razao_social) el("emp-razao").value = dados.razao_social;
-      if (dados.nome_fantasia) el("emp-nome").value = dados.nome_fantasia;
+      if (dados.nome_fantasia) {
+        el("emp-nome").value = ehFornecedorPj()
+          ? paraMaiusculas(dados.nome_fantasia)
+          : dados.nome_fantasia;
+      }
       if (dados.cep) el("emp-cep").value = dados.cep;
       if (dados.logradouro) el("emp-logradouro").value = dados.logradouro;
       if (dados.numero) el("emp-numero").value = dados.numero;
@@ -458,7 +497,10 @@
       return false;
     }
 
-    if (falta("emp-nome", "dados", "Informe o apelido da empresa.")
+    const msgNome = ehFornecedorPj()
+      ? "Informe o nome fantasia da empresa."
+      : "Informe o apelido da empresa.";
+    if (falta("emp-nome", "dados", msgNome)
       || falta("emp-razao", "dados", "Informe a razão social.")
       || falta("emp-cep", "endereco", "Informe o CEP.")
       || falta("emp-uf", "endereco", "Informe a UF.")
@@ -467,12 +509,17 @@
       || falta("emp-regime", "fiscais", "Informe o regime tributário.")) {
       return;
     }
-    const apelido = el("emp-nome").value.trim();
+    let apelido = el("emp-nome").value.trim();
+    if (ehFornecedorPj()) {
+      apelido = paraMaiusculas(apelido);
+      el("emp-nome").value = apelido;
+    }
     const tipoSel = (el("emp-tipo-pessoa")?.value || tipoOriginal()).toUpperCase();
+    const razao = el("emp-razao").value.trim();
     const body = {
       nome: apelido,
-      nome_completo: el("emp-razao").value.trim(),
-      razao_social: el("emp-razao").value.trim(),
+      nome_completo: razao,
+      razao_social: razao,
       nome_fantasia: apelido,
       tipo_pessoa: tipoSel,
       inscricao_estadual: (iePadrao() || {}).inscricao_estadual || "",
@@ -560,6 +607,15 @@
     el("emp-tipo-pessoa")?.addEventListener("change", onTipoPessoaChange);
     el("emp-documento")?.addEventListener("input", function () {
       if (conversaoPjAtiva) this.value = mascaraCnpj(this.value);
+    });
+    el("emp-nome")?.addEventListener("input", function () {
+      if (!ehFornecedorPj()) return;
+      const start = this.selectionStart;
+      const end = this.selectionEnd;
+      this.value = paraMaiusculas(this.value);
+      try {
+        this.setSelectionRange(start, end);
+      } catch (_) {}
     });
     el("emp-btn-cnpj")?.addEventListener("click", buscarCnpj);
     el("emp-btn-cep")?.addEventListener("click", buscarCep);

@@ -107,6 +107,10 @@
   font: inherit;
 }
 
+.cadastro-field input.cadastro-upper {
+  text-transform: uppercase;
+}
+
 .cadastro-body--fornecedor .cadastro-section {
   margin-bottom: 0.85rem;
 }

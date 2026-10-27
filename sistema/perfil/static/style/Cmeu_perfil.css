@@ -968,6 +968,15 @@ a.mp-cancel-link {
   min-width: 0;
 }
 
+.mp-form-empresa .mp-input-upper {
+  text-transform: uppercase;
+}
+.mp-form-empresa #emp-nome-hint {
+  margin: 4px 0 0;
+  font-size: 0.75rem;
+  color: #64748b;
+  line-height: 1.35;
+}
 .mp-form-empresa .mp-tipo-hint {
   margin: 0.25rem 0 0;
   font-size: 0.8rem;

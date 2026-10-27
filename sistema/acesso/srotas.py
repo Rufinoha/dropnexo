@@ -1438,7 +1438,10 @@ def api_cadastro_novo():
 
     if tipo_negocio in ("fornecedor", "armazem"):
         if len(nome_tenant) < 2:
-            return jsonify(success=False, message="Informe o apelido ou nome fantasia."), 400
+            return jsonify(success=False, message="Informe o nome fantasia."), 400
+        if tipo_negocio == "fornecedor":
+            # Nome fantasia em maiúsculas; razão social (nome_completo) permanece exatamente da Receita.
+            nome_tenant = nome_tenant.upper()
     else:
         if len(nome_tenant) < 2:
             nome_tenant = nome_completo[:120]
@@ -1520,6 +1523,14 @@ def api_cadastro_novo():
         id_tenant = cur.fetchone()[0]
 
         if tipo_negocio == "fornecedor":
+            cur.execute(
+                """
+                UPDATE tbl_tenant
+                SET razao_social = %s, nome_fantasia = %s
+                WHERE id = %s
+                """,
+                (nome_completo, nome_tenant, id_tenant),
+            )
             ids_parsed: list[int] = []
             for x in ids_segmentos_nichos:
                 try:
