@@ -10,10 +10,18 @@
     entregue: "Entregue",
   };
 
-  const STATUS_LABEL_COMPRADOR = {
+  const STATUS_LABEL_CLIENTE = {
     pendente: "Pendente",
     pago: "Pago",
     cancelado: "Cancelado",
+  };
+
+  const ORIGEM_LABEL = {
+    manual: "Manual",
+    bling: "Bling",
+    mercado_livre: "Mercado Livre",
+    amazon: "Amazon",
+    tiktok: "TikTok",
   };
 
   const stV = (p) => (typeof p === "string" ? p : p?.status_vendedor || p?.status || "");
@@ -112,14 +120,98 @@
     el.msg.classList.toggle("is-erro", !!erro);
   }
 
-  function badge(status, tipo = "vendedor") {
-    const labels = tipo === "comprador" ? STATUS_LABEL_COMPRADOR : STATUS_LABEL_VENDEDOR;
-    const cls = tipo === "comprador" ? `Pd_Badge Pd_Badge--c_${status}` : `Pd_Badge Pd_Badge--${status}`;
+  function badge(status, tipo = "pedido") {
+    const labels = tipo === "cliente" || tipo === "comprador" ? STATUS_LABEL_CLIENTE : STATUS_LABEL_VENDEDOR;
+    const cls =
+      tipo === "cliente" || tipo === "comprador"
+        ? `Pd_Badge Pd_Badge--c_${status}`
+        : `Pd_Badge Pd_Badge--${status}`;
     return `<span class="${cls}">${labels[status] || status}</span>`;
   }
 
   function badgesPedido(p) {
-    return `<span class="Pd_StatusPair">${badge(stC(p), "comprador")}${badge(stV(p), "vendedor")}</span>`;
+    return `<span class="Pd_StatusPair">${badge(stC(p), "cliente")}${badge(stV(p), "pedido")}</span>`;
+  }
+
+  function origemLabel(origem) {
+    const o = (origem || "manual").toLowerCase();
+    return ORIGEM_LABEL[o] || (origem ? String(origem) : "Manual");
+  }
+
+  function origemHtml(origem) {
+    const o = (origem || "manual").toLowerCase();
+    return `<span class="Pd_Origem" data-origem="${esc(o)}">${esc(origemLabel(o))}</span>`;
+  }
+
+  function fecharMenusAcoes() {
+    document.querySelectorAll(".Pd_MenuLista").forEach((n) => n.remove());
+  }
+
+  function executarAcaoLista(acao, idPed, idG, status) {
+    if (!idG && !idPed) {
+      if (window.Swal) {
+        Swal.fire({ icon: "info", title: "Pedido", text: "Pedido indisponível.", confirmButtonColor: "#021F81" });
+      }
+      return;
+    }
+    if (acao === "editar") {
+      const st = status || "";
+      const painel = ["importado", "aguardando_pagamento", "pago"].includes(st) ? "valores" : "produto";
+      abrirModalEdicao({
+        idGrupo: idG || null,
+        idPedido: idG ? null : idPed,
+        painelInicial: painel,
+        idPedidoFoco: idPed,
+      });
+      return;
+    }
+    if (acao === "cancelar") {
+      const ped = todosPedidos.find((p) => p.id === idPed);
+      if (ped) cancelarPedidos([ped]);
+      return;
+    }
+    if (acao === "nf" || acao === "etiqueta") {
+      abrirModalEdicao({
+        idGrupo: idG || null,
+        idPedido: idG ? null : idPed,
+        painelInicial: "frete",
+        idPedidoFoco: idPed,
+      });
+    }
+  }
+
+  function abrirMenuAcoes(btn) {
+    fecharMenusAcoes();
+    const idPed = +btn.getAttribute("data-id");
+    const idG = +(btn.getAttribute("data-grupo") || 0);
+    const status = btn.getAttribute("data-status") || "";
+    const origem = (btn.getAttribute("data-origem") || "manual").toLowerCase();
+    const box = document.createElement("div");
+    box.className = "Pd_MenuLista";
+
+    function item(label, acao, extraClass) {
+      const b = document.createElement("button");
+      b.type = "button";
+      if (extraClass) b.className = extraClass;
+      b.textContent = label;
+      b.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        fecharMenusAcoes();
+        executarAcaoLista(acao, idPed, idG, status);
+      });
+      box.appendChild(b);
+    }
+
+    item(status === "rascunho" ? "Editar pedido" : "Ver pedido", "editar");
+    item("Incluir NF", "nf");
+    item("Incluir etiqueta", "etiqueta");
+    if (origem === "manual" && status !== "cancelado") {
+      item("Cancelar pedido", "cancelar", "is-danger");
+    }
+    document.body.appendChild(box);
+    const r = btn.getBoundingClientRect();
+    box.style.top = `${r.bottom + 4}px`;
+    box.style.left = `${Math.max(8, r.right - box.offsetWidth)}px`;
   }
 
   let todosPedidos = [];
@@ -268,24 +360,28 @@
     if (paginaAtual < 1) paginaAtual = 1;
     const pagina = rows.slice((paginaAtual - 1) * porPagina, paginaAtual * porPagina);
     el.tbody.innerHTML = pagina
-      .map(
-        (p) => `
+      .map((p) => {
+        const data = p.criado_em ? new Date(p.criado_em).toLocaleDateString("pt-BR") : "—";
+        return `
       <tr>
-        <td><strong>${esc(p.numero)}</strong></td>
-        <td>${esc(p.fornecedor_nome || "")}</td>
-        <td>${esc(p.cliente_nome || "")}</td>
-        <td>${fmt(p.valor_total)}</td>
-        <td>${badge(stC(p), "comprador")}</td>
-        <td>${badge(stV(p), "vendedor")}</td>
-        <td>${p.criado_em ? new Date(p.criado_em).toLocaleDateString("pt-BR") : "—"}</td>
+        <td><strong class="Pd_Num">${esc(p.numero)}</strong></td>
+        <td>${esc(data)}</td>
+        <td>${esc(p.fornecedor_nome || "—")}</td>
+        <td>${esc(p.cliente_nome || "—")}</td>
+        <td><strong>${fmt(p.valor_total)}</strong></td>
+        <td>${origemHtml(p.origem)}</td>
+        <td>${badge(stC(p), "cliente")}</td>
+        <td>${badge(stV(p), "pedido")}</td>
         <td class="Cl_TableActions Pd_Acoes">
-          ${icoBtn("editar", stV(p) === "rascunho" ? "Editar pedido" : "Ver pedido", "Pd_BtnEdit", `data-acao="editar" data-id="${p.id}" data-grupo="${p.id_grupo || ""}" data-status="${esc(stV(p))}"`)}
-          ${icoBtn("nf_hub", "Incluir NF", "Pd_BtnNf", `data-acao="nf" data-id="${p.id}" data-grupo="${p.id_grupo || ""}"`)}
-          ${icoBtn("etiqueta", "Incluir etiqueta", "Pd_BtnEtq", `data-acao="etiqueta" data-id="${p.id}" data-grupo="${p.id_grupo || ""}"`)}
-          ${(p.origem || "manual") === "manual" && stV(p) !== "cancelado" ? icoBtn("cancelar", "Cancelar pedido", "Pd_BtnCancel", `data-acao="cancelar" data-id="${p.id}"`) : ""}
+          <button type="button" class="Pd_MenuBtn" aria-label="Ações"
+            data-menu="1"
+            data-id="${p.id}"
+            data-grupo="${p.id_grupo || ""}"
+            data-status="${esc(stV(p))}"
+            data-origem="${esc(p.origem || "manual")}">⋮</button>
         </td>
-      </tr>`
-      )
+      </tr>`;
+      })
       .join("");
     if (el.vazio) {
       el.vazio.hidden = rows.length > 0;
@@ -3155,41 +3251,14 @@
   document.getElementById("pd_btnConfirmar")?.addEventListener("click", () => salvar(true));
 
   el.tbody?.addEventListener("click", (ev) => {
-    const btn = ev.target.closest("button[data-acao]");
-    if (!btn) return;
-    const acao = btn.dataset.acao;
-    const idPed = +btn.dataset.id;
-    const idG = +btn.dataset.grupo;
-    if (!idG && !idPed) {
-      if (window.Swal) {
-        Swal.fire({ icon: "info", title: "Pedido", text: "Pedido indisponível.", confirmButtonColor: "#021F81" });
-      }
-      return;
-    }
-    if (acao === "editar") {
-      const st = btn.dataset.status || "";
-      const painel = ["importado", "aguardando_pagamento", "pago"].includes(st) ? "valores" : "produto";
-      abrirModalEdicao({
-        idGrupo: idG || null,
-        idPedido: idG ? null : idPed,
-        painelInicial: painel,
-        idPedidoFoco: idPed,
-      });
-      return;
-    }
-    if (acao === "cancelar") {
-      const ped = todosPedidos.find((p) => p.id === idPed);
-      if (ped) cancelarPedidos([ped]);
-      return;
-    }
-    if (acao === "nf" || acao === "etiqueta") {
-      abrirModalEdicao({
-        idGrupo: idG || null,
-        idPedido: idG ? null : idPed,
-        painelInicial: "frete",
-        idPedidoFoco: idPed,
-      });
-    }
+    const menuBtn = ev.target.closest("button[data-menu]");
+    if (!menuBtn) return;
+    ev.stopPropagation();
+    abrirMenuAcoes(menuBtn);
+  });
+  document.addEventListener("click", fecharMenusAcoes);
+  document.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape") fecharMenusAcoes();
   });
 
   function bootPedidos() {

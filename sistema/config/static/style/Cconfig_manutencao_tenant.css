@@ -935,3 +935,43 @@ button.CfgMt_KpiMini:hover {
 }
 .CfgMt_ComBusca button:hover { background: #f8fafc; }
 .CfgMt_ComAcoes { margin-top: 1rem; }
+
+.CfgMt_Muted {
+  color: #64748b;
+  font-size: 0.78rem;
+  margin-top: 0.15rem;
+}
+.CfgMt_MenuBtn {
+  border: 0;
+  background: transparent;
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0.15rem 0.45rem;
+  border-radius: 8px;
+  color: #1c2e3b;
+}
+.CfgMt_MenuBtn:hover { background: #f1f5f9; }
+.CfgMt_MenuLista {
+  position: fixed;
+  z-index: 80;
+  min-width: 180px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+  padding: 0.3rem;
+}
+.CfgMt_MenuLista button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  color: #1c2e3b;
+  padding: 0.45rem 0.6rem;
+  border-radius: 8px;
+  font: inherit;
+  cursor: pointer;
+}
+.CfgMt_MenuLista button:hover { background: #f8fafc; }

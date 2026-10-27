@@ -89,6 +89,27 @@ def status_comprador_pedido(ped: dict) -> str:
     return (ped.get("status_comprador") or STATUS_COMPRADOR_PENDENTE).strip()
 
 
+def pedido_pago_pelo_vendedor(ped: dict | str | None) -> bool:
+    """
+    Vendedor já pagou o fornecedor: comprovante anexado (aguardando_confirmacao),
+    confirmação via API/integração (pago) ou já expedido/entregue.
+    """
+    st = status_vendedor_pedido(ped) if isinstance(ped, dict) else (ped or "").strip()
+    return st in (
+        STATUS_PAGO,
+        STATUS_AGUARDANDO_CONFIRMACAO,
+        STATUS_EM_EXPEDICAO,
+        STATUS_ENTREGUE,
+    )
+
+
+MSG_ETIQUETA_SEM_PAGAMENTO = (
+    "O vendedor ainda não pagou este pedido. "
+    "A etiqueta só é liberada depois do pagamento "
+    "(comprovante anexado ou confirmação da integração)."
+)
+
+
 def _frete_editavel_status(st: str) -> bool:
     return st in (STATUS_RASCUNHO, STATUS_IMPORTADO, STATUS_AGUARDANDO)
 

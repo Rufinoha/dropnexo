@@ -4,7 +4,7 @@
 {% block topbar_title %}Manutenção de tenant{% endblock %}
 {% block head_extra %}
 <link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_crud.css') }}?v=3" />
-<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_manutencao_tenant.css') }}?v=21" />
+<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_manutencao_tenant.css') }}?v=22" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ConfigPage CfgMt_Page">
@@ -16,6 +16,7 @@
   <nav class="CfgMt_Tabs" id="cfgmt_tabs" aria-label="Seções">
     <button type="button" class="CfgMt_Tab is-active" data-cfgmt-tab="dashboard">Dashboard</button>
     <button type="button" class="CfgMt_Tab" data-cfgmt-tab="tenants">Tenants</button>
+    <button type="button" class="CfgMt_Tab" data-cfgmt-tab="reativacao">Solicitações de reativação</button>
     <button type="button" class="CfgMt_Tab" data-cfgmt-tab="fundador">Fornecedor Fundador</button>
   </nav>
 
@@ -148,6 +149,34 @@
     </section>
   </div>
 
+  <div id="cfgmt_pane_reativacao" class="CfgMt_Pane" hidden>
+    <header class="CfgMt_FundadorHead">
+      <div>
+        <h3>Solicitações de reativação de conta</h3>
+        <p class="CfgMt_FundadorStatus" id="cfgmt_reativacao_hint">Contas encerradas que pediram para voltar.</p>
+      </div>
+      <button type="button" class="Cl_BtnCancelar" id="cfgmt_btnRefreshReativacao">Atualizar</button>
+    </header>
+    <div class="Cl_TabelaPrincipal Cat_TabelaScroll">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Tenant</th>
+            <th>Tipo</th>
+            <th>Encerrada em</th>
+            <th>Pedido em</th>
+            <th>Solicitante</th>
+            <th class="Cl_TableActions">Ações</th>
+          </tr>
+        </thead>
+        <tbody id="cfgmt_reativacao_lista">
+          <tr><td colspan="7">Carregando…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
   <div id="cfgmt_pane_fundador" class="CfgMt_Pane CfgMt_PaneFundador" hidden>
     <header class="CfgMt_FundadorHead">
       <div>
@@ -259,5 +288,5 @@
 {% block page_js %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
-<script src="{{ url_for('config.static', filename='script/Sconfig_manutencao_tenant.js') }}?v=22"></script>
+<script src="{{ url_for('config.static', filename='script/Sconfig_manutencao_tenant.js') }}?v=23"></script>
 {% endblock %}

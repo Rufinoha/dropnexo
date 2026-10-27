@@ -4028,6 +4028,64 @@ def integracao_status_padrao_excluir():
 
 
 
+@config_bp.get(f"{MANUTENCAO_TENANT_PREFIX}/reativacoes")
+@login_obrigatorio()
+def manutencao_tenant_reativacoes():
+    if (r := _exigir_dev()) is not None:
+        return r
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        from sistema.perfil.reativacao import listar_solicitacoes_reativacao
+
+        itens = listar_solicitacoes_reativacao(cur)
+        conn.commit()
+        return jsonify(success=True, itens=itens)
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
+@config_bp.post(f"{MANUTENCAO_TENANT_PREFIX}/reativacoes/<int:id_tenant>/aprovar")
+@login_obrigatorio()
+def manutencao_tenant_reativar(id_tenant: int):
+    if (r := _exigir_dev()) is not None:
+        return r
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        from sistema.perfil.reativacao import enviar_email_conta_reativada, reativar_conta
+
+        res = reativar_conta(cur, int(id_tenant), id_admin=session.get("id_usuario"))
+        email_ok = False
+        email_msg = ""
+        if res.get("email"):
+            email_ok, email_msg = enviar_email_conta_reativada(
+                email=res["email"],
+                nome_usuario=res.get("nome_usuario") or "",
+                nome_conta=res.get("tenant_nome") or "",
+                cupom=res.get("cupom") or "REATIVA30",
+            )
+        conn.commit()
+        extra = " E-mail de boas-vindas enviado." if email_ok else f" E-mail: {email_msg or 'não enviado'}."
+        return jsonify(
+            success=True,
+            message=(res.get("mensagem") or "Conta reativada.") + extra,
+            cupom=res.get("cupom"),
+            email_ok=email_ok,
+        )
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 400
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
 @config_bp.get(f"{MANUTENCAO_TENANT_PREFIX}/fundador")
 @login_obrigatorio()
 def manutencao_tenant_fundador_lista():

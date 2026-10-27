@@ -36,7 +36,11 @@
     tabs: document.getElementById("cfgmt_tabs"),
     paneDash: document.getElementById("cfgmt_pane_dashboard"),
     paneTenants: document.getElementById("cfgmt_pane_tenants"),
+    paneReativacao: document.getElementById("cfgmt_pane_reativacao"),
     paneFundador: document.getElementById("cfgmt_pane_fundador"),
+    reativacaoLista: document.getElementById("cfgmt_reativacao_lista"),
+    reativacaoHint: document.getElementById("cfgmt_reativacao_hint"),
+    btnRefreshReativacao: document.getElementById("cfgmt_btnRefreshReativacao"),
     fundadorLista: document.getElementById("cfgmt_fundador_lista"),
     fundadorStatus: document.getElementById("cfgmt_fundador_status"),
     btnMigrarForn: document.getElementById("cfgmt_btnMigrarForn"),
@@ -65,13 +69,113 @@
     Chart.register(ChartDataLabels);
   }
 
+  function fecharMenusReativacao() {
+    document.querySelectorAll(".CfgMt_MenuLista").forEach((n) => n.remove());
+  }
+
+  function abrirMenuReativacao(btn) {
+    fecharMenusReativacao();
+    const id = btn.getAttribute("data-id");
+    const nome = btn.getAttribute("data-nome") || "";
+    const box = document.createElement("div");
+    box.className = "CfgMt_MenuLista";
+    const item = document.createElement("button");
+    item.type = "button";
+    item.textContent = "Reativar conta";
+    item.addEventListener("click", async () => {
+      fecharMenusReativacao();
+      await aprovarReativacao(+id, nome);
+    });
+    box.appendChild(item);
+    document.body.appendChild(box);
+    const r = btn.getBoundingClientRect();
+    box.style.top = r.bottom + 4 + "px";
+    box.style.left = Math.max(8, r.right - box.offsetWidth) + "px";
+  }
+
+  async function carregarReativacoes() {
+    if (!el.reativacaoLista) return;
+    el.reativacaoLista.innerHTML = '<tr><td colspan="7">Carregando…</td></tr>';
+    try {
+      const r = await fetch(BASE + "/reativacoes", { credentials: "same-origin" });
+      const j = await r.json();
+      if (!j.success) throw new Error(j.message || "Erro");
+      const itens = j.itens || [];
+      if (el.reativacaoHint) {
+        el.reativacaoHint.textContent = itens.length
+          ? `${itens.length} solicitação(ões) aguardando análise`
+          : "Nenhuma solicitação pendente.";
+      }
+      if (!itens.length) {
+        el.reativacaoLista.innerHTML =
+          '<tr><td colspan="7">Nenhuma solicitação de reativação.</td></tr>';
+        return;
+      }
+      el.reativacaoLista.innerHTML = itens
+        .map(
+          (t) => `<tr>
+          <td>${t.id_tenant}</td>
+          <td><strong>${esc(t.nome)}</strong><div class="CfgMt_Muted">${esc(t.slug || "")}</div></td>
+          <td>${esc(t.tipo_negocio || "—")}</td>
+          <td>${esc(t.encerrada_br || "—")}</td>
+          <td>${esc(t.solicitada_br || "—")}</td>
+          <td>${esc(t.solicitante_nome || "—")}<div class="CfgMt_Muted">${esc(t.solicitante_email || "")}</div></td>
+          <td>
+            <button type="button" class="CfgMt_MenuBtn" data-id="${t.id_tenant}" data-nome="${esc(t.nome)}" aria-label="Ações">⋮</button>
+          </td>
+        </tr>`
+        )
+        .join("");
+      el.reativacaoLista.querySelectorAll(".CfgMt_MenuBtn").forEach((btn) => {
+        btn.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          abrirMenuReativacao(btn);
+        });
+      });
+    } catch (err) {
+      el.reativacaoLista.innerHTML = `<tr><td colspan="7">${esc(err.message || "Erro")}</td></tr>`;
+    }
+  }
+
+  async function aprovarReativacao(id, nome) {
+    const ask = await Swal.fire({
+      icon: "question",
+      title: "Reativar conta?",
+      html: `<p style="margin:0">A conta <strong>${esc(nome)}</strong> volta a acessar o painel. Enviamos e-mail de boas-vindas com o cupom <strong>REATIVA30</strong>.</p>`,
+      showCancelButton: true,
+      confirmButtonText: "Reativar conta",
+      cancelButtonText: "Voltar",
+      confirmButtonColor: "#021F81",
+      cancelButtonColor: "#64748b",
+    });
+    if (!ask.isConfirmed) return;
+    const r = await fetch(BASE + "/reativacoes/" + id + "/aprovar", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { Accept: "application/json" },
+    });
+    const j = await r.json();
+    if (!j.success) {
+      await Swal.fire({ icon: "error", title: "Erro", text: j.message || "Falha", confirmButtonColor: "#021F81" });
+      return;
+    }
+    await Swal.fire({
+      icon: "success",
+      title: "Conta reativada",
+      text: j.message || "Pronto.",
+      confirmButtonColor: "#021F81",
+    });
+    await carregarReativacoes();
+  }
+
   function ativarAba(tab) {
-    const id = ["tenants", "fundador"].includes(tab) ? tab : "dashboard";
+    const id = ["tenants", "fundador", "reativacao"].includes(tab) ? tab : "dashboard";
     el.tabs?.querySelectorAll(".CfgMt_Tab").forEach((b) => {
       b.classList.toggle("is-active", b.dataset.cfgmtTab === id);
     });
     if (el.paneDash) el.paneDash.hidden = id !== "dashboard";
     if (el.paneTenants) el.paneTenants.hidden = id !== "tenants";
+    if (el.paneReativacao) el.paneReativacao.hidden = id !== "reativacao";
     if (el.paneFundador) el.paneFundador.hidden = id !== "fundador";
     try {
       localStorage.setItem("cfgmt_aba", id);
@@ -86,6 +190,7 @@
       }
     }
     if (id === "tenants" && !tenantsCarregados) carregar();
+    if (id === "reativacao") carregarReativacoes();
     if (id === "fundador") carregarFundadores();
   }
 
@@ -1138,6 +1243,11 @@
   el.btnRefresh?.addEventListener("click", () => {
     metricasCarregadas = false;
     carregarMetricas();
+  });
+  el.btnRefreshReativacao?.addEventListener("click", () => carregarReativacoes());
+  document.addEventListener("click", fecharMenusReativacao);
+  document.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape") fecharMenusReativacao();
   });
   document.getElementById("cfgmt_kpi_pendente")?.addEventListener("click", () => {
     abrirPendenteModal();

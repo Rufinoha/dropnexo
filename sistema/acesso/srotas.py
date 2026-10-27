@@ -375,6 +375,44 @@ def api_login():
         )
         row = cur.fetchone()
         if not row:
+            from sistema.perfil.reativacao import localizar_conta_encerrada
+
+            encerrada = localizar_conta_encerrada(cur, email)
+            if encerrada and encerrada.get("senha_hash"):
+                try:
+                    ok_enc = bcrypt.checkpw(
+                        senha.encode("utf-8"),
+                        encerrada["senha_hash"].encode("utf-8"),
+                    )
+                except Exception:
+                    ok_enc = False
+                if ok_enc:
+                    dia = encerrada.get("encerrada_em_br") or "—"
+                    if encerrada.get("ja_solicitou"):
+                        return jsonify(
+                            success=False,
+                            conta_encerrada=True,
+                            ja_solicitou=True,
+                            id_tenant=encerrada["id_tenant"],
+                            tenant_nome=encerrada["tenant_nome"],
+                            encerrada_em_br=dia,
+                            message=(
+                                f"A conta «{encerrada['tenant_nome']}» foi encerrada em {dia}. "
+                                "Seu pedido de reativação já está com a equipe DropNexo."
+                            ),
+                        ), 403
+                    return jsonify(
+                        success=False,
+                        conta_encerrada=True,
+                        ja_solicitou=False,
+                        id_tenant=encerrada["id_tenant"],
+                        tenant_nome=encerrada["tenant_nome"],
+                        encerrada_em_br=dia,
+                        message=(
+                            f"A conta «{encerrada['tenant_nome']}» foi encerrada em {dia}. "
+                            "Por isso o acesso ao painel está bloqueado."
+                        ),
+                    ), 403
             return jsonify(success=False, message="E-mail ou senha inválidos."), 401
 
         (
@@ -528,6 +566,61 @@ def _enviar_email_redefinicao_senha(
         tag = "dropnexo_redefinir_senha"
     ok, msg, _ = enviar_email([email], assunto, html, tag=tag)
     return ok, msg
+
+
+@auth_bp.post("/api/auth/solicitar-reativacao")
+def api_solicitar_reativacao():
+    dados = request.get_json(silent=True) or {}
+    email = (dados.get("email") or "").strip().lower()
+    senha = dados.get("senha") or ""
+    confirmar = bool(dados.get("confirmar"))
+    try:
+        id_tenant = int(dados.get("id_tenant") or 0)
+    except (TypeError, ValueError):
+        id_tenant = 0
+    if not email or not senha:
+        return jsonify(success=False, message="Informe e-mail e senha."), 400
+    if not confirmar:
+        return jsonify(
+            success=False,
+            message="Marque a confirmação para pedir a reativação da conta.",
+        ), 400
+    if id_tenant <= 0:
+        return jsonify(success=False, message="Conta inválida."), 400
+    conn = None
+    try:
+        conn = Var_ConectarBanco()
+        cur = conn.cursor()
+        from sistema.perfil.reativacao import localizar_conta_encerrada, solicitar_reativacao
+
+        encerrada = localizar_conta_encerrada(cur, email)
+        if not encerrada or int(encerrada["id_tenant"]) != id_tenant:
+            return jsonify(success=False, message="Conta encerrada não encontrada."), 404
+        try:
+            ok = bcrypt.checkpw(senha.encode("utf-8"), encerrada["senha_hash"].encode("utf-8"))
+        except Exception:
+            ok = False
+        if not ok:
+            return jsonify(success=False, message="E-mail ou senha inválidos."), 401
+        res = solicitar_reativacao(
+            cur,
+            id_tenant=id_tenant,
+            id_usuario=int(encerrada["id_usuario"]),
+        )
+        conn.commit()
+        return jsonify(success=True, message=res["mensagem"], ja_solicitou=res.get("ja_solicitou"))
+    except ValueError as e:
+        if conn:
+            conn.rollback()
+        return jsonify(success=False, message=str(e)), 400
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        _log_auth.exception("api_solicitar_reativacao falhou")
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        if conn:
+            conn.close()
 
 
 @auth_bp.post("/api/auth/solicitar-redefinicao")

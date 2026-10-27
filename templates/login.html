@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="{{ url_for('static', filename='style/Clogin.css') }}?v=3" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style/Clogin.css') }}?v=4" />
 </head>
 <body class="Dn_Login">
   <div class="Dn_Login_Stage">
@@ -42,13 +42,29 @@
             </label>
             <label>
               <span>Senha</span>
-              <input type="password" name="senha" required autocomplete="current-password" />
+              <input type="password" name="senha" id="login-senha" required autocomplete="current-password" />
             </label>
             <p class="Dn_Login_Forgot">
               <a href="#esqueci" id="link-esqueci">Esqueci minha senha</a>
             </p>
             <p class="Dn_Login_Msg" id="msg-login" hidden></p>
             <button type="submit" class="Dn_Login_Btn">Entrar</button>
+          </form>
+        </div>
+
+        <div id="painel-encerrada" hidden>
+          <h2>Conta encerrada</h2>
+          <p class="Dn_Login_Muted" id="encerrada-texto">Esta conta foi encerrada.</p>
+          <p class="Dn_Login_Muted">Deseja pedir a reativação? A equipe DropNexo analisa o pedido e libera o acesso.</p>
+          <form id="form-reativar" class="Dn_Login_Form">
+            <input type="hidden" id="reativar-tenant" value="" />
+            <label class="Dn_Login_Check">
+              <input type="checkbox" id="reativar-confirmo" />
+              <span>Confirmo que desejo reabrir esta conta e voltar a usar o DropNexo.</span>
+            </label>
+            <p class="Dn_Login_Msg" id="msg-reativar" hidden></p>
+            <button type="submit" class="Dn_Login_Btn" id="btn-reativar" disabled>Reativar conta</button>
+            <button type="button" class="Dn_Login_Btn Dn_Login_Btn--ghost" id="link-voltar-login-encerrada">Cancelar</button>
           </form>
         </div>
 
@@ -78,13 +94,19 @@
     (function () {
       const painelLogin = document.getElementById("painel-login");
       const painelEsqueci = document.getElementById("painel-esqueci");
+      const painelEncerrada = document.getElementById("painel-encerrada");
       const formLogin = document.getElementById("form-login");
       const formEsqueci = document.getElementById("form-esqueci");
+      const formReativar = document.getElementById("form-reativar");
       const msgLogin = document.getElementById("msg-login");
       const msgEsqueci = document.getElementById("msg-esqueci");
+      const msgReativar = document.getElementById("msg-reativar");
       const btnEsqueci = document.getElementById("btn-esqueci");
+      const btnReativar = document.getElementById("btn-reativar");
+      const checkReativar = document.getElementById("reativar-confirmo");
       const urlCadFornecedor = "{{ url_for('cadastro.pagina_cadastro', tipo='fornecedor') }}";
       const urlCadVendedor = "{{ url_for('cadastro.pagina_cadastro', tipo='vendedor') }}";
+      let senhaLoginCache = "";
 
       function mostrarMsg(el, texto, ok) {
         if (!el) return;
@@ -93,12 +115,18 @@
         el.className = "Dn_Login_Msg " + (ok ? "is-ok" : "is-error");
       }
 
+      function esconderPaineis() {
+        if (painelLogin) painelLogin.hidden = true;
+        if (painelEsqueci) painelEsqueci.hidden = true;
+        if (painelEncerrada) painelEncerrada.hidden = true;
+      }
+
       function irEsqueci(ev) {
         if (ev) ev.preventDefault();
         const emailLogin = document.getElementById("login-email")?.value || "";
         const emailEsqueci = document.getElementById("esqueci-email");
         if (emailEsqueci && emailLogin) emailEsqueci.value = emailLogin.trim();
-        painelLogin.hidden = true;
+        esconderPaineis();
         painelEsqueci.hidden = false;
         mostrarMsg(msgEsqueci, "", false);
         emailEsqueci?.focus();
@@ -106,14 +134,47 @@
 
       function irLogin(ev) {
         if (ev) ev.preventDefault();
-        painelEsqueci.hidden = true;
+        esconderPaineis();
         painelLogin.hidden = false;
         mostrarMsg(msgLogin, "", false);
+        mostrarMsg(msgReativar, "", false);
+        if (checkReativar) checkReativar.checked = false;
+        if (btnReativar) btnReativar.disabled = true;
         document.getElementById("login-email")?.focus();
+      }
+
+      function irEncerrada(j) {
+        esconderPaineis();
+        painelEncerrada.hidden = false;
+        const dia = j.encerrada_em_br || "—";
+        const nome = j.tenant_nome || "sua conta";
+        const texto = document.getElementById("encerrada-texto");
+        if (texto) {
+          texto.textContent =
+            "A conta «" + nome + "» foi encerrada em " + dia + ". Por isso você não pode mais entrar no painel.";
+        }
+        document.getElementById("reativar-tenant").value = j.id_tenant || "";
+        if (checkReativar) checkReativar.checked = false;
+        if (btnReativar) {
+          btnReativar.disabled = true;
+          btnReativar.hidden = !!j.ja_solicitou;
+        }
+        if (checkReativar) checkReativar.closest("label").hidden = !!j.ja_solicitou;
+        mostrarMsg(
+          msgReativar,
+          j.ja_solicitou
+            ? "Seu pedido de reativação já está com a equipe. Avisamos por e-mail quando a conta for liberada."
+            : "",
+          !!j.ja_solicitou
+        );
       }
 
       document.getElementById("link-esqueci")?.addEventListener("click", irEsqueci);
       document.getElementById("link-voltar-login")?.addEventListener("click", irLogin);
+      document.getElementById("link-voltar-login-encerrada")?.addEventListener("click", irLogin);
+      checkReativar?.addEventListener("change", function () {
+        if (btnReativar) btnReativar.disabled = !this.checked;
+      });
 
       if (window.location.hash === "#esqueci") irEsqueci();
 
@@ -121,9 +182,10 @@
         e.preventDefault();
         mostrarMsg(msgLogin, "", false);
         const fd = new FormData(e.target);
+        senhaLoginCache = String(fd.get("senha") || "");
         const body = {
           email: fd.get("email"),
-          senha: fd.get("senha"),
+          senha: senhaLoginCache,
           next: (document.getElementById("login-next")?.value || "").trim(),
         };
         const r = await fetch("{{ url_for('auth.api_login') }}", {
@@ -148,7 +210,45 @@
           window.location.href = j.redirect;
           return;
         }
+        if (j.conta_encerrada) {
+          irEncerrada(j);
+          return;
+        }
         mostrarMsg(msgLogin, j.message || "Falha no login.", false);
+      });
+
+      formReativar?.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        mostrarMsg(msgReativar, "", false);
+        if (!checkReativar?.checked) {
+          mostrarMsg(msgReativar, "Marque a confirmação para continuar.", false);
+          return;
+        }
+        if (btnReativar) btnReativar.disabled = true;
+        try {
+          const r = await fetch("{{ url_for('auth.api_solicitar_reativacao') }}", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify({
+              email: document.getElementById("login-email")?.value || "",
+              senha: senhaLoginCache,
+              id_tenant: document.getElementById("reativar-tenant")?.value || "",
+              confirmar: true,
+            }),
+          });
+          const j = await r.json();
+          if (j.success) {
+            mostrarMsg(msgReativar, j.message || "Pedido enviado.", true);
+            if (btnReativar) btnReativar.hidden = true;
+            if (checkReativar) checkReativar.closest("label").hidden = true;
+            return;
+          }
+          mostrarMsg(msgReativar, j.message || "Não foi possível enviar o pedido.", false);
+          if (btnReativar) btnReativar.disabled = !checkReativar?.checked;
+        } catch {
+          mostrarMsg(msgReativar, "Falha de comunicação com o servidor.", false);
+          if (btnReativar) btnReativar.disabled = !checkReativar?.checked;
+        }
       });
 
       formEsqueci.addEventListener("submit", async (e) => {

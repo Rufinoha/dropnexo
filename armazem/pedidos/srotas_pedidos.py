@@ -6,11 +6,14 @@ from flask import Blueprint, jsonify, redirect, render_template, request, send_f
 
 from global_utils import Var_ConectarBanco, exigir_modulo, exigir_permissao, login_obrigatorio
 from core.pedidos.servico import (
+    MSG_ETIQUETA_SEM_PAGAMENTO,
+    col_status_vendedor,
     listar_anexos_pedido,
     listar_pedidos_fornecedor,
     marcar_em_expedicao,
     marcar_entregue,
     obter_pedido,
+    pedido_pago_pelo_vendedor,
 )
 from core.pedidos.lote import lote_entregue, lote_expedir, montar_pdf_lote, parse_ids_body
 from api.pix_manual.pix_manual import confirmar_pix_manual, rejeitar_comprovante_pix
@@ -230,9 +233,10 @@ def pedido_anexo_arquivo():
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
+        cv = col_status_vendedor(cur)
         cur.execute(
-            """
-            SELECT 1
+            f"""
+            SELECT a.tipo, p.{cv}
             FROM tbl_pedido_anexo a
             JOIN tbl_pedido p ON p.id = a.id_pedido
             WHERE p.id_tenant_fornecedor = %s AND a.caminho = %s
@@ -240,8 +244,13 @@ def pedido_anexo_arquivo():
             """,
             (id_f, caminho),
         )
-        if not cur.fetchone():
+        row = cur.fetchone()
+        if not row:
             return jsonify(success=False, message="Arquivo não encontrado."), 404
+        tipo_anexo = (row[0] or "").strip().lower()
+        st_ped = (row[1] or "").strip()
+        if tipo_anexo == "etiqueta" and not pedido_pago_pelo_vendedor(st_ped):
+            return jsonify(success=False, message=MSG_ETIQUETA_SEM_PAGAMENTO), 403
     finally:
         conn.close()
 

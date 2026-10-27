@@ -18,6 +18,10 @@
   };
 
   const stV = (p) => p?.status_vendedor || p?.status || "";
+  const pagoPeloVendedor = (p) =>
+    ["pago", "aguardando_confirmacao", "em_expedicao", "entregue"].includes(stV(p));
+  const MSG_ETQ_SEM_PAGAMENTO =
+    "O vendedor ainda não pagou este pedido. A etiqueta só é liberada depois do pagamento (comprovante anexado ou confirmação da integração).";
   const listaEl = document.getElementById("pd_fn_lista");
   const vazio = document.getElementById("pd_fn_vazio");
   const modal = document.getElementById("pd_fn_modal");
@@ -402,6 +406,33 @@
     if (!ids.length) return;
 
     if (tipo === "pdf_etq" || tipo === "pdf_docs") {
+      const naoPagos = ids
+        .map((id) => todosPedidos.find((p) => p.id === id))
+        .filter((p) => p && !pagoPeloVendedor(p));
+      if (naoPagos.length) {
+        const lista = naoPagos
+          .slice(0, 8)
+          .map((p) => `<li><strong>${esc(p.numero || p.id)}</strong></li>`)
+          .join("");
+        const extra =
+          naoPagos.length > 8 ? `<li>… e mais ${naoPagos.length - 8}</li>` : "";
+        if (window.Swal) {
+          await Swal.fire({
+            icon: "warning",
+            title: "Pedido ainda não pago",
+            html: `<p style="text-align:left;margin:0 0 .6rem;color:#334155;line-height:1.45">${esc(
+              MSG_ETQ_SEM_PAGAMENTO
+            )}</p>
+            <ul style="text-align:left;margin:0;padding-left:1.2rem;color:#334155">${lista}${extra}</ul>
+            <p style="text-align:left;margin:.75rem 0 0;color:#64748b;font-size:.9rem">Remova esses pedidos da seleção ou aguarde o pagamento do vendedor.</p>`,
+            confirmButtonText: "Entendi",
+            confirmButtonColor: "#021F81",
+          });
+        } else {
+          alert(MSG_ETQ_SEM_PAGAMENTO);
+        }
+        return;
+      }
       const modo = tipo === "pdf_docs" ? "etiquetas_nf" : "etiquetas";
       const r = await fetch(`${API}/lote/pdf`, {
         method: "POST",
@@ -582,10 +613,17 @@
     const fiscalTitulo = fiscal?.tipo === "declaracao" ? "Declaração" : "Nota fiscal";
     const st = stV(p);
     const pixNeeded = ["aguardando_pagamento", "importado"].includes(st);
+    const liberadoEtq = pagoPeloVendedor(p);
+    const etqHref = etq && liberadoEtq ? anexoHref(etq) : null;
+    const etqDetail = !etq
+      ? "Aguardando etiqueta"
+      : liberadoEtq
+        ? etq.nome_original || "Abrir etiqueta"
+        : "Bloqueada — vendedor ainda não pagou";
 
     let html = `
       <div class="PdFn_Checks">
-        ${checkItem(!!etq, "Etiqueta de frete", etq?.nome_original || "Aguardando etiqueta", etq ? anexoHref(etq) : null)}
+        ${checkItem(!!etq && liberadoEtq, "Etiqueta de frete", etqDetail, etqHref)}
         ${checkItem(!!fiscal, fiscalTitulo, fiscal?.nome_original || "Aguardando NF ou declaração", fiscal ? anexoHref(fiscal) : null)}`;
 
     if (comprovantes.length || pixNeeded) {

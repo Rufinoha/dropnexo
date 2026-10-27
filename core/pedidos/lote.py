@@ -7,10 +7,12 @@ from pathlib import Path
 from typing import Any
 
 from core.pedidos.servico import (
+    MSG_ETIQUETA_SEM_PAGAMENTO,
     listar_anexos_pedido,
     marcar_em_expedicao,
     marcar_entregue,
     obter_pedido,
+    pedido_pago_pelo_vendedor,
 )
 
 
@@ -109,6 +111,15 @@ def montar_pdf_lote(
         if not ped:
             avisos.append({"id": id_pedido, "message": "Pedido não encontrado."})
             continue
+        numero = ped.get("numero") or str(id_pedido)
+        if not pedido_pago_pelo_vendedor(ped):
+            avisos.append(
+                {
+                    "id": id_pedido,
+                    "message": f"Pedido {numero}: {MSG_ETIQUETA_SEM_PAGAMENTO}",
+                }
+            )
+            continue
         anexos = listar_anexos_pedido(cur, id_pedido, id_fornecedor=id_fornecedor)
         # Ordem: etiqueta → NF/declaração
         escolhidos: list[dict] = []
@@ -127,8 +138,6 @@ def montar_pdf_lote(
                 escolhidos.append(fiscal)
             else:
                 avisos.append({"id": id_pedido, "message": "Sem NF/declaração."})
-
-        numero = ped.get("numero") or str(id_pedido)
         for an in escolhidos:
             caminho = (an.get("caminho") or "").strip().replace("\\", "/")
             if not caminho or ".." in caminho.split("/"):
@@ -158,6 +167,8 @@ def montar_pdf_lote(
                 avisos.append({"id": id_pedido, "message": f"Falha ao ler PDF ({numero})."})
 
     if paginas <= 0:
+        if avisos and all("ainda não pagou" in (a.get("message") or "") for a in avisos):
+            raise ValueError(MSG_ETIQUETA_SEM_PAGAMENTO)
         raise ValueError("Nenhum PDF encontrado nos pedidos selecionados.")
 
     buf = io.BytesIO()
