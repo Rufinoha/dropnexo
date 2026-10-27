@@ -53,14 +53,21 @@
 
 .Pd_Table tbody tr:hover td { background: #faf8ff; }
 
-.Pd_ColPed { width: 7.2rem; }
-.Pd_ColData { width: 5.2rem; white-space: nowrap; }
-.Pd_ColForn { width: 10.5rem; }
-.Pd_ColCli { width: 10.5rem; }
-.Pd_ColTotal { width: 6.2rem; white-space: nowrap; }
-.Pd_ColOrigem { width: 8.2rem; white-space: nowrap; }
-.Pd_ColStCli { width: 7.2rem; white-space: nowrap; }
-.Pd_ColStPed { width: 12.5rem; white-space: nowrap; }
+/* Colunas “miúdas”: 1% + nowrap = não engolem espaço sobrando */
+.Pd_ColPed,
+.Pd_ColData,
+.Pd_ColTotal,
+.Pd_ColOrigem,
+.Pd_ColStCli,
+.Pd_ColStPed,
+.Pd_ColAcoes {
+  width: 1%;
+  white-space: nowrap;
+}
+
+/* Espaço sobrando vai para Fornecedor / Cliente */
+.Pd_ColForn { width: 18%; }
+.Pd_ColCli { width: 22%; }
 
 .Pd_ColForn,
 .Pd_ColCli {
@@ -1453,9 +1460,8 @@
 }
 
 .Pd_ColAcoes {
-  width: 2.6rem;
-  max-width: 2.6rem;
-  padding-left: 0.25rem !important;
+  width: 1%;
+  padding-left: 0.2rem !important;
   padding-right: 0.35rem !important;
   text-align: center !important;
 }
