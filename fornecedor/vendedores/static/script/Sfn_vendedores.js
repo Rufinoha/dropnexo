@@ -18,6 +18,8 @@
 
   let dadosCache = [];
   let vinculoAtual = null;
+  let metaLista = { total: 0, exibidos: 0, limite: 100, limitado: false, filtrado: false };
+  const listaHint = document.getElementById("vd_listaHint");
 
   const STATUS_VISIVEIS = ["pausado", "aguardando", "ativo"];
   const ORDEM_STATUS = { pausado: 0, aguardando: 1, ativo: 2 };
@@ -122,37 +124,26 @@
     });
   }
 
+  function atualizarHint() {
+    if (!listaHint) return;
+    const total = Number(metaLista.total || 0);
+    const exibidos = Number(metaLista.exibidos || 0);
+    const limite = Number(metaLista.limite || 100);
+    if (!metaLista.limitado || total <= exibidos) {
+      listaHint.hidden = true;
+      listaHint.textContent = "";
+      return;
+    }
+    listaHint.hidden = false;
+    if (metaLista.filtrado) {
+      listaHint.textContent = `Mostrando ${exibidos} de ${total} resultados do filtro (máx. ${limite}). Refine a busca para achar o restante.`;
+    } else {
+      listaHint.textContent = `Mostrando os ${exibidos} mais recentes. Há ${total} no total — use os filtros para buscar no banco.`;
+    }
+  }
+
   function aplicarFiltros() {
-    const nomeQ = (fNome?.value || "").trim();
-    const razaoQ = (fRazao?.value || "").trim();
-    const docQ = soDigitos(fDoc?.value || "");
-    const stQ = (fStatus?.value || "").trim();
-    const folQ = (fFollow?.value || "").trim();
-    const hoje = hojeSP();
-    const limite7 = somaDias(hoje, 7);
-
-    const filtrados = dadosCache.filter((v) => {
-      if (!STATUS_VISIVEIS.includes(v.status)) return false;
-      if (stQ && v.status !== stQ) return false;
-      if (folQ === "sem" && v.follow_contato) return false;
-      if (folQ === "7") {
-        const ret = v.follow_retorno || "";
-        if (!ret || ret < hoje || ret > limite7) return false;
-      }
-      if (folQ === "vencido") {
-        const ret = v.follow_retorno || "";
-        if (!ret || ret >= hoje) return false;
-      }
-      if (nomeQ) {
-        const okNome = contem(v.nome, nomeQ) || contem(v.responsavel, nomeQ);
-        if (!okNome) return false;
-      }
-      if (razaoQ && !contem(v.razao_social, razaoQ)) return false;
-      if (docQ && !soDigitos(v.documento).includes(docQ)) return false;
-      return true;
-    });
-
-    renderCards(ordenarCards(filtrados));
+    carregar();
   }
 
   function renderCards(rows) {
@@ -160,7 +151,13 @@
       lista.innerHTML = "";
       if (vazio) {
         vazio.hidden = false;
-        vazio.textContent = dadosCache.length
+        const temFiltro =
+          !!(fNome?.value || "").trim() ||
+          !!(fRazao?.value || "").trim() ||
+          !!(fDoc?.value || "").trim() ||
+          !!(fStatus?.value || "").trim() ||
+          !!(fFollow?.value || "").trim();
+        vazio.textContent = temFiltro
           ? "Nenhum resultado para os filtros informados."
           : "Nenhuma solicitação ou vínculo.";
       }
@@ -642,20 +639,40 @@
   }
 
   async function carregar() {
-    const r = await fetch("/fornecedor/vendedores/dados", { credentials: "same-origin" });
+    const p = new URLSearchParams();
+    const nomeQ = (fNome?.value || "").trim();
+    const razaoQ = (fRazao?.value || "").trim();
+    const docQ = soDigitos(fDoc?.value || "");
+    const stQ = (fStatus?.value || "").trim();
+    const folQ = (fFollow?.value || "").trim();
+    if (nomeQ) p.set("nome", nomeQ);
+    if (razaoQ) p.set("razao", razaoQ);
+    if (docQ) p.set("documento", docQ);
+    if (stQ) p.set("status", stQ);
+    if (folQ) p.set("follow", folQ);
+    const qs = p.toString();
+    const r = await fetch(`/fornecedor/vendedores/dados${qs ? `?${qs}` : ""}`, { credentials: "same-origin" });
     const j = await r.json();
     if (!j.success) {
       lista.textContent = j.message || "Erro";
       return;
     }
     dadosCache = j.dados || [];
-    atualizarResumo();
-    aplicarFiltros();
+    metaLista = {
+      total: Number(j.total || 0),
+      exibidos: Number(j.exibidos || dadosCache.length || 0),
+      limite: Number(j.limite || 100),
+      limitado: !!j.limitado,
+      filtrado: !!j.filtrado,
+    };
+    atualizarResumo(j.resumo || {});
+    atualizarHint();
+    renderCards(ordenarCards(dadosCache.filter((v) => STATUS_VISIVEIS.includes(v.status))));
   }
 
-  function atualizarResumo() {
-    const nCon = dadosCache.filter((v) => v.status === "ativo").length;
-    const nAg = dadosCache.filter((v) => v.status === "aguardando").length;
+  function atualizarResumo(resumo) {
+    const nCon = Number(resumo.conectados ?? dadosCache.filter((v) => v.status === "ativo").length);
+    const nAg = Number(resumo.aguardando ?? dadosCache.filter((v) => v.status === "aguardando").length);
     const elC = document.getElementById("vd_nConectados");
     const elA = document.getElementById("vd_nAguardando");
     const lblC = document.getElementById("vd_lblConectados");

@@ -151,6 +151,10 @@ def vendedores():
     return render_template("frm_fn_vendedores.html", nav_ativo="fn_vendedores")
 
 
+# Teto de cards na tela: resumo continua com o total real do banco.
+_LIMITE_CARDS = 100
+
+
 @fn_vendedores_bp.get("/fornecedor/vendedores/dados")
 @login_obrigatorio()
 @exigir_modulo(MODULO_FORNECEDOR)
@@ -160,18 +164,61 @@ def vendedores_dados():
     id_forn = _id_tenant()
     if not id_forn:
         return jsonify(success=False, message="Sessão inválida."), 403
-    status = (request.args.get("status") or "").strip()
+    status = (request.args.get("status") or "").strip().lower()
+    nome_q = (request.args.get("nome") or "").strip()
+    razao_q = (request.args.get("razao") or "").strip()
+    doc_q = "".join(ch for ch in (request.args.get("documento") or "") if ch.isdigit())
+    follow_q = (request.args.get("follow") or "").strip().lower()
+    filtrado = bool(status or nome_q or razao_q or doc_q or follow_q)
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
-        where = ["v.id_tenant_fornecedor = %s"]
+        # Totais reais no cabeçalho (independente do teto de 100 cards)
+        cur.execute(
+            """
+            SELECT
+              COUNT(*) FILTER (WHERE status = 'ativo')::int,
+              COUNT(*) FILTER (WHERE status = 'aguardando')::int
+            FROM tbl_vinculo_vendedor_fornecedor
+            WHERE id_tenant_fornecedor = %s
+            """,
+            (id_forn,),
+        )
+        row_tot = cur.fetchone() or (0, 0)
+        resumo = {"conectados": int(row_tot[0] or 0), "aguardando": int(row_tot[1] or 0)}
+
+        where = [
+            "v.id_tenant_fornecedor = %s",
+            "v.status IN ('pausado', 'aguardando', 'ativo')",
+        ]
         params: list = [id_forn]
-        if status:
+        if status in ("pausado", "aguardando", "ativo"):
             where.append("v.status = %s")
             params.append(status)
+        if nome_q:
+            where.append(
+                """(
+                  COALESCE(t.nome_fantasia, '') ILIKE %s
+                  OR COALESCE(t.nome, '') ILIKE %s
+                  OR COALESCE(t.nome_completo, '') ILIKE %s
+                  OR COALESCE(v.snapshot_vendedor->>'usuario_nome', '') ILIKE %s
+                )"""
+            )
+            like = f"%{nome_q}%"
+            params.extend([like, like, like, like])
+        if razao_q:
+            where.append("COALESCE(t.razao_social, '') ILIKE %s")
+            params.append(f"%{razao_q}%")
+        if doc_q:
+            where.append(
+                "regexp_replace(COALESCE(t.documento, ''), '\\D', '', 'g') LIKE %s"
+            )
+            params.append(f"%{doc_q}%")
+
         follow_cols = "NULL::date, NULL::date"
         follow_join = ""
-        if _followup_existe(cur):
+        tem_follow = _followup_existe(cur)
+        if tem_follow:
             follow_cols = "fu.data_contato, fu.data_retorno"
             follow_join = """
             LEFT JOIN LATERAL (
@@ -183,6 +230,37 @@ def vendedores_dados():
                 LIMIT 1
             ) fu ON TRUE
             """
+            if follow_q == "sem":
+                where.append("fu.data_contato IS NULL")
+            elif follow_q == "7":
+                where.append(
+                    "fu.data_retorno IS NOT NULL "
+                    "AND fu.data_retorno >= (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')::date "
+                    "AND fu.data_retorno <= (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')::date + 7"
+                )
+            elif follow_q == "vencido":
+                where.append(
+                    "fu.data_retorno IS NOT NULL "
+                    "AND fu.data_retorno < (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')::date"
+                )
+        elif follow_q == "sem":
+            pass
+        elif follow_q in ("7", "vencido"):
+            where.append("FALSE")
+
+        where_sql = " AND ".join(where)
+        cur.execute(
+            f"""
+            SELECT COUNT(*)::int
+            FROM tbl_vinculo_vendedor_fornecedor v
+            JOIN tbl_tenant t ON t.id = v.id_tenant_vendedor
+            {follow_join}
+            WHERE {where_sql}
+            """,
+            params,
+        )
+        total = int((cur.fetchone() or [0])[0] or 0)
+
         cur.execute(
             f"""
             SELECT v.id, v.status, v.solicitado_em, v.respondido_em,
@@ -195,7 +273,7 @@ def vendedores_dados():
             FROM tbl_vinculo_vendedor_fornecedor v
             JOIN tbl_tenant t ON t.id = v.id_tenant_vendedor
             {follow_join}
-            WHERE {' AND '.join(where)}
+            WHERE {where_sql}
             ORDER BY
                 CASE v.status
                   WHEN 'pausado' THEN 0
@@ -204,9 +282,9 @@ def vendedores_dados():
                   ELSE 3
                 END,
                 v.solicitado_em DESC
-            LIMIT 200
+            LIMIT %s
             """,
-            params,
+            [*params, _LIMITE_CARDS],
         )
         dados = []
         alterou_contato = False
@@ -243,7 +321,17 @@ def vendedores_dados():
             )
         if alterou_contato:
             conn.commit()
-        return jsonify(success=True, dados=dados)
+        exibidos = len(dados)
+        return jsonify(
+            success=True,
+            dados=dados,
+            resumo=resumo,
+            total=total,
+            exibidos=exibidos,
+            limite=_LIMITE_CARDS,
+            limitado=total > exibidos,
+            filtrado=filtrado,
+        )
     finally:
         conn.close()
 

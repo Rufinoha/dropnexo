@@ -2,7 +2,7 @@
 {% block title %}Vendedores — {{ MARCA_NOME }}{% endblock %}
 {% block topbar_title %}Vendedores parceiros{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('fn_vendedores.static', filename='style/Cfn_vendedores.css') }}?v=8" />
+<link rel="stylesheet" href="{{ url_for('fn_vendedores.static', filename='style/Cfn_vendedores.css') }}?v=10" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal VdParceiros_Page">
@@ -63,6 +63,7 @@
     </div>
   </div>
 
+  <p class="VdParceiros_ListaHint" id="vd_listaHint" hidden></p>
   <div id="vd_lista" class="VdParceiros_Grid" aria-live="polite"></div>
   <p id="vd_vazio" class="VdParceiros_Vazio" hidden>Nenhuma solicitação ou vínculo.</p>
 </div>
@@ -80,5 +81,5 @@
 {% endblock %}
 {% block page_js %}
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-<script src="{{ url_for('fn_vendedores.static', filename='script/Sfn_vendedores.js') }}?v=15"></script>
+<script src="{{ url_for('fn_vendedores.static', filename='script/Sfn_vendedores.js') }}?v=17"></script>
 {% endblock %}

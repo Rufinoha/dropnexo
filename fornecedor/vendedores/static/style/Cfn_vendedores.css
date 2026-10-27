@@ -66,6 +66,12 @@
   }
 }
 
+.VdParceiros_ListaHint {
+  margin: 0.85rem 0 0.35rem;
+  font-size: 0.86rem;
+  color: #64748b;
+}
+
 .VdParceiros_Filtros {
   margin-top: 1rem;
 }

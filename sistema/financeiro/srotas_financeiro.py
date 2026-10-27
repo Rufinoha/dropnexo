@@ -461,20 +461,42 @@ def api_comissoes_painel():
             conn.rollback()
         except Exception:
             pass
-        # Painel nunca deve quebrar a tela: devolve estrutura vazia com aviso
-        from datetime import date as _date
+        import logging
+        from sistema.financeiro.comissao import hoje_sp, janela_fechamento, vencimento_fechamento
 
-        hoje = _date.today()
+        logging.getLogger(__name__).exception("painel comissões tenant=%s", tid)
+        hoje = hoje_sp()
+        meses = (
+            "",
+            "janeiro",
+            "fevereiro",
+            "março",
+            "abril",
+            "maio",
+            "junho",
+            "julho",
+            "agosto",
+            "setembro",
+            "outubro",
+            "novembro",
+            "dezembro",
+        )
+        prox_m = hoje.month + 1 if hoje.month < 12 else 1
+        if janela_fechamento(hoje):
+            frase = "Feche até o dia 10. O vencimento deste lote é dia 20."
+        else:
+            frase = f"O próximo fechamento é de 1 a 10 de {meses[prox_m]}."
         return jsonify(
             success=True,
-            ativo=False,
-            frase="Não foi possível carregar todas as comissões agora. Tente novamente.",
+            ativo=True,
+            frase=frase,
             hoje=hoje.isoformat(),
             ano=hoje.year,
             mes=hoje.month,
             ano_faturado=0,
             anos_periodo=[hoje.year - 1, hoje.year, hoje.year + 1],
             anos_faturado=[hoje.year],
+            vencimento_se_fechar=vencimento_fechamento(hoje).isoformat(),
             pix_ok=False,
             pode_faturar=False,
             total_aberto_centavos=0,
