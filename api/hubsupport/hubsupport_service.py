@@ -754,6 +754,7 @@ def detalhar_chamado(conn, id_usuario: int, id_tenant: int, external_id: str) ->
         "prioridade": prioridade,
         "prioridade_label": PRIORIDADE_LABEL.get(prioridade, prioridade),
         "pode_responder": status not in STATUS_SEM_RESPOSTA,
+        "pode_fechar": _normalizar_status(status) in ("em_atendimento", "em_andamento"),
         "solicitante_nome": solicitante_nome,
         "tenant_nome": row[8] or "",
         "operador": _operador_suporte(cur, id_usuario, id_tenant),
@@ -871,6 +872,55 @@ def responder_chamado(
         _notificar_status_chamado(conn, external_id, "em_atendimento")
     _log_api(conn, "responder_chamado", True, external_id, 200)
     return {"ok": True, "external_id": external_id, "anexos": anexos_meta}
+
+
+def fechar_chamado(
+    conn,
+    id_usuario: int,
+    id_tenant: int,
+    external_id: str,
+) -> dict:
+    """Fecha o chamado localmente e no HubSupport. Só se status = em atendimento."""
+    external_id = (external_id or "").strip()
+    if not external_id.startswith(f"{PREFIX}:chamado:"):
+        external_id = external_id_chamado(external_id)
+
+    if not _chamado_autorizado(conn, id_usuario, id_tenant, external_id):
+        raise HubSupportError("Chamado não encontrado ou acesso negado.", status_code=403)
+
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT status FROM tbl_hubsupport_chamado WHERE external_id = %s",
+        (external_id,),
+    )
+    row = cur.fetchone()
+    if not row:
+        raise HubSupportError("Chamado não encontrado.", status_code=404)
+
+    status_atual = _normalizar_status(row[0])
+    if status_atual in STATUS_SEM_RESPOSTA:
+        raise HubSupportError("Este chamado já está fechado.")
+    if status_atual not in ("em_atendimento", "em_andamento"):
+        raise HubSupportError(
+            "Só é possível fechar chamados em atendimento. "
+            f"Status atual: {STATUS_LABEL.get(status_atual or '', status_atual or '—')}."
+        )
+
+    client = HubSupportClient(conn=conn)
+    try:
+        client.fechar_chamado(external_id)
+    except HubSupportError as e:
+        _log_api(conn, "fechar_chamado", False, str(e), e.status_code)
+        raise
+
+    _atualizar_chamado_webhook(conn, external_id, status="fechado")
+    _log_api(conn, "fechar_chamado", True, external_id, 200)
+    return {
+        "ok": True,
+        "external_id": external_id,
+        "status": "fechado",
+        "status_label": STATUS_LABEL["fechado"],
+    }
 
 
 def webhook_delivery_processado(conn, delivery_id: str) -> bool:

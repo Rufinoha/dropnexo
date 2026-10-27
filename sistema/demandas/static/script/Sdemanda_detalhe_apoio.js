@@ -6,6 +6,7 @@
   let externalId = "";
   let tabAtual = "conversa";
   let podeResponder = false;
+  let podeFechar = false;
   let ultimoChamado = null;
 
   function el(id) {
@@ -50,6 +51,8 @@
     });
     const btnResp = el("dem_apoio_btnResponder");
     if (btnResp) btnResp.hidden = !(tabAtual === "conversa" && podeResponder);
+    const btnFecharCh = el("dem_apoio_btnFecharChamado");
+    if (btnFecharCh) btnFecharCh.hidden = !podeFechar;
   }
 
   function htmlAnexosMsg(anexos) {
@@ -165,6 +168,7 @@
       externalId = j.external_id || ref;
       chamadoUuid = j.uuid || chamadoUuid;
       podeResponder = !!j.pode_responder;
+      podeFechar = !!j.pode_fechar;
 
       if (el("id")) el("id").value = j.protocolo || "—";
       if (el("tituloPagina")) el("tituloPagina").textContent = j.titulo || "Chamado";
@@ -244,6 +248,48 @@
     }
   }
 
+  async function fecharChamado() {
+    if (!podeFechar) {
+      Swal.fire(
+        "Atenção",
+        "Só é possível fechar chamados com status Em atendimento.",
+        "warning"
+      );
+      return;
+    }
+    const conf = await Swal.fire({
+      icon: "question",
+      title: "Fechar este chamado?",
+      html: "O chamado será encerrado no DropNexo e no <strong>HubSupport</strong>. Essa ação não pode ser desfeita.",
+      showCancelButton: true,
+      confirmButtonText: "Sim, fechar",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#b91c1c",
+    });
+    if (!conf.isConfirmed) return;
+
+    Swal.fire({ title: "Fechando…", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    try {
+      const r = await fetch("/api/demandas/fechar/" + refEncoded(), {
+        method: "POST",
+        credentials: "include",
+        headers: { Accept: "application/json", "Content-Type": "application/json" },
+        body: "{}",
+      });
+      const j = await r.json().catch(() => ({}));
+      Swal.close();
+      if (!r.ok || !j.success) throw new Error(j.message || "Falha ao fechar o chamado.");
+      await Swal.fire("Fechado", j.message || "Chamado encerrado.", "success");
+      await carregar();
+      window.parent.postMessage({ grupo: "atualizarTabela", nivel: nivelModal }, window.location.origin);
+    } catch (e) {
+      try {
+        Swal.close();
+      } catch (_) {}
+      Swal.fire("Erro", e.message || "Falha ao fechar o chamado.", "error");
+    }
+  }
+
   async function resgatarAnexosHs() {
     Swal.fire({
       title: "Espelhando anexos…",
@@ -282,6 +328,7 @@
     el("dem_apoio_btnFechar")?.addEventListener("click", () => {
       if (window.GlobalUtils?.fecharJanelaApoio) GlobalUtils.fecharJanelaApoio(nivelModal);
     });
+    el("dem_apoio_btnFecharChamado")?.addEventListener("click", fecharChamado);
     el("dem_apoio_btnResponder")?.addEventListener("click", responder);
     el("dem_btnResgatarAnexos")?.addEventListener("click", resgatarAnexosHs);
     el("dem_respostaAnexos")?.addEventListener("change", function () {

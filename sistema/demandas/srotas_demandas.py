@@ -216,6 +216,26 @@ def api_detalhe(ref: str):
         conn.close()
 
 
+@demandas_bp.post("/api/demandas/fechar/<path:ref>")
+@login_obrigatorio()
+def api_fechar(ref: str):
+    id_u, id_t = _ids_sessao()
+    if not id_u:
+        return jsonify(success=False, message="Sessão inválida."), 401
+    conn = Var_ConectarBanco()
+    try:
+        from api.hubsupport.hubsupport_service import fechar_chamado
+
+        result = fechar_chamado(conn, id_u, id_t, ref)
+        conn.commit()
+        return jsonify(success=True, message="Chamado fechado.", **result)
+    except Exception as e:
+        conn.rollback()
+        return _json_erro(e)
+    finally:
+        conn.close()
+
+
 @demandas_bp.post("/api/demandas/responder/<path:ref>")
 @login_obrigatorio()
 def api_responder(ref: str):
