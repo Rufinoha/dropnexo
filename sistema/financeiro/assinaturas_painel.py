@@ -290,6 +290,14 @@ def painel_assinaturas(
     mes: int | None = None,
 ) -> dict[str, Any]:
     cur = conn.cursor()
+    try:
+        from sistema.financeiro.cobranca import garantir_colunas_assinatura
+
+        cur.execute("SAVEPOINT sp_asf_cols")
+        garantir_colunas_assinatura(cur)
+        cur.execute("RELEASE SAVEPOINT sp_asf_cols")
+    except Exception:
+        _rollback_sp(cur, "sp_asf_cols")
     hoje = date.today()
     ano_sel = int(ano or hoje.year)
     if ano_sel < 2000 or ano_sel > 2100:
@@ -306,7 +314,8 @@ def painel_assinaturas(
           t.id, t.nome, t.slug, t.plano, t.tipo_negocio, t.ativo,
           COALESCE(NULLIF(tc.periodicidade, ''), 'mensal'),
           tc.dia_vencimento, tc.forma_pagamento, tc.inicio_cobranca,
-          COALESCE(p.valor_centavos, 0), COALESCE(p.nome, t.plano)
+          COALESCE(p.valor_centavos, 0), COALESCE(p.nome, t.plano),
+          COALESCE(tc.efi_subscription_id, ''), COALESCE(tc.assinatura_status, '')
         FROM tbl_tenant t
         LEFT JOIN tbl_tenant_cobranca tc ON tc.id_tenant = t.id
         LEFT JOIN tbl_plano p ON p.slug = t.plano
@@ -329,6 +338,9 @@ def painel_assinaturas(
         plano = str(row[3] or "")
         forma = (row[8] or "").strip().lower()
         prox = _proxima_cobranca_estimada(row[7])
+        efi_sub = str(row[12] or "").strip() if len(row) > 12 else ""
+        efi_st = str(row[13] or "").strip() if len(row) > 13 else ""
+        recorrencia_efi = bool(efi_sub) and efi_st != "cancelada"
         item = {
             "id_tenant": int(row[0]),
             "nome": (row[1] or "").strip() or f"Tenant #{row[0]}",
@@ -351,6 +363,11 @@ def painel_assinaturas(
             "mrr": _fmt_reais(meta["mrr_centavos"]),
             "proxima_cobranca": _fmt_data(prox),
             "proxima_cobranca_br": _fmt_data_br(prox),
+            "efi_subscription_id": efi_sub,
+            "assinatura_status": efi_st,
+            "recorrencia_efi": recorrencia_efi,
+            "pode_criar_efi": not recorrencia_efi,
+            "pode_cancelar": efi_st != "cancelada",
         }
         ativas.append(item)
 
@@ -723,9 +740,15 @@ def painel_assinaturas(
         cur.execute("SAVEPOINT sp_asf_med_list")
         from sistema.financeiro.med_bloqueios import listar_faturas_bloqueadas, rotulo_med_status
 
+        vistos_med: set[str] = set()
+        vistos_fat: set[int] = set()
         for row in listar_faturas_bloqueadas(cur):
             forma = (row[7] or "").strip().lower()
             med_st = str(row[14] or "").strip().upper()
+            med_id = str(row[13] or "").strip()
+            if med_id:
+                vistos_med.add(med_id)
+            vistos_fat.add(int(row[0]))
             bloqueados.append(
                 {
                     "id_fatura": int(row[0]),
@@ -746,11 +769,66 @@ def painel_assinaturas(
                     "criado_br": _fmt_data_br(row[10]),
                     "efi_txid": row[11] or "",
                     "efi_e2e": row[12] or "",
-                    "med_id": row[13] or "",
+                    "med_id": med_id,
+                    "protocolo": "",
                     "med_status": med_st,
                     "med_status_label": rotulo_med_status(med_st),
                     "med_razao": (row[15] or "").strip() or "—",
                     "med_atualizado_br": _fmt_data_br(row[16]),
+                    "vinculado": True,
+                    "origem": "fatura",
+                }
+            )
+
+        # MEDs abertos na Efí sem fatura local (ou ainda não sincronizados na tbl)
+        for med in sync_med.get("infracoes_abertas") or []:
+            mid = str(med.get("med_id") or "").strip()
+            fid = med.get("id_fatura")
+            if mid and mid in vistos_med:
+                continue
+            if fid and int(fid) in vistos_fat:
+                continue
+            tid = med.get("id_tenant")
+            nome = "Sem vínculo no DropNexo"
+            plano_label = "—"
+            if tid:
+                cur.execute(
+                    "SELECT nome, plano, tipo_negocio FROM tbl_tenant WHERE id = %s",
+                    (int(tid),),
+                )
+                tr = cur.fetchone()
+                if tr:
+                    nome = (tr[0] or "").strip() or f"Tenant #{tid}"
+                    plano_label = nome_plano_comercial(tr[1], tr[2])
+            protocolo = str(med.get("protocolo") or "").strip()
+            bloqueados.append(
+                {
+                    "id_fatura": int(fid) if fid else None,
+                    "id_tenant": int(tid) if tid else None,
+                    "nome": nome,
+                    "referencia": f"MED {protocolo}" if protocolo else (mid[:12] or "MED"),
+                    "plano": "",
+                    "plano_label": plano_label,
+                    "valor_centavos": int(med.get("valor_centavos") or 0),
+                    "valor": _fmt_reais(med.get("valor_centavos")),
+                    "status": "bloqueado",
+                    "status_label": "Bloqueado",
+                    "status_grupo": "bloqueado",
+                    "forma_pagamento": "pix",
+                    "forma_label": "Pix",
+                    "vencimento_br": "—",
+                    "pago_br": med.get("data_tx_br") or "—",
+                    "criado_br": med.get("data_tx_br") or "—",
+                    "efi_txid": med.get("efi_txid") or "",
+                    "efi_e2e": med.get("efi_e2e") or "",
+                    "med_id": mid,
+                    "protocolo": protocolo,
+                    "med_status": med.get("med_status") or "",
+                    "med_status_label": med.get("med_status_label") or rotulo_med_status(med.get("med_status")),
+                    "med_razao": med.get("med_razao") or "MED Pix",
+                    "med_atualizado_br": med.get("data_tx_br") or "—",
+                    "vinculado": bool(med.get("vinculado")),
+                    "origem": "efi_med",
                 }
             )
         cur.execute("RELEASE SAVEPOINT sp_asf_med_list")
@@ -759,6 +837,10 @@ def painel_assinaturas(
         bloqueados = []
 
     valor_bloq = sum(int(x["valor_centavos"]) for x in bloqueados)
+    # Preferir total da Efí (saldo bloqueado) quando disponível
+    valor_efi = int(sync_med.get("bloqueio_total_centavos") or 0)
+    if valor_efi > valor_bloq:
+        valor_bloq = valor_efi
 
     return {
         "ativas": {
@@ -823,6 +905,9 @@ def painel_assinaturas(
                 "qtd": len(bloqueados),
                 "valor_centavos": valor_bloq,
                 "valor": _fmt_reais(valor_bloq),
+                "saldo_efi": _fmt_reais(sync_med.get("saldo_centavos")),
+                "bloqueio_med_efi": _fmt_reais(sync_med.get("bloqueio_med_centavos")),
+                "bloqueio_total_efi": _fmt_reais(sync_med.get("bloqueio_total_centavos")),
             },
             "itens": bloqueados,
             "sync": sync_med,

@@ -3656,6 +3656,91 @@ def assinaturas_lembrete_fatura():
         conn.close()
 
 
+@config_bp.get(f"{ASSINATURAS_PREFIX}/tenant/<int:id_tenant>")
+@login_obrigatorio()
+def assinaturas_detalhe_tenant(id_tenant: int):
+    if (r := _exigir_dev()) is not None:
+        return r
+    from sistema.financeiro.cobranca import detalhe_assinatura_admin
+
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        detalhe = detalhe_assinatura_admin(cur, id_tenant)
+        return jsonify(success=True, tenant=detalhe)
+    except ValueError as e:
+        return jsonify(success=False, message=str(e)), 400
+    except Exception:
+        _log.exception("detalhe assinatura tenant=%s", id_tenant)
+        return jsonify(success=False, message="Não foi possível abrir o detalhe."), 500
+    finally:
+        conn.close()
+
+
+@config_bp.post(f"{ASSINATURAS_PREFIX}/criar-assinatura-efi")
+@login_obrigatorio()
+def assinaturas_criar_efi():
+    if (r := _exigir_dev()) is not None:
+        return r
+    from sistema.financeiro.cobranca import criar_assinatura_efi_admin
+
+    body = request.get_json(silent=True) or {}
+    try:
+        id_tenant = int(body.get("id_tenant") or 0)
+    except (TypeError, ValueError):
+        id_tenant = 0
+    if id_tenant <= 0:
+        return jsonify(success=False, message="Tenant inválido."), 400
+
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        out = criar_assinatura_efi_admin(cur, id_tenant)
+        conn.commit()
+        return jsonify(success=True, **out)
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 400
+    except Exception as e:
+        conn.rollback()
+        _log.exception("criar assinatura efi tenant=%s", id_tenant)
+        return jsonify(success=False, message=str(e) or "Não foi possível criar a assinatura na Efí."), 500
+    finally:
+        conn.close()
+
+
+@config_bp.post(f"{ASSINATURAS_PREFIX}/cancelar-assinatura")
+@login_obrigatorio()
+def assinaturas_cancelar_assinatura():
+    if (r := _exigir_dev()) is not None:
+        return r
+    from sistema.financeiro.cobranca import cancelar_plano_atual
+
+    body = request.get_json(silent=True) or {}
+    try:
+        id_tenant = int(body.get("id_tenant") or 0)
+    except (TypeError, ValueError):
+        id_tenant = 0
+    if id_tenant <= 0:
+        return jsonify(success=False, message="Tenant inválido."), 400
+
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        out = cancelar_plano_atual(cur, id_tenant)
+        conn.commit()
+        return jsonify(success=True, message=out.get("mensagem") or "Assinatura cancelada.")
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 400
+    except Exception:
+        conn.rollback()
+        _log.exception("cancelar assinatura admin tenant=%s", id_tenant)
+        return jsonify(success=False, message="Não foi possível cancelar a assinatura."), 500
+    finally:
+        conn.close()
+
+
 # --- HubSupport (Central de Chamados) ---
 HS_PREFIX = "/configuracoes/hubsupport"
 

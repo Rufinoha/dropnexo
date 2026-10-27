@@ -2523,6 +2523,318 @@ def cancelar_plano_atual(cur, id_tenant: int) -> dict:
     }
 
 
+def criar_assinatura_efi_admin(cur, id_tenant: int) -> dict:
+    """
+    Migra assinante legado (renovação DropNexo) para recorrência Efí.
+    A 1ª cobrança na Efí vence no próximo ciclo — não re-cobra o período já pago.
+    Cartão exige token do cliente; nesta ação admin só boleto.
+    """
+    from sistema.financeiro.cupom import (
+        calcular_preco,
+        normalizar_periodo,
+        obter_cupom_beneficio_renovacao,
+    )
+    from sistema.planos.fornecedor_fundador import eh_fundador_ativo
+
+    garantir_cobranca_tenant(cur, id_tenant)
+    garantir_colunas_assinatura(cur)
+    garantir_referencia_fatura(cur)
+
+    if eh_fundador_ativo(cur, int(id_tenant)):
+        raise ValueError("Fornecedor Fundador não gera assinatura na Efí.")
+
+    cur.execute(
+        """
+        SELECT COALESCE(efi_subscription_id, ''), COALESCE(assinatura_status, ''),
+               COALESCE(NULLIF(periodicidade, ''), 'mensal'), COALESCE(forma_pagamento, 'boleto'),
+               COALESCE(NULLIF(plano_slug, ''), '')
+        FROM tbl_tenant_cobranca WHERE id_tenant = %s
+        """,
+        (id_tenant,),
+    )
+    tc = cur.fetchone()
+    if not tc:
+        raise ValueError("Cobrança do tenant não encontrada.")
+    sub_id, st_ass, periodo_raw, forma_raw, plano_tc = tc
+    if str(sub_id or "").strip() and (st_ass or "") != "cancelada":
+        raise ValueError("Este tenant já tem assinatura ativa na Efí.")
+
+    cur.execute("SELECT plano, ativo FROM tbl_tenant WHERE id = %s", (id_tenant,))
+    trow = cur.fetchone()
+    if not trow or not trow[1]:
+        raise ValueError("Tenant inválido ou inativo.")
+    plano_slug = (plano_tc or trow[0] or "").strip().lower()
+    if plano_slug not in PLANOS_PAGOS:
+        raise ValueError("Só planos pagos podem ter assinatura na Efí.")
+
+    forma = (forma_raw or "boleto").strip().lower()
+    if forma == "cartao":
+        raise ValueError(
+            "Forma atual é cartão. Sem o token do cartão não dá para criar a recorrência aqui. "
+            "Peça ao cliente para atualizar o pagamento no Financeiro, ou mude a forma para boleto."
+        )
+    # Pix avulso não gera recorrência Efí de assinatura — usa boleto
+    forma_efi = "boleto"
+
+    periodo = normalizar_periodo(periodo_raw)
+    plano = obter_plano_db(cur, plano_slug)
+    if not plano or int(plano.get("valor_centavos") or 0) <= 0:
+        raise ValueError("Plano sem valor de cobrança.")
+
+    cupom = obter_cupom_beneficio_renovacao(cur, int(id_tenant), periodo, plano_slug=plano_slug)
+    preco = calcular_preco(int(plano["valor_centavos"]), periodo, cupom=cupom)
+    valor_final = int(preco["valor_final_centavos"])
+    if valor_final <= 0:
+        raise ValueError("Valor final zerado (benefício). Não cria assinatura na Efí.")
+
+    cli = _dados_cliente_cobranca(cur, id_tenant)
+    doc = "".join(c for c in (cli.get("documento") or "") if c.isdigit())
+    if len(doc) not in (11, 14):
+        raise ValueError("Tenant sem CPF/CNPJ válido para a Efí.")
+    email = (cli.get("email_cobranca") or "").strip()
+    if not email or "@" not in email:
+        raise ValueError("Tenant sem e-mail de cobrança.")
+
+    cur.execute(
+        """
+        SELECT COALESCE(pago_em, criado_em)::date, COALESCE(meses_cobertos, 1)
+        FROM tbl_fatura
+        WHERE id_tenant = %s AND status IN ('pago', 'bloqueado')
+        ORDER BY pago_em DESC NULLS LAST, id DESC
+        LIMIT 1
+        """,
+        (id_tenant,),
+    )
+    ultimo = cur.fetchone()
+    fim_cobertura = None
+    if ultimo and ultimo[0]:
+        fim_cobertura = adicionar_meses(ultimo[0], max(1, int(ultimo[1] or 1)))
+
+    dia = int(cli.get("dia_vencimento") or 15)
+    venc = proximo_vencimento(dia)
+    if fim_cobertura and venc < fim_cobertura:
+        venc = proximo_vencimento(dia, fim_cobertura)
+
+    ref = referencia_assinatura(periodo, venc)
+    cur.execute(
+        """
+        SELECT id, status FROM tbl_fatura
+        WHERE id_tenant = %s AND referencia = %s AND plano_slug = %s
+        ORDER BY id DESC LIMIT 1
+        """,
+        (id_tenant, ref, plano_slug),
+    )
+    ex = cur.fetchone()
+    if ex and ex[1] == "pago":
+        # próximo ciclo depois dessa referência
+        venc = proximo_vencimento(dia, adicionar_meses(venc, max(1, int(preco.get("meses_cobertos") or 1))))
+        ref = referencia_assinatura(periodo, venc)
+        ex = None
+
+    from api.efi.efi import efi_disponivel
+
+    if not efi_disponivel():
+        raise RuntimeError("Efi não configurada no servidor (.env).")
+
+    descricao = f"DropNexo — {plano['nome']} · {preco['periodo_rotulo']} ({ref})"
+    cob = _criar_cobranca_efi(
+        cur,
+        id_tenant=id_tenant,
+        forma=forma_efi,
+        valor_centavos=valor_final,
+        descricao=descricao,
+        vencimento=venc,
+        nome_cliente=cli["nome_cliente"],
+        documento=cli["documento"],
+        email=email,
+        telefone=cli.get("telefone"),
+        endereco=cli.get("endereco"),
+        plano_slug=plano_slug,
+        periodo=periodo,
+        nome_plano=plano["nome"],
+    )
+    if not cob.get("subscription_id"):
+        raise RuntimeError("A Efí não devolveu o ID da assinatura.")
+
+    if ex and ex[1] in ("pendente", "vencido"):
+        fid = int(ex[0])
+        cur.execute(
+            """
+            UPDATE tbl_fatura
+            SET valor_centavos = %s, forma_pagamento = %s, efi_charge_id = %s,
+                link_boleto = %s, codigo_barras = %s, vencimento_em = %s,
+                periodicidade = %s, meses_cobertos = %s,
+                valor_cheio_centavos = %s, desconto_periodo_centavos = %s,
+                desconto_cupom_centavos = %s, atualizado_em = NOW()
+            WHERE id = %s
+            """,
+            (
+                valor_final,
+                forma_efi,
+                cob.get("charge_id"),
+                cob.get("link_boleto"),
+                cob.get("codigo_barras"),
+                venc,
+                periodo,
+                int(preco["meses_cobertos"]),
+                int(preco["valor_cheio_centavos"]),
+                int(preco["desconto_periodo_centavos"]),
+                int(preco["desconto_cupom_centavos"]),
+                fid,
+            ),
+        )
+    else:
+        cur.execute(
+            """
+            INSERT INTO tbl_fatura (
+                id_tenant, referencia, valor_centavos, status, forma_pagamento, plano_slug,
+                efi_charge_id, link_boleto, codigo_barras, vencimento_em, atualizado_em,
+                periodicidade, meses_cobertos, valor_cheio_centavos,
+                desconto_periodo_centavos, desconto_cupom_centavos
+            ) VALUES (
+                %s,%s,%s,'pendente',%s,%s,%s,%s,%s,%s,NOW(),%s,%s,%s,%s,%s
+            ) RETURNING id
+            """,
+            (
+                id_tenant,
+                ref,
+                valor_final,
+                forma_efi,
+                plano_slug,
+                cob.get("charge_id"),
+                cob.get("link_boleto"),
+                cob.get("codigo_barras"),
+                venc,
+                periodo,
+                int(preco["meses_cobertos"]),
+                int(preco["valor_cheio_centavos"]),
+                int(preco["desconto_periodo_centavos"]),
+                int(preco["desconto_cupom_centavos"]),
+            ),
+        )
+        fid = int(cur.fetchone()[0])
+
+    cur.execute(
+        """
+        UPDATE tbl_tenant_cobranca
+        SET efi_subscription_id = %s, efi_plan_id = %s,
+            assinatura_status = 'ativa', cancelado_em = NULL,
+            forma_pagamento = %s, periodicidade = %s, plano_slug = %s,
+            atualizado_em = NOW()
+        WHERE id_tenant = %s
+        """,
+        (
+            str(cob["subscription_id"]),
+            str(cob.get("plan_id") or ""),
+            forma_efi,
+            periodo,
+            plano_slug,
+            id_tenant,
+        ),
+    )
+
+    return {
+        "ok": True,
+        "id_tenant": id_tenant,
+        "id_fatura": fid,
+        "efi_subscription_id": str(cob["subscription_id"]),
+        "referencia": ref,
+        "vencimento": venc.isoformat(),
+        "valor_centavos": valor_final,
+        "mensagem": (
+            f"Assinatura criada na Efí. A 1ª cobrança ({ref}) vence em "
+            f"{venc.strftime('%d/%m/%Y')} — o período já pago não foi re-cobrado."
+        ),
+    }
+
+
+def detalhe_assinatura_admin(cur, id_tenant: int) -> dict:
+    """Resumo da assinatura ativa para o painel do dono."""
+    from sistema.financeiro.assinaturas_painel import (
+        FORMA_LABEL,
+        PERIODO_LABEL,
+        _fmt_data_br,
+        _fmt_reais,
+        _proxima_cobranca_estimada,
+        nome_plano_comercial,
+    )
+
+    garantir_cobranca_tenant(cur, id_tenant)
+    garantir_colunas_assinatura(cur)
+    cur.execute(
+        """
+        SELECT t.id, t.nome, t.slug, t.plano, t.tipo_negocio, t.ativo,
+               COALESCE(NULLIF(tc.periodicidade, ''), 'mensal'),
+               tc.dia_vencimento, tc.forma_pagamento, tc.inicio_cobranca,
+               COALESCE(tc.efi_subscription_id, ''), COALESCE(tc.efi_plan_id, ''),
+               COALESCE(tc.assinatura_status, ''), tc.cancelado_em,
+               tc.email_cobranca
+        FROM tbl_tenant t
+        LEFT JOIN tbl_tenant_cobranca tc ON tc.id_tenant = t.id
+        WHERE t.id = %s
+        """,
+        (id_tenant,),
+    )
+    row = cur.fetchone()
+    if not row:
+        raise ValueError("Tenant não encontrado.")
+    periodo = (row[6] or "mensal").strip().lower()
+    forma = (row[8] or "").strip().lower()
+    sub = str(row[10] or "").strip()
+    st = str(row[12] or "").strip()
+    prox = _proxima_cobranca_estimada(row[7])
+    cur.execute(
+        """
+        SELECT id, referencia, status, valor_centavos, vencimento_em, pago_em, forma_pagamento
+        FROM tbl_fatura WHERE id_tenant = %s
+        ORDER BY id DESC LIMIT 1
+        """,
+        (id_tenant,),
+    )
+    fat = cur.fetchone()
+    ultima = None
+    if fat:
+        ultima = {
+            "id_fatura": int(fat[0]),
+            "referencia": fat[1] or "",
+            "status": fat[2] or "",
+            "status_label": STATUS_LABEL.get(fat[2] or "", fat[2] or "—"),
+            "valor": _fmt_reais(fat[3]),
+            "vencimento_br": _fmt_data_br(fat[4]),
+            "pago_br": _fmt_data_br(fat[5]),
+            "forma_label": FORMA_LABEL.get((fat[6] or "").strip().lower(), fat[6] or "—"),
+        }
+    return {
+        "id_tenant": int(row[0]),
+        "nome": (row[1] or "").strip() or f"Tenant #{row[0]}",
+        "slug": row[2] or "",
+        "plano": row[3] or "",
+        "plano_label": nome_plano_comercial(row[3], row[4]),
+        "tipo_negocio": row[4] or "",
+        "ativo": bool(row[5]),
+        "periodicidade": periodo,
+        "periodicidade_label": PERIODO_LABEL.get(periodo, periodo),
+        "dia_vencimento": int(row[7]) if row[7] else None,
+        "forma_pagamento": forma,
+        "forma_label": FORMA_LABEL.get(forma, forma or "—"),
+        "inicio_cobranca_br": _fmt_data_br(row[9]),
+        "efi_subscription_id": sub or "",
+        "efi_plan_id": str(row[11] or ""),
+        "recorrencia_efi": bool(sub) and st != "cancelada",
+        "assinatura_status": st or ("ativa" if sub else "sem_efi"),
+        "assinatura_status_label": (
+            "Ativa na Efí" if sub and st != "cancelada"
+            else ("Cancelada" if st == "cancelada" else "Sem recorrência Efí (legado)")
+        ),
+        "cancelado_br": _fmt_data_br(row[13]),
+        "email_cobranca": row[14] or "",
+        "proxima_cobranca_br": _fmt_data_br(prox),
+        "pode_criar_efi": (not sub or st == "cancelada") and str(row[3] or "").lower() in PLANOS_PAGOS,
+        "pode_cancelar": str(row[3] or "").lower() in PLANOS_PAGOS and st != "cancelada",
+        "ultima_fatura": ultima,
+    }
+
+
 def tenant_pode_usar_integracao(cur, id_tenant: int) -> bool:
     """Plano pago = integrações ativas (tokens permanecem; sync/UI bloqueados no free)."""
     cur.execute("SELECT plano, tipo_negocio FROM tbl_tenant WHERE id = %s", (id_tenant,))

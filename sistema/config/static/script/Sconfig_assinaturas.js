@@ -66,7 +66,10 @@
   }
 
   function btnMenuAtiva(a) {
-    return `<div class="Asf_Acoes"><button type="button" class="Asf_MenuBtn" data-asf-menu-ativa="1" aria-label="Ações da assinatura" aria-haspopup="menu" data-tenant="${esc(a.id_tenant)}" data-nome="${esc(a.nome)}" data-slug="${esc(a.slug || "")}"><i></i><i></i><i></i></button></div>`;
+    const efi = a.recorrencia_efi ? "1" : "0";
+    const criar = a.pode_criar_efi ? "1" : "0";
+    const cancelar = a.pode_cancelar !== false ? "1" : "0";
+    return `<div class="Asf_Acoes"><button type="button" class="Asf_MenuBtn" data-asf-menu-ativa="1" aria-label="Ações da assinatura" aria-haspopup="menu" data-tenant="${esc(a.id_tenant)}" data-nome="${esc(a.nome)}" data-slug="${esc(a.slug || "")}" data-efi="${efi}" data-criar-efi="${criar}" data-cancelar="${cancelar}"><i></i><i></i><i></i></button></div>`;
   }
 
   function badgeStatus(a) {
@@ -139,8 +142,11 @@
             ? `<div>${esc(a.beneficio)}</div>${a.beneficio_prazo && a.beneficio_prazo !== "—" ? `<div class="Asf_Muted">${esc(a.beneficio_prazo)}</div>` : ""}`
             : "—";
           const valor = a.cobrado_beneficio || a.ciclo || "—";
+          const efiTag = a.recorrencia_efi
+            ? `<div class="Asf_Muted">Efí · recorrente</div>`
+            : `<div class="Asf_Muted">Sem Efí (legado)</div>`;
           return `<tr>
-        <td><strong>${esc(a.nome)}</strong><div class="Asf_Muted">#${esc(a.id_tenant)} · ${esc(a.slug || "—")}</div></td>
+        <td><strong>${esc(a.nome)}</strong><div class="Asf_Muted">#${esc(a.id_tenant)} · ${esc(a.slug || "—")}</div>${efiTag}</td>
         <td>${esc(a.plano_label)}</td>
         <td>${esc(a.periodicidade_label)}</td>
         <td>${esc(a.forma_label)}</td>
@@ -286,45 +292,59 @@
     const boxKpi = el("asf_bloq_kpis");
     if (boxKpi) {
       boxKpi.innerHTML = kpisHtml([
-        { label: "Bloqueados", value: String(r.qtd ?? 0), cls: "is-warn" },
-        { label: "Valor bloqueado", value: r.valor || "R$ 0,00", cls: "is-danger" },
+        { label: "Itens", value: String(r.qtd ?? 0), cls: "is-warn" },
+        { label: "Bloqueado (lista)", value: r.valor || "R$ 0,00", cls: "is-danger" },
+        { label: "MED na Efí", value: r.bloqueio_med_efi || "R$ 0,00", cls: "is-danger" },
+        { label: "Saldo Efí", value: r.saldo_efi || "R$ 0,00" },
       ]);
     }
     const hint = el("asf_bloq_hint");
     const itens = data?.itens || [];
     if (hint) {
       hint.textContent = itens.length
-        ? `${itens.length} cobrança(s) com valor bloqueado na Efí`
-        : "Nenhum pagamento bloqueado no momento";
+        ? `${itens.length} bloqueio(s) — MED / saldo contestado`
+        : "Nenhum bloqueio listado. Confira o sync abaixo.";
     }
     const syncEl = el("asf_bloq_sync");
     if (syncEl) {
       if (sync.ok) {
-        syncEl.textContent = `Sync Efí MED: ${sync.total_med ?? 0} infração(ões) · ${sync.atualizados ?? 0} fatura(s) atualizada(s)${sync.sem_fatura ? ` · ${sync.sem_fatura} sem vínculo` : ""}.`;
+        syncEl.textContent = `Sync Efí: ${sync.total_med ?? 0} MED · ${sync.abertos ?? 0} aberto(s) · ${sync.atualizados ?? 0} fatura(s) · ${sync.sem_fatura ?? 0} sem vínculo. Bloqueio MED conta: ${r.bloqueio_med_efi || "R$ 0,00"}.`;
       } else {
         syncEl.textContent = sync.message
           ? `Sync Efí: ${sync.message}`
-          : "Sync Efí MED não executado.";
+          : "Sync Efí MED não executado. Precisa dos escopos gn.infractions.read e gn.balance.read na app Efí.";
       }
     }
     const tb = el("asf_bloq_tbody");
     if (!tb) return;
     if (!itens.length) {
-      tb.innerHTML = emptyRow(8, "Nenhuma fatura bloqueada. Ao atualizar, consultamos a Efí (MED).");
+      const extra =
+        Number(sync.bloqueio_med_centavos || 0) > 0
+          ? ` Há ${r.bloqueio_med_efi || "valor"} bloqueado na conta Efí, mas a API de infrações não trouxe itens (escopo ou período).`
+          : "";
+      tb.innerHTML = emptyRow(8, `Nenhum item. Ao atualizar consultamos a Efí.${extra}`);
       return;
     }
     tb.innerHTML = itens
       .map((a) => {
-        const med = `<span class="Asf_Badge is-bloqueado">${esc(a.med_status_label || a.med_status || "—")}</span>`;
+        const med = `<span class="Asf_Badge is-bloqueado">${esc(a.med_status_label || a.med_status || "Bloqueio")}</span>`;
+        const proto = a.protocolo ? `<div class="Asf_Muted">Prot. ${esc(a.protocolo)}</div>` : "";
+        const tenantId = a.id_tenant ? `#${esc(a.id_tenant)}` : "—";
+        const vinculo = a.vinculado
+          ? ""
+          : `<div class="Asf_Muted">Só na Efí (sem fatura local)</div>`;
+        const acoes = a.id_fatura
+          ? btnMenuFatura({ ...a, status_grupo: "bloqueado", lembrete_rotulo: "" })
+          : "—";
         return `<tr>
-          <td><strong>${esc(a.nome)}</strong><div class="Asf_Muted">#${esc(a.id_tenant)}</div></td>
-          <td>${esc(a.plano_label)}</td>
-          <td>${esc(a.referencia || a.id_fatura)}</td>
+          <td><strong>${esc(a.nome)}</strong><div class="Asf_Muted">${tenantId}</div>${vinculo}</td>
+          <td>${esc(a.plano_label || "—")}</td>
+          <td>${esc(a.referencia || a.id_fatura || "—")}${proto}</td>
           <td><strong>${esc(a.valor)}</strong></td>
           <td>${esc(a.pago_br || "—")}</td>
           <td>${med}<div class="Asf_Muted">${esc(a.med_atualizado_br || "")}</div></td>
           <td>${esc(a.med_razao || "—")}</td>
-          <td class="Asf_ColAcoes">${btnMenuFatura({ ...a, status_grupo: "bloqueado", lembrete_rotulo: "" })}</td>
+          <td class="Asf_ColAcoes">${acoes}</td>
         </tr>`;
       })
       .join("");
@@ -482,6 +502,10 @@
     const menu = el("asf_menu_ativa");
     if (!menu) return;
     el("asf_menu") && (el("asf_menu").hidden = true);
+    const btnCriar = menu.querySelector('[data-acao-ativa="criar_efi"]');
+    const btnCancelar = menu.querySelector('[data-acao-ativa="cancelar_assinatura"]');
+    if (btnCriar) btnCriar.hidden = btn.getAttribute("data-criar-efi") !== "1";
+    if (btnCancelar) btnCancelar.hidden = btn.getAttribute("data-cancelar") !== "1";
     menuAlvo = btn;
     menuTipo = "ativa";
     posicionarMenu(menu, btn);
@@ -635,24 +659,118 @@
     }
   }
 
+  function htmlDetalheTenant(t) {
+    const fat = t.ultima_fatura || null;
+    const fatHtml = fat
+      ? `${esc(fat.referencia)} · ${esc(fat.status_label)} · ${esc(fat.valor)}`
+      : "—";
+    return `
+      <dl class="Asf_Detalhe">
+        ${linhaDetalhe("Tenant", `${t.nome || ""} #${t.id_tenant || ""}`)}
+        ${linhaDetalhe("Slug", t.slug)}
+        ${linhaDetalhe("Plano", t.plano_label)}
+        ${linhaDetalhe("Ciclo", t.periodicidade_label)}
+        ${linhaDetalhe("Forma", t.forma_label)}
+        ${linhaDetalhe("E-mail cobrança", t.email_cobranca)}
+        ${linhaDetalhe("Adesão", t.inicio_cobranca_br)}
+        ${linhaDetalhe("Próx. cobrança", t.proxima_cobranca_br)}
+        ${linhaDetalhe("Recorrência Efí", t.assinatura_status_label)}
+        ${linhaDetalhe("Subscription Efí", t.efi_subscription_id || "—")}
+        ${linhaDetalhe("Última fatura", fatHtml)}
+      </dl>`;
+  }
+
+  async function verDetalheTenant(btn) {
+    const idTenant = parseInt(btn.getAttribute("data-tenant") || "0", 10);
+    if (!idTenant) return;
+    const modal = el("asf_modal");
+    const body = el("asf_modal_body");
+    const titulo = el("asf_modal_titulo");
+    if (!modal || !body) return;
+    if (titulo) titulo.textContent = "Assinatura";
+    body.innerHTML = `<p class="Asf_Hint">Carregando…</p>`;
+    if (typeof modal.showModal === "function") modal.showModal();
+    else modal.hidden = false;
+    const url = new URL(`${cfg.apiTenant || ""}${idTenant}`, window.location.origin);
+    const r = await fetch(url.toString(), { credentials: "include", headers: { Accept: "application/json" } });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.success) throw new Error(j.message || "Não foi possível abrir o detalhe.");
+    const t = j.tenant || {};
+    if (titulo) titulo.textContent = t.nome || `Tenant #${idTenant}`;
+    body.innerHTML = htmlDetalheTenant(t);
+  }
+
+  async function criarAssinaturaEfi(btn) {
+    const idTenant = parseInt(btn.getAttribute("data-tenant") || "0", 10);
+    const nome = btn.getAttribute("data-nome") || "este tenant";
+    if (!idTenant || !window.Swal) return;
+    const c = await Swal.fire({
+      title: "Criar assinatura na Efí?",
+      html: `<p style="margin:0 0 8px"><strong>${esc(nome)}</strong></p><p style="margin:0">Gera a recorrência na Efí. A 1ª cobrança fica para o <strong>próximo ciclo</strong> (boleto) — o período já pago não é re-cobrado.</p><p style="margin:8px 0 0;color:#64748b;font-size:0.9rem">Se a forma for cartão, não dá para criar aqui (falta o token).</p>`,
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonText: "Criar na Efí",
+      cancelButtonText: "Voltar",
+      confirmButtonColor: "#021F81",
+    });
+    if (!c.isConfirmed) return;
+    Swal.fire({ title: "Criando…", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    const r = await fetch(cfg.apiCriarEfi, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ id_tenant: idTenant }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.success) throw new Error(j.message || "Não foi possível criar a assinatura.");
+    await Swal.fire({
+      icon: "success",
+      title: "Assinatura na Efí",
+      text: j.message || j.mensagem || "Criada.",
+      confirmButtonColor: "#021F81",
+    });
+    await carregar();
+  }
+
+  async function cancelarAssinaturaTenant(btn) {
+    const idTenant = parseInt(btn.getAttribute("data-tenant") || "0", 10);
+    const nome = btn.getAttribute("data-nome") || "este tenant";
+    if (!idTenant || !window.Swal) return;
+    const c = await Swal.fire({
+      title: "Cancelar assinatura?",
+      html: `<p style="margin:0 0 8px"><strong>${esc(nome)}</strong></p><p style="margin:0">Encerra a recorrência (Efí e local). O período já pago continua até o fim; depois a conta volta ao Explorar.</p>`,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Sim, cancelar",
+      cancelButtonText: "Voltar",
+      confirmButtonColor: "#E53935",
+    });
+    if (!c.isConfirmed) return;
+    Swal.fire({ title: "Cancelando…", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    const r = await fetch(cfg.apiCancelarAssinatura, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ id_tenant: idTenant }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.success) throw new Error(j.message || "Não foi possível cancelar.");
+    await Swal.fire({
+      icon: "success",
+      title: "Assinatura cancelada",
+      text: j.message || "Cancelada.",
+      confirmButtonColor: "#021F81",
+    });
+    await carregar();
+  }
+
   function acaoAtiva(acao, btn) {
-    const nome = btn.getAttribute("data-nome") || "tenant";
-    if (acao === "ver_faturas") {
-      const busca = el("asf_fat_busca");
-      if (busca) busca.value = nome;
-      filtroFatBusca = nome.toLowerCase();
-      setTab("faturamento");
-      rerenderLocal();
-      return;
-    }
-    if (window.Swal) {
-      Swal.fire({
-        icon: "info",
-        title: acao === "cancelar_plano" ? "Cancelar plano" : "Alterar plano",
-        text: "Em breve neste painel. Por enquanto use o financeiro da conta ou o suporte interno.",
-        confirmButtonColor: "#021F81",
-      });
-    }
+    const falha = (e) => {
+      if (window.Swal) Swal.fire("Erro", e.message || "Não foi possível concluir.", "error");
+    };
+    if (acao === "detalhe") verDetalheTenant(btn).catch(falha);
+    else if (acao === "criar_efi") criarAssinaturaEfi(btn).catch(falha);
+    else if (acao === "cancelar_assinatura") cancelarAssinaturaTenant(btn).catch(falha);
   }
 
   document.addEventListener("DOMContentLoaded", () => {

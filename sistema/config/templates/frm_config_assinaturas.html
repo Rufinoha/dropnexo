@@ -264,9 +264,9 @@
 </div>
 
 <div class="Asf_Menu" id="asf_menu_ativa" hidden role="menu">
-  <button type="button" data-acao-ativa="ver_faturas" role="menuitem">Ver faturas</button>
-  <button type="button" data-acao-ativa="alterar_plano" role="menuitem">Alterar plano</button>
-  <button type="button" data-acao-ativa="cancelar_plano" class="is-perigo" role="menuitem">Cancelar plano</button>
+  <button type="button" data-acao-ativa="detalhe" role="menuitem">Ver detalhes</button>
+  <button type="button" data-acao-ativa="criar_efi" role="menuitem">Criar assinatura no Efí</button>
+  <button type="button" data-acao-ativa="cancelar_assinatura" class="is-perigo" role="menuitem">Cancelar assinatura</button>
 </div>
 
 <dialog class="Asf_Modal" id="asf_modal" aria-labelledby="asf_modal_titulo">
@@ -281,7 +281,10 @@
   "apiDados": url_for("config.assinaturas_faturamento_dados"),
   "apiCancelar": url_for("config.assinaturas_cancelar_fatura"),
   "apiLembrete": url_for("config.assinaturas_lembrete_fatura"),
-  "apiDetalhe": url_for("config.assinaturas_faturamento_pagina") ~ "/fatura/"
+  "apiDetalhe": url_for("config.assinaturas_faturamento_pagina") ~ "/fatura/",
+  "apiTenant": url_for("config.assinaturas_faturamento_pagina") ~ "/tenant/",
+  "apiCriarEfi": url_for("config.assinaturas_criar_efi"),
+  "apiCancelarAssinatura": url_for("config.assinaturas_cancelar_assinatura")
 } | tojson }}</script>
-<script defer src="{{ url_for('config.static', filename='script/Sconfig_assinaturas.js') }}?v=9"></script>
+<script defer src="{{ url_for('config.static', filename='script/Sconfig_assinaturas.js') }}?v=11"></script>
 {% endblock %}

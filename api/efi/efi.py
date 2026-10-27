@@ -688,6 +688,16 @@ def listar_infracoes_med(*, inicio: str, fim: str) -> dict:
     return {"infracoes": [], "raw": resp}
 
 
+def consultar_saldo_efi(*, com_bloqueios: bool = True) -> dict:
+    """GET /v2/gn/saldo — escopo gn.balance.read. Com bloqueios=true traz MED/judicial."""
+    params = {"bloqueios": "true"} if com_bloqueios else {}
+    resp = _raise_resp(_cliente().get_account_balance(params=params))
+    corpo = resp.get("data") if isinstance(resp.get("data"), dict) else resp
+    if not isinstance(corpo, dict):
+        return {"saldo": "0.00", "bloqueios": {}}
+    return corpo
+
+
 def consultar_pix_recebido(e2e_id: str) -> dict:
     """GET /v2/pix/:e2eId — detalhe do Pix recebido (traz txid)."""
     e2e = (e2e_id or "").strip()
