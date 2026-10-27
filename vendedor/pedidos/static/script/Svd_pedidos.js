@@ -3,8 +3,8 @@
     rascunho: "Rascunho",
     importado: "Importado",
     aguardando_pagamento: "Aguardando pagamento",
-    aguardando_confirmacao: "Pago — aguardando expedição",
-    pago: "Pago (fornecedor aprovou)",
+    aguardando_confirmacao: "Aguardando expedição",
+    pago: "Pago",
     cancelado: "Cancelado",
     em_expedicao: "Em expedição",
     entregue: "Entregue",
@@ -364,15 +364,15 @@
         const data = p.criado_em ? new Date(p.criado_em).toLocaleDateString("pt-BR") : "—";
         return `
       <tr>
-        <td><strong class="Pd_Num">${esc(p.numero)}</strong></td>
-        <td>${esc(data)}</td>
-        <td>${esc(p.fornecedor_nome || "—")}</td>
-        <td>${esc(p.cliente_nome || "—")}</td>
-        <td><strong>${fmt(p.valor_total)}</strong></td>
-        <td>${origemHtml(p.origem)}</td>
-        <td>${badge(stC(p), "cliente")}</td>
-        <td>${badge(stV(p), "pedido")}</td>
-        <td class="Cl_TableActions Pd_Acoes">
+        <td class="Pd_ColPed"><strong class="Pd_Num">${esc(p.numero)}</strong></td>
+        <td class="Pd_ColData">${esc(data)}</td>
+        <td class="Pd_ColForn">${esc(p.fornecedor_nome || "—")}</td>
+        <td class="Pd_ColCli">${esc(p.cliente_nome || "—")}</td>
+        <td class="Pd_ColTotal"><strong>${fmt(p.valor_total)}</strong></td>
+        <td class="Pd_ColOrigem">${origemHtml(p.origem)}</td>
+        <td class="Pd_ColStCli">${badge(stC(p), "cliente")}</td>
+        <td class="Pd_ColStPed">${badge(stV(p), "pedido")}</td>
+        <td class="Cl_TableActions Pd_Acoes Pd_ColAcoes">
           <button type="button" class="Pd_MenuBtn" aria-label="Ações"
             data-menu="1"
             data-id="${p.id}"

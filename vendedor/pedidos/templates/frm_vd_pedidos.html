@@ -3,7 +3,7 @@
 {% set nav_ativo = 'vd_pedidos' %}
 {% block topbar_title %}Pedidos{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('vd_pedidos.static', filename='style/Cvd_pedidos.css') }}?v=30" />
+<link rel="stylesheet" href="{{ url_for('vd_pedidos.static', filename='style/Cvd_pedidos.css') }}?v=31" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal Pd_Page">
@@ -74,14 +74,14 @@
     <table class="Pd_Table" id="pd_tabela">
       <thead>
         <tr>
-          <th>Pedido</th>
-          <th>Data</th>
-          <th>Fornecedor</th>
-          <th>Cliente</th>
-          <th>Total</th>
-          <th>Origem</th>
-          <th>Status do cliente</th>
-          <th>Status do pedido</th>
+          <th class="Pd_ColPed">Pedido</th>
+          <th class="Pd_ColData">Data</th>
+          <th class="Pd_ColForn">Fornecedor</th>
+          <th class="Pd_ColCli">Cliente</th>
+          <th class="Pd_ColTotal">Total</th>
+          <th class="Pd_ColOrigem">Origem</th>
+          <th class="Pd_ColStCli">Status cliente</th>
+          <th class="Pd_ColStPed">Status pedido</th>
           <th class="Pd_ColAcoes">Ações</th>
         </tr>
       </thead>
@@ -314,6 +314,6 @@
 {% endblock %}
 {% block page_js %}
 <script defer src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
-<script defer src="{{ url_for('vd_pedidos.static', filename='script/Svd_pedidos.js') }}?v=57"></script>
+<script defer src="{{ url_for('vd_pedidos.static', filename='script/Svd_pedidos.js') }}?v=58"></script>
 <script id="pd_cfg" type="application/json">{{ {"mp_icone": url_for("mercadopago.static", filename="imge/icone_mercadopago.png")}|tojson }}</script>
 {% endblock %}
