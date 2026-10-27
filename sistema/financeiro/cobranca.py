@@ -196,6 +196,14 @@ def garantir_colunas_assinatura(cur) -> None:
         )
         """
     )
+    cur.execute(
+        """
+        ALTER TABLE tbl_fatura
+            ADD COLUMN IF NOT EXISTS nf_caminho TEXT,
+            ADD COLUMN IF NOT EXISTS nf_nome VARCHAR(180),
+            ADD COLUMN IF NOT EXISTS nf_anexado_em TIMESTAMP
+        """
+    )
 
 
 def garantir_cobranca_tenant(cur, id_tenant: int) -> None:
@@ -414,6 +422,74 @@ def fatura_dict(row) -> dict:
         "desconto_cupom_centavos": int(row[22] or 0) if len(row) > 22 else 0,
     }
     return d
+
+
+def caminho_nf_fatura(cur, id_fatura: int, id_tenant: int | None = None) -> tuple[str, str] | None:
+    """Retorna (caminho_relativo, nome) da NFS-e anexada à fatura paga."""
+    garantir_colunas_assinatura(cur)
+    params: list = [int(id_fatura)]
+    filtro = "id = %s"
+    if id_tenant:
+        filtro += " AND id_tenant = %s"
+        params.append(int(id_tenant))
+    cur.execute(
+        f"""
+        SELECT nf_caminho, nf_nome, status
+        FROM tbl_fatura
+        WHERE {filtro}
+        """,
+        params,
+    )
+    row = cur.fetchone()
+    if not row:
+        return None
+    if (row[2] or "").strip().lower() != "pago":
+        return None
+    caminho = (row[0] or "").strip()
+    if not caminho:
+        return None
+    return caminho, (row[1] or "nota-fiscal.pdf")[:180]
+
+
+def anexar_nf_fatura(cur, id_fatura: int, *, nf_nome: str, nf_caminho: str) -> dict:
+    """Anexa PDF de NFS-e (emitida fora do Drop) a uma fatura já paga."""
+    garantir_colunas_assinatura(cur)
+    caminho = (nf_caminho or "").strip()
+    nome = (nf_nome or "nota-fiscal.pdf").strip()[:180] or "nota-fiscal.pdf"
+    if not caminho:
+        raise ValueError("Caminho da nota fiscal inválido.")
+    cur.execute(
+        """
+        SELECT id, id_tenant, status
+        FROM tbl_fatura
+        WHERE id = %s
+        """,
+        (int(id_fatura),),
+    )
+    row = cur.fetchone()
+    if not row:
+        raise ValueError("Fatura não encontrada.")
+    if (row[2] or "").strip().lower() != "pago":
+        raise ValueError("Só é possível anexar nota fiscal em cobrança paga.")
+    cur.execute(
+        """
+        UPDATE tbl_fatura
+        SET nf_caminho = %s,
+            nf_nome = %s,
+            nf_anexado_em = NOW(),
+            atualizado_em = NOW()
+        WHERE id = %s AND status = 'pago'
+        """,
+        (caminho, nome, int(id_fatura)),
+    )
+    return {
+        "ok": True,
+        "id_fatura": int(row[0]),
+        "id_tenant": int(row[1]),
+        "nf_nome": nome,
+        "nf_caminho": caminho,
+        "tem_nf": True,
+    }
 
 
 _FATURA_COLS = """

@@ -10,6 +10,9 @@
   let filtroAtivasBusca = "";
   let filtroFatBusca = "";
   let filtroFatStatus = "";
+  let filtroNfBusca = "";
+  let filtroNfStatus = "sem";
+  let nfUploadAlvo = null;
 
   function el(id) {
     return document.getElementById(id);
@@ -85,7 +88,7 @@
 
   function preencherAnos() {
     const y0 = hoje.getFullYear();
-    ["asf_ano", "asf_ano_cx"].forEach((id) => {
+    ["asf_ano", "asf_ano_cx", "asf_ano_nf"].forEach((id) => {
       const sel = el(id);
       if (!sel || sel.options.length) return;
       for (let y = y0 + 1; y >= y0 - 5; y--) {
@@ -96,38 +99,44 @@
       }
       sel.value = String(filtroAno);
     });
-    ["asf_mes", "asf_mes_cx"].forEach((id) => {
+    ["asf_mes", "asf_mes_cx", "asf_mes_nf"].forEach((id) => {
       const mes = el(id);
       if (mes) mes.value = String(filtroMes);
     });
   }
 
   function syncFiltroSelects() {
-    ["asf_mes", "asf_mes_cx"].forEach((id) => {
+    ["asf_mes", "asf_mes_cx", "asf_mes_nf"].forEach((id) => {
       const n = el(id);
       if (n) n.value = String(filtroMes);
     });
-    ["asf_ano", "asf_ano_cx"].forEach((id) => {
+    ["asf_ano", "asf_ano_cx", "asf_ano_nf"].forEach((id) => {
       const n = el(id);
       if (n) n.value = String(filtroAno);
     });
   }
 
   function lerFiltros() {
-    const mesSrc =
-      tabAtual === "conciliacao"
-        ? el("asf_mes_cx")?.value || el("asf_mes")?.value
-        : el("asf_mes")?.value || el("asf_mes_cx")?.value;
-    const anoSrc =
-      tabAtual === "conciliacao"
-        ? el("asf_ano_cx")?.value || el("asf_ano")?.value
-        : el("asf_ano")?.value || el("asf_ano_cx")?.value;
+    let mesSrc = el("asf_mes")?.value || el("asf_mes_cx")?.value || el("asf_mes_nf")?.value;
+    let anoSrc = el("asf_ano")?.value || el("asf_ano_cx")?.value || el("asf_ano_nf")?.value;
+    if (tabAtual === "conciliacao") {
+      mesSrc = el("asf_mes_cx")?.value || mesSrc;
+      anoSrc = el("asf_ano_cx")?.value || anoSrc;
+    } else if (tabAtual === "nota-fiscal") {
+      mesSrc = el("asf_mes_nf")?.value || mesSrc;
+      anoSrc = el("asf_ano_nf")?.value || anoSrc;
+    } else if (tabAtual === "faturamento") {
+      mesSrc = el("asf_mes")?.value || mesSrc;
+      anoSrc = el("asf_ano")?.value || anoSrc;
+    }
     filtroMes = parseInt(mesSrc || filtroMes, 10) || filtroMes;
     filtroAno = parseInt(anoSrc || filtroAno, 10) || filtroAno;
     syncFiltroSelects();
     filtroAtivasBusca = (el("asf_ativas_busca")?.value || "").trim().toLowerCase();
     filtroFatBusca = (el("asf_fat_busca")?.value || "").trim().toLowerCase();
     filtroFatStatus = (el("asf_fat_status")?.value || "").trim().toLowerCase();
+    filtroNfBusca = (el("asf_nf_busca")?.value || "").trim().toLowerCase();
+    filtroNfStatus = (el("asf_nf_status")?.value || "").trim().toLowerCase();
   }
 
   function matchBusca(item, q) {
@@ -513,6 +522,88 @@
       .join("");
   }
 
+  function renderNotaFiscal(data) {
+    const r = data?.resumo || {};
+    const mesLbl = data?.filtros?.mes_label || `${String(filtroMes).padStart(2, "0")}/${filtroAno}`;
+    const box = el("asf_nf_kpis");
+    if (box) {
+      box.innerHTML = kpisHtml([
+        { label: "Pagas no mês", value: String(r.qtd ?? 0) },
+        { label: "Sem NF", value: String(r.sem_nf ?? 0), cls: "is-warn" },
+        { label: "Com NF", value: String(r.com_nf ?? 0), cls: "is-ok" },
+        { label: "A emitir (R$)", value: r.valor_sem_nf || "R$ 0,00", cls: "is-warn" },
+      ]);
+    }
+    const todas = data?.itens || [];
+    const filtradas = todas.filter((a) => {
+      if (!matchBusca(a, filtroNfBusca)) return false;
+      if (filtroNfStatus === "sem" && a.tem_nf) return false;
+      if (filtroNfStatus === "com" && !a.tem_nf) return false;
+      return true;
+    });
+    const hint = el("asf_nf_hint");
+    if (hint) {
+      hint.textContent = todas.length
+        ? filtroNfBusca || filtroNfStatus
+          ? `${filtradas.length} de ${todas.length} paga(s) em ${mesLbl}`
+          : `${todas.length} paga(s) em ${mesLbl}`
+        : `Nenhuma cobrança paga em ${mesLbl}`;
+    }
+    const tb = el("asf_nf_tbody");
+    if (!tb) return;
+    if (!filtradas.length) {
+      tb.innerHTML = emptyRow(
+        8,
+        todas.length ? "Nenhuma cobrança com esses filtros." : "Nenhuma cobrança paga neste mês."
+      );
+      return;
+    }
+    tb.innerHTML = filtradas
+      .map((a) => {
+        const badge = a.tem_nf
+          ? `<span class="Asf_Badge is-pago">Anexada</span><div class="Asf_Muted">${esc(a.nf_anexado_br || "")}</div>`
+          : `<span class="Asf_Badge is-pendente">Pendente</span>`;
+        const acoes = a.tem_nf
+          ? `<div class="Asf_Acoes Asf_Acoes--nf">
+              <button type="button" class="Cl_BtnLink" data-nf-ver="${esc(a.id_fatura)}">Ver PDF</button>
+              <button type="button" class="Cl_BtnLink" data-nf-anexar="${esc(a.id_fatura)}" data-nf-nome="${esc(a.nome)}">Trocar</button>
+            </div>`
+          : `<div class="Asf_Acoes Asf_Acoes--nf">
+              <button type="button" class="Cl_BtnPrimario Asf_BtnNf" data-nf-anexar="${esc(a.id_fatura)}" data-nf-nome="${esc(a.nome)}">Anexar PDF</button>
+            </div>`;
+        return `<tr>
+          <td><strong>${esc(a.pago_br || "—")}</strong></td>
+          <td><strong>${esc(a.nome)}</strong><div class="Asf_Muted">#${esc(a.id_tenant)}</div></td>
+          <td>${esc(a.plano_label)}</td>
+          <td>${esc(a.referencia || a.id_fatura)}</td>
+          <td>${esc(a.forma_label)}</td>
+          <td><strong>${esc(a.valor)}</strong></td>
+          <td>${badge}</td>
+          <td class="Asf_ColAcoes">${acoes}</td>
+        </tr>`;
+      })
+      .join("");
+  }
+
+  async function anexarNfFatura(idFatura, arquivo) {
+    const base = cfg.apiAnexarNf || "/configuracoes/assinaturas-faturamento/fatura/";
+    const fd = new FormData();
+    fd.append("nf", arquivo, arquivo.name || "nota-fiscal.pdf");
+    const r = await fetch(`${base}${idFatura}/anexar-nf`, {
+      method: "POST",
+      credentials: "same-origin",
+      body: fd,
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.success) throw new Error(j.message || "Falha ao anexar a nota.");
+    return j;
+  }
+
+  function verNfFatura(idFatura) {
+    const base = cfg.apiBaixarNf || "/configuracoes/assinaturas-faturamento/fatura/";
+    window.open(`${base}${idFatura}/nf`, "_blank", "noopener");
+  }
+
   function renderAll(j) {
     cache = j;
     lerFiltros();
@@ -521,6 +612,7 @@
     renderBloq(j.bloqueados);
     renderConciliacao(j.conciliacao);
     renderFat(j.faturamento);
+    renderNotaFiscal(j.nota_fiscal);
     setStatus(`Atualizado agora · mês ${filtroMes.toString().padStart(2, "0")}/${filtroAno}.`);
   }
 
@@ -530,6 +622,7 @@
     renderAtivas(cache.ativas);
     renderConciliacao(cache.conciliacao);
     renderFat(cache.faturamento);
+    renderNotaFiscal(cache.nota_fiscal);
   }
 
   async function sincronizarEfi() {
@@ -978,6 +1071,8 @@
     el("asf_ano")?.addEventListener("change", carregar);
     el("asf_mes_cx")?.addEventListener("change", carregar);
     el("asf_ano_cx")?.addEventListener("change", carregar);
+    el("asf_mes_nf")?.addEventListener("change", carregar);
+    el("asf_ano_nf")?.addEventListener("change", carregar);
     el("asf_btnSyncEfi")?.addEventListener("click", sincronizarEfi);
     el("asf_ativas_busca")?.addEventListener("input", () => {
       filtroAtivasBusca = (el("asf_ativas_busca")?.value || "").trim().toLowerCase();
@@ -990,6 +1085,57 @@
     el("asf_fat_status")?.addEventListener("change", () => {
       filtroFatStatus = (el("asf_fat_status")?.value || "").trim().toLowerCase();
       if (cache) renderFat(cache.faturamento);
+    });
+    el("asf_nf_busca")?.addEventListener("input", () => {
+      filtroNfBusca = (el("asf_nf_busca")?.value || "").trim().toLowerCase();
+      if (cache) renderNotaFiscal(cache.nota_fiscal);
+    });
+    el("asf_nf_status")?.addEventListener("change", () => {
+      filtroNfStatus = (el("asf_nf_status")?.value || "").trim().toLowerCase();
+      if (cache) renderNotaFiscal(cache.nota_fiscal);
+    });
+    el("asf_nf_file")?.addEventListener("change", async () => {
+      const input = el("asf_nf_file");
+      const file = input?.files?.[0];
+      const idFatura = nfUploadAlvo;
+      nfUploadAlvo = null;
+      if (input) input.value = "";
+      if (!file || !idFatura) return;
+      if (!String(file.name || "").toLowerCase().endsWith(".pdf")) {
+        if (window.Swal) Swal.fire("Atenção", "Envie um arquivo PDF.", "warning");
+        return;
+      }
+      try {
+        if (window.Swal) {
+          Swal.fire({
+            title: "Anexando…",
+            text: "Enviando a nota fiscal.",
+            allowOutsideClick: false,
+            didOpen: () => Swal.showLoading(),
+          });
+        }
+        await anexarNfFatura(idFatura, file);
+        if (window.Swal) {
+          await Swal.fire("Pronto", "Nota fiscal anexada à cobrança.", "success");
+        }
+        await carregar();
+      } catch (e) {
+        if (window.Swal) Swal.fire("Erro", e.message || "Falha ao anexar.", "error");
+      }
+    });
+    document.addEventListener("click", (ev) => {
+      const ver = ev.target.closest("[data-nf-ver]");
+      if (ver) {
+        ev.preventDefault();
+        verNfFatura(ver.getAttribute("data-nf-ver"));
+        return;
+      }
+      const anexar = ev.target.closest("[data-nf-anexar]");
+      if (anexar) {
+        ev.preventDefault();
+        nfUploadAlvo = anexar.getAttribute("data-nf-anexar");
+        el("asf_nf_file")?.click();
+      }
     });
     setTab("ativas");
     carregar();

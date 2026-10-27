@@ -215,6 +215,15 @@
   align-items: center;
   gap: 6px;
 }
+.Asf_Acoes--nf {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.Asf_BtnNf {
+  padding: 5px 10px;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
 
 .Asf_MenuBtn {
   min-width: 30px;

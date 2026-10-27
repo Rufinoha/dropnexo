@@ -3,7 +3,7 @@
 {% set nav_ativo = 'config' %}
 {% block topbar_title %}Assinaturas e faturamento{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_assinaturas.css') }}?v=13" />
+<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_assinaturas.css') }}?v=14" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal Asf_Wrap">
@@ -12,7 +12,7 @@
       <h2>Assinaturas e faturamento</h2>
       <p class="cl-page-desc">
         Visão do dono da plataforma: assinantes, inadimplência, conciliação Efí
-        (caixa) e faturamento por competência.
+        (caixa), faturamento por competência e notas fiscais das cobranças pagas.
       </p>
     </div>
     <button type="button" class="Cl_BtnCancelar" id="asf_btnAtualizar">Atualizar</button>
@@ -28,6 +28,7 @@
     <button type="button" class="Asf_Tab" data-tab="bloqueados" role="tab" aria-selected="false">Bloqueados</button>
     <button type="button" class="Asf_Tab" data-tab="conciliacao" role="tab" aria-selected="false">Conciliação Efí</button>
     <button type="button" class="Asf_Tab" data-tab="faturamento" role="tab" aria-selected="false">Faturamento</button>
+    <button type="button" class="Asf_Tab" data-tab="nota-fiscal" role="tab" aria-selected="false">Nota fiscal</button>
   </nav>
 
   <p class="Asf_Status" id="asf_status">Carregando…</p>
@@ -344,6 +345,79 @@
       </div>
     </div>
   </section>
+
+  <section class="Asf_Panel" id="asf_tab_nota_fiscal" data-tab-panel="nota-fiscal" role="tabpanel" hidden>
+    <div class="Asf_Filtros">
+      <div class="form-campo">
+        <label for="asf_mes_nf">Mês (pagamento)</label>
+        <select id="asf_mes_nf">
+          <option value="1">Janeiro</option>
+          <option value="2">Fevereiro</option>
+          <option value="3">Março</option>
+          <option value="4">Abril</option>
+          <option value="5">Maio</option>
+          <option value="6">Junho</option>
+          <option value="7">Julho</option>
+          <option value="8">Agosto</option>
+          <option value="9">Setembro</option>
+          <option value="10">Outubro</option>
+          <option value="11">Novembro</option>
+          <option value="12">Dezembro</option>
+        </select>
+      </div>
+      <div class="form-campo">
+        <label for="asf_ano_nf">Ano</label>
+        <select id="asf_ano_nf"></select>
+      </div>
+      <p class="Asf_FiltroHint">
+        Lista cobranças <strong>pagas</strong> no mês (por data de pagamento).
+        Emita a NFS-e na H74, baixe o PDF e anexe aqui.
+      </p>
+    </div>
+
+    <div class="Asf_Kpis" id="asf_nf_kpis"></div>
+
+    <div class="Asf_Card">
+      <div class="Asf_CardHead">
+        <h3>Cobranças pagas</h3>
+        <span class="Asf_Hint" id="asf_nf_hint">—</span>
+      </div>
+      <div class="Asf_Filtros Asf_Filtros--linha">
+        <div class="form-campo">
+          <label for="asf_nf_busca">Buscar tenant</label>
+          <input type="search" id="asf_nf_busca" placeholder="Nome…" autocomplete="off" />
+        </div>
+        <div class="form-campo">
+          <label for="asf_nf_status">Nota</label>
+          <select id="asf_nf_status">
+            <option value="sem">Sem NF</option>
+            <option value="">Todas</option>
+            <option value="com">Com NF</option>
+          </select>
+        </div>
+      </div>
+      <div class="Asf_TabelaWrap">
+        <table class="Asf_Tabela">
+          <thead>
+            <tr>
+              <th>Pago em</th>
+              <th>Tenant</th>
+              <th>Plano</th>
+              <th>Ref.</th>
+              <th>Forma</th>
+              <th>Valor</th>
+              <th>NF</th>
+              <th class="Asf_ColAcoes">Ações</th>
+            </tr>
+          </thead>
+          <tbody id="asf_nf_tbody">
+            <tr><td colspan="8" class="Asf_Empty">Carregando…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <input type="file" id="asf_nf_file" accept="application/pdf,.pdf" hidden />
+  </section>
 </div>
 
 <div class="Asf_Menu" id="asf_menu" hidden role="menu">
@@ -374,7 +448,9 @@
   "apiTenant": url_for("config.assinaturas_faturamento_pagina") ~ "/tenant/",
   "apiCriarEfi": url_for("config.assinaturas_criar_efi"),
   "apiCancelarAssinatura": url_for("config.assinaturas_cancelar_assinatura"),
-  "apiSyncEfi": url_for("config.assinaturas_sincronizar_efi")
+  "apiSyncEfi": url_for("config.assinaturas_sincronizar_efi"),
+  "apiAnexarNf": url_for("config.assinaturas_faturamento_pagina") ~ "/fatura/",
+  "apiBaixarNf": url_for("config.assinaturas_faturamento_pagina") ~ "/fatura/"
 } | tojson }}</script>
-<script defer src="{{ url_for('config.static', filename='script/Sconfig_assinaturas.js') }}?v=13"></script>
+<script defer src="{{ url_for('config.static', filename='script/Sconfig_assinaturas.js') }}?v=14"></script>
 {% endblock %}

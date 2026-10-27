@@ -472,6 +472,78 @@ def _montar_conciliacao(cur, ano_sel: int, mes_sel: int) -> dict[str, Any]:
     }
 
 
+def _montar_nota_fiscal(cur, ano_sel: int, mes_sel: int) -> dict[str, Any]:
+    """Cobranças pagas no mês (por pago_em) para anexar NFS-e emitida na H74."""
+    itens: list[dict[str, Any]] = []
+    try:
+        cur.execute("SAVEPOINT sp_asf_nf")
+        cur.execute(
+            """
+            SELECT f.id, f.id_tenant,
+                   COALESCE(NULLIF(t.nome_fantasia, ''), NULLIF(t.nome, ''), ''),
+                   f.referencia, f.plano_slug, f.valor_centavos, f.pago_em,
+                   f.forma_pagamento, t.tipo_negocio,
+                   COALESCE(NULLIF(TRIM(f.nf_caminho), ''), '') <> '',
+                   f.nf_nome, f.nf_anexado_em
+            FROM tbl_fatura f
+            JOIN tbl_tenant t ON t.id = f.id_tenant
+            WHERE f.status = 'pago'
+              AND f.pago_em IS NOT NULL
+              AND EXTRACT(YEAR FROM f.pago_em) = %s
+              AND EXTRACT(MONTH FROM f.pago_em) = %s
+            ORDER BY
+              CASE WHEN COALESCE(NULLIF(TRIM(f.nf_caminho), ''), '') = '' THEN 0 ELSE 1 END,
+              f.pago_em DESC, f.id DESC
+            LIMIT 300
+            """,
+            (ano_sel, mes_sel),
+        )
+        for row in cur.fetchall():
+            forma = (row[7] or "").strip().lower()
+            tem_nf = bool(row[9])
+            itens.append(
+                {
+                    "id_fatura": int(row[0]),
+                    "id_tenant": int(row[1]),
+                    "nome": (row[2] or "").strip() or f"Tenant #{row[1]}",
+                    "referencia": row[3] or "",
+                    "plano": str(row[4] or ""),
+                    "plano_label": nome_plano_comercial(row[4], row[8]),
+                    "valor_centavos": int(row[5] or 0),
+                    "valor": _fmt_reais(row[5]),
+                    "pago_em": _fmt_data(row[6]),
+                    "pago_br": _fmt_data_br(row[6]),
+                    "forma_label": FORMA_LABEL.get(forma, forma or "—"),
+                    "tem_nf": tem_nf,
+                    "nf_nome": (row[10] or "").strip() if tem_nf else "",
+                    "nf_anexado_br": _fmt_data_br(row[11]) if tem_nf else "",
+                }
+            )
+        cur.execute("RELEASE SAVEPOINT sp_asf_nf")
+    except Exception:
+        _rollback_sp(cur, "sp_asf_nf")
+        itens = []
+
+    sem_nf = sum(1 for i in itens if not i.get("tem_nf"))
+    com_nf = sum(1 for i in itens if i.get("tem_nf"))
+    valor_sem = sum(int(i.get("valor_centavos") or 0) for i in itens if not i.get("tem_nf"))
+    return {
+        "filtros": {
+            "ano": ano_sel,
+            "mes": mes_sel,
+            "mes_label": f"{mes_sel:02d}/{ano_sel}",
+        },
+        "resumo": {
+            "qtd": len(itens),
+            "sem_nf": sem_nf,
+            "com_nf": com_nf,
+            "valor_sem_nf": _fmt_reais(valor_sem),
+            "valor_sem_nf_centavos": valor_sem,
+        },
+        "itens": itens,
+    }
+
+
 def painel_assinaturas(
     conn,
     *,
@@ -1131,6 +1203,7 @@ def painel_assinaturas(
             "pagos_recentes": pagos_recentes,
         },
         "conciliacao": _montar_conciliacao(cur, ano_sel, mes_sel),
+        "nota_fiscal": _montar_nota_fiscal(cur, ano_sel, mes_sel),
         "bloqueados": {
             "resumo": {
                 "qtd": len(bloqueados),

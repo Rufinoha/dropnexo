@@ -3770,6 +3770,75 @@ def assinaturas_cancelar_assinatura():
         conn.close()
 
 
+@config_bp.post(f"{ASSINATURAS_PREFIX}/fatura/<int:id_fatura>/anexar-nf")
+@login_obrigatorio()
+def assinaturas_anexar_nf(id_fatura: int):
+    """Anexa PDF da NFS-e (emitida na H74) à cobrança paga."""
+    if (r := _exigir_dev()) is not None:
+        return r
+    from sistema.financeiro.cobranca import anexar_nf_fatura
+
+    arq = request.files.get("nf") or request.files.get("arquivo")
+    if not arq or not (arq.filename or "").lower().endswith(".pdf"):
+        return jsonify(success=False, message="Anexe a nota fiscal em PDF."), 400
+
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT id_tenant, status FROM tbl_fatura WHERE id = %s",
+            (int(id_fatura),),
+        )
+        row = cur.fetchone()
+        if not row:
+            return jsonify(success=False, message="Fatura não encontrada."), 404
+        if (row[1] or "").strip().lower() != "pago":
+            return jsonify(success=False, message="Só é possível anexar NF em cobrança paga."), 400
+        tid = int(row[0])
+        pasta = _MOD_DIR.parents[2] / "upload" / f"tenant{tid}" / "assinatura_nf"
+        pasta.mkdir(parents=True, exist_ok=True)
+        nome = Path(arq.filename or "nota-fiscal.pdf").name
+        destino = pasta / f"{int(id_fatura)}.pdf"
+        arq.save(destino)
+        rel = f"upload/tenant{tid}/assinatura_nf/{destino.name}"
+        out = anexar_nf_fatura(cur, int(id_fatura), nf_nome=nome, nf_caminho=rel)
+        conn.commit()
+        return jsonify(success=True, message="Nota fiscal anexada.", **out)
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 400
+    except Exception as e:
+        conn.rollback()
+        _log.exception("anexar nf fatura=%s", id_fatura)
+        return jsonify(success=False, message=str(e) or "Falha ao anexar a nota."), 500
+    finally:
+        conn.close()
+
+
+@config_bp.get(f"{ASSINATURAS_PREFIX}/fatura/<int:id_fatura>/nf")
+@login_obrigatorio()
+def assinaturas_baixar_nf(id_fatura: int):
+    if (r := _exigir_dev()) is not None:
+        return r
+    from flask import send_file
+
+    from sistema.financeiro.cobranca import caminho_nf_fatura
+
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        achou = caminho_nf_fatura(cur, int(id_fatura))
+    finally:
+        conn.close()
+    if not achou:
+        return jsonify(success=False, message="Nota fiscal ainda não anexada."), 404
+    rel, nome = achou
+    path = _MOD_DIR.parents[2] / rel
+    if not path.is_file():
+        return jsonify(success=False, message="Arquivo da nota não encontrado."), 404
+    return send_file(path, as_attachment=False, download_name=nome, mimetype="application/pdf")
+
+
 # --- HubSupport (Central de Chamados) ---
 HS_PREFIX = "/configuracoes/hubsupport"
 

@@ -234,16 +234,34 @@ def api_nota_fatura(id_fatura: int):
     tid = _id_tenant()
     if not tid:
         return jsonify(success=False, message="Sessão inválida."), 403
+    wants_file = (request.args.get("dl") or "").strip() in ("1", "true", "pdf")
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
         fat = obter_fatura(cur, tid, id_fatura)
         if not fat or fat.get("status") != "pago":
             return jsonify(success=False, message="Nota fiscal disponível somente após o pagamento."), 404
-        return jsonify(
-            success=False,
-            message="A nota fiscal desta fatura ainda não foi emitida.",
-        ), 404
+        from sistema.financeiro.cobranca import caminho_nf_fatura
+
+        achou = caminho_nf_fatura(cur, id_fatura, tid)
+        if not achou:
+            return jsonify(
+                success=False,
+                message="A nota fiscal desta fatura ainda não foi emitida.",
+            ), 404
+        rel, nome = achou
+        if not wants_file:
+            from flask import url_for
+
+            return jsonify(
+                success=True,
+                url=url_for("financeiro.api_nota_fatura", id_fatura=id_fatura, dl=1),
+                nome=nome,
+            )
+        path = _MOD.parents[2] / rel
+        if not path.is_file():
+            return jsonify(success=False, message="Arquivo da nota não encontrado."), 404
+        return send_file(path, as_attachment=False, download_name=nome, mimetype="application/pdf")
     finally:
         conn.close()
 
