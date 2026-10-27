@@ -12,6 +12,42 @@ def _env(key: str, fallback: str = "") -> str:
     return (os.getenv(key) or fallback).strip()
 
 
+def _garantir_cert_pem(cert_path: "Path", cert_pwd: str | None) -> "Path":
+    """
+    O efipay + OpenSSL recente falha com alguns .p12 (SSL PEM lib).
+    Se o path for .p12, gera .pem irmão (nodes) e usa o PEM.
+    """
+    from pathlib import Path
+    import subprocess
+
+    p = Path(cert_path)
+    if p.suffix.lower() != ".p12":
+        return p
+    pem = p.with_suffix(".pem")
+    precisa = (not pem.is_file()) or (pem.stat().st_mtime < p.stat().st_mtime)
+    if precisa:
+        pwd = cert_pwd if cert_pwd is not None else ""
+        tentativas = [
+            ["openssl", "pkcs12", "-in", str(p), "-out", str(pem), "-nodes", "-passin", f"pass:{pwd}"],
+            ["openssl", "pkcs12", "-in", str(p), "-out", str(pem), "-nodes", "-passin", f"pass:{pwd}", "-legacy"],
+        ]
+        last_err = ""
+        for cmd in tentativas:
+            proc = subprocess.run(cmd, capture_output=True, text=True)
+            if proc.returncode == 0 and pem.is_file():
+                try:
+                    pem.chmod(0o640)
+                except OSError:
+                    pass
+                break
+            last_err = (proc.stderr or proc.stdout or "").strip()
+        else:
+            raise RuntimeError(
+                f"Não converti o certificado Efí .p12 → .pem ({p}). OpenSSL: {last_err[:240]}"
+            )
+    return pem
+
+
 def _efi_credenciais() -> dict:
     sandbox = _env("EFI_SANDBOX", "true").lower() in ("1", "true", "yes", "on")
     # Se sandbox não definido, assume DEV quando MODO_PRODUCAO=false
@@ -48,11 +84,24 @@ def _efi_credenciais() -> dict:
         raise RuntimeError(
             "Credenciais Efi incompletas. Configure CHAVE_CLIENTE_ID/SECRET e EFI_CERTIFICATE_PATH no .env."
         )
+    # Resolve relativo ao cwd do app (produção: /srv/dropnexo).
+    # Em alguns OpenSSL o SDK falha com .p12 cru (SSL PEM lib); preferimos .pem.
+    from pathlib import Path
+
+    cert_path = Path(cert)
+    if not cert_path.is_absolute():
+        cert_path = (Path.cwd() / cert_path).resolve()
+    if not cert_path.is_file():
+        raise RuntimeError(
+            f"Certificado Efí não encontrado: {cert_path}. "
+            "Coloque o .p12/.pem em api/efi/secrets/ (Pix/MED/saldo exigem mTLS)."
+        )
+    cert_path = _garantir_cert_pem(cert_path, cert_pwd)
     opts: dict[str, Any] = {
         "client_id": client_id,
         "client_secret": client_secret,
         "sandbox": sandbox,
-        "certificate": cert,
+        "certificate": str(cert_path),
     }
     if cert_pwd:
         opts["certificate_password"] = cert_pwd
@@ -145,10 +194,12 @@ def _customer_efi(
 
 
 def _raise_resp(resp: Any) -> dict:
+    if isinstance(resp, BaseException):
+        raise RuntimeError(f"Efi: {resp}") from resp
     if isinstance(resp, str):
         raise RuntimeError(resp)
     if not isinstance(resp, dict):
-        raise RuntimeError("Resposta inválida da Efi.")
+        raise RuntimeError(f"Resposta inválida da Efi ({type(resp).__name__}).")
     code = resp.get("code", 200)
     try:
         code_n = int(code)

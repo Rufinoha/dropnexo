@@ -11,8 +11,8 @@
     <div>
       <h2>Assinaturas e faturamento</h2>
       <p class="cl-page-desc">
-        Visão do dono da plataforma: assinantes ativos, inadimplência e
-        faturamento (emitido × pago) mês a mês.
+        Visão do dono da plataforma: assinantes, inadimplência, conciliação Efí
+        (caixa) e faturamento por competência.
       </p>
     </div>
     <button type="button" class="Cl_BtnCancelar" id="asf_btnAtualizar">Atualizar</button>
@@ -26,6 +26,7 @@
     <button type="button" class="Asf_Tab is-active" data-tab="ativas" role="tab" aria-selected="true">Ativas</button>
     <button type="button" class="Asf_Tab" data-tab="inadimplencia" role="tab" aria-selected="false">Inadimplência</button>
     <button type="button" class="Asf_Tab" data-tab="bloqueados" role="tab" aria-selected="false">Bloqueados</button>
+    <button type="button" class="Asf_Tab" data-tab="conciliacao" role="tab" aria-selected="false">Conciliação Efí</button>
     <button type="button" class="Asf_Tab" data-tab="faturamento" role="tab" aria-selected="false">Faturamento</button>
   </nav>
 
@@ -170,6 +171,94 @@
     </div>
   </section>
 
+  <section class="Asf_Panel" id="asf_tab_conciliacao" data-tab-panel="conciliacao" role="tabpanel" hidden>
+    <div class="Asf_Filtros">
+      <div class="form-campo">
+        <label for="asf_mes_cx">Mês (caixa / pagamento)</label>
+        <select id="asf_mes_cx">
+          <option value="1">Janeiro</option>
+          <option value="2">Fevereiro</option>
+          <option value="3">Março</option>
+          <option value="4">Abril</option>
+          <option value="5">Maio</option>
+          <option value="6">Junho</option>
+          <option value="7">Julho</option>
+          <option value="8">Agosto</option>
+          <option value="9">Setembro</option>
+          <option value="10">Outubro</option>
+          <option value="11">Novembro</option>
+          <option value="12">Dezembro</option>
+        </select>
+      </div>
+      <div class="form-campo">
+        <label for="asf_ano_cx">Ano</label>
+        <select id="asf_ano_cx"></select>
+      </div>
+      <div class="form-campo Asf_FiltroAcao">
+        <label>&nbsp;</label>
+        <button type="button" class="Cl_BtnPrimario" id="asf_btnSyncEfi">Sincronizar com Efí</button>
+      </div>
+      <p class="Asf_FiltroHint">
+        Espelho das cobranças reais da Efí: só faturas com <strong>charge_id</strong> e valor &gt; 0.
+        O mês é o da <strong>data de pagamento</strong> (<code>pago_em</code> = paid_at).
+        Cortesia R$&nbsp;0 não entra. Use isto para conciliar com o extrato Efí / banco.
+      </p>
+    </div>
+
+    <div class="Asf_Kpis" id="asf_cx_kpis"></div>
+    <p class="Asf_Hint" id="asf_cx_sync" hidden></p>
+
+    <div class="Asf_Card">
+      <div class="Asf_CardHead">
+        <h3>Recebidos no mês (Efí)</h3>
+        <span class="Asf_Hint" id="asf_cx_recebidos_hint">—</span>
+      </div>
+      <div class="Asf_TabelaWrap">
+        <table class="Asf_Tabela">
+          <thead>
+            <tr>
+              <th>Pago em</th>
+              <th>Tenant</th>
+              <th>Charge Efí</th>
+              <th>Forma</th>
+              <th>Status</th>
+              <th>Valor</th>
+              <th class="Asf_ColAcoes">Ações</th>
+            </tr>
+          </thead>
+          <tbody id="asf_cx_recebidos_tbody">
+            <tr><td colspan="7" class="Asf_Empty">Carregando…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="Asf_Card">
+      <div class="Asf_CardHead">
+        <h3>Pendentes com charge (possível divergência)</h3>
+        <span class="Asf_Hint" id="asf_cx_div_hint">Charges ainda abertas no Drop — sync confirma se já pagaram na Efí</span>
+      </div>
+      <div class="Asf_TabelaWrap">
+        <table class="Asf_Tabela">
+          <thead>
+            <tr>
+              <th>Vencimento</th>
+              <th>Tenant</th>
+              <th>Charge Efí</th>
+              <th>Forma</th>
+              <th>Status</th>
+              <th>Valor</th>
+              <th class="Asf_ColAcoes">Ações</th>
+            </tr>
+          </thead>
+          <tbody id="asf_cx_div_tbody">
+            <tr><td colspan="7" class="Asf_Empty">Carregando…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
   <section class="Asf_Panel" id="asf_tab_faturamento" data-tab-panel="faturamento" role="tabpanel" hidden>
     <div class="Asf_Filtros">
       <div class="form-campo">
@@ -284,7 +373,8 @@
   "apiDetalhe": url_for("config.assinaturas_faturamento_pagina") ~ "/fatura/",
   "apiTenant": url_for("config.assinaturas_faturamento_pagina") ~ "/tenant/",
   "apiCriarEfi": url_for("config.assinaturas_criar_efi"),
-  "apiCancelarAssinatura": url_for("config.assinaturas_cancelar_assinatura")
+  "apiCancelarAssinatura": url_for("config.assinaturas_cancelar_assinatura"),
+  "apiSyncEfi": url_for("config.assinaturas_sincronizar_efi")
 } | tojson }}</script>
-<script defer src="{{ url_for('config.static', filename='script/Sconfig_assinaturas.js') }}?v=12"></script>
+<script defer src="{{ url_for('config.static', filename='script/Sconfig_assinaturas.js') }}?v=13"></script>
 {% endblock %}

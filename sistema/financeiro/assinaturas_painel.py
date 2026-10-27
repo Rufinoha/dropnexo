@@ -281,6 +281,195 @@ _MESES_CURTOS = (
 
 # Competência do mês = vencimento (fallback: emissão)
 _SQL_MES_COMPETENCIA = "date_trunc('month', COALESCE(f.vencimento_em, f.criado_em))::date"
+# Caixa / conciliação Efí = mês em que o dinheiro entrou (pago_em)
+_SQL_MES_CAIXA = "date_trunc('month', f.pago_em)::date"
+_SQL_CHARGE_REAL = (
+    "NULLIF(TRIM(COALESCE(f.efi_charge_id, '')), '') IS NOT NULL "
+    "AND COALESCE(f.valor_centavos, 0) > 0"
+)
+
+
+def _montar_conciliacao(cur, ano_sel: int, mes_sel: int) -> dict[str, Any]:
+    """Espelho de cobranças Efí por data de pagamento (caixa), sem cortesia R$ 0."""
+    mes_ref = date(ano_sel, mes_sel, 1)
+
+    cur.execute(
+        f"""
+        SELECT
+          COALESCE(SUM(f.valor_centavos), 0)::bigint,
+          COUNT(*)::int,
+          COALESCE(SUM(CASE WHEN f.status = 'pago' THEN f.valor_centavos ELSE 0 END), 0)::bigint,
+          COUNT(*) FILTER (WHERE f.status = 'pago')::int,
+          COALESCE(SUM(CASE WHEN f.status = 'bloqueado' THEN f.valor_centavos ELSE 0 END), 0)::bigint,
+          COUNT(*) FILTER (WHERE f.status = 'bloqueado')::int
+        FROM tbl_fatura f
+        WHERE f.status IN ('pago', 'bloqueado')
+          AND f.pago_em IS NOT NULL
+          AND {_SQL_MES_CAIXA} = %s
+          AND {_SQL_CHARGE_REAL}
+        """,
+        (mes_ref,),
+    )
+    row = cur.fetchone() or (0, 0, 0, 0, 0, 0)
+    recebido_centavos = int(row[0] or 0)
+    recebido_qtd = int(row[1] or 0)
+    pago_centavos = int(row[2] or 0)
+    pago_qtd = int(row[3] or 0)
+    bloq_centavos = int(row[4] or 0)
+    bloq_qtd = int(row[5] or 0)
+
+    cur.execute(
+        f"""
+        SELECT
+          f.id, f.id_tenant, t.nome, f.referencia, f.plano_slug, f.valor_centavos,
+          f.status, f.forma_pagamento, f.pago_em, f.vencimento_em, f.efi_charge_id,
+          t.tipo_negocio
+        FROM tbl_fatura f
+        JOIN tbl_tenant t ON t.id = f.id_tenant
+        WHERE f.status IN ('pago', 'bloqueado')
+          AND f.pago_em IS NOT NULL
+          AND {_SQL_MES_CAIXA} = %s
+          AND {_SQL_CHARGE_REAL}
+        ORDER BY f.pago_em DESC, f.id DESC
+        LIMIT 500
+        """,
+        (mes_ref,),
+    )
+    recebidos = []
+    for r in cur.fetchall():
+        st = (r[6] or "").strip().lower()
+        forma = (r[7] or "").strip().lower()
+        recebidos.append(
+            {
+                "id_fatura": int(r[0]),
+                "id_tenant": int(r[1]),
+                "nome": (r[2] or "").strip() or f"Tenant #{r[1]}",
+                "referencia": r[3] or "",
+                "plano": str(r[4] or ""),
+                "plano_label": nome_plano_comercial(r[4], r[11]),
+                "valor_centavos": int(r[5] or 0),
+                "valor": _fmt_reais(r[5]),
+                "status": st,
+                "status_grupo": "bloqueado" if st == "bloqueado" else "pago",
+                "status_label": "Bloqueado" if st == "bloqueado" else "Pago",
+                "forma_pagamento": forma,
+                "forma_label": FORMA_LABEL.get(forma, forma or "—"),
+                "pago_em": _fmt_data(r[8]),
+                "pago_br": _fmt_data_br(r[8]),
+                "vencimento_br": _fmt_data_br(r[9]),
+                "efi_charge_id": str(r[10] or ""),
+            }
+        )
+
+    # Pendentes com charge real = possíveis buracos (paid na Efí ainda não baixado)
+    cur.execute(
+        f"""
+        SELECT
+          f.id, f.id_tenant, t.nome, f.referencia, f.plano_slug, f.valor_centavos,
+          f.status, f.forma_pagamento, f.vencimento_em, f.efi_charge_id, t.tipo_negocio
+        FROM tbl_fatura f
+        JOIN tbl_tenant t ON t.id = f.id_tenant
+        WHERE f.status IN ('pendente', 'vencido')
+          AND {_SQL_CHARGE_REAL}
+        ORDER BY f.vencimento_em ASC NULLS LAST, f.id ASC
+        LIMIT 200
+        """
+    )
+    divergencias = []
+    for r in cur.fetchall():
+        st = (r[6] or "").strip().lower()
+        forma = (r[7] or "").strip().lower()
+        divergencias.append(
+            {
+                "id_fatura": int(r[0]),
+                "id_tenant": int(r[1]),
+                "nome": (r[2] or "").strip() or f"Tenant #{r[1]}",
+                "referencia": r[3] or "",
+                "plano_label": nome_plano_comercial(r[4], r[10]),
+                "valor_centavos": int(r[5] or 0),
+                "valor": _fmt_reais(r[5]),
+                "status": st,
+                "status_label": "Vencida" if st == "vencido" else "Pendente",
+                "forma_label": FORMA_LABEL.get(forma, forma or "—"),
+                "vencimento_br": _fmt_data_br(r[8]),
+                "efi_charge_id": str(r[9] or ""),
+            }
+        )
+
+    # Série anual por caixa (pago_em)
+    cur.execute(
+        f"""
+        SELECT
+          {_SQL_MES_CAIXA} AS mes,
+          COALESCE(SUM(f.valor_centavos), 0)::bigint AS total,
+          COUNT(*)::int AS qtd
+        FROM tbl_fatura f
+        WHERE f.status IN ('pago', 'bloqueado')
+          AND f.pago_em IS NOT NULL
+          AND EXTRACT(YEAR FROM f.pago_em) = %s
+          AND {_SQL_CHARGE_REAL}
+        GROUP BY 1
+        ORDER BY 1
+        """,
+        (ano_sel,),
+    )
+    mapa: dict[int, dict] = {}
+    for r in cur.fetchall():
+        mdate = r[0]
+        if isinstance(mdate, date):
+            mapa[mdate.month] = {
+                "recebido_centavos": int(r[1] or 0),
+                "qtd": int(r[2] or 0),
+            }
+
+    _MESES = (
+        "Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
+        "Jul", "Ago", "Set", "Out", "Nov", "Dez",
+    )
+    serie = []
+    for m in range(1, 13):
+        d = mapa.get(m) or {"recebido_centavos": 0, "qtd": 0}
+        serie.append(
+            {
+                "mes": m,
+                "mes_label": _MESES[m - 1],
+                "recebido_centavos": d["recebido_centavos"],
+                "recebido": _fmt_reais(d["recebido_centavos"]),
+                "qtd": d["qtd"],
+            }
+        )
+
+    return {
+        "filtros": {
+            "ano": ano_sel,
+            "mes": mes_sel,
+            "mes_label": f"{mes_sel:02d}/{ano_sel}",
+            "criterio": "pago_em",
+            "criterio_label": "Data de pagamento (caixa / Efí paid_at)",
+        },
+        "resumo": {
+            "recebido_mes_centavos": recebido_centavos,
+            "recebido_mes": _fmt_reais(recebido_centavos),
+            "recebido_mes_qtd": recebido_qtd,
+            "pago_mes_centavos": pago_centavos,
+            "pago_mes": _fmt_reais(pago_centavos),
+            "pago_mes_qtd": pago_qtd,
+            "bloqueado_mes_centavos": bloq_centavos,
+            "bloqueado_mes": _fmt_reais(bloq_centavos),
+            "bloqueado_mes_qtd": bloq_qtd,
+            "divergencias_qtd": len(divergencias),
+            "divergencias_centavos": sum(int(x["valor_centavos"]) for x in divergencias),
+            "divergencias": _fmt_reais(sum(int(x["valor_centavos"]) for x in divergencias)),
+        },
+        "recebidos_mes": recebidos,
+        "divergencias": divergencias,
+        "serie_ano": {
+            "ano": ano_sel,
+            "meses": serie,
+            "recebido_ano_centavos": sum(x["recebido_centavos"] for x in serie),
+            "recebido_ano": _fmt_reais(sum(x["recebido_centavos"] for x in serie)),
+        },
+    }
 
 
 def painel_assinaturas(
@@ -941,6 +1130,7 @@ def painel_assinaturas(
             },
             "pagos_recentes": pagos_recentes,
         },
+        "conciliacao": _montar_conciliacao(cur, ano_sel, mes_sel),
         "bloqueados": {
             "resumo": {
                 "qtd": len(bloqueados),

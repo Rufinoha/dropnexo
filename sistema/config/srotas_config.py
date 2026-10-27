@@ -3554,6 +3554,28 @@ def assinaturas_faturamento_dados():
         conn.close()
 
 
+@config_bp.post(f"{ASSINATURAS_PREFIX}/sincronizar-efi")
+@login_obrigatorio()
+def assinaturas_sincronizar_efi():
+    """Reconsulta charges abertas na Efí e espelha paid_at → pago_em."""
+    if (r := _exigir_dev()) is not None:
+        return r
+    from sistema.financeiro.cobranca import sincronizar_cobrancas_efi_abertas
+
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        out = sincronizar_cobrancas_efi_abertas(cur, limite=100)
+        conn.commit()
+        return jsonify(success=True, **out)
+    except Exception as e:
+        conn.rollback()
+        _log.exception("sincronizar cobrancas efi")
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
 @config_bp.post(f"{ASSINATURAS_PREFIX}/cancelar-fatura")
 @login_obrigatorio()
 def assinaturas_cancelar_fatura():

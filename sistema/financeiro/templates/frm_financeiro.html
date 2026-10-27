@@ -2,7 +2,7 @@
 {% block title %}Financeiro — {{ MARCA_NOME }}{% endblock %}
 {% block topbar_title %}Financeiro{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('financeiro.static', filename='style/Cfinanceiro.css') }}?v=2" />
+<link rel="stylesheet" href="{{ url_for('financeiro.static', filename='style/Cfinanceiro.css') }}?v=4" />
 {% if not sem_acesso %}
 <link rel="stylesheet" href="{{ url_for('static', filename='style/Cefi_cartao.css') }}?v=9" />
 {% endif %}
@@ -19,16 +19,15 @@
     <p>Somente o dono, admin ou perfil financeiro podem acessar este módulo.</p>
   </div>
   {% else %}
-  <div class="Fin_Aviso">
-    <strong>Importante:</strong> no cartão o plano libera na aprovação. No primeiro boleto, só depois que o banco confirma
-    (até 3 dias). Os boletos seguintes não interrompem o plano. Se a cobrança seguir em aberto por
-    <strong>{{ dias_graca }} dias depois do vencimento</strong>, a conta volta ao <strong>Explorar (gratuito)</strong>
-    e a recorrência é cancelada.
-  </div>
-
   <nav class="Fin_Tabs" role="tablist">
-    <button type="button" class="Fin_Tab is-active" data-fin-tab="faturas">Faturas</button>
-    <button type="button" class="Fin_Tab" data-fin-tab="plano">Meu plano</button>
+    <button type="button" class="Fin_Tab is-active" data-fin-tab="faturas">
+      <svg class="Fin_TabIcon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 4h16a1 1 0 0 1 1 1v3H3V5a1 1 0 0 1 1-1Zm-1 6h18v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-9Zm3 2v2h4v-2H6Zm6 0v2h6v-2h-6Z"/></svg>
+      Faturas
+    </button>
+    <button type="button" class="Fin_Tab" data-fin-tab="plano">
+      <svg class="Fin_TabIcon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a5 5 0 1 1 0 10A5 5 0 0 1 12 2Zm0 12c4.4 0 8 2.2 8 5v1H4v-1c0-2.8 3.6-5 8-5Z"/></svg>
+      Meu plano
+    </button>
   </nav>
 
   <div class="Fin_Card" data-fin-panel="faturas">
@@ -71,17 +70,6 @@
     </div>
   </div>
 
-  {% if eh_dev %}
-  <div class="Fin_Card Fin_Dev">
-    <div class="Fin_CardHead">
-      <h3>Log Efi ↔ DropNexo <span class="Fin_DevBadge">DEV</span></h3>
-      <button type="button" class="Cl_botaoFiltro" id="fin_btnLogs">Atualizar log</button>
-    </div>
-    <div class="Fin_LogBox" id="fin_logs">
-      <p class="Fin_Empty">Clique em Atualizar log.</p>
-    </div>
-  </div>
-  {% endif %}
   {% endif %}
 </div>
 {% endblock %}
@@ -90,15 +78,13 @@
 <script id="fin_cfg" type="application/json">{{ {
   "apiFaturas": url_for("financeiro.api_faturas"),
   "apiRegenerarBase": "/api/financeiro/faturas",
-  "apiLogs": url_for("financeiro.api_efi_logs") if eh_dev else "",
   "efiPayeeCode": efi_payee_code or "",
   "efiEnvironment": efi_environment or "sandbox",
-  "ehDev": eh_dev,
   "apiMeuPlano": url_for("financeiro.api_meu_plano"),
   "apiCancelar": url_for("financeiro.api_cancelar_assinatura"),
   "apiTrocarForma": url_for("financeiro.api_trocar_forma")
 }|tojson }}</script>
 <script defer src="{{ url_for('static', filename='script/Sefi_cartao.js') }}?v=12"></script>
-<script defer src="{{ url_for('financeiro.static', filename='script/Sfinanceiro.js') }}?v=9"></script>
+<script defer src="{{ url_for('financeiro.static', filename='script/Sfinanceiro.js') }}?v=11"></script>
 {% endif %}
 {% endblock %}

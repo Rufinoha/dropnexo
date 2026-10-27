@@ -84,23 +84,47 @@
   }
 
   function preencherAnos() {
-    const sel = el("asf_ano");
-    if (!sel || sel.options.length) return;
     const y0 = hoje.getFullYear();
-    for (let y = y0 + 1; y >= y0 - 5; y--) {
-      const opt = document.createElement("option");
-      opt.value = String(y);
-      opt.textContent = String(y);
-      sel.appendChild(opt);
-    }
-    sel.value = String(filtroAno);
-    const mes = el("asf_mes");
-    if (mes) mes.value = String(filtroMes);
+    ["asf_ano", "asf_ano_cx"].forEach((id) => {
+      const sel = el(id);
+      if (!sel || sel.options.length) return;
+      for (let y = y0 + 1; y >= y0 - 5; y--) {
+        const opt = document.createElement("option");
+        opt.value = String(y);
+        opt.textContent = String(y);
+        sel.appendChild(opt);
+      }
+      sel.value = String(filtroAno);
+    });
+    ["asf_mes", "asf_mes_cx"].forEach((id) => {
+      const mes = el(id);
+      if (mes) mes.value = String(filtroMes);
+    });
+  }
+
+  function syncFiltroSelects() {
+    ["asf_mes", "asf_mes_cx"].forEach((id) => {
+      const n = el(id);
+      if (n) n.value = String(filtroMes);
+    });
+    ["asf_ano", "asf_ano_cx"].forEach((id) => {
+      const n = el(id);
+      if (n) n.value = String(filtroAno);
+    });
   }
 
   function lerFiltros() {
-    filtroMes = parseInt(el("asf_mes")?.value || filtroMes, 10) || filtroMes;
-    filtroAno = parseInt(el("asf_ano")?.value || filtroAno, 10) || filtroAno;
+    const mesSrc =
+      tabAtual === "conciliacao"
+        ? el("asf_mes_cx")?.value || el("asf_mes")?.value
+        : el("asf_mes")?.value || el("asf_mes_cx")?.value;
+    const anoSrc =
+      tabAtual === "conciliacao"
+        ? el("asf_ano_cx")?.value || el("asf_ano")?.value
+        : el("asf_ano")?.value || el("asf_ano_cx")?.value;
+    filtroMes = parseInt(mesSrc || filtroMes, 10) || filtroMes;
+    filtroAno = parseInt(anoSrc || filtroAno, 10) || filtroAno;
+    syncFiltroSelects();
     filtroAtivasBusca = (el("asf_ativas_busca")?.value || "").trim().toLowerCase();
     filtroFatBusca = (el("asf_fat_busca")?.value || "").trim().toLowerCase();
     filtroFatStatus = (el("asf_fat_status")?.value || "").trim().toLowerCase();
@@ -352,19 +376,91 @@
       .join("");
   }
 
+  function renderConciliacao(data) {
+    const r = data?.resumo || {};
+    const f = data?.filtros || {};
+    if (f.mes) filtroMes = Number(f.mes);
+    if (f.ano) filtroAno = Number(f.ano);
+    syncFiltroSelects();
+
+    const mesLbl = f.mes_label || `${String(filtroMes).padStart(2, "0")}/${filtroAno}`;
+    const box = el("asf_cx_kpis");
+    if (box) {
+      box.innerHTML = kpisHtml([
+        { label: `Recebido ${mesLbl}`, value: r.recebido_mes || "R$ 0,00", cls: "is-ok" },
+        { label: `Pagos (qtd)`, value: String(r.pago_mes_qtd ?? 0), cls: "is-ok" },
+        { label: `Bloqueado ${mesLbl}`, value: r.bloqueado_mes || "R$ 0,00", cls: "is-danger" },
+        {
+          label: "Pendentes c/ charge",
+          value: `${r.divergencias_qtd ?? 0} · ${r.divergencias || "R$ 0,00"}`,
+          cls: Number(r.divergencias_qtd || 0) > 0 ? "is-warn" : "",
+        },
+      ]);
+    }
+
+    const recebidos = data?.recebidos_mes || [];
+    const hintR = el("asf_cx_recebidos_hint");
+    if (hintR) {
+      hintR.textContent = recebidos.length
+        ? `${recebidos.length} charge(s) · ${r.recebido_mes || "R$ 0,00"} (só Efí, por data de pagamento)`
+        : `Nenhum recebimento Efí em ${mesLbl}`;
+    }
+    const tbr = el("asf_cx_recebidos_tbody");
+    if (tbr) {
+      if (!recebidos.length) {
+        tbr.innerHTML = emptyRow(7, "Nenhuma cobrança Efí paga neste mês de caixa.");
+      } else {
+        tbr.innerHTML = recebidos
+          .map((a) => {
+            return `<tr>
+              <td><strong>${esc(a.pago_br)}</strong><div class="Asf_Muted">venc. ${esc(a.vencimento_br || "—")}</div></td>
+              <td><strong>${esc(a.nome)}</strong><div class="Asf_Muted">#${esc(a.id_tenant)} · ${esc(a.referencia || a.id_fatura)}</div></td>
+              <td><code>${esc(a.efi_charge_id)}</code></td>
+              <td>${esc(a.forma_label)}</td>
+              <td>${badgeStatus(a)}</td>
+              <td><strong>${esc(a.valor)}</strong></td>
+              <td class="Asf_ColAcoes">${btnMenuFatura({ ...a, lembrete_rotulo: "" })}</td>
+            </tr>`;
+          })
+          .join("");
+      }
+    }
+
+    const divs = data?.divergencias || [];
+    const hintD = el("asf_cx_div_hint");
+    if (hintD) {
+      hintD.textContent = divs.length
+        ? `${divs.length} charge(s) ainda pendente(s) no Drop — rode “Sincronizar com Efí”`
+        : "Nenhuma pendência com charge Efí";
+    }
+    const tbd = el("asf_cx_div_tbody");
+    if (tbd) {
+      if (!divs.length) {
+        tbd.innerHTML = emptyRow(7, "Nenhuma divergência potencial.");
+      } else {
+        tbd.innerHTML = divs
+          .map((a) => {
+            return `<tr>
+              <td><strong>${esc(a.vencimento_br)}</strong></td>
+              <td><strong>${esc(a.nome)}</strong><div class="Asf_Muted">#${esc(a.id_tenant)} · ${esc(a.referencia || a.id_fatura)}</div></td>
+              <td><code>${esc(a.efi_charge_id)}</code></td>
+              <td>${esc(a.forma_label)}</td>
+              <td><span class="Asf_Badge is-pendente">${esc(a.status_label)}</span></td>
+              <td><strong>${esc(a.valor)}</strong></td>
+              <td class="Asf_ColAcoes">${btnMenuFatura({ ...a, status_grupo: "aberto", lembrete_rotulo: "" })}</td>
+            </tr>`;
+          })
+          .join("");
+      }
+    }
+  }
+
   function renderFat(data) {
     const r = data?.resumo || {};
     const f = data?.filtros || {};
-    if (f.mes) {
-      filtroMes = Number(f.mes);
-      const mesSel = el("asf_mes");
-      if (mesSel) mesSel.value = String(filtroMes);
-    }
-    if (f.ano) {
-      filtroAno = Number(f.ano);
-      const anoSel = el("asf_ano");
-      if (anoSel) anoSel.value = String(filtroAno);
-    }
+    if (f.mes) filtroMes = Number(f.mes);
+    if (f.ano) filtroAno = Number(f.ano);
+    syncFiltroSelects();
 
     const mesLbl = f.mes_label || `${String(filtroMes).padStart(2, "0")}/${filtroAno}`;
     el("asf_fat_kpis").innerHTML = kpisHtml([
@@ -423,15 +519,53 @@
     renderAtivas(j.ativas);
     renderInad(j.inadimplencia);
     renderBloq(j.bloqueados);
+    renderConciliacao(j.conciliacao);
     renderFat(j.faturamento);
-    setStatus(`Atualizado agora · competência ${filtroMes.toString().padStart(2, "0")}/${filtroAno}.`);
+    setStatus(`Atualizado agora · mês ${filtroMes.toString().padStart(2, "0")}/${filtroAno}.`);
   }
 
   function rerenderLocal() {
     if (!cache) return;
     lerFiltros();
     renderAtivas(cache.ativas);
+    renderConciliacao(cache.conciliacao);
     renderFat(cache.faturamento);
+  }
+
+  async function sincronizarEfi() {
+    const btn = el("asf_btnSyncEfi");
+    const syncEl = el("asf_cx_sync");
+    if (btn) btn.disabled = true;
+    if (syncEl) {
+      syncEl.hidden = false;
+      syncEl.textContent = "Consultando charges abertas na Efí…";
+      syncEl.classList.remove("is-err");
+    }
+    setStatus("Sincronizando com Efí…");
+    try {
+      const resp = await fetch(cfg.apiSyncEfi, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        credentials: "same-origin",
+        body: "{}",
+      });
+      const j = await resp.json().catch(() => ({}));
+      if (!resp.ok || !j.success) {
+        throw new Error(j.message || "Falha no sync Efí");
+      }
+      const msg = `Sync: ${j.consultadas ?? 0} consultada(s) · ${j.alterados ?? 0} alterada(s) · ${j.pagos ?? 0} paga(s).`;
+      if (syncEl) syncEl.textContent = msg;
+      setStatus(msg);
+      await carregar();
+    } catch (e) {
+      if (syncEl) {
+        syncEl.textContent = e.message || String(e);
+        syncEl.classList.add("is-err");
+      }
+      setStatus(e.message || String(e), true);
+    } finally {
+      if (btn) btn.disabled = false;
+    }
   }
 
   async function carregar() {
@@ -842,6 +976,9 @@
     );
     el("asf_mes")?.addEventListener("change", carregar);
     el("asf_ano")?.addEventListener("change", carregar);
+    el("asf_mes_cx")?.addEventListener("change", carregar);
+    el("asf_ano_cx")?.addEventListener("change", carregar);
+    el("asf_btnSyncEfi")?.addEventListener("click", sincronizarEfi);
     el("asf_ativas_busca")?.addEventListener("input", () => {
       filtroAtivasBusca = (el("asf_ativas_busca")?.value || "").trim().toLowerCase();
       if (cache) renderAtivas(cache.ativas);

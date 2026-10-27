@@ -171,50 +171,29 @@
     }
   }
 
-  async function carregarLogs() {
-    const box = document.getElementById("fin_logs");
-    if (!box || !cfg.apiLogs) return;
-    box.innerHTML = "<p>Carregando…</p>";
-    try {
-      const r = await fetch(cfg.apiLogs + "?page=1", { headers: { Accept: "application/json" } });
-      const j = await r.json();
-      if (!j.success) throw new Error(j.message || "Erro");
-      const logs = j.logs || [];
-      if (!logs.length) {
-        box.innerHTML = '<p class="Fin_Empty">Nenhum log ainda.</p>';
-        return;
-      }
-      box.innerHTML = logs
-        .map(function (l) {
-          return (
-            '<div class="Fin_LogItem">' +
-            '<div class="' +
-            (l.ok ? "Fin_LogOk" : "Fin_LogFail") +
-            '">#' +
-            l.id +
-            " · " +
-            esc(l.criado_em) +
-            " · " +
-            esc(l.direcao) +
-            "/" +
-            esc(l.operacao) +
-            " · tenant " +
-            (l.id_tenant || "—") +
-            " · charge " +
-            esc(l.efi_charge_id || "—") +
-            "</div>" +
-            "<div>" +
-            esc((l.request_resumo || "").slice(0, 500)) +
-            "</div>" +
-            "<div>" +
-            esc((l.response_resumo || "").slice(0, 500)) +
-            "</div></div>"
-          );
-        })
-        .join("");
-    } catch (e) {
-      box.innerHTML = "<p>" + esc(e.message) + "</p>";
-    }
+  const ICO = {
+    pay: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 6h16a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2Zm0 3v2h16V9H4Zm0 4v3h6v-3H4Z"/></svg>',
+    card: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 6h18a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1Zm1 4v2h16v-2H4Zm0-3v1h16V7H4Zm0 7v2h7v-2H4Z"/></svg>',
+    doc: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 2h8l5 5v13a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Zm7 1.5V8h4.5L14 3.5ZM8 12h8v1.5H8V12Zm0 3.5h8V17H8v-1.5Z"/></svg>',
+  };
+
+  function menuItem(opts) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "Fin_MenuItem" + (opts.muted ? " is-muted" : "");
+    btn.innerHTML =
+      '<span class="Fin_MenuIcon' +
+      (opts.iconCls ? " " + opts.iconCls : "") +
+      '">' +
+      (opts.icon || "") +
+      "</span><span>" +
+      esc(opts.label) +
+      "</span>";
+    btn.addEventListener("click", function () {
+      fecharMenus();
+      if (typeof opts.onClick === "function") opts.onClick();
+    });
+    return btn;
   }
 
   function abrirMenu(btn) {
@@ -224,42 +203,93 @@
     const id = btn.getAttribute("data-menu");
     const box = document.createElement("div");
     box.className = "Fin_MenuLista";
+    const p = planoAtual || {};
+    const podeForma = !!(p.pode_trocar_proximas || p.pode_pagar_esta);
+
     if (status === "pendente" || status === "vencido") {
-      const pagar = document.createElement("button");
-      pagar.type = "button";
-      pagar.textContent = "Pagar agora";
-      pagar.addEventListener("click", function () {
-        fecharMenus();
-        if (link) window.open(link, "_blank", "noopener");
-        else
-          regenerar(
-            +id,
-            +btn.getAttribute("data-valor") || 0,
-            btn.getAttribute("data-plano") || "Fatura"
-          );
-      });
-      box.appendChild(pagar);
+      box.appendChild(
+        menuItem({
+          label: "Pagar agora",
+          icon: ICO.pay,
+          iconCls: "is-pay",
+          onClick: function () {
+            if (link) window.open(link, "_blank", "noopener");
+            else
+              regenerar(
+                +id,
+                +btn.getAttribute("data-valor") || 0,
+                btn.getAttribute("data-plano") || "Fatura"
+              );
+          },
+        })
+      );
     }
+
+    box.appendChild(
+      menuItem({
+        label: "Alterar forma de pagamento",
+        icon: ICO.card,
+        iconCls: "is-card",
+        onClick: async function () {
+          if (!planoAtual) {
+            try {
+              await carregarPlano();
+            } catch (_) {}
+          }
+          const pl = planoAtual || {};
+          if (!(pl.pode_trocar_proximas || pl.pode_pagar_esta)) {
+            if (window.Swal) {
+              Swal.fire({
+                icon: "info",
+                title: "Forma de pagamento",
+                text: "Não há cobrança recorrente ativa para alterar. Use a aba Meu plano.",
+                confirmButtonColor: "#021F81",
+              });
+            }
+            return;
+          }
+          trocarForma();
+        },
+      })
+    );
+
     if (status === "pago") {
-      const nota = document.createElement("button");
-      nota.type = "button";
-      nota.textContent = "Baixar nota fiscal";
-      nota.addEventListener("click", async function () {
-        fecharMenus();
-        try {
-          const r = await fetch(cfg.apiRegenerarBase + "/" + id + "/nota", { headers: { Accept: "application/json" } });
-          const j = await r.json();
-          if (j.success && j.url) window.open(j.url, "_blank", "noopener");
-          else if (window.Swal) Swal.fire("Nota fiscal", j.message || "Ainda não disponível.", "info");
-        } catch (e) {
-          if (window.Swal) Swal.fire("Nota fiscal", e.message || "Ainda não disponível.", "info");
-        }
-      });
-      box.appendChild(nota);
+      box.appendChild(
+        menuItem({
+          label: "Baixar nota fiscal",
+          icon: ICO.doc,
+          iconCls: "is-doc",
+          muted: true,
+          onClick: async function () {
+            try {
+              const r = await fetch(cfg.apiRegenerarBase + "/" + id + "/nota", {
+                headers: { Accept: "application/json" },
+              });
+              const j = await r.json();
+              if (j.success && j.url) window.open(j.url, "_blank", "noopener");
+              else if (window.Swal) Swal.fire("Nota fiscal", j.message || "Ainda não disponível.", "info");
+            } catch (e) {
+              if (window.Swal) Swal.fire("Nota fiscal", e.message || "Ainda não disponível.", "info");
+            }
+          },
+        })
+      );
     }
+
+    if (!box.children.length && !podeForma) {
+      box.appendChild(
+        menuItem({
+          label: "Sem ações",
+          icon: ICO.doc,
+          muted: true,
+          onClick: function () {},
+        })
+      );
+    }
+
     document.body.appendChild(box);
     const r = btn.getBoundingClientRect();
-    box.style.top = r.bottom + 4 + "px";
+    box.style.top = r.bottom + 6 + "px";
     box.style.left = Math.max(8, r.right - box.offsetWidth) + "px";
   }
 
@@ -407,7 +437,7 @@
 
   document.addEventListener("DOMContentLoaded", function () {
     carregar(1);
-    document.getElementById("fin_btnLogs")?.addEventListener("click", carregarLogs);
+    carregarPlano();
     function abrirAba(nome) {
       document.querySelectorAll("[data-fin-tab]").forEach(function (t) {
         t.classList.toggle("is-active", t.getAttribute("data-fin-tab") === nome);

@@ -1706,7 +1706,60 @@ def regenerar_cobranca(
     return fat2 or {}
 
 
-def aplicar_pagamento_fatura(cur, id_fatura: int, *, origem: str = "webhook") -> dict:
+def _parse_dt_efi(raw_dt) -> datetime | None:
+    if not raw_dt:
+        return None
+    s = str(raw_dt).strip().replace("T", " ")
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(s[:26], fmt)
+        except ValueError:
+            continue
+    try:
+        return datetime.fromisoformat(str(raw_dt).replace("Z", "+00:00")).replace(tzinfo=None)
+    except ValueError:
+        return None
+
+
+def _parse_pago_em_efi(det: dict | None) -> datetime | None:
+    """Extrai paid_at da resposta detail_charge (boleto/cartão)."""
+    if not isinstance(det, dict):
+        return None
+    raw = det.get("raw") if isinstance(det.get("raw"), dict) else det
+    if not isinstance(raw, dict):
+        return None
+    payment = raw.get("payment") if isinstance(raw.get("payment"), dict) else {}
+    candidatos = [
+        raw.get("paid_at"),
+        payment.get("paid_at"),
+    ]
+    for bloco in (payment.get("banking_billet"), payment.get("credit_card"), payment.get("pix")):
+        if isinstance(bloco, dict):
+            candidatos.append(bloco.get("paid_at"))
+    for raw_dt in candidatos:
+        dt = _parse_dt_efi(raw_dt)
+        if dt:
+            return dt
+    # Fallback: histórico "Cobrança paga" / "Pagamento"
+    hist = raw.get("history") if isinstance(raw.get("history"), list) else []
+    for h in reversed(hist):
+        if not isinstance(h, dict):
+            continue
+        msg = str(h.get("message") or "").lower()
+        if any(x in msg for x in ("paga", "pago", "pagamento", "paid", "liquid")):
+            dt = _parse_dt_efi(h.get("created_at") or h.get("date") or h.get("time"))
+            if dt:
+                return dt
+    return None
+
+
+def aplicar_pagamento_fatura(
+    cur,
+    id_fatura: int,
+    *,
+    origem: str = "webhook",
+    pago_em: datetime | date | None = None,
+) -> dict:
     cur.execute(
         """
         SELECT id, referencia, valor_centavos, status, forma_pagamento, plano_slug,
@@ -1723,13 +1776,19 @@ def aplicar_pagamento_fatura(cur, id_fatura: int, *, origem: str = "webhook") ->
     fat = fatura_dict(row[:16])
     plano_slug = fat.get("plano_slug") or "professional"
 
+    pago_dt = pago_em
+    if isinstance(pago_dt, date) and not isinstance(pago_dt, datetime):
+        pago_dt = datetime(pago_dt.year, pago_dt.month, pago_dt.day)
+
     cur.execute(
         """
         UPDATE tbl_fatura
-        SET status = 'pago', pago_em = COALESCE(pago_em, NOW()), atualizado_em = NOW()
+        SET status = 'pago',
+            pago_em = COALESCE(%s, pago_em, NOW()),
+            atualizado_em = NOW()
         WHERE id = %s
         """,
-        (id_fatura,),
+        (pago_dt, id_fatura),
     )
     cur.execute(
         """
@@ -2004,7 +2063,15 @@ def processar_webhook_efi(cur, payload: dict) -> dict:
         # Não sobrescreve MED (pago bloqueado) — o sync de infrações gerencia isso.
         if st_atual in ("pago", "bloqueado"):
             return {"ok": True, "status": st_atual, "id_fatura": id_fatura}
-        return aplicar_pagamento_fatura(cur, id_fatura, origem="webhook")
+        pago_dt = _parse_pago_em_efi(payload if isinstance(payload, dict) else None)
+        if pago_dt is None:
+            try:
+                from api.efi.efi import consultar_cobranca
+
+                pago_dt = _parse_pago_em_efi(consultar_cobranca(charge_id))
+            except Exception:
+                log.exception("paid_at Efí charge %s indisponível no webhook", charge_id)
+        return aplicar_pagamento_fatura(cur, id_fatura, origem="webhook", pago_em=pago_dt)
 
     cur.execute(
         """
@@ -2014,6 +2081,142 @@ def processar_webhook_efi(cur, payload: dict) -> dict:
         (novo, id_fatura),
     )
     return {"ok": True, "status": novo, "id_fatura": id_fatura}
+
+
+def sincronizar_fatura_com_efi(cur, id_fatura: int) -> dict:
+    """Reconsulta a charge na Efí e espelha status/pago_em na fatura local."""
+    cur.execute(
+        """
+        SELECT id, id_tenant, status, efi_charge_id, efi_txid, valor_centavos
+        FROM tbl_fatura WHERE id = %s
+        """,
+        (id_fatura,),
+    )
+    row = cur.fetchone()
+    if not row:
+        return {"ok": False, "message": "Fatura não encontrada."}
+    fid, id_tenant, st_atual = int(row[0]), int(row[1]), (row[2] or "").strip().lower()
+    charge = str(row[3] or "").strip()
+    if not charge or not charge.isdigit():
+        return {"ok": False, "message": "Fatura sem efi_charge_id numérico.", "id_fatura": fid}
+
+    from api.efi.efi import consultar_cobranca
+
+    try:
+        det = consultar_cobranca(charge)
+    except Exception as e:
+        registrar_efi_log(
+            cur,
+            id_tenant=id_tenant,
+            id_fatura=fid,
+            direcao="out",
+            operacao="sincronizar_charge",
+            ok=False,
+            efi_charge_id=charge,
+            response_resumo=_texto_efi(e),
+        )
+        return {"ok": False, "message": f"Falha ao consultar Efí: {_texto_efi(e)}", "id_fatura": fid}
+
+    status_local = (det.get("status") or "pendente").strip().lower()
+    status_efi = (det.get("status_efi") or "").strip().lower()
+    pago_dt = _parse_pago_em_efi(det)
+    registrar_efi_log(
+        cur,
+        id_tenant=id_tenant,
+        id_fatura=fid,
+        direcao="out",
+        operacao="sincronizar_charge",
+        ok=True,
+        efi_charge_id=charge,
+        response_resumo={"status_efi": status_efi, "status_local": status_local, "pago_em": str(pago_dt or "")},
+    )
+
+    if status_local == "pago":
+        if st_atual in ("pago", "bloqueado"):
+            if pago_dt and st_atual == "pago":
+                cur.execute(
+                    """
+                    UPDATE tbl_fatura
+                    SET pago_em = COALESCE(pago_em, %s), atualizado_em = NOW()
+                    WHERE id = %s
+                    """,
+                    (pago_dt, fid),
+                )
+            return {
+                "ok": True,
+                "id_fatura": fid,
+                "status": st_atual,
+                "status_efi": status_efi,
+                "alterado": False,
+            }
+        out = aplicar_pagamento_fatura(cur, fid, origem="sync_efi", pago_em=pago_dt)
+        out.update({"status_efi": status_efi, "alterado": True})
+        return out
+
+    if st_atual in ("pago", "bloqueado"):
+        return {
+            "ok": True,
+            "id_fatura": fid,
+            "status": st_atual,
+            "status_efi": status_efi,
+            "alterado": False,
+            "message": "Fatura local já liquidada; Efí não está paid.",
+        }
+
+    cur.execute(
+        """
+        UPDATE tbl_fatura SET status = %s, atualizado_em = NOW()
+        WHERE id = %s AND status NOT IN ('pago', 'bloqueado')
+        """,
+        (status_local, fid),
+    )
+    return {
+        "ok": True,
+        "id_fatura": fid,
+        "status": status_local,
+        "status_efi": status_efi,
+        "alterado": st_atual != status_local,
+    }
+
+
+def sincronizar_cobrancas_efi_abertas(cur, *, limite: int = 80) -> dict:
+    """ reconcilia faturas com charge Efí ainda não liquidadas (pendente/vencido)."""
+    cur.execute(
+        """
+        SELECT id
+        FROM tbl_fatura
+        WHERE status IN ('pendente', 'vencido')
+          AND NULLIF(TRIM(COALESCE(efi_charge_id, '')), '') IS NOT NULL
+          AND efi_charge_id ~ '^[0-9]+$'
+          AND COALESCE(valor_centavos, 0) > 0
+        ORDER BY id DESC
+        LIMIT %s
+        """,
+        (max(1, min(int(limite or 80), 200)),),
+    )
+    ids = [int(r[0]) for r in cur.fetchall()]
+    alterados = 0
+    pagos = 0
+    erros = []
+    for fid in ids:
+        try:
+            r = sincronizar_fatura_com_efi(cur, fid)
+            if r.get("alterado"):
+                alterados += 1
+            if (r.get("status") or "") == "pago":
+                pagos += 1
+            if not r.get("ok"):
+                erros.append({"id_fatura": fid, "message": r.get("message")})
+        except Exception as e:
+            erros.append({"id_fatura": fid, "message": str(e)})
+            log.exception("sync Efí fatura %s", fid)
+    return {
+        "ok": True,
+        "consultadas": len(ids),
+        "alterados": alterados,
+        "pagos": pagos,
+        "erros": erros[:20],
+    }
 
 
 def rebaixar_tenant_starter(cur, id_tenant: int, *, id_fatura: int | None = None) -> None:

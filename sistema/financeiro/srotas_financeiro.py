@@ -13,7 +13,6 @@ from sistema.financeiro.cobranca import (
     cancelar_plano_atual,
     fatura_aberta_alerta,
     garantir_cobranca_tenant,
-    listar_efi_logs,
     listar_faturas,
     obter_fatura,
     pagar_fatura_aberta_no_cartao,
@@ -99,7 +98,6 @@ def pagina():
         efi_pix_ok=bool(efi_pix_chave()),
         efi_payee_code=efi_cfg.get("payee_code") or "",
         efi_environment=efi_cfg.get("environment") or "sandbox",
-        eh_dev=bool(session.get("eh_desenvolvedor")),
     )
 
 
@@ -404,28 +402,6 @@ def api_assinar():
         return jsonify(success=False, message=str(e)), 400
     except Exception as e:
         conn.rollback()
-        return jsonify(success=False, message=str(e)), 500
-    finally:
-        conn.close()
-
-
-@financeiro_bp.get("/api/financeiro/efi-logs")
-@login_obrigatorio()
-def api_efi_logs():
-    if not session.get("eh_desenvolvedor"):
-        return jsonify(success=False, message="Somente desenvolvedor."), 403
-    try:
-        page = int(request.args.get("page") or 1)
-    except (TypeError, ValueError):
-        page = 1
-    tid = request.args.get("id_tenant")
-    id_tenant = int(tid) if tid and str(tid).isdigit() else None
-    conn = Var_ConectarBanco()
-    try:
-        cur = conn.cursor()
-        data = listar_efi_logs(cur, page=page, id_tenant=id_tenant)
-        return jsonify(success=True, **data)
-    except Exception as e:
         return jsonify(success=False, message=str(e)), 500
     finally:
         conn.close()
