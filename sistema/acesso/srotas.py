@@ -846,19 +846,21 @@ _ROTULO_TIPO_TENANT = {
 }
 
 
+def _safe_ddl(cur, sql: str) -> None:
+    """DDL com savepoint — falha não aborta a listagem do seletor."""
+    try:
+        cur.execute("SAVEPOINT sp_tenant_ddl")
+        cur.execute(sql)
+        cur.execute("RELEASE SAVEPOINT sp_tenant_ddl")
+    except Exception:
+        try:
+            cur.execute("ROLLBACK TO SAVEPOINT sp_tenant_ddl")
+        except Exception:
+            pass
+
+
 def _garantir_coluna_inativado_em(cur) -> None:
-    cur.execute(
-        """
-        SELECT 1
-        FROM information_schema.columns
-        WHERE table_schema = current_schema()
-          AND table_name = 'tbl_tenant'
-          AND column_name = 'inativado_em'
-        """
-    )
-    if cur.fetchone():
-        return
-    cur.execute("ALTER TABLE tbl_tenant ADD COLUMN IF NOT EXISTS inativado_em TIMESTAMP NULL")
+    _safe_ddl(cur, "ALTER TABLE tbl_tenant ADD COLUMN IF NOT EXISTS inativado_em TIMESTAMP NULL")
 
 
 def _iso_ts(valor) -> str:
@@ -870,6 +872,23 @@ def _iso_ts(valor) -> str:
         return str(valor)[:19]
 
 
+def _tem_coluna_tenant(cur, coluna: str) -> bool:
+    try:
+        cur.execute(
+            """
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_schema = current_schema()
+              AND table_name = 'tbl_tenant'
+              AND column_name = %s
+            """,
+            (coluna,),
+        )
+        return cur.fetchone() is not None
+    except Exception:
+        return False
+
+
 def _listar_tenants_dev(cur, id_tenant_atual: int | None) -> list[dict]:
     """Somente tenants reais (tbl_tenant) para o seletor DEV.
 
@@ -878,47 +897,21 @@ def _listar_tenants_dev(cur, id_tenant_atual: int | None) -> list[dict]:
     Inclui ativos e inativos.
     """
     _garantir_coluna_inativado_em(cur)
-    sql = """
+    tem_criado = _tem_coluna_tenant(cur, "criado_em")
+    tem_inativado = _tem_coluna_tenant(cur, "inativado_em")
+    col_criado = "t.criado_em" if tem_criado else "NULL::timestamp"
+    col_inativado = "t.inativado_em" if tem_inativado else "NULL::timestamp"
+    cur.execute(
+        f"""
         SELECT t.id, t.nome, t.slug, t.plano, t.tipo_negocio, t.cidade, t.uf, t.documento,
                COALESCE(t.ativo, TRUE),
-               t.criado_em,
-               COALESCE(
-                 t.inativado_em,
-                 (
-                   SELECT c.concluido_em
-                   FROM tbl_cancelamento_conta c
-                   WHERE c.id_tenant = t.id
-                     AND c.reativado_em IS NULL
-                     AND c.concluido_em IS NOT NULL
-                   ORDER BY c.concluido_em DESC
-                   LIMIT 1
-                 )
-               )
+               {col_criado},
+               {col_inativado}
         FROM tbl_tenant t
         WHERE t.tipo_negocio IN ('fornecedor', 'vendedor', 'hibrido', 'armazem')
         ORDER BY COALESCE(t.ativo, TRUE) DESC, t.nome ASC
         """
-    try:
-        cur.execute("SAVEPOINT sp_tenants_dev")
-        cur.execute(sql)
-        cur.execute("RELEASE SAVEPOINT sp_tenants_dev")
-    except Exception:
-        # Ambiente sem tbl_cancelamento_conta: só inativado_em / ativo
-        try:
-            cur.execute("ROLLBACK TO SAVEPOINT sp_tenants_dev")
-        except Exception:
-            pass
-        cur.execute(
-            """
-            SELECT t.id, t.nome, t.slug, t.plano, t.tipo_negocio, t.cidade, t.uf, t.documento,
-                   COALESCE(t.ativo, TRUE),
-                   t.criado_em,
-                   t.inativado_em
-            FROM tbl_tenant t
-            WHERE t.tipo_negocio IN ('fornecedor', 'vendedor', 'hibrido', 'armazem')
-            ORDER BY COALESCE(t.ativo, TRUE) DESC, t.nome ASC
-            """
-        )
+    )
     itens = []
     for row in cur.fetchall():
         (
@@ -1023,6 +1016,13 @@ def api_listar_tenants():
                 }
             )
         return jsonify(success=True, itens=itens, id_tenant_atual=id_tenant_atual)
+    except Exception as e:
+        try:
+            if conn:
+                conn.rollback()
+        except Exception:
+            pass
+        return jsonify(success=False, message=f"Falha ao listar contas: {e}"), 500
     finally:
         try:
             if cur:
