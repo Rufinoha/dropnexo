@@ -2179,20 +2179,29 @@ def sincronizar_fatura_com_efi(cur, id_fatura: int) -> dict:
     }
 
 
-def sincronizar_cobrancas_efi_abertas(cur, *, limite: int = 80) -> dict:
+def sincronizar_cobrancas_efi_abertas(
+    cur, *, limite: int = 80, id_tenant: int | None = None
+) -> dict:
     """ reconcilia faturas com charge Efí ainda não liquidadas (pendente/vencido)."""
+    params: list = []
+    filtro_tenant = ""
+    if id_tenant:
+        filtro_tenant = "AND id_tenant = %s"
+        params.append(int(id_tenant))
+    params.append(max(1, min(int(limite or 80), 200)))
     cur.execute(
-        """
+        f"""
         SELECT id
         FROM tbl_fatura
         WHERE status IN ('pendente', 'vencido')
           AND NULLIF(TRIM(COALESCE(efi_charge_id, '')), '') IS NOT NULL
           AND efi_charge_id ~ '^[0-9]+$'
           AND COALESCE(valor_centavos, 0) > 0
+          {filtro_tenant}
         ORDER BY id DESC
         LIMIT %s
         """,
-        (max(1, min(int(limite or 80), 200)),),
+        params,
     )
     ids = [int(r[0]) for r in cur.fetchall()]
     alterados = 0
@@ -2243,7 +2252,14 @@ def job_financeiro_diario(cur) -> dict:
     """Marca vencidas, avisa atraso e, 30 dias após o vencimento, cancela a recorrência."""
     hoje = date.today()
     garantir_colunas_assinatura(cur)
-    res = {"vencidas": 0, "avisos": 0, "rebaixados": 0, "renovacoes": 0, "erros": []}
+    res = {"vencidas": 0, "avisos": 0, "rebaixados": 0, "renovacoes": 0, "erros": [], "sync_efi": {}}
+
+    # Espelha pagamentos Efí que o webhook possa ter perdido (boleto/cartão).
+    try:
+        res["sync_efi"] = sincronizar_cobrancas_efi_abertas(cur, limite=120)
+    except Exception as e:
+        res["erros"].append(f"sync_efi: {e}")
+        log.exception("job diario sync efi")
 
     cur.execute(
         """

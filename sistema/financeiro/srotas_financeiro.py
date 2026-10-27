@@ -117,6 +117,14 @@ def api_faturas():
     try:
         cur = conn.cursor()
         garantir_cobranca_tenant(cur, tid)
+        # Reconsulta charges abertas deste tenant (cobre webhook Efí perdido).
+        try:
+            from sistema.financeiro.cobranca import sincronizar_cobrancas_efi_abertas
+
+            sincronizar_cobrancas_efi_abertas(cur, limite=20, id_tenant=int(tid))
+        except Exception:
+            conn.rollback()
+            garantir_cobranca_tenant(cur, tid)
         conn.commit()
         data = listar_faturas(cur, tid, page=page)
         return jsonify(success=True, **data, dias_graca=DIAS_GRACA_INADIMPLENCIA)
