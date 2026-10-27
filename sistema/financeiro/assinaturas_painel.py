@@ -540,7 +540,8 @@ def painel_assinaturas(
           AND {_SQL_MES_COMPETENCIA} = %s
         ORDER BY f.vencimento_em ASC NULLS LAST, f.id ASC
         LIMIT 500
-        """
+        """,
+        (mes_ref,),
     )
     emitidas_mes = []
     for row in cur.fetchall():
