@@ -2531,7 +2531,14 @@ def manutencao_tenant_desativar():
         if not row[1]:
             return jsonify(success=True, message="Tenant já estava inativo.")
         cur.execute(
-            "UPDATE tbl_tenant SET ativo = FALSE WHERE id = %s",
+            "ALTER TABLE tbl_tenant ADD COLUMN IF NOT EXISTS inativado_em TIMESTAMP NULL"
+        )
+        cur.execute(
+            """
+            UPDATE tbl_tenant
+            SET ativo = FALSE, inativado_em = NOW()
+            WHERE id = %s
+            """,
             (id_tenant,),
         )
         conn.commit()

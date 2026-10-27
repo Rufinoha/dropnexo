@@ -713,6 +713,24 @@ body.fg-app {
   color: #64748b;
 }
 
+.fg-tenant-item-status {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #047857;
+}
+
+.fg-tenant-item-status.is-inativo {
+  color: #b45309;
+}
+
+.fg-tenant-item.is-inativo {
+  opacity: 0.92;
+}
+
+.fg-tenant-item.is-inativo .fg-tenant-item-name {
+  color: #64748b;
+}
+
 .fg-tenant-item-badge {
   font-size: 0.68rem;
   font-weight: 700;

@@ -222,7 +222,23 @@ def reativar_conta(cur, id_tenant: int, *, id_admin: int | None = None) -> dict:
     if not row[1]:
         raise ValueError("Não há solicitação de reativação para esta conta.")
 
-    cur.execute("UPDATE tbl_tenant SET ativo = TRUE WHERE id = %s", (id_tenant,))
+    try:
+        cur.execute(
+            """
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = current_schema()
+              AND table_name = 'tbl_tenant' AND column_name = 'inativado_em'
+            """
+        )
+        if cur.fetchone():
+            cur.execute(
+                "UPDATE tbl_tenant SET ativo = TRUE, inativado_em = NULL WHERE id = %s",
+                (id_tenant,),
+            )
+        else:
+            cur.execute("UPDATE tbl_tenant SET ativo = TRUE WHERE id = %s", (id_tenant,))
+    except Exception:
+        cur.execute("UPDATE tbl_tenant SET ativo = TRUE WHERE id = %s", (id_tenant,))
     cur.execute(
         "UPDATE tbl_usuario_tenant SET ativo = TRUE WHERE id_tenant = %s",
         (id_tenant,),

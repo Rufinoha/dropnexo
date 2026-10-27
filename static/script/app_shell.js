@@ -139,12 +139,37 @@
     const termo = tenantSearch.value.trim().toLowerCase();
     if (!termo) return lista;
     return lista.filter(function (t) {
-      const alvo = [t.nome, t.slug, t.meta, t.papel_label, t.plano, t.tipo_negocio]
+      const alvo = [
+        t.nome,
+        t.slug,
+        t.meta,
+        t.papel_label,
+        t.plano,
+        t.tipo_negocio,
+        t.status_label,
+        t.status,
+      ]
         .filter(Boolean)
         .join(" ")
         .toLowerCase();
       return alvo.includes(termo);
     });
+  }
+
+  function fmtDataTenant(iso) {
+    if (!iso) return "—";
+    const s = String(iso).slice(0, 10);
+    const partes = s.split("-");
+    if (partes.length !== 3) return s;
+    return partes[2] + "/" + partes[1] + "/" + partes[0];
+  }
+
+  function linhaStatusTenant(t) {
+    const ativo = t.ativo !== false && String(t.status || "").toLowerCase() !== "inativo";
+    if (ativo) {
+      return "Ativo | abertura " + fmtDataTenant(t.criado_em);
+    }
+    return "Inativo | inativação " + fmtDataTenant(t.inativado_em);
   }
 
   function renderTenantList(itens) {
@@ -165,8 +190,14 @@
     visiveis.forEach(function (t) {
       const li = document.createElement("li");
       const btn = document.createElement("button");
+      const inativo =
+        modoDevSuporte &&
+        (t.ativo === false || String(t.status || "").toLowerCase() === "inativo");
       btn.type = "button";
-      btn.className = "fg-tenant-item" + (t.is_atual ? " is-atual" : "");
+      btn.className =
+        "fg-tenant-item" +
+        (t.is_atual ? " is-atual" : "") +
+        (inativo ? " is-inativo" : "");
       btn.setAttribute("role", "option");
       btn.setAttribute("aria-selected", t.is_atual ? "true" : "false");
       btn.dataset.idTenant = String(t.id);
@@ -198,10 +229,19 @@
 
       btn.appendChild(topo);
       btn.appendChild(meta);
+
+      if (modoDevSuporte) {
+        const statusLinha = document.createElement("span");
+        statusLinha.className =
+          "fg-tenant-item-status" + (inativo ? " is-inativo" : " is-ativo");
+        statusLinha.textContent = linhaStatusTenant(t);
+        btn.appendChild(statusLinha);
+      }
+
       if (t.is_atual) {
         const badge = document.createElement("span");
         badge.className = "fg-tenant-item-badge";
-        badge.textContent = modoDevSuporte ? "Ativo" : "Conta atual";
+        badge.textContent = "Conta atual";
         btn.appendChild(badge);
       }
 

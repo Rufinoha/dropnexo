@@ -846,24 +846,94 @@ _ROTULO_TIPO_TENANT = {
 }
 
 
+def _garantir_coluna_inativado_em(cur) -> None:
+    cur.execute(
+        """
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'tbl_tenant'
+          AND column_name = 'inativado_em'
+        """
+    )
+    if cur.fetchone():
+        return
+    cur.execute("ALTER TABLE tbl_tenant ADD COLUMN IF NOT EXISTS inativado_em TIMESTAMP NULL")
+
+
+def _iso_ts(valor) -> str:
+    if not valor:
+        return ""
+    try:
+        return valor.isoformat()
+    except Exception:
+        return str(valor)[:19]
+
+
 def _listar_tenants_dev(cur, id_tenant_atual: int | None) -> list[dict]:
     """Somente tenants reais (tbl_tenant) para o seletor DEV.
 
     Fornecedores locais do armazém (tbl_armazem_fornecedor) NÃO entram aqui —
     não são conta/tenant e não há o que “entrar”. Apenas neste menu de suporte.
+    Inclui ativos e inativos.
     """
-    cur.execute(
-        """
-        SELECT t.id, t.nome, t.slug, t.plano, t.tipo_negocio, t.cidade, t.uf, t.documento
+    _garantir_coluna_inativado_em(cur)
+    sql = """
+        SELECT t.id, t.nome, t.slug, t.plano, t.tipo_negocio, t.cidade, t.uf, t.documento,
+               COALESCE(t.ativo, TRUE),
+               t.criado_em,
+               COALESCE(
+                 t.inativado_em,
+                 (
+                   SELECT c.concluido_em
+                   FROM tbl_cancelamento_conta c
+                   WHERE c.id_tenant = t.id
+                     AND c.reativado_em IS NULL
+                     AND c.concluido_em IS NOT NULL
+                   ORDER BY c.concluido_em DESC
+                   LIMIT 1
+                 )
+               )
         FROM tbl_tenant t
-        WHERE t.ativo = TRUE
-          AND t.tipo_negocio IN ('fornecedor', 'vendedor', 'hibrido', 'armazem')
-        ORDER BY t.nome ASC
+        WHERE t.tipo_negocio IN ('fornecedor', 'vendedor', 'hibrido', 'armazem')
+        ORDER BY COALESCE(t.ativo, TRUE) DESC, t.nome ASC
         """
-    )
+    try:
+        cur.execute("SAVEPOINT sp_tenants_dev")
+        cur.execute(sql)
+        cur.execute("RELEASE SAVEPOINT sp_tenants_dev")
+    except Exception:
+        # Ambiente sem tbl_cancelamento_conta: só inativado_em / ativo
+        try:
+            cur.execute("ROLLBACK TO SAVEPOINT sp_tenants_dev")
+        except Exception:
+            pass
+        cur.execute(
+            """
+            SELECT t.id, t.nome, t.slug, t.plano, t.tipo_negocio, t.cidade, t.uf, t.documento,
+                   COALESCE(t.ativo, TRUE),
+                   t.criado_em,
+                   t.inativado_em
+            FROM tbl_tenant t
+            WHERE t.tipo_negocio IN ('fornecedor', 'vendedor', 'hibrido', 'armazem')
+            ORDER BY COALESCE(t.ativo, TRUE) DESC, t.nome ASC
+            """
+        )
     itens = []
     for row in cur.fetchall():
-        tid, nome, slug, plano, tipo_negocio, cidade, uf, documento = row
+        (
+            tid,
+            nome,
+            slug,
+            plano,
+            tipo_negocio,
+            cidade,
+            uf,
+            documento,
+            ativo,
+            criado_em,
+            inativado_em,
+        ) = row
         tipo = (tipo_negocio or "").strip().lower()
         meta_partes = []
         if cidade and uf:
@@ -884,6 +954,11 @@ def _listar_tenants_dev(cur, id_tenant_atual: int | None) -> list[dict]:
                 "perfil_codigo": "dono",
                 "perfil_nome": "Dono da conta",
                 "meta": " · ".join(meta_partes),
+                "ativo": bool(ativo),
+                "status": "ativo" if ativo else "inativo",
+                "status_label": "Ativo" if ativo else "Inativo",
+                "criado_em": _iso_ts(criado_em),
+                "inativado_em": _iso_ts(inativado_em) if not ativo else "",
                 "is_atual": tid == id_tenant_atual,
                 "eh_tenant": True,
             }
@@ -906,6 +981,10 @@ def api_listar_tenants():
 
         if eh_dev or session.get("acesso_suporte"):
             itens = _listar_tenants_dev(cur, id_tenant_atual)
+            try:
+                conn.commit()
+            except Exception:
+                pass
             return jsonify(
                 success=True,
                 itens=itens,
@@ -999,7 +1078,7 @@ def api_trocar_tenant():
                        {expr_acesso}
                 FROM tbl_usuario u
                 CROSS JOIN tbl_tenant t
-                WHERE u.id = %s AND t.id = %s AND t.ativo = TRUE
+                WHERE u.id = %s AND t.id = %s
                   AND t.tipo_negocio IN ('fornecedor', 'vendedor', 'hibrido', 'armazem')
                 LIMIT 1
                 """,
