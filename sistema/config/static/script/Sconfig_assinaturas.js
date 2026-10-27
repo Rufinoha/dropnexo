@@ -563,12 +563,15 @@
         const badge = a.tem_nf
           ? `<span class="Asf_Badge is-pago">Anexada</span><div class="Asf_Muted">${esc(a.nf_anexado_br || "")}</div>`
           : `<span class="Asf_Badge is-pendente">Pendente</span>`;
+        const dadosBtn = `<button type="button" class="Cl_BtnLink" data-nf-dados="${esc(a.id_fatura)}">Dados NF</button>`;
         const acoes = a.tem_nf
           ? `<div class="Asf_Acoes Asf_Acoes--nf">
+              ${dadosBtn}
               <button type="button" class="Cl_BtnLink" data-nf-ver="${esc(a.id_fatura)}">Ver PDF</button>
               <button type="button" class="Cl_BtnLink" data-nf-anexar="${esc(a.id_fatura)}" data-nf-nome="${esc(a.nome)}">Trocar</button>
             </div>`
           : `<div class="Asf_Acoes Asf_Acoes--nf">
+              ${dadosBtn}
               <button type="button" class="Cl_BtnPrimario Asf_BtnNf" data-nf-anexar="${esc(a.id_fatura)}" data-nf-nome="${esc(a.nome)}">Anexar PDF</button>
             </div>`;
         return `<tr>
@@ -583,6 +586,93 @@
         </tr>`;
       })
       .join("");
+  }
+
+  function campoCopia(label, valor, obrigatorio) {
+    const v = String(valor ?? "");
+    const vazio = !v.trim();
+    const star = obrigatorio ? " *" : "";
+    return `<label class="Asf_CopyField${vazio ? " is-empty" : ""}">
+      <span class="Asf_CopyLabel">${esc(label)}${star}</span>
+      <span class="Asf_CopyRow">
+        <input type="text" readonly value="${esc(v)}" data-copy-val="${esc(v)}" />
+        <button type="button" class="Asf_CopyBtn" data-copy-btn title="Copiar ${esc(label)}" aria-label="Copiar ${esc(label)}" ${vazio ? "disabled" : ""}>⧉</button>
+      </span>
+    </label>`;
+  }
+
+  function htmlDadosNf(item) {
+    const t = item?.tomador || {};
+    const s = item?.servico || {};
+    return `<p class="Asf_FiltroHint" style="margin-top:0">
+        Copie cada campo para colar na emissão da NFS-e na H74.
+      </p>
+      <div class="Asf_CopyGrid">
+        ${campoCopia("CPF / CNPJ", t.documento, true)}
+        ${campoCopia("Nome / Razão social", t.nome, true)}
+        ${campoCopia("CEP", t.cep, false)}
+        ${campoCopia("Telefone", t.telefone, false)}
+        ${campoCopia("Endereço", t.endereco, false)}
+        ${campoCopia("Número", t.numero, false)}
+        ${campoCopia("Complemento", t.complemento, false)}
+        ${campoCopia("Bairro", t.bairro, false)}
+        ${campoCopia("Cidade", t.cidade, false)}
+        ${campoCopia("UF", t.uf, false)}
+      </div>
+      <div class="Asf_Bloco" style="margin-top:14px">
+        <h4>Serviço / valor</h4>
+        <div class="Asf_CopyGrid">
+          ${campoCopia("Discriminação", s.discriminacao || "", false)}
+          ${campoCopia("Valor", s.valor || item.valor || "", true)}
+        </div>
+      </div>`;
+  }
+
+  function abrirDadosNf(idFatura) {
+    const id = parseInt(idFatura || "0", 10);
+    const item = (cache?.nota_fiscal?.itens || []).find((x) => Number(x.id_fatura) === id);
+    if (!item) {
+      if (window.Swal) Swal.fire("Atenção", "Cobrança não encontrada na lista.", "warning");
+      return;
+    }
+    const modal = el("asf_modal");
+    const body = el("asf_modal_body");
+    const titulo = el("asf_modal_titulo");
+    if (!modal || !body) return;
+    if (titulo) titulo.textContent = `Dados NF · ${item.nome || "Tenant"}`;
+    body.innerHTML = htmlDadosNf(item);
+    if (typeof modal.showModal === "function") modal.showModal();
+    else modal.hidden = false;
+  }
+
+  async function copiarTexto(texto, btn) {
+    const val = String(texto ?? "");
+    if (!val.trim()) return;
+    try {
+      if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(val);
+      else {
+        const ta = document.createElement("textarea");
+        ta.value = val;
+        ta.setAttribute("readonly", "");
+        ta.style.position = "fixed";
+        ta.style.left = "-9999px";
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+      }
+      if (btn) {
+        const old = btn.textContent;
+        btn.textContent = "✓";
+        btn.classList.add("is-ok");
+        setTimeout(() => {
+          btn.textContent = old || "⧉";
+          btn.classList.remove("is-ok");
+        }, 900);
+      }
+    } catch (e) {
+      if (window.Swal) Swal.fire("Copiar", e.message || "Não foi possível copiar.", "error");
+    }
   }
 
   async function anexarNfFatura(idFatura, arquivo) {
@@ -1124,6 +1214,20 @@
       }
     });
     document.addEventListener("click", (ev) => {
+      const copyBtn = ev.target.closest("[data-copy-btn]");
+      if (copyBtn) {
+        ev.preventDefault();
+        const input = copyBtn.closest(".Asf_CopyRow")?.querySelector("input");
+        const val = input?.getAttribute("data-copy-val") ?? input?.value ?? "";
+        copiarTexto(val, copyBtn);
+        return;
+      }
+      const dados = ev.target.closest("[data-nf-dados]");
+      if (dados) {
+        ev.preventDefault();
+        abrirDadosNf(dados.getAttribute("data-nf-dados"));
+        return;
+      }
       const ver = ev.target.closest("[data-nf-ver]");
       if (ver) {
         ev.preventDefault();

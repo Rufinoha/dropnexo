@@ -472,6 +472,26 @@ def _montar_conciliacao(cur, ano_sel: int, mes_sel: int) -> dict[str, Any]:
     }
 
 
+def _so_digitos(valor: Any) -> str:
+    return "".join(ch for ch in str(valor or "") if ch.isdigit())
+
+
+def _fmt_doc_br(doc: Any) -> str:
+    d = _so_digitos(doc)
+    if len(d) == 11:
+        return f"{d[:3]}.{d[3:6]}.{d[6:9]}-{d[9:]}"
+    if len(d) == 14:
+        return f"{d[:2]}.{d[2:5]}.{d[5:8]}/{d[8:12]}-{d[12:]}"
+    return (str(doc or "")).strip()
+
+
+def _fmt_cep_br(cep: Any) -> str:
+    d = _so_digitos(cep)
+    if len(d) == 8:
+        return f"{d[:5]}-{d[5:]}"
+    return (str(cep or "")).strip()
+
+
 def _montar_nota_fiscal(cur, ano_sel: int, mes_sel: int) -> dict[str, Any]:
     """Cobranças pagas no mês (por pago_em) para anexar NFS-e emitida na H74."""
     itens: list[dict[str, Any]] = []
@@ -484,7 +504,27 @@ def _montar_nota_fiscal(cur, ano_sel: int, mes_sel: int) -> dict[str, Any]:
                    f.referencia, f.plano_slug, f.valor_centavos, f.pago_em,
                    f.forma_pagamento, t.tipo_negocio,
                    COALESCE(NULLIF(TRIM(f.nf_caminho), ''), '') <> '',
-                   f.nf_nome, f.nf_anexado_em
+                   f.nf_nome, f.nf_anexado_em,
+                   COALESCE(NULLIF(TRIM(t.documento), ''), ''),
+                   COALESCE(
+                     NULLIF(TRIM(t.razao_social), ''),
+                     NULLIF(TRIM(t.nome_completo), ''),
+                     NULLIF(TRIM(t.nome_fantasia), ''),
+                     NULLIF(TRIM(t.nome), ''),
+                     ''
+                   ),
+                   COALESCE(NULLIF(TRIM(t.cep), ''), ''),
+                   COALESCE(
+                     NULLIF(TRIM(t.celular_comercial), ''),
+                     NULLIF(TRIM(t.telefone_comercial), ''),
+                     ''
+                   ),
+                   COALESCE(NULLIF(TRIM(t.logradouro), ''), ''),
+                   COALESCE(NULLIF(TRIM(t.numero), ''), ''),
+                   COALESCE(NULLIF(TRIM(t.complemento), ''), ''),
+                   COALESCE(NULLIF(TRIM(t.bairro), ''), ''),
+                   COALESCE(NULLIF(TRIM(t.cidade), ''), ''),
+                   COALESCE(NULLIF(TRIM(t.uf), ''), '')
             FROM tbl_fatura f
             JOIN tbl_tenant t ON t.id = f.id_tenant
             WHERE f.status = 'pago'
@@ -501,14 +541,17 @@ def _montar_nota_fiscal(cur, ano_sel: int, mes_sel: int) -> dict[str, Any]:
         for row in cur.fetchall():
             forma = (row[7] or "").strip().lower()
             tem_nf = bool(row[9])
+            plano_label = nome_plano_comercial(row[4], row[8])
+            ref = row[3] or ""
+            telefone_digits = _so_digitos(row[15])
             itens.append(
                 {
                     "id_fatura": int(row[0]),
                     "id_tenant": int(row[1]),
                     "nome": (row[2] or "").strip() or f"Tenant #{row[1]}",
-                    "referencia": row[3] or "",
+                    "referencia": ref,
                     "plano": str(row[4] or ""),
-                    "plano_label": nome_plano_comercial(row[4], row[8]),
+                    "plano_label": plano_label,
                     "valor_centavos": int(row[5] or 0),
                     "valor": _fmt_reais(row[5]),
                     "pago_em": _fmt_data(row[6]),
@@ -517,6 +560,26 @@ def _montar_nota_fiscal(cur, ano_sel: int, mes_sel: int) -> dict[str, Any]:
                     "tem_nf": tem_nf,
                     "nf_nome": (row[10] or "").strip() if tem_nf else "",
                     "nf_anexado_br": _fmt_data_br(row[11]) if tem_nf else "",
+                    "tomador": {
+                        "documento": _fmt_doc_br(row[12]),
+                        "nome": (row[13] or "").strip() or (row[2] or "").strip() or f"Tenant #{row[1]}",
+                        "cep": _fmt_cep_br(row[14]),
+                        "telefone": telefone_digits,
+                        "endereco": (row[16] or "").strip(),
+                        "numero": (row[17] or "").strip(),
+                        "complemento": (row[18] or "").strip(),
+                        "bairro": (row[19] or "").strip(),
+                        "cidade": (row[20] or "").strip(),
+                        "uf": (row[21] or "").strip().upper()[:2],
+                    },
+                    "servico": {
+                        "discriminacao": (
+                            f"Mensalidade DropNexo — plano {plano_label}"
+                            + (f" — ref. {ref}" if ref else "")
+                        ),
+                        "valor": _fmt_reais(row[5]),
+                        "valor_centavos": int(row[5] or 0),
+                    },
                 }
             )
         cur.execute("RELEASE SAVEPOINT sp_asf_nf")

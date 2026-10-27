@@ -224,6 +224,73 @@
   font-size: 0.78rem;
   white-space: nowrap;
 }
+.Asf_CopyGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 14px;
+}
+@media (max-width: 640px) {
+  .Asf_CopyGrid { grid-template-columns: 1fr; }
+}
+.Asf_CopyField {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+}
+.Asf_CopyLabel {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.Asf_CopyRow {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+}
+.Asf_CopyRow input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid #dbe3ee;
+  border-radius: 8px;
+  padding: 7px 10px;
+  font-size: 0.84rem;
+  color: #0f172a;
+  background: #f8fafc;
+}
+.Asf_CopyField.is-empty .Asf_CopyRow input {
+  color: #94a3b8;
+  font-style: italic;
+}
+.Asf_CopyBtn {
+  width: 34px;
+  flex: 0 0 34px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  color: #334155;
+  cursor: pointer;
+  font-size: 0.95rem;
+  line-height: 1;
+  padding: 0;
+}
+.Asf_CopyBtn:hover:not(:disabled) {
+  border-color: #021F81;
+  color: #021F81;
+}
+.Asf_CopyBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.Asf_CopyBtn.is-ok {
+  border-color: #16a34a;
+  color: #16a34a;
+}
+.Asf_Modal:has(.Asf_CopyGrid) {
+  width: min(760px, calc(100vw - 32px));
+}
 
 .Asf_MenuBtn {
   min-width: 30px;
