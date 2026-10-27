@@ -88,6 +88,7 @@ STATUS_LABEL = {
     "pago": "Paga",
     "vencido": "Vencida",
     "cancelado": "Cancelada",
+    "bloqueado": "Bloqueada (MED)",
 }
 
 
@@ -2000,14 +2001,15 @@ def processar_webhook_efi(cur, payload: dict) -> dict:
     )
 
     if novo == "pago":
-        if st_atual == "pago":
-            return {"ok": True, "status": "pago", "id_fatura": id_fatura}
+        # Não sobrescreve MED (pago bloqueado) — o sync de infrações gerencia isso.
+        if st_atual in ("pago", "bloqueado"):
+            return {"ok": True, "status": st_atual, "id_fatura": id_fatura}
         return aplicar_pagamento_fatura(cur, id_fatura, origem="webhook")
 
     cur.execute(
         """
         UPDATE tbl_fatura SET status = %s, atualizado_em = NOW()
-        WHERE id = %s AND status <> 'pago'
+        WHERE id = %s AND status NOT IN ('pago', 'bloqueado')
         """,
         (novo, id_fatura),
     )

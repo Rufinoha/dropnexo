@@ -74,6 +74,7 @@
     const st = String(a.status || "").toLowerCase();
     let cls = "is-pendente";
     if (grupo === "pago" || st === "pago") cls = "is-pago";
+    else if (grupo === "bloqueado" || st === "bloqueado") cls = "is-bloqueado";
     else if (grupo === "cancelado" || st === "cancelado") cls = "is-cancelado";
     else if (st === "vencido") cls = "is-vencido";
     return `<span class="Asf_Badge ${cls}">${esc(a.status_label || a.status || "—")}</span>`;
@@ -279,6 +280,56 @@
     });
   }
 
+  function renderBloq(data) {
+    const r = data?.resumo || {};
+    const sync = data?.sync || {};
+    const boxKpi = el("asf_bloq_kpis");
+    if (boxKpi) {
+      boxKpi.innerHTML = kpisHtml([
+        { label: "Bloqueados", value: String(r.qtd ?? 0), cls: "is-warn" },
+        { label: "Valor bloqueado", value: r.valor || "R$ 0,00", cls: "is-danger" },
+      ]);
+    }
+    const hint = el("asf_bloq_hint");
+    const itens = data?.itens || [];
+    if (hint) {
+      hint.textContent = itens.length
+        ? `${itens.length} cobrança(s) com valor bloqueado na Efí`
+        : "Nenhum pagamento bloqueado no momento";
+    }
+    const syncEl = el("asf_bloq_sync");
+    if (syncEl) {
+      if (sync.ok) {
+        syncEl.textContent = `Sync Efí MED: ${sync.total_med ?? 0} infração(ões) · ${sync.atualizados ?? 0} fatura(s) atualizada(s)${sync.sem_fatura ? ` · ${sync.sem_fatura} sem vínculo` : ""}.`;
+      } else {
+        syncEl.textContent = sync.message
+          ? `Sync Efí: ${sync.message}`
+          : "Sync Efí MED não executado.";
+      }
+    }
+    const tb = el("asf_bloq_tbody");
+    if (!tb) return;
+    if (!itens.length) {
+      tb.innerHTML = emptyRow(8, "Nenhuma fatura bloqueada. Ao atualizar, consultamos a Efí (MED).");
+      return;
+    }
+    tb.innerHTML = itens
+      .map((a) => {
+        const med = `<span class="Asf_Badge is-bloqueado">${esc(a.med_status_label || a.med_status || "—")}</span>`;
+        return `<tr>
+          <td><strong>${esc(a.nome)}</strong><div class="Asf_Muted">#${esc(a.id_tenant)}</div></td>
+          <td>${esc(a.plano_label)}</td>
+          <td>${esc(a.referencia || a.id_fatura)}</td>
+          <td><strong>${esc(a.valor)}</strong></td>
+          <td>${esc(a.pago_br || "—")}</td>
+          <td>${med}<div class="Asf_Muted">${esc(a.med_atualizado_br || "")}</div></td>
+          <td>${esc(a.med_razao || "—")}</td>
+          <td class="Asf_ColAcoes">${btnMenuFatura({ ...a, status_grupo: "bloqueado", lembrete_rotulo: "" })}</td>
+        </tr>`;
+      })
+      .join("");
+  }
+
   function renderFat(data) {
     const r = data?.resumo || {};
     const f = data?.filtros || {};
@@ -349,6 +400,7 @@
     lerFiltros();
     renderAtivas(j.ativas);
     renderInad(j.inadimplencia);
+    renderBloq(j.bloqueados);
     renderFat(j.faturamento);
     setStatus(`Atualizado agora · competência ${filtroMes.toString().padStart(2, "0")}/${filtroAno}.`);
   }
@@ -420,6 +472,7 @@
     const btnCancelar = menu.querySelector('[data-acao="cancelar"]');
     if (btnLembrete) btnLembrete.hidden = grupo !== "aberto";
     if (btnCancelar) btnCancelar.hidden = grupo !== "aberto";
+    // bloqueado / pago / cancelado: só detalhe
     menuAlvo = btn;
     menuTipo = "fatura";
     posicionarMenu(menu, btn);

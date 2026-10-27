@@ -536,7 +536,7 @@ def painel_assinaturas(
           COALESCE(NULLIF(f.periodicidade, ''), 'mensal'), t.tipo_negocio
         FROM tbl_fatura f
         JOIN tbl_tenant t ON t.id = f.id_tenant
-        WHERE f.status IN ('pendente', 'vencido', 'pago', 'cancelado')
+        WHERE f.status IN ('pendente', 'vencido', 'pago', 'cancelado', 'bloqueado')
           AND {_SQL_MES_COMPETENCIA} = %s
         ORDER BY f.vencimento_em ASC NULLS LAST, f.id ASC
         LIMIT 500
@@ -552,6 +552,9 @@ def painel_assinaturas(
         if st == "pago":
             st_grupo = "pago"
             st_label = "Pago"
+        elif st == "bloqueado":
+            st_grupo = "bloqueado"
+            st_label = "Bloqueado"
         elif st == "cancelado":
             st_grupo = "cancelado"
             st_label = "Cancelada"
@@ -703,6 +706,60 @@ def painel_assinaturas(
         _rollback_sp(cur, "sp_asf_cancel")
         canceladas = []
 
+    # ── Bloqueados (MED / pago contestado na Efí) ───────────────────────
+    sync_med: dict[str, Any] = {"ok": False, "message": "não sincronizado"}
+    try:
+        cur.execute("SAVEPOINT sp_asf_med_sync")
+        from sistema.financeiro.med_bloqueios import sincronizar_bloqueios_med
+
+        sync_med = sincronizar_bloqueios_med(cur, dias=180)
+        cur.execute("RELEASE SAVEPOINT sp_asf_med_sync")
+    except Exception as e:
+        _rollback_sp(cur, "sp_asf_med_sync")
+        sync_med = {"ok": False, "message": str(e), "atualizados": 0, "abertos": 0}
+
+    bloqueados: list[dict] = []
+    try:
+        cur.execute("SAVEPOINT sp_asf_med_list")
+        from sistema.financeiro.med_bloqueios import listar_faturas_bloqueadas, rotulo_med_status
+
+        for row in listar_faturas_bloqueadas(cur):
+            forma = (row[7] or "").strip().lower()
+            med_st = str(row[14] or "").strip().upper()
+            bloqueados.append(
+                {
+                    "id_fatura": int(row[0]),
+                    "id_tenant": int(row[1]),
+                    "nome": (row[2] or "").strip() or f"Tenant #{row[1]}",
+                    "referencia": row[3] or "",
+                    "plano": str(row[4] or ""),
+                    "plano_label": nome_plano_comercial(row[4], row[17]),
+                    "valor_centavos": int(row[5] or 0),
+                    "valor": _fmt_reais(row[5]),
+                    "status": (row[6] or "").strip().lower(),
+                    "status_label": "Bloqueado",
+                    "status_grupo": "bloqueado",
+                    "forma_pagamento": forma,
+                    "forma_label": FORMA_LABEL.get(forma, forma or "—"),
+                    "vencimento_br": _fmt_data_br(row[8]),
+                    "pago_br": _fmt_data_br(row[9]),
+                    "criado_br": _fmt_data_br(row[10]),
+                    "efi_txid": row[11] or "",
+                    "efi_e2e": row[12] or "",
+                    "med_id": row[13] or "",
+                    "med_status": med_st,
+                    "med_status_label": rotulo_med_status(med_st),
+                    "med_razao": (row[15] or "").strip() or "—",
+                    "med_atualizado_br": _fmt_data_br(row[16]),
+                }
+            )
+        cur.execute("RELEASE SAVEPOINT sp_asf_med_list")
+    except Exception:
+        _rollback_sp(cur, "sp_asf_med_list")
+        bloqueados = []
+
+    valor_bloq = sum(int(x["valor_centavos"]) for x in bloqueados)
+
     return {
         "ativas": {
             "resumo": {
@@ -760,5 +817,14 @@ def painel_assinaturas(
                 "pago_ano": _fmt_reais(sum(x["pago_centavos"] for x in serie_ano)),
             },
             "pagos_recentes": pagos_recentes,
+        },
+        "bloqueados": {
+            "resumo": {
+                "qtd": len(bloqueados),
+                "valor_centavos": valor_bloq,
+                "valor": _fmt_reais(valor_bloq),
+            },
+            "itens": bloqueados,
+            "sync": sync_med,
         },
     }

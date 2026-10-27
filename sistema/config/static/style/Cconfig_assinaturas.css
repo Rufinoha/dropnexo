@@ -312,6 +312,7 @@
 .Asf_Badge.is-vencido { background: #fee2e2; color: #991b1b; }
 .Asf_Badge.is-pendente { background: #ffedd5; color: #9a3412; }
 .Asf_Badge.is-pago { background: #dcfce7; color: #166534; }
+.Asf_Badge.is-bloqueado { background: #fef3c7; color: #92400e; }
 .Asf_Badge.is-cancelado { background: #f1f5f9; color: #64748b; }
 .Asf_Badge.is-starter { background: #e2e8f0; color: #475569; }
 

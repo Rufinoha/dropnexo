@@ -673,3 +673,26 @@ def cancelar_cobranca_pix(txid: str) -> dict:
             body={"status": "REMOVIDA_PELO_USUARIO_RECEBEDOR"},
         )
     )
+
+
+def listar_infracoes_med(*, inicio: str, fim: str) -> dict:
+    """GET /v2/gn/infracoes — MED/contestação Pix (escopo gn.infractions.read)."""
+    resp = _raise_resp(
+        _cliente().med_list(params={"inicio": str(inicio), "fim": str(fim)})
+    )
+    if isinstance(resp.get("infracoes"), list):
+        return resp
+    data = resp.get("data") if isinstance(resp.get("data"), dict) else {}
+    if isinstance(data.get("infracoes"), list):
+        return data
+    return {"infracoes": [], "raw": resp}
+
+
+def consultar_pix_recebido(e2e_id: str) -> dict:
+    """GET /v2/pix/:e2eId — detalhe do Pix recebido (traz txid)."""
+    e2e = (e2e_id or "").strip()
+    if not e2e:
+        raise RuntimeError("endToEndId ausente.")
+    resp = _raise_resp(_cliente().pix_detail_received(params={"e2eId": e2e}))
+    corpo = resp.get("data") if isinstance(resp.get("data"), dict) else resp
+    return corpo if isinstance(corpo, dict) else {"raw": resp}

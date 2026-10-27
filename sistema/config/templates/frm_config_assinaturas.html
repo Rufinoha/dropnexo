@@ -3,7 +3,7 @@
 {% set nav_ativo = 'config' %}
 {% block topbar_title %}Assinaturas e faturamento{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_assinaturas.css') }}?v=7" />
+<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_assinaturas.css') }}?v=8" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal Asf_Wrap">
@@ -25,6 +25,7 @@
   <nav class="Asf_Tabs" role="tablist" aria-label="Seções do painel">
     <button type="button" class="Asf_Tab is-active" data-tab="ativas" role="tab" aria-selected="true">Ativas</button>
     <button type="button" class="Asf_Tab" data-tab="inadimplencia" role="tab" aria-selected="false">Inadimplência</button>
+    <button type="button" class="Asf_Tab" data-tab="bloqueados" role="tab" aria-selected="false">Bloqueados</button>
     <button type="button" class="Asf_Tab" data-tab="faturamento" role="tab" aria-selected="false">Faturamento</button>
   </nav>
 
@@ -139,6 +140,36 @@
     </div>
   </section>
 
+  <section class="Asf_Panel" id="asf_tab_bloqueados" data-tab-panel="bloqueados" role="tabpanel" hidden>
+    <div class="Asf_Kpis" id="asf_bloq_kpis"></div>
+    <div class="Asf_Card">
+      <div class="Asf_CardHead">
+        <h3>Pagos bloqueados (MED)</h3>
+        <span class="Asf_Hint" id="asf_bloq_hint">PIX pago na Efí com contestação — aguarda liberação ou estorno</span>
+      </div>
+      <p class="Asf_Hint" id="asf_bloq_sync" style="margin:0 0 12px">—</p>
+      <div class="Asf_TabelaWrap">
+        <table class="Asf_Tabela">
+          <thead>
+            <tr>
+              <th>Tenant</th>
+              <th>Plano</th>
+              <th>Ref.</th>
+              <th>Valor</th>
+              <th>Pago em</th>
+              <th>MED</th>
+              <th>Motivo</th>
+              <th class="Asf_ColAcoes">Ações</th>
+            </tr>
+          </thead>
+          <tbody id="asf_bloq_tbody">
+            <tr><td colspan="8" class="Asf_Empty">Carregando…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
   <section class="Asf_Panel" id="asf_tab_faturamento" data-tab-panel="faturamento" role="tabpanel" hidden>
     <div class="Asf_Filtros">
       <div class="form-campo">
@@ -198,6 +229,7 @@
             <option value="">Todos</option>
             <option value="pago">Pago</option>
             <option value="aberto">Em aberto</option>
+            <option value="bloqueado">Bloqueado</option>
             <option value="cancelado">Cancelada</option>
           </select>
         </div>
@@ -251,5 +283,5 @@
   "apiLembrete": url_for("config.assinaturas_lembrete_fatura"),
   "apiDetalhe": url_for("config.assinaturas_faturamento_pagina") ~ "/fatura/"
 } | tojson }}</script>
-<script defer src="{{ url_for('config.static', filename='script/Sconfig_assinaturas.js') }}?v=8"></script>
+<script defer src="{{ url_for('config.static', filename='script/Sconfig_assinaturas.js') }}?v=9"></script>
 {% endblock %}
