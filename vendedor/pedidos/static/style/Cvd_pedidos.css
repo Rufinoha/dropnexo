@@ -53,14 +53,14 @@
 
 .Pd_Table tbody tr:hover td { background: #faf8ff; }
 
-.Pd_ColPed { width: 7.5rem; }
-.Pd_ColData { width: 5.5rem; white-space: nowrap; }
-.Pd_ColForn { width: 11rem; }
-.Pd_ColCli { width: 11rem; }
-.Pd_ColTotal { width: 6.5rem; white-space: nowrap; }
-.Pd_ColOrigem { width: 8.5rem; white-space: nowrap; }
-.Pd_ColStCli { width: 7.5rem; white-space: nowrap; }
-.Pd_ColStPed { width: 11.5rem; white-space: nowrap; }
+.Pd_ColPed { width: 7.2rem; }
+.Pd_ColData { width: 5.2rem; white-space: nowrap; }
+.Pd_ColForn { width: 10.5rem; }
+.Pd_ColCli { width: 10.5rem; }
+.Pd_ColTotal { width: 6.2rem; white-space: nowrap; }
+.Pd_ColOrigem { width: 8.2rem; white-space: nowrap; }
+.Pd_ColStCli { width: 7.2rem; white-space: nowrap; }
+.Pd_ColStPed { width: 12.5rem; white-space: nowrap; }
 
 .Pd_ColForn,
 .Pd_ColCli {
@@ -1452,7 +1452,13 @@
   overflow: auto;
 }
 
-.Pd_ColAcoes { width: 3.5rem; text-align: center !important; }
+.Pd_ColAcoes {
+  width: 2.6rem;
+  max-width: 2.6rem;
+  padding-left: 0.25rem !important;
+  padding-right: 0.35rem !important;
+  text-align: center !important;
+}
 
 .Pd_Num { color: #0f172a; font-weight: 700; letter-spacing: 0.01em; }
 
@@ -1487,41 +1493,86 @@
 
 .Pd_MenuBtn {
   border: 0;
-  background: transparent;
-  font-size: 1.25rem;
+  background: #f8fafc;
+  font-size: 1.1rem;
   line-height: 1;
   cursor: pointer;
-  padding: 0.15rem 0.45rem;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
   border-radius: 8px;
-  color: #1c2e3b;
+  color: #334155;
+  border: 1px solid #e2e8f0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
-.Pd_MenuBtn:hover { background: #f1f5f9; }
+.Pd_MenuBtn:hover {
+  background: #eef2ff;
+  border-color: #c7d2fe;
+  color: #021f81;
+}
 
 .Pd_MenuLista {
   position: fixed;
   z-index: 90;
-  min-width: 180px;
+  min-width: 210px;
   background: #fff;
   border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
-  padding: 0.3rem;
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.14);
+  padding: 0.4rem;
 }
+.Pd_MenuLista .Pd_MenuItem,
 .Pd_MenuLista button {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
   width: 100%;
   text-align: left;
   border: 0;
   background: transparent;
-  color: #1c2e3b;
-  padding: 0.45rem 0.6rem;
-  border-radius: 8px;
+  color: #1e293b;
+  padding: 0.55rem 0.65rem;
+  border-radius: 9px;
   font: inherit;
+  font-size: 0.9rem;
+  font-weight: 550;
   cursor: pointer;
 }
-.Pd_MenuLista button:hover { background: #f8fafc; }
+.Pd_MenuLista .Pd_MenuItem:hover,
+.Pd_MenuLista button:hover {
+  background: #f1f5f9;
+  color: #021f81;
+}
+.Pd_MenuIco {
+  width: 1.7rem;
+  height: 1.7rem;
+  border-radius: 8px;
+  background: #eef2ff;
+  color: #021f81;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+.Pd_MenuIco svg,
+.Pd_MenuIco .icon-tech {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+.Pd_MenuTxt { flex: 1 1 auto; min-width: 0; }
+.Pd_MenuLista .Pd_MenuItem.is-danger,
 .Pd_MenuLista button.is-danger { color: #b91c1c; }
-.Pd_MenuLista button.is-danger:hover { background: #fef2f2; }
+.Pd_MenuLista .Pd_MenuItem.is-danger .Pd_MenuIco {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+.Pd_MenuLista .Pd_MenuItem.is-danger:hover,
+.Pd_MenuLista button.is-danger:hover {
+  background: #fef2f2;
+  color: #991b1b;
+}
 
 .Pd_AnexosLista { display: flex; flex-direction: column; gap: 1rem; }
 

@@ -263,39 +263,52 @@ body.fg-app {
 .fg-nav-item {
   display: flex;
   align-items: center;
-  gap: 0.65rem;
-  padding: 0.58rem 0.75rem;
-  border-radius: 8px;
-  color: var(--shell-muted);
+  gap: 0.7rem;
+  padding: 0.48rem 0.6rem;
+  border-radius: 10px;
+  color: #475569;
   text-decoration: none;
   font-size: 0.9rem;
-  font-weight: 500;
-  transition: background 0.15s, color 0.15s;
+  font-weight: 550;
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
 }
 
 .fg-nav-item:hover {
-  background: var(--marca-light);
-  color: var(--marca-hover);
+  background: #f1f5f9;
+  color: #021f81;
   text-decoration: none;
 }
 
+.fg-nav-item:hover .fg-nav-icon {
+  background: #e0e7ff;
+  color: #021f81;
+  opacity: 1;
+}
+
 .fg-nav-item.is-active {
-  background: var(--marca-light);
-  color: var(--marca-primary);
-  font-weight: 600;
-  box-shadow: inset 3px 0 0 var(--marca-primary);
+  background: linear-gradient(90deg, #eef2ff 0%, #f8fafc 100%);
+  color: #021f81;
+  font-weight: 650;
+  box-shadow: inset 3px 0 0 #021f81;
 }
 
 .fg-nav-icon {
-  width: 1.15rem;
-  height: 1.15rem;
+  width: 1.85rem;
+  height: 1.85rem;
+  padding: 0.35rem;
+  box-sizing: border-box;
   flex-shrink: 0;
-  opacity: 0.85;
+  opacity: 1;
+  color: #64748b;
+  background: #f1f5f9;
+  border-radius: 8px;
+  display: block;
 }
 
 .fg-nav-item.is-active .fg-nav-icon {
   opacity: 1;
-  color: var(--marca-primary);
+  color: #021f81;
+  background: #dbeafe;
 }
 
 .fg-sidebar-foot {

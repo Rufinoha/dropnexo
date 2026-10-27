@@ -188,12 +188,13 @@
     const origem = (btn.getAttribute("data-origem") || "manual").toLowerCase();
     const box = document.createElement("div");
     box.className = "Pd_MenuLista";
+    const ico = (nome) => util().gerarIconeTech?.(nome) || "";
 
-    function item(label, acao, extraClass) {
+    function item(label, acao, iconName, extraClass) {
       const b = document.createElement("button");
       b.type = "button";
-      if (extraClass) b.className = extraClass;
-      b.textContent = label;
+      b.className = `Pd_MenuItem${extraClass ? ` ${extraClass}` : ""}`;
+      b.innerHTML = `<span class="Pd_MenuIco" aria-hidden="true">${ico(iconName)}</span><span class="Pd_MenuTxt">${esc(label)}</span>`;
       b.addEventListener("click", (ev) => {
         ev.stopPropagation();
         fecharMenusAcoes();
@@ -202,15 +203,17 @@
       box.appendChild(b);
     }
 
-    item(status === "rascunho" ? "Editar pedido" : "Ver pedido", "editar");
-    item("Incluir NF", "nf");
-    item("Incluir etiqueta", "etiqueta");
+    item(status === "rascunho" ? "Editar pedido" : "Ver pedido", "editar", "visualizar");
+    item("Incluir NF", "nf", "nf_hub");
+    item("Incluir etiqueta", "etiqueta", "etiqueta");
     if (origem === "manual" && status !== "cancelado") {
-      item("Cancelar pedido", "cancelar", "is-danger");
+      item("Cancelar pedido", "cancelar", "cancelar", "is-danger");
     }
     document.body.appendChild(box);
+    util().gerarIconeTech?.refresh?.();
+    window.lucide?.createIcons?.();
     const r = btn.getBoundingClientRect();
-    box.style.top = `${r.bottom + 4}px`;
+    box.style.top = `${r.bottom + 6}px`;
     box.style.left = `${Math.max(8, r.right - box.offsetWidth)}px`;
   }
 
