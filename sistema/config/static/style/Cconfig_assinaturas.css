@@ -35,6 +35,7 @@
 }
 .Asf_Status.is-err { color: #b91c1c; }
 .Asf_Hint { color: #64748b; font-size: 0.88rem; }
+.Asf_Hint.is-err { color: #b91c1c; font-weight: 600; }
 
 .Asf_Panel { display: none; }
 .Asf_Panel.is-active { display: block; }
@@ -111,7 +112,7 @@
 
 .Asf_Tabela {
   width: 100% !important;
-  min-width: 640px;
+  min-width: 980px;
   border-collapse: separate;
   border-spacing: 0;
   table-layout: auto !important;
@@ -199,21 +200,30 @@
   color: #334155;
   line-height: 1.2;
 }
-.Asf_Acoes { text-align: right; }
+.Asf_Acoes {
+  text-align: right;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 6px;
+}
 
 .Asf_MenuBtn {
-  width: 34px;
-  height: 34px;
-  border: 1px solid #e2e8f0;
+  min-width: 36px;
+  height: 36px;
+  border: 1px solid #cbd5e1;
   background: #fff;
   border-radius: 8px;
   cursor: pointer;
   display: inline-flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 3px;
-  padding: 0;
+  padding: 0 8px;
+  color: #0f172a;
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.02em;
 }
 .Asf_MenuBtn i {
   width: 4px;
@@ -222,7 +232,7 @@
   background: #334155;
   display: block;
 }
-.Asf_MenuBtn:hover { background: #f8fafc; border-color: #cbd5e1; }
+.Asf_MenuBtn:hover { background: #f1f5f9; border-color: #94a3b8; }
 
 .Asf_Menu {
   position: fixed;
@@ -317,8 +327,21 @@
 .Asf_Badge.is-starter { background: #e2e8f0; color: #475569; }
 
 .Asf_ColAcoes {
-  width: 72px;
-  text-align: right;
+  width: 88px;
+  min-width: 88px;
+  text-align: right !important;
+  position: sticky;
+  right: 0;
+  z-index: 3;
+  background: #fff !important;
+  box-shadow: -6px 0 10px -8px rgba(15, 23, 42, 0.35);
+}
+.Asf_Tabela thead th.Asf_ColAcoes {
+  background: #f8fafc !important;
+  z-index: 4;
+}
+.Asf_Tabela tbody tr:hover td.Asf_ColAcoes {
+  background: #f8fafc !important;
 }
 
 .Asf_Filtros {

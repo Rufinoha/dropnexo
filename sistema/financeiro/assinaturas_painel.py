@@ -724,20 +724,34 @@ def painel_assinaturas(
         canceladas = []
 
     # ── Bloqueados (MED / pago contestado na Efí) ───────────────────────
-    sync_med: dict[str, Any] = {"ok": False, "message": "não sincronizado"}
+    # Sync chama API externa: não usar SAVEPOINT em volta (DDL + rollback apagava colunas).
+    sync_med: dict[str, Any] = {
+        "ok": False,
+        "message": "não sincronizado",
+        "atualizados": 0,
+        "abertos": 0,
+        "infracoes_abertas": [],
+        "bloqueio_med_centavos": 0,
+        "bloqueio_total_centavos": 0,
+        "saldo_centavos": 0,
+    }
     try:
-        cur.execute("SAVEPOINT sp_asf_med_sync")
-        from sistema.financeiro.med_bloqueios import sincronizar_bloqueios_med
+        from sistema.financeiro.med_bloqueios import garantir_colunas_med_fatura, sincronizar_bloqueios_med
 
-        sync_med = sincronizar_bloqueios_med(cur, dias=180)
-        cur.execute("RELEASE SAVEPOINT sp_asf_med_sync")
+        garantir_colunas_med_fatura(cur)
+        sync_med = sincronizar_bloqueios_med(cur, dias=180) or sync_med
     except Exception as e:
-        _rollback_sp(cur, "sp_asf_med_sync")
-        sync_med = {"ok": False, "message": str(e), "atualizados": 0, "abertos": 0}
+        sync_med = {
+            **sync_med,
+            "ok": False,
+            "message": str(e),
+            "atualizados": 0,
+            "abertos": 0,
+            "infracoes_abertas": [],
+        }
 
     bloqueados: list[dict] = []
     try:
-        cur.execute("SAVEPOINT sp_asf_med_list")
         from sistema.financeiro.med_bloqueios import listar_faturas_bloqueadas, rotulo_med_status
 
         vistos_med: set[str] = set()
@@ -831,10 +845,37 @@ def painel_assinaturas(
                     "origem": "efi_med",
                 }
             )
-        cur.execute("RELEASE SAVEPOINT sp_asf_med_list")
-    except Exception:
-        _rollback_sp(cur, "sp_asf_med_list")
-        bloqueados = []
+    except Exception as e:
+        # Mantém o que veio da Efí mesmo se a query local falhar
+        if not bloqueados:
+            for med in sync_med.get("infracoes_abertas") or []:
+                bloqueados.append(
+                    {
+                        "id_fatura": None,
+                        "id_tenant": None,
+                        "nome": "Sem vínculo no DropNexo",
+                        "referencia": f"MED {med.get('protocolo') or med.get('med_id') or ''}".strip(),
+                        "plano_label": "—",
+                        "valor_centavos": int(med.get("valor_centavos") or 0),
+                        "valor": _fmt_reais(med.get("valor_centavos")),
+                        "status": "bloqueado",
+                        "status_label": "Bloqueado",
+                        "status_grupo": "bloqueado",
+                        "forma_label": "Pix",
+                        "pago_br": med.get("data_tx_br") or "—",
+                        "med_id": med.get("med_id") or "",
+                        "protocolo": str(med.get("protocolo") or ""),
+                        "med_status": med.get("med_status") or "",
+                        "med_status_label": med.get("med_status_label") or "Bloqueado",
+                        "med_razao": med.get("med_razao") or "MED Pix",
+                        "med_atualizado_br": med.get("data_tx_br") or "—",
+                        "vinculado": False,
+                        "origem": "efi_med",
+                    }
+                )
+        sync_med["message"] = (
+            (sync_med.get("message") or "") + f" | lista local: {e}"
+        ).strip(" |")
 
     valor_bloq = sum(int(x["valor_centavos"]) for x in bloqueados)
     # Preferir total da Efí (saldo bloqueado) quando disponível

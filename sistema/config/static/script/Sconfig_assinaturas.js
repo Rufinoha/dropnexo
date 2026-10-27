@@ -62,14 +62,14 @@
       ? `<div class="Asf_Muted">${esc(a.lembrete_rotulo)}</div>`
       : "";
     const grupo = String(a.status_grupo || a.status || "").toLowerCase();
-    return `<div class="Asf_Acoes"><button type="button" class="Asf_MenuBtn" data-asf-menu="1" aria-label="Ações da cobrança" aria-haspopup="menu" data-id="${esc(a.id_fatura)}" data-tenant="${esc(a.id_tenant)}" data-nome="${esc(a.nome)}" data-ref="${esc(a.referencia || a.id_fatura)}" data-valor="${esc(a.valor)}" data-status-grupo="${esc(grupo)}"><i></i><i></i><i></i></button>${pista}</div>`;
+    return `<div class="Asf_Acoes"><button type="button" class="Asf_MenuBtn" data-asf-menu="1" aria-label="Ações da cobrança" aria-haspopup="menu" title="Ações" data-id="${esc(a.id_fatura)}" data-tenant="${esc(a.id_tenant)}" data-nome="${esc(a.nome)}" data-ref="${esc(a.referencia || a.id_fatura)}" data-valor="${esc(a.valor)}" data-status-grupo="${esc(grupo)}">⋮</button>${pista}</div>`;
   }
 
   function btnMenuAtiva(a) {
     const efi = a.recorrencia_efi ? "1" : "0";
     const criar = a.pode_criar_efi ? "1" : "0";
     const cancelar = a.pode_cancelar !== false ? "1" : "0";
-    return `<div class="Asf_Acoes"><button type="button" class="Asf_MenuBtn" data-asf-menu-ativa="1" aria-label="Ações da assinatura" aria-haspopup="menu" data-tenant="${esc(a.id_tenant)}" data-nome="${esc(a.nome)}" data-slug="${esc(a.slug || "")}" data-efi="${efi}" data-criar-efi="${criar}" data-cancelar="${cancelar}"><i></i><i></i><i></i></button></div>`;
+    return `<div class="Asf_Acoes"><button type="button" class="Asf_MenuBtn" data-asf-menu-ativa="1" aria-label="Ações da assinatura" aria-haspopup="menu" title="Ações" data-tenant="${esc(a.id_tenant)}" data-nome="${esc(a.nome)}" data-slug="${esc(a.slug || "")}" data-efi="${efi}" data-criar-efi="${criar}" data-cancelar="${cancelar}">⋮</button></div>`;
   }
 
   function badgeStatus(a) {
@@ -309,10 +309,12 @@
     if (syncEl) {
       if (sync.ok) {
         syncEl.textContent = `Sync Efí: ${sync.total_med ?? 0} MED · ${sync.abertos ?? 0} aberto(s) · ${sync.atualizados ?? 0} fatura(s) · ${sync.sem_fatura ?? 0} sem vínculo. Bloqueio MED conta: ${r.bloqueio_med_efi || "R$ 0,00"}.`;
+        syncEl.classList.remove("is-err");
       } else {
         syncEl.textContent = sync.message
-          ? `Sync Efí: ${sync.message}`
-          : "Sync Efí MED não executado. Precisa dos escopos gn.infractions.read e gn.balance.read na app Efí.";
+          ? `Sync Efí falhou: ${sync.message}`
+          : "Sync Efí falhou. Ative gn.infractions.read e gn.balance.read na aplicação Efí (API Pix) e atualize.";
+        syncEl.classList.add("is-err");
       }
     }
     const tb = el("asf_bloq_tbody");
