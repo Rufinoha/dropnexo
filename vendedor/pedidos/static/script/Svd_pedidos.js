@@ -353,7 +353,23 @@
     dis("pd_btnUltimo", noFim);
   }
 
+  function renderCabecalhoLista() {
+    const thead = document.querySelector("#pd_tabela thead tr");
+    if (!thead) return;
+    thead.innerHTML = `
+      <th class="Pd_ColPed">Pedido</th>
+      <th class="Pd_ColData">Data</th>
+      <th class="Pd_ColForn">Fornecedor</th>
+      <th class="Pd_ColCli">Cliente</th>
+      <th class="Pd_ColTotal">Total</th>
+      <th class="Pd_ColOrigem">Origem</th>
+      <th class="Pd_ColStCli">Status cliente</th>
+      <th class="Pd_ColStPed">Status pedido</th>
+      <th class="Pd_ColAcoes">Ações</th>`;
+  }
+
   function renderLista() {
+    renderCabecalhoLista();
     const rows = pedidosVisiveis();
     const totalPaginas = Math.max(1, Math.ceil(rows.length / porPagina));
     if (paginaAtual > totalPaginas) paginaAtual = totalPaginas;
