@@ -26,6 +26,10 @@
       .replace(/"/g, "&quot;");
   }
 
+  function planosAtivos() {
+    return dados?.planos_ativos || dados?.previsoes || [];
+  }
+
   function resumo() {
     const frase = document.getElementById("com_frase");
     const aviso = document.getElementById("com_aviso");
@@ -34,7 +38,7 @@
     const nAberto = document.getElementById("com_n_aberto");
     const nFat = document.getElementById("com_n_faturado");
     const nInad = document.getElementById("com_n_inad");
-    if (nPrev) nPrev.textContent = String((dados.previsoes || []).length);
+    if (nPrev) nPrev.textContent = String(planosAtivos().length);
     if (nAberto) nAberto.textContent = String((dados.abertos || []).length);
     if (nFat) nFat.textContent = String((dados.faturados || []).length);
     if (nInad) nInad.textContent = String((dados.inadimplentes || []).length);
@@ -85,22 +89,27 @@
     </div>`;
   }
 
-  function htmlPrevisao() {
-    const rows = (dados.previsoes || []).map((i, idx) => {
+  function htmlPlanosAtivos() {
+    const rows = planosAtivos().map((i, idx) => {
+      const st = esc(i.status_label || "Plano ativo");
       return `<tr>
         <td>${esc(i.vendedor)}${viaDe(i)}</td>
         <td>${esc(i.plano || "—")}</td>
         <td>${dataBr(i.vencimento_em)}</td>
         <td>${brl(i.valor_pago_centavos)}</td>
         <td><button type="button" class="Fin_ComLink" data-prev="${idx}">${brl(i.valor_comissao_centavos)}</button></td>
+        <td><span class="Fin_Meta">${st}</span></td>
       </tr>`;
     });
-    const [hy, hm] = String(dados.hoje || "").slice(0, 7).split("-").map(Number);
-    const passado = Number(dados.ano) < hy || (Number(dados.ano) === hy && Number(dados.mes) < hm);
-    const vazio = passado
-      ? "Nenhuma previsão neste mês. Os vencimentos já passaram."
-      : "Nenhum vencimento previsto neste mês.";
-    return htmlFiltroPeriodo() + tabela(["Vendedor", "Plano", "Vencimento", "Mensalidade", "Previsão"], rows, vazio);
+    return (
+      htmlFiltroPeriodo() +
+      `<p class="Fin_Meta Fin_FiltroNota">Vendedores com plano ativo na sua rede e nos fornecedores indicados.</p>` +
+      tabela(
+        ["Vendedor", "Plano", "Vencimento", "Mensalidade", "Previsão", "Situação"],
+        rows,
+        "Nenhum plano ativo na rede neste período."
+      )
+    );
   }
 
   function htmlAberto() {
@@ -117,7 +126,7 @@
     });
     const cabeca = `<input type="checkbox" class="Fin_Chk" id="com_sel_todos" aria-label="Selecionar todos" />`;
     return `
-      <p class="Fin_Meta Fin_FiltroNota">Todos os meses ainda não faturados.</p>
+      <p class="Fin_Meta Fin_FiltroNota">Assinaturas pagas com comissão gerada, ainda sem fechamento.</p>
       ${tabela([cabeca, "Vendedor", "Referência", "Pago em", "Mensalidade", "%", "Comissão"], rows, "Nenhuma comissão em aberto.")}
       <div class="Fin_Fechar" id="com_fechar_bar">
         <label class="Fin_Nf">
@@ -136,21 +145,30 @@
 
   function htmlFaturado() {
     const rows = (dados.faturados || []).map((f) => {
-      const pago = f.status === "pago";
+      const pago = f.status === "pago" || f.tem_comprovante;
       const badge = pago
         ? `<span class="Fin_Badge Fin_Badge--ok">Pago</span>`
         : `<span class="Fin_Badge Fin_Badge--warn">Aguardando</span>`;
+      const acoes = f.editavel
+        ? `<button type="button" class="Fin_ComLink" data-lote-acao="alterar" data-lote="${Number(f.id)}">Alterar NF</button>
+           <button type="button" class="Fin_ComLink" data-lote-acao="cancelar" data-lote="${Number(f.id)}">Cancelar</button>`
+        : `<span class="Fin_Meta">${pago ? "Bloqueado" : "—"}</span>`;
       return `<tr class="Fin_Lote" data-lote="${Number(f.id)}" tabindex="0">
         <td>${dataBr(f.criado_em)}</td>
         <td>${dataBr(f.vencimento_em)}</td>
         <td>${brl(f.valor_centavos)}</td>
         <td>${badge}</td>
+        <td class="Fin_Acoes" onclick="event.stopPropagation()">${acoes}</td>
       </tr>`;
     });
     const vazio = Number(dados.ano_faturado)
       ? `Nenhum lote em ${dados.ano_faturado}.`
       : "Nenhum lote nos últimos 12 meses.";
-    return htmlFiltroAno() + tabela(["Fechado em", "Vencimento", "Valor", "Situação"], rows, vazio);
+    return (
+      htmlFiltroAno() +
+      `<p class="Fin_Meta Fin_FiltroNota">Após anexar o comprovante de pagamento, o lote não pode mais ser alterado.</p>` +
+      tabela(["Fechado em", "Vencimento", "Valor", "Situação", "Ações"], rows, vazio)
+    );
   }
 
   function htmlInad() {
@@ -160,14 +178,15 @@
         <td>${esc(i.plano || "—")}</td>
         <td>${dataBr(i.vencimento_em)}</td>
         <td>${brl(i.valor_centavos)}</td>
+        <td><span class="Fin_Meta">${esc(i.status_label || "Em atraso")}</span></td>
       </tr>`;
     });
     return (
-      htmlFiltroPeriodo() +
+      `<p class="Fin_Meta Fin_FiltroNota">Planos ativos com cobrança vencida e ainda não paga.</p>` +
       tabela(
-        ["Vendedor", "Plano", "Vencimento", "Mensalidade"],
+        ["Vendedor", "Plano", "Vencimento", "Mensalidade", "Situação"],
         rows,
-        "Nenhum vencimento passou sem pagamento neste mês."
+        "Nenhum vendedor inadimplente na rede."
       )
     );
   }
@@ -176,7 +195,7 @@
     if (!painel || !dados) return;
     resumo();
     tabs?.querySelectorAll(".Fin_Tab").forEach((b) => b.classList.toggle("is-active", b.dataset.aba === aba));
-    if (aba === "previsao") painel.innerHTML = htmlPrevisao();
+    if (aba === "previsao") painel.innerHTML = htmlPlanosAtivos();
     else if (aba === "faturado") painel.innerHTML = htmlFaturado();
     else if (aba === "inadimplente") painel.innerHTML = htmlInad();
     else painel.innerHTML = htmlAberto();
@@ -289,13 +308,90 @@
     const nota = j.nf_nome
       ? `<p class="Fin_ContaSub"><a href="/api/comissoes/fechamento/${id}/nf" target="_blank" rel="noopener">${esc(j.nf_nome)}</a></p>`
       : `<p class="Fin_ContaSub">Sem nota anexada.</p>`;
-    const situacao = j.status === "pago" ? "Pago" : "Aguardando";
-    await Swal.fire({
+    const situacao = j.status === "pago" || j.tem_comprovante ? "Pago" : "Aguardando";
+    const bloqueio = j.editavel
+      ? ""
+      : `<p class="Fin_ContaSub">Lote bloqueado após comprovante/pagamento.</p>`;
+    const result = await Swal.fire({
       title: brl(j.valor_centavos),
-      html: `<p class="Fin_ContaSub">Fechado em ${dataBr(j.criado_em)} · vence ${dataBr(j.vencimento_em)} · ${situacao}</p>${nota}${corpo}`,
+      html: `<p class="Fin_ContaSub">Fechado em ${dataBr(j.criado_em)} · vence ${dataBr(j.vencimento_em)} · ${situacao}</p>${nota}${bloqueio}${corpo}`,
+      showDenyButton: !!j.editavel,
+      showCancelButton: !!j.editavel,
       confirmButtonText: "Fechar",
+      denyButtonText: "Alterar NF",
+      cancelButtonText: "Cancelar lote",
       confirmButtonColor: "#021F81",
+      denyButtonColor: "#021F81",
+      cancelButtonColor: "#b42318",
       width: 640,
+    });
+    if (result.isDenied) {
+      await alterarNf(id);
+      return;
+    }
+    if (result.dismiss === Swal.DismissReason.cancel && j.editavel) {
+      await cancelarLote(id);
+    }
+  }
+
+  async function alterarNf(id) {
+    const { value: file } = await Swal.fire({
+      title: "Nova nota fiscal",
+      html: `<input type="file" id="com_alt_nf" accept="application/pdf,.pdf" class="swal2-file" />`,
+      showCancelButton: true,
+      confirmButtonText: "Salvar",
+      cancelButtonText: "Voltar",
+      confirmButtonColor: "#021F81",
+      preConfirm: () => {
+        const inp = document.getElementById("com_alt_nf");
+        const f = inp?.files?.[0];
+        if (!f) {
+          Swal.showValidationMessage("Selecione um PDF.");
+          return false;
+        }
+        return f;
+      },
+    });
+    if (!file) return;
+    const fd = new FormData();
+    fd.append("nf", file);
+    Swal.fire({ title: "Salvando…", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    const r = await fetch(`/api/comissoes/fechamento/${id}/alterar`, {
+      method: "POST",
+      credentials: "same-origin",
+      body: fd,
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.success) throw new Error(j.message || "Falha ao alterar.");
+    await carregar();
+    await Swal.fire({ icon: "success", title: "Nota atualizada", confirmButtonColor: "#021F81" });
+  }
+
+  async function cancelarLote(id) {
+    const conf = await Swal.fire({
+      icon: "warning",
+      title: "Cancelar este fechamento?",
+      text: "Os itens voltam para Em aberto e o lote deixa de valer.",
+      showCancelButton: true,
+      confirmButtonText: "Cancelar lote",
+      cancelButtonText: "Manter",
+      confirmButtonColor: "#b42318",
+    });
+    if (!conf.isConfirmed) return;
+    Swal.fire({ title: "Cancelando…", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    const r = await fetch(`/api/comissoes/fechamento/${id}/cancelar`, {
+      method: "POST",
+      credentials: "same-origin",
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.success) throw new Error(j.message || "Falha ao cancelar.");
+    aba = "aberto";
+    await carregar();
+    await Swal.fire({
+      icon: "success",
+      title: "Fechamento cancelado",
+      text: j.message || "",
+      confirmButtonColor: "#021F81",
     });
   }
 
@@ -381,13 +477,22 @@
     render();
   });
   painel?.addEventListener("click", (ev) => {
+    const acaoBtn = ev.target.closest("[data-lote-acao]");
+    if (acaoBtn) {
+      ev.stopPropagation();
+      const id = Number(acaoBtn.dataset.lote);
+      const acao = acaoBtn.dataset.loteAcao;
+      if (acao === "cancelar") cancelarLote(id).catch((e) => Swal.fire("Erro", e.message, "error"));
+      else if (acao === "alterar") alterarNf(id).catch((e) => Swal.fire("Erro", e.message, "error"));
+      return;
+    }
     const prev = ev.target.closest("[data-prev]");
     if (prev) {
-      abrirDetalhe((dados?.previsoes || [])[Number(prev.dataset.prev)]);
+      abrirDetalhe(planosAtivos()[Number(prev.dataset.prev)]);
       return;
     }
     const link = ev.target.closest(".Fin_ComLink");
-    if (link) {
+    if (link && link.dataset.idx != null) {
       abrirDetalhe((dados?.abertos || [])[Number(link.dataset.idx)]);
       return;
     }

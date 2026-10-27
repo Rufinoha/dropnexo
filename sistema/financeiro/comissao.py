@@ -254,19 +254,31 @@ def registrar_comissao_fatura(cur, id_fatura: int) -> None:
 
 
 def _fornecedor_primeiro_vinculo(cur, id_vendedor: int) -> int | None:
-    """Entre os vínculos ativos, a comissão fica com o fornecedor a que o vendedor se conectou primeiro."""
+    """
+    Fornecedor de origem da comissão: entre vínculos ativos, prioriza quem gera
+    comissão (config ativa no próprio ou no pai da indicação); senão o mais antigo.
+    """
     cur.execute(
         """
-        SELECT id_tenant_fornecedor
-        FROM tbl_vinculo_vendedor_fornecedor
-        WHERE id_tenant_vendedor = %s AND status = 'ativo'
-        ORDER BY COALESCE(respondido_em, solicitado_em), id
-        LIMIT 1
+        SELECT v.id_tenant_fornecedor
+        FROM tbl_vinculo_vendedor_fornecedor v
+        WHERE v.id_tenant_vendedor = %s AND v.status = 'ativo'
+        ORDER BY COALESCE(v.respondido_em, v.solicitado_em) NULLS LAST, v.id
         """,
         (int(id_vendedor),),
     )
-    row = cur.fetchone()
-    return int(row[0]) if row else None
+    candidatos = [int(r[0]) for r in cur.fetchall() if r and r[0]]
+    if not candidatos:
+        return None
+    for origem_id in candidatos:
+        pai = pai_da_indicacao(cur, origem_id)
+        beneficiario = pai or origem_id
+        cfg = _config_row(cur, beneficiario)
+        if cfg and cfg["ativo"] and (
+            _pct(cfg["percentual_indicado"] if pai else cfg["percentual_proprio"]) > 0
+        ):
+            return origem_id
+    return candidatos[0]
 
 
 def _nome(cur, id_tenant: int) -> str:
@@ -621,6 +633,7 @@ def _lote_no_mes(cur, id_tenant: int, dia: date | None = None) -> bool:
         """
         SELECT 1 FROM tbl_comissao_fechamento
         WHERE id_tenant_fornecedor = %s
+          AND status IN ('aguardando', 'pago')
           AND (criado_em AT TIME ZONE 'America/Sao_Paulo')::date >= %s
           AND (criado_em AT TIME ZONE 'America/Sao_Paulo')::date < %s
         LIMIT 1
@@ -645,63 +658,97 @@ def _frase_topo(hoje: date, *, lote: bool, janela: bool, pix_ok: bool, tem_abert
     return f"O próximo fechamento é de 1 a 10 de {prox}."
 
 
+def _ids_rede_fornecedores(cur, id_tenant: int) -> list[int]:
+    """Tenant atual + fornecedores indicados por ele. Nunca propaga falha."""
+    tid = int(id_tenant)
+    try:
+        cur.execute(
+            """
+            SELECT %s::int
+            UNION
+            SELECT id_tenant_indicado
+            FROM tbl_comissao_indicacao
+            WHERE id_tenant_pai = %s
+            """,
+            (tid, tid),
+        )
+        ids = [int(r[0]) for r in cur.fetchall() if r and r[0]]
+        return ids or [tid]
+    except Exception:
+        log.exception("ids rede fornecedores tenant=%s", tid)
+        return [tid]
+
+
 def _vendedores_rede(cur, id_tenant: int) -> list[dict]:
-    cur.execute(
-        """
-        WITH rede AS (
-          SELECT %s::int AS id_fornecedor
-          UNION
-          SELECT id_tenant_indicado FROM tbl_comissao_indicacao WHERE id_tenant_pai = %s
+    """
+    Vendedores com vínculo ativo ao tenant OU a qualquer fornecedor indicado por ele.
+    Preferência de origem: o próprio tenant; senão o indicado mais antigo no vínculo.
+    Nunca propaga falha — lista vazia em erro.
+    """
+    tid = int(id_tenant)
+    try:
+        rede = _ids_rede_fornecedores(cur, tid)
+        if not rede:
+            return []
+        cur.execute(
+            """
+            SELECT t.id,
+                   COALESCE(NULLIF(TRIM(t.nome_fantasia), ''), NULLIF(TRIM(t.nome), ''), 'Vendedor'),
+                   COALESCE(t.plano, ''),
+                   COALESCE(t.tipo_negocio, ''),
+                   COALESCE(tc.dia_vencimento, 15),
+                   COALESCE(NULLIF(tc.periodicidade, ''), 'mensal'),
+                   COALESCE(p.valor_centavos, 0),
+                   origem.id_fornecedor,
+                   CASE WHEN origem.id_fornecedor = %s THEN '' ELSE
+                     COALESCE(NULLIF(TRIM(tf.nome_fantasia), ''), NULLIF(TRIM(tf.nome), ''), '')
+                   END
+            FROM tbl_tenant t
+            JOIN LATERAL (
+              SELECT v.id_tenant_fornecedor AS id_fornecedor
+              FROM tbl_vinculo_vendedor_fornecedor v
+              WHERE v.id_tenant_vendedor = t.id
+                AND v.status = 'ativo'
+                AND v.id_tenant_fornecedor = ANY(%s)
+              ORDER BY
+                CASE WHEN v.id_tenant_fornecedor = %s THEN 0 ELSE 1 END,
+                COALESCE(v.respondido_em, v.solicitado_em) NULLS LAST,
+                v.id
+              LIMIT 1
+            ) origem ON TRUE
+            LEFT JOIN tbl_tenant_cobranca tc ON tc.id_tenant = t.id
+            LEFT JOIN tbl_plano p ON p.slug = t.plano
+            LEFT JOIN tbl_tenant tf ON tf.id = origem.id_fornecedor
+            WHERE COALESCE(t.ativo, TRUE) = TRUE
+              AND COALESCE(t.tipo_negocio, '') IN ('vendedor', 'hibrido')
+              AND COALESCE(t.plano, '') NOT IN ('', 'starter')
+              AND NOT (
+                COALESCE(t.eh_fornecedor_fundador, FALSE)
+                AND COALESCE(t.fornecedor_fundador_ativo, FALSE)
+              )
+            ORDER BY 2
+            """,
+            (tid, rede, tid),
         )
-        SELECT t.id,
-               COALESCE(NULLIF(TRIM(t.nome_fantasia), ''), NULLIF(TRIM(t.nome), ''), 'Vendedor'),
-               COALESCE(t.plano, ''),
-               COALESCE(t.tipo_negocio, ''),
-               COALESCE(tc.dia_vencimento, 15),
-               COALESCE(NULLIF(tc.periodicidade, ''), 'mensal'),
-               COALESCE(p.valor_centavos, 0),
-               prim.id_tenant_fornecedor,
-               CASE WHEN prim.id_tenant_fornecedor = %s THEN '' ELSE
-                 COALESCE(NULLIF(TRIM(tf.nome_fantasia), ''), NULLIF(TRIM(tf.nome), ''), '')
-               END
-        FROM tbl_tenant t
-        JOIN LATERAL (
-          SELECT v.id_tenant_fornecedor
-          FROM tbl_vinculo_vendedor_fornecedor v
-          WHERE v.id_tenant_vendedor = t.id AND v.status = 'ativo'
-          ORDER BY COALESCE(v.respondido_em, v.solicitado_em), v.id
-          LIMIT 1
-        ) prim ON prim.id_tenant_fornecedor IN (SELECT id_fornecedor FROM rede)
-        LEFT JOIN tbl_tenant_cobranca tc ON tc.id_tenant = t.id
-        LEFT JOIN tbl_plano p ON p.slug = t.plano
-        LEFT JOIN tbl_tenant tf ON tf.id = prim.id_tenant_fornecedor
-        WHERE COALESCE(t.ativo, TRUE) = TRUE
-          AND COALESCE(t.plano, '') NOT IN ('', 'starter')
-          AND COALESCE(p.valor_centavos, 0) > 0
-          AND NOT (
-            COALESCE(t.eh_fornecedor_fundador, FALSE)
-            AND COALESCE(t.fornecedor_fundador_ativo, FALSE)
-          )
-        ORDER BY 2
-        """,
-        (int(id_tenant), int(id_tenant), int(id_tenant)),
-    )
-    out = []
-    for r in cur.fetchall():
-        out.append(
-            {
-                "id": int(r[0]),
-                "nome": r[1] or "Vendedor",
-                "plano": (r[2] or "").strip().lower(),
-                "tipo": r[3] or "",
-                "dia": int(r[4] or 15),
-                "periodo": (r[5] or "mensal").strip().lower(),
-                "catalogo": int(r[6] or 0),
-                "origem_id": int(r[7]),
-                "via": r[8] or "",
-            }
-        )
-    return out
+        out = []
+        for r in cur.fetchall():
+            out.append(
+                {
+                    "id": int(r[0]),
+                    "nome": r[1] or "Vendedor",
+                    "plano": (r[2] or "").strip().lower(),
+                    "tipo": r[3] or "",
+                    "dia": int(r[4] or 15),
+                    "periodo": (r[5] or "mensal").strip().lower(),
+                    "catalogo": int(r[6] or 0),
+                    "origem_id": int(r[7]),
+                    "via": r[8] or "",
+                }
+            )
+        return out
+    except Exception:
+        log.exception("vendedores rede tenant=%s", tid)
+        return []
 
 
 def _ultimas_faturas(cur, ids: list[int]) -> dict[int, dict]:
@@ -784,10 +831,82 @@ def _cobra_no_vencimento(due: date, ultima: dict | None, dia: int, hoje: date) -
     return due == primeiro
 
 
+def _fatura_aberta_atual(cur, ids: list[int]) -> dict[int, dict]:
+    """Última fatura em aberto (pendente/vencido) por tenant — independente do mês."""
+    if not ids:
+        return {}
+    cur.execute(
+        """
+        SELECT DISTINCT ON (id_tenant)
+          id, id_tenant, COALESCE(referencia, ''), COALESCE(plano_slug, ''),
+          valor_centavos, vencimento_em, status
+        FROM tbl_fatura
+        WHERE id_tenant = ANY(%s)
+          AND status IN ('pendente', 'vencido')
+          AND COALESCE(plano_slug, '') NOT IN ('', 'starter')
+        ORDER BY id_tenant, vencimento_em ASC NULLS LAST, id ASC
+        """,
+        (ids,),
+    )
+    out = {}
+    for r in cur.fetchall():
+        out[int(r[1])] = {
+            "id": int(r[0]),
+            "referencia": r[2] or "",
+            "plano": (r[3] or "").strip().lower(),
+            "valor": int(r[4] or 0),
+            "vencimento": _como_data(r[5]),
+            "status": (r[6] or "").strip().lower(),
+        }
+    return out
+
+
+def _backfill_comissoes_rede(cur, id_tenant: int, ids_vendedores: list[int]) -> None:
+    """Garante item de comissão para faturas já pagas da rede (sem quebrar o painel)."""
+    if not ids_vendedores:
+        return
+    try:
+        cur.execute(
+            """
+            SELECT f.id
+            FROM tbl_fatura f
+            WHERE f.id_tenant = ANY(%s)
+              AND f.status = 'pago'
+              AND COALESCE(f.valor_centavos, 0) > 0
+              AND COALESCE(f.plano_slug, '') NOT IN ('', 'starter')
+              AND NOT EXISTS (
+                SELECT 1 FROM tbl_comissao_item ci WHERE ci.id_fatura = f.id
+              )
+            ORDER BY f.id DESC
+            LIMIT 200
+            """,
+            (ids_vendedores,),
+        )
+        for (fid,) in cur.fetchall():
+            try:
+                registrar_comissao_fatura(cur, int(fid))
+            except Exception:
+                log.exception("backfill comissão fatura %s", fid)
+    except Exception:
+        log.exception("backfill comissões rede tenant %s", id_tenant)
+
+
 def _linhas_ciclo(cur, id_tenant: int, cfg: dict | None, ano: int, mes: int) -> tuple[list[dict], list[dict]]:
-    """Previsão do mês (ainda no prazo) e inadimplência do mês (vencimento já passou)."""
+    """
+    Planos ativos (rede) + inadimplência (plano ativo com cobrança vencida sem pagamento).
+    Nunca propaga exceção — devolve listas vazias em falha.
+    """
+    try:
+        return _linhas_ciclo_interno(cur, id_tenant, cfg, ano, mes)
+    except Exception:
+        log.exception("linhas ciclo comissão tenant=%s", id_tenant)
+        return [], []
+
+
+def _linhas_ciclo_interno(
+    cur, id_tenant: int, cfg: dict | None, ano: int, mes: int
+) -> tuple[list[dict], list[dict]]:
     hoje = hoje_sp()
-    inicio = date(ano, mes, 1)
     if pai_da_indicacao(cur, id_tenant) or not cfg or not cfg["ativo"]:
         return [], []
 
@@ -796,73 +915,119 @@ def _linhas_ciclo(cur, id_tenant: int, cfg: dict | None, ano: int, mes: int) -> 
 
     vendedores = _vendedores_rede(cur, id_tenant)
     ids = [v["id"] for v in vendedores]
-    fim = _somar_meses(inicio, 1) - timedelta(days=1)
-    abertas = _faturas_no_mes(cur, ids, inicio, fim)
+    _backfill_comissoes_rede(cur, id_tenant, ids)
+
+    abertas = _fatura_aberta_atual(cur, ids)
     ultimas = _ultimas_faturas(cur, ids)
-    previsoes = []
-    inadimplentes = []
+    inicio = date(ano, mes, 1)
+    planos_ativos: list[dict] = []
+    inadimplentes: list[dict] = []
+
     for v in vendedores:
         origem = "proprio" if v["origem_id"] == int(id_tenant) else "indicado"
         percentual = cfg["percentual_proprio"] if origem == "proprio" else cfg["percentual_indicado"]
-        if _pct(percentual) <= 0:
-            continue
         aberta = abertas.get(v["id"])
-        if aberta and aberta["vencimento"] and aberta["vencimento"] < hoje:
+        ultima = ultimas.get(v["id"])
+        plano_slug = (aberta or {}).get("plano") or (ultima or {}).get("plano") or v["plano"]
+        plano_lbl = nome_plano_comercial(plano_slug, v["tipo"])
+
+        # Inadimplência: cobrança em aberto já vencida
+        if aberta and aberta.get("vencimento") and aberta["vencimento"] < hoje:
             inadimplentes.append(
                 {
                     "id": aberta["id"],
                     "referencia": aberta["referencia"],
-                    "plano": nome_plano_comercial(aberta["plano"] or v["plano"], v["tipo"]),
+                    "plano": plano_lbl,
                     "valor_centavos": aberta["valor"],
                     "vencimento_em": aberta["vencimento"].isoformat(),
-                    "status": aberta["status"],
+                    "status": aberta["status"] or "vencido",
+                    "status_label": "Vencida" if aberta["status"] == "vencido" else "Em atraso",
                     "vendedor": v["nome"],
                     "via": v["via"],
                 }
             )
-            continue
+
+        # Valor / vencimento exibidos em Planos Ativos
         valor = 0
-        venc = None
+        venc: date | None = None
         referencia = ""
-        plano_slug = v["plano"]
-        if aberta and aberta["vencimento"] and aberta["vencimento"] >= hoje and aberta["valor"] > 0:
-            valor = aberta["valor"]
-            venc = aberta["vencimento"]
-            referencia = aberta["referencia"]
-            plano_slug = aberta["plano"] or v["plano"]
-        elif not aberta and inicio >= date(hoje.year, hoje.month, 1):
+        fat_status = ""
+        if aberta:
+            valor = int(aberta["valor"] or 0)
+            venc = aberta.get("vencimento")
+            referencia = aberta.get("referencia") or ""
+            fat_status = aberta.get("status") or "pendente"
+        elif ultima and ultima.get("status") == "pago":
             periodo = v["periodo"] if v["periodo"] in PERIODOS else "mensal"
-            due = _dia_no_mes(ano, mes, v["dia"])
-            if _cobra_no_vencimento(due, ultimas.get(v["id"]), v["dia"], hoje):
-                valor = int(calcular_preco(v["catalogo"], periodo)["valor_final_centavos"] or 0)
-                venc = due
-        if not venc or valor <= 0:
+            base = ultima.get("base") or hoje
+            meses = int(ultima.get("meses") or 1)
+            venc = _primeiro_vencimento(_somar_meses(base, meses), v["dia"])
+            valor = int(ultima.get("valor") or 0) or int(
+                calcular_preco(v["catalogo"], periodo)["valor_final_centavos"] or 0
+            )
+            fat_status = "pago"
+            referencia = ultima.get("referencia") or ""
+        else:
+            periodo = v["periodo"] if v["periodo"] in PERIODOS else "mensal"
+            venc = _dia_no_mes(ano, mes, v["dia"])
+            if venc < hoje:
+                venc = _primeiro_vencimento(hoje, v["dia"])
+            valor = int(calcular_preco(v["catalogo"], periodo)["valor_final_centavos"] or 0)
+            fat_status = "sem_cobranca"
+
+        # Filtro de competência opcional: se o vencimento cai no mês selecionado OU não há vencimento no mês mas plano ativo
+        no_mes = bool(venc and venc.year == ano and venc.month == mes)
+        if inicio < date(hoje.year, hoje.month, 1):
+            # meses passados: só quem tinha vencimento naquele mês
+            if not no_mes:
+                continue
+        elif not no_mes and fat_status not in ("pendente", "vencido", "pago", "sem_cobranca"):
             continue
-        comissao = calcular_comissao_centavos(
-            valor, base=cfg["base"], percentual=percentual, impostos=cfg["impostos"]
-        )
-        if comissao <= 0:
-            continue
-        previsoes.append(
+
+        comissao = 0
+        if valor > 0 and _pct(percentual) > 0:
+            comissao = calcular_comissao_centavos(
+                valor, base=cfg["base"], percentual=percentual, impostos=cfg["impostos"]
+            )
+
+        if fat_status in ("pendente", "vencido") and venc and venc < hoje:
+            status_label = "Inadimplente"
+            status_grupo = "inadimplente"
+        elif fat_status in ("pendente", "vencido"):
+            status_label = "Cobrança em aberto"
+            status_grupo = "aberto"
+        elif fat_status == "pago":
+            status_label = "Em dia"
+            status_grupo = "pago"
+        else:
+            status_label = "Plano ativo"
+            status_grupo = "ativo"
+
+        planos_ativos.append(
             {
                 "id": int(aberta["id"]) if aberta else 0,
+                "id_tenant_vendedor": v["id"],
                 "referencia": referencia,
-                "plano": nome_plano_comercial(plano_slug, v["tipo"]),
+                "plano": plano_lbl,
                 "vendedor": v["nome"],
                 "via": v["via"],
-                "vencimento_em": venc.isoformat(),
+                "vencimento_em": venc.isoformat() if venc else "",
                 "valor_pago_centavos": valor,
                 "valor_comissao_centavos": comissao,
                 "percentual": float(_pct(percentual)),
                 "base": cfg["base"],
                 "impostos": cfg["impostos"],
                 "origem": origem,
-                "previsao": True,
+                "previsao": fat_status != "pago",
+                "status": fat_status,
+                "status_label": status_label,
+                "status_grupo": status_grupo,
             }
         )
-    previsoes.sort(key=lambda i: (i["vencimento_em"], i["vendedor"]))
+
+    planos_ativos.sort(key=lambda i: (i.get("vencimento_em") or "9999", i["vendedor"]))
     inadimplentes.sort(key=lambda i: (i["vencimento_em"], i["vendedor"]))
-    return previsoes, inadimplentes
+    return planos_ativos, inadimplentes
 
 
 def painel_comissoes(
@@ -927,9 +1092,11 @@ def painel_comissoes(
         )
     cur.execute(
         f"""
-        SELECT id, valor_centavos, vencimento_em, status, criado_em, nf_nome, pago_em
+        SELECT id, valor_centavos, vencimento_em, status, criado_em, nf_nome, pago_em,
+               COALESCE(NULLIF(TRIM(comprovante_caminho), ''), '') <> ''
         FROM tbl_comissao_fechamento
         WHERE id_tenant_fornecedor = %s
+          AND status IN ('aguardando', 'pago')
           {filtro_fat[0]}
         ORDER BY criado_em DESC, id DESC
         """,
@@ -944,6 +1111,7 @@ def painel_comissoes(
             "criado_em": r[4].isoformat() if r[4] else "",
             "nf_nome": r[5] or "",
             "pago_em": r[6].isoformat() if r[6] else "",
+            "tem_comprovante": bool(r[7]),
         }
         for r in cur.fetchall()
     ]
@@ -952,6 +1120,7 @@ def painel_comissoes(
         SELECT DISTINCT EXTRACT(YEAR FROM (criado_em AT TIME ZONE 'America/Sao_Paulo'))::int
         FROM tbl_comissao_fechamento
         WHERE id_tenant_fornecedor = %s
+          AND status IN ('aguardando', 'pago')
         ORDER BY 1 DESC
         """,
         (id_tenant,),
@@ -960,9 +1129,14 @@ def painel_comissoes(
     if hoje.year not in anos_faturado:
         anos_faturado.append(hoje.year)
         anos_faturado.sort(reverse=True)
-    previsoes, inadimplentes = _linhas_ciclo(cur, id_tenant, cfg, ano_i, mes_i)
+    planos_ativos, inadimplentes = _linhas_ciclo(cur, id_tenant, cfg, ano_i, mes_i)
     lote = _lote_no_mes(cur, id_tenant, hoje)
     janela = janela_fechamento(hoje)
+    # Faturados: incluir se pode cancelar/alterar (ainda aguardando e sem comprovante)
+    for f in faturados:
+        st = (f.get("status") or "").strip().lower()
+        f["editavel"] = st == "aguardando" and not bool(f.get("tem_comprovante"))
+        f["status_label"] = "Pago" if st == "pago" else "Aguardando pagamento"
     return {
         "ativo": bool(cfg and cfg["ativo"]),
         "pai_nome": _nome(cur, pai) if pai else "",
@@ -981,7 +1155,8 @@ def painel_comissoes(
         "pix_tipo": pix["tipo"],
         "pix_chave": pix["chave"],
         "total_aberto_centavos": total_aberto,
-        "previsoes": previsoes,
+        "planos_ativos": planos_ativos,
+        "previsoes": planos_ativos,  # compat JS antigo
         "abertos": abertos,
         "faturados": faturados,
         "inadimplentes": inadimplentes,
@@ -1080,21 +1255,161 @@ def caminho_nf_fechamento(cur, id_fechamento: int, id_tenant: int) -> tuple[str,
     return row[0], row[1] or "nota.pdf"
 
 
+def _fechamento_editavel(status: str, tem_comprovante: bool) -> bool:
+    return (status or "").strip().lower() == "aguardando" and not bool(tem_comprovante)
+
+
+def _assert_fechamento_editavel(cur, id_tenant: int, id_fechamento: int) -> dict:
+    cur.execute(
+        """
+        SELECT id, status,
+               COALESCE(NULLIF(TRIM(comprovante_caminho), ''), '') <> '',
+               nf_caminho, nf_nome, valor_centavos
+        FROM tbl_comissao_fechamento
+        WHERE id = %s AND id_tenant_fornecedor = %s
+        """,
+        (int(id_fechamento), int(id_tenant)),
+    )
+    row = cur.fetchone()
+    if not row:
+        raise ValueError("Fechamento não encontrado.")
+    st = (row[1] or "").strip().lower()
+    if st == "cancelado":
+        raise ValueError("Este fechamento já foi cancelado.")
+    if st == "pago" or bool(row[2]):
+        raise ValueError("Após o pagamento com comprovante, o fechamento não pode mais ser alterado.")
+    if st != "aguardando":
+        raise ValueError("Este fechamento não pode ser alterado.")
+    return {
+        "id": int(row[0]),
+        "status": st,
+        "tem_comprovante": bool(row[2]),
+        "nf_caminho": row[3] or "",
+        "nf_nome": row[4] or "",
+        "valor_centavos": int(row[5] or 0),
+    }
+
+
+def cancelar_fechamento(cur, id_tenant: int, id_fechamento: int) -> dict:
+    """Devolve os itens para Em aberto e marca o lote como cancelado."""
+    _assert_fechamento_editavel(cur, id_tenant, id_fechamento)
+    cur.execute(
+        """
+        UPDATE tbl_comissao_item
+        SET status = 'aberto', id_fechamento = NULL
+        WHERE id_fechamento = %s
+          AND id_tenant_beneficiario = %s
+          AND status = 'faturado'
+        """,
+        (int(id_fechamento), int(id_tenant)),
+    )
+    qtd = int(cur.rowcount or 0)
+    cur.execute(
+        """
+        UPDATE tbl_comissao_fechamento
+        SET status = 'cancelado'
+        WHERE id = %s AND id_tenant_fornecedor = %s AND status = 'aguardando'
+        """,
+        (int(id_fechamento), int(id_tenant)),
+    )
+    if cur.rowcount == 0:
+        raise ValueError("Não foi possível cancelar o fechamento.")
+    return {"id": int(id_fechamento), "itens_reabertos": qtd}
+
+
+def alterar_fechamento(
+    cur,
+    id_tenant: int,
+    id_fechamento: int,
+    *,
+    ids: list[int] | None = None,
+    nf_nome: str | None = None,
+    nf_caminho: str | None = None,
+) -> dict:
+    """
+    Altera itens e/ou NF do lote enquanto aguarda pagamento sem comprovante.
+    """
+    _assert_fechamento_editavel(cur, id_tenant, id_fechamento)
+    fid = int(id_fechamento)
+    tid = int(id_tenant)
+    if ids is not None:
+        escolhidos = sorted({int(i) for i in (ids or []) if int(i) > 0})
+        if not escolhidos:
+            raise ValueError("Selecione ao menos uma comissão.")
+        cur.execute(
+            """
+            SELECT id, valor_comissao_centavos FROM tbl_comissao_item
+            WHERE id_tenant_beneficiario = %s
+              AND (
+                (status = 'aberto' AND id_fechamento IS NULL)
+                OR (status = 'faturado' AND id_fechamento = %s)
+              )
+              AND id = ANY(%s)
+            ORDER BY id
+            """,
+            (tid, fid, escolhidos),
+        )
+        rows = cur.fetchall()
+        if len(rows) != len(escolhidos):
+            raise ValueError("Algum item selecionado não está disponível para este lote.")
+        cur.execute(
+            """
+            UPDATE tbl_comissao_item
+            SET status = 'aberto', id_fechamento = NULL
+            WHERE id_fechamento = %s AND id_tenant_beneficiario = %s AND status = 'faturado'
+            """,
+            (fid, tid),
+        )
+        ids_ok = [int(r[0]) for r in rows]
+        total = sum(int(r[1] or 0) for r in rows)
+        cur.execute(
+            """
+            UPDATE tbl_comissao_item
+            SET status = 'faturado', id_fechamento = %s
+            WHERE id = ANY(%s) AND id_tenant_beneficiario = %s
+            """,
+            (fid, ids_ok, tid),
+        )
+        cur.execute(
+            """
+            UPDATE tbl_comissao_fechamento
+            SET valor_centavos = %s
+            WHERE id = %s AND id_tenant_fornecedor = %s
+            """,
+            (total, fid, tid),
+        )
+    if nf_caminho is not None:
+        nome = (nf_nome or "nota.pdf")[:180]
+        cur.execute(
+            """
+            UPDATE tbl_comissao_fechamento
+            SET nf_caminho = %s, nf_nome = %s
+            WHERE id = %s AND id_tenant_fornecedor = %s AND status = 'aguardando'
+            """,
+            (nf_caminho, nome, fid, tid),
+        )
+    return detalhe_fechamento(cur, tid, fid) or {"id": fid}
+
+
 def detalhe_fechamento(cur, id_tenant: int, id_fechamento: int) -> dict | None:
     cur.execute(
         """
-        SELECT id, valor_centavos, vencimento_em, status, criado_em, nf_nome, pago_em
+        SELECT id, valor_centavos, vencimento_em, status, criado_em, nf_nome, pago_em,
+               COALESCE(NULLIF(TRIM(comprovante_caminho), ''), '') <> ''
         FROM tbl_comissao_fechamento
         WHERE id = %s AND id_tenant_fornecedor = %s
+          AND status IN ('aguardando', 'pago')
         """,
         (int(id_fechamento), int(id_tenant)),
     )
     cab = cur.fetchone()
     if not cab:
         return None
+    st = (cab[3] or "").strip().lower()
+    tem_comp = bool(cab[7])
     cur.execute(
         """
-        SELECT i.referencia, i.plano_slug, i.valor_pago_centavos, i.valor_comissao_centavos,
+        SELECT i.id, i.referencia, i.plano_slug, i.valor_pago_centavos, i.valor_comissao_centavos,
                i.pago_em, i.origem,
                COALESCE(NULLIF(TRIM(tv.nome_fantasia), ''), NULLIF(TRIM(tv.nome), ''), 'Vendedor'),
                COALESCE(NULLIF(TRIM(to2.nome_fantasia), ''), NULLIF(TRIM(to2.nome), ''), '')
@@ -1108,14 +1423,15 @@ def detalhe_fechamento(cur, id_tenant: int, id_fechamento: int) -> dict | None:
     )
     itens = [
         {
-            "referencia": r[0] or "",
-            "plano": r[1] or "",
-            "valor_pago_centavos": int(r[2] or 0),
-            "valor_comissao_centavos": int(r[3] or 0),
-            "pago_em": r[4].isoformat() if r[4] else "",
-            "origem": r[5] or "",
-            "vendedor": r[6] or "",
-            "via": r[7] or "",
+            "id": int(r[0]),
+            "referencia": r[1] or "",
+            "plano": r[2] or "",
+            "valor_pago_centavos": int(r[3] or 0),
+            "valor_comissao_centavos": int(r[4] or 0),
+            "pago_em": r[5].isoformat() if r[5] else "",
+            "origem": r[6] or "",
+            "vendedor": r[7] or "",
+            "via": r[8] or "",
         }
         for r in cur.fetchall()
     ]
@@ -1123,10 +1439,12 @@ def detalhe_fechamento(cur, id_tenant: int, id_fechamento: int) -> dict | None:
         "id": int(cab[0]),
         "valor_centavos": int(cab[1] or 0),
         "vencimento_em": cab[2].isoformat() if cab[2] else "",
-        "status": cab[3] or "",
+        "status": st,
         "criado_em": cab[4].isoformat() if cab[4] else "",
         "nf_nome": cab[5] or "",
         "pago_em": cab[6].isoformat() if cab[6] else "",
+        "tem_comprovante": tem_comp,
+        "editavel": _fechamento_editavel(st, tem_comp),
         "itens": itens,
     }
 

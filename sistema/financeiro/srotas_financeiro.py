@@ -457,7 +457,34 @@ def api_comissoes_painel():
         conn.commit()
         return jsonify(success=True, **data)
     except Exception as e:
-        return jsonify(success=False, message=str(e)), 500
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        # Painel nunca deve quebrar a tela: devolve estrutura vazia com aviso
+        from datetime import date as _date
+
+        hoje = _date.today()
+        return jsonify(
+            success=True,
+            ativo=False,
+            frase="Não foi possível carregar todas as comissões agora. Tente novamente.",
+            hoje=hoje.isoformat(),
+            ano=hoje.year,
+            mes=hoje.month,
+            ano_faturado=0,
+            anos_periodo=[hoje.year - 1, hoje.year, hoje.year + 1],
+            anos_faturado=[hoje.year],
+            pix_ok=False,
+            pode_faturar=False,
+            total_aberto_centavos=0,
+            planos_ativos=[],
+            previsoes=[],
+            abertos=[],
+            faturados=[],
+            inadimplentes=[],
+            erro=str(e),
+        )
     finally:
         conn.close()
 
@@ -559,3 +586,86 @@ def api_comissoes_nf(id_fechamento: int):
     if not path.is_file():
         return jsonify(success=False, message="Arquivo da nota não encontrado."), 404
     return send_file(path, as_attachment=False, download_name=nome, mimetype="application/pdf")
+
+
+@financeiro_bp.post("/api/comissoes/fechamento/<int:id_fechamento>/cancelar")
+@login_obrigatorio()
+def api_comissoes_cancelar(id_fechamento: int):
+    if not _pode_comissoes():
+        return jsonify(success=False, message="Sem permissão."), 403
+    tid = _id_tenant()
+    if not tid:
+        return jsonify(success=False, message="Sessão inválida."), 403
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        from sistema.financeiro.comissao import cancelar_fechamento
+
+        res = cancelar_fechamento(cur, int(tid), int(id_fechamento))
+        conn.commit()
+        return jsonify(success=True, message="Fechamento cancelado. Itens voltaram para Em aberto.", **res)
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 400
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
+@financeiro_bp.post("/api/comissoes/fechamento/<int:id_fechamento>/alterar")
+@login_obrigatorio()
+def api_comissoes_alterar(id_fechamento: int):
+    if not _pode_comissoes():
+        return jsonify(success=False, message="Sem permissão."), 403
+    tid = _id_tenant()
+    if not tid:
+        return jsonify(success=False, message="Sessão inválida."), 403
+    arq = request.files.get("nf")
+    ids_raw = request.form.get("ids")
+    ids = None
+    if ids_raw is not None and str(ids_raw).strip() != "":
+        try:
+            ids = json.loads(ids_raw)
+        except Exception:
+            return jsonify(success=False, message="Seleção inválida."), 400
+        if not isinstance(ids, list):
+            return jsonify(success=False, message="Seleção inválida."), 400
+    if arq is not None and arq.filename:
+        if not (arq.filename or "").lower().endswith(".pdf"):
+            return jsonify(success=False, message="Anexe a nota fiscal em PDF."), 400
+    elif ids is None:
+        return jsonify(success=False, message="Nada para alterar."), 400
+    pasta = _MOD.parents[2] / "upload" / f"tenant{tid}" / "comissoes"
+    pasta.mkdir(parents=True, exist_ok=True)
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        from sistema.financeiro.comissao import alterar_fechamento
+
+        nf_nome = None
+        nf_caminho = None
+        if arq is not None and arq.filename:
+            nf_nome = Path(arq.filename or "nota.pdf").name
+            destino = pasta / f"{int(id_fechamento)}.pdf"
+            arq.save(destino)
+            nf_caminho = f"upload/tenant{tid}/comissoes/{destino.name}"
+        data = alterar_fechamento(
+            cur,
+            int(tid),
+            int(id_fechamento),
+            ids=ids,
+            nf_nome=nf_nome,
+            nf_caminho=nf_caminho,
+        )
+        conn.commit()
+        return jsonify(success=True, message="Fechamento atualizado.", **data)
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 400
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
