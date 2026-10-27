@@ -527,51 +527,58 @@ def painel_assinaturas(
     aberto_total_centavos = int(row_ab_tot[0] or 0)
     aberto_total_qtd = int(row_ab_tot[1] or 0)
 
+    # Emitidas do mês de competência (todas: pagas, em aberto e canceladas)
     cur.execute(
-        """
+        f"""
         SELECT
           f.id, f.id_tenant, t.nome, f.referencia, f.plano_slug, f.valor_centavos,
-          f.status, f.forma_pagamento, f.vencimento_em, f.criado_em,
+          f.status, f.forma_pagamento, f.vencimento_em, f.criado_em, f.pago_em,
           COALESCE(NULLIF(f.periodicidade, ''), 'mensal'), t.tipo_negocio
         FROM tbl_fatura f
         JOIN tbl_tenant t ON t.id = f.id_tenant
-        WHERE f.status IN ('pendente', 'vencido')
+        WHERE f.status IN ('pendente', 'vencido', 'pago', 'cancelado')
+          AND {_SQL_MES_COMPETENCIA} = %s
         ORDER BY f.vencimento_em ASC NULLS LAST, f.id ASC
-        LIMIT 200
+        LIMIT 500
         """
     )
-    em_aberto = []
+    emitidas_mes = []
     for row in cur.fetchall():
         forma = (row[7] or "").strip().lower()
-        periodo = _periodo_ok(row[10])
+        periodo = _periodo_ok(row[11])
         plano = str(row[4] or "")
         st = (row[6] or "").strip().lower()
-        venc = row[8]
-        no_mes = False
-        if isinstance(venc, datetime):
-            no_mes = venc.year == ano_sel and venc.month == mes_sel
-        elif isinstance(venc, date):
-            no_mes = venc.year == ano_sel and venc.month == mes_sel
-        em_aberto.append(
+        if st == "pago":
+            st_grupo = "pago"
+            st_label = "Pago"
+        elif st == "cancelado":
+            st_grupo = "cancelado"
+            st_label = "Cancelada"
+        else:
+            st_grupo = "aberto"
+            st_label = "Em aberto" if st == "pendente" else "Vencida"
+        emitidas_mes.append(
             {
                 "id_fatura": int(row[0]),
                 "id_tenant": int(row[1]),
                 "nome": (row[2] or "").strip() or f"Tenant #{row[1]}",
                 "referencia": row[3] or "",
                 "plano": plano,
-                "plano_label": nome_plano_comercial(plano, row[11] if len(row) > 11 else None),
+                "plano_label": nome_plano_comercial(plano, row[12] if len(row) > 12 else None),
                 "valor_centavos": int(row[5] or 0),
                 "valor": _fmt_reais(row[5]),
                 "status": st,
-                "status_label": {"pendente": "Emitida", "vencido": "Vencida"}.get(st, st),
+                "status_grupo": st_grupo,
+                "status_label": st_label,
                 "forma_pagamento": forma,
                 "forma_label": FORMA_LABEL.get(forma, forma or "—"),
-                "vencimento_em": _fmt_data(venc),
-                "vencimento_br": _fmt_data_br(venc),
+                "vencimento_em": _fmt_data(row[8]),
+                "vencimento_br": _fmt_data_br(row[8]),
                 "criado_em": _fmt_data(row[9]),
                 "criado_br": _fmt_data_br(row[9]),
+                "pago_em": _fmt_data(row[10]),
+                "pago_br": _fmt_data_br(row[10]),
                 "periodicidade_label": PERIODO_LABEL.get(periodo, periodo),
-                "no_mes_selecionado": no_mes,
             }
         )
 
@@ -663,7 +670,7 @@ def painel_assinaturas(
         )
 
     _anexar_lembretes(cur, em_atraso)
-    _anexar_lembretes(cur, em_aberto)
+    _anexar_lembretes(cur, emitidas_mes)
 
     canceladas: list[dict] = []
     try:
@@ -742,7 +749,7 @@ def painel_assinaturas(
                 "aberto_total": _fmt_reais(aberto_total_centavos),
                 "aberto_total_qtd": aberto_total_qtd,
             },
-            "em_aberto": em_aberto,
+            "emitidas_mes": emitidas_mes,
             "serie_ano": {
                 "ano": ano_sel,
                 "meses": serie_ano,

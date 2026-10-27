@@ -7,6 +7,9 @@
   const hoje = new Date();
   let filtroMes = hoje.getMonth() + 1;
   let filtroAno = hoje.getFullYear();
+  let filtroAtivasBusca = "";
+  let filtroFatBusca = "";
+  let filtroFatStatus = "";
 
   function el(id) {
     return document.getElementById(id);
@@ -54,11 +57,26 @@
     return `<tr><td colspan="${cols}" class="Asf_Empty">${esc(msg)}</td></tr>`;
   }
 
-  function btnMenu(a) {
+  function btnMenuFatura(a) {
     const pista = a.lembrete_rotulo
       ? `<div class="Asf_Muted">${esc(a.lembrete_rotulo)}</div>`
       : "";
-    return `<div class="Asf_Acoes"><button type="button" class="Asf_MenuBtn" data-asf-menu="1" aria-label="Ações da cobrança" aria-haspopup="menu" data-id="${esc(a.id_fatura)}" data-tenant="${esc(a.id_tenant)}" data-nome="${esc(a.nome)}" data-ref="${esc(a.referencia || a.id_fatura)}" data-valor="${esc(a.valor)}"><i></i><i></i><i></i></button>${pista}</div>`;
+    const grupo = String(a.status_grupo || a.status || "").toLowerCase();
+    return `<div class="Asf_Acoes"><button type="button" class="Asf_MenuBtn" data-asf-menu="1" aria-label="Ações da cobrança" aria-haspopup="menu" data-id="${esc(a.id_fatura)}" data-tenant="${esc(a.id_tenant)}" data-nome="${esc(a.nome)}" data-ref="${esc(a.referencia || a.id_fatura)}" data-valor="${esc(a.valor)}" data-status-grupo="${esc(grupo)}"><i></i><i></i><i></i></button>${pista}</div>`;
+  }
+
+  function btnMenuAtiva(a) {
+    return `<div class="Asf_Acoes"><button type="button" class="Asf_MenuBtn" data-asf-menu-ativa="1" aria-label="Ações da assinatura" aria-haspopup="menu" data-tenant="${esc(a.id_tenant)}" data-nome="${esc(a.nome)}" data-slug="${esc(a.slug || "")}"><i></i><i></i><i></i></button></div>`;
+  }
+
+  function badgeStatus(a) {
+    const grupo = String(a.status_grupo || "").toLowerCase();
+    const st = String(a.status || "").toLowerCase();
+    let cls = "is-pendente";
+    if (grupo === "pago" || st === "pago") cls = "is-pago";
+    else if (grupo === "cancelado" || st === "cancelado") cls = "is-cancelado";
+    else if (st === "vencido") cls = "is-vencido";
+    return `<span class="Asf_Badge ${cls}">${esc(a.status_label || a.status || "—")}</span>`;
   }
 
   function preencherAnos() {
@@ -79,6 +97,17 @@
   function lerFiltros() {
     filtroMes = parseInt(el("asf_mes")?.value || filtroMes, 10) || filtroMes;
     filtroAno = parseInt(el("asf_ano")?.value || filtroAno, 10) || filtroAno;
+    filtroAtivasBusca = (el("asf_ativas_busca")?.value || "").trim().toLowerCase();
+    filtroFatBusca = (el("asf_fat_busca")?.value || "").trim().toLowerCase();
+    filtroFatStatus = (el("asf_fat_status")?.value || "").trim().toLowerCase();
+  }
+
+  function matchBusca(item, q) {
+    if (!q) return true;
+    const nome = String(item.nome || "").toLowerCase();
+    const slug = String(item.slug || "").toLowerCase();
+    const id = String(item.id_tenant || "");
+    return nome.includes(q) || slug.includes(q) || id === q;
   }
 
   function renderAtivas(data) {
@@ -89,30 +118,40 @@
       { label: "ARR", value: r.arr || "R$ 0,00" },
       { label: "Provisão / mês", value: r.provisao_mensal || "R$ 0,00" },
     ]);
-    const itens = data?.itens || [];
-    el("asf_ativas_hint").textContent = itens.length
-      ? `${itens.length} tenant(s) em plano pago`
+    const itens = (data?.itens || []).filter((a) => matchBusca(a, filtroAtivasBusca));
+    const total = (data?.itens || []).length;
+    el("asf_ativas_hint").textContent = total
+      ? filtroAtivasBusca
+        ? `${itens.length} de ${total} tenant(s)`
+        : `${total} tenant(s) em plano pago`
       : "Nenhum assinante pago ativo";
     const tb = el("asf_ativas_tbody");
     if (!itens.length) {
-      tb.innerHTML = emptyRow(11, "Nenhum tenant com plano pago ativo.");
-    } else tb.innerHTML = itens
-      .map(
-        (a) => `<tr>
+      tb.innerHTML = emptyRow(
+        9,
+        filtroAtivasBusca ? "Nenhum tenant encontrado com essa busca." : "Nenhum tenant com plano pago ativo."
+      );
+    } else {
+      tb.innerHTML = itens
+        .map((a) => {
+          const benef = a.beneficio && a.beneficio !== "—"
+            ? `<div>${esc(a.beneficio)}</div>${a.beneficio_prazo && a.beneficio_prazo !== "—" ? `<div class="Asf_Muted">${esc(a.beneficio_prazo)}</div>` : ""}`
+            : "—";
+          const valor = a.cobrado_beneficio || a.ciclo || "—";
+          return `<tr>
         <td><strong>${esc(a.nome)}</strong><div class="Asf_Muted">#${esc(a.id_tenant)} · ${esc(a.slug || "—")}</div></td>
         <td>${esc(a.plano_label)}</td>
         <td>${esc(a.periodicidade_label)}</td>
         <td>${esc(a.forma_label)}</td>
-        <td><strong>${esc(a.mrr)}</strong></td>
-        <td>${esc(a.ciclo)}</td>
-        <td>${esc(a.beneficio || "—")}</td>
-        <td>${esc(a.beneficio_prazo || "—")}</td>
-        <td><strong>${esc(a.cobrado_beneficio || a.ciclo)}</strong></td>
-        <td>${esc(a.efi_rotulo || "Não")}${a.efi_detalhe ? `<div class="Asf_Muted">${esc(a.efi_detalhe)}</div>` : ""}</td>
+        <td><strong>${esc(valor)}</strong></td>
+        <td>${benef}</td>
+        <td>${esc(a.inicio_cobranca_br || "—")}</td>
         <td>${esc(a.proxima_cobranca_br || "—")}</td>
-      </tr>`
-      )
-      .join("");
+        <td class="Asf_ColAcoes">${btnMenuAtiva(a)}</td>
+      </tr>`;
+        })
+        .join("");
+    }
     const canceladas = data?.canceladas || [];
     const tbc = el("asf_cancel_tbody");
     const hint = el("asf_cancel_hint");
@@ -166,7 +205,7 @@
           <td>${esc(a.vencimento_br)}</td>
           <td><strong>${esc(a.valor)}</strong></td>
           <td>${esc(a.forma_label)}</td>
-          <td>${btnMenu(a)}</td>
+          <td>${btnMenuFatura(a)}</td>
         </tr>`;
         })
         .join("");
@@ -264,59 +303,61 @@
 
     renderChart(data?.serie_ano);
 
-    const abertos = data?.em_aberto || [];
-    const noMes = abertos.filter((a) => a.no_mes_selecionado).length;
-    el("asf_aberto_hint").textContent = abertos.length
-      ? `${abertos.length} em aberto · ${noMes} com vencimento em ${mesLbl}`
-      : "Nenhuma cobrança em aberto";
-    const tba = el("asf_aberto_tbody");
-    if (!abertos.length) {
-      tba.innerHTML = emptyRow(8, "Nenhuma fatura emitida/vencida em aberto.");
-    } else {
-      tba.innerHTML = abertos
-        .map((a) => {
-          const st = String(a.status || "").toLowerCase();
-          const badge = st === "vencido" ? "is-vencido" : "is-pendente";
-          const rowCls = a.no_mes_selecionado ? ' class="is-mes"' : "";
-          return `<tr${rowCls}>
+    const todas = data?.emitidas_mes || [];
+    const filtradas = todas.filter((a) => {
+      if (!matchBusca(a, filtroFatBusca)) return false;
+      if (!filtroFatStatus) return true;
+      return String(a.status_grupo || "").toLowerCase() === filtroFatStatus;
+    });
+    const hint = el("asf_emitidas_hint");
+    if (hint) {
+      hint.textContent = todas.length
+        ? filtroFatBusca || filtroFatStatus
+          ? `${filtradas.length} de ${todas.length} emitida(s) em ${mesLbl}`
+          : `${todas.length} emitida(s) em ${mesLbl}`
+        : `Nenhuma cobrança emitida em ${mesLbl}`;
+    }
+    const tba = el("asf_emitidas_tbody");
+    if (!tba) return;
+    if (!filtradas.length) {
+      tba.innerHTML = emptyRow(
+        8,
+        todas.length ? "Nenhuma cobrança com esses filtros." : "Nenhuma cobrança emitida neste mês."
+      );
+      return;
+    }
+    tba.innerHTML = filtradas
+      .map((a) => {
+        const grupo = String(a.status_grupo || "").toLowerCase();
+        const menu = grupo === "aberto" ? btnMenuFatura(a) : btnMenuFatura({ ...a, lembrete_rotulo: "" });
+        return `<tr>
           <td><strong>${esc(a.vencimento_br)}</strong><div class="Asf_Muted">emitida ${esc(a.criado_br || "—")}</div></td>
           <td><strong>${esc(a.nome)}</strong><div class="Asf_Muted">#${esc(a.id_tenant)}</div></td>
           <td>${esc(a.plano_label)}</td>
           <td>${esc(a.referencia || a.id_fatura)}</td>
-          <td><span class="Asf_Badge ${badge}">${esc(a.status_label || a.status)}</span></td>
+          <td>${badgeStatus(a)}</td>
           <td>${esc(a.forma_label)}</td>
           <td><strong>${esc(a.valor)}</strong></td>
-          <td>${btnMenu(a)}</td>
+          <td class="Asf_ColAcoes">${menu}</td>
         </tr>`;
-        })
-        .join("");
-    }
-
-    const pagos = data?.pagos_recentes || [];
-    const tbp = el("asf_pagos_tbody");
-    if (!pagos.length) {
-      tbp.innerHTML = emptyRow(5, "Nenhum pagamento recente.");
-      return;
-    }
-    tbp.innerHTML = pagos
-      .map(
-        (p) => `<tr>
-        <td>${esc(p.pago_br)}</td>
-        <td><strong>${esc(p.nome)}</strong><div class="Asf_Muted">#${esc(p.id_tenant)}</div></td>
-        <td>${esc(p.plano_label)}</td>
-        <td>${esc(p.periodicidade_label)}</td>
-        <td><strong>${esc(p.valor)}</strong></td>
-      </tr>`
-      )
+      })
       .join("");
   }
 
   function renderAll(j) {
     cache = j;
+    lerFiltros();
     renderAtivas(j.ativas);
     renderInad(j.inadimplencia);
     renderFat(j.faturamento);
     setStatus(`Atualizado agora · competência ${filtroMes.toString().padStart(2, "0")}/${filtroAno}.`);
+  }
+
+  function rerenderLocal() {
+    if (!cache) return;
+    lerFiltros();
+    renderAtivas(cache.ativas);
+    renderFat(cache.faturamento);
   }
 
   async function carregar() {
@@ -343,20 +384,20 @@
 
   let cancelando = false;
   let menuAlvo = null;
+  let menuTipo = null;
   let menuAbertoEm = 0;
 
-  function fecharMenu() {
-    const menu = el("asf_menu");
-    if (!menu) return;
-    menu.hidden = true;
+  function fecharMenus() {
+    ["asf_menu", "asf_menu_ativa"].forEach((id) => {
+      const menu = el(id);
+      if (menu) menu.hidden = true;
+    });
     menuAlvo = null;
+    menuTipo = null;
   }
 
-  function abrirMenu(btn) {
-    const menu = el("asf_menu");
-    if (!menu) return;
+  function posicionarMenu(menu, btn) {
     menu.hidden = false;
-    menuAlvo = btn;
     menuAbertoEm = Date.now();
     const rect = btn.getBoundingClientRect();
     const largura = menu.offsetWidth || 196;
@@ -368,6 +409,29 @@
     if (top + altura > window.innerHeight - 8) top = Math.max(8, rect.top - altura - 6);
     menu.style.top = `${top}px`;
     menu.style.left = `${left}px`;
+  }
+
+  function abrirMenuFatura(btn) {
+    const menu = el("asf_menu");
+    if (!menu) return;
+    el("asf_menu_ativa") && (el("asf_menu_ativa").hidden = true);
+    const grupo = String(btn.getAttribute("data-status-grupo") || "aberto").toLowerCase();
+    const btnLembrete = menu.querySelector('[data-acao="lembrete"]');
+    const btnCancelar = menu.querySelector('[data-acao="cancelar"]');
+    if (btnLembrete) btnLembrete.hidden = grupo !== "aberto";
+    if (btnCancelar) btnCancelar.hidden = grupo !== "aberto";
+    menuAlvo = btn;
+    menuTipo = "fatura";
+    posicionarMenu(menu, btn);
+  }
+
+  function abrirMenuAtiva(btn) {
+    const menu = el("asf_menu_ativa");
+    if (!menu) return;
+    el("asf_menu") && (el("asf_menu").hidden = true);
+    menuAlvo = btn;
+    menuTipo = "ativa";
+    posicionarMenu(menu, btn);
   }
 
   function linhaDetalhe(rotulo, valor) {
@@ -501,9 +565,6 @@
     });
     if (!c.isConfirmed) return;
     cancelando = true;
-    document.querySelectorAll("[data-asf-cancelar]").forEach((b) => {
-      b.disabled = true;
-    });
     Swal.fire({ title: "Cancelando…", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
     try {
       const r = await fetch(cfg.apiCancelar, {
@@ -516,13 +577,28 @@
       if (!r.ok || !j.success) throw new Error(j.message || "Não foi possível cancelar a cobrança.");
       await Swal.fire({ icon: "success", title: "Cobrança cancelada", text: j.message || "Cancelada.", confirmButtonColor: "#021F81" });
       await carregar();
-    } catch (e) {
-      document.querySelectorAll("[data-asf-cancelar]").forEach((b) => {
-        b.disabled = false;
-      });
-      throw e;
     } finally {
       cancelando = false;
+    }
+  }
+
+  function acaoAtiva(acao, btn) {
+    const nome = btn.getAttribute("data-nome") || "tenant";
+    if (acao === "ver_faturas") {
+      const busca = el("asf_fat_busca");
+      if (busca) busca.value = nome;
+      filtroFatBusca = nome.toLowerCase();
+      setTab("faturamento");
+      rerenderLocal();
+      return;
+    }
+    if (window.Swal) {
+      Swal.fire({
+        icon: "info",
+        title: acao === "cancelar_plano" ? "Cancelar plano" : "Alterar plano",
+        text: "Em breve neste painel. Por enquanto use o financeiro da conta ou o suporte interno.",
+        confirmButtonColor: "#021F81",
+      });
     }
   }
 
@@ -537,18 +613,31 @@
       if (ev.target === el("asf_modal")) el("asf_modal").close();
     });
     document.addEventListener("click", (ev) => {
-      const menuBtn = ev.target.closest("[data-asf-menu]");
-      if (menuBtn) {
+      const menuBtnFat = ev.target.closest("[data-asf-menu]");
+      if (menuBtnFat) {
         ev.stopPropagation();
-        if (menuAlvo === menuBtn && el("asf_menu") && !el("asf_menu").hidden) fecharMenu();
-        else abrirMenu(menuBtn);
+        if (menuAlvo === menuBtnFat && menuTipo === "fatura" && el("asf_menu") && !el("asf_menu").hidden) {
+          fecharMenus();
+        } else {
+          abrirMenuFatura(menuBtnFat);
+        }
         return;
       }
-      const acaoBtn = ev.target.closest("#asf_menu [data-acao]");
-      if (acaoBtn && menuAlvo) {
+      const menuBtnAtiva = ev.target.closest("[data-asf-menu-ativa]");
+      if (menuBtnAtiva) {
+        ev.stopPropagation();
+        if (menuAlvo === menuBtnAtiva && menuTipo === "ativa" && el("asf_menu_ativa") && !el("asf_menu_ativa").hidden) {
+          fecharMenus();
+        } else {
+          abrirMenuAtiva(menuBtnAtiva);
+        }
+        return;
+      }
+      const acaoFat = ev.target.closest("#asf_menu [data-acao]");
+      if (acaoFat && menuAlvo && menuTipo === "fatura") {
         const alvo = menuAlvo;
-        const acao = acaoBtn.getAttribute("data-acao");
-        fecharMenu();
+        const acao = acaoFat.getAttribute("data-acao");
+        fecharMenus();
         const falha = (e) => {
           if (window.Swal) Swal.fire("Erro", e.message || "Não foi possível concluir.", "error");
         };
@@ -557,21 +646,41 @@
         else if (acao === "cancelar") cancelarCobranca(alvo).catch(falha);
         return;
       }
-      if (!ev.target.closest("#asf_menu")) fecharMenu();
+      const acaoAt = ev.target.closest("#asf_menu_ativa [data-acao-ativa]");
+      if (acaoAt && menuAlvo && menuTipo === "ativa") {
+        const alvo = menuAlvo;
+        const acao = acaoAt.getAttribute("data-acao-ativa");
+        fecharMenus();
+        acaoAtiva(acao, alvo);
+        return;
+      }
+      if (!ev.target.closest("#asf_menu") && !ev.target.closest("#asf_menu_ativa")) fecharMenus();
     });
     document.addEventListener("keydown", (ev) => {
-      if (ev.key === "Escape") fecharMenu();
+      if (ev.key === "Escape") fecharMenus();
     });
     window.addEventListener(
       "scroll",
       () => {
         if (Date.now() - menuAbertoEm < 250) return;
-        fecharMenu();
+        fecharMenus();
       },
       true
     );
     el("asf_mes")?.addEventListener("change", carregar);
     el("asf_ano")?.addEventListener("change", carregar);
+    el("asf_ativas_busca")?.addEventListener("input", () => {
+      filtroAtivasBusca = (el("asf_ativas_busca")?.value || "").trim().toLowerCase();
+      if (cache) renderAtivas(cache.ativas);
+    });
+    el("asf_fat_busca")?.addEventListener("input", () => {
+      filtroFatBusca = (el("asf_fat_busca")?.value || "").trim().toLowerCase();
+      if (cache) renderFat(cache.faturamento);
+    });
+    el("asf_fat_status")?.addEventListener("change", () => {
+      filtroFatStatus = (el("asf_fat_status")?.value || "").trim().toLowerCase();
+      if (cache) renderFat(cache.faturamento);
+    });
     setTab("ativas");
     carregar();
   });

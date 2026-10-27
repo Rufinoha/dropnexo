@@ -311,7 +311,14 @@
 
 .Asf_Badge.is-vencido { background: #fee2e2; color: #991b1b; }
 .Asf_Badge.is-pendente { background: #ffedd5; color: #9a3412; }
+.Asf_Badge.is-pago { background: #dcfce7; color: #166534; }
+.Asf_Badge.is-cancelado { background: #f1f5f9; color: #64748b; }
 .Asf_Badge.is-starter { background: #e2e8f0; color: #475569; }
+
+.Asf_ColAcoes {
+  width: 72px;
+  text-align: right;
+}
 
 .Asf_Filtros {
   display: flex;
@@ -323,6 +330,13 @@
   border: 1px solid #e2e8f0;
   border-radius: 12px;
   background: #fff;
+}
+.Asf_Filtros--linha {
+  margin-top: 0;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-color: #f1f5f9;
+  background: #f8fafc;
 }
 .Asf_Filtros .form-campo {
   display: flex;
@@ -338,7 +352,8 @@
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
-.Asf_Filtros .form-campo select {
+.Asf_Filtros .form-campo select,
+.Asf_Filtros .form-campo input[type="search"] {
   min-width: 160px;
   padding: 8px 12px;
   border: 1px solid #d1d5db;
@@ -346,6 +361,9 @@
   background: #fff;
   color: #1e293b;
   font-size: 0.95rem;
+}
+.Asf_Filtros .form-campo input[type="search"] {
+  min-width: 220px;
 }
 .Asf_FiltroHint {
   flex: 1 1 220px;

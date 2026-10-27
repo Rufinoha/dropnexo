@@ -3,7 +3,7 @@
 {% set nav_ativo = 'config' %}
 {% block topbar_title %}Assinaturas e faturamento{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_assinaturas.css') }}?v=5" />
+<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_assinaturas.css') }}?v=7" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal Asf_Wrap">
@@ -11,8 +11,8 @@
     <div>
       <h2>Assinaturas e faturamento</h2>
       <p class="cl-page-desc">
-        Visão do dono da plataforma: assinantes ativos com provisão de receita,
-        inadimplência, cobranças em aberto e faturamento (emitido × pago) mês a mês.
+        Visão do dono da plataforma: assinantes ativos, inadimplência e
+        faturamento (emitido × pago) mês a mês.
       </p>
     </div>
     <button type="button" class="Cl_BtnCancelar" id="asf_btnAtualizar">Atualizar</button>
@@ -37,6 +37,12 @@
         <h3>Assinantes ativos</h3>
         <span class="Asf_Hint" id="asf_ativas_hint">—</span>
       </div>
+      <div class="Asf_Filtros Asf_Filtros--linha">
+        <div class="form-campo">
+          <label for="asf_ativas_busca">Buscar tenant</label>
+          <input type="search" id="asf_ativas_busca" placeholder="Nome ou slug…" autocomplete="off" />
+        </div>
+      </div>
       <div class="Asf_TabelaWrap">
         <table class="Asf_Tabela">
           <thead>
@@ -45,17 +51,15 @@
               <th>Plano</th>
               <th>Ciclo</th>
               <th>Forma</th>
-              <th>MRR</th>
-              <th>Ciclo (valor)</th>
+              <th>Valor</th>
               <th>Benefício</th>
-              <th>Prazo</th>
-              <th>A cobrar</th>
-              <th>Efí</th>
+              <th>Data adesão</th>
               <th>Próx. cobrança</th>
+              <th class="Asf_ColAcoes">Ações</th>
             </tr>
           </thead>
           <tbody id="asf_ativas_tbody">
-            <tr><td colspan="11" class="Asf_Empty">Carregando…</td></tr>
+            <tr><td colspan="9" class="Asf_Empty">Carregando…</td></tr>
           </tbody>
         </table>
       </div>
@@ -180,8 +184,23 @@
 
     <div class="Asf_Card">
       <div class="Asf_CardHead">
-        <h3>Cobranças em aberto</h3>
-        <span class="Asf_Hint" id="asf_aberto_hint">Emitidas / vencidas — receita que pode entrar</span>
+        <h3>Cobranças emitidas do mês</h3>
+        <span class="Asf_Hint" id="asf_emitidas_hint">Todas as faturas da competência selecionada</span>
+      </div>
+      <div class="Asf_Filtros Asf_Filtros--linha">
+        <div class="form-campo">
+          <label for="asf_fat_busca">Buscar nome</label>
+          <input type="search" id="asf_fat_busca" placeholder="Tenant…" autocomplete="off" />
+        </div>
+        <div class="form-campo">
+          <label for="asf_fat_status">Status</label>
+          <select id="asf_fat_status">
+            <option value="">Todos</option>
+            <option value="pago">Pago</option>
+            <option value="aberto">Em aberto</option>
+            <option value="cancelado">Cancelada</option>
+          </select>
+        </div>
       </div>
       <div class="Asf_TabelaWrap">
         <table class="Asf_Tabela">
@@ -194,34 +213,11 @@
               <th>Status</th>
               <th>Forma</th>
               <th>Valor</th>
-              <th></th>
+              <th class="Asf_ColAcoes">Ações</th>
             </tr>
           </thead>
-          <tbody id="asf_aberto_tbody">
+          <tbody id="asf_emitidas_tbody">
             <tr><td colspan="8" class="Asf_Empty">Carregando…</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <div class="Asf_Card">
-      <div class="Asf_CardHead">
-        <h3>Pagamentos recentes</h3>
-        <span class="Asf_Hint">Últimas 80 faturas pagas</span>
-      </div>
-      <div class="Asf_TabelaWrap">
-        <table class="Asf_Tabela">
-          <thead>
-            <tr>
-              <th>Pago em</th>
-              <th>Tenant</th>
-              <th>Plano</th>
-              <th>Ciclo</th>
-              <th>Valor</th>
-            </tr>
-          </thead>
-          <tbody id="asf_pagos_tbody">
-            <tr><td colspan="5" class="Asf_Empty">Carregando…</td></tr>
           </tbody>
         </table>
       </div>
@@ -233,6 +229,12 @@
   <button type="button" data-acao="lembrete" role="menuitem">Enviar lembrete</button>
   <button type="button" data-acao="detalhe" role="menuitem">Ver detalhe</button>
   <button type="button" data-acao="cancelar" class="is-perigo" role="menuitem">Cancelar cobrança</button>
+</div>
+
+<div class="Asf_Menu" id="asf_menu_ativa" hidden role="menu">
+  <button type="button" data-acao-ativa="ver_faturas" role="menuitem">Ver faturas</button>
+  <button type="button" data-acao-ativa="alterar_plano" role="menuitem">Alterar plano</button>
+  <button type="button" data-acao-ativa="cancelar_plano" class="is-perigo" role="menuitem">Cancelar plano</button>
 </div>
 
 <dialog class="Asf_Modal" id="asf_modal" aria-labelledby="asf_modal_titulo">
@@ -249,5 +251,5 @@
   "apiLembrete": url_for("config.assinaturas_lembrete_fatura"),
   "apiDetalhe": url_for("config.assinaturas_faturamento_pagina") ~ "/fatura/"
 } | tojson }}</script>
-<script defer src="{{ url_for('config.static', filename='script/Sconfig_assinaturas.js') }}?v=7"></script>
+<script defer src="{{ url_for('config.static', filename='script/Sconfig_assinaturas.js') }}?v=8"></script>
 {% endblock %}
