@@ -4,7 +4,7 @@
 {% block topbar_title %}Manutenção de tenant{% endblock %}
 {% block head_extra %}
 <link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_crud.css') }}?v=3" />
-<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_manutencao_tenant.css') }}?v=22" />
+<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_manutencao_tenant.css') }}?v=23" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ConfigPage CfgMt_Page">
@@ -209,6 +209,7 @@
           <col class="is-ativo">
           <col class="is-erp">
           <col class="is-prod">
+          <col class="is-pedidos">
           <col class="is-wa">
           <col class="is-acoes">
         </colgroup>
@@ -220,12 +221,13 @@
             <th>Ativo</th>
             <th>ERP</th>
             <th>Produtos pub.</th>
+            <th>Pedidos</th>
             <th>WhatsApp</th>
             <th>Ações</th>
           </tr>
         </thead>
         <tbody id="cfgmt_fundador_lista">
-          <tr><td colspan="8">Carregando…</td></tr>
+          <tr><td colspan="9">Carregando…</td></tr>
         </tbody>
       </table>
     </div>
@@ -288,5 +290,5 @@
 {% block page_js %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
-<script src="{{ url_for('config.static', filename='script/Sconfig_manutencao_tenant.js') }}?v=23"></script>
+<script src="{{ url_for('config.static', filename='script/Sconfig_manutencao_tenant.js') }}?v=24"></script>
 {% endblock %}

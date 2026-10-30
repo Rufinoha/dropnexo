@@ -448,7 +448,7 @@ def aplicar_precificacao_catalogo(
                 UPDATE tbl_produto SET
                     valor_drop = %s, valor_dropshipping = %s,
                     valor_drop_manual = FALSE,
-                    publicado = TRUE, ativo = TRUE, atualizado_em = %s
+                    publicado = TRUE, atualizado_em = %s
                 WHERE id = %s AND id_tenant = %s
                 """,
                 (vd, vd, agora, pid, id_tenant),

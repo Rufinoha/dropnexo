@@ -104,8 +104,12 @@ def mapear_status_ml_para_dn(status_ml: str | None, *, shipping_status: str | No
         return STATUS_CANCELADO
     if s in ("delivered",) or o in ("delivered",):
         return STATUS_ENTREGUE
-    if s in ("shipped", "ready_to_ship", "handling") or o in ("shipped",):
+    # Só "shipped" = já despachado → Em expedição.
+    # ready_to_ship / handling = pronto para o fornecedor expedir (não "já em expedição").
+    if s in ("shipped",) or o in ("shipped",):
         return STATUS_EM_EXPEDICAO
+    if s in ("ready_to_ship", "handling"):
+        return STATUS_AGUARDANDO_CONFIRMACAO
     # paid/confirmed: não avançar status_vendedor — entrada é outro fluxo
     if o in ("paid", "confirmed", "payment_required", "pending"):
         return None

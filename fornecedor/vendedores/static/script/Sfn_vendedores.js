@@ -281,11 +281,13 @@
 
     const chips = [];
     if (v.email) {
-      chips.push(`<a class="VdDet_Chip" href="mailto:${esc(v.email)}">E-mail</a>`);
+      chips.push(
+        `<a class="VdDet_Chip" href="mailto:${esc(v.email)}" data-fol-click="email">E-mail</a>`
+      );
     }
     if (waHref) {
       chips.push(
-        `<a class="VdDet_Chip is-wa" href="${esc(waHref)}" target="_blank" rel="noopener">WhatsApp</a>`
+        `<a class="VdDet_Chip is-wa" href="${esc(waHref)}" target="_blank" rel="noopener" data-fol-click="whatsapp">WhatsApp</a>`
       );
     }
     if (siteUrl) {
@@ -352,13 +354,13 @@
               <div><dt>Responsável</dt><dd>${esc(v.contato_nome || "—")}</dd></div>
               <div><dt>E-mail</dt><dd>${
                 v.email
-                  ? `<a href="mailto:${esc(v.email)}">${esc(v.email)}</a>`
+                  ? `<a href="mailto:${esc(v.email)}" data-fol-click="email">${esc(v.email)}</a>`
                   : "—"
               }</dd></div>
               <div><dt>Telefone</dt><dd>${esc(fmtTel(v.telefone))}</dd></div>
               <div><dt>WhatsApp</dt><dd>${
                 waHref
-                  ? `<a class="VdDet_WaLink" href="${esc(waHref)}" target="_blank" rel="noopener">${esc(fmtTel(v.whatsapp))}</a>`
+                  ? `<a class="VdDet_WaLink" href="${esc(waHref)}" target="_blank" rel="noopener" data-fol-click="whatsapp">${esc(fmtTel(v.whatsapp))}</a>`
                   : "—"
               }</dd></div>
             </dl>
@@ -536,6 +538,34 @@
     pintarFollow(j.dados || []);
   }
 
+  const FOL_CLICK_DESC = {
+    whatsapp: "Clicou no link de WhatsApp.",
+    email: "Clicou no link de e-mail.",
+  };
+  const folClickDebounce = new Map();
+
+  async function postFollowup({ dataContato, descricao, dataRetorno }) {
+    if (!vinculoAtual) return { success: false, message: "Vínculo inválido." };
+    const r = await fetch("/fornecedor/vendedores/followup", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: vinculoAtual.id,
+        data_contato: dataContato,
+        descricao,
+        data_retorno: dataRetorno || "",
+      }),
+    });
+    let j = {};
+    try {
+      j = await r.json();
+    } catch (_) {
+      j = { success: false, message: "Erro no servidor (" + r.status + ")." };
+    }
+    return j;
+  }
+
   async function salvarFollow(ev) {
     ev.preventDefault();
     if (!vinculoAtual) return;
@@ -554,23 +584,7 @@
       Swal?.fire("Atenção", "Informe a descrição do contato.", "warning");
       return;
     }
-    const r = await fetch("/fornecedor/vendedores/followup", {
-      method: "POST",
-      credentials: "same-origin",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        id: vinculoAtual.id,
-        data_contato: dataContato,
-        descricao,
-        data_retorno: dataRetorno,
-      }),
-    });
-    let j = {};
-    try {
-      j = await r.json();
-    } catch (_) {
-      j = { success: false, message: "Erro no servidor (" + r.status + ")." };
-    }
+    const j = await postFollowup({ dataContato, descricao, dataRetorno });
     if (!j.success) {
       if (window.Swal) Swal.fire("Erro", j.message || "Falha", "error");
       else alert(j.message || "Falha");
@@ -583,6 +597,34 @@
     pintarFollow(j.dados || []);
     aplicarFollowNoCard(vinculoAtual.id, j.follow_contato, j.follow_retorno);
     if (window.Swal) Swal.fire("OK", j.message || "Contato registrado.", "success");
+  }
+
+  async function registrarFollowPorClick(canal) {
+    if (!vinculoAtual?.id) return;
+    const key = String(vinculoAtual.id) + ":" + canal;
+    const agora = Date.now();
+    const ultimo = folClickDebounce.get(key) || 0;
+    if (agora - ultimo < 4000) return;
+    folClickDebounce.set(key, agora);
+
+    const descricao = FOL_CLICK_DESC[canal];
+    if (!descricao) return;
+
+    try {
+      const j = await postFollowup({
+        dataContato: hojeSP(),
+        descricao,
+        dataRetorno: "",
+      });
+      if (!j.success) return;
+      aplicarFollowNoCard(vinculoAtual.id, j.follow_contato, j.follow_retorno);
+      const painelFollow = modalBody?.querySelector('[data-painel="follow"]');
+      if (painelFollow && !painelFollow.hidden) {
+        pintarFollow(j.dados || []);
+      }
+    } catch (_) {
+      /* clique no link não deve ser bloqueado */
+    }
   }
 
   function trocarAba(aba) {
@@ -786,6 +828,13 @@
   });
 
   modalBody?.addEventListener("click", (e) => {
+    const clickFol = e.target.closest("[data-fol-click]");
+    if (clickFol) {
+      const canal = (clickFol.getAttribute("data-fol-click") || "").trim().toLowerCase();
+      if (canal === "email" || canal === "whatsapp") {
+        registrarFollowPorClick(canal);
+      }
+    }
     const tab = e.target.closest("[data-aba]");
     if (!tab) return;
     trocarAba(tab.getAttribute("data-aba"));

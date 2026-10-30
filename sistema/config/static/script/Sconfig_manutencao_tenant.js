@@ -208,7 +208,7 @@
       }
       const itens = j.itens || [];
       if (!itens.length) {
-        el.fundadorLista.innerHTML = '<tr><td colspan="8">Nenhum Fundador cadastrado.</td></tr>';
+        el.fundadorLista.innerHTML = '<tr><td colspan="9">Nenhum Fundador cadastrado.</td></tr>';
         return;
       }
       el.fundadorLista.innerHTML = itens
@@ -219,6 +219,12 @@
             : `<button type="button" class="Cl_botaoprimario cfgmt-fundador-toggle" data-id="${t.id}" data-ativo="1">Ativar</button>`;
           const excluir =
             `<button type="button" class="CfgMt_BtnAcao CfgMt_BtnAcao--del cfgmt-fundador-excluir" data-id="${t.id}" data-nome="${esc(t.nome)}">Excluir</button>`;
+          const qtdPed = Number(t.pedidos_qtd || 0);
+          const ultPed = formatarDataCurta(t.ultimo_pedido_em);
+          const celPedidos =
+            qtdPed > 0
+              ? `<div class="CfgMt_PedidosCell"><strong>${qtdPed}</strong><span>${ultPed}</span></div>`
+              : `<div class="CfgMt_PedidosCell"><strong>0</strong><span>—</span></div>`;
           return `<tr>
             <td>${t.id}</td>
             <td class="is-nome" title="${esc(t.nome)}">${esc(t.nome)}</td>
@@ -226,13 +232,14 @@
             <td>${ativo}</td>
             <td>${esc(t.sistema_erp || "—")}</td>
             <td>${t.produtos_publicados ?? 0}</td>
+            <td>${celPedidos}</td>
             <td>${celulaWhatsapp(t.whatsapp)}</td>
             <td><div class="CfgMt_FundadorAcoes">${btn}${excluir}</div></td>
           </tr>`;
         })
         .join("");
     } catch (err) {
-      el.fundadorLista.innerHTML = `<tr><td colspan="8">${esc(err.message || "Erro")}</td></tr>`;
+      el.fundadorLista.innerHTML = `<tr><td colspan="9">${esc(err.message || "Erro")}</td></tr>`;
     }
   }
 
@@ -513,6 +520,17 @@
       `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ` +
       `${pad(d.getHours())}:${pad(d.getMinutes())}`
     );
+  }
+
+  function formatarDataCurta(iso) {
+    if (!iso) return "—";
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) {
+      const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/);
+      return m ? `${m[3]}/${m[2]}/${m[1]}` : "—";
+    }
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
   }
 
   function pct(parte, total) {

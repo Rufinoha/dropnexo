@@ -386,6 +386,14 @@ def listar_fundadores(cur) -> list[dict[str, Any]]:
                (SELECT COUNT(*)::int FROM tbl_produto p
                 WHERE p.id_tenant = t.id AND COALESCE(p.publicado, FALSE) = TRUE) AS produtos_pub,
                (SELECT COUNT(*)::int FROM tbl_produto p WHERE p.id_tenant = t.id) AS produtos_total,
+               (SELECT COUNT(*)::int FROM tbl_pedido ped
+                WHERE ped.id_tenant_fornecedor = t.id
+                  AND COALESCE(ped.status_vendedor, ped.status, '') NOT IN ('rascunho', 'cancelado')
+               ) AS pedidos_qtd,
+               (SELECT MAX(ped.criado_em) FROM tbl_pedido ped
+                WHERE ped.id_tenant_fornecedor = t.id
+                  AND COALESCE(ped.status_vendedor, ped.status, '') NOT IN ('rascunho', 'cancelado')
+               ) AS ultimo_pedido_em,
                (SELECT u.email FROM tbl_usuario_tenant ut
                 JOIN tbl_usuario u ON u.id = ut.id_usuario
                 JOIN tbl_perfil pf ON pf.id = ut.id_perfil AND pf.codigo = 'dono'
@@ -419,8 +427,10 @@ def listar_fundadores(cur) -> list[dict[str, Any]]:
                 "criado_em": r[10].isoformat() if r[10] else None,
                 "produtos_publicados": int(r[11] or 0),
                 "produtos_total": int(r[12] or 0),
-                "email": r[13] or "",
-                "whatsapp": r[14] or "",
+                "pedidos_qtd": int(r[13] or 0),
+                "ultimo_pedido_em": r[14].isoformat() if r[14] else None,
+                "email": r[15] or "",
+                "whatsapp": r[16] or "",
             }
         )
     return out
