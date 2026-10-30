@@ -4284,6 +4284,9 @@ def manutencao_tenant_fundador_lista():
             status=status_programa(cur),
             itens=listar_fundadores(cur),
         )
+    except Exception as e:
+        _log.exception("manutencao fundador lista")
+        return jsonify(success=False, message=str(e)), 500
     finally:
         conn.close()
 

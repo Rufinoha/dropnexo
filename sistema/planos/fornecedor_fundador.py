@@ -378,8 +378,11 @@ def listar_candidatos_fundador(cur) -> list[dict[str, Any]]:
 
 def listar_fundadores(cur) -> list[dict[str, Any]]:
     garantir_colunas_fundador(cur)
+    from core.pedidos.servico import col_status_vendedor
+
+    col_st = col_status_vendedor(cur)
     cur.execute(
-        """
+        f"""
         SELECT t.id, t.nome, t.slug, t.documento, t.ativo, t.plano,
                t.fornecedor_fundador_ativo, t.sistema_erp, t.fornecedor_fundador_em,
                t.fornecedor_fundador_obs, t.criado_em,
@@ -388,11 +391,11 @@ def listar_fundadores(cur) -> list[dict[str, Any]]:
                (SELECT COUNT(*)::int FROM tbl_produto p WHERE p.id_tenant = t.id) AS produtos_total,
                (SELECT COUNT(*)::int FROM tbl_pedido ped
                 WHERE ped.id_tenant_fornecedor = t.id
-                  AND COALESCE(ped.status_vendedor, ped.status, '') NOT IN ('rascunho', 'cancelado')
+                  AND COALESCE(ped.{col_st}, '') NOT IN ('rascunho', 'cancelado')
                ) AS pedidos_qtd,
                (SELECT MAX(ped.criado_em) FROM tbl_pedido ped
                 WHERE ped.id_tenant_fornecedor = t.id
-                  AND COALESCE(ped.status_vendedor, ped.status, '') NOT IN ('rascunho', 'cancelado')
+                  AND COALESCE(ped.{col_st}, '') NOT IN ('rascunho', 'cancelado')
                ) AS ultimo_pedido_em,
                (SELECT u.email FROM tbl_usuario_tenant ut
                 JOIN tbl_usuario u ON u.id = ut.id_usuario
