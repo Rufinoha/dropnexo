@@ -646,10 +646,12 @@ def api_meu_perfil_dados():
 def api_meu_perfil_salvar():
     dados = request.get_json(silent=True) or {}
     nome = (dados.get("nome") or "").strip()
-    whatsapp = (dados.get("whatsapp") or "").strip() or None
+    whatsapp_digitos = "".join(ch for ch in str(dados.get("whatsapp") or "") if ch.isdigit())
 
     if len(nome) < 2:
         return jsonify(success=False, message="Informe o nome."), 400
+    if len(whatsapp_digitos) < 10 or len(whatsapp_digitos) > 15:
+        return jsonify(success=False, message="Informe um WhatsApp válido com DDD."), 400
 
     conn = None
     cur = None
@@ -665,7 +667,7 @@ def api_meu_perfil_salvar():
             UPDATE tbl_usuario SET nome = %s, whatsapp = %s
             WHERE id = %s
             """,
-            (nome, whatsapp, id_usuario),
+            (nome, whatsapp_digitos, id_usuario),
         )
         conn.commit()
         # Em suporte, não altera o nome da sessão do DEV no shell.

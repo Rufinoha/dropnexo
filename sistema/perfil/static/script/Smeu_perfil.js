@@ -150,9 +150,16 @@
     ev.preventDefault();
     const nome = (document.getElementById("mp-nome").value || "").trim();
     const whatsapp = (document.getElementById("mp-whatsapp").value || "").trim();
+    const waDigitos = whatsapp.replace(/\D+/g, "");
 
     if (nome.length < 2) {
       if (typeof Swal !== "undefined") Swal.fire("Atenção", "Informe o nome.", "warning");
+      return;
+    }
+    if (waDigitos.length < 10 || waDigitos.length > 15) {
+      if (typeof Swal !== "undefined") {
+        Swal.fire("Atenção", "Informe um WhatsApp válido com DDD.", "warning");
+      }
       return;
     }
 
@@ -160,7 +167,7 @@
       const r = await fetch(cfg.apiSalvar, {
         method: "PUT",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ nome: nome, whatsapp: whatsapp || null }),
+        body: JSON.stringify({ nome: nome, whatsapp: waDigitos }),
       });
       const j = await r.json();
       if (!j.success) {

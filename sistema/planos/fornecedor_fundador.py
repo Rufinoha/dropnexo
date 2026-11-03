@@ -211,6 +211,17 @@ def atribuir_fundador(
             "vagas_restantes": 0,
         }
 
+    wa = contato_whatsapp_dono(cur, tid)
+    if len(wa) < 10:
+        return {
+            "ok": False,
+            "message": (
+                "O dono desta conta não tem WhatsApp cadastrado. "
+                "Peça para preencher em Meu perfil (ou informe o telefone comercial do tenant) "
+                "antes de ativar o Fundador."
+            ),
+        }
+
     erp = (sistema_erp or "").strip() or None
     nota = (obs or "").strip() or None
     cur.execute(
@@ -376,11 +387,46 @@ def listar_candidatos_fundador(cur) -> list[dict[str, Any]]:
     return out
 
 
+def _whatsapp_dono_sql() -> str:
+    """WhatsApp do dono (preferindo vínculo ativo) com fallback no telefone comercial do tenant."""
+    return """
+        COALESCE(
+          NULLIF(TRIM((
+            SELECT u.whatsapp
+            FROM tbl_usuario_tenant ut
+            JOIN tbl_usuario u ON u.id = ut.id_usuario
+            JOIN tbl_perfil pf ON pf.id = ut.id_perfil
+            WHERE ut.id_tenant = t.id
+              AND LOWER(COALESCE(pf.codigo, '')) = 'dono'
+            ORDER BY ut.ativo DESC NULLS LAST, ut.id
+            LIMIT 1
+          )), ''),
+          NULLIF(TRIM(COALESCE(t.telefone_comercial, '')), '')
+        )
+    """
+
+
+def contato_whatsapp_dono(cur, id_tenant: int) -> str:
+    """Retorna só dígitos do WhatsApp do dono (ou telefone comercial), se houver."""
+    cur.execute(
+        f"""
+        SELECT {_whatsapp_dono_sql()}
+        FROM tbl_tenant t
+        WHERE t.id = %s
+        """,
+        (int(id_tenant),),
+    )
+    row = cur.fetchone()
+    raw = (row[0] if row else "") or ""
+    return "".join(ch for ch in str(raw) if ch.isdigit())
+
+
 def listar_fundadores(cur) -> list[dict[str, Any]]:
     garantir_colunas_fundador(cur)
     from core.pedidos.servico import col_status_vendedor
 
     col_st = col_status_vendedor(cur)
+    wa_sql = _whatsapp_dono_sql()
     cur.execute(
         f"""
         SELECT t.id, t.nome, t.slug, t.documento, t.ativo, t.plano,
@@ -399,14 +445,12 @@ def listar_fundadores(cur) -> list[dict[str, Any]]:
                ) AS ultimo_pedido_em,
                (SELECT u.email FROM tbl_usuario_tenant ut
                 JOIN tbl_usuario u ON u.id = ut.id_usuario
-                JOIN tbl_perfil pf ON pf.id = ut.id_perfil AND pf.codigo = 'dono'
-                WHERE ut.id_tenant = t.id AND ut.ativo = TRUE
-                ORDER BY ut.id LIMIT 1) AS email_dono,
-               (SELECT u.whatsapp FROM tbl_usuario_tenant ut
-                JOIN tbl_usuario u ON u.id = ut.id_usuario
-                JOIN tbl_perfil pf ON pf.id = ut.id_perfil AND pf.codigo = 'dono'
-                WHERE ut.id_tenant = t.id AND ut.ativo = TRUE
-                ORDER BY ut.id LIMIT 1) AS whatsapp_dono
+                JOIN tbl_perfil pf ON pf.id = ut.id_perfil
+                WHERE ut.id_tenant = t.id
+                  AND LOWER(COALESCE(pf.codigo, '')) = 'dono'
+                ORDER BY ut.ativo DESC NULLS LAST, ut.id
+                LIMIT 1) AS email_dono,
+               ({wa_sql}) AS whatsapp_dono
         FROM tbl_tenant t
         WHERE t.eh_fornecedor_fundador = TRUE
           AND t.tipo_negocio IN ('fornecedor', 'hibrido')
