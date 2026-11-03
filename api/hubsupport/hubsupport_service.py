@@ -313,17 +313,18 @@ _NOME_CONTA = "COALESCE(NULLIF(TRIM(t.nome_fantasia), ''), NULLIF(TRIM(t.nome), 
 
 
 def _operador_suporte(cur, id_usuario: int, id_tenant: int) -> bool:
-    """Dono de fornecedor/híbrido com o interruptor ligado vê os chamados de todas as contas."""
+    """Dono de fornecedor/híbrido com o interruptor ligado vê os chamados de todas as contas.
+
+    Usa o banco (perfil + tipo do tenant + flag) como fonte de verdade — a sessão
+    sozinha falhava às vezes (perfil_codigo ausente / tipo desatualizado) e a lista
+    sumia para o operador.
+    """
     try:
         from flask import has_request_context
 
         if not has_request_context():
             return False
     except Exception:
-        return False
-    if (session.get("perfil_codigo") or "").strip().lower() != "dono":
-        return False
-    if (session.get("tenant_tipo_negocio") or "").strip().lower() not in ("fornecedor", "hibrido"):
         return False
     if int(session.get("id_tenant") or 0) != int(id_tenant):
         return False
@@ -332,8 +333,10 @@ def _operador_suporte(cur, id_usuario: int, id_tenant: int) -> bool:
         SELECT 1
         FROM tbl_usuario_tenant ut
         JOIN tbl_perfil p ON p.id = ut.id_perfil
+        JOIN tbl_tenant t ON t.id = ut.id_tenant
         WHERE ut.id_usuario = %s AND ut.id_tenant = %s AND ut.ativo = TRUE
           AND lower(p.codigo) = 'dono'
+          AND lower(COALESCE(t.tipo_negocio, '')) IN ('fornecedor', 'hibrido')
         LIMIT 1
         """,
         (int(id_usuario), int(id_tenant)),
@@ -407,7 +410,7 @@ def listar_chamados_tenant(
                    c.ultima_interacao_preview, c.criado_em, c.ultima_interacao_em,
                    c.atualizado_em, c.id_usuario, {_NOME_CONTA} AS tenant_nome
             FROM tbl_hubsupport_chamado c
-            JOIN tbl_tenant t ON t.id = c.id_tenant
+            LEFT JOIN tbl_tenant t ON t.id = c.id_tenant
             ORDER BY CASE
                        WHEN c.status = 'aguardando_suporte' THEN 0
                        WHEN c.status IN ('fechado', 'cancelado') THEN 2

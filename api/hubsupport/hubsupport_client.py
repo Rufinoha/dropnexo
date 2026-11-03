@@ -173,25 +173,17 @@ class HubSupportClient:
         )
 
     def fechar_chamado(self, chamado_external_id: str) -> Any:
-        """Encerra o chamado no HubSupport (status fechado)."""
+        """Encerra o chamado no HubSupport (POST …/fechar)."""
         from urllib.parse import quote
 
         ref = quote(chamado_external_id, safe="")
-        try:
-            return self.request(
-                "POST",
-                f"chamados/{ref}/fechar",
-                json_body={"status": "fechado"},
-            )
-        except HubSupportError as e:
-            # Fallback: algumas versões usam PATCH no recurso
-            if e.status_code not in (404, 405):
-                raise
-            return self.request(
-                "PATCH",
-                f"chamados/{ref}",
-                json_body={"status": "fechado"},
-            )
+        return self.request(
+            "POST",
+            f"chamados/{ref}/fechar",
+            json_body={"status": "fechado"},
+            timeout=20,
+            max_retries=2,
+        )
 
     def listar_anexos(self, chamado_ref: str | int) -> Any:
         from urllib.parse import quote
