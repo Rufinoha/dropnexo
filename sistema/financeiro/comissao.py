@@ -179,7 +179,11 @@ def comissao_menu_visivel(cur, id_tenant: int) -> bool:
 
 
 def registrar_comissao_fatura(cur, id_fatura: int) -> None:
-    """Gera o item no pagamento. Plano grátis e valor zero não entram. A mesma fatura conta uma vez."""
+    """Gera o item no pagamento (1x por fatura).
+
+    Critérios: pago, valor > 0, plano ≠ starter, vendedor com vínculo ativo ao
+    fornecedor comissionado ou a um indicado dele; %/config ativos no beneficiário.
+    """
     cur.execute(
         """
         SELECT id, id_tenant, valor_centavos, COALESCE(plano_slug, ''), status,
@@ -882,10 +886,34 @@ def _fatura_aberta_atual(cur, ids: list[int]) -> dict[int, dict]:
     return out
 
 
-def _backfill_comissoes_rede(cur, id_tenant: int, ids_vendedores: list[int]) -> None:
-    """Garante item de comissão para faturas já pagas da rede (sem quebrar o painel)."""
-    if not ids_vendedores:
-        return
+def _ids_vendedores_vinculados_rede(cur, id_tenant: int) -> list[int]:
+    """
+    Vendedores com vínculo ativo ao fornecedor ou a um indicado dele.
+    Inclui conta inativa: fatura paga da rede ainda deve gerar comissão.
+    """
+    rede = _ids_rede_fornecedores(cur, id_tenant)
+    cur.execute(
+        """
+        SELECT DISTINCT v.id_tenant_vendedor
+        FROM tbl_vinculo_vendedor_fornecedor v
+        WHERE v.status = 'ativo'
+          AND v.id_tenant_fornecedor = ANY(%s)
+        """,
+        (rede,),
+    )
+    return [int(r[0]) for r in cur.fetchall() if r and r[0]]
+
+
+def _backfill_comissoes_rede(cur, id_tenant: int, ids_vendedores: list[int] | None = None) -> int:
+    """Garante item de comissão para faturas já pagas da rede (próprios + indicados)."""
+    ids = list({int(x) for x in (ids_vendedores or []) if x})
+    for tid in _ids_vendedores_vinculados_rede(cur, id_tenant):
+        if tid not in ids:
+            ids.append(tid)
+    if not ids:
+        return 0
+
+    criados = {"n": 0}
 
     def _run():
         cur.execute(
@@ -900,19 +928,24 @@ def _backfill_comissoes_rede(cur, id_tenant: int, ids_vendedores: list[int]) -> 
                 SELECT 1 FROM tbl_comissao_item ci WHERE ci.id_fatura = f.id
               )
             ORDER BY f.id DESC
-            LIMIT 200
+            LIMIT 500
             """,
-            (ids_vendedores,),
+            (ids,),
         )
-        for (fid,) in cur.fetchall():
+        pendentes = [int(r[0]) for r in cur.fetchall()]
+        for fid in pendentes:
             _safe_cur(
                 cur,
                 f"backfill_fat_{fid}",
                 lambda fid=fid: registrar_comissao_fatura(cur, int(fid)),
                 None,
             )
+            cur.execute("SELECT 1 FROM tbl_comissao_item WHERE id_fatura = %s", (fid,))
+            if cur.fetchone():
+                criados["n"] += 1
 
     _safe_cur(cur, f"backfill_rede_{id_tenant}", _run, None)
+    return int(criados["n"])
 
 
 def _linhas_ciclo(cur, id_tenant: int, cfg: dict | None, ano: int, mes: int) -> tuple[list[dict], list[dict]]:
@@ -1086,6 +1119,15 @@ def painel_comissoes(
     pix = _safe_cur(
         cur, "pix", lambda: _pix_fornecedor(cur, id_tenant), {"ok": False, "tipo": "", "chave": ""}
     )
+
+    # Backfill antes de listar "Em aberto": fatura paga da rede (ativos ou não).
+    if cfg and cfg.get("ativo") and not pai:
+        _safe_cur(
+            cur,
+            f"backfill_antes_{id_tenant}",
+            lambda: _backfill_comissoes_rede(cur, id_tenant),
+            0,
+        )
 
     def _carregar_abertos():
         cur.execute(
