@@ -310,9 +310,14 @@
     box.innerHTML = meses
       .map((m) => {
         const pago = Number(m.pago_centavos || 0);
-        const hPago = Math.round((pago / max) * 100);
+        const hPago = Math.max(pago > 0 ? 8 : 0, Math.round((pago / max) * 100));
         const on = Number(m.mes) === filtroMes ? " is-sel" : "";
+        const valorTopo =
+          pago > 0
+            ? `<span class="Asf_BarValor">${esc(m.pago)}</span>`
+            : `<span class="Asf_BarValor is-zero">—</span>`;
         return `<button type="button" class="Asf_BarGroup${on}" data-mes="${esc(m.mes)}" title="${esc(m.mes_label)}: ${esc(m.pago)}">
+          ${valorTopo}
           <div class="Asf_Bars">
             <div class="Asf_Bar Asf_Bar--pago" style="height:${hPago}%"></div>
           </div>

@@ -769,38 +769,54 @@
 .Asf_Chart {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
-  gap: 8px;
+  gap: 10px;
   align-items: end;
-  min-height: 220px;
-  padding: 8px 4px 4px;
+  min-height: 260px;
+  padding: 12px 4px 4px;
   border-top: 1px solid #f1f5f9;
 }
 .Asf_BarGroup {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   border: none;
   background: transparent;
-  padding: 6px 2px;
+  padding: 8px 4px;
   cursor: pointer;
-  border-radius: 8px;
+  border-radius: 10px;
   min-width: 0;
 }
 .Asf_BarGroup:hover { background: #f8fafc; }
 .Asf_BarGroup.is-sel { background: #eef2ff; }
+.Asf_BarValor {
+  display: block;
+  width: 100%;
+  min-height: 2.1em;
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1.15;
+  color: #166534;
+  text-align: center;
+  white-space: normal;
+  word-break: break-word;
+}
+.Asf_BarValor.is-zero {
+  color: #cbd5e1;
+  font-weight: 600;
+}
 .Asf_Bars {
   display: flex;
   align-items: flex-end;
   justify-content: center;
   gap: 3px;
   width: 100%;
-  height: 160px;
+  height: 170px;
 }
 .Asf_Bar {
-  width: 10px;
+  width: min(42px, 72%);
   min-height: 2px;
-  border-radius: 4px 4px 2px 2px;
+  border-radius: 8px 8px 3px 3px;
   transition: height 0.2s ease;
 }
 .Asf_Bar--fat { background: #94a3b8; }
