@@ -156,6 +156,12 @@ def format_numero_pedido(id_tenant: int, seq: int) -> str:
     return f"{_pad_tenant_numero(id_tenant)}-{_pad_sequencia_pedido(seq)}"
 
 
+def _numero_grupo_temporario(id_vendedor: int) -> str:
+    """Placeholder de tbl_pedido_grupo.numero (VARCHAR 30) até o número real do pedido."""
+    suf = str(time.time_ns())[-12:]
+    return f"t{int(id_vendedor)}-{suf}"[:30]
+
+
 def _gerar_numero(cur, prefixo: str, id_tenant: int, tabela: str, col_tenant: str) -> str:
     """Legado (PED-/GRP-YYYY-NNNNN) — fallback se migração 070 não aplicada."""
     ano = datetime.now().year
@@ -1150,7 +1156,7 @@ def salvar_rascunho(
             INSERT INTO tbl_pedido_grupo (id_tenant_vendedor, numero)
             VALUES (%s, %s) RETURNING id
             """,
-            (id_vendedor, f"__novo_{id_vendedor}_{time.time_ns()}"),
+            (id_vendedor, _numero_grupo_temporario(id_vendedor)),
         )
         id_grupo = int(cur.fetchone()[0])
 

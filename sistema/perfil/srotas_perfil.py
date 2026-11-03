@@ -1588,6 +1588,9 @@ def api_cancelar_conta_concluir():
         row = cur.fetchone()
         if not row or int(row[0]) < 2:
             return jsonify(success=False, message="Conclua as etapas anteriores."), 400
+        from sistema.financeiro.cobranca import encerrar_billing_ao_cancelar_conta
+
+        encerrar_billing_ao_cancelar_conta(cur, int(id_tenant))
         cur.execute("UPDATE tbl_tenant SET ativo = FALSE WHERE id = %s", (id_tenant,))
         cur.execute(
             "UPDATE tbl_usuario_tenant SET ativo = FALSE WHERE id_tenant = %s",

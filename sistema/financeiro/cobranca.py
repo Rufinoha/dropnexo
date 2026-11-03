@@ -888,6 +888,27 @@ def emitir_fatura(
 
         if not efi_disponivel():
             raise RuntimeError("Efi não configurada no servidor (.env).")
+        # Persiste a intenção ANTES de cobrar na Efí. Se o worker morrer depois
+        # da autorização do cartão, o webhook ainda consegue abrir a fatura
+        # com o plano certo (caso Matias / charge sem fatura local).
+        garantir_cobranca_tenant(cur, id_tenant)
+        garantir_colunas_assinatura(cur)
+        cur.execute(
+            """
+            UPDATE tbl_tenant_cobranca
+            SET plano_slug_pendente = %s,
+                forma_pagamento = %s,
+                periodicidade = %s,
+                atualizado_em = NOW()
+            WHERE id_tenant = %s
+            """,
+            (plano_slug, forma, periodo, id_tenant),
+        )
+        try:
+            cur.connection.commit()
+        except Exception:
+            log.exception("Commit pré-Efí (intenção de assinatura) falhou tenant=%s", id_tenant)
+
         cob = _criar_cobranca_efi(
             cur,
             id_tenant=id_tenant,
@@ -906,6 +927,34 @@ def emitir_fatura(
             periodo=periodo,
             nome_plano=plano["nome"],
         )
+        # Espelha subscription/charge o quanto antes — se o INSERT da fatura
+        # falhar ou o processo morrer, o webhook ainda acha o tenant.
+        if cob.get("subscription_id") or cob.get("charge_id"):
+            cur.execute(
+                """
+                UPDATE tbl_tenant_cobranca
+                SET efi_subscription_id = COALESCE(%s, efi_subscription_id),
+                    efi_plan_id = COALESCE(%s, efi_plan_id),
+                    assinatura_status = CASE
+                        WHEN %s IS NOT NULL THEN 'ativa'
+                        ELSE assinatura_status
+                    END,
+                    cancelado_em = CASE WHEN %s IS NOT NULL THEN NULL ELSE cancelado_em END,
+                    atualizado_em = NOW()
+                WHERE id_tenant = %s
+                """,
+                (
+                    str(cob["subscription_id"]) if cob.get("subscription_id") else None,
+                    str(cob["plan_id"]) if cob.get("plan_id") else None,
+                    str(cob["subscription_id"]) if cob.get("subscription_id") else None,
+                    str(cob["subscription_id"]) if cob.get("subscription_id") else None,
+                    id_tenant,
+                ),
+            )
+            try:
+                cur.connection.commit()
+            except Exception:
+                log.exception("Commit pós-Efí (subscription) falhou tenant=%s", id_tenant)
 
     status_ini = "pago" if cortesia or (forma == "cartao" and cob.get("pago")) else "pendente"
     cur.execute(
@@ -1906,7 +1955,7 @@ def aplicar_pagamento_fatura(
 
 
 def _mapa_status_efi_local(status: str) -> str:
-    s = (status or "").lower()
+    s = (status or "").lower().strip()
     return {
         "paid": "pago",
         "settled": "pago",
@@ -1914,12 +1963,102 @@ def _mapa_status_efi_local(status: str) -> str:
         "waiting": "pendente",
         "unpaid": "pendente",
         "pending": "pendente",
+        "new": "pendente",
+        "waiting_payment": "pendente",
+        "identified": "pendente",
         "expired": "vencido",
         "canceled": "cancelado",
         "cancelled": "cancelado",
+        "refunded": "cancelado",
+        "refund": "cancelado",
+        "partially_refunded": "cancelado",
+        "chargeback": "cancelado",
+        "charged_back": "cancelado",
         "concluida": "pago",
         "ativa": "pendente",
+        "removida_pelo_usuario_recebedor": "cancelado",
     }.get(s, "pendente")
+
+
+def _eh_estorno_efi(status: str) -> bool:
+    """Chargeback / reembolso Efí (fatura local precisa sair de pago)."""
+    s = (status or "").lower().strip()
+    return s in {
+        "refunded",
+        "refund",
+        "partially_refunded",
+        "chargeback",
+        "charged_back",
+    }
+
+
+def aplicar_estorno_fatura(
+    cur,
+    id_fatura: int,
+    *,
+    origem: str = "webhook",
+    status_efi: str | None = None,
+) -> dict:
+    """Marca fatura como cancelado após estorno e rebaixa o plano se não houver pagamento mais novo."""
+    cur.execute(
+        "SELECT id, id_tenant, status FROM tbl_fatura WHERE id = %s",
+        (id_fatura,),
+    )
+    row = cur.fetchone()
+    if not row:
+        return {"ok": False, "message": "Fatura não encontrada."}
+    fid, tid, st = int(row[0]), int(row[1]), (row[2] or "").strip().lower()
+    if st == "cancelado":
+        return {"ok": True, "status": "cancelado", "id_fatura": fid, "ja_estornada": True}
+
+    cur.execute(
+        """
+        UPDATE tbl_fatura
+        SET status = 'cancelado', atualizado_em = NOW()
+        WHERE id = %s
+        """,
+        (fid,),
+    )
+    registrar_efi_log(
+        cur,
+        id_tenant=tid,
+        id_fatura=fid,
+        direcao="in",
+        operacao="estorno_fatura",
+        ok=True,
+        response_resumo={
+            "origem": origem,
+            "status_anterior": st,
+            "status_efi": status_efi,
+        },
+    )
+
+    rebaixou = False
+    if st in ("pago", "bloqueado"):
+        _encerrar_assinatura_efi(cur, tid)
+        cur.execute(
+            """
+            SELECT id FROM tbl_fatura
+            WHERE id_tenant = %s
+              AND status IN ('pago', 'bloqueado')
+              AND id <> %s
+            ORDER BY COALESCE(pago_em, criado_em) DESC NULLS LAST, id DESC
+            LIMIT 1
+            """,
+            (tid, fid),
+        )
+        if not cur.fetchone():
+            rebaixar_tenant_starter(cur, tid, id_fatura=fid)
+            rebaixou = True
+
+    return {
+        "ok": True,
+        "status": "cancelado",
+        "id_fatura": fid,
+        "id_tenant": tid,
+        "rebaixou": rebaixou,
+        "origem": origem,
+    }
 
 
 def _fatura_do_custom(cur, payload: dict):
@@ -1953,11 +2092,91 @@ def _tenant_do_aviso(cur, payload: dict) -> int | None:
     return int(row[0]) if row else None
 
 
-def _abrir_fatura_de_aviso(cur, id_tenant: int, charge_id: str) -> int | None:
-    """Grava a cobrança que a Efí emitiu sozinha no ciclo seguinte."""
+def _inferir_plano_de_cobranca_efi(cur, raw: dict | None, valor_centavos: int | None = None) -> str | None:
+    """Descobre o plano pago a partir do item/valor da cobrança Efí (não confia no starter local)."""
+    data = raw if isinstance(raw, dict) else {}
+    items = data.get("items") if isinstance(data.get("items"), list) else []
+    nome = ""
+    if items and isinstance(items[0], dict):
+        nome = str(items[0].get("name") or "").strip().lower()
+        if valor_centavos is None:
+            try:
+                valor_centavos = int(items[0].get("value") or 0)
+            except Exception:
+                valor_centavos = None
+    # Nome no item: "DropNexo — Crescer · Mensal (...)"
+    mapa_nome = {
+        "crescer": "professional",
+        "escalar": "scale",
+        "pro": "enterprise",
+        "professional": "professional",
+        "scale": "scale",
+        "enterprise": "enterprise",
+    }
+    for chave, slug in mapa_nome.items():
+        if chave in nome:
+            return slug
+    if valor_centavos is not None:
+        cur.execute(
+            """
+            SELECT slug FROM tbl_plano
+            WHERE ativo = TRUE AND valor_centavos = %s AND slug = ANY(%s)
+            ORDER BY id LIMIT 1
+            """,
+            (int(valor_centavos), list(PLANOS_PAGOS)),
+        )
+        row = cur.fetchone()
+        if row:
+            return str(row[0])
+    return None
+
+
+def _garantir_indice_charge_unico(cur) -> None:
+    """Uma charge Efí = no máximo uma fatura local (recorrência e adesão)."""
+    try:
+        cur.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS uq_fatura_efi_charge_id
+            ON tbl_fatura (efi_charge_id)
+            WHERE efi_charge_id IS NOT NULL AND btrim(efi_charge_id) <> ''
+            """
+        )
+    except Exception:
+        log.exception("Índice único efi_charge_id")
+
+
+def _abrir_fatura_de_aviso(
+    cur,
+    id_tenant: int,
+    charge_id: str,
+    *,
+    payload: dict | None = None,
+) -> int | None:
+    """Caminho normal da recorrência: a Efí gera a charge e o DropNexo espelha a fatura.
+
+    Também cobre adesão em que o cartão passou na Efí e o commit local falhou.
+    """
+    charge_id = str(charge_id or "").strip()
+    if not charge_id:
+        return None
+    _garantir_indice_charge_unico(cur)
     cur.execute(
         """
-        SELECT COALESCE(NULLIF(plano_slug, ''), 'professional'),
+        SELECT id FROM tbl_fatura
+        WHERE efi_charge_id = %s
+        ORDER BY id DESC LIMIT 1
+        """,
+        (charge_id,),
+    )
+    ja = cur.fetchone()
+    if ja:
+        return int(ja[0])
+
+    garantir_cobranca_tenant(cur, id_tenant)
+    garantir_colunas_assinatura(cur)
+    cur.execute(
+        """
+        SELECT COALESCE(NULLIF(plano_slug_pendente, ''), NULLIF(plano_slug, ''), ''),
                COALESCE(NULLIF(forma_pagamento, ''), 'boleto'),
                COALESCE(NULLIF(periodicidade, ''), 'mensal')
         FROM tbl_tenant_cobranca
@@ -1968,56 +2187,121 @@ def _abrir_fatura_de_aviso(cur, id_tenant: int, charge_id: str) -> int | None:
     tc = cur.fetchone()
     if not tc:
         return None
-    plano_slug, forma, periodo = tc[0], tc[1], tc[2]
-    plano = obter_plano_db(cur, plano_slug) or {}
-    valor = int(plano.get("valor_centavos") or 0)
+    plano_slug = (tc[0] or "").strip().lower()
+    forma, periodo = tc[1], tc[2]
+    plano = obter_plano_db(cur, plano_slug) if plano_slug in PLANOS_PAGOS else {}
+    valor = int((plano or {}).get("valor_centavos") or 0)
     venc = date.today() if (forma or "").lower() == "cartao" else date.today() + timedelta(days=10)
     link = None
+    sub_id = str((payload or {}).get("subscription_id") or "").strip()
+    plan_id_efi = ""
+    raw: dict = {}
     try:
         from api.efi.efi import consultar_cobranca
 
         det = consultar_cobranca(charge_id)
-        raw = det.get("raw") or {}
+        raw = det.get("raw") if isinstance(det.get("raw"), dict) else {}
         payment = raw.get("payment") if isinstance(raw.get("payment"), dict) else {}
+        method = str(payment.get("method") or "").strip().lower()
+        if method in ("credit_card", "card", "cartao"):
+            forma = "cartao"
         billet = payment.get("banking_billet") if isinstance(payment.get("banking_billet"), dict) else {}
         exp = billet.get("expire_at") or raw.get("expire_at")
         if exp:
             venc = date.fromisoformat(str(exp)[:10])
         pdf = billet.get("pdf") if isinstance(billet.get("pdf"), dict) else {}
         link = billet.get("link") or billet.get("billet_link") or pdf.get("charge")
-        total = raw.get("total") or raw.get("value")
+        total = raw.get("total") or raw.get("value") or raw.get("paid_value")
         if total is not None and str(total).isdigit():
             valor = int(total)
+        inferido = _inferir_plano_de_cobranca_efi(cur, raw, valor)
+        if inferido:
+            plano_slug = inferido
+        sub_bloco = raw.get("subscription") if isinstance(raw.get("subscription"), dict) else {}
+        if not sub_id:
+            sub_id = str(sub_bloco.get("subscription_id") or raw.get("subscription_id") or "").strip()
+        plan_id_efi = str(sub_bloco.get("plan_id") or "").strip()
     except Exception:
         log.exception("Detalhe da cobrança Efí %s indisponível", charge_id)
-    ref = referencia_assinatura(periodo, venc)
-    cur.execute(
-        """
-        INSERT INTO tbl_fatura (
-            id_tenant, referencia, valor_centavos, status, forma_pagamento, plano_slug,
-            efi_charge_id, link_boleto, vencimento_em, atualizado_em,
-            periodicidade, meses_cobertos
-        ) VALUES (
-            %s, %s, %s, 'pendente', %s, %s,
-            %s, %s, %s, NOW(),
-            %s, %s
+
+    if plano_slug not in PLANOS_PAGOS:
+        # Sem plano pago conhecido: não inventa starter — tenta professional como fallback seguro
+        # só se o valor cobrado bate com algum plano; senão aborta.
+        inferido = _inferir_plano_de_cobranca_efi(cur, raw, valor if valor else None)
+        if not inferido:
+            log.error(
+                "Webhook Efí charge=%s tenant=%s sem plano pago identificável (local=%s valor=%s)",
+                charge_id,
+                id_tenant,
+                plano_slug,
+                valor,
+            )
+            return None
+        plano_slug = inferido
+
+    if sub_id:
+        cur.execute(
+            """
+            UPDATE tbl_tenant_cobranca
+            SET efi_subscription_id = COALESCE(NULLIF(efi_subscription_id, ''), %s),
+                efi_plan_id = COALESCE(NULLIF(efi_plan_id, ''), NULLIF(%s, '')),
+                assinatura_status = COALESCE(NULLIF(assinatura_status, ''), 'ativa'),
+                forma_pagamento = %s,
+                plano_slug_pendente = COALESCE(NULLIF(plano_slug_pendente, ''), %s),
+                atualizado_em = NOW()
+            WHERE id_tenant = %s
+            """,
+            (sub_id, plan_id_efi, forma, plano_slug, id_tenant),
         )
-        RETURNING id
-        """,
-        (
-            id_tenant,
-            ref,
-            valor,
-            forma,
-            plano_slug,
-            charge_id,
-            link,
-            venc,
-            periodo,
-            _intervalo_meses(periodo),
-        ),
-    )
-    return int(cur.fetchone()[0])
+
+    ref = referencia_assinatura(periodo, venc)
+    cur.execute("SAVEPOINT sp_abrir_fatura_aviso")
+    try:
+        cur.execute(
+            """
+            INSERT INTO tbl_fatura (
+                id_tenant, referencia, valor_centavos, status, forma_pagamento, plano_slug,
+                efi_charge_id, link_boleto, vencimento_em, atualizado_em,
+                periodicidade, meses_cobertos
+            ) VALUES (
+                %s, %s, %s, 'pendente', %s, %s,
+                %s, %s, %s, NOW(),
+                %s, %s
+            )
+            RETURNING id
+            """,
+            (
+                id_tenant,
+                ref,
+                valor,
+                forma,
+                plano_slug,
+                charge_id,
+                link,
+                venc,
+                periodo,
+                _intervalo_meses(periodo),
+            ),
+        )
+        fid = int(cur.fetchone()[0])
+        cur.execute("RELEASE SAVEPOINT sp_abrir_fatura_aviso")
+        return fid
+    except Exception as e:
+        # Webhook duplicado / corrida: já existe fatura para esta charge.
+        msg = str(e).lower()
+        try:
+            cur.execute("ROLLBACK TO SAVEPOINT sp_abrir_fatura_aviso")
+        except Exception:
+            pass
+        if "uq_fatura_efi_charge_id" in msg or "unique" in msg or "duplicate" in msg:
+            cur.execute(
+                "SELECT id FROM tbl_fatura WHERE efi_charge_id = %s ORDER BY id DESC LIMIT 1",
+                (charge_id,),
+            )
+            row = cur.fetchone()
+            if row:
+                return int(row[0])
+        raise
 
 
 def processar_webhook_efi(cur, payload: dict) -> dict:
@@ -2101,10 +2385,35 @@ def processar_webhook_efi(cur, payload: dict) -> dict:
     if not row:
         id_tenant_aviso = _tenant_do_aviso(cur, payload)
         if not id_tenant_aviso:
-            return {"ok": True, "ignorado": True, "charge_id": charge_id}
-        novo_id = _abrir_fatura_de_aviso(cur, id_tenant_aviso, charge_id)
+            registrar_efi_log(
+                cur,
+                id_tenant=None,
+                id_fatura=None,
+                direcao="in",
+                operacao="webhook_sem_tenant",
+                ok=False,
+                efi_charge_id=charge_id,
+                response_resumo={"payload": payload},
+            )
+            return {"ok": False, "message": "Cobrança sem tenant local.", "charge_id": charge_id}
+        novo_id = _abrir_fatura_de_aviso(cur, id_tenant_aviso, charge_id, payload=payload)
         if not novo_id:
-            return {"ok": True, "ignorado": True, "charge_id": charge_id}
+            registrar_efi_log(
+                cur,
+                id_tenant=id_tenant_aviso,
+                id_fatura=None,
+                direcao="in",
+                operacao="webhook_fatura_nao_aberta",
+                ok=False,
+                efi_charge_id=charge_id,
+                response_resumo={"motivo": "nao foi possivel abrir fatura local", "payload": payload},
+            )
+            return {
+                "ok": False,
+                "message": "Não foi possível abrir fatura local para a cobrança Efí.",
+                "charge_id": charge_id,
+                "id_tenant": id_tenant_aviso,
+            }
         cur.execute(
             "SELECT id, id_tenant, status FROM tbl_fatura WHERE id = %s",
             (novo_id,),
@@ -2134,6 +2443,11 @@ def processar_webhook_efi(cur, payload: dict) -> dict:
         efi_charge_id=charge_id,
         response_resumo={"status": novo, "status_atual": st_atual},
     )
+
+    if _eh_estorno_efi(str(status_raw)):
+        return aplicar_estorno_fatura(
+            cur, id_fatura, origem="webhook", status_efi=str(status_raw)
+        )
 
     if novo == "pago":
         # Não sobrescreve MED (pago bloqueado) — o sync de infrações gerencia isso.
@@ -2207,6 +2521,13 @@ def sincronizar_fatura_com_efi(cur, id_fatura: int) -> dict:
         response_resumo={"status_efi": status_efi, "status_local": status_local, "pago_em": str(pago_dt or "")},
     )
 
+    if _eh_estorno_efi(status_efi):
+        out = aplicar_estorno_fatura(
+            cur, fid, origem="sync_efi", status_efi=status_efi or status_local
+        )
+        out.update({"status_efi": status_efi, "alterado": True})
+        return out
+
     if status_local == "pago":
         if st_atual in ("pago", "bloqueado"):
             if pago_dt and st_atual == "pago":
@@ -2252,6 +2573,65 @@ def sincronizar_fatura_com_efi(cur, id_fatura: int) -> dict:
         "status": status_local,
         "status_efi": status_efi,
         "alterado": st_atual != status_local,
+    }
+
+
+def reconciliar_cobrancas_efi_orfas(cur, *, dias: int = 14, limite: int = 40) -> dict:
+    """Reprocessa charges Efí que chegaram no webhook sem fatura local (recorrência).
+
+    Fonte: tbl_efi_log com charge_id + custom_id tn-* ou subscription_id conhecida.
+    """
+    garantir_colunas_assinatura(cur)
+    _garantir_indice_charge_unico(cur)
+    dias = max(1, min(60, int(dias or 14)))
+    limite = max(1, min(100, int(limite or 40)))
+    cur.execute(
+        """
+        SELECT DISTINCT ON (efi_charge_id)
+               efi_charge_id, request_resumo
+        FROM tbl_efi_log
+        WHERE criado_em >= NOW() - (%s || ' days')::interval
+          AND COALESCE(efi_charge_id, '') ~ '^[0-9]+$'
+          AND operacao IN ('webhook', 'webhook_fatura_nao_aberta', 'webhook_sem_tenant')
+        ORDER BY efi_charge_id, id DESC
+        LIMIT %s
+        """,
+        (str(dias), limite * 3),
+    )
+    candidatos = []
+    for charge, raw in cur.fetchall():
+        charge = str(charge or "").strip()
+        if not charge:
+            continue
+        cur.execute("SELECT 1 FROM tbl_fatura WHERE efi_charge_id = %s LIMIT 1", (charge,))
+        if cur.fetchone():
+            continue
+        payload = raw if isinstance(raw, dict) else {}
+        if not payload.get("charge_id"):
+            payload = {**payload, "charge_id": charge}
+        if not payload.get("custom_id") and not payload.get("subscription_id"):
+            continue
+        candidatos.append(payload)
+        if len(candidatos) >= limite:
+            break
+
+    ok = 0
+    falhas = []
+    for payload in candidatos:
+        try:
+            out = processar_webhook_efi(cur, payload)
+            if out.get("ok") and not out.get("ignorado"):
+                ok += 1
+            elif not out.get("ok"):
+                falhas.append({"charge_id": payload.get("charge_id"), "message": out.get("message")})
+        except Exception as e:
+            falhas.append({"charge_id": payload.get("charge_id"), "message": str(e)})
+            log.exception("reconciliar charge %s", payload.get("charge_id"))
+    return {
+        "ok": True,
+        "candidatos": len(candidatos),
+        "recuperados": ok,
+        "falhas": falhas[:20],
     }
 
 
@@ -2304,7 +2684,9 @@ def sincronizar_cobrancas_efi_abertas(
     }
 
 
-def rebaixar_tenant_starter(cur, id_tenant: int, *, id_fatura: int | None = None) -> None:
+def rebaixar_tenant_starter(
+    cur, id_tenant: int, *, id_fatura: int | None = None, notificar: bool = True
+) -> None:
     cur.execute("UPDATE tbl_tenant SET plano = 'starter' WHERE id = %s", (id_tenant,))
     cur.execute(
         """
@@ -2319,16 +2701,51 @@ def rebaixar_tenant_starter(cur, id_tenant: int, *, id_fatura: int | None = None
             "UPDATE tbl_fatura SET rebaixado_em = NOW(), atualizado_em = NOW() WHERE id = %s",
             (id_fatura,),
         )
+    if not notificar:
+        return
     fat = obter_fatura(cur, id_tenant, id_fatura) if id_fatura else None
     if fat:
         _enviar_email_fatura(cur, id_tenant, fat, tipo="rebaixado")
+
+
+def encerrar_billing_ao_cancelar_conta(cur, id_tenant: int) -> None:
+    """Ao encerrar a conta: cancela recorrência Efí, faturas abertas e volta ao Explorar."""
+    garantir_colunas_assinatura(cur)
+    _encerrar_assinatura_efi(cur, id_tenant)
+    cur.execute(
+        """
+        UPDATE tbl_fatura
+        SET status = 'cancelado', atualizado_em = NOW()
+        WHERE id_tenant = %s AND status IN ('pendente', 'vencido')
+        """,
+        (id_tenant,),
+    )
+    rebaixar_tenant_starter(cur, id_tenant, notificar=False)
+    cur.execute(
+        """
+        UPDATE tbl_tenant_cobranca
+        SET assinatura_status = 'cancelada',
+            cancelado_em = COALESCE(cancelado_em, NOW()),
+            atualizado_em = NOW()
+        WHERE id_tenant = %s
+        """,
+        (id_tenant,),
+    )
 
 
 def job_financeiro_diario(cur) -> dict:
     """Marca vencidas, avisa atraso e, 30 dias após o vencimento, cancela a recorrência."""
     hoje = date.today()
     garantir_colunas_assinatura(cur)
-    res = {"vencidas": 0, "avisos": 0, "rebaixados": 0, "renovacoes": 0, "erros": [], "sync_efi": {}}
+    res = {
+        "vencidas": 0,
+        "avisos": 0,
+        "rebaixados": 0,
+        "renovacoes": 0,
+        "erros": [],
+        "sync_efi": {},
+        "reconciliar_orfas": {},
+    }
 
     # Espelha pagamentos Efí que o webhook possa ter perdido (boleto/cartão).
     try:
@@ -2336,6 +2753,13 @@ def job_financeiro_diario(cur) -> dict:
     except Exception as e:
         res["erros"].append(f"sync_efi: {e}")
         log.exception("job diario sync efi")
+
+    # Recorrência: charges que nasceram na Efí e não viraram fatura local.
+    try:
+        res["reconciliar_orfas"] = reconciliar_cobrancas_efi_orfas(cur, dias=14, limite=40)
+    except Exception as e:
+        res["erros"].append(f"reconciliar_orfas: {e}")
+        log.exception("job diario reconciliar orfas")
 
     cur.execute(
         """

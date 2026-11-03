@@ -692,6 +692,11 @@ def consultar_cobranca(charge_id: str) -> dict:
         "expired": "vencido",
         "canceled": "cancelado",
         "cancelled": "cancelado",
+        "refunded": "cancelado",
+        "refund": "cancelado",
+        "partially_refunded": "cancelado",
+        "chargeback": "cancelado",
+        "charged_back": "cancelado",
     }
     return {
         "status": mapa.get(status, "pendente"),
