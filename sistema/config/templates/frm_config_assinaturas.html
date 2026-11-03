@@ -3,7 +3,7 @@
 {% set nav_ativo = 'config' %}
 {% block topbar_title %}Assinaturas e faturamento{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_assinaturas.css') }}?v=16" />
+<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_assinaturas.css') }}?v=17" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal Asf_Wrap">
@@ -11,8 +11,8 @@
     <div>
       <h2>Assinaturas e faturamento</h2>
       <p class="cl-page-desc">
-        Visão do dono da plataforma: assinantes, inadimplência, conciliação Efí
-        (caixa), faturamento por competência e notas fiscais das cobranças pagas.
+        Visão do dono da plataforma: pagamentos, notas fiscais, assinantes ativos,
+        inadimplência, bloqueios MED, conciliação Efí e cancelamentos do mês.
       </p>
     </div>
     <button type="button" class="Cl_BtnCancelar" id="asf_btnAtualizar">Atualizar</button>
@@ -23,22 +23,23 @@
   </p>
 
   <nav class="Asf_Tabs" role="tablist" aria-label="Seções do painel">
-    <button type="button" class="Asf_Tab is-active" data-tab="ativas" role="tab" aria-selected="true">Ativas</button>
+    <button type="button" class="Asf_Tab is-active" data-tab="faturamento" role="tab" aria-selected="true">Faturamento</button>
+    <button type="button" class="Asf_Tab" data-tab="nota-fiscal" role="tab" aria-selected="false">Nota fiscal</button>
+    <button type="button" class="Asf_Tab" data-tab="ativos" role="tab" aria-selected="false">Ativos</button>
     <button type="button" class="Asf_Tab" data-tab="inadimplencia" role="tab" aria-selected="false">Inadimplência</button>
     <button type="button" class="Asf_Tab" data-tab="bloqueados" role="tab" aria-selected="false">Bloqueados</button>
     <button type="button" class="Asf_Tab" data-tab="conciliacao" role="tab" aria-selected="false">Conciliação Efí</button>
-    <button type="button" class="Asf_Tab" data-tab="faturamento" role="tab" aria-selected="false">Faturamento</button>
-    <button type="button" class="Asf_Tab" data-tab="nota-fiscal" role="tab" aria-selected="false">Nota fiscal</button>
+    <button type="button" class="Asf_Tab" data-tab="cancelados" role="tab" aria-selected="false">Cancelados</button>
   </nav>
 
   <p class="Asf_Status" id="asf_status">Carregando…</p>
 
-  <section class="Asf_Panel is-active" id="asf_tab_ativas" data-tab-panel="ativas" role="tabpanel">
+  <section class="Asf_Panel" id="asf_tab_ativos" data-tab-panel="ativos" role="tabpanel" hidden>
     <div class="Asf_Kpis" id="asf_ativas_kpis"></div>
     <div class="Asf_Card">
       <div class="Asf_CardHead">
-        <h3>Assinantes ativos</h3>
-        <span class="Asf_Hint" id="asf_ativas_hint">—</span>
+        <h3>Planos ativos (contam no MRR)</h3>
+        <span class="Asf_Hint" id="asf_ativas_hint">Cupom abaixo de 100% e planos pagos</span>
       </div>
       <div class="Asf_Filtros Asf_Filtros--linha">
         <div class="form-campo">
@@ -69,8 +70,8 @@
     </div>
     <div class="Asf_Card">
       <div class="Asf_CardHead">
-        <h3>Quem cancelou o plano</h3>
-        <span class="Asf_Hint" id="asf_cancel_hint">Recorrência encerrada. O período já pago segue até o fim.</span>
+        <h3>Cortesia / cupom 100%</h3>
+        <span class="Asf_Hint" id="asf_cortesia_hint">Não entram no MRR nem na provisão</span>
       </div>
       <div class="Asf_TabelaWrap">
         <table class="Asf_Tabela">
@@ -78,12 +79,17 @@
             <tr>
               <th>Tenant</th>
               <th>Plano</th>
-              <th>Cancelado em</th>
-              <th>Efí</th>
+              <th>Ciclo</th>
+              <th>Forma</th>
+              <th>Valor</th>
+              <th>Benefício</th>
+              <th>Data adesão</th>
+              <th>Próx. cobrança</th>
+              <th class="Asf_ColAcoes">Ações</th>
             </tr>
           </thead>
-          <tbody id="asf_cancel_tbody">
-            <tr><td colspan="4" class="Asf_Empty">Carregando…</td></tr>
+          <tbody id="asf_cortesia_tbody">
+            <tr><td colspan="9" class="Asf_Empty">Carregando…</td></tr>
           </tbody>
         </table>
       </div>
@@ -260,7 +266,7 @@
     </div>
   </section>
 
-  <section class="Asf_Panel" id="asf_tab_faturamento" data-tab-panel="faturamento" role="tabpanel" hidden>
+  <section class="Asf_Panel is-active" id="asf_tab_faturamento" data-tab-panel="faturamento" role="tabpanel">
     <div class="Asf_Filtros">
       <div class="form-campo">
         <label for="asf_mes">Mês (competência)</label>
@@ -284,8 +290,8 @@
         <select id="asf_ano"></select>
       </div>
       <p class="Asf_FiltroHint">
-        Competência = mês do <strong>vencimento</strong> da fatura.
-        Assim o boleto que vence em agosto entra em agosto (mesmo se emitido em julho).
+        Só <strong>pagamentos</strong>. Competência = mês do <strong>vencimento</strong> da fatura.
+        Em aberto, bloqueados e cancelados ficam nas outras abas.
       </p>
     </div>
 
@@ -293,42 +299,31 @@
 
     <div class="Asf_Card">
       <div class="Asf_CardHead">
-        <h3>Ano <span id="asf_graf_ano">—</span> — Faturado × Pago</h3>
+        <h3>Ano <span id="asf_graf_ano">—</span> — Pagamentos</h3>
         <span class="Asf_Hint" id="asf_graf_hint">Por mês de vencimento</span>
       </div>
       <div class="Asf_Legenda">
-        <span class="Asf_LegendaItem"><i class="Asf_Dot Asf_Dot--fat"></i> Faturado (emitido)</span>
-        <span class="Asf_LegendaItem"><i class="Asf_Dot Asf_Dot--pago"></i> Faturado e pago</span>
+        <span class="Asf_LegendaItem"><i class="Asf_Dot Asf_Dot--pago"></i> Pago</span>
       </div>
-      <div class="Asf_Chart" id="asf_chart" aria-label="Gráfico anual faturado versus pago"></div>
+      <div class="Asf_Chart" id="asf_chart" aria-label="Gráfico anual de pagamentos"></div>
     </div>
 
     <div class="Asf_Card">
       <div class="Asf_CardHead">
-        <h3>Cobranças emitidas do mês</h3>
-        <span class="Asf_Hint" id="asf_emitidas_hint">Todas as faturas da competência selecionada</span>
+        <h3>Pagamentos do mês</h3>
+        <span class="Asf_Hint" id="asf_emitidas_hint">Faturas pagas na competência selecionada</span>
       </div>
       <div class="Asf_Filtros Asf_Filtros--linha">
         <div class="form-campo">
           <label for="asf_fat_busca">Buscar nome</label>
           <input type="search" id="asf_fat_busca" placeholder="Tenant…" autocomplete="off" />
         </div>
-        <div class="form-campo">
-          <label for="asf_fat_status">Status</label>
-          <select id="asf_fat_status">
-            <option value="">Todos</option>
-            <option value="pago">Pago</option>
-            <option value="aberto">Em aberto</option>
-            <option value="bloqueado">Bloqueado</option>
-            <option value="cancelado">Cancelada</option>
-          </select>
-        </div>
       </div>
       <div class="Asf_TabelaWrap">
         <table class="Asf_Tabela">
           <thead>
             <tr>
-              <th>Vencimento</th>
+              <th>Pago em</th>
               <th>Tenant</th>
               <th>Plano</th>
               <th>Ref.</th>
@@ -340,6 +335,80 @@
           </thead>
           <tbody id="asf_emitidas_tbody">
             <tr><td colspan="8" class="Asf_Empty">Carregando…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="Asf_Panel" id="asf_tab_cancelados" data-tab-panel="cancelados" role="tabpanel" hidden>
+    <div class="Asf_Filtros">
+      <div class="form-campo">
+        <label for="asf_mes_cancel">Mês</label>
+        <select id="asf_mes_cancel">
+          <option value="1">Janeiro</option>
+          <option value="2">Fevereiro</option>
+          <option value="3">Março</option>
+          <option value="4">Abril</option>
+          <option value="5">Maio</option>
+          <option value="6">Junho</option>
+          <option value="7">Julho</option>
+          <option value="8">Agosto</option>
+          <option value="9">Setembro</option>
+          <option value="10">Outubro</option>
+          <option value="11">Novembro</option>
+          <option value="12">Dezembro</option>
+        </select>
+      </div>
+      <div class="form-campo">
+        <label for="asf_ano_cancel">Ano</label>
+        <select id="asf_ano_cancel"></select>
+      </div>
+      <p class="Asf_FiltroHint">
+        Planos e cobranças <strong>cancelados no mês</strong> selecionado.
+      </p>
+    </div>
+    <div class="Asf_Kpis" id="asf_cancel_kpis"></div>
+    <div class="Asf_Card">
+      <div class="Asf_CardHead">
+        <h3>Planos cancelados no mês</h3>
+        <span class="Asf_Hint" id="asf_cancel_planos_hint">—</span>
+      </div>
+      <div class="Asf_TabelaWrap">
+        <table class="Asf_Tabela">
+          <thead>
+            <tr>
+              <th>Tenant</th>
+              <th>Plano</th>
+              <th>Cancelado em</th>
+              <th>Efí</th>
+            </tr>
+          </thead>
+          <tbody id="asf_cancel_planos_tbody">
+            <tr><td colspan="4" class="Asf_Empty">Carregando…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="Asf_Card">
+      <div class="Asf_CardHead">
+        <h3>Cobranças canceladas no mês</h3>
+        <span class="Asf_Hint" id="asf_cancel_cob_hint">—</span>
+      </div>
+      <div class="Asf_TabelaWrap">
+        <table class="Asf_Tabela">
+          <thead>
+            <tr>
+              <th>Cancelado em</th>
+              <th>Tenant</th>
+              <th>Plano</th>
+              <th>Ref.</th>
+              <th>Forma</th>
+              <th>Valor</th>
+            </tr>
+          </thead>
+          <tbody id="asf_cancel_cob_tbody">
+            <tr><td colspan="6" class="Asf_Empty">Carregando…</td></tr>
           </tbody>
         </table>
       </div>
@@ -463,5 +532,5 @@
   "apiAnexarNf": url_for("config.assinaturas_faturamento_pagina") ~ "/fatura/",
   "apiBaixarNf": url_for("config.assinaturas_faturamento_pagina") ~ "/fatura/"
 } | tojson }}</script>
-<script defer src="{{ url_for('config.static', filename='script/Sconfig_assinaturas.js') }}?v=16"></script>
+<script defer src="{{ url_for('config.static', filename='script/Sconfig_assinaturas.js') }}?v=17"></script>
 {% endblock %}

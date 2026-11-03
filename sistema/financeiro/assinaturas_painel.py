@@ -700,27 +700,43 @@ def painel_assinaturas(
 
     mrr_total = 0
     ciclo_mes_estimado = 0
+    ativas_pagantes: list[dict] = []
+    ativas_cortesia: list[dict] = []
     for item in ativas:
+        cobrado = int(item.get("cobrado_beneficio_centavos") or 0)
+        periodo = item["periodicidade"]
+        meses = max(1, int(PERIODOS.get(periodo, PERIODOS["mensal"])["meses"]))
         if item.get("eh_fundador"):
-            item["mrr_centavos"] = 0
-            item["mrr"] = _fmt_reais(0)
-            item["ciclo_centavos"] = 0
-            item["ciclo"] = _fmt_reais(0)
+            cobrado = 0
             item["cobrado_beneficio_centavos"] = 0
             item["cobrado_beneficio"] = _fmt_reais(0)
+            item["ciclo_centavos"] = 0
+            item["ciclo"] = _fmt_reais(0)
             item["proxima_cobranca"] = None
             item["proxima_cobranca_br"] = "—"
-        mrr_total += int(item["mrr_centavos"])
-        ciclo_mes_estimado += int(item["mrr_centavos"])
+        # Cupom 100% / fundador / R$ 0 não entram no MRR nem na tabela de cima
+        eh_cortesia = cobrado <= 0
+        item["eh_cortesia"] = eh_cortesia
+        if eh_cortesia:
+            item["mrr_centavos"] = 0
+            item["mrr"] = _fmt_reais(0)
+            ativas_cortesia.append(item)
+            continue
+        mrr_item = int(round(cobrado / meses))
+        item["mrr_centavos"] = mrr_item
+        item["mrr"] = _fmt_reais(mrr_item)
+        item["ciclo_centavos"] = cobrado
+        item["ciclo"] = _fmt_reais(cobrado)
+        mrr_total += mrr_item
+        ciclo_mes_estimado += mrr_item
+        ativas_pagantes.append(item)
         plano = item["plano"]
-        periodo = item["periodicidade"]
-        meta_mrr = int(item["mrr_centavos"])
         bp = por_plano.setdefault(
             plano,
             {"plano": plano, "plano_label": item["plano_label"], "qtd": 0, "mrr_centavos": 0},
         )
         bp["qtd"] += 1
-        bp["mrr_centavos"] += meta_mrr
+        bp["mrr_centavos"] += mrr_item
 
         pp = por_periodo.setdefault(
             periodo,
@@ -732,7 +748,7 @@ def painel_assinaturas(
             },
         )
         pp["qtd"] += 1
-        pp["mrr_centavos"] += meta_mrr
+        pp["mrr_centavos"] += mrr_item
 
     for d in (por_plano, por_periodo):
         for v in d.values():
@@ -829,47 +845,22 @@ def painel_assinaturas(
             }
         )
 
-    # ── Faturamento: competência = mês do vencimento ────────────────────
-    # Faturado = emitidas no mês (pendente/vencido/pago)
-    # Pago     = dessas, as que estão pagas (mesmo mês de competência)
-    # Aberto   = pendente/vencido (todas, e também filtro do mês)
+    # ── Faturamento: só pagamentos (competência = mês do vencimento) ────
     cur.execute(
         f"""
         SELECT
           COALESCE(SUM(f.valor_centavos), 0)::bigint,
-          COUNT(*)::int,
-          COALESCE(SUM(CASE WHEN f.status = 'pago' THEN f.valor_centavos ELSE 0 END), 0)::bigint,
-          COUNT(*) FILTER (WHERE f.status = 'pago')::int,
-          COALESCE(SUM(CASE WHEN f.status IN ('pendente', 'vencido') THEN f.valor_centavos ELSE 0 END), 0)::bigint,
-          COUNT(*) FILTER (WHERE f.status IN ('pendente', 'vencido'))::int
+          COUNT(*)::int
         FROM tbl_fatura f
-        WHERE f.status IN ('pendente', 'vencido', 'pago')
+        WHERE f.status = 'pago'
           AND {_SQL_MES_COMPETENCIA} = %s
         """,
         (mes_ref,),
     )
-    row_comp = cur.fetchone() or (0, 0, 0, 0, 0, 0)
-    faturado_mes_centavos = int(row_comp[0] or 0)
-    faturado_mes_qtd = int(row_comp[1] or 0)
-    pago_mes_centavos = int(row_comp[2] or 0)
-    pago_mes_qtd = int(row_comp[3] or 0)
-    aberto_mes_centavos = int(row_comp[4] or 0)
-    aberto_mes_qtd = int(row_comp[5] or 0)
+    row_comp = cur.fetchone() or (0, 0)
+    pago_mes_centavos = int(row_comp[0] or 0)
+    pago_mes_qtd = int(row_comp[1] or 0)
 
-    cur.execute(
-        """
-        SELECT
-          COALESCE(SUM(f.valor_centavos), 0)::bigint,
-          COUNT(*)::int
-        FROM tbl_fatura f
-        WHERE f.status IN ('pendente', 'vencido')
-        """
-    )
-    row_ab_tot = cur.fetchone() or (0, 0)
-    aberto_total_centavos = int(row_ab_tot[0] or 0)
-    aberto_total_qtd = int(row_ab_tot[1] or 0)
-
-    # Emitidas do mês de competência (todas: pagas, em aberto e canceladas)
     cur.execute(
         f"""
         SELECT
@@ -878,9 +869,9 @@ def painel_assinaturas(
           COALESCE(NULLIF(f.periodicidade, ''), 'mensal'), t.tipo_negocio
         FROM tbl_fatura f
         JOIN tbl_tenant t ON t.id = f.id_tenant
-        WHERE f.status IN ('pendente', 'vencido', 'pago', 'cancelado', 'bloqueado')
+        WHERE f.status = 'pago'
           AND {_SQL_MES_COMPETENCIA} = %s
-        ORDER BY f.vencimento_em ASC NULLS LAST, f.id ASC
+        ORDER BY f.pago_em DESC NULLS LAST, f.vencimento_em DESC NULLS LAST, f.id DESC
         LIMIT 500
         """,
         (mes_ref,),
@@ -890,19 +881,6 @@ def painel_assinaturas(
         forma = (row[7] or "").strip().lower()
         periodo = _periodo_ok(row[11])
         plano = str(row[4] or "")
-        st = (row[6] or "").strip().lower()
-        if st == "pago":
-            st_grupo = "pago"
-            st_label = "Pago"
-        elif st == "bloqueado":
-            st_grupo = "bloqueado"
-            st_label = "Bloqueado"
-        elif st == "cancelado":
-            st_grupo = "cancelado"
-            st_label = "Cancelada"
-        else:
-            st_grupo = "aberto"
-            st_label = "Em aberto" if st == "pendente" else "Vencida"
         emitidas_mes.append(
             {
                 "id_fatura": int(row[0]),
@@ -913,9 +891,9 @@ def painel_assinaturas(
                 "plano_label": nome_plano_comercial(plano, row[12] if len(row) > 12 else None),
                 "valor_centavos": int(row[5] or 0),
                 "valor": _fmt_reais(row[5]),
-                "status": st,
-                "status_grupo": st_grupo,
-                "status_label": st_label,
+                "status": "pago",
+                "status_grupo": "pago",
+                "status_label": "Pago",
                 "forma_pagamento": forma,
                 "forma_label": FORMA_LABEL.get(forma, forma or "—"),
                 "vencimento_em": _fmt_data(row[8]),
@@ -928,17 +906,15 @@ def painel_assinaturas(
             }
         )
 
-    # Série anual (12 meses): faturado × pago por competência
+    # Série anual: só pagos por competência
     cur.execute(
         f"""
         SELECT
           {_SQL_MES_COMPETENCIA} AS mes,
-          COALESCE(SUM(f.valor_centavos), 0)::bigint AS faturado,
-          COALESCE(SUM(CASE WHEN f.status = 'pago' THEN f.valor_centavos ELSE 0 END), 0)::bigint AS pago,
-          COUNT(*)::int AS qtd_faturado,
-          COUNT(*) FILTER (WHERE f.status = 'pago')::int AS qtd_pago
+          COALESCE(SUM(f.valor_centavos), 0)::bigint AS pago,
+          COUNT(*)::int AS qtd_pago
         FROM tbl_fatura f
-        WHERE f.status IN ('pendente', 'vencido', 'pago')
+        WHERE f.status = 'pago'
           AND EXTRACT(YEAR FROM COALESCE(f.vencimento_em, f.criado_em)) = %s
         GROUP BY 1
         ORDER BY 1
@@ -951,30 +927,23 @@ def painel_assinaturas(
         if not isinstance(mdate, date):
             continue
         mapa_ano[mdate.month] = {
-            "faturado_centavos": int(row[1] or 0),
-            "pago_centavos": int(row[2] or 0),
-            "qtd_faturado": int(row[3] or 0),
-            "qtd_pago": int(row[4] or 0),
+            "pago_centavos": int(row[1] or 0),
+            "qtd_pago": int(row[2] or 0),
         }
 
     serie_ano = []
     for m in range(1, 13):
-        d = mapa_ano.get(m) or {
-            "faturado_centavos": 0,
-            "pago_centavos": 0,
-            "qtd_faturado": 0,
-            "qtd_pago": 0,
-        }
+        d = mapa_ano.get(m) or {"pago_centavos": 0, "qtd_pago": 0}
         serie_ano.append(
             {
                 "mes": m,
                 "mes_label": _MESES_CURTOS[m - 1],
                 "mes_ref": f"{ano_sel}-{m:02d}-01",
-                "faturado_centavos": d["faturado_centavos"],
-                "faturado": _fmt_reais(d["faturado_centavos"]),
+                "faturado_centavos": d["pago_centavos"],
+                "faturado": _fmt_reais(d["pago_centavos"]),
                 "pago_centavos": d["pago_centavos"],
                 "pago": _fmt_reais(d["pago_centavos"]),
-                "qtd_faturado": d["qtd_faturado"],
+                "qtd_faturado": d["qtd_pago"],
                 "qtd_pago": d["qtd_pago"],
             }
         )
@@ -1018,35 +987,85 @@ def painel_assinaturas(
     _anexar_lembretes(cur, em_atraso)
     _anexar_lembretes(cur, emitidas_mes)
 
-    canceladas: list[dict] = []
+    # ── Cancelados no mês (planos + cobranças) ──────────────────────────
+    planos_cancelados_mes: list[dict] = []
+    cobrancas_canceladas_mes: list[dict] = []
     try:
         cur.execute("SAVEPOINT sp_asf_cancel")
         cur.execute(
             """
             SELECT t.id,
                    COALESCE(NULLIF(t.nome_fantasia, ''), NULLIF(t.nome, ''), ''),
-                   tc.plano_slug, tc.cancelado_em, tc.efi_subscription_id, t.tipo_negocio
+                   tc.plano_slug, tc.cancelado_em, tc.efi_subscription_id, t.tipo_negocio,
+                   t.plano
             FROM tbl_tenant_cobranca tc
             JOIN tbl_tenant t ON t.id = tc.id_tenant
             WHERE tc.assinatura_status = 'cancelada'
-            ORDER BY tc.cancelado_em DESC NULLS LAST
-            LIMIT 80
-            """
+              AND tc.cancelado_em IS NOT NULL
+              AND date_trunc('month', tc.cancelado_em)::date = %s
+            ORDER BY tc.cancelado_em DESC
+            LIMIT 200
+            """,
+            (mes_ref,),
         )
         for row in cur.fetchall():
-            canceladas.append(
+            planos_cancelados_mes.append(
                 {
+                    "tipo": "plano",
                     "id_tenant": int(row[0]),
                     "nome": (row[1] or "").strip() or f"Tenant #{row[0]}",
-                    "plano_label": nome_plano_comercial(row[2], row[5]),
+                    "plano": str(row[2] or row[6] or ""),
+                    "plano_label": nome_plano_comercial(row[2] or row[6], row[5]),
+                    "cancelado_em": _fmt_data(row[3]),
                     "cancelado_br": _fmt_data_br(row[3]),
                     "efi": "Sim" if row[4] else "Não",
+                    "referencia": "",
+                    "valor_centavos": 0,
+                    "valor": "—",
+                    "status_label": "Plano cancelado",
+                }
+            )
+        cur.execute(
+            """
+            SELECT
+              f.id, f.id_tenant, t.nome, f.referencia, f.plano_slug, f.valor_centavos,
+              f.status, f.forma_pagamento, f.atualizado_em, f.criado_em, t.tipo_negocio
+            FROM tbl_fatura f
+            JOIN tbl_tenant t ON t.id = f.id_tenant
+            WHERE f.status = 'cancelado'
+              AND date_trunc('month', COALESCE(f.atualizado_em, f.criado_em))::date = %s
+            ORDER BY COALESCE(f.atualizado_em, f.criado_em) DESC NULLS LAST, f.id DESC
+            LIMIT 300
+            """,
+            (mes_ref,),
+        )
+        for row in cur.fetchall():
+            forma = (row[7] or "").strip().lower()
+            cobrancas_canceladas_mes.append(
+                {
+                    "tipo": "cobranca",
+                    "id_fatura": int(row[0]),
+                    "id_tenant": int(row[1]),
+                    "nome": (row[2] or "").strip() or f"Tenant #{row[1]}",
+                    "referencia": row[3] or "",
+                    "plano": str(row[4] or ""),
+                    "plano_label": nome_plano_comercial(row[4], row[10]),
+                    "valor_centavos": int(row[5] or 0),
+                    "valor": _fmt_reais(row[5]),
+                    "status": "cancelado",
+                    "status_label": "Cobrança cancelada",
+                    "forma_label": FORMA_LABEL.get(forma, forma or "—"),
+                    "cancelado_em": _fmt_data(row[8] or row[9]),
+                    "cancelado_br": _fmt_data_br(row[8] or row[9]),
+                    "efi": "—",
                 }
             )
         cur.execute("RELEASE SAVEPOINT sp_asf_cancel")
     except Exception:
         _rollback_sp(cur, "sp_asf_cancel")
-        canceladas = []
+        planos_cancelados_mes = []
+        cobrancas_canceladas_mes = []
+    cancelados_valor = sum(int(x["valor_centavos"]) for x in cobrancas_canceladas_mes)
 
     # ── Bloqueados (MED / pago contestado na Efí) ───────────────────────
     # Sync chama API externa: não usar SAVEPOINT em volta (DDL + rollback apagava colunas).
@@ -1208,10 +1227,13 @@ def painel_assinaturas(
     if valor_efi > valor_bloq:
         valor_bloq = valor_efi
 
+    pago_ano_centavos = sum(x["pago_centavos"] for x in serie_ano)
     return {
         "ativas": {
             "resumo": {
-                "qtd": len(ativas),
+                "qtd": len(ativas_pagantes),
+                "qtd_cortesia": len(ativas_cortesia),
+                "qtd_total": len(ativas_pagantes) + len(ativas_cortesia),
                 "mrr_centavos": mrr_total,
                 "mrr": _fmt_reais(mrr_total),
                 "arr_centavos": mrr_total * 12,
@@ -1221,8 +1243,8 @@ def painel_assinaturas(
                 "por_plano": list(por_plano.values()),
                 "por_periodo": list(por_periodo.values()),
             },
-            "itens": ativas,
-            "canceladas": canceladas,
+            "itens": ativas_pagantes,
+            "cortesia": ativas_cortesia,
         },
         "inadimplencia": {
             "resumo": {
@@ -1242,29 +1264,41 @@ def painel_assinaturas(
                 "mes_label": f"{mes_sel:02d}/{ano_sel}",
             },
             "resumo": {
-                "faturado_mes_centavos": faturado_mes_centavos,
-                "faturado_mes": _fmt_reais(faturado_mes_centavos),
-                "faturado_mes_qtd": faturado_mes_qtd,
                 "pago_mes_centavos": pago_mes_centavos,
                 "pago_mes": _fmt_reais(pago_mes_centavos),
                 "pago_mes_qtd": pago_mes_qtd,
-                "aberto_mes_centavos": aberto_mes_centavos,
-                "aberto_mes": _fmt_reais(aberto_mes_centavos),
-                "aberto_mes_qtd": aberto_mes_qtd,
-                "aberto_total_centavos": aberto_total_centavos,
-                "aberto_total": _fmt_reais(aberto_total_centavos),
-                "aberto_total_qtd": aberto_total_qtd,
+                "ticket_medio_centavos": int(round(pago_mes_centavos / pago_mes_qtd)) if pago_mes_qtd else 0,
+                "ticket_medio": _fmt_reais(
+                    int(round(pago_mes_centavos / pago_mes_qtd)) if pago_mes_qtd else 0
+                ),
+                "pago_ano_centavos": pago_ano_centavos,
+                "pago_ano": _fmt_reais(pago_ano_centavos),
             },
             "emitidas_mes": emitidas_mes,
             "serie_ano": {
                 "ano": ano_sel,
                 "meses": serie_ano,
-                "faturado_ano_centavos": sum(x["faturado_centavos"] for x in serie_ano),
-                "faturado_ano": _fmt_reais(sum(x["faturado_centavos"] for x in serie_ano)),
-                "pago_ano_centavos": sum(x["pago_centavos"] for x in serie_ano),
-                "pago_ano": _fmt_reais(sum(x["pago_centavos"] for x in serie_ano)),
+                "faturado_ano_centavos": pago_ano_centavos,
+                "faturado_ano": _fmt_reais(pago_ano_centavos),
+                "pago_ano_centavos": pago_ano_centavos,
+                "pago_ano": _fmt_reais(pago_ano_centavos),
             },
             "pagos_recentes": pagos_recentes,
+        },
+        "cancelados": {
+            "filtros": {
+                "ano": ano_sel,
+                "mes": mes_sel,
+                "mes_label": f"{mes_sel:02d}/{ano_sel}",
+            },
+            "resumo": {
+                "qtd_planos": len(planos_cancelados_mes),
+                "qtd_cobrancas": len(cobrancas_canceladas_mes),
+                "valor_cobrancas_centavos": cancelados_valor,
+                "valor_cobrancas": _fmt_reais(cancelados_valor),
+            },
+            "planos": planos_cancelados_mes,
+            "cobrancas": cobrancas_canceladas_mes,
         },
         "conciliacao": _montar_conciliacao(cur, ano_sel, mes_sel),
         "nota_fiscal": _montar_nota_fiscal(cur, ano_sel, mes_sel),

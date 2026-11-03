@@ -3,13 +3,12 @@
 
   const cfg = JSON.parse(document.getElementById("asf_cfg")?.textContent || "{}");
   let cache = null;
-  let tabAtual = "ativas";
+  let tabAtual = "faturamento";
   const hoje = new Date();
   let filtroMes = hoje.getMonth() + 1;
   let filtroAno = hoje.getFullYear();
   let filtroAtivasBusca = "";
   let filtroFatBusca = "";
-  let filtroFatStatus = "";
   let filtroNfBusca = "";
   let filtroNfStatus = "sem";
   let nfUploadAlvo = null;
@@ -34,7 +33,7 @@
   }
 
   function setTab(tab) {
-    tabAtual = tab || "ativas";
+    tabAtual = tab || "faturamento";
     document.querySelectorAll(".Asf_Tab").forEach((btn) => {
       const on = btn.getAttribute("data-tab") === tabAtual;
       btn.classList.toggle("is-active", on);
@@ -45,6 +44,32 @@
       pane.classList.toggle("is-active", on);
       pane.hidden = !on;
     });
+  }
+
+  function linhaAtivaHtml(a) {
+    const benef =
+      a.beneficio && a.beneficio !== "—"
+        ? `<div>${esc(a.beneficio)}</div>${
+            a.beneficio_prazo && a.beneficio_prazo !== "—"
+              ? `<div class="Asf_Muted">${esc(a.beneficio_prazo)}</div>`
+              : ""
+          }`
+        : "—";
+    const valor = a.cobrado_beneficio || a.ciclo || "—";
+    const efiTag = a.recorrencia_efi
+      ? `<div class="Asf_Muted">Efí · recorrente</div>`
+      : `<div class="Asf_Muted">Sem Efí (legado)</div>`;
+    return `<tr>
+        <td><strong>${esc(a.nome)}</strong><div class="Asf_Muted">#${esc(a.id_tenant)} · ${esc(a.slug || "—")}</div>${efiTag}</td>
+        <td>${esc(a.plano_label)}</td>
+        <td>${esc(a.periodicidade_label)}</td>
+        <td>${esc(a.forma_label)}</td>
+        <td><strong>${esc(valor)}</strong></td>
+        <td>${benef}</td>
+        <td>${esc(a.inicio_cobranca_br || "—")}</td>
+        <td>${esc(a.proxima_cobranca_br || "—")}</td>
+        <td class="Asf_ColAcoes">${btnMenuAtiva(a)}</td>
+      </tr>`;
   }
 
   function kpisHtml(items) {
@@ -88,7 +113,7 @@
 
   function preencherAnos() {
     const y0 = hoje.getFullYear();
-    ["asf_ano", "asf_ano_cx", "asf_ano_nf"].forEach((id) => {
+    ["asf_ano", "asf_ano_cx", "asf_ano_nf", "asf_ano_cancel"].forEach((id) => {
       const sel = el(id);
       if (!sel || sel.options.length) return;
       for (let y = y0 + 1; y >= y0 - 5; y--) {
@@ -99,18 +124,18 @@
       }
       sel.value = String(filtroAno);
     });
-    ["asf_mes", "asf_mes_cx", "asf_mes_nf"].forEach((id) => {
+    ["asf_mes", "asf_mes_cx", "asf_mes_nf", "asf_mes_cancel"].forEach((id) => {
       const mes = el(id);
       if (mes) mes.value = String(filtroMes);
     });
   }
 
   function syncFiltroSelects() {
-    ["asf_mes", "asf_mes_cx", "asf_mes_nf"].forEach((id) => {
+    ["asf_mes", "asf_mes_cx", "asf_mes_nf", "asf_mes_cancel"].forEach((id) => {
       const n = el(id);
       if (n) n.value = String(filtroMes);
     });
-    ["asf_ano", "asf_ano_cx", "asf_ano_nf"].forEach((id) => {
+    ["asf_ano", "asf_ano_cx", "asf_ano_nf", "asf_ano_cancel"].forEach((id) => {
       const n = el(id);
       if (n) n.value = String(filtroAno);
     });
@@ -128,13 +153,15 @@
     } else if (tabAtual === "faturamento") {
       mesSrc = el("asf_mes")?.value || mesSrc;
       anoSrc = el("asf_ano")?.value || anoSrc;
+    } else if (tabAtual === "cancelados") {
+      mesSrc = el("asf_mes_cancel")?.value || mesSrc;
+      anoSrc = el("asf_ano_cancel")?.value || anoSrc;
     }
     filtroMes = parseInt(mesSrc || filtroMes, 10) || filtroMes;
     filtroAno = parseInt(anoSrc || filtroAno, 10) || filtroAno;
     syncFiltroSelects();
     filtroAtivasBusca = (el("asf_ativas_busca")?.value || "").trim().toLowerCase();
     filtroFatBusca = (el("asf_fat_busca")?.value || "").trim().toLowerCase();
-    filtroFatStatus = (el("asf_fat_status")?.value || "").trim().toLowerCase();
     filtroNfBusca = (el("asf_nf_busca")?.value || "").trim().toLowerCase();
     filtroNfStatus = (el("asf_nf_status")?.value || "").trim().toLowerCase();
   }
@@ -149,70 +176,55 @@
 
   function renderAtivas(data) {
     const r = data?.resumo || {};
-    el("asf_ativas_kpis").innerHTML = kpisHtml([
-      { label: "Assinantes", value: String(r.qtd ?? 0) },
-      { label: "MRR (provisão)", value: r.mrr || "R$ 0,00", cls: "is-ok" },
-      { label: "ARR", value: r.arr || "R$ 0,00" },
-      { label: "Provisão / mês", value: r.provisao_mensal || "R$ 0,00" },
-    ]);
+    const boxKpi = el("asf_ativas_kpis");
+    if (boxKpi) {
+      boxKpi.innerHTML = kpisHtml([
+        { label: "Pagantes (MRR)", value: String(r.qtd ?? 0) },
+        { label: "Cortesia / 100%", value: String(r.qtd_cortesia ?? 0) },
+        { label: "MRR (provisão)", value: r.mrr || "R$ 0,00", cls: "is-ok" },
+        { label: "ARR", value: r.arr || "R$ 0,00" },
+      ]);
+    }
     const itens = (data?.itens || []).filter((a) => matchBusca(a, filtroAtivasBusca));
     const total = (data?.itens || []).length;
-    el("asf_ativas_hint").textContent = total
-      ? filtroAtivasBusca
-        ? `${itens.length} de ${total} tenant(s)`
-        : `${total} tenant(s) em plano pago`
-      : "Nenhum assinante pago ativo";
-    const tb = el("asf_ativas_tbody");
-    if (!itens.length) {
-      tb.innerHTML = emptyRow(
-        9,
-        filtroAtivasBusca ? "Nenhum tenant encontrado com essa busca." : "Nenhum tenant com plano pago ativo."
-      );
-    } else {
-      tb.innerHTML = itens
-        .map((a) => {
-          const benef = a.beneficio && a.beneficio !== "—"
-            ? `<div>${esc(a.beneficio)}</div>${a.beneficio_prazo && a.beneficio_prazo !== "—" ? `<div class="Asf_Muted">${esc(a.beneficio_prazo)}</div>` : ""}`
-            : "—";
-          const valor = a.cobrado_beneficio || a.ciclo || "—";
-          const efiTag = a.recorrencia_efi
-            ? `<div class="Asf_Muted">Efí · recorrente</div>`
-            : `<div class="Asf_Muted">Sem Efí (legado)</div>`;
-          return `<tr>
-        <td><strong>${esc(a.nome)}</strong><div class="Asf_Muted">#${esc(a.id_tenant)} · ${esc(a.slug || "—")}</div>${efiTag}</td>
-        <td>${esc(a.plano_label)}</td>
-        <td>${esc(a.periodicidade_label)}</td>
-        <td>${esc(a.forma_label)}</td>
-        <td><strong>${esc(valor)}</strong></td>
-        <td>${benef}</td>
-        <td>${esc(a.inicio_cobranca_br || "—")}</td>
-        <td>${esc(a.proxima_cobranca_br || "—")}</td>
-        <td class="Asf_ColAcoes">${btnMenuAtiva(a)}</td>
-      </tr>`;
-        })
-        .join("");
-    }
-    const canceladas = data?.canceladas || [];
-    const tbc = el("asf_cancel_tbody");
-    const hint = el("asf_cancel_hint");
+    const hint = el("asf_ativas_hint");
     if (hint) {
-      hint.textContent = canceladas.length
-        ? `${canceladas.length} assinatura(s) cancelada(s)`
-        : "Nenhum cancelamento registrado";
+      hint.textContent = total
+        ? filtroAtivasBusca
+          ? `${itens.length} de ${total} pagante(s)`
+          : `${total} plano(s) que contam no MRR`
+        : "Nenhum plano pago ativo";
     }
+    const tb = el("asf_ativas_tbody");
+    if (tb) {
+      if (!itens.length) {
+        tb.innerHTML = emptyRow(
+          9,
+          filtroAtivasBusca ? "Nenhum tenant encontrado com essa busca." : "Nenhum plano ativo com cobrança."
+        );
+      } else {
+        tb.innerHTML = itens.map(linhaAtivaHtml).join("");
+      }
+    }
+
+    const cortesiaAll = data?.cortesia || [];
+    const cortesia = cortesiaAll.filter((a) => matchBusca(a, filtroAtivasBusca));
+    const hintC = el("asf_cortesia_hint");
+    if (hintC) {
+      hintC.textContent = cortesiaAll.length
+        ? filtroAtivasBusca
+          ? `${cortesia.length} de ${cortesiaAll.length} · não entram no MRR`
+          : `${cortesiaAll.length} cortesia / cupom 100% · não entram no MRR`
+        : "Nenhuma cortesia ativa";
+    }
+    const tbc = el("asf_cortesia_tbody");
     if (tbc) {
-      tbc.innerHTML = canceladas.length
-        ? canceladas
-            .map(
-              (a) => `<tr>
-        <td><strong>${esc(a.nome)}</strong><div class="Asf_Muted">#${esc(a.id_tenant)}</div></td>
-        <td>${esc(a.plano_label)}</td>
-        <td>${esc(a.cancelado_br || "—")}</td>
-        <td>${esc(a.efi || "—")}</td>
-      </tr>`
-            )
-            .join("")
-        : emptyRow(4, "Nenhum cancelamento de plano.");
+      tbc.innerHTML = cortesia.length
+        ? cortesia.map(linhaAtivaHtml).join("")
+        : emptyRow(
+            9,
+            filtroAtivasBusca ? "Nenhum tenant encontrado com essa busca." : "Nenhuma cortesia / cupom 100%."
+          );
     }
   }
 
@@ -282,25 +294,26 @@
     if (!box) return;
     const meses = serie?.meses || [];
     const ano = serie?.ano || filtroAno;
-    el("asf_graf_ano").textContent = String(ano);
-    el("asf_graf_hint").textContent = `Ano ${ano} · ${serie?.faturado_ano || "R$ 0,00"} faturado · ${serie?.pago_ano || "R$ 0,00"} pago`;
+    const grafAno = el("asf_graf_ano");
+    const grafHint = el("asf_graf_hint");
+    if (grafAno) grafAno.textContent = String(ano);
+    if (grafHint) {
+      grafHint.textContent = `Ano ${ano} · ${serie?.pago_ano || "R$ 0,00"} pagos`;
+    }
 
     let max = 0;
     meses.forEach((m) => {
-      max = Math.max(max, Number(m.faturado_centavos || 0), Number(m.pago_centavos || 0));
+      max = Math.max(max, Number(m.pago_centavos || 0));
     });
     if (max <= 0) max = 1;
 
     box.innerHTML = meses
       .map((m) => {
-        const fat = Number(m.faturado_centavos || 0);
         const pago = Number(m.pago_centavos || 0);
-        const hFat = Math.round((fat / max) * 100);
         const hPago = Math.round((pago / max) * 100);
         const on = Number(m.mes) === filtroMes ? " is-sel" : "";
-        return `<button type="button" class="Asf_BarGroup${on}" data-mes="${esc(m.mes)}" title="${esc(m.mes_label)}: faturado ${esc(m.faturado)} · pago ${esc(m.pago)}">
+        return `<button type="button" class="Asf_BarGroup${on}" data-mes="${esc(m.mes)}" title="${esc(m.mes_label)}: ${esc(m.pago)}">
           <div class="Asf_Bars">
-            <div class="Asf_Bar Asf_Bar--fat" style="height:${hFat}%"></div>
             <div class="Asf_Bar Asf_Bar--pago" style="height:${hPago}%"></div>
           </div>
           <span class="Asf_BarLabel">${esc(m.mes_label)}</span>
@@ -472,44 +485,42 @@
     syncFiltroSelects();
 
     const mesLbl = f.mes_label || `${String(filtroMes).padStart(2, "0")}/${filtroAno}`;
-    el("asf_fat_kpis").innerHTML = kpisHtml([
-      { label: `Faturado ${mesLbl}`, value: r.faturado_mes || "R$ 0,00" },
-      { label: `Pago ${mesLbl}`, value: r.pago_mes || "R$ 0,00", cls: "is-ok" },
-      { label: `Em aberto ${mesLbl}`, value: r.aberto_mes || "R$ 0,00", cls: "is-warn" },
-      { label: "Em aberto (total)", value: r.aberto_total || "R$ 0,00", cls: "is-danger" },
-    ]);
+    const boxKpi = el("asf_fat_kpis");
+    if (boxKpi) {
+      boxKpi.innerHTML = kpisHtml([
+        { label: `Pago ${mesLbl}`, value: r.pago_mes || "R$ 0,00", cls: "is-ok" },
+        { label: `Pagamentos`, value: String(r.pago_mes_qtd ?? 0), cls: "is-ok" },
+        { label: "Ticket médio", value: r.ticket_medio || "R$ 0,00" },
+        { label: `Pago no ano`, value: r.pago_ano || "R$ 0,00" },
+      ]);
+    }
 
     renderChart(data?.serie_ano);
 
     const todas = data?.emitidas_mes || [];
-    const filtradas = todas.filter((a) => {
-      if (!matchBusca(a, filtroFatBusca)) return false;
-      if (!filtroFatStatus) return true;
-      return String(a.status_grupo || "").toLowerCase() === filtroFatStatus;
-    });
+    const filtradas = todas.filter((a) => matchBusca(a, filtroFatBusca));
     const hint = el("asf_emitidas_hint");
     if (hint) {
       hint.textContent = todas.length
-        ? filtroFatBusca || filtroFatStatus
-          ? `${filtradas.length} de ${todas.length} emitida(s) em ${mesLbl}`
-          : `${todas.length} emitida(s) em ${mesLbl}`
-        : `Nenhuma cobrança emitida em ${mesLbl}`;
+        ? filtroFatBusca
+          ? `${filtradas.length} de ${todas.length} pagamento(s) em ${mesLbl}`
+          : `${todas.length} pagamento(s) em ${mesLbl}`
+        : `Nenhum pagamento em ${mesLbl}`;
     }
     const tba = el("asf_emitidas_tbody");
     if (!tba) return;
     if (!filtradas.length) {
       tba.innerHTML = emptyRow(
         8,
-        todas.length ? "Nenhuma cobrança com esses filtros." : "Nenhuma cobrança emitida neste mês."
+        todas.length ? "Nenhum pagamento com essa busca." : "Nenhum pagamento neste mês."
       );
       return;
     }
     tba.innerHTML = filtradas
       .map((a) => {
-        const grupo = String(a.status_grupo || "").toLowerCase();
-        const menu = grupo === "aberto" ? btnMenuFatura(a) : btnMenuFatura({ ...a, lembrete_rotulo: "" });
+        const menu = btnMenuFatura({ ...a, lembrete_rotulo: "" });
         return `<tr>
-          <td><strong>${esc(a.vencimento_br)}</strong><div class="Asf_Muted">emitida ${esc(a.criado_br || "—")}</div></td>
+          <td><strong>${esc(a.pago_br || "—")}</strong><div class="Asf_Muted">venc. ${esc(a.vencimento_br || "—")}</div></td>
           <td><strong>${esc(a.nome)}</strong><div class="Asf_Muted">#${esc(a.id_tenant)}</div></td>
           <td>${esc(a.plano_label)}</td>
           <td>${esc(a.referencia || a.id_fatura)}</td>
@@ -520,6 +531,69 @@
         </tr>`;
       })
       .join("");
+  }
+
+  function renderCancelados(data) {
+    const r = data?.resumo || {};
+    const f = data?.filtros || {};
+    if (f.mes) filtroMes = Number(f.mes);
+    if (f.ano) filtroAno = Number(f.ano);
+    syncFiltroSelects();
+    const mesLbl = f.mes_label || `${String(filtroMes).padStart(2, "0")}/${filtroAno}`;
+    const box = el("asf_cancel_kpis");
+    if (box) {
+      box.innerHTML = kpisHtml([
+        { label: `Planos ${mesLbl}`, value: String(r.qtd_planos ?? 0), cls: "is-warn" },
+        { label: `Cobranças ${mesLbl}`, value: String(r.qtd_cobrancas ?? 0), cls: "is-danger" },
+        { label: "Valor cancelado", value: r.valor_cobrancas || "R$ 0,00", cls: "is-danger" },
+      ]);
+    }
+    const planos = data?.planos || [];
+    const hintP = el("asf_cancel_planos_hint");
+    if (hintP) {
+      hintP.textContent = planos.length
+        ? `${planos.length} plano(s) cancelado(s) em ${mesLbl}`
+        : `Nenhum plano cancelado em ${mesLbl}`;
+    }
+    const tbp = el("asf_cancel_planos_tbody");
+    if (tbp) {
+      tbp.innerHTML = planos.length
+        ? planos
+            .map(
+              (a) => `<tr>
+          <td><strong>${esc(a.nome)}</strong><div class="Asf_Muted">#${esc(a.id_tenant)}</div></td>
+          <td>${esc(a.plano_label)}</td>
+          <td>${esc(a.cancelado_br || "—")}</td>
+          <td>${esc(a.efi || "—")}</td>
+        </tr>`
+            )
+            .join("")
+        : emptyRow(4, "Nenhum plano cancelado neste mês.");
+    }
+    const cob = data?.cobrancas || [];
+    const hintC = el("asf_cancel_cob_hint");
+    if (hintC) {
+      hintC.textContent = cob.length
+        ? `${cob.length} cobrança(s) · ${r.valor_cobrancas || "R$ 0,00"}`
+        : `Nenhuma cobrança cancelada em ${mesLbl}`;
+    }
+    const tbc = el("asf_cancel_cob_tbody");
+    if (tbc) {
+      tbc.innerHTML = cob.length
+        ? cob
+            .map(
+              (a) => `<tr>
+          <td><strong>${esc(a.cancelado_br || "—")}</strong></td>
+          <td><strong>${esc(a.nome)}</strong><div class="Asf_Muted">#${esc(a.id_tenant)}</div></td>
+          <td>${esc(a.plano_label)}</td>
+          <td>${esc(a.referencia || a.id_fatura || "—")}</td>
+          <td>${esc(a.forma_label || "—")}</td>
+          <td><strong>${esc(a.valor)}</strong></td>
+        </tr>`
+            )
+            .join("")
+        : emptyRow(6, "Nenhuma cobrança cancelada neste mês.");
+    }
   }
 
   function renderNotaFiscal(data) {
@@ -754,6 +828,7 @@
     renderConciliacao(j.conciliacao);
     renderFat(j.faturamento);
     renderNotaFiscal(j.nota_fiscal);
+    renderCancelados(j.cancelados);
     setStatus(`Atualizado agora · mês ${filtroMes.toString().padStart(2, "0")}/${filtroAno}.`);
   }
 
@@ -764,6 +839,7 @@
     renderConciliacao(cache.conciliacao);
     renderFat(cache.faturamento);
     renderNotaFiscal(cache.nota_fiscal);
+    renderCancelados(cache.cancelados);
   }
 
   async function sincronizarEfi() {
@@ -1214,6 +1290,8 @@
     el("asf_ano_cx")?.addEventListener("change", carregar);
     el("asf_mes_nf")?.addEventListener("change", carregar);
     el("asf_ano_nf")?.addEventListener("change", carregar);
+    el("asf_mes_cancel")?.addEventListener("change", carregar);
+    el("asf_ano_cancel")?.addEventListener("change", carregar);
     el("asf_btnSyncEfi")?.addEventListener("click", sincronizarEfi);
     el("asf_ativas_busca")?.addEventListener("input", () => {
       filtroAtivasBusca = (el("asf_ativas_busca")?.value || "").trim().toLowerCase();
@@ -1221,10 +1299,6 @@
     });
     el("asf_fat_busca")?.addEventListener("input", () => {
       filtroFatBusca = (el("asf_fat_busca")?.value || "").trim().toLowerCase();
-      if (cache) renderFat(cache.faturamento);
-    });
-    el("asf_fat_status")?.addEventListener("change", () => {
-      filtroFatStatus = (el("asf_fat_status")?.value || "").trim().toLowerCase();
       if (cache) renderFat(cache.faturamento);
     });
     el("asf_nf_busca")?.addEventListener("input", () => {
@@ -1292,7 +1366,7 @@
         el("asf_nf_file")?.click();
       }
     });
-    setTab("ativas");
+    setTab("faturamento");
     carregar();
   });
 })();
