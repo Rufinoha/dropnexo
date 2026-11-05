@@ -1183,6 +1183,38 @@
     await carregar();
   }
 
+  async function cancelarAgoraTenant(btn) {
+    const idTenant = parseInt(btn.getAttribute("data-tenant") || "0", 10);
+    const nome = btn.getAttribute("data-nome") || "este tenant";
+    if (!idTenant || !window.Swal) return;
+    const c = await Swal.fire({
+      title: "Cancelar agora?",
+      html: `<p style="margin:0 0 8px"><strong>${esc(nome)}</strong></p><p style="margin:0">Volta ao Explorar neste instante. Todas as cobranças em aberto são canceladas na Efí. O cliente não recebe e-mail.</p>`,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Cancelar agora",
+      cancelButtonText: "Voltar",
+      confirmButtonColor: "#E53935",
+    });
+    if (!c.isConfirmed) return;
+    Swal.fire({ title: "Rebaixando…", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    const r = await fetch(cfg.apiRebaixarAgora, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ id_tenant: idTenant }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.success) throw new Error(j.message || "Não foi possível rebaixar.");
+    await Swal.fire({
+      icon: "success",
+      title: "Plano rebaixado",
+      text: j.message || "Voltou ao Explorar.",
+      confirmButtonColor: "#021F81",
+    });
+    await carregar();
+  }
+
   async function cancelarAssinaturaTenant(btn) {
     const idTenant = parseInt(btn.getAttribute("data-tenant") || "0", 10);
     const nome = btn.getAttribute("data-nome") || "este tenant";
@@ -1222,6 +1254,7 @@
     if (acao === "detalhe") verDetalheTenant(btn).catch(falha);
     else if (acao === "criar_efi") criarAssinaturaEfi(btn).catch(falha);
     else if (acao === "cancelar_assinatura") cancelarAssinaturaTenant(btn).catch(falha);
+    else if (acao === "cancelar_agora") cancelarAgoraTenant(btn).catch(falha);
   }
 
   document.addEventListener("DOMContentLoaded", () => {

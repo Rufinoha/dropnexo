@@ -723,6 +723,49 @@ def _encerrar_assinatura_efi(cur, id_tenant: int) -> None:
     )
 
 
+def _fatura_adesao_em_aberto(cur, id_tenant: int, plano_slug: str, valor_centavos: int):
+    """Se já há assinatura ativa deste plano, devolve o boleto em aberto em vez de criar outra.
+
+    Sem fatura em aberto e com assinatura ativa do mesmo plano, recusa a nova adesão.
+    Plano diferente segue o fluxo normal (a assinatura anterior é encerrada na criação).
+    """
+    garantir_colunas_assinatura(cur)
+    cur.execute(
+        """
+        SELECT COALESCE(efi_subscription_id, ''), COALESCE(assinatura_status, '')
+        FROM tbl_tenant_cobranca
+        WHERE id_tenant = %s
+        """,
+        (int(id_tenant),),
+    )
+    row = cur.fetchone()
+    sub = str(row[0] or "").strip() if row else ""
+    st = str(row[1] or "").strip().lower() if row else ""
+    if not sub or st == "cancelada":
+        return None
+    cur.execute(
+        """
+        SELECT id, plano_slug, valor_centavos
+        FROM tbl_fatura
+        WHERE id_tenant = %s AND status IN ('pendente', 'vencido')
+        ORDER BY id DESC
+        LIMIT 1
+        """,
+        (int(id_tenant),),
+    )
+    aberta = cur.fetchone()
+    if aberta and str(aberta[1] or "") == plano_slug and int(aberta[2] or 0) == int(valor_centavos):
+        return obter_fatura(cur, int(id_tenant), int(aberta[0]))
+    if aberta and str(aberta[1] or "") != plano_slug:
+        return None
+    if aberta and int(aberta[2] or 0) != int(valor_centavos):
+        return None
+    raise ValueError(
+        "Já existe uma assinatura ativa deste plano. "
+        "Use o boleto já emitido ou aguarde a confirmação do pagamento."
+    )
+
+
 def _criar_cobranca_efi(
     cur,
     *,
@@ -909,52 +952,63 @@ def emitir_fatura(
         except Exception:
             log.exception("Commit pré-Efí (intenção de assinatura) falhou tenant=%s", id_tenant)
 
-        cob = _criar_cobranca_efi(
-            cur,
-            id_tenant=id_tenant,
-            forma=forma,
-            valor_centavos=valor_final,
-            descricao=descricao,
-            vencimento=venc,
-            nome_cliente=cli["nome_cliente"],
-            documento=cli["documento"],
-            email=email,
-            payment_token=payment_token,
-            installments=installments,
-            telefone=cli.get("telefone"),
-            endereco=cli.get("endereco"),
-            plano_slug=plano_slug,
-            periodo=periodo,
-            nome_plano=plano["nome"],
-        )
-        # Espelha subscription/charge o quanto antes — se o INSERT da fatura
-        # falhar ou o processo morrer, o webhook ainda acha o tenant.
-        if cob.get("subscription_id") or cob.get("charge_id"):
-            cur.execute(
-                """
-                UPDATE tbl_tenant_cobranca
-                SET efi_subscription_id = COALESCE(%s, efi_subscription_id),
-                    efi_plan_id = COALESCE(%s, efi_plan_id),
-                    assinatura_status = CASE
-                        WHEN %s IS NOT NULL THEN 'ativa'
-                        ELSE assinatura_status
-                    END,
-                    cancelado_em = CASE WHEN %s IS NOT NULL THEN NULL ELSE cancelado_em END,
-                    atualizado_em = NOW()
-                WHERE id_tenant = %s
-                """,
-                (
-                    str(cob["subscription_id"]) if cob.get("subscription_id") else None,
-                    str(cob["plan_id"]) if cob.get("plan_id") else None,
-                    str(cob["subscription_id"]) if cob.get("subscription_id") else None,
-                    str(cob["subscription_id"]) if cob.get("subscription_id") else None,
-                    id_tenant,
-                ),
+        # Uma adesão por vez: o segundo clique espera e reutiliza a assinatura já aberta.
+        cur.execute("SELECT pg_advisory_lock(5260, %s)", (int(id_tenant),))
+        try:
+            reuso = _fatura_adesao_em_aberto(cur, id_tenant, plano_slug, valor_final)
+            if reuso:
+                return reuso
+            cob = _criar_cobranca_efi(
+                cur,
+                id_tenant=id_tenant,
+                forma=forma,
+                valor_centavos=valor_final,
+                descricao=descricao,
+                vencimento=venc,
+                nome_cliente=cli["nome_cliente"],
+                documento=cli["documento"],
+                email=email,
+                payment_token=payment_token,
+                installments=installments,
+                telefone=cli.get("telefone"),
+                endereco=cli.get("endereco"),
+                plano_slug=plano_slug,
+                periodo=periodo,
+                nome_plano=plano["nome"],
             )
+            # Espelha subscription/charge o quanto antes — se o INSERT da fatura
+            # falhar ou o processo morrer, o webhook ainda acha o tenant.
+            if cob.get("subscription_id") or cob.get("charge_id"):
+                cur.execute(
+                    """
+                    UPDATE tbl_tenant_cobranca
+                    SET efi_subscription_id = COALESCE(%s, efi_subscription_id),
+                        efi_plan_id = COALESCE(%s, efi_plan_id),
+                        assinatura_status = CASE
+                            WHEN %s IS NOT NULL THEN 'ativa'
+                            ELSE assinatura_status
+                        END,
+                        cancelado_em = CASE WHEN %s IS NOT NULL THEN NULL ELSE cancelado_em END,
+                        atualizado_em = NOW()
+                    WHERE id_tenant = %s
+                    """,
+                    (
+                        str(cob["subscription_id"]) if cob.get("subscription_id") else None,
+                        str(cob["plan_id"]) if cob.get("plan_id") else None,
+                        str(cob["subscription_id"]) if cob.get("subscription_id") else None,
+                        str(cob["subscription_id"]) if cob.get("subscription_id") else None,
+                        id_tenant,
+                    ),
+                )
+                try:
+                    cur.connection.commit()
+                except Exception:
+                    log.exception("Commit pós-Efí (subscription) falhou tenant=%s", id_tenant)
+        finally:
             try:
-                cur.connection.commit()
+                cur.execute("SELECT pg_advisory_unlock(5260, %s)", (int(id_tenant),))
             except Exception:
-                log.exception("Commit pós-Efí (subscription) falhou tenant=%s", id_tenant)
+                log.exception("Unlock adesão tenant=%s", id_tenant)
 
     status_ini = "pago" if cortesia or (forma == "cartao" and cob.get("pago")) else "pendente"
     cur.execute(
@@ -1330,8 +1384,26 @@ def _cancelar_pix_efi(cur, id_tenant: int, id_fatura: int, txid: str) -> str:
     return "O PIX foi cancelado na Efí."
 
 
+def _fatura_tem_nf_anexada(cur, id_fatura: int) -> bool:
+    """True se a cobrança já tem PDF de NFS-e anexado (bloqueia cancelamento)."""
+    garantir_colunas_assinatura(cur)
+    cur.execute(
+        """
+        SELECT COALESCE(NULLIF(TRIM(nf_caminho), ''), '') <> ''
+        FROM tbl_fatura
+        WHERE id = %s
+        """,
+        (int(id_fatura),),
+    )
+    row = cur.fetchone()
+    return bool(row and row[0])
+
+
 def cancelar_fatura_admin(cur, id_fatura: int, *, id_tenant: int | None = None) -> dict:
-    """Cancela a fatura local e a cobrança na Efí. Não altera o plano do tenant."""
+    """Cancela a fatura local e a cobrança na Efí. Não altera o plano do tenant.
+
+    Cobrança com nota fiscal anexada não cancela — só o plano / cobranças futuras.
+    """
     if id_fatura <= 0:
         raise ValueError("Fatura inválida.")
     sql = f"SELECT {_FATURA_COLS}, id_tenant FROM tbl_fatura WHERE id = %s"
@@ -1345,6 +1417,11 @@ def cancelar_fatura_admin(cur, id_fatura: int, *, id_tenant: int | None = None) 
         raise ValueError("Fatura não encontrada.")
     fat = fatura_dict(row)
     tid = int(row[-1])
+    if _fatura_tem_nf_anexada(cur, id_fatura):
+        raise ValueError(
+            "Esta cobrança tem nota fiscal anexada e não pode ser cancelada. "
+            "Cancele o plano para encerrar cobranças futuras; a fatura com NF permanece."
+        )
     st = (fat.get("status") or "").strip().lower()
     if st == "pago":
         raise ValueError("Fatura já está paga. Cobrança paga não é cancelada.")
@@ -1999,7 +2076,10 @@ def aplicar_estorno_fatura(
     origem: str = "webhook",
     status_efi: str | None = None,
 ) -> dict:
-    """Marca fatura como cancelado após estorno e rebaixa o plano se não houver pagamento mais novo."""
+    """Marca fatura como cancelado após estorno e rebaixa o plano se não houver pagamento mais novo.
+
+    Com NF anexada a fatura não muda de status (documento fiscal já emitido).
+    """
     cur.execute(
         "SELECT id, id_tenant, status FROM tbl_fatura WHERE id = %s",
         (id_fatura,),
@@ -2010,6 +2090,34 @@ def aplicar_estorno_fatura(
     fid, tid, st = int(row[0]), int(row[1]), (row[2] or "").strip().lower()
     if st == "cancelado":
         return {"ok": True, "status": "cancelado", "id_fatura": fid, "ja_estornada": True}
+
+    if _fatura_tem_nf_anexada(cur, fid):
+        registrar_efi_log(
+            cur,
+            id_tenant=tid,
+            id_fatura=fid,
+            direcao="in",
+            operacao="estorno_fatura_bloqueado_nf",
+            ok=False,
+            response_resumo={
+                "origem": origem,
+                "status_anterior": st,
+                "status_efi": status_efi,
+                "motivo": "nota_fiscal_anexada",
+            },
+        )
+        return {
+            "ok": False,
+            "status": st,
+            "id_fatura": fid,
+            "id_tenant": tid,
+            "bloqueado_nf": True,
+            "message": (
+                "Cobrança com nota fiscal anexada não pode ser cancelada/estornada no sistema. "
+                "Trate o estorno fora e mantenha a NF."
+            ),
+            "origem": origem,
+        }
 
     cur.execute(
         """
@@ -2733,6 +2841,70 @@ def encerrar_billing_ao_cancelar_conta(cur, id_tenant: int) -> None:
     )
 
 
+def encerrar_adesoes_boleto_vencido(cur) -> int:
+    """Primeiro boleto venceu sem nenhum pagamento: cancela a recorrência na Efí.
+
+    Vale também para quem nunca saiu do Explorar. Quem já pagou um ciclo segue
+    a regra dos 30 dias de atraso.
+    """
+    garantir_colunas_assinatura(cur)
+    cur.execute(
+        """
+        SELECT tc.id_tenant, f.id
+        FROM tbl_tenant_cobranca tc
+        JOIN tbl_fatura f ON f.id_tenant = tc.id_tenant
+        WHERE COALESCE(tc.efi_subscription_id, '') <> ''
+          AND COALESCE(tc.assinatura_status, '') <> 'cancelada'
+          AND f.status IN ('pendente', 'vencido')
+          AND lower(COALESCE(f.forma_pagamento, '')) = 'boleto'
+          AND f.vencimento_em IS NOT NULL
+          AND f.vencimento_em < CURRENT_DATE
+          AND NOT EXISTS (
+            SELECT 1 FROM tbl_fatura p
+            WHERE p.id_tenant = tc.id_tenant
+              AND p.status = 'pago'
+              AND COALESCE(p.valor_centavos, 0) > 0
+          )
+        ORDER BY tc.id_tenant, f.id
+        """
+    )
+    rows = cur.fetchall()
+    vistos: set[int] = set()
+    n = 0
+    for tid, fid in rows:
+        tid_n = int(tid)
+        if tid_n not in vistos:
+            _encerrar_assinatura_efi(cur, tid_n)
+            cur.execute(
+                """
+                UPDATE tbl_tenant_cobranca
+                SET plano_slug_pendente = NULL, atualizado_em = NOW()
+                WHERE id_tenant = %s
+                """,
+                (tid_n,),
+            )
+            registrar_efi_log(
+                cur,
+                id_tenant=tid_n,
+                id_fatura=int(fid),
+                direcao="out",
+                operacao="cancelar_adesao_boleto_vencido",
+                ok=True,
+                response_resumo={"motivo": "primeiro boleto venceu sem pagamento"},
+            )
+            vistos.add(tid_n)
+            n += 1
+        cur.execute(
+            """
+            UPDATE tbl_fatura
+            SET status = 'cancelado', atualizado_em = NOW()
+            WHERE id = %s AND status IN ('pendente', 'vencido')
+            """,
+            (int(fid),),
+        )
+    return n
+
+
 def job_financeiro_diario(cur) -> dict:
     """Marca vencidas, avisa atraso e, 30 dias após o vencimento, cancela a recorrência."""
     hoje = date.today()
@@ -2742,6 +2914,7 @@ def job_financeiro_diario(cur) -> dict:
         "avisos": 0,
         "rebaixados": 0,
         "renovacoes": 0,
+        "adesoes_boleto_canceladas": 0,
         "erros": [],
         "sync_efi": {},
         "reconciliar_orfas": {},
@@ -2797,6 +2970,12 @@ def job_financeiro_diario(cur) -> dict:
             _enviar_email_fatura(cur, int(tid), fat, tipo="aviso")
             cur.execute("UPDATE tbl_fatura SET avisado_em = NOW() WHERE id = %s", (fid,))
             res["avisos"] += 1
+
+    try:
+        res["adesoes_boleto_canceladas"] = encerrar_adesoes_boleto_vencido(cur)
+    except Exception as e:
+        res["erros"].append(f"adesao_boleto: {e}")
+        log.exception("job diario adesao boleto vencido")
 
     # 30 dias após o vencimento sem pagamento: plano gratuito e cancela a recorrência.
     limite = hoje - timedelta(days=DIAS_ATRASO_CANCELA)
@@ -3219,6 +3398,77 @@ def resumo_assinatura_tenant(cur, id_tenant: int) -> dict:
     }
 
 
+def rebaixar_agora_sem_aviso(cur, id_tenant: int) -> dict:
+    """Volta ao Explorar na hora, sem e-mail, e cancela todas as cobranças em aberto na Efí."""
+    garantir_cobranca_tenant(cur, id_tenant)
+    garantir_colunas_assinatura(cur)
+    cur.execute(
+        """
+        SELECT COALESCE(efi_subscription_id, ''), COALESCE(assinatura_status, '')
+        FROM tbl_tenant_cobranca
+        WHERE id_tenant = %s
+        """,
+        (int(id_tenant),),
+    )
+    row = cur.fetchone()
+    sub = str(row[0] or "").strip() if row else ""
+    if sub.isdigit():
+        from api.efi.efi import cancelar_assinatura
+
+        try:
+            cancelar_assinatura(sub)
+        except Exception:
+            log.exception("Falha ao cancelar assinatura Efí tenant=%s sub=%s", id_tenant, sub)
+        cur.execute(
+            """
+            UPDATE tbl_tenant_cobranca
+            SET assinatura_status = 'cancelada',
+                cancelado_em = COALESCE(cancelado_em, NOW()),
+                atualizado_em = NOW()
+            WHERE id_tenant = %s
+            """,
+            (int(id_tenant),),
+        )
+
+    cur.execute(
+        """
+        SELECT id FROM tbl_fatura
+        WHERE id_tenant = %s AND status IN ('pendente', 'vencido')
+        ORDER BY id
+        """,
+        (int(id_tenant),),
+    )
+    abertas = [int(r[0]) for r in cur.fetchall()]
+    canceladas: list[int] = []
+    falhas: list[str] = []
+    for fid in abertas:
+        try:
+            cur.execute("SAVEPOINT sp_rebaixar_agora")
+            cancelar_fatura_admin(cur, fid, id_tenant=int(id_tenant))
+            cur.execute("RELEASE SAVEPOINT sp_rebaixar_agora")
+            canceladas.append(fid)
+        except Exception as e:
+            try:
+                cur.execute("ROLLBACK TO SAVEPOINT sp_rebaixar_agora")
+            except Exception:
+                pass
+            falhas.append(f"#{fid}: {e}")
+            log.exception("Cancelar fatura aberta %s tenant=%s", fid, id_tenant)
+
+    rebaixar_tenant_starter(cur, int(id_tenant), notificar=False)
+    msg = "Conta voltou ao Explorar agora. Nenhum e-mail foi enviado."
+    if canceladas:
+        msg += f" Cobranças em aberto canceladas: {len(canceladas)}."
+    if falhas:
+        msg += " Algumas cobranças não cancelaram na Efí: " + "; ".join(falhas[:5])
+    return {
+        "ok": True,
+        "mensagem": msg,
+        "faturas_canceladas": canceladas,
+        "falhas": falhas,
+    }
+
+
 def cancelar_plano_atual(cur, id_tenant: int) -> dict:
     """Encerra a recorrência na Efí. O período já pago segue até o fim."""
     garantir_cobranca_tenant(cur, id_tenant)
@@ -3237,6 +3487,7 @@ def cancelar_plano_atual(cur, id_tenant: int) -> dict:
         "ok": True,
         "mensagem": (
             "Assinatura cancelada. Não haverá novas cobranças. "
+            "Cobranças já pagas — inclusive com nota fiscal anexada — permanecem. "
             "O período já pago continua até o fim e, depois disso, a conta volta ao Explorar."
         ),
     }

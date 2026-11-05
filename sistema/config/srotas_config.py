@@ -3738,6 +3738,39 @@ def assinaturas_criar_efi():
         conn.close()
 
 
+@config_bp.post(f"{ASSINATURAS_PREFIX}/rebaixar-agora")
+@login_obrigatorio()
+def assinaturas_rebaixar_agora():
+    """Limpeza temporária: Explorar na hora, sem e-mail, cancela toda cobrança em aberto."""
+    if (r := _exigir_dev()) is not None:
+        return r
+    from sistema.financeiro.cobranca import rebaixar_agora_sem_aviso
+
+    body = request.get_json(silent=True) or {}
+    try:
+        id_tenant = int(body.get("id_tenant") or 0)
+    except (TypeError, ValueError):
+        id_tenant = 0
+    if id_tenant <= 0:
+        return jsonify(success=False, message="Tenant inválido."), 400
+
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        out = rebaixar_agora_sem_aviso(cur, id_tenant)
+        conn.commit()
+        return jsonify(success=True, message=out.get("mensagem") or "Plano rebaixado.")
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 400
+    except Exception:
+        conn.rollback()
+        _log.exception("rebaixar agora tenant=%s", id_tenant)
+        return jsonify(success=False, message="Não foi possível rebaixar o plano."), 500
+    finally:
+        conn.close()
+
+
 @config_bp.post(f"{ASSINATURAS_PREFIX}/cancelar-assinatura")
 @login_obrigatorio()
 def assinaturas_cancelar_assinatura():
