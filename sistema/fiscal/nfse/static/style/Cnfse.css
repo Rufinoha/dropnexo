@@ -64,6 +64,12 @@
   padding:0;
   background:transparent;
 }
+.Nfse_Parametros .nfse-panel.is-bloqueado{
+  opacity:.72;
+}
+.Nfse_Parametros .nfse-panel.is-bloqueado .Nfse_SecaoTitulo{
+  margin-top:.5rem;
+}
 .Nfse_Page .Nfse_AcoesTopo{display:flex;align-items:center;gap:.55rem;flex-wrap:wrap;justify-content:flex-end}
 .Nfse_Page .Nfse_Filtros{display:grid;grid-template-columns:minmax(220px,1.4fr) minmax(160px,.7fr) auto;gap:.85rem 1rem;align-items:end;margin:0 0 1rem;padding:0 0 .2rem}
 .Nfse_Page .Nfse_FiltrosAcao{display:flex;align-items:end}

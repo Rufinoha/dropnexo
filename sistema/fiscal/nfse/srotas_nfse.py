@@ -852,30 +852,15 @@ def api_perfil_salvar():
 @nfse_bp.route("/api/config")
 @_nfse_autorizado
 def api_config():
+    from sistema.fiscal.nfse.tenant_fiscal import carregar_empresa_fiscal
+
     conn = Var_ConectarBanco()
     try:
-        cur = db_execute(
-            conn,
-            """
-            SELECT c.id, c.id_tenant,
-                   t.razao_social, t.nome_fantasia, t.cnpj,
-                   t.inscricao_municipal, t.municipio_ibge_codigo,
-                   t.municipio_nome, t.uf,
-                   c.regime_tributario, c.optante_simples,
-                   c.incentivador_cultural, c.regime_especial_tributacao,
-                   c.percentual_tributos_sn,
-                   c.serie_dps, c.proximo_numero_dps, c.ambiente,
-                   c.dt_criacao, c.dt_atualizacao
-              FROM tbl_nfse_config_empresa c
-              JOIN tbl_tenant t ON t.id = c.id_tenant
-             WHERE c.id_tenant = %s
-            """,
-            (_tenant(),),
-        )
+        dados = carregar_empresa_fiscal(conn, _tenant())
         return jsonify(
             {
                 "success": True,
-                "dados": _payload_row(_dict_row(cur)),
+                "dados": _payload_row(dados),
                 "dev_crypto_fallback": validar_configuracao_criptografica(),
             }
         )
@@ -886,6 +871,8 @@ def api_config():
 @nfse_bp.route("/api/config/salvar", methods=["POST"])
 @_nfse_autorizado
 def api_config_salvar():
+    from sistema.fiscal.nfse.tenant_fiscal import salvar_empresa_fiscal
+
     dados = request.get_json(silent=True) or {}
     cnpj = somente_digitos(dados.get("cnpj"))
     uf = (dados.get("uf") or "").strip().upper()
@@ -896,81 +883,37 @@ def api_config_salvar():
         return jsonify({"success": False, "message": "UF deve ter dois caracteres."}), 400
     if ibge and len(ibge) != 7:
         return jsonify({"success": False, "message": "Código IBGE deve ter 7 dígitos."}), 400
-    ambiente = dados.get("ambiente") if dados.get("ambiente") in {"homologacao", "producao"} else "homologacao"
     bruto_percentual = str(dados.get("percentual_tributos_sn") or "").strip()
     percentual_sn = None
     if bruto_percentual:
         percentual_sn = _decimal(bruto_percentual, "Percentual aproximado do Simples")
         if percentual_sn > Decimal("99.99"):
             return jsonify({"success": False, "message": "Percentual aproximado do Simples deve ficar entre 0 e 99,99."}), 400
+    dados = dict(dados)
+    dados["percentual_tributos_sn"] = percentual_sn
+    dados["optante_simples"] = _bool(dados.get("optante_simples"))
+    dados["incentivador_cultural"] = _bool(dados.get("incentivador_cultural"))
     conn = Var_ConectarBanco()
     try:
-        # Identidade jurídica pertence ao tenant e pode ser reutilizada por
-        # qualquer módulo fiscal futuro.
-        db_execute(
-            conn,
-            """
-            UPDATE tbl_tenant SET
-                razao_social=%s, nome_fantasia=%s, cnpj=%s,
-                inscricao_municipal=%s, municipio_ibge_codigo=%s,
-                municipio_nome=%s, uf=%s, dt_atualizacao=NOW()
-             WHERE id=%s
-            """,
-            (
-                (dados.get("razao_social") or "").strip() or None,
-                (dados.get("nome_fantasia") or "").strip() or None,
-                cnpj or None,
-                (dados.get("inscricao_municipal") or "").strip() or None,
-                ibge or None,
-                (dados.get("municipio_nome") or "").strip() or None,
-                uf or None,
-                _tenant(),
-            ),
-        )
-        db_execute(
-            conn,
-            """
-            INSERT INTO tbl_nfse_config_empresa (
-                id_tenant, razao_social, nome_fantasia, cnpj, inscricao_municipal,
-                municipio_ibge_codigo, municipio_nome, uf, regime_tributario,
-                optante_simples, incentivador_cultural, regime_especial_tributacao,
-                percentual_tributos_sn, serie_dps, proximo_numero_dps, ambiente
-            ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-            ON CONFLICT (id_tenant) DO UPDATE SET
-                razao_social=EXCLUDED.razao_social, nome_fantasia=EXCLUDED.nome_fantasia,
-                cnpj=EXCLUDED.cnpj, inscricao_municipal=EXCLUDED.inscricao_municipal,
-                municipio_ibge_codigo=EXCLUDED.municipio_ibge_codigo,
-                municipio_nome=EXCLUDED.municipio_nome, uf=EXCLUDED.uf,
-                regime_tributario=EXCLUDED.regime_tributario,
-                optante_simples=EXCLUDED.optante_simples,
-                incentivador_cultural=EXCLUDED.incentivador_cultural,
-                regime_especial_tributacao=EXCLUDED.regime_especial_tributacao,
-                percentual_tributos_sn=EXCLUDED.percentual_tributos_sn,
-                serie_dps=EXCLUDED.serie_dps, proximo_numero_dps=EXCLUDED.proximo_numero_dps,
-                ambiente=EXCLUDED.ambiente, dt_atualizacao=NOW()
-            """,
-            (
-                _tenant(),
-                (dados.get("razao_social") or "").strip(),
-                (dados.get("nome_fantasia") or "").strip() or None,
-                cnpj,
-                (dados.get("inscricao_municipal") or "").strip() or None,
-                ibge,
-                (dados.get("municipio_nome") or "").strip(),
-                uf,
-                (dados.get("regime_tributario") or "simples_nacional").strip(),
-                _bool(dados.get("optante_simples")),
-                _bool(dados.get("incentivador_cultural")),
-                (dados.get("regime_especial_tributacao") or "").strip() or None,
-                percentual_sn,
-                (dados.get("serie_dps") or "1").strip(),
-                max(1, int(dados.get("proximo_numero_dps") or 1)),
-                ambiente,
-            ),
-        )
-        _auditar(conn, "config_salva", "Configuração fiscal do tenant atualizada.")
+        salvos = salvar_empresa_fiscal(conn, _tenant(), dados)
+        _auditar(conn, "config_salva", "Empresa fiscal atualizada no cadastro do tenant.")
         conn.commit()
-        return jsonify({"success": True, "message": "Configuração fiscal salva."})
+        return jsonify(
+            {
+                "success": True,
+                "message": "Empresa fiscal salva no cadastro do tenant.",
+                "dados": _payload_row(salvos),
+            }
+        )
+    except PermissionError as e:
+        conn.rollback()
+        return jsonify({"success": False, "message": str(e)}), 403
+    except ValueError as e:
+        conn.rollback()
+        return jsonify({"success": False, "message": str(e)}), 400
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"success": False, "message": str(e)}), 500
     finally:
         conn.close()
 
@@ -1015,7 +958,14 @@ def api_certificado_upload():
     conn = Var_ConectarBanco()
     try:
         config = db_execute(
-            conn, "SELECT cnpj FROM tbl_tenant WHERE id=%s", (_tenant(),)
+            conn,
+            """
+            SELECT COALESCE(NULLIF(TRIM(cnpj), ''),
+                            CASE WHEN UPPER(COALESCE(tipo_pessoa,''))='J'
+                                 THEN NULLIF(TRIM(documento),'') END)
+              FROM tbl_tenant WHERE id=%s
+            """,
+            (_tenant(),),
         ).fetchone()
         cnpj_config = somente_digitos(config[0]) if config else ""
         if meta["cnpj"] and cnpj_config and meta["cnpj"] != cnpj_config:
@@ -1142,16 +1092,38 @@ def api_nota_salvar():
                 (*campos_tomador, id_nota, _tenant()),
             )
         else:
+            from sistema.fiscal.nfse.tenant_fiscal import (
+                carregar_empresa_fiscal,
+                garantir_colunas_tenant_fiscal,
+            )
+
+            garantir_colunas_tenant_fiscal(conn)
             config = db_execute(
                 conn,
                 """
-                SELECT serie_dps, proximo_numero_dps FROM tbl_nfse_config_empresa
-                 WHERE id_tenant=%s FOR UPDATE
+                SELECT COALESCE(NULLIF(TRIM(serie_dps), ''), '1'),
+                       COALESCE(NULLIF(proximo_numero_dps, 0), 1),
+                       UPPER(COALESCE(tipo_pessoa, ''))
+                  FROM tbl_tenant
+                 WHERE id=%s FOR UPDATE
                 """,
                 (_tenant(),),
             ).fetchone()
             if not config:
-                return jsonify({"success": False, "message": "Configure os parâmetros fiscais antes de criar a DPS.", "erros": ["config"]}), 400
+                return jsonify({"success": False, "message": "Tenant não encontrado.", "erros": ["config"]}), 400
+            if config[2] != "J":
+                return jsonify({
+                    "success": False,
+                    "message": "Empresa fiscal exige tenant PJ. Atualize o cadastro do tenant.",
+                    "erros": ["pj"],
+                }), 400
+            emp = carregar_empresa_fiscal(conn, _tenant())
+            if not somente_digitos(emp.get("cnpj") or "") or not (emp.get("razao_social") or "").strip():
+                return jsonify({
+                    "success": False,
+                    "message": "Complete a Empresa fiscal (CNPJ e razão social) antes de criar a DPS.",
+                    "erros": ["config"],
+                }), 400
             cur = db_execute(
                 conn,
                 """
@@ -1185,7 +1157,7 @@ def api_nota_salvar():
             )
             db_execute(
                 conn,
-                "UPDATE tbl_nfse_config_empresa SET proximo_numero_dps=proximo_numero_dps+1 WHERE id_tenant=%s",
+                "UPDATE tbl_tenant SET proximo_numero_dps=COALESCE(proximo_numero_dps,1)+1, dt_atualizacao=NOW() WHERE id=%s",
                 (_tenant(),),
             )
         row = cur.fetchone()
@@ -1224,15 +1196,21 @@ def _validar_nota(conn, id_nota: int) -> list[str]:
     cur = db_execute(
         conn,
         """
-        SELECT n.*, t.razao_social AS prestador_razao, t.cnpj AS prestador_cnpj,
-               t.inscricao_municipal, t.municipio_ibge_codigo, t.uf, c.ambiente,
-               c.regime_tributario, c.optante_simples, c.regime_especial_tributacao,
-               c.percentual_tributos_sn,
+        SELECT n.*,
+               COALESCE(NULLIF(TRIM(t.razao_social), ''), NULLIF(TRIM(t.nome_completo), ''), t.nome) AS prestador_razao,
+               COALESCE(NULLIF(TRIM(t.cnpj), ''),
+                        CASE WHEN UPPER(COALESCE(t.tipo_pessoa,''))='J'
+                             THEN NULLIF(TRIM(t.documento),'') END) AS prestador_cnpj,
+               t.inscricao_municipal, t.municipio_ibge_codigo, t.uf,
+               COALESCE(NULLIF(TRIM(t.ambiente_nfse), ''), 'homologacao') AS ambiente,
+               COALESCE(NULLIF(TRIM(t.regime_tributario), ''), 'simples_nacional') AS regime_tributario,
+               COALESCE(t.optante_simples, TRUE) AS optante_simples,
+               t.regime_especial_tributacao,
+               t.percentual_tributos_sn,
                emp_inter.razao_social AS intermediario_razao_social,
                emp_inter.cnpj AS intermediario_cnpj_cpf,
                emp_inter.telefone AS intermediario_fone
           FROM tbl_nfse_nota n
-          LEFT JOIN tbl_nfse_config_empresa c ON c.id_tenant=n.id_tenant
           LEFT JOIN tbl_tenant t ON t.id=n.id_tenant
           LEFT JOIN tbl_empresa emp_inter
             ON emp_inter.id=n.id_intermediario_empresa AND emp_inter.id_tenant=n.id_tenant
@@ -1342,17 +1320,22 @@ def api_nota_emitir(id_nota):
         cur = db_execute(
             conn,
             """
-            SELECT n.*, t.razao_social AS prestador_razao, t.cnpj AS prestador_cnpj,
+            SELECT n.*,
+                   COALESCE(NULLIF(TRIM(t.razao_social), ''), NULLIF(TRIM(t.nome_completo), ''), t.nome) AS prestador_razao,
+                   COALESCE(NULLIF(TRIM(t.cnpj), ''),
+                            CASE WHEN UPPER(COALESCE(t.tipo_pessoa,''))='J'
+                                 THEN NULLIF(TRIM(t.documento),'') END) AS prestador_cnpj,
                    t.inscricao_municipal, t.municipio_ibge_codigo,
-                   c.ambiente, c.regime_tributario, c.optante_simples,
-                   c.regime_especial_tributacao, c.percentual_tributos_sn,
+                   COALESCE(NULLIF(TRIM(t.ambiente_nfse), ''), 'homologacao') AS ambiente,
+                   COALESCE(NULLIF(TRIM(t.regime_tributario), ''), 'simples_nacional') AS regime_tributario,
+                   COALESCE(t.optante_simples, TRUE) AS optante_simples,
+                   t.regime_especial_tributacao, t.percentual_tributos_sn,
                    emp_inter.razao_social AS intermediario_razao_social,
                    emp_inter.cnpj AS intermediario_cnpj_cpf,
                    emp_inter.telefone AS intermediario_fone,
                    cert.conteudo_encriptado, cert.senha_encriptada
               FROM tbl_nfse_nota n
               JOIN tbl_tenant t ON t.id=n.id_tenant
-              JOIN tbl_nfse_config_empresa c ON c.id_tenant=n.id_tenant
               LEFT JOIN tbl_empresa emp_inter
                 ON emp_inter.id=n.id_intermediario_empresa AND emp_inter.id_tenant=n.id_tenant
               LEFT JOIN LATERAL (
@@ -1636,9 +1619,10 @@ def _gravar_nota_importada(conn, nota: dict, cnpj_tenant: str, serie_config: str
             db_execute(
                 conn,
                 """
-                UPDATE tbl_nfse_config_empresa
-                   SET proximo_numero_dps=GREATEST(proximo_numero_dps, %s)
-                 WHERE id_tenant=%s
+                UPDATE tbl_tenant
+                   SET proximo_numero_dps=GREATEST(COALESCE(proximo_numero_dps, 1), %s),
+                       dt_atualizacao=NOW()
+                 WHERE id=%s
                 """,
                 (numero + 1, _tenant()),
             )
@@ -1659,25 +1643,19 @@ def api_notas_importar():
     """Copia para o painel as NFS-e que este CNPJ já emitiu. Não transmite DPS."""
     conn = Var_ConectarBanco()
     try:
+        from sistema.fiscal.nfse.tenant_fiscal import carregar_empresa_fiscal, garantir_colunas_tenant_fiscal
+
         try:
-            db_execute(
-                conn,
-                """
-                ALTER TABLE tbl_nfse_config_empresa
-                    ADD COLUMN IF NOT EXISTS ultimo_nsu_adn BIGINT NOT NULL DEFAULT 0
-                """,
-            )
-            conn.commit()
+            garantir_colunas_tenant_fiscal(conn)
         except Exception:
             conn.rollback()
         try:
+            emp = carregar_empresa_fiscal(conn, _tenant())
             cur = db_execute(
                 conn,
                 """
-                SELECT t.cnpj, c.ambiente, c.serie_dps, coalesce(c.ultimo_nsu_adn, 0),
-                       cert.conteudo_encriptado, cert.senha_encriptada
+                SELECT cert.conteudo_encriptado, cert.senha_encriptada
                   FROM tbl_tenant t
-                  JOIN tbl_nfse_config_empresa c ON c.id_tenant=t.id
                   LEFT JOIN LATERAL (
                       SELECT conteudo_encriptado, senha_encriptada
                         FROM tbl_nfse_certificado
@@ -1692,13 +1670,18 @@ def api_notas_importar():
             conn.rollback()
             return jsonify({
                 "success": False,
-                "message": "Falta atualizar o banco. Rode o script sql/17_nfse_nsu_adn.sql e tente de novo.",
+                "message": "Falta atualizar o banco (colunas fiscais do tenant). Reinicie e tente de novo.",
             }), 400
-        origem = cur.fetchone()
-        if not origem:
-            return jsonify({"success": False, "message": "Configure os parâmetros fiscais antes de importar."}), 400
-        cnpj, ambiente, serie_config, cursor, pfx_cifrado, senha_cifrada = origem
-        cnpj = somente_digitos(cnpj)
+        cert_row = cur.fetchone()
+        if not emp.get("eh_pj"):
+            return jsonify({"success": False, "message": "Importação exige tenant PJ com Empresa fiscal."}), 400
+        if not cert_row:
+            return jsonify({"success": False, "message": "Configure a Empresa fiscal antes de importar."}), 400
+        cnpj = somente_digitos(emp.get("cnpj") or "")
+        ambiente = emp.get("ambiente") or "homologacao"
+        serie_config = emp.get("serie_dps") or "1"
+        cursor = int(emp.get("ultimo_nsu_adn") or 0)
+        pfx_cifrado, senha_cifrada = cert_row[0], cert_row[1]
         if len(cnpj) != 14:
             return jsonify({"success": False, "message": "CNPJ do prestador não está cadastrado."}), 400
         if not pfx_cifrado:
@@ -1777,7 +1760,7 @@ def api_notas_importar():
                     contagem["cancelada"] += 1
             db_execute(
                 conn,
-                "UPDATE tbl_nfse_config_empresa SET ultimo_nsu_adn=%s, dt_atualizacao=NOW() WHERE id_tenant=%s",
+                "UPDATE tbl_tenant SET ultimo_nsu_adn=%s, dt_atualizacao=NOW() WHERE id=%s",
                 (cursor, _tenant()),
             )
             conn.commit()
@@ -1833,11 +1816,14 @@ def api_nota_reconciliar(id_nota):
             conn,
             """
             SELECT n.id, n.status, n.numero_dps, n.serie_dps, n.id_dps, n.numero_nfse,
-                   n.xml_nfse_encriptado, t.cnpj AS prestador_cnpj, c.ambiente,
+                   n.xml_nfse_encriptado,
+                   COALESCE(NULLIF(TRIM(t.cnpj), ''),
+                            CASE WHEN UPPER(COALESCE(t.tipo_pessoa,''))='J'
+                                 THEN NULLIF(TRIM(t.documento),'') END) AS prestador_cnpj,
+                   COALESCE(NULLIF(TRIM(t.ambiente_nfse), ''), 'homologacao') AS ambiente,
                    cert.conteudo_encriptado, cert.senha_encriptada
               FROM tbl_nfse_nota n
               JOIN tbl_tenant t ON t.id=n.id_tenant
-              LEFT JOIN tbl_nfse_config_empresa c ON c.id_tenant=n.id_tenant
               LEFT JOIN LATERAL (
                   SELECT conteudo_encriptado, senha_encriptada
                     FROM tbl_nfse_certificado
@@ -2024,11 +2010,14 @@ def api_nota_cancelar(id_nota):
         cur = db_execute(
             conn,
             """
-            SELECT n.id, n.status, n.chave_nfse, n.dt_autorizacao, n.resposta_metadata, c.ambiente, t.cnpj,
+            SELECT n.id, n.status, n.chave_nfse, n.dt_autorizacao, n.resposta_metadata,
+                   COALESCE(NULLIF(TRIM(t.ambiente_nfse), ''), 'homologacao') AS ambiente,
+                   COALESCE(NULLIF(TRIM(t.cnpj), ''),
+                            CASE WHEN UPPER(COALESCE(t.tipo_pessoa,''))='J'
+                                 THEN NULLIF(TRIM(t.documento),'') END) AS cnpj,
                    cert.conteudo_encriptado, cert.senha_encriptada
               FROM tbl_nfse_nota n
               JOIN tbl_tenant t ON t.id=n.id_tenant
-              JOIN tbl_nfse_config_empresa c ON c.id_tenant=n.id_tenant
               LEFT JOIN LATERAL (
                   SELECT conteudo_encriptado, senha_encriptada
                     FROM tbl_nfse_certificado

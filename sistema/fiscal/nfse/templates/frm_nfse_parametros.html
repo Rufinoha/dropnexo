@@ -3,13 +3,13 @@
 {% block head_extra %}
 <link rel="stylesheet" href="{{ url_for('static', filename='style/Csweetalert.css') }}">
 <link rel="stylesheet" href="{{ url_for('financeiro.static', filename='style/Cfinanceiro.css') }}?v=6">
-<link rel="stylesheet" href="{{ url_for('nfse.static', filename='style/Cnfse.css') }}?v=28">
+<link rel="stylesheet" href="{{ url_for('nfse.static', filename='style/Cnfse.css') }}?v=29">
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio Cl_PainelPagina Fin_Page Nfse_Page">
   <div class="pt-page-title">
     <h2>Parâmetros</h2>
-    <p class="pt-page-desc">Empresa fiscal, perfis de nota e certificados A1 do tenant.</p>
+    <p class="pt-page-desc">Empresa fiscal (cadastro do tenant PJ), perfis de nota e certificados A1.</p>
   </div>
 
   <section class="Fin_Card Nfse_Parametros">
@@ -20,7 +20,9 @@
     </div>
 
     <section class="nfse-panel" data-panel="empresa">
+      <div id="cfgEmpresaAviso" class="nfse-warning" hidden></div>
       <h3 class="Nfse_SecaoTitulo">Prestador e ambiente</h3>
+      <p class="nfse-hint">Mesmos dados do cadastro do tenant (PJ). Ao salvar, atualiza <code>tbl_tenant</code> — sem cadastro paralelo.</p>
       <div class="nfse-cnpj-row">
         <div class="Cl_FormCampo"><label>CNPJ *</label><input id="cfg_cnpj" maxlength="18" inputmode="numeric" placeholder="00.000.000/0000-00"></div>
         <button type="button" class="Cl_botaoprimario" id="btnPreencherCnpj">Preencher dados</button>
@@ -116,5 +118,5 @@
 </div>
 {% endblock %}
 {% block page_js %}
-<script src="{{ url_for('nfse.static', filename='script/Snfse_parametros.js') }}?v=28"></script>
+<script src="{{ url_for('nfse.static', filename='script/Snfse_parametros.js') }}?v=29"></script>
 {% endblock %}

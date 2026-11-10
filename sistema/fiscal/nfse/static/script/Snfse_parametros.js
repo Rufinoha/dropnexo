@@ -14,8 +14,23 @@
   async function carregarConfig(){
     const r=await req("/nfse/api/config"); if(!r?.ok)return;
     const d=r.json.dados||{}; cfgCampos.forEach(c=>{const e=$(`cfg_${c}`);if(e)e.value=d[c]??""});
+    if($("cfg_cnpj") && d.cnpj) $("cfg_cnpj").value=formatarCnpj(d.cnpj);
     $("cfg_optante_simples").checked=!!d.optante_simples;$("cfg_incentivador_cultural").checked=!!d.incentivador_cultural;
     $("cryptoWarning").hidden=!r.json.dev_crypto_fallback;
+    const aviso=$("cfgEmpresaAviso");
+    const formBox=document.querySelector('.nfse-panel[data-panel="empresa"]');
+    if(aviso){
+      if(d.eh_pj===false){
+        aviso.hidden=false;
+        aviso.textContent="Este tenant não é PJ. A Empresa fiscal usa o cadastro do tenant — altere o tipo para pessoa jurídica para emitir NFS-e.";
+        formBox?.classList.add("is-bloqueado");
+        formBox?.querySelectorAll("input,select,button,textarea").forEach(el=>{ if(el.id!=="cfgEmpresaAviso") el.disabled=true; });
+      }else{
+        aviso.hidden=true;
+        formBox?.classList.remove("is-bloqueado");
+        formBox?.querySelectorAll("input,select,button,textarea").forEach(el=>{ el.disabled=false; });
+      }
+    }
   }
   function formatarCnpj(v){
     const d=String(v||"").replace(/\D/g,"").slice(0,14);
