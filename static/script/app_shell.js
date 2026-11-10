@@ -478,13 +478,30 @@
   document.addEventListener("DOMContentLoaded", function () {
     carregarAvatarHeader();
     document.querySelectorAll("[data-fg-submenu-toggle]").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const group = btn.closest(".fg-nav-group");
-        if (!group) return;
+      const group = btn.closest(".fg-nav-group");
+      if (!group) return;
+      const key = "fg-nav-open:" + (group.getAttribute("data-fg-nav-group") || "");
+      const sub = group.querySelector(".fg-nav-sub");
+      const filhoAtivo = !!group.querySelector(".fg-nav-subitem.is-active");
+      // Sem preferência: abre se um filho está ativo. Com preferência: respeita o clique do usuário.
+      let aberto = filhoAtivo;
+      try {
+        const saved = sessionStorage.getItem(key);
+        if (saved === "0") aberto = false;
+        if (saved === "1") aberto = true;
+      } catch (_) {}
+      group.classList.toggle("is-open", aberto);
+      btn.setAttribute("aria-expanded", aberto ? "true" : "false");
+      if (sub) sub.hidden = !aberto;
+
+      btn.addEventListener("click", (ev) => {
+        ev.preventDefault();
         const open = group.classList.toggle("is-open");
         btn.setAttribute("aria-expanded", open ? "true" : "false");
-        const sub = group.querySelector(".fg-nav-sub");
         if (sub) sub.hidden = !open;
+        try {
+          sessionStorage.setItem(key, open ? "1" : "0");
+        } catch (_) {}
       });
     });
   });

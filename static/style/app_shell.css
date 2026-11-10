@@ -314,7 +314,7 @@ body.fg-app {
 .fg-nav-group {
   display: flex;
   flex-direction: column;
-  gap: 0.1rem;
+  gap: 0.12rem;
 }
 button.fg-nav-parent {
   width: 100%;
@@ -326,22 +326,61 @@ button.fg-nav-parent {
 }
 .fg-nav-caret {
   margin-left: auto;
-  font-size: 0.75rem;
-  color: #94a3b8;
+  width: 1.15rem;
+  height: 1.15rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  color: #64748b;
+  background: #f1f5f9;
+  font-size: 0.7rem;
+  line-height: 1;
+  transition: transform 0.15s ease, background 0.15s ease, color 0.15s ease;
 }
 .fg-nav-group.is-open > .fg-nav-parent .fg-nav-caret {
   transform: rotate(180deg);
+  color: #021f81;
+  background: #e0e7ff;
 }
 .fg-nav-sub {
-  display: flex;
+  display: none;
   flex-direction: column;
-  gap: 0.05rem;
-  padding: 0.1rem 0 0.25rem 2.35rem;
+  gap: 0.08rem;
+  margin: 0.05rem 0 0.2rem 0.55rem;
+  padding: 0.2rem 0 0.2rem 0.7rem;
+  border-left: 2px solid #e2e8f0;
+}
+.fg-nav-group.is-open > .fg-nav-sub {
+  display: flex;
+}
+.fg-nav-sub[hidden] {
+  display: none !important;
 }
 .fg-nav-subitem {
-  padding: 0.38rem 0.55rem;
-  font-size: 0.86rem;
-  font-weight: 500;
+  padding: 0.42rem 0.65rem;
+  font-size: 0.84rem;
+  font-weight: 550;
+  border-radius: 8px;
+  color: #64748b;
+}
+.fg-nav-subitem:hover {
+  background: #f8fafc;
+  color: #021f81;
+}
+.fg-nav-subitem.is-active {
+  background: #eef2ff;
+  color: #021f81;
+  font-weight: 650;
+  box-shadow: none;
+}
+.fg-nav-badge {
+  margin-left: 0.25rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: #94a3b8;
+  text-transform: lowercase;
 }
 
 .fg-sidebar-foot {

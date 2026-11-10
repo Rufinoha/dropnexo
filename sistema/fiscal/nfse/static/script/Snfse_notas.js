@@ -143,7 +143,7 @@
     notas.clear();
     listaNotas.replaceChildren();
     if (!j.dados.length) {
-      listaNotas.innerHTML = '<tr><td colspan="8">Nenhum registro encontrado.</td></tr>';
+      listaNotas.innerHTML = '<tr><td colspan="8" class="Fin_Empty">Nenhuma nota encontrada.</td></tr>';
     } else {
       j.dados.forEach(n => {
         const id = Number(n.id);

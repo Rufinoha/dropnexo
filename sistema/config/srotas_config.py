@@ -1165,6 +1165,7 @@ def _item_nota_fiscal_menu(mod_ativo: str) -> dict:
                     "nome": "NFe",
                     "url": url_for("fn_notas.notas_nfe_em_breve"),
                     "nav_codigo": "fn_notas_nfe",
+                    "badge": "em breve",
                 },
                 {
                     "nome": "NFSe",
@@ -1183,6 +1184,7 @@ def _item_nota_fiscal_menu(mod_ativo: str) -> dict:
                 "nome": "NFe",
                 "url": url_for("vd_notas.notas_nfe_em_breve"),
                 "nav_codigo": "vd_notas_nfe",
+                "badge": "em breve",
             },
             {
                 "nome": "NFSe",

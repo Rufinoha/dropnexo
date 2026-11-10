@@ -7,7 +7,7 @@
   <meta name="robots" content="noindex, nofollow" />
   {% include "partials/marca_favicon.html" %}
   <link rel="stylesheet" href="{{ url_for('static', filename='style/global_utils.css') }}" />
-  <link rel="stylesheet" href="{{ url_for('static', filename='style/app_shell.css') }}?v=11" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style/app_shell.css') }}?v=12" />
   {% if session.get('id_usuario') %}
   <link rel="stylesheet" href="{{ url_for('static', filename='style/Cnovidades.css') }}?v=2" />
   {% endif %}
@@ -15,7 +15,7 @@
   <script defer src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <script defer src="{{ url_for('static', filename='script/global_utils.js') }}"></script>
-  <script defer src="{{ url_for('static', filename='script/app_shell.js') }}?v=10"></script>
+  <script defer src="{{ url_for('static', filename='script/app_shell.js') }}?v=11"></script>
 </head>
 <body class="fg-app">
   {% set nome_usuario = session.get('nome', 'Usuário') %}
@@ -101,17 +101,18 @@
         {% for item in menu_sidebar %}
           {% set _filhos = item.filhos or [] %}
           {% if _filhos %}
-          {% set _pai_ativo = (nav_ativo == item.nav_codigo) or (_filhos | selectattr('nav_codigo', 'equalto', nav_ativo) | list | length > 0) %}
-          <div class="fg-nav-group{% if _pai_ativo %} is-open{% endif %}">
-            <button type="button" class="fg-nav-item fg-nav-parent{% if _pai_ativo %} is-active{% endif %}" data-fg-submenu-toggle aria-expanded="{{ 'true' if _pai_ativo else 'false' }}">
+          {% set _filho_ativo = (_filhos | selectattr('nav_codigo', 'equalto', nav_ativo) | list | length > 0) %}
+          {% set _pai_ativo = (nav_ativo == item.nav_codigo) or _filho_ativo %}
+          <div class="fg-nav-group{% if _pai_ativo %} is-open{% endif %}" data-fg-nav-group="{{ item.nav_codigo }}">
+            <button type="button" class="fg-nav-item fg-nav-parent{% if _pai_ativo %} is-active{% endif %}" data-fg-submenu-toggle aria-expanded="{{ 'true' if _pai_ativo else 'false' }}" title="Recolher / expandir">
               <svg class="fg-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">{{ item.icone_svg|safe }}</svg>
               <span class="fg-nav-label">{{ item.nome }}</span>
               <span class="fg-nav-caret" aria-hidden="true">▾</span>
             </button>
-            <div class="fg-nav-sub" {% if not _pai_ativo %}hidden{% endif %}>
+            <div class="fg-nav-sub"{% if not _pai_ativo %} hidden{% endif %}>
               {% for f in _filhos %}
               <a href="{{ f.url }}" class="fg-nav-item fg-nav-subitem{% if nav_ativo == f.nav_codigo %} is-active{% endif %}">
-                <span class="fg-nav-label">{{ f.nome }}</span>
+                <span class="fg-nav-label">{{ f.nome }}{% if f.get('badge') %} <small class="fg-nav-badge">{{ f.badge }}</small>{% elif f.nome == 'NFe' %} <small class="fg-nav-badge">em breve</small>{% endif %}</span>
               </a>
               {% endfor %}
             </div>
