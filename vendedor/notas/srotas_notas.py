@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from flask import Blueprint, jsonify, render_template, request, send_file, session, url_for
+from flask import Blueprint, jsonify, redirect, render_template, request, send_file, session, url_for
 
 from global_utils import Var_ConectarBanco, exigir_modulo, exigir_permissao, login_obrigatorio
 from sistema.plataforma.sessao import MODULO_VENDEDOR
@@ -81,10 +81,29 @@ def _pode_emitir_nota(cur, id_tenant: int) -> dict:
 def notas_pagina():
     if (r := _vendedor()) is not None:
         return r
+    from sistema.fiscal.nfse.acesso import tenant_pode_nota_fiscal
+
+    if not tenant_pode_nota_fiscal():
+        return redirect(url_for("dashboard.index"))
+    return redirect(url_for("nfse.notas"))
+
+
+@vd_notas_bp.get("/vendedor/notas/nfe")
+@login_obrigatorio()
+@exigir_modulo(MODULO_VENDEDOR)
+@exigir_permissao(codigo="vd_notas.ver")
+def notas_nfe_em_breve():
+    if (r := _vendedor()) is not None:
+        return r
+    from sistema.fiscal.nfse.acesso import tenant_pode_nota_fiscal
+
+    if not tenant_pode_nota_fiscal():
+        return redirect(url_for("dashboard.index"))
     return render_template(
-        "frm_vd_notas.html",
-        nav_ativo="vd_notas",
-        nf_planos=url_for("planos.meu_plano", escolher=1),
+        "frm_nf_em_breve.html",
+        titulo="NFe",
+        mensagem="Emissor de NF-e (venda de produto) em breve. Por enquanto use a NFS-e neste menu.",
+        nav_ativo="vd_notas_nfe",
     )
 
 

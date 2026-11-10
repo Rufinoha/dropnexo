@@ -41,11 +41,32 @@ def _fornecedor():
 def notas_pagina():
     if (r := _fornecedor()) is not None:
         return r
+    from flask import redirect, url_for
+    from sistema.fiscal.nfse.acesso import tenant_pode_nota_fiscal
+
+    if not tenant_pode_nota_fiscal():
+        return redirect(url_for("dashboard.index"))
+    return redirect(url_for("nfse.notas"))
+
+
+@fn_notas_bp.get("/fornecedor/notas/nfe")
+@login_obrigatorio()
+@exigir_modulo(MODULO_FORNECEDOR)
+@exigir_permissao(codigo="fn_notas.ver")
+def notas_nfe_em_breve():
+    if (r := _fornecedor()) is not None:
+        return r
+    from sistema.fiscal.nfse.acesso import tenant_pode_nota_fiscal
+
+    if not tenant_pode_nota_fiscal():
+        from flask import redirect, url_for
+
+        return redirect(url_for("dashboard.index"))
     return render_template(
-        "frm_vd_notas.html",
-        nav_ativo="fn_notas",
-        nf_base="/fornecedor",
-        nf_checa_cert=True,
+        "frm_nf_em_breve.html",
+        titulo="NFe",
+        mensagem="Emissor de NF-e (venda de produto) em breve. Por enquanto use a NFS-e neste menu.",
+        nav_ativo="fn_notas_nfe",
     )
 
 

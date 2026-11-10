@@ -995,3 +995,23 @@ button.CfgMt_KpiMini:hover {
   cursor: pointer;
 }
 .CfgMt_MenuLista button:hover { background: #f8fafc; }
+
+.CfgMt_StatusBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.2;
+  background: #f1f5f9;
+  color: #334155;
+}
+.CfgMt_StatusBadge.is-wait {
+  background: #fff7ed;
+  color: #c2410c;
+}
+.CfgMt_StatusBadge.is-ok {
+  background: #ecfdf5;
+  color: #047857;
+}

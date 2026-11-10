@@ -3110,21 +3110,31 @@ def marcar_em_expedicao(
     transportadora: str | None = None,
     id_usuario: int | None = None,
     _notificar: bool = True,
+    exigir_fiscal: bool = True,
 ) -> None:
     ped = obter_pedido(cur, id_pedido, id_fornecedor=id_fornecedor)
     if not ped:
         raise ValueError("Pedido não encontrado.")
     st = status_vendedor_pedido(ped)
+    # Reimpressão / abrir etiqueta de novo: já expedido ou entregue — não falha.
+    if st in (STATUS_EM_EXPEDICAO, STATUS_ENTREGUE):
+        return
     # Só depois que o vendedor pagou (ou legado já em pago). A expedição confirma.
     if st not in (STATUS_PAGO, STATUS_AGUARDANDO_CONFIRMACAO):
         raise ValueError("O vendedor ainda não pagou este pedido.")
 
-    docs = pedido_docs_frete_ok(cur, id_pedido)
-    if not docs.get("ok"):
-        raise ValueError(
-            docs.get("message")
-            or "Anexe a etiqueta de frete e a NF ou declaração de conteúdo antes de expedir."
-        )
+    if exigir_fiscal:
+        docs = pedido_docs_frete_ok(cur, id_pedido)
+        if not docs.get("ok"):
+            raise ValueError(
+                docs.get("message")
+                or "Anexe a etiqueta de frete e a NF ou declaração de conteúdo antes de expedir."
+            )
+    else:
+        anexos = listar_anexos_pedido(cur, int(id_pedido))
+        tipos = {(a.get("tipo") or "").strip().lower() for a in anexos}
+        if "etiqueta" not in tipos:
+            raise ValueError("Anexe a etiqueta de frete antes de expedir.")
 
     # Estoque já baixou quando o vendedor pagou — não baixa de novo.
 

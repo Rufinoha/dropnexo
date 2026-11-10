@@ -1,0 +1,86 @@
+{% extends "frm_base.html" %}
+{% block title %}Parâmetros NFS-e · DropNexo{% endblock %}
+{% block head_extra %}<link rel="stylesheet" href="{{ url_for('nfse.static', filename='style/Cnfse.css') }}">{% endblock %}
+{% block content %}
+<div class="Cl_ConfigContainer nfse-page">
+  <div class="nfse-title"><div><h2>Parâmetros NFS-e</h2><p>Configuração isolada do tenant atual.</p></div></div>
+  <div class="nfse-tabs">
+    <button class="is-on" data-tab="perfis">Perfis de nota</button><button data-tab="empresa">Empresa fiscal</button><button data-tab="certificados">Certificados A1</button>
+  </div>
+
+  <section class="nfse-panel" data-panel="empresa">
+    <h3>Prestador e ambiente</h3>
+    <div class="nfse-cnpj-row">
+      <div class="Cl_FormCampo"><label>CNPJ *</label><input id="cfg_cnpj" maxlength="18" inputmode="numeric" placeholder="00.000.000/0000-00"></div>
+      <button type="button" class="Cl_btn Cl_btn_primary" id="btnPreencherCnpj">Preencher dados</button>
+    </div>
+    <p class="nfse-hint">A consulta preenche razão social, município, UF, IBGE e Simples. Série e ambiente continuam manuais. A inscrição municipal fica só no cadastro: a DPS não envia esse campo enquanto o município não tiver informações complementares no CNC NFS-e.</p>
+    <div class="nfse-grid nfse-grid-3">
+      <div class="Cl_FormCampo"><label>Razão social *</label><input id="cfg_razao_social"></div>
+      <div class="Cl_FormCampo"><label>Nome fantasia</label><input id="cfg_nome_fantasia"></div>
+      <div class="Cl_FormCampo"><label>Inscrição municipal</label><input id="cfg_inscricao_municipal"></div>
+      <div class="Cl_FormCampo"><label>Código IBGE *</label><input id="cfg_municipio_ibge_codigo" maxlength="7"></div>
+      <div class="Cl_FormCampo"><label>Município *</label><input id="cfg_municipio_nome"></div>
+      <div class="Cl_FormCampo"><label>UF *</label><input id="cfg_uf" maxlength="2"></div>
+      <div class="Cl_FormCampo"><label>Regime tributário</label><select id="cfg_regime_tributario"><option value="simples_nacional">Simples Nacional</option><option value="lucro_presumido">Lucro presumido</option><option value="lucro_real">Lucro real</option><option value="mei">MEI</option><option value="outro">Outro</option></select></div>
+      <div class="Cl_FormCampo"><label>Regime especial</label><input id="cfg_regime_especial_tributacao"></div>
+      <div class="Cl_FormCampo"><label>Tributos aproximados do Simples (%)</label><input id="cfg_percentual_tributos_sn" inputmode="decimal" placeholder="6,00"></div>
+      <div class="Cl_FormCampo"><label>Série DPS</label><input id="cfg_serie_dps"></div>
+      <div class="Cl_FormCampo"><label>Próximo número DPS</label><input id="cfg_proximo_numero_dps" type="number" min="1"></div>
+      <div class="Cl_FormCampo"><label>Ambiente</label><select id="cfg_ambiente"><option value="homologacao">Homologação</option><option value="producao">Produção</option></select></div>
+    </div>
+    <p class="nfse-hint">O percentual é o total aproximado da alíquota do Simples (Lei 12.741). Na nota já emitida esse valor é 6,00. Vazio significa não informar.</p>
+    <div class="nfse-checks"><label><input type="checkbox" id="cfg_optante_simples"> Optante do Simples</label><label><input type="checkbox" id="cfg_incentivador_cultural"> Incentivador cultural</label></div>
+    <button class="Cl_btn Cl_btn_primary" id="btnSalvarConfig">Salvar configuração</button>
+  </section>
+
+  <section class="nfse-panel is-on" data-panel="perfis">
+    <div class="nfse-title"><h3>Perfis para preenchimento da DPS</h3><button class="Cl_btn Cl_btn_primary" id="btnNovoPerfil">Novo perfil</button></div>
+    <div class="Cl_Table"><table><thead><tr><th>Nome</th><th>Serviço</th><th>Tributação</th><th>ISS</th><th>Status</th><th>Ação</th></tr></thead><tbody id="listaPerfis"></tbody></table></div>
+    <div id="modalPerfil" class="nfse-modal" hidden aria-hidden="true">
+      <div class="nfse-modal__window" role="dialog" aria-modal="true" aria-labelledby="modalPerfilTitulo">
+        <header class="nfse-modal__header">
+          <span id="modalPerfilTitulo">Novo perfil</span>
+          <button type="button" class="nfse-modal__close" id="btnFecharPerfil" aria-label="Fechar">✖</button>
+        </header>
+        <form id="formPerfil" class="nfse-profile-form nfse-modal__body">
+          <input type="hidden" id="pf_id">
+          <div class="nfse-grid nfse-grid-3">
+            <div class="Cl_FormCampo"><label>Nome *</label><input id="pf_nome" placeholder="Ex.: Licenciamento de software"></div>
+            <div class="Cl_FormCampo"><label>Código municipal</label><input id="pf_codigo_servico" inputmode="numeric" maxlength="3" placeholder="3 dígitos, se houver"></div>
+            <div class="Cl_FormCampo"><label>Tributação nacional *</label><input id="pf_codigo_tributacao_nacional" inputmode="numeric" maxlength="6" placeholder="6 dígitos, ex. 010501"></div>
+            <div class="Cl_FormCampo"><label>NBS</label><input id="pf_codigo_nbs" inputmode="numeric" maxlength="9" placeholder="9 dígitos, ex. 111032200"></div>
+          </div>
+          <p class="nfse-hint">O local da prestação é o município de quem presta o serviço, cadastrado em Empresa fiscal. Ele não fica gravado neste perfil.</p>
+          <div class="Cl_FormCampo"><label>Descrição do serviço *</label><textarea id="pf_descricao_servico" rows="3" placeholder="Texto que sai na nota. Competência e vencimento mudam a cada emissão."></textarea></div>
+          <div class="nfse-grid nfse-grid-3" id="tributosPerfil">
+            {% for tributo in ['iss','pis','cofins','inss','ir','csll'] %}
+            <div class="nfse-tax">
+              <label class="nfse-tax__retido" for="pf_{{ tributo }}_retido">
+                <input type="checkbox" id="pf_{{ tributo }}_retido">
+                <span>{{ tributo|upper }} retido</span>
+              </label>
+              <div class="Cl_FormCampo">
+                <label for="pf_aliquota_{{ tributo }}">Alíquota %</label>
+                <input id="pf_aliquota_{{ tributo }}" type="text" inputmode="decimal" value="0" placeholder="0,00" autocomplete="off">
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          <div class="Cl_FormCampo"><label>Extensões IBS/CBS (JSON)</label><textarea id="pf_ibs_cbs_json" rows="3">{}</textarea></div>
+          <label><input type="checkbox" id="pf_ativo" checked> Perfil ativo</label>
+          <div class="nfse-actions"><button type="button" class="Cl_btn Cl_btn_neutral" id="btnCancelarPerfil">Cancelar</button><button class="Cl_btn Cl_btn_primary">Salvar perfil</button></div>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <section class="nfse-panel" data-panel="certificados">
+    <div class="nfse-alert"><i data-lucide="shield-check"></i><span>O arquivo e a senha são criptografados separadamente, nunca podem ser baixados e ficam isolados por tenant.</span></div>
+    <div id="cryptoWarning" class="nfse-warning" hidden>DEV: usando chave derivada de SECRET_KEY. Configure NFSE_MASTER_KEY antes da produção.</div>
+    <form id="formCertificado" class="nfse-upload"><div class="Cl_FormCampo"><label>Certificado A1 (.pfx/.p12)</label><input type="file" id="cert_arquivo" accept=".pfx,.p12" required></div><div class="Cl_FormCampo"><label>Senha</label><input type="password" id="cert_senha" autocomplete="new-password"></div><button class="Cl_btn Cl_btn_primary">Validar e armazenar</button></form>
+    <div class="Cl_Table"><table><thead><tr><th>Arquivo</th><th>Titular / CNPJ</th><th>Serial</th><th>Validade</th><th>Status</th></tr></thead><tbody id="listaCertificados"></tbody></table></div>
+  </section>
+</div>
+{% endblock %}
+{% block page_js %}<script src="{{ url_for('nfse.static', filename='script/Snfse_parametros.js') }}"></script>{% endblock %}

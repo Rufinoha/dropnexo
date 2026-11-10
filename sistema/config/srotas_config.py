@@ -1134,9 +1134,9 @@ def carregar_menu_sidebar() -> list[dict]:
                     "pai": pai,
                 }
             )
-        return _dashboard_primeiro_na_lista(itens)
+        return _aplicar_gating_nota_fiscal(_dashboard_primeiro_na_lista(itens), mod_ativo)
     except Exception:
-        return _menu_sidebar_fallback(mod_ativo)
+        return _aplicar_gating_nota_fiscal(_menu_sidebar_fallback(mod_ativo), mod_ativo)
     finally:
         try:
             if cur:
@@ -1150,6 +1150,79 @@ def carregar_menu_sidebar() -> list[dict]:
             pass
 
 
+def _item_nota_fiscal_menu(mod_ativo: str) -> dict:
+    """Menu pai Nota Fiscal com submenus NFe (em breve) e NFS-e."""
+    from sistema.plataforma.sessao import MODULO_FORNECEDOR
+
+    if mod_ativo == MODULO_FORNECEDOR:
+        return {
+            "nome": "Nota Fiscal",
+            "url": "#",
+            "icone_svg": _ICONES_SVG["file"],
+            "nav_codigo": "fn_notas",
+            "filhos": [
+                {
+                    "nome": "NFe",
+                    "url": url_for("fn_notas.notas_nfe_em_breve"),
+                    "nav_codigo": "fn_notas_nfe",
+                },
+                {
+                    "nome": "NFSe",
+                    "url": url_for("nfse.notas"),
+                    "nav_codigo": "fn_notas_nfse",
+                },
+            ],
+        }
+    return {
+        "nome": "Nota Fiscal",
+        "url": "#",
+        "icone_svg": _ICONES_SVG["file"],
+        "nav_codigo": "vd_notas",
+        "filhos": [
+            {
+                "nome": "NFe",
+                "url": url_for("vd_notas.notas_nfe_em_breve"),
+                "nav_codigo": "vd_notas_nfe",
+            },
+            {
+                "nome": "NFSe",
+                "url": url_for("nfse.notas"),
+                "nav_codigo": "vd_notas_nfse",
+            },
+        ],
+    }
+
+
+def _aplicar_gating_nota_fiscal(itens: list[dict], mod_ativo: str) -> list[dict]:
+    """Só tenants 1 e 2 veem Nota Fiscal (fase teste). Demais: oculta."""
+    from sistema.fiscal.nfse.acesso import tenant_pode_nota_fiscal
+
+    navs_nf = {
+        "fn_notas",
+        "vd_notas",
+        "fn_notas_nfe",
+        "fn_notas_nfse",
+        "vd_notas_nfe",
+        "vd_notas_nfse",
+    }
+    filtrados = [i for i in (itens or []) if (i.get("nav_codigo") or "") not in navs_nf]
+    if not tenant_pode_nota_fiscal():
+        return filtrados
+    # Insere após Pedidos / Meus produtos quando possível.
+    item_nf = _item_nota_fiscal_menu(mod_ativo)
+    out = []
+    inseriu = False
+    for i in filtrados:
+        out.append(i)
+        nav = i.get("nav_codigo") or ""
+        if not inseriu and nav in ("fn_pedidos", "az_pedidos", "produtos", "vd_pedidos"):
+            out.append(item_nf)
+            inseriu = True
+    if not inseriu:
+        out.append(item_nf)
+    return out
+
+
 def _menu_sidebar_fallback(mod_ativo: str = "vendedor") -> list[dict]:
     from sistema.plataforma.sessao import MODULO_ARMAZEM, MODULO_FORNECEDOR, resolver_url_menu
 
@@ -1159,7 +1232,6 @@ def _menu_sidebar_fallback(mod_ativo: str = "vendedor") -> list[dict]:
     if mod_ativo == MODULO_FORNECEDOR:
         return comum + [
             {"nome": "Pedidos", "url": url_for("fn_pedidos.pedidos"), "icone_svg": _ICONES_SVG["shopping-bag"], "nav_codigo": "fn_pedidos"},
-            {"nome": "Nota Fiscal", "url": url_for("fn_notas.notas_pagina"), "icone_svg": _ICONES_SVG["file"], "nav_codigo": "fn_notas"},
             {"nome": "Catálogo", "url": url_for("fn_catalogo.pagina"), "icone_svg": _ICONES_SVG["package"], "nav_codigo": "catalogos"},
         ]
     if mod_ativo == MODULO_ARMAZEM:
@@ -1178,7 +1250,6 @@ def _menu_sidebar_fallback(mod_ativo: str = "vendedor") -> list[dict]:
         {"nome": "Fornecedores", "url": url_for("vd_fornecedores.pagina"), "icone_svg": _ICONES_SVG["users"], "nav_codigo": "fornecedores"},
         {"nome": "Meus produtos", "url": url_for("vd_meus_produtos.pagina"), "icone_svg": _ICONES_SVG["shopping-bag"], "nav_codigo": "produtos"},
         {"nome": "Loja Virtual", "url": url_for("vd_loja_virtual.pagina"), "icone_svg": _ICONES_SVG["store"], "nav_codigo": "vd_loja_virtual"},
-        {"nome": "Nota Fiscal", "url": url_for("vd_notas.notas_pagina"), "icone_svg": _ICONES_SVG["file"], "nav_codigo": "vd_notas"},
     ]
 
 
@@ -4252,11 +4323,15 @@ def manutencao_tenant_reativacoes():
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
-        from sistema.perfil.reativacao import listar_solicitacoes_reativacao
+        from sistema.perfil.reativacao import (
+            listar_reativacoes_historico,
+            listar_solicitacoes_reativacao,
+        )
 
         itens = listar_solicitacoes_reativacao(cur)
+        historico = listar_reativacoes_historico(cur)
         conn.commit()
-        return jsonify(success=True, itens=itens)
+        return jsonify(success=True, itens=itens, historico=historico)
     except Exception as e:
         conn.rollback()
         return jsonify(success=False, message=str(e)), 500
@@ -4277,20 +4352,29 @@ def manutencao_tenant_reativar(id_tenant: int):
         res = reativar_conta(cur, int(id_tenant), id_admin=session.get("id_usuario"))
         email_ok = False
         email_msg = ""
-        if res.get("email"):
+        email_destino = (res.get("email") or "").strip()
+        if email_destino:
             email_ok, email_msg = enviar_email_conta_reativada(
-                email=res["email"],
+                email=email_destino,
                 nome_usuario=res.get("nome_usuario") or "",
                 nome_conta=res.get("tenant_nome") or "",
                 cupom=res.get("cupom") or "REATIVA30",
             )
         conn.commit()
-        extra = " E-mail de boas-vindas enviado." if email_ok else f" E-mail: {email_msg or 'não enviado'}."
+        if email_ok:
+            extra = f" Conta ativa. E-mail enviado para {email_destino}."
+        elif email_destino:
+            extra = f" Conta ativa. E-mail não enviado ({email_msg or 'falha'})."
+        else:
+            extra = " Conta ativa. Sem e-mail do titular para aviso."
         return jsonify(
             success=True,
             message=(res.get("mensagem") or "Conta reativada.") + extra,
             cupom=res.get("cupom"),
             email_ok=email_ok,
+            email=email_destino,
+            status="ativa",
+            id_tenant=int(id_tenant),
         )
     except ValueError as e:
         conn.rollback()

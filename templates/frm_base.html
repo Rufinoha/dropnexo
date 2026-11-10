@@ -7,7 +7,7 @@
   <meta name="robots" content="noindex, nofollow" />
   {% include "partials/marca_favicon.html" %}
   <link rel="stylesheet" href="{{ url_for('static', filename='style/global_utils.css') }}" />
-  <link rel="stylesheet" href="{{ url_for('static', filename='style/app_shell.css') }}?v=10" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style/app_shell.css') }}?v=11" />
   {% if session.get('id_usuario') %}
   <link rel="stylesheet" href="{{ url_for('static', filename='style/Cnovidades.css') }}?v=2" />
   {% endif %}
@@ -15,7 +15,7 @@
   <script defer src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <script defer src="{{ url_for('static', filename='script/global_utils.js') }}"></script>
-  <script defer src="{{ url_for('static', filename='script/app_shell.js') }}?v=9"></script>
+  <script defer src="{{ url_for('static', filename='script/app_shell.js') }}?v=10"></script>
 </head>
 <body class="fg-app">
   {% set nome_usuario = session.get('nome', 'Usuário') %}
@@ -99,14 +99,33 @@
 
       <nav class="fg-sidebar-nav" aria-label="Menu principal">
         {% for item in menu_sidebar %}
-        <a href="{{ item.url }}" class="fg-nav-item{% if nav_ativo == item.nav_codigo %} is-active{% endif %}">
-          <svg class="fg-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">{{ item.icone_svg|safe }}</svg>
-          <span class="fg-nav-label">{{ item.nome }}</span>
-          {% set _bn = (menu_badges_nav or {}).get(item.nav_codigo, 0) %}
-          {% if _bn %}
-          <span class="fg-menu-badge" aria-label="{{ _bn }} pendência(s)">{{ _bn if _bn < 100 else '99+' }}</span>
+          {% set _filhos = item.filhos or [] %}
+          {% if _filhos %}
+          {% set _pai_ativo = (nav_ativo == item.nav_codigo) or (_filhos | selectattr('nav_codigo', 'equalto', nav_ativo) | list | length > 0) %}
+          <div class="fg-nav-group{% if _pai_ativo %} is-open{% endif %}">
+            <button type="button" class="fg-nav-item fg-nav-parent{% if _pai_ativo %} is-active{% endif %}" data-fg-submenu-toggle aria-expanded="{{ 'true' if _pai_ativo else 'false' }}">
+              <svg class="fg-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">{{ item.icone_svg|safe }}</svg>
+              <span class="fg-nav-label">{{ item.nome }}</span>
+              <span class="fg-nav-caret" aria-hidden="true">▾</span>
+            </button>
+            <div class="fg-nav-sub" {% if not _pai_ativo %}hidden{% endif %}>
+              {% for f in _filhos %}
+              <a href="{{ f.url }}" class="fg-nav-item fg-nav-subitem{% if nav_ativo == f.nav_codigo %} is-active{% endif %}">
+                <span class="fg-nav-label">{{ f.nome }}</span>
+              </a>
+              {% endfor %}
+            </div>
+          </div>
+          {% else %}
+          <a href="{{ item.url }}" class="fg-nav-item{% if nav_ativo == item.nav_codigo %} is-active{% endif %}">
+            <svg class="fg-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">{{ item.icone_svg|safe }}</svg>
+            <span class="fg-nav-label">{{ item.nome }}</span>
+            {% set _bn = (menu_badges_nav or {}).get(item.nav_codigo, 0) %}
+            {% if _bn %}
+            <span class="fg-menu-badge" aria-label="{{ _bn }} pendência(s)">{{ _bn if _bn < 100 else '99+' }}</span>
+            {% endif %}
+          </a>
           {% endif %}
-        </a>
         {% else %}
         <a href="{{ url_for('dashboard.index') }}" class="fg-nav-item{% if nav_ativo == 'inicio' %} is-active{% endif %}">
           <svg class="fg-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>

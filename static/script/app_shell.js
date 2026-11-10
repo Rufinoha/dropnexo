@@ -477,5 +477,15 @@
 
   document.addEventListener("DOMContentLoaded", function () {
     carregarAvatarHeader();
+    document.querySelectorAll("[data-fg-submenu-toggle]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const group = btn.closest(".fg-nav-group");
+        if (!group) return;
+        const open = group.classList.toggle("is-open");
+        btn.setAttribute("aria-expanded", open ? "true" : "false");
+        const sub = group.querySelector(".fg-nav-sub");
+        if (sub) sub.hidden = !open;
+      });
+    });
   });
 })();

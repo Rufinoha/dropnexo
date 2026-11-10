@@ -38,6 +38,7 @@ def lote_expedir(
     *,
     id_fornecedor: int,
     id_usuario: int | None = None,
+    exigir_fiscal: bool = True,
 ) -> dict[str, Any]:
     ok: list[int] = []
     erros: list[dict[str, Any]] = []
@@ -48,6 +49,7 @@ def lote_expedir(
                 id_pedido,
                 id_fornecedor=id_fornecedor,
                 id_usuario=id_usuario,
+                exigir_fiscal=exigir_fiscal,
             )
             ok.append(id_pedido)
         except ValueError as e:
@@ -92,8 +94,12 @@ def montar_pdf_lote(
     id_fornecedor: int,
     raiz: Path,
     modo: str = "etiquetas",
-) -> tuple[bytes, str, list[dict[str, Any]]]:
-    """Mescla anexos PDF dos pedidos. Retorna (bytes, filename, avisos)."""
+) -> tuple[bytes, str, list[dict[str, Any]], list[int]]:
+    """Mescla anexos PDF dos pedidos.
+
+    Retorna (bytes, filename, avisos, ids_com_etiqueta) — ids em que a
+    etiqueta entrou no PDF (candidatos a marcar em expedição).
+    """
     try:
         from pypdf import PdfReader, PdfWriter
     except ImportError as e:
@@ -104,6 +110,7 @@ def montar_pdf_lote(
     tipos = _tipos_pdf(modo)
     writer = PdfWriter()
     avisos: list[dict[str, Any]] = []
+    ids_com_etiqueta: list[int] = []
     paginas = 0
 
     for id_pedido in ids:
@@ -123,6 +130,7 @@ def montar_pdf_lote(
         anexos = listar_anexos_pedido(cur, id_pedido, id_fornecedor=id_fornecedor)
         # Ordem: etiqueta → NF/declaração
         escolhidos: list[dict] = []
+        tem_etiqueta_pdf = False
         if "etiqueta" in tipos:
             etq = next((a for a in anexos if (a.get("tipo") or "") == "etiqueta"), None)
             if etq:
@@ -160,11 +168,16 @@ def montar_pdf_lote(
                 continue
             try:
                 reader = PdfReader(str(arquivo))
+                pages_before = paginas
                 for page in reader.pages:
                     writer.add_page(page)
                     paginas += 1
+                if (an.get("tipo") or "") == "etiqueta" and paginas > pages_before:
+                    tem_etiqueta_pdf = True
             except Exception:
                 avisos.append({"id": id_pedido, "message": f"Falha ao ler PDF ({numero})."})
+        if tem_etiqueta_pdf and id_pedido not in ids_com_etiqueta:
+            ids_com_etiqueta.append(id_pedido)
 
     if paginas <= 0:
         if avisos and all("ainda não pagou" in (a.get("message") or "") for a in avisos):
@@ -175,7 +188,27 @@ def montar_pdf_lote(
     writer.write(buf)
     buf.seek(0)
     nome = "etiquetas.pdf" if tipos == {"etiqueta"} else "etiquetas_e_notas.pdf"
-    return buf.getvalue(), nome, avisos
+    return buf.getvalue(), nome, avisos, ids_com_etiqueta
+
+
+def mensagem_expedicao_lote(res: dict[str, Any]) -> str:
+    """Texto curto para UI após gerar etiqueta / expedir em lote."""
+    qtd_ok = int(res.get("qtd_ok") or 0)
+    qtd_erro = int(res.get("qtd_erro") or 0)
+    if qtd_ok and not qtd_erro:
+        return f"{qtd_ok} pedido(s) marcado(s) em expedição."
+    if qtd_ok and qtd_erro:
+        msgs = "; ".join(
+            f"#{e.get('id')}: {e.get('message')}" for e in (res.get("erros") or [])[:5]
+        )
+        extra = f" {msgs}" if msgs else ""
+        return f"{qtd_ok} em expedição; {qtd_erro} sem alteração.{extra}"
+    if qtd_erro:
+        msgs = "; ".join(
+            f"#{e.get('id')}: {e.get('message')}" for e in (res.get("erros") or [])[:5]
+        )
+        return msgs or "Nenhum pedido pôde ser marcado em expedição."
+    return "Nenhum pedido para marcar em expedição."
 
 
 def parse_ids_body(body: dict | None) -> list[int]:

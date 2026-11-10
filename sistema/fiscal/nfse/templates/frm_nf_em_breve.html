@@ -1,0 +1,8 @@
+{% extends 'frm_base.html' %}
+{% block title %}{{ titulo or 'Nota Fiscal' }} · DropNexo{% endblock %}
+{% block content %}
+<div class="Cl_ContainerApoio Cl_PainelPagina" style="max-width:720px;margin:2rem auto;padding:1.5rem">
+  <h2 style="margin:0 0 .5rem;color:#0f172a">{{ titulo or 'Nota Fiscal' }}</h2>
+  <p style="margin:0;color:#64748b;line-height:1.5">{{ mensagem or 'Em breve.' }}</p>
+</div>
+{% endblock %}

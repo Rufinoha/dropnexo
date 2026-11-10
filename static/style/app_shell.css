@@ -311,6 +311,39 @@ body.fg-app {
   background: #dbeafe;
 }
 
+.fg-nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+button.fg-nav-parent {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+.fg-nav-caret {
+  margin-left: auto;
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+.fg-nav-group.is-open > .fg-nav-parent .fg-nav-caret {
+  transform: rotate(180deg);
+}
+.fg-nav-sub {
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+  padding: 0.1rem 0 0.25rem 2.35rem;
+}
+.fg-nav-subitem {
+  padding: 0.38rem 0.55rem;
+  font-size: 0.86rem;
+  font-weight: 500;
+}
+
 .fg-sidebar-foot {
   flex-shrink: 0;
   padding: 0.75rem 0.65rem;

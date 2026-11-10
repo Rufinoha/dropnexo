@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>DPS · H74</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style/global_utils.css') }}">
+  <link rel="stylesheet" href="{{ url_for('nfse.static', filename='style/Cnfse.css') }}?v=20261105b">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <script src="{{ url_for('static', filename='script/global_utils.js') }}"></script>
+</head>
+<body class="nfse-apoio">
+  <input type="hidden" id="notaId">
+  <main class="nfse-form" id="formNota">
+    <p class="nfse-lock" id="avisoTravada" hidden></p>
+    <div class="nfse-editor">
+      <nav class="nfse-side" aria-label="Seções da nota">
+        <button type="button" class="is-on" data-secao="geral" aria-selected="true">
+          <span class="nfse-side__nome">Geral</span>
+          <i class="nfse-side__ok" id="sideOkGeral" aria-hidden="true"></i>
+        </button>
+        <button type="button" data-secao="tomador" aria-selected="false">
+          <span class="nfse-side__nome">Tomador</span>
+          <i class="nfse-side__ok" id="sideOkTomador" aria-hidden="true"></i>
+        </button>
+        <button type="button" data-secao="campos" aria-selected="false">
+          <span class="nfse-side__nome">Campos preenchidos</span>
+          <i class="nfse-side__ok" id="sideOkCampos" aria-hidden="true"></i>
+        </button>
+      </nav>
+      <div class="nfse-editor__corpo">
+        <section class="nfse-secao is-on" data-painel="geral">
+          <div class="nfse-grid nfse-grid-2">
+            <div class="Cl_FormCampo"><label>Perfil de nota *</label><select id="perfil"><option value="">Selecione...</option></select></div>
+            <div class="Cl_FormCampo"><label>Competência *</label><input id="competencia" type="date"></div>
+            <div class="Cl_FormCampo"><label>Valor do serviço *</label><input id="valor" type="number" min="0" step="0.01" placeholder="0,00"></div>
+            <div class="Cl_FormCampo"><label>Destinatário da operação</label><select id="destinatario"><option value="">Não informado</option></select></div>
+            <div class="Cl_FormCampo"><label>Intermediário da operação</label><select id="intermediario"><option value="">Não informado</option></select></div>
+          </div>
+          <div class="Cl_FormCampo"><label>Observações</label><textarea id="observacoes" maxlength="1500" rows="4" placeholder="A descrição do perfil entra aqui. Você pode alterar antes de emitir."></textarea></div>
+          <p class="nfse-hint">Destinatário e intermediário são opcionais. Se não escolher, a DANFSe mostra Não Informado.</p>
+          <p class="nfse-hint">Esse texto é a descrição do serviço desta nota. Ao escolher o perfil, a descrição cadastrada aparece aqui e você pode alterar.</p>
+        </section>
+
+        <section class="nfse-secao" data-painel="tomador" hidden>
+    <section class="nfse-tomador" aria-label="Tomador do serviço">
+      <h3 class="nfse-tomador__titulo">Tomador do serviço *</h3>
+      <div class="nfse-tabs nfse-tabs--compact" role="tablist">
+        <button type="button" class="is-on" id="tabTomadorCad" data-modo="cadastrado" role="tab" aria-selected="true">Tomador cadastrado</button>
+        <button type="button" id="tabTomadorAvulso" data-modo="avulso" role="tab" aria-selected="false">Tomador sem cadastro</button>
+      </div>
+
+      <div class="nfse-panel is-on" id="painelTomadorCad" role="tabpanel">
+        <div class="Cl_FormCampo">
+          <label for="tomador">Empresa cadastrada *</label>
+          <select id="tomador"><option value="">Selecione...</option></select>
+        </div>
+        <p class="nfse-hint">Usa um cliente já cadastrado em Clientes.</p>
+      </div>
+
+      <div class="nfse-panel" id="painelTomadorAvulso" role="tabpanel" hidden>
+        <div class="nfse-grid nfse-grid-2">
+          <div class="Cl_FormCampo">
+            <label for="tomaDoc">CPF / CNPJ *</label>
+            <input id="tomaDoc" type="text" inputmode="numeric" autocomplete="off" maxlength="18" placeholder="000.000.000-00 ou 00.000.000/0000-00">
+          </div>
+          <div class="Cl_FormCampo">
+            <label for="tomaNome">Nome / Razão social *</label>
+            <input id="tomaNome" type="text" maxlength="220" placeholder="Nome completo ou razão social">
+          </div>
+          <div class="Cl_FormCampo">
+            <label for="tomaCep">CEP</label>
+            <input id="tomaCep" type="text" inputmode="numeric" maxlength="9" placeholder="00000-000">
+          </div>
+          <div class="Cl_FormCampo">
+            <label for="tomaFone">Telefone</label>
+            <input id="tomaFone" type="text" inputmode="numeric" maxlength="20" placeholder="Somente números">
+          </div>
+          <div class="Cl_FormCampo">
+            <label for="tomaEnd">Endereço</label>
+            <input id="tomaEnd" type="text" maxlength="220" placeholder="Logradouro">
+          </div>
+          <div class="Cl_FormCampo">
+            <label for="tomaNum">Número</label>
+            <input id="tomaNum" type="text" maxlength="20" placeholder="Nº">
+          </div>
+          <div class="Cl_FormCampo">
+            <label for="tomaComp">Complemento</label>
+            <input id="tomaComp" type="text" maxlength="120" placeholder="Apto, sala...">
+          </div>
+          <div class="Cl_FormCampo">
+            <label for="tomaBairro">Bairro</label>
+            <input id="tomaBairro" type="text" maxlength="120">
+          </div>
+          <div class="Cl_FormCampo">
+            <label for="tomaCidade">Cidade</label>
+            <input id="tomaCidade" type="text" maxlength="120">
+          </div>
+          <div class="Cl_FormCampo">
+            <label for="tomaUf">UF</label>
+            <input id="tomaUf" type="text" maxlength="2" placeholder="UF">
+          </div>
+        </div>
+        <p class="nfse-hint" id="hintTomadorAvulso">CNPJ preenche automaticamente. Em CPF, digite o CEP para completar o endereço.</p>
+      </div>
+    </section>
+        </section>
+
+        <section class="nfse-secao" data-painel="campos" hidden>
+    <section class="nfse-preview">
+      <h3>Campos preenchidos pelo perfil</h3>
+      <div class="nfse-grid nfse-grid-3">
+        <div><small>Código do serviço</small><strong id="pvServico">—</strong></div>
+        <div><small>Tributação nacional</small><strong id="pvTributacao">—</strong></div>
+        <div><small>NBS</small><strong id="pvNbs">—</strong></div>
+      </div>
+      <div><small>Local da prestação</small><p id="pvLocal">Município de quem presta o serviço.</p></div>
+      <div><small>Total aproximado dos tributos</small><p id="pvTotTrib">Não informado.</p></div>
+      <div><small>Descrição</small><p id="pvDescricao">Selecione um perfil.</p></div>
+      <div><small>Tributos e retenções</small><p id="pvTributos">—</p></div>
+    </section>
+        </section>
+      </div>
+    </div>
+  </main>
+  <footer class="nfse-form-footer">
+    <button class="Cl_btn Cl_btn_neutral" id="btnFechar">Fechar</button>
+    <div class="nfse-passos-wrap" id="acoesRascunho">
+      <p class="nfse-passo-legenda" id="passoLegenda">Passo 1 de 3 — salve o rascunho.</p>
+      <div class="nfse-passos" aria-label="Sequência de emissão">
+        <button type="button" class="nfse-passo is-agora" id="btnSalvar" title="Salva a DPS para liberar a validação.">
+          <span class="nfse-passo__n">1</span><span>Salvar rascunho</span>
+        </button>
+        <span class="nfse-passo__liga" aria-hidden="true"></span>
+        <button type="button" class="nfse-passo is-espera" id="btnValidar" disabled title="Disponível depois de salvar o rascunho.">
+          <span class="nfse-passo__n">2</span><span>Validar</span>
+        </button>
+        <span class="nfse-passo__liga" aria-hidden="true"></span>
+        <button type="button" class="nfse-passo is-espera" id="btnEmitir" disabled title="Disponível somente após a validação.">
+          <span class="nfse-passo__n">3</span><span>Emitir NFS-e</span>
+        </button>
+      </div>
+    </div>
+    <span id="acoesAutorizada" hidden>
+      <button class="Cl_btn Cl_btn_primary" id="btnDanfse">DANFSe</button>
+      <button class="Cl_btn Cl_btn_neutral" id="btnAtualizarXml" title="Baixa o XML completo na Sefin pela chave">Atualizar XML / número</button>
+      <button class="Cl_btn Cl_btn_neutral" id="btnCancelarNota">Cancelar nota</button>
+    </span>
+    <span id="acoesProcessando" hidden>
+      <button class="Cl_btn Cl_btn_primary" id="btnSincronizar">Sincronizar com a Sefin</button>
+      <button class="Cl_btn Cl_btn_neutral" id="btnInformarChave" title="Cole a chave de 50 dígitos do portal">Informar chave do portal</button>
+    </span>
+  </footer>
+  <script src="{{ url_for('nfse.static', filename='script/Snfse_nota_apoio.js') }}?v=20261105b"></script>
+</body>
+</html>

@@ -4,7 +4,7 @@
 {% block topbar_title %}Manutenção de tenant{% endblock %}
 {% block head_extra %}
 <link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_crud.css') }}?v=3" />
-<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_manutencao_tenant.css') }}?v=23" />
+<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_manutencao_tenant.css') }}?v=24" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ConfigPage CfgMt_Page">
@@ -164,6 +164,7 @@
             <th>ID</th>
             <th>Tenant</th>
             <th>Tipo</th>
+            <th>Status</th>
             <th>Encerrada em</th>
             <th>Pedido em</th>
             <th>Solicitante</th>
@@ -171,7 +172,33 @@
           </tr>
         </thead>
         <tbody id="cfgmt_reativacao_lista">
-          <tr><td colspan="7">Carregando…</td></tr>
+          <tr><td colspan="8">Carregando…</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <header class="CfgMt_FundadorHead" style="margin-top:1.5rem">
+      <div>
+        <h3>Histórico de reativações</h3>
+        <p class="CfgMt_FundadorStatus" id="cfgmt_reativacao_hist_hint">Contas já liberadas pela equipe.</p>
+      </div>
+    </header>
+    <div class="Cl_TabelaPrincipal Cat_TabelaScroll">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Tenant</th>
+            <th>Tipo</th>
+            <th>Status</th>
+            <th>Pedido em</th>
+            <th>Reativada em</th>
+            <th>Solicitante</th>
+            <th>Liberada por</th>
+          </tr>
+        </thead>
+        <tbody id="cfgmt_reativacao_historico">
+          <tr><td colspan="8">Carregando…</td></tr>
         </tbody>
       </table>
     </div>
@@ -290,5 +317,5 @@
 {% block page_js %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
-<script src="{{ url_for('config.static', filename='script/Sconfig_manutencao_tenant.js') }}?v=24"></script>
+<script src="{{ url_for('config.static', filename='script/Sconfig_manutencao_tenant.js') }}?v=25"></script>
 {% endblock %}

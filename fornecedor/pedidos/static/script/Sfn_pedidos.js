@@ -451,6 +451,13 @@
         else alert(msg);
         return;
       }
+      const qtdOk = parseInt(r.headers.get("X-DropNexo-Expedido-Ok") || "0", 10) || 0;
+      const qtdErro = parseInt(r.headers.get("X-DropNexo-Expedido-Erro") || "0", 10) || 0;
+      const msgExp =
+        (r.headers.get("X-DropNexo-Expedido-Msg") || "").trim() ||
+        (qtdOk
+          ? `${qtdOk} pedido(s) marcado(s) em expedição.`
+          : "Etiqueta gerada.");
       const blob = await r.blob();
       const url = URL.createObjectURL(blob);
       const w = window.open(url, "_blank");
@@ -467,23 +474,14 @@
           } catch (_) {}
         }, 600);
       }
-      // Imprimiu etiqueta → Expedido automático
-      try {
-        const re = await fetch(`${API}/lote/expedir`, {
-          method: "POST",
-          credentials: "same-origin",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ids }),
-        });
-        const je = await re.json();
-        if (window.Swal) {
-          await Swal.fire(
-            je.success ? "Expedido" : "Atenção",
-            je.message || (je.success ? "Pedidos marcados em expedição." : "Alguns pedidos não puderam ser expedidos."),
-            je.success ? "success" : "warning"
-          );
-        }
-      } catch (_) {}
+      // Status já atualizado no servidor ao gerar o PDF.
+      if (window.Swal) {
+        await Swal.fire(
+          qtdErro && !qtdOk ? "Atenção" : qtdErro ? "Atenção" : "Expedido",
+          msgExp,
+          qtdErro ? "warning" : "success"
+        );
+      }
       limparSelecao();
       await carregar();
       return;
@@ -623,7 +621,18 @@
 
     let html = `
       <div class="PdFn_Checks">
-        ${checkItem(!!etq && liberadoEtq, "Etiqueta de frete", etqDetail, etqHref)}
+        ${
+          etq && liberadoEtq && etqHref
+            ? `<a class="PdFn_Check PdFn_Check--ok PdFn_CheckEtiqueta" href="${etqHref}" target="_blank" rel="noopener" data-etq-pedido="${p.id}">
+          <span class="PdFn_CheckMark" aria-hidden="true">✓</span>
+          <div>
+            <strong>Etiqueta de frete</strong>
+            <p>${esc(etqDetail)}</p>
+          </div>
+          <span class="PdFn_CheckGo">Abrir</span>
+        </a>`
+            : checkItem(!!etq && liberadoEtq, "Etiqueta de frete", etqDetail, etqHref)
+        }
         ${checkItem(!!fiscal, fiscalTitulo, fiscal?.nome_original || "Aguardando NF ou declaração", fiscal ? anexoHref(fiscal) : null)}`;
 
     if (comprovantes.length || pixNeeded) {
@@ -1059,6 +1068,16 @@
   document.getElementById("pd_fn_fechar")?.addEventListener("click", () => setModalOpen(false));
   modal?.addEventListener("click", (e) => {
     if (e.target === modal) setModalOpen(false);
+  });
+  // Abrir etiqueta no servidor já expede; atualiza lista/modal em seguida.
+  body?.addEventListener("click", (e) => {
+    const a = e.target.closest("a.PdFn_CheckEtiqueta");
+    if (!a) return;
+    const id = parseInt(a.getAttribute("data-etq-pedido") || "0", 10);
+    setTimeout(async () => {
+      await carregar();
+      if (id && modal && !modal.hidden) abrir(id);
+    }, 700);
   });
   function pintarPeriodoBtn() {
     const txt = document.getElementById("pd_fn_periodoTxt");

@@ -7,6 +7,59 @@ window.App = window.App || {};
 window.Util = window.Util || {};
 window.GlobalUtils = window.GlobalUtils || {};
 
+// requestJSON — compatível com o módulo NFS-e (H74)
+GlobalUtils.requestJSON = async function requestJSON({
+  url,
+  method = "GET",
+  payload = null,
+  headers = {},
+  timeoutMs = 30000,
+} = {}) {
+  if (!url) throw new Error("GlobalUtils.requestJSON: 'url' é obrigatório.");
+  const m = String(method || "GET").toUpperCase();
+  const h = Object.assign({ Accept: "application/json" }, headers || {});
+  const opt = { method: m, credentials: "include", headers: h };
+  if (payload != null && m !== "GET" && m !== "HEAD") {
+    if (payload instanceof FormData) {
+      opt.body = payload;
+    } else {
+      h["Content-Type"] = h["Content-Type"] || "application/json";
+      opt.body = typeof payload === "string" ? payload : JSON.stringify(payload);
+    }
+  }
+  const ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
+  if (ctrl) {
+    opt.signal = ctrl.signal;
+    setTimeout(() => ctrl.abort(), timeoutMs);
+  }
+  let resp;
+  try {
+    resp = await fetch(url, opt);
+  } catch (e) {
+    return { ok: false, status: 0, json: { success: false, message: e.message || "Falha de rede" } };
+  }
+  let json = null;
+  const ct = (resp.headers.get("content-type") || "").toLowerCase();
+  if (ct.includes("application/json")) {
+    try {
+      json = await resp.json();
+    } catch (_) {
+      json = null;
+    }
+  }
+  if (resp.status === 401) {
+    window.location.href = "/login";
+    return null;
+  }
+  if (resp.status === 403 && window.Swal) {
+    Swal.fire({
+      icon: "warning",
+      title: "Sem permissão",
+      text: (json && (json.message || json.mensagem)) || "Acesso negado.",
+    });
+  }
+  return { ok: resp.ok, status: resp.status, json: json || {} };
+};
 
 // --------------------------------------------------------
 // SweetAlert padrão para todo o sistema

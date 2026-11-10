@@ -93,14 +93,29 @@
     box.style.left = Math.max(8, r.right - box.offsetWidth) + "px";
   }
 
+  function badgeStatusReativacao(status, label) {
+    const st = (status || "").toLowerCase();
+    const cls =
+      st === "ativa" || st === "reativada"
+        ? "CfgMt_StatusBadge is-ok"
+        : st === "aguardando"
+          ? "CfgMt_StatusBadge is-wait"
+          : "CfgMt_StatusBadge";
+    return `<span class="${cls}">${esc(label || status || "—")}</span>`;
+  }
+
   async function carregarReativacoes() {
     if (!el.reativacaoLista) return;
-    el.reativacaoLista.innerHTML = '<tr><td colspan="7">Carregando…</td></tr>';
+    el.reativacaoLista.innerHTML = '<tr><td colspan="8">Carregando…</td></tr>';
+    const histEl = document.getElementById("cfgmt_reativacao_historico");
+    const histHint = document.getElementById("cfgmt_reativacao_hist_hint");
+    if (histEl) histEl.innerHTML = '<tr><td colspan="8">Carregando…</td></tr>';
     try {
       const r = await fetch(BASE + "/reativacoes", { credentials: "same-origin" });
       const j = await r.json();
       if (!j.success) throw new Error(j.message || "Erro");
       const itens = j.itens || [];
+      const historico = j.historico || [];
       if (el.reativacaoHint) {
         el.reativacaoHint.textContent = itens.length
           ? `${itens.length} solicitação(ões) aguardando análise`
@@ -108,32 +123,59 @@
       }
       if (!itens.length) {
         el.reativacaoLista.innerHTML =
-          '<tr><td colspan="7">Nenhuma solicitação de reativação.</td></tr>';
-        return;
-      }
-      el.reativacaoLista.innerHTML = itens
-        .map(
-          (t) => `<tr>
-          <td>${t.id_tenant}</td>
-          <td><strong>${esc(t.nome)}</strong><div class="CfgMt_Muted">${esc(t.slug || "")}</div></td>
-          <td>${esc(t.tipo_negocio || "—")}</td>
-          <td>${esc(t.encerrada_br || "—")}</td>
-          <td>${esc(t.solicitada_br || "—")}</td>
-          <td>${esc(t.solicitante_nome || "—")}<div class="CfgMt_Muted">${esc(t.solicitante_email || "")}</div></td>
-          <td>
-            <button type="button" class="CfgMt_MenuBtn" data-id="${t.id_tenant}" data-nome="${esc(t.nome)}" aria-label="Ações">⋮</button>
-          </td>
-        </tr>`
-        )
-        .join("");
-      el.reativacaoLista.querySelectorAll(".CfgMt_MenuBtn").forEach((btn) => {
-        btn.addEventListener("click", (ev) => {
-          ev.stopPropagation();
-          abrirMenuReativacao(btn);
+          '<tr><td colspan="8">Nenhuma solicitação de reativação.</td></tr>';
+      } else {
+        el.reativacaoLista.innerHTML = itens
+          .map(
+            (t) => `<tr>
+            <td>${t.id_tenant}</td>
+            <td><strong>${esc(t.nome)}</strong><div class="CfgMt_Muted">${esc(t.slug || "")}</div></td>
+            <td>${esc(t.tipo_negocio || "—")}</td>
+            <td>${badgeStatusReativacao(t.status || "aguardando", t.status_label || "Aguardando análise")}</td>
+            <td>${esc(t.encerrada_br || "—")}</td>
+            <td>${esc(t.solicitada_br || "—")}</td>
+            <td>${esc(t.solicitante_nome || "—")}<div class="CfgMt_Muted">${esc(t.solicitante_email || "")}</div></td>
+            <td>
+              <button type="button" class="CfgMt_MenuBtn" data-id="${t.id_tenant}" data-nome="${esc(t.nome)}" aria-label="Ações">⋮</button>
+            </td>
+          </tr>`
+          )
+          .join("");
+        el.reativacaoLista.querySelectorAll(".CfgMt_MenuBtn").forEach((btn) => {
+          btn.addEventListener("click", (ev) => {
+            ev.stopPropagation();
+            abrirMenuReativacao(btn);
+          });
         });
-      });
+      }
+      if (histHint) {
+        histHint.textContent = historico.length
+          ? `${historico.length} reativação(ões) recentes`
+          : "Nenhuma conta reativada ainda.";
+      }
+      if (histEl) {
+        if (!historico.length) {
+          histEl.innerHTML = '<tr><td colspan="8">Nenhuma reativação no histórico.</td></tr>';
+        } else {
+          histEl.innerHTML = historico
+            .map(
+              (t) => `<tr>
+              <td>${t.id_tenant}</td>
+              <td><strong>${esc(t.nome)}</strong><div class="CfgMt_Muted">${esc(t.slug || "")}</div></td>
+              <td>${esc(t.tipo_negocio || "—")}</td>
+              <td>${badgeStatusReativacao(t.status || "ativa", t.status_label || "Ativa")}</td>
+              <td>${esc(t.solicitada_br || "—")}</td>
+              <td>${esc(t.reativada_br || "—")}</td>
+              <td>${esc(t.solicitante_nome || "—")}<div class="CfgMt_Muted">${esc(t.solicitante_email || "")}</div></td>
+              <td>${esc(t.admin_nome || "—")}</td>
+            </tr>`
+            )
+            .join("");
+        }
+      }
     } catch (err) {
-      el.reativacaoLista.innerHTML = `<tr><td colspan="7">${esc(err.message || "Erro")}</td></tr>`;
+      el.reativacaoLista.innerHTML = `<tr><td colspan="8">${esc(err.message || "Erro")}</td></tr>`;
+      if (histEl) histEl.innerHTML = `<tr><td colspan="8">${esc(err.message || "Erro")}</td></tr>`;
     }
   }
 
@@ -141,7 +183,7 @@
     const ask = await Swal.fire({
       icon: "question",
       title: "Reativar conta?",
-      html: `<p style="margin:0">A conta <strong>${esc(nome)}</strong> volta a acessar o painel. Enviamos e-mail de boas-vindas com o cupom <strong>REATIVA30</strong>.</p>`,
+      html: `<p style="margin:0">A conta <strong>${esc(nome)}</strong> (ID ${id}) volta a ficar <strong>ativa</strong>. O pedido sai da fila e entra no histórico. Enviamos e-mail com o cupom <strong>REATIVA30</strong>.</p>`,
       showCancelButton: true,
       confirmButtonText: "Reativar conta",
       cancelButtonText: "Voltar",
@@ -154,15 +196,27 @@
       credentials: "same-origin",
       headers: { Accept: "application/json" },
     });
-    const j = await r.json();
-    if (!j.success) {
-      await Swal.fire({ icon: "error", title: "Erro", text: j.message || "Falha", confirmButtonColor: "#021F81" });
+    let j = {};
+    try {
+      j = await r.json();
+    } catch (_) {
+      j = { success: false, message: "Resposta inválida do servidor." };
+    }
+    if (!r.ok || !j.success) {
+      await Swal.fire({
+        icon: "error",
+        title: "Reativação não concluída",
+        text: j.message || `Falha HTTP ${r.status}`,
+        confirmButtonColor: "#021F81",
+      });
+      await carregarReativacoes();
       return;
     }
     await Swal.fire({
       icon: "success",
-      title: "Conta reativada",
-      text: j.message || "Pronto.",
+      title: "Conta ativa",
+      html: `<p style="margin:0 0 .5rem;text-align:left">${esc(j.message || "Conta reativada.")}</p>
+        <p style="margin:0;text-align:left;color:#64748b;font-size:.92rem">Status: <strong>Ativa</strong>. O pedido sai da lista de aguardando e aparece no histórico abaixo.</p>`,
       confirmButtonColor: "#021F81",
     });
     await carregarReativacoes();

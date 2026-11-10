@@ -15,7 +15,13 @@ from core.pedidos.servico import (
     obter_pedido,
     pedido_pago_pelo_vendedor,
 )
-from core.pedidos.lote import lote_entregue, lote_expedir, montar_pdf_lote, parse_ids_body
+from core.pedidos.lote import (
+    lote_entregue,
+    lote_expedir,
+    mensagem_expedicao_lote,
+    montar_pdf_lote,
+    parse_ids_body,
+)
 from api.pix_manual.pix_manual import confirmar_pix_manual, rejeitar_comprovante_pix
 from sistema.plataforma.sessao import MODULO_ARMAZEM
 
@@ -160,11 +166,19 @@ def pedidos_lote_pdf():
     try:
         cur = conn.cursor()
         try:
-            data, nome, avisos = montar_pdf_lote(
+            data, nome, avisos, ids_etq = montar_pdf_lote(
                 cur, ids, id_fornecedor=id_f, raiz=_RAIZ, modo=modo
             )
         except ValueError as e:
             return jsonify(success=False, message=str(e)), 400
+        res_exp = lote_expedir(
+            cur,
+            ids_etq,
+            id_fornecedor=id_f,
+            id_usuario=_id_usuario(),
+            exigir_fiscal=False,
+        )
+        conn.commit()
         resp = send_file(
             _io.BytesIO(data),
             mimetype="application/pdf",
@@ -174,6 +188,18 @@ def pedidos_lote_pdf():
         )
         if avisos:
             resp.headers["X-DropNexo-Avisos"] = str(len(avisos))
+        resp.headers["X-DropNexo-Expedido-Ok"] = str(res_exp.get("qtd_ok") or 0)
+        resp.headers["X-DropNexo-Expedido-Erro"] = str(res_exp.get("qtd_erro") or 0)
+        msg_hdr = (
+            mensagem_expedicao_lote(res_exp)[:500]
+            .encode("latin-1", "replace")
+            .decode("latin-1")
+        )
+        resp.headers["X-DropNexo-Expedido-Msg"] = msg_hdr
+        resp.headers["Access-Control-Expose-Headers"] = (
+            "X-DropNexo-Avisos, X-DropNexo-Expedido-Ok, "
+            "X-DropNexo-Expedido-Erro, X-DropNexo-Expedido-Msg"
+        )
         return resp
     finally:
         conn.close()
@@ -236,7 +262,7 @@ def pedido_anexo_arquivo():
         cv = col_status_vendedor(cur)
         cur.execute(
             f"""
-            SELECT a.tipo, p.{cv}
+            SELECT a.tipo, p.{cv}, p.id
             FROM tbl_pedido_anexo a
             JOIN tbl_pedido p ON p.id = a.id_pedido
             WHERE p.id_tenant_fornecedor = %s AND a.caminho = %s
@@ -249,8 +275,21 @@ def pedido_anexo_arquivo():
             return jsonify(success=False, message="Arquivo não encontrado."), 404
         tipo_anexo = (row[0] or "").strip().lower()
         st_ped = (row[1] or "").strip()
+        id_pedido = int(row[2])
         if tipo_anexo == "etiqueta" and not pedido_pago_pelo_vendedor(st_ped):
             return jsonify(success=False, message=MSG_ETIQUETA_SEM_PAGAMENTO), 403
+        if tipo_anexo == "etiqueta" and pedido_pago_pelo_vendedor(st_ped):
+            try:
+                marcar_em_expedicao(
+                    cur,
+                    id_pedido,
+                    id_fornecedor=id_f,
+                    id_usuario=_id_usuario(),
+                    exigir_fiscal=False,
+                )
+                conn.commit()
+            except ValueError:
+                conn.rollback()
     finally:
         conn.close()
 

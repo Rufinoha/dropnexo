@@ -138,6 +138,7 @@ def solicitar_reativacao(cur, *, id_tenant: int, id_usuario: int) -> dict:
 
 
 def listar_solicitacoes_reativacao(cur) -> list[dict]:
+    """Pedidos ainda pendentes de análise (conta inativa)."""
     garantir_colunas_reativacao(cur)
     cur.execute(
         """
@@ -170,6 +171,54 @@ def listar_solicitacoes_reativacao(cur) -> list[dict]:
                 "solicitada_br": _fmt_data_br(r[6]),
                 "solicitante_nome": r[7] or "",
                 "solicitante_email": r[8] or "",
+                "status": "aguardando",
+                "status_label": "Aguardando análise",
+            }
+        )
+    return out
+
+
+def listar_reativacoes_historico(cur, *, limite: int = 40) -> list[dict]:
+    """Contas já reativadas (histórico recente)."""
+    garantir_colunas_reativacao(cur)
+    lim = max(1, min(int(limite or 40), 100))
+    cur.execute(
+        """
+        SELECT t.id,
+               COALESCE(NULLIF(t.nome_fantasia, ''), NULLIF(t.nome, ''), t.slug),
+               t.slug, t.tipo_negocio, t.ativo,
+               c.concluido_em, c.solicitacao_reativacao_em, c.reativado_em,
+               COALESCE(us.nome, ''), COALESCE(us.email, ''),
+               COALESCE(ua.nome, '')
+        FROM tbl_cancelamento_conta c
+        JOIN tbl_tenant t ON t.id = c.id_tenant
+        LEFT JOIN tbl_usuario us ON us.id = c.id_usuario_solicitante
+        LEFT JOIN tbl_usuario ua ON ua.id = c.id_usuario_admin
+        WHERE c.reativado_em IS NOT NULL
+        ORDER BY c.reativado_em DESC
+        LIMIT %s
+        """,
+        (lim,),
+    )
+    out = []
+    for r in cur.fetchall():
+        ativo = bool(r[4])
+        out.append(
+            {
+                "id_tenant": int(r[0]),
+                "nome": (r[1] or "").strip() or f"Tenant #{r[0]}",
+                "slug": r[2] or "",
+                "tipo_negocio": r[3] or "",
+                "ativo": ativo,
+                "encerrada_br": _fmt_data_br(r[5]),
+                "solicitada_br": _fmt_data_br(r[6]),
+                "reativada_em": r[7].isoformat() if r[7] else None,
+                "reativada_br": _fmt_data_br(r[7]),
+                "solicitante_nome": r[8] or "",
+                "solicitante_email": r[9] or "",
+                "admin_nome": r[10] or "",
+                "status": "ativa" if ativo else "reativada",
+                "status_label": "Ativa" if ativo else "Reativada (inativa de novo)",
             }
         )
     return out

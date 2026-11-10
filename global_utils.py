@@ -141,6 +141,61 @@ def is_modo_producao() -> bool:
     )
 
 
+def modo_producao() -> bool:
+    """Alias usado pelo módulo NFS-e (H74)."""
+    return is_modo_producao()
+
+
+def db_execute(conn, sql: str, params=None):
+    """Executa SQL com placeholders %s (PostgreSQL). Usado pelo NFS-e."""
+    cur = conn.cursor()
+    cur.execute(sql, params or ())
+    return cur
+
+
+def somente_digitos(valor) -> str:
+    return re.sub(r"\D", "", str(valor or ""))
+
+
+def validar_cnpj(cnpj) -> bool:
+    c = somente_digitos(cnpj)
+    if len(c) != 14 or len(set(c)) == 1:
+        return False
+
+    def _digito(base, pesos):
+        s = sum(int(base[i]) * pesos[i] for i in range(len(pesos)))
+        r = s % 11
+        return 0 if r < 2 else 11 - r
+
+    peso1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
+    peso2 = [6] + peso1
+    d1 = _digito(c[:12], peso1)
+    d2 = _digito(c[:12] + str(d1), peso2)
+    return c[-2:] == f"{d1}{d2}"
+
+
+def formatar_cnpj(cnpj) -> str:
+    d = somente_digitos(cnpj)
+    if len(d) != 14:
+        return str(cnpj or "")
+    return f"{d[:2]}.{d[2:5]}.{d[5:8]}/{d[8:12]}-{d[12:]}"
+
+
+def validar_cpf(cpf) -> bool:
+    c = somente_digitos(cpf)
+    if len(c) != 11 or len(set(c)) == 1:
+        return False
+    s = sum(int(c[i]) * (10 - i) for i in range(9))
+    d1 = (s * 10) % 11
+    d1 = 0 if d1 == 10 else d1
+    if d1 != int(c[9]):
+        return False
+    s = sum(int(c[i]) * (11 - i) for i in range(10))
+    d2 = (s * 10) % 11
+    d2 = 0 if d2 == 10 else d2
+    return d2 == int(c[10])
+
+
 def obter_base_url() -> str:
     """
     URL pública da aplicação (links em e-mail, etc.).
