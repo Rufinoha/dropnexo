@@ -52,6 +52,12 @@
       iconeTech: "life-buoy",
     },
     {
+      titulo: "Hub H74",
+      texto: "URL e token do Painel NF-e (H74). Credenciais criptografadas no banco, com fallback do .env.",
+      rota: "/configuracoes/hub-h74",
+      iconeTech: "nf_hub",
+    },
+    {
       titulo: "Tarefas secundárias",
       texto: "Jobs agendados da plataforma (ex.: cache semanal de categorias do Mercado Livre) com status e log.",
       rota: "/configuracoes/tarefas-secundarias",

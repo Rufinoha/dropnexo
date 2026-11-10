@@ -3954,6 +3954,73 @@ def assinaturas_baixar_nf(id_fatura: int):
     return send_file(path, as_attachment=False, download_name=nome, mimetype="application/pdf")
 
 
+# --- Hub H74 (NF-e / Painel HUB) ---
+HUB_H74_PREFIX = "/configuracoes/hub-h74"
+
+
+@config_bp.get(HUB_H74_PREFIX)
+@login_obrigatorio()
+def hub_h74_pagina():
+    if not session.get("eh_desenvolvedor"):
+        return redirect(url_for("dashboard.index"))
+    return render_template("frm_config_hub_h74.html", nav_ativo="config")
+
+
+@config_bp.get(f"{HUB_H74_PREFIX}/dados")
+@login_obrigatorio()
+def hub_h74_dados():
+    if (r := _exigir_dev()) is not None:
+        return r
+    from api.fiscal.hub_nfe_config import obter_painel_config
+
+    conn = Var_ConectarBanco()
+    try:
+        painel = obter_painel_config(conn)
+        return jsonify(success=True, **painel)
+    except Exception as e:
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
+@config_bp.post(f"{HUB_H74_PREFIX}/salvar")
+@login_obrigatorio()
+def hub_h74_salvar():
+    if (r := _exigir_dev()) is not None:
+        return r
+    from api.fiscal.hub_nfe_config import obter_painel_config, salvar_config_admin
+
+    payload = request.get_json(silent=True) or {}
+    conn = Var_ConectarBanco()
+    try:
+        salvar_config_admin(conn, payload)
+        conn.commit()
+        painel = obter_painel_config(conn)
+        return jsonify(success=True, message="Configuração Hub H74 salva.", **painel)
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
+@config_bp.post(f"{HUB_H74_PREFIX}/testar")
+@login_obrigatorio()
+def hub_h74_testar():
+    if (r := _exigir_dev()) is not None:
+        return r
+    from api.fiscal.hub_nfe_config import testar_conexao
+
+    conn = Var_ConectarBanco()
+    try:
+        resultado = testar_conexao(conn)
+        return jsonify(success=bool(resultado.get("ok")), **resultado)
+    except Exception as e:
+        return jsonify(success=False, ok=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
 # --- HubSupport (Central de Chamados) ---
 HS_PREFIX = "/configuracoes/hubsupport"
 

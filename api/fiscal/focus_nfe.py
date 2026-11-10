@@ -1,7 +1,6 @@
 # Cliente do hub H74 de NF-e modelo 55. Este sistema não fala com a SEFAZ.
 from __future__ import annotations
 
-import os
 from typing import Any
 
 import requests
@@ -13,8 +12,14 @@ class FocusNfeError(Exception):
         self.status = status
 
 
+def _credenciais() -> dict:
+    from api.fiscal.hub_nfe_config import obter_credenciais
+
+    return obter_credenciais()
+
+
 def _hub() -> str:
-    return (os.getenv("HUB_NFE_URL") or "").strip().rstrip("/")
+    return (_credenciais().get("base_url") or "").strip().rstrip("/")
 
 
 def token_configurado(ambiente: str = "") -> bool:
@@ -22,7 +27,7 @@ def token_configurado(ambiente: str = "") -> bool:
 
 
 def _token() -> str:
-    return (os.getenv("HUB_NFE_TOKEN") or "").strip()
+    return (_credenciais().get("token") or "").strip()
 
 
 def _ambiente(ambiente: str) -> str:
@@ -31,9 +36,13 @@ def _ambiente(ambiente: str) -> str:
 
 def _exigir_config() -> str:
     if not _hub():
-        raise FocusNfeError("Defina HUB_NFE_URL no .env do servidor.")
+        raise FocusNfeError(
+            "Defina a URL do Hub H74 em Configurações → Hub H74 (ou HUB_NFE_URL no .env)."
+        )
     if not _token():
-        raise FocusNfeError("Defina HUB_NFE_TOKEN no .env do servidor.")
+        raise FocusNfeError(
+            "Defina o token do Hub H74 em Configurações → Hub H74 (ou HUB_NFE_TOKEN no .env)."
+        )
     return _token()
 
 
@@ -48,8 +57,8 @@ def _cabecalhos(ambiente: str) -> dict:
 def _mensagem(resp: requests.Response) -> str:
     if resp.status_code == 401:
         return (
-            "O hub recusou o acesso. Confira o token no .env e se o sistema dropnexo "
-            "está ligado nesse token."
+            "O hub recusou o acesso. Confira o token em Configurações → Hub H74 "
+            "e se o sistema dropnexo está ligado nesse token."
         )
     try:
         body = resp.json()
