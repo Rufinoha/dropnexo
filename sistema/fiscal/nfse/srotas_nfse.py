@@ -396,6 +396,7 @@ def dashboard():
         email=session.get("email"),
         menu_ativo="nfse-dashboard",
         nav_ativo="fn_notas_nfse",
+        nfse_aba="dashboard",
     )
 
 
@@ -584,6 +585,7 @@ def notas():
         email=session.get("email"),
         menu_ativo="nfse-notas",
         nav_ativo="fn_notas_nfse",
+        nfse_aba="notas",
     )
 
 
@@ -608,6 +610,7 @@ def parametros():
         email=session.get("email"),
         menu_ativo="nfse-parametros",
         nav_ativo="fn_notas_nfse",
+        nfse_aba="parametros",
     )
 
 

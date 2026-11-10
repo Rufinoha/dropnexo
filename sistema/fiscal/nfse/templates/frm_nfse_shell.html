@@ -1,0 +1,34 @@
+{% extends "frm_base.html" %}
+{% block title %}NFS-e · DropNexo{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('static', filename='style/Csweetalert.css') }}">
+<link rel="stylesheet" href="{{ url_for('financeiro.static', filename='style/Cfinanceiro.css') }}?v=6">
+<link rel="stylesheet" href="{{ url_for('nfse.static', filename='style/Cnfse.css') }}?v=27">
+{% block nfse_head %}{% endblock %}
+{% endblock %}
+{% block content %}
+{% set aba = nfse_aba|default('notas') %}
+<div class="Cl_ContainerApoio Cl_PainelPagina Fin_Page Nfse_Page">
+  <div class="pt-page-title">
+    <h2>NFS-e</h2>
+    <p class="pt-page-desc">Notas de serviço do tenant. Certificado e regras em Parâmetros.</p>
+  </div>
+
+  <nav class="Nfse_Abas" aria-label="Seções NFS-e">
+    <a class="Nfse_Aba{% if aba == 'notas' %} is-active{% endif %}"
+       href="{{ url_for('nfse.notas') }}"
+       {% if aba == 'notas' %}aria-current="page"{% endif %}>Notas emitidas</a>
+    <a class="Nfse_Aba{% if aba == 'parametros' %} is-active{% endif %}"
+       href="{{ url_for('nfse.parametros') }}"
+       {% if aba == 'parametros' %}aria-current="page"{% endif %}>Parâmetros</a>
+    <a class="Nfse_Aba{% if aba == 'dashboard' %} is-active{% endif %}"
+       href="{{ url_for('nfse.dashboard') }}"
+       {% if aba == 'dashboard' %}aria-current="page"{% endif %}>Dashboard</a>
+  </nav>
+
+  {% block nfse_body %}{% endblock %}
+</div>
+{% endblock %}
+{% block page_js %}
+{% block nfse_js %}{% endblock %}
+{% endblock %}

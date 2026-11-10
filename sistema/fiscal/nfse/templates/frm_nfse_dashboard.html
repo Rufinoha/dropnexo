@@ -1,71 +1,58 @@
-{% extends "frm_base.html" %}
-{% block title %}Dashboard NFS-e · DropNexo{% endblock %}
-{% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('nfse.static', filename='style/Cnfse.css') }}?v=20261105d">
-{% endblock %}
-{% block content %}
-<div class="Cl_ConfigContainer nfse-page">
-  <div class="nfse-title">
-    <div>
-      <h2>Dashboard</h2>
-      <p>Faturamento das NFS-e autorizadas deste tenant.</p>
-    </div>
-    <a class="Cl_btn Cl_btn_neutral" href="/nfse/notas">Notas emitidas</a>
-  </div>
-
-  <div class="NfDash_Kpis" id="dashKpis">
-    <article class="NfDash_Kpi"><span>Faturado no ano</span><strong>—</strong></article>
-    <article class="NfDash_Kpi"><span>No mês</span><strong>—</strong></article>
-    <article class="NfDash_Kpi"><span>Notas autorizadas</span><strong>—</strong></article>
-    <article class="NfDash_Kpi"><span>Ticket médio</span><strong>—</strong></article>
-  </div>
-
-  <section class="NfDash_Card">
-    <header class="NfDash_CardHead">
-      <div class="NfDash_CardTitulo">
-        <h3 id="dashTitulo">Ano — Faturamento</h3>
-        <label class="NfDash_Ano">
-          <span>Ano</span>
-          <select id="dashAno"></select>
-        </label>
-      </div>
-      <strong id="dashTotalAno">—</strong>
-    </header>
-    <p class="NfDash_Legenda"><i></i> Autorizada</p>
-    <div class="NfDash_Chart" id="dashChart" aria-label="Faturamento mensal"></div>
-  </section>
-
-  <section class="NfDash_Card">
-    <header class="NfDash_CardHead">
-      <div>
-        <h3>Projeção 2027</h3>
-        <p id="dashProjecaoTexto">Caminho até a meta, a partir dos meses já fechados.</p>
-      </div>
-      <label class="NfDash_Ano">
-        <span>Meta por mês</span>
-        <input id="dashMeta" inputmode="decimal" value="20.000" aria-label="Meta mensal de 2027">
-      </label>
-    </header>
-    <div class="NfDash_Kpis NfDash_Kpis--3" id="dashProjecaoKpis"></div>
-    <p class="NfDash_Legenda">
-      <i class="is-caminho"></i> Caminho até a meta
-      <i class="is-ritmo"></i> Ritmo atual
-      <i class="is-meta"></i> Meta
-    </p>
-    <div class="NfDash_Chart NfDash_Chart--proj" id="dashProjecaoChart" aria-label="Projeção mensal de 2027"></div>
-  </section>
-
-  <section class="NfDash_Card">
-    <header class="NfDash_CardHead">
-      <div>
-        <h3>Top clientes</h3>
-        <p>Quem mais faturou no ano, entre as notas autorizadas.</p>
-      </div>
-    </header>
-    <ol class="NfDash_Rank" id="dashClientes"></ol>
-  </section>
+{% extends "frm_nfse_shell.html" %}
+{% block title %}NFS-e · Dashboard · DropNexo{% endblock %}
+{% block nfse_body %}
+<div class="NfDash_Kpis" id="dashKpis">
+  <article class="NfDash_Kpi"><span>Faturado no ano</span><strong>—</strong></article>
+  <article class="NfDash_Kpi"><span>No mês</span><strong>—</strong></article>
+  <article class="NfDash_Kpi"><span>Notas autorizadas</span><strong>—</strong></article>
+  <article class="NfDash_Kpi"><span>Ticket médio</span><strong>—</strong></article>
 </div>
+
+<section class="NfDash_Card">
+  <header class="NfDash_CardHead">
+    <div class="NfDash_CardTitulo">
+      <h3 id="dashTitulo">Ano — Faturamento</h3>
+      <label class="NfDash_Ano">
+        <span>Ano</span>
+        <select id="dashAno"></select>
+      </label>
+    </div>
+    <strong id="dashTotalAno">—</strong>
+  </header>
+  <p class="NfDash_Legenda"><i></i> Autorizada</p>
+  <div class="NfDash_Chart" id="dashChart" aria-label="Faturamento mensal"></div>
+</section>
+
+<section class="NfDash_Card">
+  <header class="NfDash_CardHead">
+    <div>
+      <h3>Projeção 2027</h3>
+      <p id="dashProjecaoTexto">Caminho até a meta, a partir dos meses já fechados.</p>
+    </div>
+    <label class="NfDash_Ano">
+      <span>Meta por mês</span>
+      <input id="dashMeta" inputmode="decimal" value="20.000" aria-label="Meta mensal de 2027">
+    </label>
+  </header>
+  <div class="NfDash_Kpis NfDash_Kpis--3" id="dashProjecaoKpis"></div>
+  <p class="NfDash_Legenda">
+    <i class="is-caminho"></i> Caminho até a meta
+    <i class="is-ritmo"></i> Ritmo atual
+    <i class="is-meta"></i> Meta
+  </p>
+  <div class="NfDash_Chart NfDash_Chart--proj" id="dashProjecaoChart" aria-label="Projeção mensal de 2027"></div>
+</section>
+
+<section class="NfDash_Card">
+  <header class="NfDash_CardHead">
+    <div>
+      <h3>Top clientes</h3>
+      <p>Quem mais faturou no ano, entre as notas autorizadas.</p>
+    </div>
+  </header>
+  <ol class="NfDash_Rank" id="dashClientes"></ol>
+</section>
 {% endblock %}
-{% block page_js %}
-<script src="{{ url_for('nfse.static', filename='script/Snfse_dashboard.js') }}?v=20261105d"></script>
+{% block nfse_js %}
+<script src="{{ url_for('nfse.static', filename='script/Snfse_dashboard.js') }}?v=27"></script>
 {% endblock %}

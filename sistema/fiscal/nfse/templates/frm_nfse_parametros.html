@@ -1,18 +1,25 @@
-{% extends "frm_base.html" %}
-{% block title %}Parâmetros NFS-e · DropNexo{% endblock %}
-{% block head_extra %}<link rel="stylesheet" href="{{ url_for('nfse.static', filename='style/Cnfse.css') }}">{% endblock %}
-{% block content %}
-<div class="Cl_ConfigContainer nfse-page">
-  <div class="nfse-title"><div><h2>Parâmetros NFS-e</h2><p>Configuração isolada do tenant atual.</p></div></div>
-  <div class="nfse-tabs">
-    <button class="is-on" data-tab="perfis">Perfis de nota</button><button data-tab="empresa">Empresa fiscal</button><button data-tab="certificados">Certificados A1</button>
+{% extends "frm_nfse_shell.html" %}
+{% block title %}NFS-e · Parâmetros · DropNexo{% endblock %}
+{% block nfse_body %}
+<section class="Fin_Card Nfse_Parametros">
+  <div class="Fin_CardHead">
+    <div>
+      <h3>Parâmetros</h3>
+      <p class="Fin_Meta">Configuração isolada do tenant atual.</p>
+    </div>
+  </div>
+
+  <div class="Nfse_SubAbas nfse-tabs" role="tablist">
+    <button type="button" class="Nfse_SubAba is-on" data-tab="perfis">Perfis de nota</button>
+    <button type="button" class="Nfse_SubAba" data-tab="empresa">Empresa fiscal</button>
+    <button type="button" class="Nfse_SubAba" data-tab="certificados">Certificados A1</button>
   </div>
 
   <section class="nfse-panel" data-panel="empresa">
-    <h3>Prestador e ambiente</h3>
+    <h3 class="Nfse_SecaoTitulo">Prestador e ambiente</h3>
     <div class="nfse-cnpj-row">
       <div class="Cl_FormCampo"><label>CNPJ *</label><input id="cfg_cnpj" maxlength="18" inputmode="numeric" placeholder="00.000.000/0000-00"></div>
-      <button type="button" class="Cl_btn Cl_btn_primary" id="btnPreencherCnpj">Preencher dados</button>
+      <button type="button" class="Cl_botaoprimario" id="btnPreencherCnpj">Preencher dados</button>
     </div>
     <p class="nfse-hint">A consulta preenche razão social, município, UF, IBGE e Simples. Série e ambiente continuam manuais. A inscrição municipal fica só no cadastro: a DPS não envia esse campo enquanto o município não tiver informações complementares no CNC NFS-e.</p>
     <div class="nfse-grid nfse-grid-3">
@@ -31,12 +38,20 @@
     </div>
     <p class="nfse-hint">O percentual é o total aproximado da alíquota do Simples (Lei 12.741). Na nota já emitida esse valor é 6,00. Vazio significa não informar.</p>
     <div class="nfse-checks"><label><input type="checkbox" id="cfg_optante_simples"> Optante do Simples</label><label><input type="checkbox" id="cfg_incentivador_cultural"> Incentivador cultural</label></div>
-    <button class="Cl_btn Cl_btn_primary" id="btnSalvarConfig">Salvar configuração</button>
+    <button type="button" class="Cl_botaoprimario" id="btnSalvarConfig">Salvar configuração</button>
   </section>
 
   <section class="nfse-panel is-on" data-panel="perfis">
-    <div class="nfse-title"><h3>Perfis para preenchimento da DPS</h3><button class="Cl_btn Cl_btn_primary" id="btnNovoPerfil">Novo perfil</button></div>
-    <div class="Cl_Table"><table><thead><tr><th>Nome</th><th>Serviço</th><th>Tributação</th><th>ISS</th><th>Status</th><th>Ação</th></tr></thead><tbody id="listaPerfis"></tbody></table></div>
+    <div class="Fin_CardHead Nfse_SecaoHead">
+      <h3 class="Nfse_SecaoTitulo">Perfis para preenchimento da DPS</h3>
+      <button type="button" class="Cl_botaoprimario" id="btnNovoPerfil">Novo perfil</button>
+    </div>
+    <div class="Fin_TableWrap">
+      <table class="Fin_Table">
+        <thead><tr><th>Nome</th><th>Serviço</th><th>Tributação</th><th>ISS</th><th>Status</th><th>Ação</th></tr></thead>
+        <tbody id="listaPerfis"></tbody>
+      </table>
+    </div>
     <div id="modalPerfil" class="nfse-modal" hidden aria-hidden="true">
       <div class="nfse-modal__window" role="dialog" aria-modal="true" aria-labelledby="modalPerfilTitulo">
         <header class="nfse-modal__header">
@@ -69,18 +84,32 @@
           </div>
           <div class="Cl_FormCampo"><label>Extensões IBS/CBS (JSON)</label><textarea id="pf_ibs_cbs_json" rows="3">{}</textarea></div>
           <label><input type="checkbox" id="pf_ativo" checked> Perfil ativo</label>
-          <div class="nfse-actions"><button type="button" class="Cl_btn Cl_btn_neutral" id="btnCancelarPerfil">Cancelar</button><button class="Cl_btn Cl_btn_primary">Salvar perfil</button></div>
+          <div class="nfse-actions">
+            <button type="button" class="Cl_BtnCancelar" id="btnCancelarPerfil">Cancelar</button>
+            <button type="submit" class="Cl_botaoprimario">Salvar perfil</button>
+          </div>
         </form>
       </div>
     </div>
   </section>
 
   <section class="nfse-panel" data-panel="certificados">
-    <div class="nfse-alert"><i data-lucide="shield-check"></i><span>O arquivo e a senha são criptografados separadamente, nunca podem ser baixados e ficam isolados por tenant.</span></div>
+    <div class="nfse-alert"><span>O arquivo e a senha são criptografados separadamente, nunca podem ser baixados e ficam isolados por tenant.</span></div>
     <div id="cryptoWarning" class="nfse-warning" hidden>DEV: usando chave derivada de SECRET_KEY. Configure NFSE_MASTER_KEY antes da produção.</div>
-    <form id="formCertificado" class="nfse-upload"><div class="Cl_FormCampo"><label>Certificado A1 (.pfx/.p12)</label><input type="file" id="cert_arquivo" accept=".pfx,.p12" required></div><div class="Cl_FormCampo"><label>Senha</label><input type="password" id="cert_senha" autocomplete="new-password"></div><button class="Cl_btn Cl_btn_primary">Validar e armazenar</button></form>
-    <div class="Cl_Table"><table><thead><tr><th>Arquivo</th><th>Titular / CNPJ</th><th>Serial</th><th>Validade</th><th>Status</th></tr></thead><tbody id="listaCertificados"></tbody></table></div>
+    <form id="formCertificado" class="nfse-upload">
+      <div class="Cl_FormCampo"><label>Certificado A1 (.pfx/.p12)</label><input type="file" id="cert_arquivo" accept=".pfx,.p12" required></div>
+      <div class="Cl_FormCampo"><label>Senha</label><input type="password" id="cert_senha" autocomplete="new-password"></div>
+      <button type="submit" class="Cl_botaoprimario">Validar e armazenar</button>
+    </form>
+    <div class="Fin_TableWrap">
+      <table class="Fin_Table">
+        <thead><tr><th>Arquivo</th><th>Titular / CNPJ</th><th>Serial</th><th>Validade</th><th>Status</th></tr></thead>
+        <tbody id="listaCertificados"></tbody>
+      </table>
+    </div>
   </section>
-</div>
+</section>
 {% endblock %}
-{% block page_js %}<script src="{{ url_for('nfse.static', filename='script/Snfse_parametros.js') }}"></script>{% endblock %}
+{% block nfse_js %}
+<script src="{{ url_for('nfse.static', filename='script/Snfse_parametros.js') }}?v=27"></script>
+{% endblock %}

@@ -1,85 +1,67 @@
-{% extends "frm_base.html" %}
+{% extends "frm_nfse_shell.html" %}
 {% block title %}NFS-e · Notas emitidas · DropNexo{% endblock %}
-{% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('static', filename='style/Csweetalert.css') }}">
-<link rel="stylesheet" href="{{ url_for('financeiro.static', filename='style/Cfinanceiro.css') }}?v=6">
-<link rel="stylesheet" href="{{ url_for('nfse.static', filename='style/Cnfse.css') }}?v=26">
-{% endblock %}
-{% block content %}
-<div class="Cl_ContainerApoio Cl_PainelPagina Fin_Page Nfse_Page">
-  <div class="pt-page-title">
-    <h2>NFS-e</h2>
-    <p class="pt-page-desc">Notas de serviço do tenant. Configure certificado e regras em Parâmetros.</p>
+{% block nfse_body %}
+<section class="Fin_Card">
+  <div class="Fin_CardHead">
+    <div>
+      <h3>Notas emitidas</h3>
+      <p class="Fin_Meta">DPS, rascunhos e NFS-e autorizadas.</p>
+    </div>
+    <div class="Nfse_AcoesTopo">
+      <button type="button" class="Cl_BtnCancelar" id="btnImportarNotas">Importar</button>
+      <button type="button" class="Cl_BtnCancelar" id="btnDanfseModelo">DANFSe modelo</button>
+      <button type="button" class="Cl_botaoprimario" id="btnNovaNota">Nova DPS</button>
+    </div>
   </div>
 
-  <nav class="Fin_Tabs Nfse_Tabs" aria-label="NFS-e">
-    <a class="Fin_Tab is-active" href="{{ url_for('nfse.notas') }}">Notas emitidas</a>
-    <a class="Fin_Tab" href="{{ url_for('nfse.parametros') }}">Parâmetros</a>
-    <a class="Fin_Tab" href="{{ url_for('nfse.dashboard') }}">Dashboard</a>
-  </nav>
-
-  <section class="Fin_Card">
-    <div class="Fin_CardHead">
-      <div>
-        <h3>Notas emitidas</h3>
-        <p class="Fin_Meta">DPS, rascunhos e NFS-e autorizadas.</p>
-      </div>
-      <div class="Nfse_AcoesTopo">
-        <button type="button" class="Cl_BtnCancelar" id="btnImportarNotas">Importar</button>
-        <button type="button" class="Cl_BtnCancelar" id="btnDanfseModelo">DANFSe modelo</button>
-        <button type="button" class="Cl_botaoprimario" id="btnNovaNota">Nova DPS</button>
-      </div>
+  <div class="Nfse_Filtros">
+    <div class="filter-group">
+      <label for="filtroTermo">Pesquisa</label>
+      <input id="filtroTermo" placeholder="Cliente, número ou chave">
     </div>
-
-    <div class="Nfse_Filtros">
-      <div class="filter-group">
-        <label for="filtroTermo">Pesquisa</label>
-        <input id="filtroTermo" placeholder="Cliente, número ou chave">
-      </div>
-      <div class="filter-group">
-        <label for="filtroStatus">Status</label>
-        <select id="filtroStatus">
-          <option value="">Todos</option>
-          <option>rascunho</option>
-          <option>validado</option>
-          <option>autorizada</option>
-          <option>rejeitada</option>
-          <option>cancelada</option>
-        </select>
-      </div>
-      <div class="Nfse_FiltrosAcao">
-        <button type="button" class="Cl_botaoprimario" id="btnFiltrar">Filtrar</button>
-      </div>
+    <div class="filter-group">
+      <label for="filtroStatus">Status</label>
+      <select id="filtroStatus">
+        <option value="">Todos</option>
+        <option>rascunho</option>
+        <option>validado</option>
+        <option>autorizada</option>
+        <option>rejeitada</option>
+        <option>cancelada</option>
+      </select>
     </div>
-
-    <div class="Fin_TableWrap Nfse_TableWrap">
-      <table class="Fin_Table Nfse_Table">
-        <thead>
-          <tr>
-            <th>DPS</th>
-            <th>Criado</th>
-            <th>Autorizada</th>
-            <th>NFS-e / chave</th>
-            <th>Cliente</th>
-            <th class="nfse-valor">Valor</th>
-            <th>Status</th>
-            <th class="Cl_TableActions">Ações</th>
-          </tr>
-        </thead>
-        <tbody id="listaNotas">
-          <tr><td colspan="8" class="Fin_Empty">Carregando…</td></tr>
-        </tbody>
-      </table>
+    <div class="Nfse_FiltrosAcao">
+      <button type="button" class="Cl_botaoprimario" id="btnFiltrar">Filtrar</button>
     </div>
+  </div>
 
-    <div class="Nfse_Paginacao">
-      <button type="button" class="Cl_BtnCancelar" id="pagAnterior">Anterior</button>
-      <span class="Fin_Meta">Página <strong id="paginaAtual">1</strong> de <strong id="totalPaginas">1</strong></span>
-      <button type="button" class="Cl_BtnCancelar" id="pagProxima">Próxima</button>
-    </div>
-  </section>
-</div>
+  <div class="Fin_TableWrap Nfse_TableWrap">
+    <table class="Fin_Table Nfse_Table">
+      <thead>
+        <tr>
+          <th>DPS</th>
+          <th>Criado</th>
+          <th>Autorizada</th>
+          <th>NFS-e / chave</th>
+          <th>Cliente</th>
+          <th class="nfse-valor">Valor</th>
+          <th>Status</th>
+          <th class="Cl_TableActions">Ações</th>
+        </tr>
+      </thead>
+      <tbody id="listaNotas">
+        <tr><td colspan="8" class="Fin_Empty">Carregando…</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="Nfse_Paginacao">
+    <button type="button" class="Cl_BtnCancelar" id="pagAnterior">Anterior</button>
+    <span class="Fin_Meta">Página <strong id="paginaAtual">1</strong> de <strong id="totalPaginas">1</strong></span>
+    <button type="button" class="Cl_BtnCancelar" id="pagProxima">Próxima</button>
+  </div>
+</section>
 {% endblock %}
-{% block page_js %}
-<script src="{{ url_for('nfse.static', filename='script/Snfse_notas.js') }}?v=26"></script>
+{% block nfse_js %}
+<script src="{{ url_for('nfse.static', filename='script/Snfse_notas.js') }}?v=27"></script>
 {% endblock %}
