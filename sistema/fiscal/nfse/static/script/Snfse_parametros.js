@@ -11,12 +11,21 @@
     document.querySelectorAll(".nfse-panel").forEach(x=>x.classList.toggle("is-on",x.dataset.panel===b.dataset.tab));
   });
   const cfgCampos=["razao_social","nome_fantasia","cnpj","inscricao_municipal","municipio_ibge_codigo","municipio_nome","uf","regime_tributario","regime_especial_tributacao","percentual_tributos_sn","serie_dps","proximo_numero_dps","ambiente"];
+  function travarIdentidade(){
+    ["cfg_cnpj","cfg_razao_social"].forEach(id=>{
+      const e=$(id); if(!e) return;
+      e.readOnly=true;
+      e.classList.add("is-readonly");
+    });
+  }
   async function carregarConfig(){
     const r=await req("/nfse/api/config"); if(!r?.ok)return;
     const d=r.json.dados||{}; cfgCampos.forEach(c=>{const e=$(`cfg_${c}`);if(e)e.value=d[c]??""});
-    if($("cfg_cnpj") && d.cnpj) $("cfg_cnpj").value=formatarCnpj(d.cnpj);
+    if($("cfg_cnpj")) $("cfg_cnpj").value=d.cnpj?formatarCnpj(d.cnpj):"";
+    if($("cfg_razao_social")) $("cfg_razao_social").value=d.razao_social||"";
     $("cfg_optante_simples").checked=!!d.optante_simples;$("cfg_incentivador_cultural").checked=!!d.incentivador_cultural;
     $("cryptoWarning").hidden=!r.json.dev_crypto_fallback;
+    travarIdentidade();
     const aviso=$("cfgEmpresaAviso");
     const formBox=document.querySelector('.nfse-panel[data-panel="empresa"]');
     if(aviso){
@@ -29,6 +38,11 @@
         aviso.hidden=true;
         formBox?.classList.remove("is-bloqueado");
         formBox?.querySelectorAll("input,select,button,textarea").forEach(el=>{ el.disabled=false; });
+        travarIdentidade();
+        if(!d.cnpj || !d.razao_social){
+          aviso.hidden=false;
+          aviso.textContent="CNPJ ou razão social ausentes no cadastro do tenant. Complete em Minha empresa (não editáveis aqui).";
+        }
       }
     }
   }
@@ -42,15 +56,15 @@
   }
   $("btnPreencherCnpj").onclick=async()=>{
     const cnpj=($("cfg_cnpj").value||"").replace(/\D/g,"");
-    if(cnpj.length!==14) return msg("Atenção","Informe um CNPJ com 14 dígitos.","warning");
+    if(cnpj.length!==14) return msg("Atenção","CNPJ do tenant ausente. Cadastre em Minha empresa.","warning");
     const btn=$("btnPreencherCnpj");
     btn.disabled=true; const rotulo=btn.textContent; btn.textContent="Consultando...";
     try{
       const r=await req("/clientes/empresa/consulta-cnpj","POST",{cnpj});
       const d=r?.json||{};
       if(!r?.ok) return msg("Consulta", d.erro||d.message||"Não foi possível consultar o CNPJ.","warning");
-      if(d.razao_social) $("cfg_razao_social").value=d.razao_social;
-      if(d.nome_fantasia) $("cfg_nome_fantasia").value=d.nome_fantasia;
+      // CNPJ e razão social permanecem os do tenant (imutáveis).
+      if(d.nome_fantasia && !$("cfg_nome_fantasia").value) $("cfg_nome_fantasia").value=d.nome_fantasia;
       if(d.cidade) $("cfg_municipio_nome").value=tituloCidade(d.cidade);
       if(d.uf) $("cfg_uf").value=d.uf;
       if(d.codigo_municipio_ibge) $("cfg_municipio_ibge_codigo").value=String(d.codigo_municipio_ibge);
@@ -59,9 +73,9 @@
       if(d.opcao_pelo_simples!=null||mei) $("cfg_optante_simples").checked=simples;
       if(mei) $("cfg_regime_tributario").value="mei";
       else if(d.opcao_pelo_simples===true) $("cfg_regime_tributario").value="simples_nacional";
-      $("cfg_cnpj").value=formatarCnpj(cnpj);
+      travarIdentidade();
       const aviso=d.situacao_ativa===false?" O CNPJ não está ativo na base pública.":"";
-      msg("Dados preenchidos","Razão social, município, UF, IBGE e Simples vieram da base pública. Inscrição municipal, série e ambiente continuam manuais."+aviso,"success");
+      msg("Dados completados","Município, UF, IBGE e Simples vieram da base pública. CNPJ e razão social não são alterados."+aviso,"success");
     }finally{
       btn.disabled=false; btn.textContent=rotulo;
     }

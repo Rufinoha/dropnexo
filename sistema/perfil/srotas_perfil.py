@@ -1000,6 +1000,20 @@ def api_minha_empresa_salvar():
             tipo_final = "J"
             documento_final = documento_solicitado
 
+        # PJ: CNPJ e razão social são imutáveis (vêm do cadastro original / conversão F→J).
+        cur.execute(
+            "SELECT nome_completo, razao_social FROM tbl_tenant WHERE id = %s",
+            (id_tenant,),
+        )
+        row_id = cur.fetchone() or ("", "")
+        razao_atual = (row_id[1] or row_id[0] or "").strip()
+        if tipo_final == "J" and tipo_atual == "J":
+            documento_final = documento_atual
+            nome_completo = razao_atual or nome_completo
+            razao_gravar = razao_atual or (dados.get("razao_social") or "").strip() or None
+        else:
+            razao_gravar = (dados.get("razao_social") or "").strip() or nome_completo or None
+
         # Fornecedor PJ: nome fantasia em maiúsculas; razão social permanece como enviada/cadastrada.
         if tipo_negocio == "fornecedor" and tipo_final == "J":
             nome = nome.upper()
@@ -1030,7 +1044,7 @@ def api_minha_empresa_salvar():
             (
                 nome,
                 nome_completo,
-                (dados.get("razao_social") or "").strip() or None,
+                razao_gravar,
                 nome_fantasia,
                 tipo_final,
                 documento_final,

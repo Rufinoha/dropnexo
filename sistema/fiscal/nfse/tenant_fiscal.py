@@ -91,7 +91,13 @@ def sincronizar_legado_config_empresa(conn, id_tenant: int) -> None:
 
 def carregar_empresa_fiscal(conn, id_tenant: int) -> dict:
     garantir_colunas_tenant_fiscal(conn)
-    sincronizar_legado_config_empresa(conn, id_tenant)
+    try:
+        sincronizar_legado_config_empresa(conn, id_tenant)
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
     cur = db_execute(
         conn,
         """
@@ -113,13 +119,21 @@ def carregar_empresa_fiscal(conn, id_tenant: int) -> dict:
         return {"eh_pj": False, "tipo_pessoa": "", "id_tenant": id_tenant}
     d = dict(zip(cols, row))
     tipo = (d.get("tipo_pessoa") or "").strip().upper()
-    eh_pj = tipo == "J"
-    cnpj = somente_digitos(d.get("cnpj") or "") or (
-        somente_digitos(d.get("documento") or "") if eh_pj else ""
-    )
+    doc = somente_digitos(d.get("documento") or "")
+    cnpj_col = somente_digitos(d.get("cnpj") or "")
+    # Identidade oficial do tenant: documento (Minha empresa) tem prioridade.
+    cnpj = cnpj_col or doc
+    eh_pj = tipo == "J" or len(cnpj) == 14
+    if eh_pj and len(cnpj) != 14:
+        cnpj = doc if len(doc) == 14 else cnpj
     municipio = (d.get("municipio_nome") or d.get("cidade") or "").strip()
-    razao = (d.get("razao_social") or d.get("nome_completo") or d.get("nome") or "").strip()
-    fantasia = (d.get("nome_fantasia") or "").strip()
+    # Mesma regra do perfil: nome_completo costuma ser a razão social cadastrada.
+    razao = (
+        (d.get("razao_social") or "").strip()
+        or (d.get("nome_completo") or "").strip()
+        or (d.get("nome") or "").strip()
+    )
+    fantasia = (d.get("nome_fantasia") or d.get("nome") or "").strip()
     ambiente = (d.get("ambiente_nfse") or "homologacao").strip()
     if ambiente not in ("homologacao", "producao"):
         ambiente = "homologacao"
@@ -132,11 +146,11 @@ def carregar_empresa_fiscal(conn, id_tenant: int) -> dict:
         percentual = ""
     return {
         "id_tenant": id_tenant,
-        "tipo_pessoa": tipo,
+        "tipo_pessoa": tipo or ("J" if eh_pj else ""),
         "eh_pj": eh_pj,
         "razao_social": razao,
         "nome_fantasia": fantasia,
-        "cnpj": cnpj,
+        "cnpj": cnpj if eh_pj else "",
         "inscricao_municipal": (d.get("inscricao_municipal") or "").strip(),
         "municipio_ibge_codigo": somente_digitos(d.get("municipio_ibge_codigo") or ""),
         "municipio_nome": municipio,
@@ -151,31 +165,31 @@ def carregar_empresa_fiscal(conn, id_tenant: int) -> dict:
         "ambiente": ambiente,
         "ambiente_nfse": ambiente,
         "ultimo_nsu_adn": int(d.get("ultimo_nsu_adn") or 0),
+        "cnpj_bloqueado": True,
+        "razao_bloqueada": True,
     }
 
 
 def salvar_empresa_fiscal(conn, id_tenant: int, dados: dict) -> dict:
     garantir_colunas_tenant_fiscal(conn)
-    cur = db_execute(
-        conn,
-        "SELECT tipo_pessoa FROM tbl_tenant WHERE id = %s LIMIT 1",
-        (id_tenant,),
-    )
-    row = cur.fetchone()
-    if not row:
-        raise ValueError("Tenant não encontrado.")
-    tipo = (row[0] or "").strip().upper()
-    if tipo != "J":
+    atual = carregar_empresa_fiscal(conn, id_tenant)
+    if not atual.get("eh_pj"):
         raise PermissionError(
             "Empresa fiscal só se aplica a tenant pessoa jurídica (PJ). "
             "Atualize o cadastro do tenant para tipo PJ."
         )
 
-    cnpj = somente_digitos(dados.get("cnpj"))
+    # CNPJ e razão social são identidade imutável do tenant.
+    cnpj = somente_digitos(atual.get("cnpj") or "")
+    razao = (atual.get("razao_social") or "").strip()
+    if len(cnpj) != 14:
+        raise ValueError("CNPJ do tenant ausente ou inválido. Corrija em Minha empresa.")
+    if not razao:
+        raise ValueError("Razão social do tenant ausente. Corrija em Minha empresa.")
+
     uf = (dados.get("uf") or "").strip().upper()
     ibge = somente_digitos(dados.get("municipio_ibge_codigo"))
     municipio = (dados.get("municipio_nome") or "").strip()
-    razao = (dados.get("razao_social") or "").strip()
     fantasia = (dados.get("nome_fantasia") or "").strip() or None
     im = (dados.get("inscricao_municipal") or "").strip() or None
     ambiente = dados.get("ambiente") if dados.get("ambiente") in {"homologacao", "producao"} else "homologacao"
@@ -193,11 +207,11 @@ def salvar_empresa_fiscal(conn, id_tenant: int, dados: dict) -> dict:
         conn,
         """
         UPDATE tbl_tenant SET
-            razao_social = %s,
             nome_fantasia = %s,
+            cnpj = COALESCE(NULLIF(TRIM(cnpj), ''), %s),
+            documento = COALESCE(NULLIF(TRIM(documento), ''), %s),
+            razao_social = COALESCE(NULLIF(TRIM(razao_social), ''), %s),
             nome_completo = COALESCE(NULLIF(TRIM(nome_completo), ''), %s),
-            cnpj = %s,
-            documento = %s,
             inscricao_municipal = %s,
             municipio_ibge_codigo = %s,
             municipio_nome = %s,
@@ -215,11 +229,11 @@ def salvar_empresa_fiscal(conn, id_tenant: int, dados: dict) -> dict:
          WHERE id = %s
         """,
         (
-            razao or None,
             fantasia,
-            razao or None,
-            cnpj or None,
-            cnpj or None,
+            cnpj,
+            cnpj,
+            razao,
+            razao,
             im,
             ibge or None,
             municipio or None,

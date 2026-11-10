@@ -95,6 +95,16 @@
       doc.classList.add("mp-readonly");
       if (btnCnpj) btnCnpj.hidden = true;
       doc.value = formatarDocumento(dadosOriginais?.documento || doc.value, "J");
+      const razao = el("emp-razao");
+      if (razao) {
+        razao.readOnly = true;
+        razao.classList.add("mp-readonly");
+        razao.value =
+          dadosOriginais?.nome_completo ||
+          dadosOriginais?.razao_social ||
+          razao.value ||
+          "";
+      }
       aplicarUiNomeFantasia();
       return;
     }

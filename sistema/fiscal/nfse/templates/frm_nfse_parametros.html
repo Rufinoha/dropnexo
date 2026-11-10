@@ -3,7 +3,7 @@
 {% block head_extra %}
 <link rel="stylesheet" href="{{ url_for('static', filename='style/Csweetalert.css') }}">
 <link rel="stylesheet" href="{{ url_for('financeiro.static', filename='style/Cfinanceiro.css') }}?v=6">
-<link rel="stylesheet" href="{{ url_for('nfse.static', filename='style/Cnfse.css') }}?v=29">
+<link rel="stylesheet" href="{{ url_for('nfse.static', filename='style/Cnfse.css') }}?v=30">
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio Cl_PainelPagina Fin_Page Nfse_Page">
@@ -24,12 +24,12 @@
       <h3 class="Nfse_SecaoTitulo">Prestador e ambiente</h3>
       <p class="nfse-hint">Mesmos dados do cadastro do tenant (PJ). Ao salvar, atualiza <code>tbl_tenant</code> — sem cadastro paralelo.</p>
       <div class="nfse-cnpj-row">
-        <div class="Cl_FormCampo"><label>CNPJ *</label><input id="cfg_cnpj" maxlength="18" inputmode="numeric" placeholder="00.000.000/0000-00"></div>
-        <button type="button" class="Cl_botaoprimario" id="btnPreencherCnpj">Preencher dados</button>
+        <div class="Cl_FormCampo"><label>CNPJ *</label><input id="cfg_cnpj" maxlength="18" inputmode="numeric" placeholder="00.000.000/0000-00" readonly class="is-readonly"></div>
+        <button type="button" class="Cl_botaoprimario" id="btnPreencherCnpj">Completar da Receita</button>
       </div>
-      <p class="nfse-hint">A consulta preenche razão social, município, UF, IBGE e Simples. Série e ambiente continuam manuais. A inscrição municipal fica só no cadastro: a DPS não envia esse campo enquanto o município não tiver informações complementares no CNC NFS-e.</p>
+      <p class="nfse-hint">CNPJ e razão social vêm do cadastro do tenant e não podem ser alterados aqui. A consulta completa município, UF, IBGE e Simples. Série e ambiente são manuais.</p>
       <div class="nfse-grid nfse-grid-3">
-        <div class="Cl_FormCampo"><label>Razão social *</label><input id="cfg_razao_social"></div>
+        <div class="Cl_FormCampo"><label>Razão social *</label><input id="cfg_razao_social" readonly class="is-readonly"></div>
         <div class="Cl_FormCampo"><label>Nome fantasia</label><input id="cfg_nome_fantasia"></div>
         <div class="Cl_FormCampo"><label>Inscrição municipal</label><input id="cfg_inscricao_municipal"></div>
         <div class="Cl_FormCampo"><label>Código IBGE *</label><input id="cfg_municipio_ibge_codigo" maxlength="7"></div>
@@ -118,5 +118,5 @@
 </div>
 {% endblock %}
 {% block page_js %}
-<script src="{{ url_for('nfse.static', filename='script/Snfse_parametros.js') }}?v=29"></script>
+<script src="{{ url_for('nfse.static', filename='script/Snfse_parametros.js') }}?v=30"></script>
 {% endblock %}
