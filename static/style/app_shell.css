@@ -494,6 +494,7 @@ button.fg-nav-parent {
 .fg-topbar-left {
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
   gap: 0.1rem;
   min-width: 0;
 }
@@ -503,6 +504,150 @@ button.fg-nav-parent {
   font-size: 1.05rem;
   font-weight: 700;
   color: #1e293b;
+}
+
+/* Hub switcher (Painel / Financeiro) — no lugar do título Painel */
+.fg-hub-switcher {
+  position: relative;
+}
+.fg-hub-trigger {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 0;
+  min-height: 2.55rem;
+  padding: 0.2rem 0.35rem 0.2rem 0.45rem;
+  border: 1px solid #c7d2fe;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #f8faff 0%, #eef2ff 100%);
+  color: #021f81;
+  cursor: pointer;
+  font: inherit;
+  box-shadow: 0 1px 0 rgba(2, 31, 129, 0.04);
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+}
+.fg-hub-trigger:hover,
+.fg-hub-trigger[aria-expanded="true"] {
+  border-color: #a5b4fc;
+  box-shadow: 0 6px 18px rgba(2, 31, 129, 0.1);
+  background: #fff;
+}
+.fg-hub-mod {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.05rem;
+  min-width: 3.1rem;
+  padding: 0.15rem 0.45rem 0.15rem 0.2rem;
+  color: #6366f1;
+}
+.fg-hub-mod-ico {
+  width: 1rem;
+  height: 1rem;
+}
+.fg-hub-mod-txt {
+  font-size: 0.58rem;
+  font-weight: 750;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 1;
+}
+.fg-hub-divider {
+  width: 1px;
+  align-self: stretch;
+  margin: 0.25rem 0.15rem;
+  background: #c7d2fe;
+}
+.fg-hub-current {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.15rem 0.25rem 0.15rem 0.45rem;
+  min-width: 7.5rem;
+}
+.fg-hub-current-ico {
+  width: 1.05rem;
+  height: 1.05rem;
+  flex: 0 0 auto;
+  color: #021f81;
+}
+.fg-hub-current-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.05rem;
+  min-width: 0;
+}
+.fg-hub-current-text strong {
+  font-size: 0.92rem;
+  font-weight: 750;
+  color: #0f172a;
+  line-height: 1.1;
+}
+.fg-hub-current-text small {
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #94a3b8;
+  line-height: 1;
+}
+.fg-hub-caret {
+  width: 1.25rem;
+  height: 1.25rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 7px;
+  background: #e0e7ff;
+  color: #021f81;
+}
+.fg-hub-caret svg {
+  width: 0.85rem;
+  height: 0.85rem;
+}
+.fg-hub-dropdown {
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  left: 0;
+  z-index: 80;
+  min-width: 14rem;
+  margin: 0;
+  padding: 0.35rem;
+  list-style: none;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.14);
+}
+.fg-hub-dropdown button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+  width: 100%;
+  margin: 0;
+  padding: 0.65rem 0.75rem;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: #1c2e3b;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.fg-hub-dropdown button span {
+  font-weight: 700;
+  font-size: 0.92rem;
+}
+.fg-hub-dropdown button small {
+  color: #94a3b8;
+  font-size: 0.75rem;
+}
+.fg-hub-dropdown button:hover,
+.fg-hub-dropdown button[aria-selected="true"] {
+  background: #eef2ff;
+  color: #021f81;
 }
 
 .fg-topbar-sub {

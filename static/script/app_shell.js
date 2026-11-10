@@ -423,10 +423,20 @@
   const moduloDropdown = document.getElementById("fg-modulo-dropdown");
   const moduloLabel = document.getElementById("fg-modulo-trigger-label");
 
+  const hubSwitcher = document.getElementById("fg-hub-switcher");
+  const hubTrigger = document.getElementById("fg-hub-trigger");
+  const hubDropdown = document.getElementById("fg-hub-dropdown");
+
   function closeModuloMenu() {
     if (!moduloDropdown) return;
     moduloDropdown.hidden = true;
     if (moduloTrigger) moduloTrigger.setAttribute("aria-expanded", "false");
+  }
+
+  function closeHubMenu() {
+    if (!hubDropdown) return;
+    hubDropdown.hidden = true;
+    if (hubTrigger) hubTrigger.setAttribute("aria-expanded", "false");
   }
 
   function toggleModuloMenu() {
@@ -434,8 +444,19 @@
     const abrir = moduloDropdown.hidden;
     closeUserMenu();
     closeTenantMenu();
+    closeHubMenu();
     moduloDropdown.hidden = !abrir;
     moduloTrigger.setAttribute("aria-expanded", abrir ? "true" : "false");
+  }
+
+  function toggleHubMenu() {
+    if (!hubDropdown || !hubTrigger) return;
+    const abrir = hubDropdown.hidden;
+    closeUserMenu();
+    closeTenantMenu();
+    closeModuloMenu();
+    hubDropdown.hidden = !abrir;
+    hubTrigger.setAttribute("aria-expanded", abrir ? "true" : "false");
   }
 
   async function trocarModulo(codigo) {
@@ -446,6 +467,27 @@
       credentials: "same-origin",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify({ modulo: codigo }),
+    });
+    const j = await r.json();
+    if (!j.success) {
+      if (window.Util && Util.alertar) Util.alertar(j.message || "Erro", "error");
+      return;
+    }
+    window.location.href = j.redirect || cfg.urlDashboard || "/";
+  }
+
+  async function trocarHub(codigo) {
+    const cfg = window.OSB_SHELL;
+    if (!cfg || !cfg.apiTrocarHub) return;
+    if (cfg.hubAtivo && cfg.hubAtivo === codigo) {
+      closeHubMenu();
+      return;
+    }
+    const r = await fetch(cfg.apiTrocarHub, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ hub: codigo }),
     });
     const j = await r.json();
     if (!j.success) {
@@ -467,13 +509,33 @@
       closeModuloMenu();
       trocarModulo(btn.getAttribute("data-modulo"));
     });
-    document.addEventListener("click", function () {
-      closeModuloMenu();
+  }
+
+  if (hubSwitcher && hubTrigger && hubDropdown) {
+    hubTrigger.addEventListener("click", function (e) {
+      e.stopPropagation();
+      toggleHubMenu();
     });
-    document.addEventListener("keydown", function (e) {
-      if (e.key === "Escape") closeModuloMenu();
+    hubDropdown.addEventListener("click", function (e) {
+      const btn = e.target.closest("button[data-hub]");
+      if (!btn) return;
+      e.preventDefault();
+      e.stopPropagation();
+      closeHubMenu();
+      trocarHub(btn.getAttribute("data-hub"));
     });
   }
+
+  document.addEventListener("click", function () {
+    closeModuloMenu();
+    closeHubMenu();
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") {
+      closeModuloMenu();
+      closeHubMenu();
+    }
+  });
 
   document.addEventListener("DOMContentLoaded", function () {
     carregarAvatarHeader();

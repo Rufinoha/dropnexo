@@ -62,6 +62,9 @@ def notas_nfe_em_breve():
         from flask import redirect, url_for
 
         return redirect(url_for("dashboard.index"))
+    from sistema.plataforma.sessao import HUB_FINANCEIRO, definir_hub_sessao
+
+    definir_hub_sessao(HUB_FINANCEIRO)
     return render_template(
         "frm_nf_em_breve.html",
         titulo="NFe",

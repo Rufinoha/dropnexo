@@ -1151,7 +1151,7 @@ def carregar_menu_sidebar() -> list[dict]:
 
 
 def _item_nota_fiscal_menu(mod_ativo: str) -> dict:
-    """Menu pai Nota Fiscal com submenus NFe (em breve) e NFS-e."""
+    """Menu pai Nota Fiscal (hub Financeiro): NFSe, NFe e Parâmetros."""
     from sistema.plataforma.sessao import MODULO_FORNECEDOR
 
     if mod_ativo == MODULO_FORNECEDOR:
@@ -1162,15 +1162,20 @@ def _item_nota_fiscal_menu(mod_ativo: str) -> dict:
             "nav_codigo": "fn_notas",
             "filhos": [
                 {
+                    "nome": "NFSe",
+                    "url": url_for("nfse.notas"),
+                    "nav_codigo": "fn_notas_nfse",
+                },
+                {
                     "nome": "NFe",
                     "url": url_for("fn_notas.notas_nfe_em_breve"),
                     "nav_codigo": "fn_notas_nfe",
                     "badge": "em breve",
                 },
                 {
-                    "nome": "NFSe",
-                    "url": url_for("nfse.notas"),
-                    "nav_codigo": "fn_notas_nfse",
+                    "nome": "Parâmetros",
+                    "url": url_for("nfse.parametros"),
+                    "nav_codigo": "fn_notas_param",
                 },
             ],
         }
@@ -1181,48 +1186,52 @@ def _item_nota_fiscal_menu(mod_ativo: str) -> dict:
         "nav_codigo": "vd_notas",
         "filhos": [
             {
+                "nome": "NFSe",
+                "url": url_for("nfse.notas"),
+                "nav_codigo": "vd_notas_nfse",
+            },
+            {
                 "nome": "NFe",
                 "url": url_for("vd_notas.notas_nfe_em_breve"),
                 "nav_codigo": "vd_notas_nfe",
                 "badge": "em breve",
             },
             {
-                "nome": "NFSe",
-                "url": url_for("nfse.notas"),
-                "nav_codigo": "vd_notas_nfse",
+                "nome": "Parâmetros",
+                "url": url_for("nfse.parametros"),
+                "nav_codigo": "vd_notas_param",
             },
         ],
     }
 
 
+def _menu_hub_financeiro(mod_ativo: str) -> list[dict]:
+    """Sidebar enxuta do hub Financeiro (mais itens virão depois)."""
+    return [_item_nota_fiscal_menu(mod_ativo)]
+
+
 def _aplicar_gating_nota_fiscal(itens: list[dict], mod_ativo: str) -> list[dict]:
-    """Só tenants 1 e 2 veem Nota Fiscal (fase teste). Demais: oculta."""
+    """Nota Fiscal só no hub Financeiro e só tenants 1 e 2 (fase teste)."""
     from sistema.fiscal.nfse.acesso import tenant_pode_nota_fiscal
+    from sistema.plataforma.sessao import HUB_FINANCEIRO, garantir_hub_sessao
 
     navs_nf = {
         "fn_notas",
         "vd_notas",
         "fn_notas_nfe",
         "fn_notas_nfse",
+        "fn_notas_param",
         "vd_notas_nfe",
         "vd_notas_nfse",
+        "vd_notas_param",
     }
     filtrados = [i for i in (itens or []) if (i.get("nav_codigo") or "") not in navs_nf]
     if not tenant_pode_nota_fiscal():
         return filtrados
-    # Insere após Pedidos / Meus produtos quando possível.
-    item_nf = _item_nota_fiscal_menu(mod_ativo)
-    out = []
-    inseriu = False
-    for i in filtrados:
-        out.append(i)
-        nav = i.get("nav_codigo") or ""
-        if not inseriu and nav in ("fn_pedidos", "az_pedidos", "produtos", "vd_pedidos"):
-            out.append(item_nf)
-            inseriu = True
-    if not inseriu:
-        out.append(item_nf)
-    return out
+    if garantir_hub_sessao() == HUB_FINANCEIRO:
+        return _menu_hub_financeiro(mod_ativo)
+    # Hub Painel: menu operacional sem Nota Fiscal (evita poluição).
+    return filtrados
 
 
 def _menu_sidebar_fallback(mod_ativo: str = "vendedor") -> list[dict]:

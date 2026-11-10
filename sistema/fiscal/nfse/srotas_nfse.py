@@ -62,10 +62,19 @@ def init_app(app):
         pass
 
 
+def _nav_nfse(codigo_sufixo: str = "nfse") -> str:
+    from sistema.plataforma.sessao import MODULO_FORNECEDOR, garantir_modulo_sessao
+
+    prefix = "fn" if garantir_modulo_sessao() == MODULO_FORNECEDOR else "vd"
+    return f"{prefix}_notas_{codigo_sufixo}"
+
+
 def _nfse_autorizado(fn):
     @wraps(fn)
     @login_obrigatorio()
     def wrapper(*args, **kwargs):
+        from sistema.plataforma.sessao import HUB_FINANCEIRO, definir_hub_sessao
+
         garantir_sessao_nfse()
         if not session.get("id_tenant") or not tenant_pode_nota_fiscal():
             if request.path.startswith("/nfse/api/"):
@@ -74,8 +83,10 @@ def _nfse_autorizado(fn):
                 "frm_nf_em_breve.html",
                 titulo="NFS-e",
                 mensagem="Acesso ao módulo NFS-e não autorizado neste tenant.",
-                nav_ativo="fn_notas_nfse",
+                nav_ativo=_nav_nfse("nfse"),
             ), 403
+        # Deep link /nfse/* entra no hub Financeiro automaticamente.
+        definir_hub_sessao(HUB_FINANCEIRO)
         return fn(*args, **kwargs)
 
     return wrapper
@@ -395,7 +406,7 @@ def dashboard():
         nome=session.get("nome"),
         email=session.get("email"),
         menu_ativo="nfse-dashboard",
-        nav_ativo="fn_notas_nfse",
+        nav_ativo=_nav_nfse("nfse"),
         nfse_aba="dashboard",
     )
 
@@ -584,7 +595,7 @@ def notas():
         nome=session.get("nome"),
         email=session.get("email"),
         menu_ativo="nfse-notas",
-        nav_ativo="fn_notas_nfse",
+        nav_ativo=_nav_nfse("nfse"),
         nfse_aba="notas",
     )
 
@@ -609,7 +620,7 @@ def parametros():
         nome=session.get("nome"),
         email=session.get("email"),
         menu_ativo="nfse-parametros",
-        nav_ativo="fn_notas_nfse",
+        nav_ativo=_nav_nfse("param"),
         nfse_aba="parametros",
     )
 

@@ -24,6 +24,11 @@ MODULO_VENDEDOR = "vendedor"
 MODULO_ARMAZEM = "armazem"
 MODULOS_VALIDOS = (MODULO_FORNECEDOR, MODULO_VENDEDOR, MODULO_ARMAZEM)
 
+# Hub do header (Painel × Financeiro) — ortogonal ao módulo fornecedor/vendedor.
+HUB_PAINEL = "painel"
+HUB_FINANCEIRO = "financeiro"
+HUBS_VALIDOS = (HUB_PAINEL, HUB_FINANCEIRO)
+
 
 def modulos_disponiveis(tipo_negocio: str | None) -> list[str]:
     """Um tipo de negócio = um módulo. Híbrido legado vira vendedor até migração."""
@@ -69,6 +74,44 @@ def rotulo_modulo(codigo: str) -> str:
         "vendedor": "Vendedor",
         "armazem": "Armazém",
     }.get(codigo, codigo)
+
+
+def rotulo_hub(codigo: str) -> str:
+    return {
+        HUB_PAINEL: "Painel",
+        HUB_FINANCEIRO: "Financeiro",
+    }.get(codigo, codigo)
+
+
+def tenant_pode_hub_financeiro() -> bool:
+    """Só tenants beta (1 e 2) veem o switcher Painel/Financeiro."""
+    try:
+        from sistema.fiscal.nfse.acesso import tenant_pode_nota_fiscal
+
+        return bool(tenant_pode_nota_fiscal())
+    except Exception:
+        return False
+
+
+def garantir_hub_sessao() -> str:
+    if not tenant_pode_hub_financeiro():
+        session["hub_ativo"] = HUB_PAINEL
+        return HUB_PAINEL
+    ativo = (session.get("hub_ativo") or HUB_PAINEL).strip().lower()
+    if ativo not in HUBS_VALIDOS:
+        ativo = HUB_PAINEL
+        session["hub_ativo"] = ativo
+    return ativo
+
+
+def definir_hub_sessao(codigo: str) -> str:
+    hub = (codigo or "").strip().lower()
+    if hub == HUB_FINANCEIRO and not tenant_pode_hub_financeiro():
+        hub = HUB_PAINEL
+    if hub not in HUBS_VALIDOS:
+        hub = HUB_PAINEL
+    session["hub_ativo"] = hub
+    return hub
 
 
 def icone_modulo(codigo: str) -> str:
@@ -170,11 +213,17 @@ def ctx_navegacao() -> dict:
             "modulo_ativo": "",
             "modulo_ativo_rotulo": "",
             "exibir_seletor_modulo": False,
+            "hub_ativo": HUB_PAINEL,
+            "hub_ativo_rotulo": rotulo_hub(HUB_PAINEL),
+            "exibir_seletor_hub": False,
+            "hubs_nav": [],
             "pode_config_plataforma": False,
             "header_navs": set(),
         }
     mods = modulos_disponiveis_sessao()
     ativo = garantir_modulo_sessao()
+    hub = garantir_hub_sessao()
+    pode_hub = tenant_pode_hub_financeiro()
     header_navs: set[str] = set()
     try:
         tid = session.get("id_tenant")
@@ -205,6 +254,15 @@ def ctx_navegacao() -> dict:
         "modulo_ativo": ativo,
         "modulo_ativo_rotulo": rotulo_modulo(ativo),
         "exibir_seletor_modulo": len(mods) > 1,
+        "hub_ativo": hub,
+        "hub_ativo_rotulo": rotulo_hub(hub),
+        "exibir_seletor_hub": pode_hub,
+        "hubs_nav": [
+            {"codigo": HUB_PAINEL, "rotulo": rotulo_hub(HUB_PAINEL)},
+            {"codigo": HUB_FINANCEIRO, "rotulo": rotulo_hub(HUB_FINANCEIRO)},
+        ]
+        if pode_hub
+        else [],
         "pode_config_plataforma": bool(session.get("eh_desenvolvedor")),
         "header_navs": header_navs,
     }

@@ -1165,18 +1165,60 @@ def api_trocar_tenant():
 @auth_bp.post("/api/auth/trocar-modulo")
 @login_obrigatorio()
 def api_trocar_modulo():
-    from sistema.plataforma.sessao import modulos_disponiveis_sessao, rotulo_modulo
+    from sistema.plataforma.sessao import (
+        HUB_FINANCEIRO,
+        garantir_hub_sessao,
+        modulos_disponiveis_sessao,
+        rotulo_modulo,
+    )
 
     dados = request.get_json(silent=True) or {}
     codigo = (dados.get("modulo") or "").strip().lower()
     if codigo not in modulos_disponiveis_sessao():
         return jsonify(success=False, message="Módulo indisponível para esta conta."), 400
     session["modulo_ativo"] = codigo
+    redirect = (
+        url_for("nfse.notas")
+        if garantir_hub_sessao() == HUB_FINANCEIRO
+        else url_for("dashboard.index")
+    )
     return jsonify(
         success=True,
         modulo=codigo,
         rotulo=rotulo_modulo(codigo),
-        redirect=url_for("dashboard.index"),
+        redirect=redirect,
+    )
+
+
+@auth_bp.post("/api/auth/trocar-hub")
+@login_obrigatorio()
+def api_trocar_hub():
+    """Troca hub do header: Painel ↔ Financeiro (tenants beta)."""
+    from sistema.plataforma.sessao import (
+        HUB_FINANCEIRO,
+        HUB_PAINEL,
+        HUBS_VALIDOS,
+        definir_hub_sessao,
+        rotulo_hub,
+        tenant_pode_hub_financeiro,
+    )
+
+    if not tenant_pode_hub_financeiro():
+        return jsonify(success=False, message="Hub Financeiro indisponível para esta conta."), 403
+    dados = request.get_json(silent=True) or {}
+    codigo = (dados.get("hub") or "").strip().lower()
+    if codigo not in HUBS_VALIDOS:
+        return jsonify(success=False, message="Hub inválido."), 400
+    hub = definir_hub_sessao(codigo)
+    if hub == HUB_FINANCEIRO:
+        redirect = url_for("nfse.notas")
+    else:
+        redirect = url_for("dashboard.index")
+    return jsonify(
+        success=True,
+        hub=hub,
+        rotulo=rotulo_hub(hub),
+        redirect=redirect,
     )
 
 
