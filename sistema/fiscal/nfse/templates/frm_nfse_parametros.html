@@ -19,33 +19,53 @@
       <button type="button" class="Nfse_SubAba" data-tab="certificados">Certificados A1</button>
     </div>
 
+    {% set emp = empresa or {} %}
     <section class="nfse-panel" data-panel="empresa">
       <div id="cfgEmpresaAviso" class="nfse-warning" hidden></div>
       <h3 class="Nfse_SecaoTitulo">Prestador e ambiente</h3>
-      <p class="nfse-hint">Mesmos dados do cadastro do tenant (PJ). Ao salvar, atualiza <code>tbl_tenant</code> — sem cadastro paralelo.</p>
+      <p class="nfse-hint">Mesmos dados do cadastro do tenant (PJ). Ao salvar, atualiza o tenant — sem cadastro paralelo.</p>
       <div class="nfse-cnpj-row">
-        <div class="Cl_FormCampo"><label>CNPJ *</label><input id="cfg_cnpj" maxlength="18" inputmode="numeric" placeholder="00.000.000/0000-00" readonly class="is-readonly"></div>
+        <div class="Cl_FormCampo"><label>CNPJ *</label><input id="cfg_cnpj" maxlength="18" inputmode="numeric" placeholder="00.000.000/0000-00" readonly class="is-readonly" value="{{ emp.get('cnpj_formatado') or emp.get('cnpj') or '' }}"></div>
         <button type="button" class="Cl_botaoprimario" id="btnPreencherCnpj">Completar da Receita</button>
       </div>
       <p class="nfse-hint">CNPJ e razão social vêm do cadastro do tenant e não podem ser alterados aqui. A consulta completa município, UF, IBGE e Simples. Série e ambiente são manuais.</p>
       <div class="nfse-grid nfse-grid-3">
-        <div class="Cl_FormCampo"><label>Razão social *</label><input id="cfg_razao_social" readonly class="is-readonly"></div>
-        <div class="Cl_FormCampo"><label>Nome fantasia</label><input id="cfg_nome_fantasia"></div>
-        <div class="Cl_FormCampo"><label>Inscrição municipal</label><input id="cfg_inscricao_municipal"></div>
-        <div class="Cl_FormCampo"><label>Código IBGE *</label><input id="cfg_municipio_ibge_codigo" maxlength="7"></div>
-        <div class="Cl_FormCampo"><label>Município *</label><input id="cfg_municipio_nome"></div>
-        <div class="Cl_FormCampo"><label>UF *</label><input id="cfg_uf" maxlength="2"></div>
-        <div class="Cl_FormCampo"><label>Regime tributário</label><select id="cfg_regime_tributario"><option value="simples_nacional">Simples Nacional</option><option value="lucro_presumido">Lucro presumido</option><option value="lucro_real">Lucro real</option><option value="mei">MEI</option><option value="outro">Outro</option></select></div>
-        <div class="Cl_FormCampo"><label>Regime especial</label><input id="cfg_regime_especial_tributacao"></div>
-        <div class="Cl_FormCampo"><label>Tributos aproximados do Simples (%)</label><input id="cfg_percentual_tributos_sn" inputmode="decimal" placeholder="6,00"></div>
-        <div class="Cl_FormCampo"><label>Série DPS</label><input id="cfg_serie_dps"></div>
-        <div class="Cl_FormCampo"><label>Próximo número DPS</label><input id="cfg_proximo_numero_dps" type="number" min="1"></div>
-        <div class="Cl_FormCampo"><label>Ambiente</label><select id="cfg_ambiente"><option value="homologacao">Homologação</option><option value="producao">Produção</option></select></div>
+        <div class="Cl_FormCampo"><label>Razão social *</label><input id="cfg_razao_social" readonly class="is-readonly" value="{{ emp.get('razao_social') or '' }}"></div>
+        <div class="Cl_FormCampo"><label>Nome fantasia</label><input id="cfg_nome_fantasia" value="{{ emp.get('nome_fantasia') or '' }}"></div>
+        <div class="Cl_FormCampo"><label>Inscrição municipal</label><input id="cfg_inscricao_municipal" value="{{ emp.get('inscricao_municipal') or '' }}"></div>
+        <div class="Cl_FormCampo"><label>Código IBGE *</label><input id="cfg_municipio_ibge_codigo" maxlength="7" value="{{ emp.get('municipio_ibge_codigo') or '' }}"></div>
+        <div class="Cl_FormCampo"><label>Município *</label><input id="cfg_municipio_nome" value="{{ emp.get('municipio_nome') or '' }}"></div>
+        <div class="Cl_FormCampo"><label>UF *</label><input id="cfg_uf" maxlength="2" value="{{ emp.get('uf') or '' }}"></div>
+        <div class="Cl_FormCampo"><label>Regime tributário</label>
+          {% set reg = emp.get('regime_tributario') or 'simples_nacional' %}
+          <select id="cfg_regime_tributario">
+            <option value="simples_nacional"{% if reg=='simples_nacional' %} selected{% endif %}>Simples Nacional</option>
+            <option value="lucro_presumido"{% if reg=='lucro_presumido' %} selected{% endif %}>Lucro presumido</option>
+            <option value="lucro_real"{% if reg=='lucro_real' %} selected{% endif %}>Lucro real</option>
+            <option value="mei"{% if reg=='mei' %} selected{% endif %}>MEI</option>
+            <option value="outro"{% if reg=='outro' %} selected{% endif %}>Outro</option>
+          </select>
+        </div>
+        <div class="Cl_FormCampo"><label>Regime especial</label><input id="cfg_regime_especial_tributacao" value="{{ emp.get('regime_especial_tributacao') or '' }}"></div>
+        <div class="Cl_FormCampo"><label>Tributos aproximados do Simples (%)</label><input id="cfg_percentual_tributos_sn" inputmode="decimal" placeholder="6,00" value="{{ emp.get('percentual_tributos_sn') or '' }}"></div>
+        <div class="Cl_FormCampo"><label>Série DPS</label><input id="cfg_serie_dps" value="{{ emp.get('serie_dps') or '1' }}"></div>
+        <div class="Cl_FormCampo"><label>Próximo número DPS</label><input id="cfg_proximo_numero_dps" type="number" min="1" value="{{ emp.get('proximo_numero_dps') or 1 }}"></div>
+        <div class="Cl_FormCampo"><label>Ambiente</label>
+          {% set amb = emp.get('ambiente') or 'homologacao' %}
+          <select id="cfg_ambiente">
+            <option value="homologacao"{% if amb=='homologacao' %} selected{% endif %}>Homologação</option>
+            <option value="producao"{% if amb=='producao' %} selected{% endif %}>Produção</option>
+          </select>
+        </div>
       </div>
       <p class="nfse-hint">O percentual é o total aproximado da alíquota do Simples (Lei 12.741). Na nota já emitida esse valor é 6,00. Vazio significa não informar.</p>
-      <div class="nfse-checks"><label><input type="checkbox" id="cfg_optante_simples"> Optante do Simples</label><label><input type="checkbox" id="cfg_incentivador_cultural"> Incentivador cultural</label></div>
+      <div class="nfse-checks">
+        <label><input type="checkbox" id="cfg_optante_simples"{% if emp.get('optante_simples', True) %} checked{% endif %}> Optante do Simples</label>
+        <label><input type="checkbox" id="cfg_incentivador_cultural"{% if emp.get('incentivador_cultural') %} checked{% endif %}> Incentivador cultural</label>
+      </div>
       <button type="button" class="Cl_botaoprimario" id="btnSalvarConfig">Salvar configuração</button>
     </section>
+    <script type="application/json" id="nfse_empresa_boot">{{ emp | tojson }}</script>
 
     <section class="nfse-panel is-on" data-panel="perfis">
       <div class="Fin_CardHead Nfse_SecaoHead">
@@ -118,5 +138,5 @@
 </div>
 {% endblock %}
 {% block page_js %}
-<script src="{{ url_for('nfse.static', filename='script/Snfse_parametros.js') }}?v=31"></script>
+<script src="{{ url_for('nfse.static', filename='script/Snfse_parametros.js') }}?v=32"></script>
 {% endblock %}

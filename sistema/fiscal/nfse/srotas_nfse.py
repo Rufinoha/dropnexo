@@ -615,6 +615,29 @@ def notas_editar():
 @nfse_bp.route("/parametros")
 @_nfse_autorizado
 def parametros():
+    from sistema.fiscal.nfse.tenant_fiscal import carregar_empresa_fiscal
+
+    empresa = {}
+    conn = Var_ConectarBanco()
+    try:
+        empresa = carregar_empresa_fiscal(conn, _tenant()) or {}
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        empresa = {}
+    finally:
+        conn.close()
+
+    cnpj_dig = somente_digitos(empresa.get("cnpj") or "")
+    if len(cnpj_dig) == 14:
+        cnpj_fmt = f"{cnpj_dig[:2]}.{cnpj_dig[2:5]}.{cnpj_dig[5:8]}/{cnpj_dig[8:12]}-{cnpj_dig[12:]}"
+    else:
+        cnpj_fmt = cnpj_dig
+    empresa = dict(empresa)
+    empresa["cnpj_formatado"] = cnpj_fmt
+
     return render_template(
         "frm_nfse_parametros.html",
         nome=session.get("nome"),
@@ -622,6 +645,7 @@ def parametros():
         menu_ativo="nfse-parametros",
         nav_ativo=_nav_nfse("param"),
         nfse_aba="parametros",
+        empresa=empresa,
     )
 
 

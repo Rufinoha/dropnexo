@@ -32,17 +32,11 @@
     aviso.hidden=false;
     aviso.removeAttribute("hidden");
   }
-  async function carregarConfig(){
-    setAvisoEmpresa("");
-    const r=await req("/nfse/api/config");
-    if(!r?.ok){
-      setAvisoEmpresa((r?.json&& (r.json.message||r.json.mensagem))||"Não foi possível carregar a empresa fiscal do tenant.");
-      return;
-    }
-    const d=r.json.dados||{};
+  function aplicarEmpresa(d, cryptoFallback){
+    if(!d) d={};
     cfgCampos.forEach(c=>{const e=$(`cfg_${c}`); if(e && d[c]!=null && d[c]!=="") e.value=d[c];});
-    if($("cfg_cnpj")) $("cfg_cnpj").value=d.cnpj?formatarCnpj(d.cnpj):"";
-    if($("cfg_razao_social")) $("cfg_razao_social").value=d.razao_social||"";
+    if($("cfg_cnpj")) $("cfg_cnpj").value=d.cnpj?formatarCnpj(d.cnpj):(d.cnpj_formatado||$("cfg_cnpj").value||"");
+    if($("cfg_razao_social") && d.razao_social) $("cfg_razao_social").value=d.razao_social;
     if($("cfg_nome_fantasia") && d.nome_fantasia) $("cfg_nome_fantasia").value=d.nome_fantasia;
     if($("cfg_municipio_nome") && d.municipio_nome) $("cfg_municipio_nome").value=d.municipio_nome;
     if($("cfg_uf") && d.uf) $("cfg_uf").value=d.uf;
@@ -53,9 +47,9 @@
     if($("cfg_ambiente") && d.ambiente) $("cfg_ambiente").value=d.ambiente;
     if($("cfg_regime_tributario") && d.regime_tributario) $("cfg_regime_tributario").value=d.regime_tributario;
     if($("cfg_percentual_tributos_sn") && d.percentual_tributos_sn) $("cfg_percentual_tributos_sn").value=d.percentual_tributos_sn;
-    $("cfg_optante_simples").checked=!!d.optante_simples;
-    $("cfg_incentivador_cultural").checked=!!d.incentivador_cultural;
-    if($("cryptoWarning")) $("cryptoWarning").hidden=!r.json.dev_crypto_fallback;
+    if($("cfg_optante_simples")) $("cfg_optante_simples").checked=!!d.optante_simples;
+    if($("cfg_incentivador_cultural")) $("cfg_incentivador_cultural").checked=!!d.incentivador_cultural;
+    if($("cryptoWarning") && cryptoFallback!=null) $("cryptoWarning").hidden=!cryptoFallback;
     travarIdentidade();
     const formBox=document.querySelector('.nfse-panel[data-panel="empresa"]');
     if(d.eh_pj===false){
@@ -72,6 +66,25 @@
         setAvisoEmpresa("");
       }
     }
+  }
+  function bootEmpresa(){
+    try{
+      const raw=$("nfse_empresa_boot")?.textContent||"{}";
+      const d=JSON.parse(raw);
+      if(d && (d.cnpj || d.razao_social || d.eh_pj!=null)) aplicarEmpresa(d, null);
+    }catch(_){}
+  }
+  async function carregarConfig(){
+    setAvisoEmpresa("");
+    bootEmpresa();
+    const r=await req("/nfse/api/config");
+    if(!r?.ok){
+      if(!($("cfg_cnpj")?.value) && !($("cfg_razao_social")?.value)){
+        setAvisoEmpresa((r?.json&& (r.json.message||r.json.mensagem))||"Não foi possível carregar a empresa fiscal do tenant.");
+      }
+      return;
+    }
+    aplicarEmpresa(r.json.dados||{}, r.json.dev_crypto_fallback);
   }
   function formatarCnpj(v){
     const d=String(v||"").replace(/\D/g,"").slice(0,14);
@@ -162,5 +175,10 @@
     if(!r?.ok)return msg("Certificado rejeitado",r?.json?.message||"Falha no upload.","error");
     e.target.reset();await carregarCertificados();msg("Certificado armazenado",r.json.message,"success");
   };
-  carregarConfig();carregarPerfis();carregarCertificados();
+  document.addEventListener("DOMContentLoaded", function(){
+    bootEmpresa();
+    carregarConfig();
+    carregarPerfis();
+    carregarCertificados();
+  });
 })();
