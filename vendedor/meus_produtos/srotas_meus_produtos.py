@@ -259,7 +259,7 @@ def _montar_linhas_kits(cur, id_tenant: int, busca: str, somente_ativos: bool) -
 @login_obrigatorio()
 @exigir_permissao(codigo="produtos.ver")
 def meus_produtos_exportar():
-    """Exporta somente produtos próprios (nunca catálogo do fornecedor)."""
+    """Exporta Meus produtos no padrão Bling (rede + cadastro próprio), conforme filtro da tela."""
     from flask import Response
 
     from fornecedor.importacao.exportacao_catalogo import (
@@ -277,7 +277,16 @@ def meus_produtos_exportar():
     busca = (request.args.get("busca") or "").strip()
     id_categoria = (request.args.get("id_categoria") or "").strip()
     filtro_tipo = (request.args.get("tipo") or "").strip().lower()
+    filtro_origem = (request.args.get("origem") or "").strip().lower()
     somente_publicados = (request.args.get("ativos") or "sim").strip().lower() != "nao"
+    ids_produto: list[int] = []
+    for bruto in (request.args.getlist("ids") or []):
+        for parte in str(bruto or "").split(","):
+            parte = parte.strip()
+            if parte.isdigit():
+                ids_produto.append(int(parte))
+    if not ids_produto:
+        return jsonify(success=False, message="Selecione ao menos um produto para exportar."), 400
 
     conn = Var_ConectarBanco()
     try:
@@ -289,20 +298,22 @@ def meus_produtos_exportar():
             id_categoria=id_categoria,
             filtro_tipo=filtro_tipo,
             somente_publicados=somente_publicados,
+            filtro_origem=filtro_origem,
+            ids_produto=ids_produto,
         )
-        colunas = colunas_para_contexto("vendedor")
+        colunas = colunas_para_contexto("bling")
         if formato in ("xlsx", "excel"):
             data = gerar_xlsx(linhas, colunas)
             return Response(
                 data,
                 mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                headers={"Content-Disposition": "attachment; filename=meus_produtos_dropnexo.xlsx"},
+                headers={"Content-Disposition": "attachment; filename=meus_produtos_bling.xlsx"},
             )
         data = gerar_csv(linhas, colunas)
         return Response(
             data,
             mimetype="text/csv; charset=utf-8",
-            headers={"Content-Disposition": "attachment; filename=meus_produtos_dropnexo.csv"},
+            headers={"Content-Disposition": "attachment; filename=meus_produtos_bling.csv"},
         )
     finally:
         conn.close()

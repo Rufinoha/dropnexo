@@ -200,11 +200,14 @@
   }
 
   function renderSelCell(l) {
-    if (l.tipo !== "pai") {
+    // Variação marca o pai: exportar 1 filho leva a família completa.
+    const pid = l.tipo === "variante" ? Number(l.id_produto || 0) : Number(l.id || 0);
+    if (!pid) {
       return '<span class="Cat_ExpandSpacer Cat_ExpandSpacer--var" aria-hidden="true"></span>';
     }
-    const on = selecionados.has(l.id);
-    return `<input type="checkbox" class="Cat_ChkSel Cat_ChkRow" data-produto="${l.id}" ${on ? "checked" : ""} aria-label="Selecionar produto" />`;
+    const on = selecionados.has(pid);
+    const label = l.tipo === "variante" ? "Selecionar variação (exporta o produto completo)" : "Selecionar produto";
+    return `<input type="checkbox" class="Cat_ChkSel Cat_ChkRow" data-produto="${pid}" ${on ? "checked" : ""} aria-label="${label}" />`;
   }
 
   let menuIntegracoesEl = null;
@@ -1554,9 +1557,19 @@
   });
 
   async function exportarMeusProdutos() {
+    const ids = [...selecionados];
+    if (!ids.length) {
+      await Swal.fire({
+        icon: "info",
+        title: "Nada selecionado",
+        text: "Selecione ao menos um produto. Se marcar só uma variação, o pai e as outras variações vão junto.",
+        confirmButtonColor: "#021F81",
+      });
+      return;
+    }
     const escolha = await Swal.fire({
       title: "Exportar Meus produtos",
-      text: "Somente produtos próprios, conforme o filtro da tela (nunca o catálogo do fornecedor).",
+      text: `Planilha no padrão Bling com ${ids.length} produto(s) selecionado(s). Variação marcada exporta o pai e todas as irmãs.`,
       icon: "question",
       showDenyButton: true,
       showCancelButton: true,
@@ -1567,13 +1580,8 @@
     });
     if (escolha.isDismissed) return;
     const formato = escolha.isDenied ? "xlsx" : "csv";
-    const p = new URLSearchParams({
-      formato,
-      busca: (el.filtroBusca?.value || "").trim(),
-      id_categoria: el.filtroCategoria?.value || "",
-      tipo: el.filtroTipo?.value || "",
-      ativos: el.filtroAtivos?.checked ? "sim" : "nao",
-    });
+    const p = new URLSearchParams({ formato });
+    ids.forEach((id) => p.append("ids", String(id)));
     window.location.href = `${BASE}/exportar?${p}`;
   }
 
@@ -1642,6 +1650,10 @@
       if (!pid) return;
       if (chk.checked) selecionados.add(pid);
       else selecionados.delete(pid);
+      // Pai e filhos compartilham o mesmo id de produto na seleção.
+      el.tbody.querySelectorAll(`.Cat_ChkRow[data-produto="${pid}"]`).forEach((box) => {
+        box.checked = chk.checked;
+      });
       syncBulkBar();
       return;
     }
