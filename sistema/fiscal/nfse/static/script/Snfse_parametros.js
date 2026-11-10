@@ -18,31 +18,58 @@
       e.classList.add("is-readonly");
     });
   }
+  function setAvisoEmpresa(texto){
+    const aviso=$("cfgEmpresaAviso");
+    if(!aviso) return;
+    const msg=(texto||"").trim();
+    if(!msg){
+      aviso.textContent="";
+      aviso.hidden=true;
+      aviso.setAttribute("hidden","");
+      return;
+    }
+    aviso.textContent=msg;
+    aviso.hidden=false;
+    aviso.removeAttribute("hidden");
+  }
   async function carregarConfig(){
-    const r=await req("/nfse/api/config"); if(!r?.ok)return;
-    const d=r.json.dados||{}; cfgCampos.forEach(c=>{const e=$(`cfg_${c}`);if(e)e.value=d[c]??""});
+    setAvisoEmpresa("");
+    const r=await req("/nfse/api/config");
+    if(!r?.ok){
+      setAvisoEmpresa((r?.json&& (r.json.message||r.json.mensagem))||"Não foi possível carregar a empresa fiscal do tenant.");
+      return;
+    }
+    const d=r.json.dados||{};
+    cfgCampos.forEach(c=>{const e=$(`cfg_${c}`); if(e && d[c]!=null && d[c]!=="") e.value=d[c];});
     if($("cfg_cnpj")) $("cfg_cnpj").value=d.cnpj?formatarCnpj(d.cnpj):"";
     if($("cfg_razao_social")) $("cfg_razao_social").value=d.razao_social||"";
-    $("cfg_optante_simples").checked=!!d.optante_simples;$("cfg_incentivador_cultural").checked=!!d.incentivador_cultural;
-    $("cryptoWarning").hidden=!r.json.dev_crypto_fallback;
+    if($("cfg_nome_fantasia") && d.nome_fantasia) $("cfg_nome_fantasia").value=d.nome_fantasia;
+    if($("cfg_municipio_nome") && d.municipio_nome) $("cfg_municipio_nome").value=d.municipio_nome;
+    if($("cfg_uf") && d.uf) $("cfg_uf").value=d.uf;
+    if($("cfg_inscricao_municipal") && d.inscricao_municipal) $("cfg_inscricao_municipal").value=d.inscricao_municipal;
+    if($("cfg_municipio_ibge_codigo") && d.municipio_ibge_codigo) $("cfg_municipio_ibge_codigo").value=d.municipio_ibge_codigo;
+    if($("cfg_serie_dps") && d.serie_dps) $("cfg_serie_dps").value=d.serie_dps;
+    if($("cfg_proximo_numero_dps") && d.proximo_numero_dps!=null) $("cfg_proximo_numero_dps").value=d.proximo_numero_dps;
+    if($("cfg_ambiente") && d.ambiente) $("cfg_ambiente").value=d.ambiente;
+    if($("cfg_regime_tributario") && d.regime_tributario) $("cfg_regime_tributario").value=d.regime_tributario;
+    if($("cfg_percentual_tributos_sn") && d.percentual_tributos_sn) $("cfg_percentual_tributos_sn").value=d.percentual_tributos_sn;
+    $("cfg_optante_simples").checked=!!d.optante_simples;
+    $("cfg_incentivador_cultural").checked=!!d.incentivador_cultural;
+    if($("cryptoWarning")) $("cryptoWarning").hidden=!r.json.dev_crypto_fallback;
     travarIdentidade();
-    const aviso=$("cfgEmpresaAviso");
     const formBox=document.querySelector('.nfse-panel[data-panel="empresa"]');
-    if(aviso){
-      if(d.eh_pj===false){
-        aviso.hidden=false;
-        aviso.textContent="Este tenant não é PJ. A Empresa fiscal usa o cadastro do tenant — altere o tipo para pessoa jurídica para emitir NFS-e.";
-        formBox?.classList.add("is-bloqueado");
-        formBox?.querySelectorAll("input,select,button,textarea").forEach(el=>{ if(el.id!=="cfgEmpresaAviso") el.disabled=true; });
+    if(d.eh_pj===false){
+      setAvisoEmpresa("Este tenant não é PJ. A Empresa fiscal usa o cadastro do tenant — altere o tipo para pessoa jurídica para emitir NFS-e.");
+      formBox?.classList.add("is-bloqueado");
+      formBox?.querySelectorAll("input,select,button,textarea").forEach(el=>{ el.disabled=true; });
+    }else{
+      formBox?.classList.remove("is-bloqueado");
+      formBox?.querySelectorAll("input,select,button,textarea").forEach(el=>{ el.disabled=false; });
+      travarIdentidade();
+      if(!d.cnpj || !d.razao_social){
+        setAvisoEmpresa("CNPJ ou razão social ausentes no cadastro do tenant. Complete em Minha empresa (não editáveis aqui).");
       }else{
-        aviso.hidden=true;
-        formBox?.classList.remove("is-bloqueado");
-        formBox?.querySelectorAll("input,select,button,textarea").forEach(el=>{ el.disabled=false; });
-        travarIdentidade();
-        if(!d.cnpj || !d.razao_social){
-          aviso.hidden=false;
-          aviso.textContent="CNPJ ou razão social ausentes no cadastro do tenant. Complete em Minha empresa (não editáveis aqui).";
-        }
+        setAvisoEmpresa("");
       }
     }
   }

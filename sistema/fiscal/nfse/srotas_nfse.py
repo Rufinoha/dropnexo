@@ -857,13 +857,29 @@ def api_config():
     conn = Var_ConectarBanco()
     try:
         dados = carregar_empresa_fiscal(conn, _tenant())
+        try:
+            crypto_fallback = validar_configuracao_criptografica()
+        except Exception:
+            crypto_fallback = True
         return jsonify(
             {
                 "success": True,
                 "dados": _payload_row(dados),
-                "dev_crypto_fallback": validar_configuracao_criptografica(),
+                "dev_crypto_fallback": crypto_fallback,
             }
         )
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return jsonify(
+            {
+                "success": False,
+                "message": f"Falha ao ler empresa do tenant: {e}",
+                "dados": {},
+            }
+        ), 500
     finally:
         conn.close()
 

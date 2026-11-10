@@ -25,6 +25,27 @@ _COLUNAS = (
     ("dt_atualizacao", "TIMESTAMPTZ"),
 )
 
+# Sempre existentes no DropNexo (cadastro / Minha empresa).
+_COLS_BASE = (
+    "id",
+    "tipo_pessoa",
+    "documento",
+    "nome",
+    "nome_completo",
+    "razao_social",
+    "nome_fantasia",
+    "inscricao_municipal",
+    "cidade",
+    "uf",
+    "cep",
+    "logradouro",
+    "numero",
+    "complemento",
+    "bairro",
+    "telefone_comercial",
+    "email_comercial",
+)
+
 
 def _coluna_existe(conn, coluna: str) -> bool:
     cur = db_execute(
@@ -44,14 +65,20 @@ def _coluna_existe(conn, coluna: str) -> bool:
 
 def garantir_colunas_tenant_fiscal(conn) -> None:
     for nome, tipo in _COLUNAS:
-        if _coluna_existe(conn, nome):
-            continue
-        db_execute(conn, f"ALTER TABLE tbl_tenant ADD COLUMN IF NOT EXISTS {nome} {tipo}")
-    conn.commit()
+        try:
+            if _coluna_existe(conn, nome):
+                continue
+            db_execute(conn, f"ALTER TABLE tbl_tenant ADD COLUMN IF NOT EXISTS {nome} {tipo}")
+            conn.commit()
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
 
 
 def sincronizar_legado_config_empresa(conn, id_tenant: int) -> None:
-    """Copia uma vez dados antigos de tbl_nfse_config_empresa → tbl_tenant (sem sobrescrever)."""
+    """Copia dados antigos de tbl_nfse_config_empresa → tbl_tenant (sem sobrescrever)."""
     if not id_tenant:
         return
     try:
@@ -86,11 +113,46 @@ def sincronizar_legado_config_empresa(conn, id_tenant: int) -> None:
         )
         conn.commit()
     except Exception:
-        conn.rollback()
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+
+
+def _ler_tenant_row(conn, id_tenant: int) -> dict:
+    """Lê só colunas que existem — nunca quebra se faltar campo fiscal novo."""
+    presentes = [c for c in _COLS_BASE if _coluna_existe(conn, c)]
+    extras = [n for n, _ in _COLUNAS if n not in presentes and _coluna_existe(conn, n)]
+    cols = presentes + extras
+    if "id" not in cols:
+        cols.insert(0, "id")
+    cur = db_execute(
+        conn,
+        f"SELECT {', '.join(cols)} FROM tbl_tenant WHERE id = %s LIMIT 1",
+        (id_tenant,),
+    )
+    row = cur.fetchone()
+    if not row:
+        return {}
+    return dict(zip([c[0] for c in cur.description], row))
+
+
+def _fmt_percentual(valor) -> str:
+    if valor is None or valor == "":
+        return ""
+    if isinstance(valor, Decimal):
+        return f"{valor:.2f}".replace(".", ",")
+    return str(valor).replace(".", ",")
 
 
 def carregar_empresa_fiscal(conn, id_tenant: int) -> dict:
-    garantir_colunas_tenant_fiscal(conn)
+    try:
+        garantir_colunas_tenant_fiscal(conn)
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
     try:
         sincronizar_legado_config_empresa(conn, id_tenant)
     except Exception:
@@ -98,69 +160,54 @@ def carregar_empresa_fiscal(conn, id_tenant: int) -> dict:
             conn.rollback()
         except Exception:
             pass
-    cur = db_execute(
-        conn,
-        """
-        SELECT id, tipo_pessoa, documento, nome, nome_completo,
-               razao_social, nome_fantasia, cnpj, inscricao_municipal,
-               municipio_ibge_codigo, municipio_nome, cidade, uf,
-               regime_tributario, optante_simples, incentivador_cultural,
-               regime_especial_tributacao, percentual_tributos_sn,
-               serie_dps, proximo_numero_dps, ambiente_nfse, ultimo_nsu_adn
-          FROM tbl_tenant
-         WHERE id = %s
-         LIMIT 1
-        """,
-        (id_tenant,),
-    )
-    cols = [c[0] for c in cur.description]
-    row = cur.fetchone()
-    if not row:
+
+    d = _ler_tenant_row(conn, id_tenant)
+    if not d:
         return {"eh_pj": False, "tipo_pessoa": "", "id_tenant": id_tenant}
-    d = dict(zip(cols, row))
+
     tipo = (d.get("tipo_pessoa") or "").strip().upper()
     doc = somente_digitos(d.get("documento") or "")
     cnpj_col = somente_digitos(d.get("cnpj") or "")
-    # Identidade oficial do tenant: documento (Minha empresa) tem prioridade.
-    cnpj = cnpj_col or doc
-    eh_pj = tipo == "J" or len(cnpj) == 14
-    if eh_pj and len(cnpj) != 14:
-        cnpj = doc if len(doc) == 14 else cnpj
-    municipio = (d.get("municipio_nome") or d.get("cidade") or "").strip()
-    # Mesma regra do perfil: nome_completo costuma ser a razão social cadastrada.
+    cnpj = doc if len(doc) == 14 else (cnpj_col if len(cnpj_col) == 14 else (cnpj_col or doc))
+    eh_pj = tipo == "J" or len(somente_digitos(cnpj)) == 14
+
     razao = (
         (d.get("razao_social") or "").strip()
         or (d.get("nome_completo") or "").strip()
         or (d.get("nome") or "").strip()
     )
     fantasia = (d.get("nome_fantasia") or d.get("nome") or "").strip()
+    municipio = (d.get("municipio_nome") or d.get("cidade") or "").strip()
     ambiente = (d.get("ambiente_nfse") or "homologacao").strip()
     if ambiente not in ("homologacao", "producao"):
         ambiente = "homologacao"
-    percentual = d.get("percentual_tributos_sn")
-    if isinstance(percentual, Decimal):
-        percentual = f"{percentual:.2f}".replace(".", ",")
-    elif percentual is not None:
-        percentual = str(percentual).replace(".", ",")
-    else:
-        percentual = ""
+
     return {
         "id_tenant": id_tenant,
         "tipo_pessoa": tipo or ("J" if eh_pj else ""),
         "eh_pj": eh_pj,
         "razao_social": razao,
         "nome_fantasia": fantasia,
-        "cnpj": cnpj if eh_pj else "",
+        "cnpj": somente_digitos(cnpj) if eh_pj else "",
         "inscricao_municipal": (d.get("inscricao_municipal") or "").strip(),
         "municipio_ibge_codigo": somente_digitos(d.get("municipio_ibge_codigo") or ""),
         "municipio_nome": municipio,
         "uf": (d.get("uf") or "").strip().upper(),
+        "cep": somente_digitos(d.get("cep") or ""),
+        "logradouro": (d.get("logradouro") or "").strip(),
+        "numero": (d.get("numero") or "").strip(),
+        "complemento": (d.get("complemento") or "").strip(),
+        "bairro": (d.get("bairro") or "").strip(),
+        "telefone_comercial": (d.get("telefone_comercial") or "").strip(),
+        "email_comercial": (d.get("email_comercial") or "").strip(),
         "regime_tributario": (d.get("regime_tributario") or "simples_nacional").strip(),
-        "optante_simples": bool(d.get("optante_simples") if d.get("optante_simples") is not None else True),
+        "optante_simples": bool(
+            d.get("optante_simples") if d.get("optante_simples") is not None else True
+        ),
         "incentivador_cultural": bool(d.get("incentivador_cultural") or False),
         "regime_especial_tributacao": (d.get("regime_especial_tributacao") or "").strip(),
-        "percentual_tributos_sn": percentual,
-        "serie_dps": (d.get("serie_dps") or "1").strip() or "1",
+        "percentual_tributos_sn": _fmt_percentual(d.get("percentual_tributos_sn")),
+        "serie_dps": ((d.get("serie_dps") or "1").strip() or "1"),
         "proximo_numero_dps": int(d.get("proximo_numero_dps") or 1),
         "ambiente": ambiente,
         "ambiente_nfse": ambiente,
@@ -179,7 +226,6 @@ def salvar_empresa_fiscal(conn, id_tenant: int, dados: dict) -> dict:
             "Atualize o cadastro do tenant para tipo PJ."
         )
 
-    # CNPJ e razão social são identidade imutável do tenant.
     cnpj = somente_digitos(atual.get("cnpj") or "")
     razao = (atual.get("razao_social") or "").strip()
     if len(cnpj) != 14:
@@ -192,7 +238,11 @@ def salvar_empresa_fiscal(conn, id_tenant: int, dados: dict) -> dict:
     municipio = (dados.get("municipio_nome") or "").strip()
     fantasia = (dados.get("nome_fantasia") or "").strip() or None
     im = (dados.get("inscricao_municipal") or "").strip() or None
-    ambiente = dados.get("ambiente") if dados.get("ambiente") in {"homologacao", "producao"} else "homologacao"
+    ambiente = (
+        dados.get("ambiente")
+        if dados.get("ambiente") in {"homologacao", "producao"}
+        else "homologacao"
+    )
     serie = (dados.get("serie_dps") or "1").strip() or "1"
     proximo = max(1, int(dados.get("proximo_numero_dps") or 1))
     regime = (dados.get("regime_tributario") or "simples_nacional").strip() or "simples_nacional"
@@ -203,51 +253,51 @@ def salvar_empresa_fiscal(conn, id_tenant: int, dados: dict) -> dict:
     if percentual is not None and str(percentual).strip() == "":
         percentual = None
 
+    sets = [
+        "nome_fantasia = %s",
+        "inscricao_municipal = %s",
+        "uf = %s",
+    ]
+    vals: list = [fantasia, im, uf or None]
+
+    if _coluna_existe(conn, "cnpj"):
+        sets.append("cnpj = COALESCE(NULLIF(TRIM(cnpj), ''), %s)")
+        vals.append(cnpj)
+    sets.append("documento = COALESCE(NULLIF(TRIM(documento), ''), %s)")
+    vals.append(cnpj)
+    if _coluna_existe(conn, "razao_social"):
+        sets.append("razao_social = COALESCE(NULLIF(TRIM(razao_social), ''), %s)")
+        vals.append(razao)
+    sets.append("nome_completo = COALESCE(NULLIF(TRIM(nome_completo), ''), %s)")
+    vals.append(razao)
+
+    for col, val in (
+        ("municipio_ibge_codigo", ibge or None),
+        ("municipio_nome", municipio or None),
+        ("regime_tributario", regime),
+        ("optante_simples", optante),
+        ("incentivador_cultural", cultural),
+        ("regime_especial_tributacao", regime_esp),
+        ("percentual_tributos_sn", percentual),
+        ("serie_dps", serie),
+        ("proximo_numero_dps", proximo),
+        ("ambiente_nfse", ambiente),
+    ):
+        if _coluna_existe(conn, col):
+            sets.append(f"{col} = %s")
+            vals.append(val)
+
+    if municipio and _coluna_existe(conn, "cidade"):
+        sets.append("cidade = COALESCE(NULLIF(TRIM(%s), ''), cidade)")
+        vals.append(municipio)
+
+    if _coluna_existe(conn, "dt_atualizacao"):
+        sets.append("dt_atualizacao = NOW()")
+
+    vals.append(id_tenant)
     db_execute(
         conn,
-        """
-        UPDATE tbl_tenant SET
-            nome_fantasia = %s,
-            cnpj = COALESCE(NULLIF(TRIM(cnpj), ''), %s),
-            documento = COALESCE(NULLIF(TRIM(documento), ''), %s),
-            razao_social = COALESCE(NULLIF(TRIM(razao_social), ''), %s),
-            nome_completo = COALESCE(NULLIF(TRIM(nome_completo), ''), %s),
-            inscricao_municipal = %s,
-            municipio_ibge_codigo = %s,
-            municipio_nome = %s,
-            cidade = COALESCE(NULLIF(TRIM(%s), ''), cidade),
-            uf = %s,
-            regime_tributario = %s,
-            optante_simples = %s,
-            incentivador_cultural = %s,
-            regime_especial_tributacao = %s,
-            percentual_tributos_sn = %s,
-            serie_dps = %s,
-            proximo_numero_dps = %s,
-            ambiente_nfse = %s,
-            dt_atualizacao = NOW()
-         WHERE id = %s
-        """,
-        (
-            fantasia,
-            cnpj,
-            cnpj,
-            razao,
-            razao,
-            im,
-            ibge or None,
-            municipio or None,
-            municipio or None,
-            uf or None,
-            regime,
-            optante,
-            cultural,
-            regime_esp,
-            percentual,
-            serie,
-            proximo,
-            ambiente,
-            id_tenant,
-        ),
+        f"UPDATE tbl_tenant SET {', '.join(sets)} WHERE id = %s",
+        tuple(vals),
     )
     return carregar_empresa_fiscal(conn, id_tenant)
