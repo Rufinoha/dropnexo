@@ -250,7 +250,7 @@
 
   async function carregarFundadores() {
     if (!el.fundadorLista) return;
-    el.fundadorLista.innerHTML = '<tr><td colspan="8">Carregando…</td></tr>';
+    el.fundadorLista.innerHTML = '<tr><td colspan="12">Carregando…</td></tr>';
     try {
       const r = await fetch(BASE + "/fundador", { credentials: "same-origin" });
       const j = await r.json();
@@ -262,7 +262,7 @@
       }
       const itens = j.itens || [];
       if (!itens.length) {
-        el.fundadorLista.innerHTML = '<tr><td colspan="9">Nenhum Fundador cadastrado.</td></tr>';
+        el.fundadorLista.innerHTML = '<tr><td colspan="12">Nenhum Fundador cadastrado.</td></tr>';
         return;
       }
       el.fundadorLista.innerHTML = itens
@@ -288,12 +288,15 @@
             <td>${t.produtos_publicados ?? 0}</td>
             <td>${celPedidos}</td>
             <td>${celulaWhatsapp(t.whatsapp)}</td>
+            <td title="Vendedores aguardando conexão">${t.vendedores_aguardando ?? 0}</td>
+            <td title="Vendedores conectados">${t.vendedores_conectados ?? 0}</td>
+            <td title="Vendedores que já colocaram pedidos">${t.vendedores_com_pedidos ?? 0}</td>
             <td><div class="CfgMt_FundadorAcoes">${btn}${excluir}</div></td>
           </tr>`;
         })
         .join("");
     } catch (err) {
-      el.fundadorLista.innerHTML = `<tr><td colspan="9">${esc(err.message || "Erro")}</td></tr>`;
+      el.fundadorLista.innerHTML = `<tr><td colspan="12">${esc(err.message || "Erro")}</td></tr>`;
     }
   }
 

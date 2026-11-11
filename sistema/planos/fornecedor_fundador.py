@@ -450,7 +450,18 @@ def listar_fundadores(cur) -> list[dict[str, Any]]:
                   AND LOWER(COALESCE(pf.codigo, '')) = 'dono'
                 ORDER BY ut.ativo DESC NULLS LAST, ut.id
                 LIMIT 1) AS email_dono,
-               ({wa_sql}) AS whatsapp_dono
+               ({wa_sql}) AS whatsapp_dono,
+               (SELECT COUNT(*)::int FROM tbl_vinculo_vendedor_fornecedor v
+                WHERE v.id_tenant_fornecedor = t.id AND v.status = 'aguardando'
+               ) AS vendedores_aguardando,
+               (SELECT COUNT(*)::int FROM tbl_vinculo_vendedor_fornecedor v
+                WHERE v.id_tenant_fornecedor = t.id AND v.status = 'ativo'
+               ) AS vendedores_conectados,
+               (SELECT COUNT(DISTINCT ped.id_tenant_vendedor)::int FROM tbl_pedido ped
+                WHERE ped.id_tenant_fornecedor = t.id
+                  AND ped.id_tenant_vendedor IS NOT NULL
+                  AND COALESCE(ped.{col_st}, '') NOT IN ('rascunho', 'cancelado')
+               ) AS vendedores_com_pedidos
         FROM tbl_tenant t
         WHERE t.eh_fornecedor_fundador = TRUE
           AND t.tipo_negocio IN ('fornecedor', 'hibrido')
@@ -478,6 +489,9 @@ def listar_fundadores(cur) -> list[dict[str, Any]]:
                 "ultimo_pedido_em": r[14].isoformat() if r[14] else None,
                 "email": r[15] or "",
                 "whatsapp": r[16] or "",
+                "vendedores_aguardando": int(r[17] or 0),
+                "vendedores_conectados": int(r[18] or 0),
+                "vendedores_com_pedidos": int(r[19] or 0),
             }
         )
     return out

@@ -752,18 +752,21 @@ button.CfgMt_KpiMini:hover {
 .Cl_TabelaPrincipal.Cat_TabelaScroll.CfgMt_TabelaFundador table {
   table-layout: fixed;
   width: 100%;
-  min-width: 1080px;
+  min-width: 1280px;
   max-width: none;
 }
-.CfgMt_TabelaFundador col.is-id { width: 5%; }
-.CfgMt_TabelaFundador col.is-nome { width: 20%; }
-.CfgMt_TabelaFundador col.is-cadastro { width: 12%; }
-.CfgMt_TabelaFundador col.is-ativo { width: 6%; }
-.CfgMt_TabelaFundador col.is-erp { width: 9%; }
-.CfgMt_TabelaFundador col.is-prod { width: 9%; }
-.CfgMt_TabelaFundador col.is-pedidos { width: 10%; }
-.CfgMt_TabelaFundador col.is-wa { width: 12%; }
-.CfgMt_TabelaFundador col.is-acoes { width: 17%; }
+.CfgMt_TabelaFundador col.is-id { width: 4%; }
+.CfgMt_TabelaFundador col.is-nome { width: 16%; }
+.CfgMt_TabelaFundador col.is-cadastro { width: 10%; }
+.CfgMt_TabelaFundador col.is-ativo { width: 5%; }
+.CfgMt_TabelaFundador col.is-erp { width: 7%; }
+.CfgMt_TabelaFundador col.is-prod { width: 7%; }
+.CfgMt_TabelaFundador col.is-pedidos { width: 8%; }
+.CfgMt_TabelaFundador col.is-wa { width: 10%; }
+.CfgMt_TabelaFundador col.is-aguard { width: 8%; }
+.CfgMt_TabelaFundador col.is-conect { width: 7%; }
+.CfgMt_TabelaFundador col.is-comped { width: 7%; }
+.CfgMt_TabelaFundador col.is-acoes { width: 11%; }
 .CfgMt_TabelaFundador th,
 .CfgMt_TabelaFundador td {
   white-space: nowrap;
@@ -781,11 +784,17 @@ button.CfgMt_KpiMini:hover {
 .CfgMt_TabelaFundador th:nth-child(6),
 .CfgMt_TabelaFundador td:nth-child(6),
 .CfgMt_TabelaFundador th:nth-child(7),
-.CfgMt_TabelaFundador td:nth-child(7) {
+.CfgMt_TabelaFundador td:nth-child(7),
+.CfgMt_TabelaFundador th:nth-child(9),
+.CfgMt_TabelaFundador td:nth-child(9),
+.CfgMt_TabelaFundador th:nth-child(10),
+.CfgMt_TabelaFundador td:nth-child(10),
+.CfgMt_TabelaFundador th:nth-child(11),
+.CfgMt_TabelaFundador td:nth-child(11) {
   text-align: center;
 }
-.CfgMt_TabelaFundador th:nth-child(9),
-.CfgMt_TabelaFundador td:nth-child(9) {
+.CfgMt_TabelaFundador th:nth-child(12),
+.CfgMt_TabelaFundador td:nth-child(12) {
   overflow: visible;
   text-align: right;
   text-overflow: clip;
