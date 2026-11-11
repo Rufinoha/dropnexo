@@ -6,6 +6,7 @@ from datetime import date, datetime, timedelta
 log = logging.getLogger(__name__)
 
 CUPOM_REATIVACAO = "REATIVA30"
+EMAIL_TESTE = "hazael@h74.com.br"
 
 
 def garantir_colunas_reativacao(cur) -> None:
@@ -314,8 +315,8 @@ def reativar_conta(cur, id_tenant: int, *, id_admin: int | None = None) -> dict:
         (id_admin, id_tenant),
     )
 
-    cupom = _garantir_cupom_reativacao(cur)
     try:
+        cupom = _garantir_cupom_reativacao(cur)
         from sistema.financeiro.cobranca import garantir_cobranca_tenant
 
         garantir_cobranca_tenant(cur, id_tenant)
@@ -377,6 +378,8 @@ def enviar_email_conta_reativada(
     nome_usuario: str,
     nome_conta: str,
     cupom: str = CUPOM_REATIVACAO,
+    assunto: str | None = None,
+    tag: str = "dropnexo_reativacao",
 ) -> tuple[bool, str]:
     from flask import render_template
     from api.brevo.srotas_brevo import enviar_email
@@ -396,8 +399,46 @@ def enviar_email_conta_reativada(
     )
     ok, msg, _ = enviar_email(
         [email],
-        "Conta reativada • DropNexo",
+        assunto or "Conta reativada • DropNexo",
         html,
-        tag="dropnexo_reativacao",
+        tag=tag,
     )
     return ok, msg
+
+
+def enviar_email_conta_reativada_teste(cur=None, id_tenant: int | None = None) -> dict:
+    """Prévia DEV: sempre envia para EMAIL_TESTE, sem reativar a conta."""
+    nome_usuario = "Hazael (teste)"
+    nome_conta = "Conta de teste — reativação"
+    if cur is not None and id_tenant:
+        cur.execute(
+            """
+            SELECT COALESCE(NULLIF(t.nome_fantasia, ''), NULLIF(t.nome, ''), t.slug),
+                   COALESCE(u.nome, ''), COALESCE(u.email, '')
+            FROM tbl_tenant t
+            LEFT JOIN tbl_cancelamento_conta c ON c.id_tenant = t.id
+            LEFT JOIN tbl_usuario u ON u.id = c.id_usuario_solicitante
+            WHERE t.id = %s
+            """,
+            (int(id_tenant),),
+        )
+        row = cur.fetchone()
+        if row:
+            nome_conta = (row[0] or "").strip() or nome_conta
+            if (row[1] or "").strip():
+                nome_usuario = (row[1] or "").strip()
+    ok, msg = enviar_email_conta_reativada(
+        email=EMAIL_TESTE,
+        nome_usuario=nome_usuario,
+        nome_conta=nome_conta,
+        cupom=CUPOM_REATIVACAO,
+        assunto="[TESTE] Conta reativada • DropNexo",
+        tag="dropnexo_reativacao_teste",
+    )
+    if not ok:
+        return {"ok": False, "message": msg or "Falha ao enviar teste.", "email": EMAIL_TESTE}
+    return {
+        "ok": True,
+        "message": f"E-mail teste enviado para {EMAIL_TESTE}.",
+        "email": EMAIL_TESTE,
+    }

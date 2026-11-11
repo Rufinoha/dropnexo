@@ -41,6 +41,7 @@
     reativacaoLista: document.getElementById("cfgmt_reativacao_lista"),
     reativacaoHint: document.getElementById("cfgmt_reativacao_hint"),
     btnRefreshReativacao: document.getElementById("cfgmt_btnRefreshReativacao"),
+    btnTestarEmailReativacao: document.getElementById("cfgmt_btnTestarEmailReativacao"),
     fundadorLista: document.getElementById("cfgmt_fundador_lista"),
     fundadorStatus: document.getElementById("cfgmt_fundador_status"),
     btnMigrarForn: document.getElementById("cfgmt_btnMigrarForn"),
@@ -189,34 +190,47 @@
       cancelButtonText: "Voltar",
       confirmButtonColor: "#021F81",
       cancelButtonColor: "#64748b",
+      showLoaderOnConfirm: true,
+      allowOutsideClick: () => !Swal.isLoading(),
+      preConfirm: async () => {
+        try {
+          const r = await fetch(BASE + "/reativacoes/" + id + "/aprovar", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: { Accept: "application/json" },
+          });
+          let j = {};
+          try {
+            j = await r.json();
+          } catch (_) {
+            j = { success: false, message: "Resposta inválida do servidor." };
+          }
+          if (!r.ok || !j.success) {
+            Swal.showValidationMessage(j.message || `Falha HTTP ${r.status}`);
+            return false;
+          }
+          return j;
+        } catch (err) {
+          Swal.showValidationMessage(err.message || "Falha de rede ao reativar.");
+          return false;
+        }
+      },
     });
-    if (!ask.isConfirmed) return;
-    const r = await fetch(BASE + "/reativacoes/" + id + "/aprovar", {
-      method: "POST",
-      credentials: "same-origin",
-      headers: { Accept: "application/json" },
-    });
-    let j = {};
-    try {
-      j = await r.json();
-    } catch (_) {
-      j = { success: false, message: "Resposta inválida do servidor." };
-    }
-    if (!r.ok || !j.success) {
-      await Swal.fire({
-        icon: "error",
-        title: "Reativação não concluída",
-        text: j.message || `Falha HTTP ${r.status}`,
-        confirmButtonColor: "#021F81",
-      });
+    if (!ask.isConfirmed || !ask.value) {
       await carregarReativacoes();
       return;
     }
+    const j = ask.value;
+    const emailLinha = j.email_ok
+      ? `E-mail enviado para <strong>${esc(j.email || "")}</strong>.`
+      : j.email
+        ? `Conta ativa, mas o e-mail não saiu: ${esc(j.message || "falha no envio")}.`
+        : "Conta ativa. Sem e-mail do titular.";
     await Swal.fire({
       icon: "success",
       title: "Conta ativa",
       html: `<p style="margin:0 0 .5rem;text-align:left">${esc(j.message || "Conta reativada.")}</p>
-        <p style="margin:0;text-align:left;color:#64748b;font-size:.92rem">Status: <strong>Ativa</strong>. O pedido sai da lista de aguardando e aparece no histórico abaixo.</p>`,
+        <p style="margin:0;text-align:left;color:#64748b;font-size:.92rem">${emailLinha}</p>`,
       confirmButtonColor: "#021F81",
     });
     await carregarReativacoes();
@@ -1320,6 +1334,47 @@
     carregarMetricas();
   });
   el.btnRefreshReativacao?.addEventListener("click", () => carregarReativacoes());
+  el.btnTestarEmailReativacao?.addEventListener("click", async () => {
+    const pendenteId =
+      el.reativacaoLista?.querySelector(".CfgMt_MenuBtn")?.getAttribute("data-id") || null;
+    const conf = await Swal.fire({
+      title: "Testar e-mail?",
+      text: "Envia a prévia de conta reativada para hazael@h74.com.br (não reativa ninguém).",
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonText: "Enviar teste",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#021F81",
+      cancelButtonColor: "#64748b",
+    });
+    if (!conf.isConfirmed) return;
+    el.btnTestarEmailReativacao.disabled = true;
+    try {
+      const r = await fetch(BASE + "/reativacoes/testar-email", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify(pendenteId ? { id: +pendenteId } : {}),
+      });
+      const j = await r.json();
+      if (!j.success) throw new Error(j.message || "Falha");
+      await Swal.fire({
+        icon: "success",
+        title: "E-mail enviado",
+        text: j.message || "E-mail teste enviado.",
+        confirmButtonColor: "#021F81",
+      });
+    } catch (err) {
+      await Swal.fire({
+        icon: "error",
+        title: "Erro",
+        text: err.message || "Erro",
+        confirmButtonColor: "#021F81",
+      });
+    } finally {
+      el.btnTestarEmailReativacao.disabled = false;
+    }
+  });
   document.addEventListener("click", fecharMenusReativacao);
   document.addEventListener("keydown", (ev) => {
     if (ev.key === "Escape") fecharMenusReativacao();

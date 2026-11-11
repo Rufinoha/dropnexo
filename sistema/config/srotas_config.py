@@ -4428,37 +4428,91 @@ def manutencao_tenant_reativar(id_tenant: int):
         from sistema.perfil.reativacao import enviar_email_conta_reativada, reativar_conta
 
         res = reativar_conta(cur, int(id_tenant), id_admin=session.get("id_usuario"))
-        email_ok = False
-        email_msg = ""
-        email_destino = (res.get("email") or "").strip()
-        if email_destino:
+        # Commit antes do e-mail: falha/Brevo lento não pode desfazer a reativação.
+        conn.commit()
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 400
+    except Exception as e:
+        conn.rollback()
+        _log.exception("manutencao reativar tenant %s", id_tenant)
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+    email_ok = False
+    email_msg = ""
+    email_destino = (res.get("email") or "").strip()
+    if email_destino:
+        try:
             email_ok, email_msg = enviar_email_conta_reativada(
                 email=email_destino,
                 nome_usuario=res.get("nome_usuario") or "",
                 nome_conta=res.get("tenant_nome") or "",
                 cupom=res.get("cupom") or "REATIVA30",
             )
+        except Exception as e:
+            _log.exception("e-mail reativação tenant %s", id_tenant)
+            email_ok, email_msg = False, str(e)
+    if email_ok:
+        extra = f" Conta ativa. E-mail enviado para {email_destino}."
+    elif email_destino:
+        extra = f" Conta ativa. E-mail não enviado ({email_msg or 'falha'})."
+    else:
+        extra = " Conta ativa. Sem e-mail do titular para aviso."
+    return jsonify(
+        success=True,
+        message=(res.get("mensagem") or "Conta reativada.") + extra,
+        cupom=res.get("cupom"),
+        email_ok=email_ok,
+        email=email_destino,
+        status="ativa",
+        id_tenant=int(id_tenant),
+    )
+
+
+@config_bp.post(f"{MANUTENCAO_TENANT_PREFIX}/reativacoes/testar-email")
+@login_obrigatorio()
+def manutencao_tenant_reativacao_testar_email():
+    if (r := _exigir_dev()) is not None:
+        return r
+    body = request.get_json(silent=True) or {}
+    id_tenant = body.get("id") or body.get("id_tenant")
+    try:
+        id_tenant = int(id_tenant) if id_tenant else None
+    except (TypeError, ValueError):
+        id_tenant = None
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        from sistema.perfil.reativacao import EMAIL_TESTE, enviar_email_conta_reativada_teste
+
+        if id_tenant is None:
+            cur.execute(
+                """
+                SELECT c.id_tenant
+                FROM tbl_cancelamento_conta c
+                JOIN tbl_tenant t ON t.id = c.id_tenant
+                WHERE c.solicitacao_reativacao_em IS NOT NULL
+                  AND c.reativado_em IS NULL
+                  AND t.ativo = FALSE
+                ORDER BY c.solicitacao_reativacao_em DESC
+                LIMIT 1
+                """
+            )
+            row = cur.fetchone()
+            id_tenant = int(row[0]) if row else None
+        res = enviar_email_conta_reativada_teste(cur, id_tenant)
         conn.commit()
-        if email_ok:
-            extra = f" Conta ativa. E-mail enviado para {email_destino}."
-        elif email_destino:
-            extra = f" Conta ativa. E-mail não enviado ({email_msg or 'falha'})."
-        else:
-            extra = " Conta ativa. Sem e-mail do titular para aviso."
-        return jsonify(
-            success=True,
-            message=(res.get("mensagem") or "Conta reativada.") + extra,
-            cupom=res.get("cupom"),
-            email_ok=email_ok,
-            email=email_destino,
-            status="ativa",
-            id_tenant=int(id_tenant),
-        )
-    except ValueError as e:
-        conn.rollback()
-        return jsonify(success=False, message=str(e)), 400
+        if not res.get("ok"):
+            return jsonify(success=False, message=res.get("message") or "Falha", email=EMAIL_TESTE), 400
+        return jsonify(success=True, message=res.get("message"), email=EMAIL_TESTE, id_tenant=id_tenant)
     except Exception as e:
         conn.rollback()
+        _log.exception("manutencao reativacao testar-email")
         return jsonify(success=False, message=str(e)), 500
     finally:
         conn.close()
