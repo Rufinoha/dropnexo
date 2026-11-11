@@ -155,8 +155,40 @@
 .nfse-menu button.is-danger:hover{background:#fef2f2}
 .nfse-menu button.is-danger:hover svg{color:#991b1b}
 
-.nfse-apoio .nfse-form{padding-bottom:112px}
-.nfse-editor{display:grid;grid-template-columns:210px minmax(0,1fr);gap:18px;align-items:start}
+.nfse-apoio .nfse-form{padding:20px 22px 120px}
+.nfse-apoio .Cl_FormCampo{
+  display:flex;flex-direction:column;gap:.35rem;margin:0;min-width:0;
+}
+.nfse-apoio .Cl_FormCampo label{
+  font-size:.75rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.02em;
+}
+.nfse-apoio .Cl_FormCampo input,
+.nfse-apoio .Cl_FormCampo select,
+.nfse-apoio .Cl_FormCampo textarea{
+  width:100%;min-height:2.45rem;padding:.55rem .75rem;border:1px solid #d6dee6;border-radius:10px;
+  background:#fff;color:#1c2e3b;font:inherit;box-sizing:border-box;
+}
+.nfse-apoio .Cl_FormCampo textarea{min-height:7.5rem;resize:vertical;line-height:1.45}
+.nfse-editor{display:grid;grid-template-columns:200px minmax(0,1fr);gap:18px;align-items:start}
+.nfse-editor__corpo{
+  min-height:480px;padding:18px 20px;background:#fff;border:1px solid #d9e2ec;border-radius:14px;
+}
+.nfse-geral-campos{
+  display:grid;
+  grid-template-columns:minmax(0,1.5fr) minmax(150px,.75fr) minmax(150px,.75fr);
+  gap:14px 16px;
+  align-items:start;
+}
+.nfse-geral-campos .nfse-campo-dest{grid-column:1 / 2}
+.nfse-geral-campos .nfse-campo-inter{grid-column:2 / 4}
+.nfse-geral-campos .nfse-campo-obs{grid-column:1 / -1}
+.nfse-secao .nfse-hint{margin:12px 0 0}
+@media(max-width:900px){
+  .nfse-geral-campos{grid-template-columns:1fr}
+  .nfse-geral-campos .nfse-campo-dest,
+  .nfse-geral-campos .nfse-campo-inter,
+  .nfse-geral-campos .nfse-campo-obs{grid-column:auto}
+}
 .nfse-side{position:sticky;top:0;display:flex;flex-direction:column;gap:4px;padding:8px;background:#fff;border:1px solid #d9e2ec;border-radius:14px}
 .nfse-side button{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;margin:0;padding:11px 12px;border:0;border-radius:10px;background:transparent;color:#475569;font:inherit;font-size:14px;font-weight:700;text-align:left;cursor:pointer}
 .nfse-side button:hover{background:#f4f7fb;color:#0f172a}

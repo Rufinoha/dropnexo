@@ -4,7 +4,7 @@
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <title>DPS · H74</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style/global_utils.css') }}">
-  <link rel="stylesheet" href="{{ url_for('nfse.static', filename='style/Cnfse.css') }}?v=20261105b">
+  <link rel="stylesheet" href="{{ url_for('nfse.static', filename='style/Cnfse.css') }}?v=20261111a">
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <script src="{{ url_for('static', filename='script/global_utils.js') }}"></script>
 </head>
@@ -29,16 +29,33 @@
       </nav>
       <div class="nfse-editor__corpo">
         <section class="nfse-secao is-on" data-painel="geral">
-          <div class="nfse-grid nfse-grid-2">
-            <div class="Cl_FormCampo"><label>Perfil de nota *</label><select id="perfil"><option value="">Selecione...</option></select></div>
-            <div class="Cl_FormCampo"><label>Competência *</label><input id="competencia" type="date"></div>
-            <div class="Cl_FormCampo"><label>Valor do serviço *</label><input id="valor" type="number" min="0" step="0.01" placeholder="0,00"></div>
-            <div class="Cl_FormCampo"><label>Destinatário da operação</label><select id="destinatario"><option value="">Não informado</option></select></div>
-            <div class="Cl_FormCampo"><label>Intermediário da operação</label><select id="intermediario"><option value="">Não informado</option></select></div>
+          <div class="nfse-geral-campos">
+            <div class="Cl_FormCampo nfse-campo-perfil">
+              <label>Perfil de nota *</label>
+              <select id="perfil"><option value="">Selecione...</option></select>
+            </div>
+            <div class="Cl_FormCampo">
+              <label>Competência *</label>
+              <input id="competencia" type="date">
+            </div>
+            <div class="Cl_FormCampo">
+              <label>Valor do serviço *</label>
+              <input id="valor" type="number" min="0" step="0.01" placeholder="0,00">
+            </div>
+            <div class="Cl_FormCampo nfse-campo-dest">
+              <label>Destinatário da operação</label>
+              <select id="destinatario"><option value="">Não informado</option></select>
+            </div>
+            <div class="Cl_FormCampo nfse-campo-inter">
+              <label>Intermediário da operação</label>
+              <select id="intermediario"><option value="">Não informado</option></select>
+            </div>
+            <div class="Cl_FormCampo nfse-campo-obs">
+              <label>Observações / descrição do serviço</label>
+              <textarea id="observacoes" maxlength="1500" rows="5" placeholder="A descrição do perfil entra aqui. Você pode alterar antes de emitir."></textarea>
+            </div>
           </div>
-          <div class="Cl_FormCampo"><label>Observações</label><textarea id="observacoes" maxlength="1500" rows="4" placeholder="A descrição do perfil entra aqui. Você pode alterar antes de emitir."></textarea></div>
-          <p class="nfse-hint">Destinatário e intermediário são opcionais. Se não escolher, a DANFSe mostra Não Informado.</p>
-          <p class="nfse-hint">Esse texto é a descrição do serviço desta nota. Ao escolher o perfil, a descrição cadastrada aparece aqui e você pode alterar.</p>
+          <p class="nfse-hint">Destinatário e intermediário são opcionais. A observação sai como descrição do serviço na nota — o perfil preenche e você pode editar.</p>
         </section>
 
         <section class="nfse-secao" data-painel="tomador" hidden>
@@ -150,6 +167,6 @@
       <button class="Cl_btn Cl_btn_neutral" id="btnInformarChave" title="Cole a chave de 50 dígitos do portal">Informar chave do portal</button>
     </span>
   </footer>
-  <script src="{{ url_for('nfse.static', filename='script/Snfse_nota_apoio.js') }}?v=20261105b"></script>
+  <script src="{{ url_for('nfse.static', filename='script/Snfse_nota_apoio.js') }}?v=20261111a"></script>
 </body>
 </html>

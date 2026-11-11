@@ -189,8 +189,8 @@
     GlobalUtils.abrirJanelaApoioModal({
       rota: existe ? `/nfse/notas/editar?id=${notaId}` : "/nfse/notas/incluir",
       titulo,
-      largura: 1050,
-      altura: 650,
+      largura: 1220,
+      altura: 760,
       id: existe ? notaId : null
     });
   }
@@ -286,7 +286,6 @@
   document.querySelector(".nfse-table")?.addEventListener("scroll", fecharMenu, true);
 
   btnNovaNota.onclick = () => abrir(null);
-  btnDanfseModelo.onclick = () => window.open("/nfse/api/danfse-modelo", "_blank");
   btnImportarNotas.onclick = async () => {
     btnImportarNotas.disabled = true;
     const swal = GlobalUtils.obterSwal();

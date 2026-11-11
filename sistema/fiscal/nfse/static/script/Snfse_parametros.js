@@ -146,16 +146,56 @@
     $("pf_ibs_cbs_json").value=JSON.stringify(p.ibs_cbs_json||{},null,2);$("pf_ativo").checked=p.ativo!==false;
     abrirModalPerfil();
   }
+  function fecharMenusPerfis(){
+    document.querySelectorAll(".Fin_MenuLista").forEach(n=>n.remove());
+  }
+  function abrirMenuPerfil(btn){
+    fecharMenusPerfis();
+    const id=btn.getAttribute("data-id");
+    const box=document.createElement("div");
+    box.className="Fin_MenuLista";
+    const editar=document.createElement("button");
+    editar.type="button";
+    editar.className="Fin_MenuItem";
+    editar.textContent="Editar perfil";
+    editar.addEventListener("click",()=>{
+      fecharMenusPerfis();
+      abrirPerfil(perfis.find(p=>String(p.id)===String(id))||{});
+    });
+    box.appendChild(editar);
+    document.body.appendChild(box);
+    const r=btn.getBoundingClientRect();
+    box.style.top=`${r.bottom+4}px`;
+    box.style.left=`${Math.max(8,r.right-box.offsetWidth)}px`;
+  }
   async function carregarPerfis(){
     const r=await req("/nfse/api/perfis");if(!r?.ok)return;perfis=r.json.dados;
-    $("listaPerfis").innerHTML=perfis.length?perfis.map(p=>`<tr><td>${esc(p.nome)}</td><td>${esc(p.codigo_servico)}</td><td>${esc(p.codigo_tributacao_nacional)}</td><td>${Number(p.aliquota_iss||0)}% ${p.iss_retido?"retido":""}</td><td>${p.ativo?"Ativo":"Inativo"}</td><td><button class="Cl_btn Cl_btn_neutral editarPerfil" data-id="${p.id}">Editar</button></td></tr>`).join(""):'<tr><td colspan="6">Nenhum perfil cadastrado.</td></tr>';
+    $("listaPerfis").innerHTML=perfis.length?perfis.map(p=>`<tr>
+      <td>${esc(p.nome)}</td>
+      <td title="Código de tributação municipal">${esc(p.codigo_servico)||"—"}</td>
+      <td>${esc(p.codigo_tributacao_nacional)||"—"}</td>
+      <td>${Number(p.aliquota_iss||0)}% ${p.iss_retido?"retido":""}</td>
+      <td>${p.ativo?"Ativo":"Inativo"}</td>
+      <td><button type="button" class="Fin_MenuBtn nfse-perfil-menu" data-id="${p.id}" aria-label="Ações">⋮</button></td>
+    </tr>`).join(""):'<tr><td colspan="6">Nenhum perfil cadastrado.</td></tr>';
   }
   $("btnNovoPerfil").onclick=()=>abrirPerfil();
   $("btnCancelarPerfil").onclick=fecharModalPerfil;
   $("btnFecharPerfil").onclick=fecharModalPerfil;
   $("modalPerfil").addEventListener("mousedown",e=>{if(e.target===$("modalPerfil"))fecharModalPerfil();});
-  document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("modalPerfil").hidden)fecharModalPerfil();});
-  $("listaPerfis").onclick=e=>{const b=e.target.closest(".editarPerfil");if(b)abrirPerfil(perfis.find(p=>String(p.id)===b.dataset.id))};
+  document.addEventListener("keydown",e=>{
+    if(e.key==="Escape"){
+      if(!$("modalPerfil").hidden) fecharModalPerfil();
+      fecharMenusPerfis();
+    }
+  });
+  document.addEventListener("click",fecharMenusPerfis);
+  $("listaPerfis").onclick=e=>{
+    const b=e.target.closest(".nfse-perfil-menu");
+    if(!b) return;
+    e.stopPropagation();
+    abrirMenuPerfil(b);
+  };
   $("formPerfil").onsubmit=async e=>{
     e.preventDefault();const p={id:$("pf_id").value||null,ativo:$("pf_ativo").checked};
     ["nome","codigo_servico","codigo_tributacao_nacional","codigo_nbs","descricao_servico"].forEach(c=>p[c]=$(`pf_${c}`).value);

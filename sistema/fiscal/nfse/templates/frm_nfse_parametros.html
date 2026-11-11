@@ -2,7 +2,7 @@
 {% block title %}Parâmetros fiscais · DropNexo{% endblock %}
 {% block head_extra %}
 <link rel="stylesheet" href="{{ url_for('financeiro.static', filename='style/Cfinanceiro.css') }}?v=6">
-<link rel="stylesheet" href="{{ url_for('nfse.static', filename='style/Cnfse.css') }}?v=31">
+<link rel="stylesheet" href="{{ url_for('nfse.static', filename='style/Cnfse.css') }}?v=33">
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio Cl_PainelPagina Fin_Page Nfse_Page">
@@ -22,12 +22,10 @@
     <section class="nfse-panel" data-panel="empresa">
       <div id="cfgEmpresaAviso" class="nfse-warning" hidden></div>
       <h3 class="Nfse_SecaoTitulo">Prestador e ambiente</h3>
-      <p class="nfse-hint">Mesmos dados do cadastro do tenant (PJ). Ao salvar, atualiza o tenant — sem cadastro paralelo.</p>
       <div class="nfse-cnpj-row">
         <div class="Cl_FormCampo"><label>CNPJ *</label><input id="cfg_cnpj" maxlength="18" inputmode="numeric" placeholder="00.000.000/0000-00" readonly class="is-readonly" value="{{ emp.get('cnpj_formatado') or emp.get('cnpj') or '' }}"></div>
         <button type="button" class="Cl_botaoprimario" id="btnPreencherCnpj">Completar da Receita</button>
       </div>
-      <p class="nfse-hint">CNPJ e razão social vêm do cadastro do tenant e não podem ser alterados aqui. A consulta completa município, UF, IBGE e Simples. Série e ambiente são manuais.</p>
       <div class="nfse-grid nfse-grid-3">
         <div class="Cl_FormCampo"><label>Razão social *</label><input id="cfg_razao_social" readonly class="is-readonly" value="{{ emp.get('razao_social') or '' }}"></div>
         <div class="Cl_FormCampo"><label>Nome fantasia</label><input id="cfg_nome_fantasia" value="{{ emp.get('nome_fantasia') or '' }}"></div>
@@ -59,8 +57,16 @@
       </div>
       <p class="nfse-hint">O percentual é o total aproximado da alíquota do Simples (Lei 12.741). Na nota já emitida esse valor é 6,00. Vazio significa não informar.</p>
       <div class="nfse-checks">
-        <label><input type="checkbox" id="cfg_optante_simples"{% if emp.get('optante_simples', True) %} checked{% endif %}> Optante do Simples</label>
-        <label><input type="checkbox" id="cfg_incentivador_cultural"{% if emp.get('incentivador_cultural') %} checked{% endif %}> Incentivador cultural</label>
+        <label class="Cl_Switch">
+          <input type="checkbox" id="cfg_optante_simples"{% if emp.get('optante_simples', True) %} checked{% endif %}>
+          <span class="Cl_SwitchSlider"></span>
+          <span>Optante do Simples</span>
+        </label>
+        <label class="Cl_Switch">
+          <input type="checkbox" id="cfg_incentivador_cultural"{% if emp.get('incentivador_cultural') %} checked{% endif %}>
+          <span class="Cl_SwitchSlider"></span>
+          <span>Incentivador cultural</span>
+        </label>
       </div>
       <button type="button" class="Cl_botaoprimario" id="btnSalvarConfig">Salvar configuração</button>
     </section>
@@ -73,7 +79,14 @@
       </div>
       <div class="Fin_TableWrap">
         <table class="Fin_Table">
-          <thead><tr><th>Nome</th><th>Serviço</th><th>Tributação</th><th>ISS</th><th>Status</th><th>Ação</th></tr></thead>
+          <thead><tr>
+            <th>Nome</th>
+            <th title="Código de tributação municipal (cTribMun), se o município exigir">Cód. municipal</th>
+            <th>Tributação</th>
+            <th>ISS</th>
+            <th>Status</th>
+            <th class="Cl_TableActions">Ações</th>
+          </tr></thead>
           <tbody id="listaPerfis"></tbody>
         </table>
       </div>
@@ -137,5 +150,5 @@
 </div>
 {% endblock %}
 {% block page_js %}
-<script src="{{ url_for('nfse.static', filename='script/Snfse_parametros.js') }}?v=32"></script>
+<script src="{{ url_for('nfse.static', filename='script/Snfse_parametros.js') }}?v=33"></script>
 {% endblock %}
