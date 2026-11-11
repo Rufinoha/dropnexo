@@ -121,9 +121,33 @@
     }
   };
   $("btnSalvarConfig").onclick=async()=>{
-    const p={};cfgCampos.forEach(c=>p[c]=$(`cfg_${c}`).value);
-    p.optante_simples=$("cfg_optante_simples").checked;p.incentivador_cultural=$("cfg_incentivador_cultural").checked;
-    const r=await req("/nfse/api/config/salvar","POST",p);msg(r?.ok?"Salvo":"Erro",r?.json?.message||"Falha ao salvar.",r?.ok?"success":"error");
+    const btn=$("btnSalvarConfig");
+    try{
+      const p={};
+      cfgCampos.forEach(c=>{
+        const el=$(`cfg_${c}`);
+        if(!el) throw new Error(`Campo ausente na tela: ${c}`);
+        p[c]=el.value;
+      });
+      const ibge=String(p.municipio_ibge_codigo||"").replace(/\D/g,"");
+      if(ibge && ibge.length!==7){
+        return msg("Atenção","Código IBGE deve ter 7 dígitos. Use Completar da Receita.","warning");
+      }
+      if(!ibge){
+        return msg("Atenção","Informe o Código IBGE (7 dígitos) ou use Completar da Receita.","warning");
+      }
+      p.optante_simples=$("cfg_optante_simples").checked;
+      p.incentivador_cultural=$("cfg_incentivador_cultural").checked;
+      btn.disabled=true;
+      const r=await req("/nfse/api/config/salvar","POST",p);
+      if(!r) return;
+      if(r.ok && r.json?.dados) aplicarEmpresa(r.json.dados, null);
+      await msg(r.ok?"Salvo":"Erro", r.json?.message||"Falha ao salvar.", r.ok?"success":"error");
+    }catch(err){
+      await msg("Erro", err?.message||"Falha ao salvar a empresa fiscal.","error");
+    }finally{
+      btn.disabled=false;
+    }
   };
   function abrirModalPerfil(){
     const modal=$("modalPerfil");
@@ -209,11 +233,28 @@
     $("listaCertificados").innerHTML=r.json.dados.length?r.json.dados.map(c=>`<tr><td>${esc(c.nome_arquivo)}</td><td>${esc(c.titular||"N/D")}<br><small>${esc(c.cnpj_certificado||"CNPJ não identificado")}</small></td><td>${esc(c.serial_certificado||"—")}</td><td>${c.dt_fim_validade?new Date(c.dt_fim_validade).toLocaleDateString("pt-BR"):"—"}</td><td>${c.ativo?"Ativo":"Inativo"}</td></tr>`).join(""):'<tr><td colspan="5">Nenhum certificado cadastrado.</td></tr>';
   }
   $("formCertificado").onsubmit=async e=>{
-    e.preventDefault();const f=$("cert_arquivo").files[0];if(!f)return;
-    const fd=new FormData();fd.append("arquivo",f);fd.append("senha",$("cert_senha").value);
-    const r=await GlobalUtils.requestFormData({url:"/nfse/api/certificados/upload",formData:fd});
-    if(!r?.ok)return msg("Certificado rejeitado",r?.json?.message||"Falha no upload.","error");
-    e.target.reset();await carregarCertificados();msg("Certificado armazenado",r.json.message,"success");
+    e.preventDefault();
+    const btn=e.target.querySelector('button[type="submit"]');
+    try{
+      const f=$("cert_arquivo")?.files?.[0];
+      if(!f) return msg("Atenção","Selecione o arquivo .pfx/.p12 do certificado.","warning");
+      const senha=$("cert_senha")?.value||"";
+      if(!senha) return msg("Atenção","Informe a senha do certificado.","warning");
+      const fd=new FormData();
+      fd.append("arquivo",f);
+      fd.append("senha",senha);
+      if(btn) btn.disabled=true;
+      const r=await GlobalUtils.requestFormData({url:"/nfse/api/certificados/upload",formData:fd});
+      if(!r) return;
+      if(!r.ok) return msg("Certificado rejeitado", r.json?.message||"Falha no upload.","error");
+      e.target.reset();
+      await carregarCertificados();
+      await msg("Certificado armazenado", r.json?.message||"Certificado validado e armazenado.","success");
+    }catch(err){
+      await msg("Erro", err?.message||"Falha ao enviar o certificado.","error");
+    }finally{
+      if(btn) btn.disabled=false;
+    }
   };
   document.addEventListener("DOMContentLoaded", function(){
     bootEmpresa();

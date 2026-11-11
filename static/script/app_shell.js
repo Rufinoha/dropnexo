@@ -335,6 +335,25 @@
       const collapsed = sidebar.classList.contains("is-collapsed");
       btnCollapse.textContent = collapsed ? "»" : "«";
       btnCollapse.setAttribute("aria-label", collapsed ? "Expandir menu" : "Recolher menu");
+      if (collapsed) {
+        sidebar.querySelectorAll(".fg-nav-group.is-open").forEach((g) => {
+          g.classList.remove("is-open");
+          const sub = g.querySelector(".fg-nav-sub");
+          const btn = g.querySelector("[data-fg-submenu-toggle]");
+          if (sub) sub.hidden = true;
+          if (btn) btn.setAttribute("aria-expanded", "false");
+        });
+      } else {
+        const ativo = sidebar.querySelector(".fg-nav-subitem.is-active, .fg-nav-parent.is-active");
+        const group = ativo?.closest(".fg-nav-group");
+        if (group) {
+          group.classList.add("is-open");
+          const sub = group.querySelector(".fg-nav-sub");
+          const btn = group.querySelector("[data-fg-submenu-toggle]");
+          if (sub) sub.hidden = false;
+          if (btn) btn.setAttribute("aria-expanded", "true");
+        }
+      }
     });
   }
 

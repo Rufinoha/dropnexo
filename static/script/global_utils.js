@@ -61,6 +61,27 @@ GlobalUtils.requestJSON = async function requestJSON({
   return { ok: resp.ok, status: resp.status, json: json || {} };
 };
 
+/** Upload multipart — mesmo contrato de requestJSON ({ ok, status, json }). */
+GlobalUtils.requestFormData = async function requestFormData({
+  url,
+  formData,
+  method = "POST",
+  headers = {},
+  timeoutMs = 60000,
+} = {}) {
+  if (!url) throw new Error("GlobalUtils.requestFormData: 'url' é obrigatório.");
+  if (!(formData instanceof FormData)) {
+    throw new Error("GlobalUtils.requestFormData: 'formData' deve ser FormData.");
+  }
+  return GlobalUtils.requestJSON({
+    url,
+    method,
+    payload: formData,
+    headers,
+    timeoutMs,
+  });
+};
+
 // --------------------------------------------------------
 // SweetAlert padrão para todo o sistema
 // --------------------------------------------------------
@@ -88,6 +109,34 @@ GlobalUtils.requestJSON = async function requestJSON({
     window.addEventListener('load', applyMixin, { once: true });
   }
 })();
+
+/** Retorna o Swal global (já com mixin), se disponível. */
+GlobalUtils.obterSwal = function obterSwal() {
+  return window.Swal && typeof window.Swal.fire === "function" ? window.Swal : null;
+};
+
+/**
+ * Wrapper único do SweetAlert2 usado pelos módulos (NFS-e etc.).
+ * Aceita objeto de opções OU (titulo, texto, icon) no estilo Swal.fire clássico.
+ */
+GlobalUtils.swalFire = function swalFire(a, b, c) {
+  const SwalLib = GlobalUtils.obterSwal();
+  if (!SwalLib) {
+    let titulo = "";
+    let texto = "";
+    if (a && typeof a === "object") {
+      titulo = a.title || "";
+      texto = a.text || (typeof a.html === "string" ? a.html.replace(/<[^>]+>/g, " ") : "") || "";
+    } else {
+      titulo = a == null ? "" : String(a);
+      texto = b == null ? "" : String(b);
+    }
+    window.alert([titulo, texto].filter(Boolean).join("\n"));
+    return Promise.resolve({ isConfirmed: true, isDenied: false, isDismissed: false, value: true });
+  }
+  if (a && typeof a === "object") return SwalLib.fire(a);
+  return SwalLib.fire(a, b, c);
+};
 
 /** Feedback ao usuário — sempre SweetAlert2 quando disponível. */
 window.Util.alertar = function (mensagem, tipo) {

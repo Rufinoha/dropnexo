@@ -921,7 +921,14 @@ def api_config_salvar():
         return jsonify({"success": False, "message": "CNPJ do prestador inválido."}), 400
     if uf and len(uf) != 2:
         return jsonify({"success": False, "message": "UF deve ter dois caracteres."}), 400
-    if ibge and len(ibge) != 7:
+    if not ibge:
+        return jsonify(
+            {
+                "success": False,
+                "message": "Informe o Código IBGE do município (7 dígitos) ou use Completar da Receita.",
+            }
+        ), 400
+    if len(ibge) != 7:
         return jsonify({"success": False, "message": "Código IBGE deve ter 7 dígitos."}), 400
     bruto_percentual = str(dados.get("percentual_tributos_sn") or "").strip()
     percentual_sn = None

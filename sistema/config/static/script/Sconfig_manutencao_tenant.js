@@ -342,8 +342,12 @@
       if (!j.success) throw new Error(j.message || "Erro");
       const st = j.status || {};
       if (el.fundadorStatus) {
+        const sistemaMax = st.vagas_sistema_max || st.vagas_max || 10;
+        const divulgadas = st.vagas_divulgadas || st.vagas_max || 10;
+        const restoSistema =
+          st.vagas_sistema_restantes != null ? st.vagas_sistema_restantes : st.vagas_restantes || 0;
         el.fundadorStatus.textContent =
-          `Vagas: ${st.vagas_usadas || 0}/${st.vagas_max || 10} · restantes: ${st.vagas_restantes || 0}`;
+          `Sistema: ${st.vagas_usadas || 0}/${sistemaMax} · restantes: ${restoSistema} · divulgação: ${divulgadas}`;
       }
       const itens = j.itens || [];
       if (!itens.length) {

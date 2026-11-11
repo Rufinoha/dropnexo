@@ -1582,9 +1582,9 @@ def api_cadastro_novo():
             salvar_segmentos_fornecedor(cur, id_tenant, ids_parsed, exigir_minimo=True)
             salvar_visivel_rede_vendedor(cur, id_tenant, True)
             sistema_erp = (dados.get("sistema_erp") or "").strip() or None
-            fundador_res = tentar_reservar_no_cadastro(cur, id_tenant, sistema_erp=sistema_erp)
         else:
-            fundador_res = None
+            sistema_erp = None
+        fundador_res = None
 
         if row_usuario:
             id_usuario, usuario_ativo, senha_hash, token_ativacao = row_usuario
@@ -1601,6 +1601,11 @@ def api_cadastro_novo():
                     "UPDATE tbl_usuario SET nome = %s, whatsapp = %s WHERE id = %s",
                     (nome_usuario, whatsapp, id_usuario),
                 )
+                # Reserva Fundador só depois do vínculo dono + WhatsApp.
+                if tipo_negocio == "fornecedor":
+                    fundador_res = tentar_reservar_no_cadastro(
+                        cur, id_tenant, sistema_erp=sistema_erp, whatsapp=whatsapp
+                    )
                 conn.commit()
                 notificar_se_novo_fundador(cur, fundador_res)
                 ok, msg = _enviar_email_nova_conta_vinculada(
@@ -1624,6 +1629,10 @@ def api_cadastro_novo():
                 "UPDATE tbl_usuario SET nome = %s, whatsapp = %s, token_ativacao = %s, token_expira_em = %s WHERE id = %s",
                 (nome_usuario, whatsapp, token_hash, expira, id_usuario),
             )
+            if tipo_negocio == "fornecedor":
+                fundador_res = tentar_reservar_no_cadastro(
+                    cur, id_tenant, sistema_erp=sistema_erp, whatsapp=whatsapp
+                )
             conn.commit()
             notificar_se_novo_fundador(cur, fundador_res)
             link = f"{obter_base_url()}/definir-senha?token={raw}"
@@ -1666,6 +1675,10 @@ def api_cadastro_novo():
             "INSERT INTO tbl_usuario_tenant (id_usuario, id_tenant, id_perfil, ativo) VALUES (%s, %s, %s, TRUE)",
             (id_usuario, id_tenant, id_perfil_dono),
         )
+        if tipo_negocio == "fornecedor":
+            fundador_res = tentar_reservar_no_cadastro(
+                cur, id_tenant, sistema_erp=sistema_erp, whatsapp=whatsapp
+            )
         conn.commit()
         notificar_se_novo_fundador(cur, fundador_res)
 

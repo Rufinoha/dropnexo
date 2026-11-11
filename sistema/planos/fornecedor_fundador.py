@@ -1,4 +1,4 @@
-# sistema/planos/fornecedor_fundador.py — programa Fornecedor Fundador (10 vagas, vitalicio)
+# sistema/planos/fornecedor_fundador.py — programa Fornecedor Fundador (vitalicio)
 from __future__ import annotations
 
 import logging
@@ -8,7 +8,9 @@ from typing import Any
 
 _log = logging.getLogger(__name__)
 
-VAGAS_MAX = 10
+# Divulgação pública (landing / copy) vs teto real do sistema (buffer operacional).
+VAGAS_DIVULGADAS = 10
+VAGAS_MAX = max(VAGAS_DIVULGADAS, int(os.getenv("FUNDADOR_VAGAS_MAX", "15") or "15"))
 PLANO_HUB = "enterprise"
 EMAIL_ESPERA = "hazael@h74.com.br"
 EMAIL_TESTE = "hazael@h74.com.br"
@@ -92,12 +94,18 @@ def status_programa(cur) -> dict[str, Any]:
     except Exception:
         _log.exception("garantir_colunas_fundador")
     usados = contar_fundadores_ativos(cur)
-    resto = max(0, VAGAS_MAX - usados)
+    resto_sistema = max(0, VAGAS_MAX - usados)
+    resto_divulgadas = max(0, VAGAS_DIVULGADAS - usados)
     return {
-        "vagas_max": VAGAS_MAX,
+        # Campos públicos (landing): meta divulgada de 10.
+        "vagas_max": VAGAS_DIVULGADAS,
         "vagas_usadas": usados,
-        "vagas_restantes": resto,
-        "aberto": resto > 0,
+        "vagas_restantes": resto_divulgadas,
+        # Teto operacional do sistema (aceita até VAGAS_MAX).
+        "vagas_divulgadas": VAGAS_DIVULGADAS,
+        "vagas_sistema_max": VAGAS_MAX,
+        "vagas_sistema_restantes": resto_sistema,
+        "aberto": resto_sistema > 0,
         "plano_hub": PLANO_HUB,
         "slug_vitrine": SLUG_VITRINE,
     }
@@ -169,6 +177,7 @@ def atribuir_fundador(
     forcar: bool = False,
     sistema_erp: str | None = None,
     obs: str | None = None,
+    whatsapp: str | None = None,
 ) -> dict[str, Any]:
     """Marca tenant como Fundador ativo (limites = Hub). Reserva vaga se houver."""
     from sistema.planos.limites import eh_conta_teste_fornecedor
@@ -207,11 +216,13 @@ def atribuir_fundador(
     if not forcar and not programa_aberto(cur):
         return {
             "ok": False,
-            "message": "Programa Fornecedor Fundador esgotou as 10 vagas.",
+            "message": f"Programa Fornecedor Fundador esgotou as {VAGAS_MAX} vagas do sistema.",
             "vagas_restantes": 0,
         }
 
-    wa = contato_whatsapp_dono(cur, tid)
+    wa = "".join(ch for ch in str(whatsapp or "") if ch.isdigit())
+    if len(wa) < 10:
+        wa = contato_whatsapp_dono(cur, tid)
     if len(wa) < 10:
         return {
             "ok": False,
@@ -221,6 +232,15 @@ def atribuir_fundador(
                 "antes de ativar o Fundador."
             ),
         }
+    # Garante fallback no tenant para próximas leituras (cadastro / manutenção).
+    cur.execute(
+        """
+        UPDATE tbl_tenant
+        SET telefone_comercial = COALESCE(NULLIF(TRIM(telefone_comercial), ''), %s)
+        WHERE id = %s
+        """,
+        (wa, tid),
+    )
 
     erp = (sistema_erp or "").strip() or None
     nota = (obs or "").strip() or None
@@ -334,6 +354,7 @@ def tentar_reservar_no_cadastro(
     id_tenant: int,
     *,
     sistema_erp: str | None = None,
+    whatsapp: str | None = None,
 ) -> dict[str, Any]:
     """Chamado no cadastro de fornecedor: reserva vaga se ainda houver."""
     if not programa_aberto(cur):
@@ -349,7 +370,13 @@ def tentar_reservar_no_cadastro(
             "message": "Vagas esgotadas — conta no plano Explorar.",
             "vagas_restantes": 0,
         }
-    res = atribuir_fundador(cur, id_tenant, sistema_erp=sistema_erp, obs="Reserva no cadastro")
+    res = atribuir_fundador(
+        cur,
+        id_tenant,
+        sistema_erp=sistema_erp,
+        obs="Reserva no cadastro",
+        whatsapp=whatsapp,
+    )
     res["reservado"] = bool(res.get("ok"))
     return res
 

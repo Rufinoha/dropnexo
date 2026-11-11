@@ -45,6 +45,35 @@ body.fg-app {
   width: 76px;
 }
 
+/* Recolhido: só ícones (igual hub Painel) — some submenu/caret que sobrava no Financeiro */
+.fg-sidebar.is-collapsed .fg-sidebar-brand {
+  justify-content: center;
+  padding: 1rem 0.5rem 0.85rem;
+}
+.fg-sidebar.is-collapsed .fg-sidebar-nav {
+  padding: 0.45rem 0.55rem;
+  align-items: stretch;
+}
+.fg-sidebar.is-collapsed .fg-nav-item {
+  justify-content: center;
+  gap: 0;
+  padding: 0.5rem;
+}
+.fg-sidebar.is-collapsed .fg-nav-caret,
+.fg-sidebar.is-collapsed .fg-menu-badge,
+.fg-sidebar.is-collapsed .fg-nav-sub {
+  display: none !important;
+}
+.fg-sidebar.is-collapsed .fg-sidebar-foot {
+  padding: 0.75rem 0.55rem;
+}
+.fg-sidebar.is-collapsed .fg-marktplace-link {
+  justify-content: center;
+  gap: 0;
+  padding: 0.5rem;
+  margin-bottom: 0.45rem;
+}
+
 .fg-sidebar-brand {
   display: flex;
   align-items: center;
