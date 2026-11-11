@@ -766,7 +766,7 @@ button.CfgMt_KpiMini:hover {
 .CfgMt_TabelaFundador col.is-aguard { width: 8%; }
 .CfgMt_TabelaFundador col.is-conect { width: 7%; }
 .CfgMt_TabelaFundador col.is-comped { width: 7%; }
-.CfgMt_TabelaFundador col.is-acoes { width: 11%; }
+.CfgMt_TabelaFundador col.is-acoes { width: 6%; }
 .CfgMt_TabelaFundador th,
 .CfgMt_TabelaFundador td {
   white-space: nowrap;
@@ -1004,6 +1004,8 @@ button.CfgMt_KpiMini:hover {
   cursor: pointer;
 }
 .CfgMt_MenuLista button:hover { background: #f8fafc; }
+.CfgMt_MenuLista button.is-danger { color: #dc2626; }
+.CfgMt_MenuLista button.is-danger:hover { background: #fef2f2; }
 
 .CfgMt_StatusBadge {
   display: inline-flex;

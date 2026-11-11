@@ -70,12 +70,20 @@
     Chart.register(ChartDataLabels);
   }
 
-  function fecharMenusReativacao() {
+  function fecharMenusAcoes() {
     document.querySelectorAll(".CfgMt_MenuLista").forEach((n) => n.remove());
+  }
+  const fecharMenusReativacao = fecharMenusAcoes;
+
+  function posicionarMenuAcoes(btn, box) {
+    document.body.appendChild(box);
+    const r = btn.getBoundingClientRect();
+    box.style.top = r.bottom + 4 + "px";
+    box.style.left = Math.max(8, r.right - box.offsetWidth) + "px";
   }
 
   function abrirMenuReativacao(btn) {
-    fecharMenusReativacao();
+    fecharMenusAcoes();
     const id = btn.getAttribute("data-id");
     const nome = btn.getAttribute("data-nome") || "";
     const box = document.createElement("div");
@@ -84,14 +92,77 @@
     item.type = "button";
     item.textContent = "Reativar conta";
     item.addEventListener("click", async () => {
-      fecharMenusReativacao();
+      fecharMenusAcoes();
       await aprovarReativacao(+id, nome);
     });
     box.appendChild(item);
-    document.body.appendChild(box);
-    const r = btn.getBoundingClientRect();
-    box.style.top = r.bottom + 4 + "px";
-    box.style.left = Math.max(8, r.right - box.offsetWidth) + "px";
+    posicionarMenuAcoes(btn, box);
+  }
+
+  function abrirMenuFundador(btn) {
+    fecharMenusAcoes();
+    const id = parseInt(btn.getAttribute("data-id") || "0", 10);
+    const nome = btn.getAttribute("data-nome") || "";
+    const ativo = btn.getAttribute("data-ativo") === "1";
+    const box = document.createElement("div");
+    box.className = "CfgMt_MenuLista";
+
+    const itemToggle = document.createElement("button");
+    itemToggle.type = "button";
+    itemToggle.textContent = ativo ? "Desativar" : "Ativar";
+    itemToggle.addEventListener("click", async () => {
+      fecharMenusAcoes();
+      try {
+        const j = await toggleFundador(id, !ativo);
+        if (j?.cancelled) return;
+        await carregarFundadores();
+        if (!ativo) {
+          await Swal.fire({
+            icon: "success",
+            title: "Fundador ativado",
+            text: j?.email?.ok ? j.email.message : j?.message || "Benefício liberado.",
+            confirmButtonColor: "#021F81",
+          });
+        }
+      } catch (err) {
+        await Swal.fire({
+          icon: "error",
+          title: "Erro",
+          text: err.message || "Erro",
+          confirmButtonColor: "#021F81",
+        });
+      }
+    });
+
+    const itemExcluir = document.createElement("button");
+    itemExcluir.type = "button";
+    itemExcluir.className = "is-danger";
+    itemExcluir.textContent = "Excluir do programa";
+    itemExcluir.addEventListener("click", async () => {
+      fecharMenusAcoes();
+      try {
+        const j = await excluirDoPrograma(id, nome);
+        if (j?.cancelled) return;
+        await carregarFundadores();
+        await Swal.fire({
+          icon: "success",
+          title: "Fora do programa",
+          text: j.message || "A conta saiu do Fornecedor Fundador.",
+          confirmButtonColor: "#021F81",
+        });
+      } catch (err) {
+        await Swal.fire({
+          icon: "error",
+          title: "Erro",
+          text: err.message || "Erro",
+          confirmButtonColor: "#021F81",
+        });
+      }
+    });
+
+    box.appendChild(itemToggle);
+    box.appendChild(itemExcluir);
+    posicionarMenuAcoes(btn, box);
   }
 
   function badgeStatusReativacao(status, label) {
@@ -281,12 +352,8 @@
       }
       el.fundadorLista.innerHTML = itens
         .map((t) => {
-          const ativo = t.fornecedor_fundador_ativo ? "Sim" : "Não";
-          const btn = t.fornecedor_fundador_ativo
-            ? `<button type="button" class="Cl_BtnCancelar cfgmt-fundador-toggle" data-id="${t.id}" data-ativo="0">Desativar</button>`
-            : `<button type="button" class="Cl_botaoprimario cfgmt-fundador-toggle" data-id="${t.id}" data-ativo="1">Ativar</button>`;
-          const excluir =
-            `<button type="button" class="CfgMt_BtnAcao CfgMt_BtnAcao--del cfgmt-fundador-excluir" data-id="${t.id}" data-nome="${esc(t.nome)}">Excluir</button>`;
+          const ativoProg = !!t.fornecedor_fundador_ativo;
+          const ativo = ativoProg ? "Sim" : "Não";
           const qtdPed = Number(t.pedidos_qtd || 0);
           const ultPed = formatarDataCurta(t.ultimo_pedido_em);
           const celPedidos =
@@ -305,7 +372,11 @@
             <td title="Vendedores aguardando conexão">${t.vendedores_aguardando ?? 0}</td>
             <td title="Vendedores conectados">${t.vendedores_conectados ?? 0}</td>
             <td title="Vendedores que já colocaram pedidos">${t.vendedores_com_pedidos ?? 0}</td>
-            <td><div class="CfgMt_FundadorAcoes">${btn}${excluir}</div></td>
+            <td>
+              <button type="button" class="CfgMt_MenuBtn cfgmt-fundador-menu"
+                data-id="${t.id}" data-nome="${esc(t.nome)}" data-ativo="${ativoProg ? "1" : "0"}"
+                aria-label="Ações">⋮</button>
+            </td>
           </tr>`;
         })
         .join("");
@@ -365,60 +436,11 @@
     return j;
   }
 
-  el.fundadorLista?.addEventListener("click", async (e) => {
-    const sair = e.target.closest(".cfgmt-fundador-excluir");
-    if (sair) {
-      const id = parseInt(sair.dataset.id, 10);
-      sair.disabled = true;
-      try {
-        const j = await excluirDoPrograma(id, sair.dataset.nome || "");
-        if (j?.cancelled) return;
-        await carregarFundadores();
-        await Swal.fire({
-          icon: "success",
-          title: "Fora do programa",
-          text: j.message || "A conta saiu do Fornecedor Fundador.",
-          confirmButtonColor: "#021F81",
-        });
-      } catch (err) {
-        await Swal.fire({
-          icon: "error",
-          title: "Erro",
-          text: err.message || "Erro",
-          confirmButtonColor: "#021F81",
-        });
-      } finally {
-        sair.disabled = false;
-      }
-      return;
-    }
-    const btn = e.target.closest(".cfgmt-fundador-toggle");
+  el.fundadorLista?.addEventListener("click", (e) => {
+    const btn = e.target.closest(".cfgmt-fundador-menu");
     if (!btn) return;
-    const id = parseInt(btn.dataset.id, 10);
-    const ativo = btn.dataset.ativo === "1";
-    btn.disabled = true;
-    try {
-      const j = await toggleFundador(id, ativo);
-      if (j?.cancelled) return;
-      await carregarFundadores();
-      if (ativo) {
-        await Swal.fire({
-          icon: "success",
-          title: "Fundador ativado",
-          text: j?.email?.ok ? j.email.message : j?.message || "Benefício liberado.",
-          confirmButtonColor: "#021F81",
-        });
-      }
-    } catch (err) {
-      await Swal.fire({
-        icon: "error",
-        title: "Erro",
-        text: err.message || "Erro",
-        confirmButtonColor: "#021F81",
-      });
-    } finally {
-      btn.disabled = false;
-    }
+    e.stopPropagation();
+    abrirMenuFundador(btn);
   });
 
   function fecharMigrarBox() {

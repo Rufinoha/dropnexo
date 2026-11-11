@@ -3,7 +3,6 @@
 {% block title %}Nota Fiscal{% endblock %}
 
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('static', filename='style/Csweetalert.css') }}">
 <link rel="stylesheet" href="{{ url_for('financeiro.static', filename='style/Cfinanceiro.css') }}?v=6">
 <link rel="stylesheet" href="{{ url_for('vd_notas.static', filename='style/Cvd_notas.css') }}?v=5">
 {% endblock %}
@@ -136,7 +135,6 @@
 {% endblock %}
 
 {% block page_js %}
-<script src="{{ url_for('static', filename='script/Jsweetalert.js') }}"></script>
 <script src="{{ url_for('vd_notas.static', filename='script/Svd_notas.js') }}?v=7"></script>
 <script src="{{ url_for('vd_parametros.static', filename='script/Svd_parametros.js') }}?v=7"></script>
 {% endblock %}
