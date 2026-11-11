@@ -100,7 +100,7 @@
     const btn=$("btnPreencherCnpj");
     btn.disabled=true; const rotulo=btn.textContent; btn.textContent="Consultando...";
     try{
-      const r=await req("/clientes/empresa/consulta-cnpj","POST",{cnpj});
+      const r=await req("/nfse/api/consulta-cnpj","POST",{cnpj});
       const d=r?.json||{};
       if(!r?.ok) return msg("Consulta", d.erro||d.message||"Não foi possível consultar o CNPJ.","warning");
       // CNPJ e razão social permanecem os do tenant (imutáveis).

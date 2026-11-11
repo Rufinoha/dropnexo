@@ -131,6 +131,17 @@
     $("tomaUf").value = (n.tomador_uf || "").toUpperCase();
     atualizarHintAvulso();
   }
+  async function lerJsonResposta(res) {
+    const ct = (res.headers.get("content-type") || "").toLowerCase();
+    if (!ct.includes("application/json")) {
+      throw new Error("A consulta não respondeu em JSON. Atualize a página e tente de novo.");
+    }
+    try {
+      return await res.json();
+    } catch (_) {
+      throw new Error("Resposta inválida do servidor na consulta.");
+    }
+  }
   async function buscarCNPJAuto() {
     const cnpj = digitos($("tomaDoc").value);
     if (cnpj.length !== 14 || buscandoCnpj || cnpj === ultimoCnpj) return;
@@ -140,24 +151,25 @@
     buscandoCnpj = true;
     ultimoCnpj = cnpj;
     try {
-      const res = await fetch("/clientes/empresa/consulta-cnpj", {
+      const res = await fetch("/nfse/api/consulta-cnpj", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json", Accept: "application/json", "X-Requested-With": "XMLHttpRequest" },
         body: JSON.stringify({ cnpj }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.erro || "Falha na consulta.");
+      const data = await lerJsonResposta(res);
+      if (!res.ok) throw new Error(data.erro || data.message || "Falha na consulta.");
       if (data.razao_social) $("tomaNome").value = String(data.razao_social).toLocaleUpperCase("pt-BR");
       if (data.telefone) $("tomaFone").value = digitos(data.telefone);
       if (data.cep) {
         $("tomaCep").value = formatarCEP(data.cep);
         ultimoCep = digitos(data.cep);
       }
-      if (data.endereco) $("tomaEnd").value = data.endereco;
+      if (data.endereco || data.logradouro) $("tomaEnd").value = data.endereco || data.logradouro;
       if (data.numero) $("tomaNum").value = data.numero;
       if (data.complemento) $("tomaComp").value = data.complemento;
       if (data.bairro) $("tomaBairro").value = data.bairro;
-      if (data.cidade) $("tomaCidade").value = data.cidade;
+      if (data.cidade || data.municipio) $("tomaCidade").value = data.cidade || data.municipio;
       if (data.uf) $("tomaUf").value = data.uf;
       marcarAlterado();
       toast("CNPJ preenchido");
@@ -174,16 +186,17 @@
     buscandoCep = true;
     ultimoCep = cep;
     try {
-      const res = await fetch("/clientes/empresa/consulta-cep?cep=" + encodeURIComponent(cep), {
-        headers: { "X-Requested-With": "XMLHttpRequest" },
+      const res = await fetch("/nfse/api/consulta-cep?cep=" + encodeURIComponent(cep), {
+        credentials: "same-origin",
+        headers: { Accept: "application/json", "X-Requested-With": "XMLHttpRequest" },
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.erro || "Falha na consulta.");
+      const data = await lerJsonResposta(res);
+      if (!res.ok) throw new Error(data.erro || data.message || "Falha na consulta.");
       $("tomaCep").value = formatarCEP(data.cep || cep);
       if (data.logradouro) $("tomaEnd").value = data.logradouro;
       if (data.complemento) $("tomaComp").value = data.complemento;
       if (data.bairro) $("tomaBairro").value = data.bairro;
-      if (data.municipio) $("tomaCidade").value = data.municipio;
+      if (data.municipio || data.cidade) $("tomaCidade").value = data.municipio || data.cidade;
       if (data.uf) $("tomaUf").value = data.uf;
       marcarAlterado();
       toast("CEP preenchido");
@@ -676,14 +689,17 @@
     if (tomadorModo !== "avulso") setModoTomador("avulso", {manual:true});
     marcarAlterado();
   }
-  $("tomaDoc").addEventListener("input", e => {
-    e.target.value = formatarDoc(e.target.value);
+  function aoDigitarDocTomador() {
+    const el = $("tomaDoc");
+    el.value = formatarDoc(el.value);
     atualizarHintAvulso();
     marcarAvulsoEditado();
-    const d = digitos(e.target.value);
+    const d = digitos(el.value);
     if (d.length === 14) buscarCNPJAuto();
     else ultimoCnpj = "";
-  });
+  }
+  $("tomaDoc").addEventListener("input", aoDigitarDocTomador);
+  $("tomaDoc").addEventListener("paste", () => setTimeout(aoDigitarDocTomador, 0));
   $("tomaCep").addEventListener("input", e => {
     e.target.value = formatarCEP(e.target.value);
     marcarAvulsoEditado();

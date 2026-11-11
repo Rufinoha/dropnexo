@@ -908,6 +908,63 @@ def api_config():
         conn.close()
 
 
+@nfse_bp.route("/api/consulta-cnpj", methods=["GET", "POST"])
+@_nfse_autorizado
+def api_consulta_cnpj():
+    """Consulta pública de CNPJ para tomador avulso / Completar da Receita."""
+    from core.dominio import consultar_cnpj
+
+    body = request.get_json(silent=True) or {}
+    cnpj = somente_digitos(body.get("cnpj") or request.args.get("cnpj") or "")
+    if len(cnpj) != 14:
+        return jsonify(success=False, erro="Informe um CNPJ com 14 dígitos.", message="Informe um CNPJ com 14 dígitos."), 400
+    try:
+        dados = consultar_cnpj(cnpj)
+    except ValueError as exc:
+        msg = str(exc) or "Não foi possível consultar o CNPJ."
+        return jsonify(success=False, erro=msg, message=msg), 400
+    except Exception as exc:
+        msg = str(exc) or "Consulta de CNPJ indisponível."
+        return jsonify(success=False, erro=msg, message=msg), 502
+    # Resposta plana (compat H74) + flags success para requestJSON.
+    out = dict(dados)
+    out["success"] = True
+    out["message"] = "CNPJ consultado."
+    return jsonify(out)
+
+
+@nfse_bp.route("/api/consulta-cep", methods=["GET"])
+@_nfse_autorizado
+def api_consulta_cep():
+    """Consulta ViaCEP para endereço do tomador avulso."""
+    import requests
+
+    cep = somente_digitos(request.args.get("cep") or "")
+    if len(cep) != 8:
+        return jsonify(success=False, erro="CEP inválido.", message="CEP inválido."), 400
+    try:
+        r = requests.get(f"https://viacep.com.br/ws/{cep}/json/", timeout=8)
+        r.raise_for_status()
+        data = r.json()
+    except Exception as exc:
+        msg = str(exc) or "Falha ao consultar CEP."
+        return jsonify(success=False, erro=msg, message=msg), 502
+    if data.get("erro"):
+        return jsonify(success=False, erro="CEP não encontrado.", message="CEP não encontrado."), 404
+    return jsonify(
+        success=True,
+        cep=cep,
+        logradouro=data.get("logradouro") or "",
+        complemento=data.get("complemento") or "",
+        bairro=data.get("bairro") or "",
+        municipio=data.get("localidade") or "",
+        cidade=data.get("localidade") or "",
+        uf=(data.get("uf") or "").upper(),
+        ibge=data.get("ibge") or "",
+        message="CEP consultado.",
+    )
+
+
 @nfse_bp.route("/api/config/salvar", methods=["POST"])
 @_nfse_autorizado
 def api_config_salvar():

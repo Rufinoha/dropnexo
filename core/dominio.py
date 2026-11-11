@@ -126,8 +126,15 @@ def _pacote_cnpj(
     bairro: str = "",
     cidade: str = "",
     uf: str = "",
+    telefone: str = "",
+    codigo_municipio_ibge: str = "",
+    opcao_pelo_simples=None,
+    opcao_pelo_mei=None,
+    situacao_ativa=None,
 ) -> dict:
     razao = (razao_social or "").strip()
+    logradouro_limpo = (logradouro or "").strip()
+    cidade_limpa = (cidade or "").strip()
     return {
         "cnpj": doc,
         "razao_social": razao,
@@ -135,12 +142,19 @@ def _pacote_cnpj(
         "situacao_cadastral": (situacao or "").strip(),
         "cnae_principal": _so_digitos(str(cnae or "")),
         "cep": _so_digitos(str(cep or "")),
-        "logradouro": (logradouro or "").strip(),
+        "logradouro": logradouro_limpo,
+        "endereco": logradouro_limpo,  # alias NFS-e / H74
         "numero": (numero or "").strip(),
         "complemento": (complemento or "").strip(),
         "bairro": (bairro or "").strip(),
-        "cidade": (cidade or "").strip(),
+        "cidade": cidade_limpa,
+        "municipio": cidade_limpa,  # alias consulta CEP / H74
         "uf": (uf or "").strip().upper(),
+        "telefone": _so_digitos(str(telefone or "")),
+        "codigo_municipio_ibge": _so_digitos(str(codigo_municipio_ibge or "")),
+        "opcao_pelo_simples": opcao_pelo_simples,
+        "opcao_pelo_mei": opcao_pelo_mei,
+        "situacao_ativa": situacao_ativa,
     }
 
 
@@ -164,6 +178,14 @@ def _ler_json_cnpj(url: str) -> dict:
 
 def _via_brasilapi(doc: str) -> dict:
     data = _ler_json_cnpj(f"{_BRASIL_API}/{doc}")
+    ddd = str(data.get("ddd_telefone_1") or "").strip()
+    tel = str(data.get("telefone_1") or "").strip()
+    telefone = f"{ddd}{tel}".strip()
+    tipo_log = (data.get("descricao_tipo_logradouro") or "").strip()
+    logradouro = (data.get("logradouro") or "").strip()
+    if tipo_log and logradouro:
+        logradouro = f"{tipo_log} {logradouro}"
+    sit = data.get("situacao_cadastral")
     return _pacote_cnpj(
         doc,
         razao_social=data.get("razao_social") or "",
@@ -171,12 +193,17 @@ def _via_brasilapi(doc: str) -> dict:
         situacao=data.get("descricao_situacao_cadastral") or "",
         cnae=str(data.get("cnae_fiscal") or data.get("cnae") or ""),
         cep=str(data.get("cep") or ""),
-        logradouro=data.get("logradouro") or "",
+        logradouro=logradouro,
         numero=data.get("numero") or "",
         complemento=data.get("complemento") or "",
         bairro=data.get("bairro") or "",
         cidade=data.get("municipio") or "",
         uf=data.get("uf") or "",
+        telefone=telefone,
+        codigo_municipio_ibge=str(data.get("codigo_municipio_ibge") or ""),
+        opcao_pelo_simples=data.get("opcao_pelo_simples"),
+        opcao_pelo_mei=data.get("opcao_pelo_mei"),
+        situacao_ativa=(sit == 2) if sit is not None else None,
     )
 
 
