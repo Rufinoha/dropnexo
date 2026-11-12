@@ -1,4 +1,97 @@
 (function () {
+  // Polyfill: emissão NFS-e precisa destes helpers mesmo se o parent ainda tiver global_utils antigo.
+  (function garantirHelpersNfse() {
+    const GU = (window.GlobalUtils = window.GlobalUtils || {});
+    if (typeof GU.bloquearFecharApoio !== "function") {
+      GU.__apoioBloqueioFechar__ = GU.__apoioBloqueioFechar__ || {};
+      GU.bloquearFecharApoio = function (nivel, bloquear, motivo) {
+        const chave = Number(nivel) > 0 ? Number(nivel) : 1;
+        const texto = String(motivo || "Aguarde o fim do processamento.");
+        if (bloquear) GU.__apoioBloqueioFechar__[chave] = { motivo: texto, ts: Date.now() };
+        else delete GU.__apoioBloqueioFechar__[chave];
+        const docs = [document];
+        try { if (window.parent && window.parent !== window) docs.push(window.parent.document); } catch (_) {}
+        docs.forEach((doc) => {
+          try {
+            const btn = doc.getElementById(`modalApoioOverlay_nivel${chave}`)
+              ?.querySelector(`button[data-fechar-nivel="${chave}"]`);
+            if (!btn) return;
+            btn.disabled = !!bloquear;
+            btn.style.opacity = bloquear ? "0.35" : "";
+            btn.style.cursor = bloquear ? "not-allowed" : "pointer";
+            btn.title = bloquear ? texto : "";
+          } catch (_) {}
+        });
+        try {
+          if (window.parent?.GlobalUtils && window.parent.GlobalUtils !== GU) {
+            window.parent.GlobalUtils.__apoioBloqueioFechar__ = window.parent.GlobalUtils.__apoioBloqueioFechar__ || {};
+            if (bloquear) window.parent.GlobalUtils.__apoioBloqueioFechar__[chave] = { motivo: texto, ts: Date.now() };
+            else delete window.parent.GlobalUtils.__apoioBloqueioFechar__[chave];
+          }
+        } catch (_) {}
+      };
+    }
+    if (typeof GU.swalProgress !== "function") {
+      GU.swalProgress = function (opts) {
+        opts = opts || {};
+        const SwalRef = GU.obterSwal?.() || window.Swal || window.parent?.Swal;
+        const steps = (opts.steps && opts.steps.length ? opts.steps : ["Processando…"]).map(String);
+        if (!SwalRef?.fire) {
+          return { update() {}, finish() { return Promise.resolve(); }, close() {} };
+        }
+        let stepIdx = 0, pct = 6, timer = null, closed = false;
+        const docAlvo = (() => {
+          try { return window.parent && window.parent !== window ? window.parent.document : document; }
+          catch (_) { return document; }
+        })();
+        const paint = () => {
+          const bar = docAlvo.getElementById("dnProgBar");
+          const lbl = docAlvo.getElementById("dnProgLabel");
+          const pctEl = docAlvo.getElementById("dnProgPct");
+          if (bar) bar.style.width = Math.max(0, Math.min(100, pct)) + "%";
+          if (lbl) lbl.textContent = steps[Math.min(stepIdx, steps.length - 1)] || "";
+          if (pctEl) pctEl.textContent = Math.round(pct) + "%";
+        };
+        SwalRef.fire({
+          title: opts.title || "Processando",
+          html: `<div style="text-align:left"><p id="dnProgLabel" style="margin:0 0 12px;min-height:1.4em">${steps[0]}</p>
+            <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-size:.75rem;opacity:.7">PROGRESSO</span><span id="dnProgPct">6%</span></div>
+            <div style="height:10px;border-radius:999px;background:rgba(0,0,0,.08);overflow:hidden"><div id="dnProgBar" style="height:100%;width:6%;border-radius:999px;background:linear-gradient(90deg,#021f81,#2c6bf3);transition:width .35s ease"></div></div>
+            <p style="margin:14px 0 0;font-size:.8rem;opacity:.7">Não feche a janela até concluir.</p></div>`,
+          allowOutsideClick: false,
+          allowEscapeKey: false,
+          showConfirmButton: false,
+          didOpen() {
+            paint();
+            timer = setInterval(() => {
+              if (closed) return;
+              if (pct < 88) pct += Math.max(0.6, (88 - pct) * 0.045);
+              stepIdx = Math.min(steps.length - 1, Math.floor((pct / 90) * steps.length));
+              paint();
+            }, 450);
+          },
+          willClose() { closed = true; if (timer) clearInterval(timer); },
+        });
+        return {
+          update() {},
+          finish(ok) {
+            closed = true;
+            if (timer) clearInterval(timer);
+            pct = 100; stepIdx = steps.length - 1; paint();
+            if (ok === false) {
+              const lbl = docAlvo.getElementById("dnProgLabel");
+              if (lbl) lbl.textContent = "Não foi possível concluir.";
+            }
+            return new Promise((resolve) => {
+              setTimeout(() => { try { SwalRef.close(); } catch (_) {} resolve(); }, ok === false ? 350 : 420);
+            });
+          },
+          close() { closed = true; if (timer) clearInterval(timer); try { SwalRef.close(); } catch (_) {} },
+        };
+      };
+    }
+  })();
+
   let perfis = [], notaId = null, statusNota = null, ambiente = "homologacao", carga = 0;
   let chaveNota = "", numeroNfseNota = "";
   let prestadorLocal = "Cadastre o município do prestador em Empresa fiscal.";

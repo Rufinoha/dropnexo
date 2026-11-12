@@ -110,9 +110,37 @@ GlobalUtils.requestFormData = async function requestFormData({
   }
 })();
 
-/** Retorna o Swal global (já com mixin), se disponível. */
+/** True quando este documento está dentro de um modal de apoio (iframe). */
+GlobalUtils.estaEmApoioModal = function estaEmApoioModal() {
+  try {
+    if (!window.parent || window.parent === window) return false;
+    if (document.body?.classList?.contains("is-in-modal")) return true;
+    if (document.body?.classList?.contains("nfse-apoio")) return true;
+    if (window.__nivelModal__) return true;
+    return new URLSearchParams(window.location.search).get("modal") === "1";
+  } catch (_) {
+    return false;
+  }
+};
+
+/** Retorna o Swal global (já com mixin), se disponível. Prefer parent no apoio. */
 GlobalUtils.obterSwal = function obterSwal() {
+  try {
+    if (GlobalUtils.estaEmApoioModal() && window.parent.Swal?.fire) {
+      return window.parent.Swal;
+    }
+  } catch (_) {}
   return window.Swal && typeof window.Swal.fire === "function" ? window.Swal : null;
+};
+
+/** Garante que o SweetAlert fique acima do modal de apoio. */
+GlobalUtils._ajustarZIndexSwalApoio = function _ajustarZIndexSwalApoio() {
+  try {
+    const doc = GlobalUtils.estaEmApoioModal() ? window.parent.document : document;
+    doc.querySelectorAll(".swal2-container").forEach((c) => {
+      c.style.zIndex = "20050";
+    });
+  } catch (_) {}
 };
 
 /**
@@ -134,8 +162,138 @@ GlobalUtils.swalFire = function swalFire(a, b, c) {
     window.alert([titulo, texto].filter(Boolean).join("\n"));
     return Promise.resolve({ isConfirmed: true, isDenied: false, isDismissed: false, value: true });
   }
-  if (a && typeof a === "object") return SwalLib.fire(a);
-  return SwalLib.fire(a, b, c);
+  if (a && typeof a === "object") {
+    const opts = Object.assign({}, a);
+    const userDidOpen = opts.didOpen;
+    opts.didOpen = (popup) => {
+      GlobalUtils._ajustarZIndexSwalApoio();
+      if (typeof userDidOpen === "function") userDidOpen(popup);
+    };
+    return SwalLib.fire(opts);
+  }
+  return SwalLib.fire({
+    title: a,
+    text: b,
+    icon: c,
+    didOpen: () => GlobalUtils._ajustarZIndexSwalApoio(),
+  });
+};
+
+/**
+ * Modal de progresso (barra + etapas) para tarefas longas (ex.: emitir NFS-e).
+ * Uso: const p = GlobalUtils.swalProgress({ title, steps }); await p.finish(ok);
+ */
+GlobalUtils.swalProgress = function swalProgress(opts) {
+  opts = opts || {};
+  const SwalRef = GlobalUtils.obterSwal();
+  const steps = (opts.steps && opts.steps.length ? opts.steps : ["Processando…"]).map(String);
+  let stepIdx = 0;
+  let pct = 6;
+  let timer = null;
+  let closed = false;
+  const docAlvo = (() => {
+    try {
+      return GlobalUtils.estaEmApoioModal() ? window.parent.document : document;
+    } catch (_) {
+      return document;
+    }
+  })();
+
+  function paint() {
+    const bar = docAlvo.getElementById("dnProgBar");
+    const lbl = docAlvo.getElementById("dnProgLabel");
+    const pctEl = docAlvo.getElementById("dnProgPct");
+    if (bar) bar.style.width = Math.max(0, Math.min(100, pct)) + "%";
+    if (lbl) lbl.textContent = steps[Math.min(stepIdx, steps.length - 1)] || "";
+    if (pctEl) pctEl.textContent = Math.round(pct) + "%";
+  }
+
+  function tick() {
+    if (closed) return;
+    if (pct < 88) {
+      const restante = 88 - pct;
+      pct += Math.max(0.6, restante * 0.045);
+    }
+    const alvo = Math.min(steps.length - 1, Math.floor((pct / 90) * steps.length));
+    if (alvo > stepIdx) stepIdx = alvo;
+    paint();
+  }
+
+  if (!SwalRef?.fire) {
+    return {
+      update() {},
+      finish() { return Promise.resolve(); },
+      close() {},
+    };
+  }
+
+  SwalRef.fire({
+    title: opts.title || "Processando",
+    html:
+      '<div style="text-align:left">' +
+      '<p id="dnProgLabel" style="margin:0 0 12px;font-size:0.95rem;min-height:1.4em">' +
+      steps[0] +
+      "</p>" +
+      '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">' +
+      '<span style="font-size:0.75rem;letter-spacing:.08em;text-transform:uppercase;opacity:.7">Progresso</span>' +
+      '<span id="dnProgPct" style="font-size:0.85rem;font-weight:700">6%</span>' +
+      "</div>" +
+      '<div style="height:10px;border-radius:999px;background:rgba(0,0,0,.08);overflow:hidden">' +
+      '<div id="dnProgBar" style="height:100%;width:6%;border-radius:999px;background:linear-gradient(90deg,#021f81,#2c6bf3);transition:width .35s ease"></div>' +
+      "</div>" +
+      '<p style="margin:14px 0 0;font-size:0.8rem;opacity:.7">Não feche a janela até concluir.</p>' +
+      "</div>",
+    allowOutsideClick: false,
+    allowEscapeKey: false,
+    showConfirmButton: false,
+    heightAuto: false,
+    didOpen() {
+      GlobalUtils._ajustarZIndexSwalApoio();
+      paint();
+      timer = setInterval(tick, 450);
+    },
+    willClose() {
+      closed = true;
+      if (timer) clearInterval(timer);
+      timer = null;
+    },
+  });
+
+  return {
+    update(nextPct, text) {
+      if (typeof nextPct === "number") pct = Math.max(pct, nextPct);
+      if (text) {
+        const i = steps.indexOf(text);
+        if (i >= 0) stepIdx = i;
+        else steps[stepIdx] = text;
+      }
+      paint();
+    },
+    finish(ok) {
+      closed = true;
+      if (timer) clearInterval(timer);
+      timer = null;
+      pct = 100;
+      stepIdx = steps.length - 1;
+      if (ok === false) {
+        const lbl = docAlvo.getElementById("dnProgLabel");
+        if (lbl) lbl.textContent = "Não foi possível concluir.";
+      } else {
+        paint();
+      }
+      return new Promise((resolve) => {
+        setTimeout(() => {
+          try { SwalRef.close(); } catch (_) {}
+          resolve();
+        }, ok === false ? 350 : 420);
+      });
+    },
+    close() {
+      closed = true;
+      if (timer) clearInterval(timer);
+      try { SwalRef.close(); } catch (_) {}
+    },
+  };
 };
 
 /** Feedback ao usuário — sempre SweetAlert2 quando disponível. */
@@ -416,8 +574,104 @@ GlobalUtils.receberDadosApoio = function (callback) {
 }; 
 
 
+/*************************** Bloqueio de fechar modal de apoio (ex.: emissão NFS-e) *******************/
+GlobalUtils.__apoioBloqueioFechar__ = GlobalUtils.__apoioBloqueioFechar__ || {};
+
+GlobalUtils.bloquearFecharApoio = function (nivel, bloquear, motivo) {
+  const n = Number(nivel);
+  const chave = Number.isFinite(n) && n > 0 ? n : 1;
+  const texto = String(motivo || "Aguarde o fim do processamento.");
+  const estado = bloquear ? { motivo: texto, ts: Date.now() } : null;
+
+  function aplicarMapa(GU) {
+    if (!GU) return;
+    GU.__apoioBloqueioFechar__ = GU.__apoioBloqueioFechar__ || {};
+    if (estado) GU.__apoioBloqueioFechar__[chave] = estado;
+    else delete GU.__apoioBloqueioFechar__[chave];
+  }
+
+  function pintarBotao(doc) {
+    if (!doc) return;
+    try {
+      const overlay = doc.getElementById(`modalApoioOverlay_nivel${chave}`);
+      const btn = overlay?.querySelector(`button[data-fechar-nivel="${chave}"]`);
+      if (!btn) return;
+      btn.disabled = !!bloquear;
+      btn.style.opacity = bloquear ? "0.35" : "";
+      btn.style.cursor = bloquear ? "not-allowed" : "pointer";
+      btn.title = bloquear ? texto : "";
+    } catch (_) {}
+  }
+
+  aplicarMapa(GlobalUtils);
+  pintarBotao(document);
+  try {
+    if (window.parent && window.parent !== window) {
+      aplicarMapa(window.parent.GlobalUtils);
+      pintarBotao(window.parent.document);
+    }
+  } catch (_) {}
+};
+
+GlobalUtils.apoioFecharBloqueado = function (nivel) {
+  const n = Number(nivel);
+  const chave = Number.isFinite(n) && n > 0 ? n : 1;
+  try {
+    if (
+      window.parent &&
+      window.parent !== window &&
+      window.parent.GlobalUtils &&
+      window.parent.GlobalUtils !== GlobalUtils
+    ) {
+      const info = window.parent.GlobalUtils.__apoioBloqueioFechar__?.[chave];
+      if (info) return info;
+    }
+  } catch (_) {}
+  return GlobalUtils.__apoioBloqueioFechar__[chave] || null;
+};
+
+GlobalUtils._avisarApoioBloqueado = function (nivel) {
+  const info = GlobalUtils.apoioFecharBloqueado(nivel);
+  const msg = info?.motivo || "Aguarde o fim do processamento.";
+  try {
+    const SwalRef = GlobalUtils.obterSwal?.() || window.Swal;
+    if (SwalRef?.fire) {
+      SwalRef.fire({
+        toast: true,
+        position: "top-end",
+        icon: "info",
+        title: msg,
+        showConfirmButton: false,
+        timer: 2200,
+        didOpen: () => GlobalUtils._ajustarZIndexSwalApoio?.(),
+      });
+      return;
+    }
+  } catch (_) {}
+  try { console.warn(msg); } catch (_) {}
+};
+
 /*************************** MODAL Função padrão para FECHAR o apoio  ***********************************/
 GlobalUtils.fecharJanelaApoio = function (nivel, quiet = false) {
+  const n = Number(nivel);
+  const chave = Number.isFinite(n) && n > 0 ? n : null;
+  if (!quiet) {
+    const alvo = chave != null ? chave : (() => {
+      try {
+        const overlays = Array.from(document.querySelectorAll('[id^="modalApoioOverlay_nivel"]'));
+        if (!overlays.length) return 1;
+        return overlays.reduce((max, el) => {
+          const v = Number(el.id.replace(/\D/g, "")) || 0;
+          return v > max ? v : max;
+        }, 1);
+      } catch (_) { return 1; }
+    })();
+    if (GlobalUtils.apoioFecharBloqueado(alvo)) {
+      GlobalUtils._avisarApoioBloqueado(alvo);
+      return;
+    }
+  }
+
   const fecharEm = (doc, alvoNivel) => {
     if (!doc) return false;
 
