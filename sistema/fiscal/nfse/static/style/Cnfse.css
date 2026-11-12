@@ -200,9 +200,16 @@
 .nfse-secao[hidden]{display:none}
 .nfse-editor .nfse-tomador{margin-top:0}
 .nfse-editor .nfse-preview{margin-top:0}
+.nfse-form-footer{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 .nfse-form-footer #btnFechar{margin-right:auto}
 .nfse-passos-wrap{display:flex;flex-direction:column;align-items:flex-end;gap:6px;min-width:0}
 .nfse-passo-legenda{margin:0;color:#64748b;font-size:12px;font-weight:700;letter-spacing:.01em}
+.nfse-acoes-btns{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.nfse-acoes-btns .Cl_botaoprimario,
+.nfse-acoes-btns .Cl_BtnCancelar,
+.nfse-form-footer > .Cl_BtnCancelar{
+  min-height:2.35rem;padding:.55rem 1rem;border-radius:10px;font-weight:700;
+}
 .nfse-passos{display:flex;align-items:center;gap:8px}
 .nfse-passo{display:inline-flex;align-items:center;gap:8px;margin:0;padding:8px 14px;border:1px solid #d6dee6;border-radius:999px;background:#f8fafc;color:#94a3b8;font:inherit;font-size:13.5px;font-weight:700;cursor:pointer}
 .nfse-passo__n{width:22px;height:22px;border-radius:99px;display:inline-flex;align-items:center;justify-content:center;background:#e2e8f0;font-size:12px;line-height:1}

@@ -355,6 +355,22 @@
     $("acoesRascunho").hidden = travada;
     $("acoesAutorizada").hidden = !["autorizada", "cancelada"].includes(statusNota);
     if ($("acoesProcessando")) $("acoesProcessando").hidden = statusNota !== "processando";
+    const podeLiberar = statusNota === "processando" && !chaveNota && !numeroNfseNota;
+    if ($("btnLiberarEmissao")) {
+      $("btnLiberarEmissao").hidden = !podeLiberar;
+      $("btnLiberarEmissao").classList.toggle("Cl_botaoprimario", podeLiberar);
+      $("btnLiberarEmissao").classList.toggle("Cl_BtnCancelar", !podeLiberar);
+    }
+    if ($("legendaProcessando")) {
+      $("legendaProcessando").textContent = podeLiberar
+        ? "Transmissão falhou sem chave — libere e emita de novo, ou sincronize se achar no portal."
+        : "Já há chave/número — sincronize ou informe a chave. Não reemita.";
+    }
+    if ($("legendaAutorizada")) {
+      $("legendaAutorizada").textContent = statusNota === "cancelada"
+        ? "NFS-e cancelada."
+        : "NFS-e autorizada.";
+    }
     const etapa = etapaEmissao();
     const ordem = ["salvar", "validar", "emitir"];
     const atual = ordem.indexOf(etapa);
@@ -463,6 +479,36 @@
     await carregarNota(notaId);
     window.parent.postMessage({grupo:"nfse:salvo", id:notaId}, "*");
     await aviso("Nota reconciliada", r.json?.message || "Status atualizado.", "success");
+  }
+  async function liberarEmissao() {
+    if (!notaId) return;
+    if (chaveNota || numeroNfseNota) {
+      return aviso(
+        "Não liberar",
+        "Já existe chave/número. Sincronize ou informe a chave do portal — não reemita.",
+        "warning"
+      );
+    }
+    const ok = await GlobalUtils.swalFire({
+      icon: "warning",
+      title: "Liberar para emitir de novo?",
+      text: "Use só se a transmissão falhou e a nota NÃO aparece autorizada no portal/Sefin. Se já autorizou, informe a chave.",
+      showCancelButton: true,
+      confirmButtonText: "Liberar",
+      cancelButtonText: "Cancelar",
+    });
+    if (!ok?.isConfirmed) return;
+    const r = await GlobalUtils.requestJSON({
+      url: `/nfse/api/notas/${notaId}/liberar-emissao`,
+      method: "POST",
+      payload: {},
+    });
+    if (!r?.ok) {
+      return aviso("Não liberou", r?.json?.message || "Não foi possível destravar a nota.", "error");
+    }
+    await carregarNota(notaId);
+    window.parent.postMessage({grupo:"nfse:salvo", id:notaId}, "*");
+    await aviso("Liberada", r.json?.message || "Agora pode emitir.", "success");
   }
   async function sincronizarComSefin() {
     if (!notaId) return;
@@ -827,6 +873,7 @@
   if ($("btnSincronizar")) $("btnSincronizar").onclick = sincronizarComSefin;
   if ($("btnInformarChave")) $("btnInformarChave").onclick = () => reconciliarComChave(chaveNota);
   if ($("btnAtualizarXml")) $("btnAtualizarXml").onclick = () => reconciliarComChave(chaveNota);
+  if ($("btnLiberarEmissao")) $("btnLiberarEmissao").onclick = liberarEmissao;
   GlobalUtils.receberDadosApoio(id=>init(id));
   const queryId=Number(new URLSearchParams(location.search).get("id")||0);
   setTimeout(() => { if (!carga) init(queryId || null); }, 150);

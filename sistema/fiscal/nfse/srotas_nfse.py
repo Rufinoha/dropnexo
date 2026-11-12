@@ -1831,6 +1831,69 @@ def api_nota_emitir(id_nota):
         conn.close()
 
 
+@nfse_bp.route("/api/notas/<int:id_nota>/liberar-emissao", methods=["POST"])
+@_nfse_autorizado
+def api_nota_liberar_emissao(id_nota):
+    """Destrava nota em processando sem chave — permite validar/emitir de novo."""
+    conn = Var_ConectarBanco()
+    try:
+        cur = db_execute(
+            conn,
+            """
+            SELECT status, chave_nfse, numero_nfse
+              FROM tbl_nfse_nota
+             WHERE id=%s AND id_tenant=%s
+             FOR UPDATE
+            """,
+            (id_nota, _tenant()),
+        )
+        row = cur.fetchone()
+        if not row:
+            return jsonify({"success": False, "message": "Nota não encontrada."}), 404
+        status, chave, numero = row[0], (row[1] or "").strip(), (row[2] or "").strip()
+        if status != "processando":
+            return jsonify({
+                "success": False,
+                "message": f"Só é possível liberar notas em processamento (atual: {status}).",
+            }), 409
+        if chave or numero:
+            return jsonify({
+                "success": False,
+                "message": (
+                    "Esta DPS já tem chave/número. Use Sincronizar ou Informe a chave do portal — "
+                    "não reemita para evitar duplicidade."
+                ),
+            }), 409
+        db_execute(
+            conn,
+            """
+            UPDATE tbl_nfse_nota
+               SET status='validado', erro_codigo=NULL,
+                   erro_mensagem='Emissão liberada manualmente (sem chave na Sefin).',
+                   dt_atualizacao=NOW()
+             WHERE id=%s AND id_tenant=%s AND status='processando'
+            """,
+            (id_nota, _tenant()),
+        )
+        _auditar(
+            conn,
+            "emissao_liberada",
+            "Nota destravada para nova emissão (processando sem chave).",
+            id_nota,
+        )
+        conn.commit()
+        return jsonify({
+            "success": True,
+            "message": "Nota liberada. Pode emitir de novo.",
+            "status": "validado",
+        })
+    except Exception as exc:
+        conn.rollback()
+        return jsonify({"success": False, "message": str(exc)}), 500
+    finally:
+        conn.close()
+
+
 def _mensagem_importacao(importadas, canceladas, reconciliadas, ja_existiam, terceiros, interrompida) -> str:
     partes = []
     if importadas:
