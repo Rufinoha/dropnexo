@@ -177,6 +177,29 @@ def salvar_config_admin(conn, payload: dict) -> None:
     ambiente = str(payload.get("ambiente") or "").strip().lower()
     if ambiente in {"homologacao", "producao"}:
         _salvar_chave_db(conn, CHAVE_AMBIENTE, ambiente)
+        # Mantém a Empresa fiscal do tenant da sessão alinhada ao Hub.
+        try:
+            from flask import session
+
+            id_tenant = int(session.get("id_tenant") or 0)
+        except Exception:
+            id_tenant = 0
+        if id_tenant:
+            try:
+                from global_utils import db_execute
+
+                db_execute(
+                    conn,
+                    """
+                    UPDATE tbl_tenant
+                       SET ambiente_nfse=%s,
+                           dt_atualizacao=COALESCE(dt_atualizacao, NOW())
+                     WHERE id=%s
+                    """,
+                    (ambiente, id_tenant),
+                )
+            except Exception:
+                pass
 
 
 def obter_painel_config(conn) -> dict:

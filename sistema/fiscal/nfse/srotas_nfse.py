@@ -239,6 +239,24 @@ def _ambiente_nfse_tenant(conn, id_tenant: int | None = None) -> str:
     return "producao" if amb == "producao" else "homologacao"
 
 
+def _ambiente_emissao(conn, nota: dict | None = None) -> str:
+    """
+    Ambiente efetivo da emissão via Hub.
+    Prioridade: Hub H74 (Configurações) → ambiente da nota → Empresa fiscal.
+    """
+    from api.fiscal.focus_nfe import token_configurado
+    from api.fiscal.hub_nfe_config import obter_credenciais
+
+    if token_configurado(escopo="nfse") or token_configurado(escopo="nfe"):
+        amb = (obter_credenciais(conn).get("ambiente") or "").strip().lower()
+        if amb in {"homologacao", "producao"}:
+            return amb
+    amb = ((nota or {}).get("ambiente") or "").strip().lower()
+    if amb in {"homologacao", "producao"}:
+        return amb
+    return _ambiente_nfse_tenant(conn)
+
+
 def _garantir_partes_operacao(conn) -> None:
     for nome, tipo in (
         ("id_destinatario_empresa", "INTEGER NULL"),
@@ -1106,7 +1124,17 @@ def api_config_salvar():
         salvos = salvar_empresa_fiscal(conn, _tenant(), dados)
         _salvar_series_nfe(conn, dados)
         salvos = _anexar_series_nfe(conn, salvos)
-        hub = tentar_sincronizar_emitente_hub(conn, _tenant())
+        # Alinha o ambiente do Hub H74 ao da Empresa fiscal.
+        amb_salvo = (salvos.get("ambiente") or dados.get("ambiente") or "").strip().lower()
+        if amb_salvo in {"homologacao", "producao"}:
+            try:
+                from api.fiscal.hub_nfe_config import CHAVE_AMBIENTE, _salvar_chave_db, garantir_tabela_config_sistema
+
+                garantir_tabela_config_sistema(conn)
+                _salvar_chave_db(conn, CHAVE_AMBIENTE, amb_salvo)
+            except Exception:
+                pass
+        hub = tentar_sincronizar_emitente_hub(conn, _tenant(), ambiente=amb_salvo or None)
         _auditar(
             conn,
             "config_salva",
@@ -1533,9 +1561,8 @@ def _validar_nota(conn, id_nota: int) -> list[str]:
     if len(documento_tomador) not in (11, 14):
         erros.append("CPF/CNPJ do tomador deve conter 11 ou 14 dígitos.")
 
-    ambiente = (nota.get("ambiente") or "homologacao").strip().lower()
-    if ambiente != "producao":
-        ambiente = "homologacao"
+    ambiente = _ambiente_emissao(conn, nota)
+    nota["ambiente"] = ambiente
     erros.extend(pendencias_emitente_hub(conn, _tenant(), ambiente=ambiente))
 
     # Remove duplicatas preservando ordem
@@ -1556,8 +1583,10 @@ def _validar_nota(conn, id_nota: int) -> list[str]:
                 "inscricao_municipal": nota["inscricao_municipal"],
                 "municipio_ibge_codigo": nota["municipio_ibge_codigo"],
             }
-            xml = construir_dps(nota, prestador, nota)
-            validar_xml(xml, nota["ambiente"])
+            cfg = dict(nota)
+            cfg["ambiente"] = ambiente
+            xml = construir_dps(nota, prestador, cfg)
+            validar_xml(xml, ambiente)
     except ErroDPS as exc:
         erros.append(str(exc))
 
@@ -1677,9 +1706,8 @@ def _emitir_nfse_via_hub(conn, nota: dict, id_nota: int):
     if not token_configurado(escopo="nfse"):
         return None
 
-    ambiente = (nota.get("ambiente") or "homologacao").strip().lower()
-    if ambiente != "producao":
-        ambiente = "homologacao"
+    ambiente = _ambiente_emissao(conn, nota)
+    nota["ambiente"] = ambiente
     ref = f"dn-nfse-{int(id_nota)}"[:60]
     payload = _payload_nfse_hub(nota)
 

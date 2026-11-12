@@ -177,53 +177,60 @@
       btn.disabled=false; btn.textContent=rotulo;
     }
   };
-  $("btnSalvarConfig").onclick=async()=>{
-    const btn=$("btnSalvarConfig");
+  function montarPayloadEmpresa(){
+    const p={};
+    cfgCampos.forEach(c=>{
+      const el=$(`cfg_${c}`);
+      if(!el) throw new Error(`Campo ausente na tela: ${c}`);
+      p[c]=el.value;
+    });
+    const ibge=String(p.municipio_ibge_codigo||"").replace(/\D/g,"");
+    const uf=String(p.uf||"").trim().toUpperCase();
+    const municipio=String(p.municipio_nome||"").trim();
+    if(!uf || uf.length!==2){
+      throw new Error("Informe a UF (2 letras) da sua empresa na aba Empresa fiscal.");
+    }
+    if(!municipio){
+      throw new Error("Informe o município da sua empresa na aba Empresa fiscal.");
+    }
+    if(ibge && ibge.length!==7){
+      throw new Error("Código IBGE deve ter 7 dígitos. Use Completar da Receita.");
+    }
+    if(!ibge){
+      throw new Error("Informe o código IBGE (7 dígitos) na aba Empresa fiscal.");
+    }
+    p.uf=uf;
+    p.cep=String(p.cep||"").replace(/\D/g,"").slice(0,8);
+    if(enderecoViaCep.logradouro) p.logradouro=enderecoViaCep.logradouro;
+    if(enderecoViaCep.bairro) p.bairro=enderecoViaCep.bairro;
+    p.optante_simples=$("cfg_optante_simples").checked;
+    p.incentivador_cultural=$("cfg_incentivador_cultural").checked;
+    p.serie_dps=String(p.serie_dps||"1").trim()||"1";
+    p.proximo_numero_dps=Math.max(1, parseInt(p.proximo_numero_dps||"1",10)||1);
+    p.serie_nfe=Math.max(1, parseInt(p.serie_nfe||"1",10)||1);
+    p.proximo_numero_nfe=Math.max(1, parseInt(p.proximo_numero_nfe||"1",10)||1);
+    return p;
+  }
+  async function salvarConfiguracao(btn, tituloOk){
     try{
-      const p={};
-      cfgCampos.forEach(c=>{
-        const el=$(`cfg_${c}`);
-        if(!el) throw new Error(`Campo ausente na tela: ${c}`);
-        p[c]=el.value;
-      });
-      const ibge=String(p.municipio_ibge_codigo||"").replace(/\D/g,"");
-      const uf=String(p.uf||"").trim().toUpperCase();
-      const municipio=String(p.municipio_nome||"").trim();
-      if(!uf || uf.length!==2){
-        return msg("Atenção","Informe a UF (2 letras) da sua empresa.","warning");
-      }
-      if(!municipio){
-        return msg("Atenção","Informe o município da sua empresa.","warning");
-      }
-      if(ibge && ibge.length!==7){
-        return msg("Atenção","Código IBGE deve ter 7 dígitos. Use Completar da Receita.","warning");
-      }
-      if(!ibge){
-        return msg("Atenção","Informe o código IBGE (7 dígitos) ou use Completar da Receita.","warning");
-      }
-      p.uf=uf;
-      p.cep=String(p.cep||"").replace(/\D/g,"").slice(0,8);
-      if(enderecoViaCep.logradouro) p.logradouro=enderecoViaCep.logradouro;
-      if(enderecoViaCep.bairro) p.bairro=enderecoViaCep.bairro;
-      p.optante_simples=$("cfg_optante_simples").checked;
-      p.incentivador_cultural=$("cfg_incentivador_cultural").checked;
-      p.serie_dps=String(p.serie_dps||"1").trim()||"1";
-      p.proximo_numero_dps=Math.max(1, parseInt(p.proximo_numero_dps||"1",10)||1);
-      p.serie_nfe=Math.max(1, parseInt(p.serie_nfe||"1",10)||1);
-      p.proximo_numero_nfe=Math.max(1, parseInt(p.proximo_numero_nfe||"1",10)||1);
-      btn.disabled=true;
+      const p=montarPayloadEmpresa();
+      if(btn) btn.disabled=true;
       const r=await req("/nfse/api/config/salvar","POST",p);
       if(!r) return;
       if(r.ok && r.json?.dados) aplicarEmpresa(r.json.dados, null);
-      const texto=textoApi(r.json)||(r.ok?"Empresa fiscal salva.":"Falha ao salvar.");
+      const texto=textoApi(r.json)||(r.ok?(tituloOk||"Configuração salva."):"Falha ao salvar.");
       const icon=r.ok?(r.json?.hub_sincronizado?"success":"warning"):"error";
       await msg(r.ok?(r.json?.hub_sincronizado?"Salvo no Hub":"Salvo"):"Erro", texto, icon);
     }catch(err){
-      await msg("Erro", err?.message||"Falha ao salvar a empresa fiscal.","error");
+      await msg("Atenção", err?.message||"Falha ao salvar.","warning");
     }finally{
-      btn.disabled=false;
+      if(btn) btn.disabled=false;
     }
-  };
+  }
+  $("btnSalvarConfig").onclick=()=>salvarConfiguracao($("btnSalvarConfig"), "Empresa fiscal salva.");
+  if($("btnSalvarNumeracao")){
+    $("btnSalvarNumeracao").onclick=()=>salvarConfiguracao($("btnSalvarNumeracao"), "Ambiente e numeração salvos.");
+  }
   function abrirModalPerfil(){
     const modal=$("modalPerfil");
     modal.hidden=false;
