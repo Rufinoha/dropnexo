@@ -8,7 +8,7 @@
 <div class="Cl_ContainerApoio Cl_PainelPagina Fin_Page Nfse_Page">
   <div class="pt-page-title">
     <h2>Parâmetros</h2>
-    <p class="pt-page-desc">Empresa fiscal (cadastro do tenant PJ), perfis de nota e certificados A1.</p>
+    <p class="pt-page-desc">Dados da sua empresa (PJ), perfis de nota e certificados A1. Ao salvar, a empresa é enviada ao Hub H74.</p>
   </div>
 
   <section class="Fin_Card Nfse_Parametros">
@@ -30,9 +30,11 @@
         <div class="Cl_FormCampo"><label>Razão social *</label><input id="cfg_razao_social" readonly class="is-readonly" value="{{ emp.get('razao_social') or '' }}"></div>
         <div class="Cl_FormCampo"><label>Nome fantasia</label><input id="cfg_nome_fantasia" value="{{ emp.get('nome_fantasia') or '' }}"></div>
         <div class="Cl_FormCampo"><label>Inscrição municipal</label><input id="cfg_inscricao_municipal" value="{{ emp.get('inscricao_municipal') or '' }}"></div>
+        <div class="Cl_FormCampo"><label>CEP</label><input id="cfg_cep" maxlength="9" inputmode="numeric" placeholder="00000-000" autocomplete="postal-code" value="{{ emp.get('cep') or '' }}"></div>
         <div class="Cl_FormCampo"><label>Código IBGE *</label><input id="cfg_municipio_ibge_codigo" maxlength="7" value="{{ emp.get('municipio_ibge_codigo') or '' }}"></div>
         <div class="Cl_FormCampo"><label>Município *</label><input id="cfg_municipio_nome" value="{{ emp.get('municipio_nome') or '' }}"></div>
         <div class="Cl_FormCampo"><label>UF *</label><input id="cfg_uf" maxlength="2" value="{{ emp.get('uf') or '' }}"></div>
+        <div class="Cl_FormCampo nfse-hint-span" style="grid-column:span 2"><p class="nfse-hint" style="margin:0">Ao informar o CEP (8 dígitos), município, UF e IBGE são preenchidos automaticamente.</p></div>
         <div class="Cl_FormCampo"><label>Regime tributário</label>
           {% set reg = emp.get('regime_tributario') or 'simples_nacional' %}
           <select id="cfg_regime_tributario">
@@ -139,7 +141,7 @@
     </section>
 
     <section class="nfse-panel" data-panel="certificados">
-      <div class="nfse-alert"><span>O arquivo e a senha são criptografados separadamente, nunca podem ser baixados e ficam isolados por tenant.</span></div>
+      <div class="nfse-alert"><span>O arquivo e a senha são criptografados, não podem ser baixados depois e ficam isolados na sua conta. Ao incluir o certificado, a empresa é cadastrada/atualizada no Hub H74.</span></div>
       <div id="cryptoWarning" class="nfse-warning" hidden>DEV: usando chave derivada de SECRET_KEY. Configure NFSE_MASTER_KEY antes da produção.</div>
       <form id="formCertificado" class="nfse-upload">
         <div class="Cl_FormCampo"><label>Certificado A1 (.pfx/.p12)</label><input type="file" id="cert_arquivo" accept=".pfx,.p12" required></div>
@@ -157,5 +159,5 @@
 </div>
 {% endblock %}
 {% block page_js %}
-<script defer src="{{ url_for('nfse.static', filename='script/Snfse_parametros.js') }}?v=37"></script>
+<script defer src="{{ url_for('nfse.static', filename='script/Snfse_parametros.js') }}?v=39"></script>
 {% endblock %}

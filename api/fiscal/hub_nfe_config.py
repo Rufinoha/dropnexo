@@ -198,7 +198,7 @@ def obter_painel_config(conn) -> dict:
         "dica": (
             "No H74 Painel → HUB → Painel NF-e, o código do sistema deve ser "
             f"«{_X_SISTEMA}». Copie HUB_NFE_TOKEN e HUB_NFSE_TOKEN (aparecem uma vez). "
-            "O emitente das notas é o CNPJ do tenant, nunca a H74."
+            "O emitente das notas é o CNPJ da sua empresa, nunca a H74."
         ),
     }
 

@@ -10,7 +10,10 @@
     document.querySelectorAll(".nfse-tabs button").forEach(x=>x.classList.toggle("is-on",x===b));
     document.querySelectorAll(".nfse-panel").forEach(x=>x.classList.toggle("is-on",x.dataset.panel===b.dataset.tab));
   });
-  const cfgCampos=["razao_social","nome_fantasia","cnpj","inscricao_municipal","municipio_ibge_codigo","municipio_nome","uf","regime_tributario","regime_especial_tributacao","percentual_tributos_sn","serie_dps","proximo_numero_dps","serie_nfe","proximo_numero_nfe","ambiente"];
+  const cfgCampos=["razao_social","nome_fantasia","cnpj","inscricao_municipal","cep","municipio_ibge_codigo","municipio_nome","uf","regime_tributario","regime_especial_tributacao","percentual_tributos_sn","serie_dps","proximo_numero_dps","serie_nfe","proximo_numero_nfe","ambiente"];
+  let buscandoCep=false;
+  let ultimoCep="";
+  let enderecoViaCep={logradouro:"",bairro:""};
   function travarIdentidade(){
     ["cfg_cnpj","cfg_razao_social"].forEach(id=>{
       const e=$(id); if(!e) return;
@@ -38,10 +41,13 @@
     if($("cfg_cnpj")) $("cfg_cnpj").value=d.cnpj?formatarCnpj(d.cnpj):(d.cnpj_formatado||$("cfg_cnpj").value||"");
     if($("cfg_razao_social") && d.razao_social) $("cfg_razao_social").value=d.razao_social;
     if($("cfg_nome_fantasia") && d.nome_fantasia) $("cfg_nome_fantasia").value=d.nome_fantasia;
+    if($("cfg_cep")) $("cfg_cep").value=d.cep?formatarCep(d.cep):($("cfg_cep").value||"");
     if($("cfg_municipio_nome") && d.municipio_nome) $("cfg_municipio_nome").value=d.municipio_nome;
     if($("cfg_uf") && d.uf) $("cfg_uf").value=d.uf;
     if($("cfg_inscricao_municipal") && d.inscricao_municipal) $("cfg_inscricao_municipal").value=d.inscricao_municipal;
     if($("cfg_municipio_ibge_codigo") && d.municipio_ibge_codigo) $("cfg_municipio_ibge_codigo").value=d.municipio_ibge_codigo;
+    ultimoCep=String(d.cep||"").replace(/\D/g,"").slice(0,8);
+    enderecoViaCep={logradouro:d.logradouro||"",bairro:d.bairro||""};
     if($("cfg_serie_dps")) $("cfg_serie_dps").value=(d.serie_dps!=null && d.serie_dps!=="")?d.serie_dps:"1";
     if($("cfg_proximo_numero_dps")) $("cfg_proximo_numero_dps").value=d.proximo_numero_dps!=null?d.proximo_numero_dps:1;
     if($("cfg_serie_nfe")) $("cfg_serie_nfe").value=d.serie_nfe!=null?d.serie_nfe:1;
@@ -55,7 +61,7 @@
     travarIdentidade();
     const formBox=document.querySelector('.nfse-panel[data-panel="empresa"]');
     if(d.eh_pj===false){
-      setAvisoEmpresa("Este tenant não é PJ. A Empresa fiscal usa o cadastro do tenant — altere o tipo para pessoa jurídica para emitir NFS-e.");
+      setAvisoEmpresa("Sua conta não é pessoa jurídica (PJ). Altere o tipo em Minha empresa para emitir NFS-e.");
       formBox?.classList.add("is-bloqueado");
       formBox?.querySelectorAll("input,select,button,textarea").forEach(el=>{ el.disabled=true; });
     }else{
@@ -63,7 +69,7 @@
       formBox?.querySelectorAll("input,select,button,textarea").forEach(el=>{ el.disabled=false; });
       travarIdentidade();
       if(!d.cnpj || !d.razao_social){
-        setAvisoEmpresa("CNPJ ou razão social ausentes no cadastro do tenant. Complete em Minha empresa (não editáveis aqui).");
+        setAvisoEmpresa("CNPJ ou razão social ausentes. Complete em Minha empresa (não editáveis aqui).");
       }else{
         setAvisoEmpresa("");
       }
@@ -82,7 +88,7 @@
     const r=await req("/nfse/api/config");
     if(!r?.ok){
       if(!($("cfg_cnpj")?.value) && !($("cfg_razao_social")?.value)){
-        setAvisoEmpresa((r?.json&& (r.json.message||r.json.mensagem))||"Não foi possível carregar a empresa fiscal do tenant.");
+        setAvisoEmpresa((r?.json&& (r.json.message||r.json.mensagem))||"Não foi possível carregar a empresa fiscal.");
       }
       return;
     }
@@ -93,19 +99,68 @@
     if(d.length!==14) return d;
     return d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/,"$1.$2.$3/$4-$5");
   }
+  function formatarCep(v){
+    const d=String(v||"").replace(/\D/g,"").slice(0,8);
+    if(d.length!==8) return d;
+    return d.replace(/^(\d{5})(\d{3})$/,"$1-$2");
+  }
   function tituloCidade(v){
     return String(v||"").toLocaleLowerCase("pt-BR").replace(/(^|[\s\-'])(\p{L})/gu,(_,a,b)=>a+b.toLocaleUpperCase("pt-BR"));
   }
+  async function buscarCepEmpresa(){
+    const el=$("cfg_cep");
+    if(!el) return;
+    const cep=String(el.value||"").replace(/\D/g,"").slice(0,8);
+    el.value=formatarCep(cep);
+    if(cep.length!==8 || buscandoCep || cep===ultimoCep) return;
+    buscandoCep=true;
+    ultimoCep=cep;
+    try{
+      const r=await req("/nfse/api/consulta-cep?cep="+encodeURIComponent(cep),"GET");
+      const d=r?.json||{};
+      if(!r?.ok){
+        ultimoCep="";
+        return msg("Consulta CEP", d.erro||d.message||"Não foi possível consultar o CEP.","warning");
+      }
+      el.value=formatarCep(d.cep||cep);
+      if(d.ibge) $("cfg_municipio_ibge_codigo").value=String(d.ibge).replace(/\D/g,"").slice(0,7);
+      if(d.municipio||d.cidade) $("cfg_municipio_nome").value=tituloCidade(d.municipio||d.cidade);
+      if(d.uf) $("cfg_uf").value=String(d.uf).toUpperCase().slice(0,2);
+      enderecoViaCep={
+        logradouro:d.logradouro||"",
+        bairro:d.bairro||"",
+      };
+      msg("CEP encontrado","Município, UF e código IBGE foram preenchidos.","success");
+    }catch(err){
+      ultimoCep="";
+      msg("Consulta CEP", err?.message||"Falha ao consultar o CEP.","warning");
+    }finally{
+      buscandoCep=false;
+    }
+  }
+  function textoApi(j){
+    if(!j) return "";
+    const partes=[];
+    if(j.message) partes.push(String(j.message));
+    if(Array.isArray(j.erros) && j.erros.length){
+      const ja=String(j.message||"");
+      j.erros.forEach(e=>{
+        const t=String(e||"").trim();
+        if(t && !ja.includes(t)) partes.push("• "+t);
+      });
+    }
+    return partes.join("\n");
+  }
   $("btnPreencherCnpj").onclick=async()=>{
     const cnpj=($("cfg_cnpj").value||"").replace(/\D/g,"");
-    if(cnpj.length!==14) return msg("Atenção","CNPJ do tenant ausente. Cadastre em Minha empresa.","warning");
+    if(cnpj.length!==14) return msg("Atenção","CNPJ da sua empresa ausente. Cadastre em Minha empresa.","warning");
     const btn=$("btnPreencherCnpj");
     btn.disabled=true; const rotulo=btn.textContent; btn.textContent="Consultando...";
     try{
       const r=await req("/nfse/api/consulta-cnpj","POST",{cnpj});
       const d=r?.json||{};
       if(!r?.ok) return msg("Consulta", d.erro||d.message||"Não foi possível consultar o CNPJ.","warning");
-      // CNPJ e razão social permanecem os do tenant (imutáveis).
+      // CNPJ e razão social permanecem os da empresa (imutáveis aqui).
       if(d.nome_fantasia && !$("cfg_nome_fantasia").value) $("cfg_nome_fantasia").value=d.nome_fantasia;
       if(d.cidade) $("cfg_municipio_nome").value=tituloCidade(d.cidade);
       if(d.uf) $("cfg_uf").value=d.uf;
@@ -132,12 +187,24 @@
         p[c]=el.value;
       });
       const ibge=String(p.municipio_ibge_codigo||"").replace(/\D/g,"");
+      const uf=String(p.uf||"").trim().toUpperCase();
+      const municipio=String(p.municipio_nome||"").trim();
+      if(!uf || uf.length!==2){
+        return msg("Atenção","Informe a UF (2 letras) da sua empresa.","warning");
+      }
+      if(!municipio){
+        return msg("Atenção","Informe o município da sua empresa.","warning");
+      }
       if(ibge && ibge.length!==7){
         return msg("Atenção","Código IBGE deve ter 7 dígitos. Use Completar da Receita.","warning");
       }
       if(!ibge){
-        return msg("Atenção","Informe o Código IBGE (7 dígitos) ou use Completar da Receita.","warning");
+        return msg("Atenção","Informe o código IBGE (7 dígitos) ou use Completar da Receita.","warning");
       }
+      p.uf=uf;
+      p.cep=String(p.cep||"").replace(/\D/g,"").slice(0,8);
+      if(enderecoViaCep.logradouro) p.logradouro=enderecoViaCep.logradouro;
+      if(enderecoViaCep.bairro) p.bairro=enderecoViaCep.bairro;
       p.optante_simples=$("cfg_optante_simples").checked;
       p.incentivador_cultural=$("cfg_incentivador_cultural").checked;
       p.serie_dps=String(p.serie_dps||"1").trim()||"1";
@@ -148,7 +215,9 @@
       const r=await req("/nfse/api/config/salvar","POST",p);
       if(!r) return;
       if(r.ok && r.json?.dados) aplicarEmpresa(r.json.dados, null);
-      await msg(r.ok?"Salvo":"Erro", r.json?.message||"Falha ao salvar.", r.ok?"success":"error");
+      const texto=textoApi(r.json)||(r.ok?"Empresa fiscal salva.":"Falha ao salvar.");
+      const icon=r.ok?(r.json?.hub_sincronizado?"success":"warning"):"error";
+      await msg(r.ok?(r.json?.hub_sincronizado?"Salvo no Hub":"Salvo"):"Erro", texto, icon);
     }catch(err){
       await msg("Erro", err?.message||"Falha ao salvar a empresa fiscal.","error");
     }finally{
@@ -252,16 +321,28 @@
       if(btn) btn.disabled=true;
       const r=await GlobalUtils.requestFormData({url:"/nfse/api/certificados/upload",formData:fd});
       if(!r) return;
-      if(!r.ok) return msg("Certificado rejeitado", r.json?.message||"Falha no upload.","error");
+      if(!r.ok) return msg("Certificado rejeitado", textoApi(r.json)||r.json?.message||"Falha no upload.","error");
       e.target.reset();
       await carregarCertificados();
-      await msg("Certificado armazenado", r.json?.message||"Certificado validado e armazenado.","success");
+      const texto=textoApi(r.json)||"Certificado validado e armazenado.";
+      const icon=r.json?.hub_sincronizado?"success":"warning";
+      await msg(r.json?.hub_sincronizado?"Certificado e Hub":"Certificado armazenado", texto, icon);
     }catch(err){
       await msg("Erro", err?.message||"Falha ao enviar o certificado.","error");
     }finally{
       if(btn) btn.disabled=false;
     }
   };
+  if($("cfg_cep")){
+    $("cfg_cep").addEventListener("blur", buscarCepEmpresa);
+    $("cfg_cep").addEventListener("change", buscarCepEmpresa);
+    $("cfg_cep").addEventListener("input",()=>{
+      const el=$("cfg_cep");
+      const d=String(el.value||"").replace(/\D/g,"").slice(0,8);
+      if(d.length===8) el.value=formatarCep(d);
+      if(d.length===8 && d!==ultimoCep) buscarCepEmpresa();
+    });
+  }
   document.addEventListener("DOMContentLoaded", function(){
     bootEmpresa();
     carregarConfig();

@@ -222,20 +222,23 @@ def salvar_empresa_fiscal(conn, id_tenant: int, dados: dict) -> dict:
     atual = carregar_empresa_fiscal(conn, id_tenant)
     if not atual.get("eh_pj"):
         raise PermissionError(
-            "Empresa fiscal só se aplica a tenant pessoa jurídica (PJ). "
-            "Atualize o cadastro do tenant para tipo PJ."
+            "Empresa fiscal só se aplica a cadastro pessoa jurídica (PJ). "
+            "Atualize em Minha empresa para tipo PJ."
         )
 
     cnpj = somente_digitos(atual.get("cnpj") or "")
     razao = (atual.get("razao_social") or "").strip()
     if len(cnpj) != 14:
-        raise ValueError("CNPJ do tenant ausente ou inválido. Corrija em Minha empresa.")
+        raise ValueError("CNPJ da sua empresa ausente ou inválido. Corrija em Minha empresa.")
     if not razao:
-        raise ValueError("Razão social do tenant ausente. Corrija em Minha empresa.")
+        raise ValueError("Razão social da sua empresa ausente. Corrija em Minha empresa.")
 
     uf = (dados.get("uf") or "").strip().upper()
     ibge = somente_digitos(dados.get("municipio_ibge_codigo"))
     municipio = (dados.get("municipio_nome") or "").strip()
+    cep = somente_digitos(dados.get("cep") or "")[:8] or None
+    logradouro = (dados.get("logradouro") or "").strip() or None
+    bairro = (dados.get("bairro") or "").strip() or None
     fantasia = (dados.get("nome_fantasia") or "").strip() or None
     im = (dados.get("inscricao_municipal") or "").strip() or None
     ambiente = (
@@ -274,6 +277,9 @@ def salvar_empresa_fiscal(conn, id_tenant: int, dados: dict) -> dict:
     for col, val in (
         ("municipio_ibge_codigo", ibge or None),
         ("municipio_nome", municipio or None),
+        ("cep", cep),
+        ("logradouro", logradouro),
+        ("bairro", bairro),
         ("regime_tributario", regime),
         ("optante_simples", optante),
         ("incentivador_cultural", cultural),
@@ -283,6 +289,9 @@ def salvar_empresa_fiscal(conn, id_tenant: int, dados: dict) -> dict:
         ("proximo_numero_dps", proximo),
         ("ambiente_nfse", ambiente),
     ):
+        if val is None and col in {"logradouro", "bairro", "cep"}:
+            # Não apaga endereço existente se a tela não enviou o campo.
+            continue
         if _coluna_existe(conn, col):
             sets.append(f"{col} = %s")
             vals.append(val)

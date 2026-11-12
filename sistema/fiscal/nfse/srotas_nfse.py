@@ -82,7 +82,7 @@ def _nfse_autorizado(fn):
             return render_template(
                 "frm_nf_em_breve.html",
                 titulo="NFS-e",
-                mensagem="Acesso ao módulo NFS-e não autorizado neste tenant.",
+                mensagem="Acesso ao módulo NFS-e não autorizado nesta conta.",
                 nav_ativo=_nav_nfse("nfse"),
             ), 403
         # Deep link /nfse/* entra no hub Financeiro automaticamente.
@@ -919,7 +919,7 @@ def api_perfil_salvar():
             )
         row = cur.fetchone()
         if not row:
-            return jsonify({"success": False, "message": "Perfil não encontrado neste tenant."}), 404
+            return jsonify({"success": False, "message": "Perfil não encontrado nesta conta."}), 404
         _auditar(conn, "perfil_salvo", "Perfil de nota salvo.", dados={"id_perfil": row[0]})
         conn.commit()
         return jsonify({"success": True, "id": row[0], "message": "Perfil salvo."})
@@ -957,7 +957,7 @@ def api_config():
         return jsonify(
             {
                 "success": False,
-                "message": f"Falha ao ler empresa do tenant: {e}",
+                "message": f"Falha ao ler a empresa fiscal: {e}",
                 "dados": {},
             }
         ), 500
@@ -1025,21 +1025,28 @@ def api_consulta_cep():
 @nfse_bp.route("/api/config/salvar", methods=["POST"])
 @_nfse_autorizado
 def api_config_salvar():
-    from sistema.fiscal.nfse.tenant_fiscal import salvar_empresa_fiscal
+    from sistema.fiscal.nfse.emitente_hub import (
+        pendencias_empresa_fiscal,
+        tentar_sincronizar_emitente_hub,
+    )
+    from sistema.fiscal.nfse.tenant_fiscal import carregar_empresa_fiscal, salvar_empresa_fiscal
 
     dados = request.get_json(silent=True) or {}
     cnpj = somente_digitos(dados.get("cnpj"))
     uf = (dados.get("uf") or "").strip().upper()
     ibge = somente_digitos(dados.get("municipio_ibge_codigo"))
+    municipio = (dados.get("municipio_nome") or "").strip()
     if cnpj and not validar_cnpj(cnpj):
-        return jsonify({"success": False, "message": "CNPJ do prestador inválido."}), 400
-    if uf and len(uf) != 2:
-        return jsonify({"success": False, "message": "UF deve ter dois caracteres."}), 400
+        return jsonify({"success": False, "message": "CNPJ da sua empresa inválido."}), 400
+    if not uf or len(uf) != 2:
+        return jsonify({"success": False, "message": "Informe a UF (2 letras) da sua empresa."}), 400
+    if not municipio:
+        return jsonify({"success": False, "message": "Informe o município da sua empresa."}), 400
     if not ibge:
         return jsonify(
             {
                 "success": False,
-                "message": "Informe o Código IBGE do município (7 dígitos) ou use Completar da Receita.",
+                "message": "Informe o código IBGE do município (7 dígitos) ou use Completar da Receita.",
             }
         ), 400
     if len(ibge) != 7:
@@ -1056,16 +1063,57 @@ def api_config_salvar():
     dados["incentivador_cultural"] = _bool(dados.get("incentivador_cultural"))
     conn = Var_ConectarBanco()
     try:
+        atual = carregar_empresa_fiscal(conn, _tenant())
+        preview = dict(atual)
+        preview.update(
+            {
+                "uf": uf,
+                "municipio_ibge_codigo": ibge,
+                "municipio_nome": municipio,
+            }
+        )
+        faltando = pendencias_empresa_fiscal(preview)
+        if faltando:
+            return jsonify({
+                "success": False,
+                "message": "Complete os campos obrigatórios antes de salvar.",
+                "erros": faltando,
+            }), 400
+
         salvos = salvar_empresa_fiscal(conn, _tenant(), dados)
         _salvar_series_nfe(conn, dados)
         salvos = _anexar_series_nfe(conn, salvos)
-        _auditar(conn, "config_salva", "Empresa fiscal e séries NF-e/NFS-e atualizadas.")
+        hub = tentar_sincronizar_emitente_hub(conn, _tenant())
+        _auditar(
+            conn,
+            "config_salva",
+            "Empresa fiscal e séries NF-e/NFS-e atualizadas.",
+            dados={"hub_sincronizado": hub.get("hub_sincronizado"), "hub_erro": hub.get("erro")},
+        )
         conn.commit()
+        if hub.get("hub_sincronizado"):
+            mensagem = (
+                "Empresa fiscal salva e cadastrada/atualizada no Hub H74 "
+                f"({(hub.get('resultado') or {}).get('ambiente') or 'homologacao'})."
+            )
+        elif hub.get("pendencias"):
+            mensagem = (
+                "Empresa fiscal salva. Ainda não foi possível enviar ao Hub H74:\n"
+                + "\n".join(f"• {p}" for p in hub["pendencias"])
+            )
+        else:
+            mensagem = (
+                "Empresa fiscal salva, mas a sincronização com o Hub H74 falhou:\n"
+                + (hub.get("erro") or "Erro desconhecido.")
+            )
         return jsonify(
             {
                 "success": True,
-                "message": "Empresa fiscal e numeração (NF-e/NFS-e) salvas.",
+                "message": mensagem,
                 "dados": _payload_row(salvos),
+                "hub_sincronizado": bool(hub.get("hub_sincronizado")),
+                "hub_pendencias": hub.get("pendencias") or [],
+                "hub_erro": hub.get("erro"),
             }
         )
     except PermissionError as e:
@@ -1133,8 +1181,29 @@ def api_certificado_upload():
         cnpj_config = somente_digitos(config[0]) if config else ""
         if meta["cnpj"] and cnpj_config and meta["cnpj"] != cnpj_config:
             return jsonify(
-                {"success": False, "message": "O CNPJ identificado no certificado difere do CNPJ do prestador."}
+                {
+                    "success": False,
+                    "message": "O CNPJ do certificado é diferente do CNPJ da sua empresa.",
+                }
             ), 400
+        from sistema.fiscal.nfse.emitente_hub import (
+            pendencias_empresa_fiscal,
+            tentar_sincronizar_emitente_hub,
+        )
+        from sistema.fiscal.nfse.tenant_fiscal import carregar_empresa_fiscal
+
+        emp = carregar_empresa_fiscal(conn, _tenant())
+        faltando_emp = pendencias_empresa_fiscal(emp)
+        if faltando_emp:
+            return jsonify({
+                "success": False,
+                "message": (
+                    "Complete Parâmetros → Empresa fiscal antes de enviar o certificado:\n"
+                    + "\n".join(f"• {e}" for e in faltando_emp)
+                ),
+                "erros": faltando_emp,
+            }), 400
+
         db_execute(
             conn, "UPDATE tbl_nfse_certificado SET ativo=FALSE WHERE id_tenant=%s", (_tenant(),)
         )
@@ -1160,9 +1229,41 @@ def api_certificado_upload():
             ),
         )
         id_cert = cur.fetchone()[0]
-        _auditar(conn, "certificado_incluido", "Novo certificado A1 incluído.", dados={"id_certificado": id_cert})
+        hub = tentar_sincronizar_emitente_hub(conn, _tenant())
+        _auditar(
+            conn,
+            "certificado_incluido",
+            "Novo certificado A1 incluído.",
+            dados={
+                "id_certificado": id_cert,
+                "hub_sincronizado": hub.get("hub_sincronizado"),
+                "hub_erro": hub.get("erro"),
+            },
+        )
         conn.commit()
-        return jsonify({"success": True, "id": id_cert, "message": "Certificado validado e armazenado com criptografia."})
+        if hub.get("hub_sincronizado"):
+            mensagem = (
+                "Certificado armazenado e empresa cadastrada/atualizada no Hub H74 "
+                f"({(hub.get('resultado') or {}).get('ambiente') or 'homologacao'})."
+            )
+        elif hub.get("pendencias"):
+            mensagem = (
+                "Certificado armazenado. Ainda não foi possível enviar ao Hub H74:\n"
+                + "\n".join(f"• {p}" for p in hub["pendencias"])
+            )
+        else:
+            mensagem = (
+                "Certificado armazenado, mas a sincronização com o Hub H74 falhou:\n"
+                + (hub.get("erro") or "Erro desconhecido.")
+            )
+        return jsonify({
+            "success": True,
+            "id": id_cert,
+            "message": mensagem,
+            "hub_sincronizado": bool(hub.get("hub_sincronizado")),
+            "hub_pendencias": hub.get("pendencias") or [],
+            "hub_erro": hub.get("erro"),
+        })
     finally:
         conn.close()
 
@@ -1277,7 +1378,7 @@ def api_nota_salvar():
             if config[2] != "J":
                 return jsonify({
                     "success": False,
-                    "message": "Empresa fiscal exige tenant PJ. Atualize o cadastro do tenant.",
+                    "message": "Empresa fiscal exige cadastro PJ. Atualize em Minha empresa.",
                     "erros": ["pj"],
                 }), 400
             emp = carregar_empresa_fiscal(conn, _tenant())
@@ -1355,6 +1456,11 @@ def api_nota_salvar():
 
 
 def _validar_nota(conn, id_nota: int) -> list[str]:
+    from sistema.fiscal.nfse.emitente_hub import (
+        pendencias_emitente_hub,
+        tentar_sincronizar_emitente_hub,
+    )
+
     _garantir_partes_operacao(conn)
     cur = db_execute(
         conn,
@@ -1386,43 +1492,61 @@ def _validar_nota(conn, id_nota: int) -> list[str]:
         return ["Rascunho não encontrado."]
     erros = []
     obrigatorios = {
-        "Razão social do prestador": nota.get("prestador_razao"),
-        "CNPJ do prestador": nota.get("prestador_cnpj"),
-        "Município IBGE do prestador": nota.get("municipio_ibge_codigo"),
-        "UF do prestador": nota.get("uf"),
+        "Razão social da sua empresa": nota.get("prestador_razao"),
+        "CNPJ da sua empresa": nota.get("prestador_cnpj"),
+        "Município IBGE da sua empresa": nota.get("municipio_ibge_codigo"),
+        "UF da sua empresa": nota.get("uf"),
         "Tomador": nota.get("tomador_razao_social"),
         "Código de tributação nacional": nota.get("codigo_tributacao_nacional"),
         "Descrição do serviço": nota.get("descricao_servico"),
     }
     erros.extend(f"{campo} não informado." for campo, valor in obrigatorios.items() if not valor)
     if nota.get("prestador_cnpj") and not validar_cnpj(nota["prestador_cnpj"]):
-        erros.append("CNPJ do prestador inválido.")
+        erros.append("CNPJ da sua empresa inválido.")
     documento_tomador = somente_digitos(nota.get("tomador_cnpj_cpf"))
     if len(documento_tomador) not in (11, 14):
         erros.append("CPF/CNPJ do tomador deve conter 11 ou 14 dígitos.")
+
+    ambiente = (nota.get("ambiente") or "homologacao").strip().lower()
+    if ambiente != "producao":
+        ambiente = "homologacao"
+    erros.extend(pendencias_emitente_hub(conn, _tenant(), ambiente=ambiente))
+
+    # Remove duplicatas preservando ordem
+    vistos: set[str] = set()
+    uniq: list[str] = []
+    for e in erros:
+        if e in vistos:
+            continue
+        vistos.add(e)
+        uniq.append(e)
+    erros = uniq
+
     try:
         if not erros:
-            tenant = {
+            prestador = {
                 "razao_social": nota["prestador_razao"],
                 "cnpj": nota["prestador_cnpj"],
                 "inscricao_municipal": nota["inscricao_municipal"],
                 "municipio_ibge_codigo": nota["municipio_ibge_codigo"],
             }
-            xml = construir_dps(nota, tenant, nota)
+            xml = construir_dps(nota, prestador, nota)
             validar_xml(xml, nota["ambiente"])
     except ErroDPS as exc:
         erros.append(str(exc))
-    cert = db_execute(
-        conn,
-        """
-        SELECT id FROM tbl_nfse_certificado
-         WHERE id_tenant=%s AND ativo=TRUE AND dt_fim_validade > NOW()
-         ORDER BY dt_fim_validade DESC LIMIT 1
-        """,
-        (_tenant(),),
-    ).fetchone()
-    if not cert:
-        erros.append("Nenhum certificado A1 ativo e válido.")
+
+    if not erros:
+        hub = tentar_sincronizar_emitente_hub(conn, _tenant(), ambiente=ambiente)
+        if not hub.get("hub_sincronizado"):
+            if hub.get("pendencias"):
+                erros.extend(hub["pendencias"])
+            elif hub.get("erro"):
+                erros.append(hub["erro"])
+            else:
+                erros.append(
+                    "Não foi possível cadastrar/atualizar sua empresa no Hub H74. "
+                    "Revise Parâmetros → Empresa fiscal, Certificados A1 e Hub H74."
+                )
     return erros
 
 
@@ -1513,122 +1637,11 @@ def _payload_nfse_hub(nota: dict) -> dict:
     return _json_safe(payload)
 
 
-def _escopo_hub_empresas() -> str:
-    from api.fiscal.focus_nfe import token_configurado
-
-    return "nfe" if token_configurado(escopo="nfe") else "nfse"
-
-
 def _garantir_emitente_hub_nfse(conn, nota: dict, ambiente: str) -> None:
-    """Garante o CNPJ/A1 do tenant em /v2/empresas (emitente nunca é a H74)."""
-    import base64
+    """Garante o CNPJ/A1 da sua empresa no Hub (/v2/empresas). Emitente nunca é a H74."""
+    from sistema.fiscal.nfse.emitente_hub import sincronizar_emitente_hub
 
-    from api.fiscal.focus_nfe import FocusNfeError, request_json, token_configurado
-    from sistema.fiscal.nfse.tenant_fiscal import carregar_empresa_fiscal
-
-    if not (token_configurado(escopo="nfe") or token_configurado(escopo="nfse")):
-        raise ValueError("Configure os tokens do Hub H74 antes de emitir.")
-
-    cnpj = somente_digitos(nota.get("prestador_cnpj"))
-    if len(cnpj) != 14:
-        raise ValueError("CNPJ do emitente (tenant) inválido.")
-    if not nota.get("conteudo_encriptado") or not nota.get("senha_encriptada"):
-        raise ValueError("Nenhum certificado A1 ativo. Envie em Parâmetros → Certificados A1.")
-
-    emp = carregar_empresa_fiscal(conn, _tenant())
-    ibge = somente_digitos(emp.get("municipio_ibge_codigo") or nota.get("municipio_ibge_codigo"))
-    if len(ibge) != 7:
-        raise ValueError(
-            "Informe o código IBGE do município (7 dígitos) em Parâmetros → Empresa fiscal."
-        )
-    uf = (emp.get("uf") or "").strip().upper()
-    if len(uf) != 2:
-        raise ValueError("Informe a UF do emitente em Parâmetros → Empresa fiscal.")
-    nome = (emp.get("razao_social") or nota.get("prestador_razao") or "").strip()
-    if not nome:
-        raise ValueError("Razão social do emitente ausente.")
-
-    regime = str(emp.get("regime_tributario") or "simples_nacional").strip().lower()
-    crt = 1 if regime in {"simples_nacional", "mei", "1"} else 3
-    pfx = descriptografar(nota["conteudo_encriptado"])
-    senha = descriptografar(nota["senha_encriptada"]).decode("utf-8")
-    body = {
-        "cnpj": cnpj,
-        "nome": nome[:160],
-        "nome_fantasia": (emp.get("nome_fantasia") or nome)[:160],
-        "inscricao_estadual": "ISENTO",
-        "inscricao_municipal": (emp.get("inscricao_municipal") or nota.get("inscricao_municipal") or "").strip() or None,
-        "regime_tributario": crt,
-        "optante_simples": bool(emp.get("optante_simples", True)),
-        "regime_especial_tributacao": (emp.get("regime_especial_tributacao") or "").strip() or None,
-        "percentual_tributos_sn": emp.get("percentual_tributos_sn") or None,
-        "email": (emp.get("email_comercial") or "").strip() or None,
-        "telefone": somente_digitos(emp.get("telefone_comercial") or "")[:14] or None,
-        "logradouro": (emp.get("logradouro") or "Nao informado")[:160],
-        "numero": (emp.get("numero") or "S/N")[:20],
-        "complemento": (emp.get("complemento") or "").strip() or None,
-        "bairro": (emp.get("bairro") or "Centro")[:120],
-        "cep": somente_digitos(emp.get("cep") or "")[:8] or "00000000",
-        "municipio": (emp.get("municipio_nome") or "")[:120],
-        "uf": uf,
-        "codigo_municipio": ibge,
-        "arquivo_certificado_base64": base64.b64encode(pfx).decode("ascii"),
-        "senha_certificado": senha,
-    }
-    if isinstance(body.get("percentual_tributos_sn"), str) and body["percentual_tributos_sn"]:
-        try:
-            body["percentual_tributos_sn"] = float(
-                str(body["percentual_tributos_sn"]).replace(",", ".")
-            )
-        except ValueError:
-            body["percentual_tributos_sn"] = None
-
-    escopo = _escopo_hub_empresas()
-    try:
-        _, lista = request_json(ambiente, "GET", "/v2/empresas", timeout=30, escopo=escopo)
-    except FocusNfeError as exc:
-        raise ValueError(f"Hub recusou listar empresas: {exc}") from exc
-
-    empresa_id = ""
-    itens = lista if isinstance(lista, list) else (
-        (lista.get("dados") or lista.get("empresas") or lista.get("items") or [])
-        if isinstance(lista, dict) else []
-    )
-    for item in itens:
-        if not isinstance(item, dict):
-            continue
-        if somente_digitos(item.get("cnpj")) != cnpj:
-            continue
-        amb_item = str(item.get("ambiente") or "").strip().lower()
-        if amb_item and amb_item != ambiente:
-            continue
-        empresa_id = str(item.get("id") or "").strip()
-        if empresa_id:
-            break
-
-    try:
-        if empresa_id:
-            request_json(
-                ambiente,
-                "PUT",
-                f"/v2/empresas/{empresa_id}",
-                json_body=body,
-                timeout=60,
-                escopo=escopo,
-            )
-        else:
-            request_json(
-                ambiente,
-                "POST",
-                "/v2/empresas",
-                json_body=body,
-                timeout=60,
-                escopo=escopo,
-            )
-    except FocusNfeError as exc:
-        raise ValueError(
-            f"Não foi possível cadastrar o emitente no hub (/v2/empresas): {exc}"
-        ) from exc
+    sincronizar_emitente_hub(conn, _tenant(), ambiente=ambiente)
 
 
 def _emitir_nfse_via_hub(conn, nota: dict, id_nota: int):

@@ -12,7 +12,7 @@
       <h2>Hub H74 · NF-e e NFS-e</h2>
       <p class="cl-page-desc">
         Credenciais do DropNexo no Painel NF-e do H74. Tokens ficam criptografados no banco
-        (prioridade sobre o <code>.env</code>). O emitente é sempre o CNPJ do tenant.
+        (prioridade sobre o <code>.env</code>). O emitente é sempre o CNPJ da sua empresa.
       </p>
     </div>
     <div class="HsCfg_Acoes">
@@ -70,7 +70,7 @@
       <ol class="HsCfg_Hint" style="margin:0;padding-left:1.2rem;line-height:1.55">
         <li>Abra o <strong>H74 Painel → HUB → Painel NF-e</strong>.</li>
         <li>Em Sistemas, use código <code>dropnexo</code> e gere <strong>dois</strong> tokens (NF-e e NFS-e).</li>
-        <li>Cadastre o emitente do tenant em <code>/v2/empresas</code> (CNPJ + A1 do tenant).</li>
+        <li>Ao salvar Empresa fiscal e o certificado A1 em NFS-e → Parâmetros, a sua empresa é enviada ao Hub automaticamente.</li>
         <li>Cole URL e tokens neste card, escolha Homologação e salve.</li>
         <li>Use <strong>Testar conexão</strong> para validar NF-e e NFS-e.</li>
       </ol>
