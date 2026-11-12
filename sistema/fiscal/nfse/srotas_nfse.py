@@ -150,6 +150,42 @@ def _payload_row(row: dict | None):
     return {k: _json_safe(v) for k, v in dados.items()}
 
 
+def _anexar_series_nfe(conn, dados: dict) -> dict:
+    """Inclui série/próximo número da NF-e (tbl_fiscal_config), padrão 1."""
+    out = dict(dados or {})
+    out.setdefault("serie_nfe", 1)
+    out.setdefault("proximo_numero_nfe", 1)
+    try:
+        from sistema.fiscal.nfe_servico import ler_config
+
+        cfg = ler_config(conn.cursor(), _tenant())
+        out["serie_nfe"] = int(cfg.get("serie") or 1)
+        out["proximo_numero_nfe"] = int(cfg.get("proximo_numero") or 1)
+    except Exception:
+        pass
+    return out
+
+
+def _salvar_series_nfe(conn, dados: dict) -> None:
+    """Persiste série/próximo número da NF-e sem alterar certificado."""
+    try:
+        from sistema.fiscal.nfe_servico import salvar_config
+
+        serie = max(1, int(dados.get("serie_nfe") or 1))
+        proximo = max(1, int(dados.get("proximo_numero_nfe") or 1))
+        salvar_config(
+            conn.cursor(),
+            _tenant(),
+            {"serie": serie, "proximo_numero": proximo},
+            None,
+            "",
+            editar_regras=True,
+        )
+    except Exception:
+        # NFS-e continua salvando mesmo se o módulo NF-e ainda não tiver tabela.
+        pass
+
+
 def _schema_atual(conn) -> str:
     cur = db_execute(conn, "SELECT current_schema()")
     row = cur.fetchone()
@@ -625,13 +661,13 @@ def parametros():
     empresa = {}
     conn = Var_ConectarBanco()
     try:
-        empresa = carregar_empresa_fiscal(conn, _tenant()) or {}
+        empresa = _anexar_series_nfe(conn, carregar_empresa_fiscal(conn, _tenant()) or {})
     except Exception:
         try:
             conn.rollback()
         except Exception:
             pass
-        empresa = {}
+        empresa = {"serie_dps": "1", "proximo_numero_dps": 1, "serie_nfe": 1, "proximo_numero_nfe": 1}
     finally:
         conn.close()
 
@@ -642,6 +678,10 @@ def parametros():
         cnpj_fmt = cnpj_dig
     empresa = dict(empresa)
     empresa["cnpj_formatado"] = cnpj_fmt
+    empresa.setdefault("serie_dps", "1")
+    empresa.setdefault("proximo_numero_dps", 1)
+    empresa.setdefault("serie_nfe", 1)
+    empresa.setdefault("proximo_numero_nfe", 1)
 
     return render_template(
         "frm_nfse_parametros.html",
@@ -897,7 +937,7 @@ def api_config():
 
     conn = Var_ConectarBanco()
     try:
-        dados = carregar_empresa_fiscal(conn, _tenant())
+        dados = _anexar_series_nfe(conn, carregar_empresa_fiscal(conn, _tenant()))
         try:
             crypto_fallback = validar_configuracao_criptografica()
         except Exception:
@@ -1017,12 +1057,14 @@ def api_config_salvar():
     conn = Var_ConectarBanco()
     try:
         salvos = salvar_empresa_fiscal(conn, _tenant(), dados)
-        _auditar(conn, "config_salva", "Empresa fiscal atualizada no cadastro do tenant.")
+        _salvar_series_nfe(conn, dados)
+        salvos = _anexar_series_nfe(conn, salvos)
+        _auditar(conn, "config_salva", "Empresa fiscal e séries NF-e/NFS-e atualizadas.")
         conn.commit()
         return jsonify(
             {
                 "success": True,
-                "message": "Empresa fiscal salva no cadastro do tenant.",
+                "message": "Empresa fiscal e numeração (NF-e/NFS-e) salvas.",
                 "dados": _payload_row(salvos),
             }
         )

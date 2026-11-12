@@ -10,7 +10,7 @@
     document.querySelectorAll(".nfse-tabs button").forEach(x=>x.classList.toggle("is-on",x===b));
     document.querySelectorAll(".nfse-panel").forEach(x=>x.classList.toggle("is-on",x.dataset.panel===b.dataset.tab));
   });
-  const cfgCampos=["razao_social","nome_fantasia","cnpj","inscricao_municipal","municipio_ibge_codigo","municipio_nome","uf","regime_tributario","regime_especial_tributacao","percentual_tributos_sn","serie_dps","proximo_numero_dps","ambiente"];
+  const cfgCampos=["razao_social","nome_fantasia","cnpj","inscricao_municipal","municipio_ibge_codigo","municipio_nome","uf","regime_tributario","regime_especial_tributacao","percentual_tributos_sn","serie_dps","proximo_numero_dps","serie_nfe","proximo_numero_nfe","ambiente"];
   function travarIdentidade(){
     ["cfg_cnpj","cfg_razao_social"].forEach(id=>{
       const e=$(id); if(!e) return;
@@ -42,8 +42,10 @@
     if($("cfg_uf") && d.uf) $("cfg_uf").value=d.uf;
     if($("cfg_inscricao_municipal") && d.inscricao_municipal) $("cfg_inscricao_municipal").value=d.inscricao_municipal;
     if($("cfg_municipio_ibge_codigo") && d.municipio_ibge_codigo) $("cfg_municipio_ibge_codigo").value=d.municipio_ibge_codigo;
-    if($("cfg_serie_dps") && d.serie_dps) $("cfg_serie_dps").value=d.serie_dps;
-    if($("cfg_proximo_numero_dps") && d.proximo_numero_dps!=null) $("cfg_proximo_numero_dps").value=d.proximo_numero_dps;
+    if($("cfg_serie_dps")) $("cfg_serie_dps").value=(d.serie_dps!=null && d.serie_dps!=="")?d.serie_dps:"1";
+    if($("cfg_proximo_numero_dps")) $("cfg_proximo_numero_dps").value=d.proximo_numero_dps!=null?d.proximo_numero_dps:1;
+    if($("cfg_serie_nfe")) $("cfg_serie_nfe").value=d.serie_nfe!=null?d.serie_nfe:1;
+    if($("cfg_proximo_numero_nfe")) $("cfg_proximo_numero_nfe").value=d.proximo_numero_nfe!=null?d.proximo_numero_nfe:1;
     if($("cfg_ambiente") && d.ambiente) $("cfg_ambiente").value=d.ambiente;
     if($("cfg_regime_tributario") && d.regime_tributario) $("cfg_regime_tributario").value=d.regime_tributario;
     if($("cfg_percentual_tributos_sn") && d.percentual_tributos_sn) $("cfg_percentual_tributos_sn").value=d.percentual_tributos_sn;
@@ -138,6 +140,10 @@
       }
       p.optante_simples=$("cfg_optante_simples").checked;
       p.incentivador_cultural=$("cfg_incentivador_cultural").checked;
+      p.serie_dps=String(p.serie_dps||"1").trim()||"1";
+      p.proximo_numero_dps=Math.max(1, parseInt(p.proximo_numero_dps||"1",10)||1);
+      p.serie_nfe=Math.max(1, parseInt(p.serie_nfe||"1",10)||1);
+      p.proximo_numero_nfe=Math.max(1, parseInt(p.proximo_numero_nfe||"1",10)||1);
       btn.disabled=true;
       const r=await req("/nfse/api/config/salvar","POST",p);
       if(!r) return;

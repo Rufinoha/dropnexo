@@ -45,15 +45,22 @@
         </div>
         <div class="Cl_FormCampo"><label>Regime especial</label><input id="cfg_regime_especial_tributacao" value="{{ emp.get('regime_especial_tributacao') or '' }}"></div>
         <div class="Cl_FormCampo"><label>Tributos aproximados do Simples (%)</label><input id="cfg_percentual_tributos_sn" inputmode="decimal" placeholder="6,00" value="{{ emp.get('percentual_tributos_sn') or '' }}"></div>
-        <div class="Cl_FormCampo"><label>Série DPS</label><input id="cfg_serie_dps" value="{{ emp.get('serie_dps') or '1' }}"></div>
-        <div class="Cl_FormCampo"><label>Próximo número DPS</label><input id="cfg_proximo_numero_dps" type="number" min="1" value="{{ emp.get('proximo_numero_dps') or 1 }}"></div>
-        <div class="Cl_FormCampo"><label>Ambiente</label>
+        <div class="Cl_FormCampo"><label>Ambiente NFS-e</label>
           {% set amb = emp.get('ambiente') or 'homologacao' %}
           <select id="cfg_ambiente">
             <option value="homologacao"{% if amb=='homologacao' %} selected{% endif %}>Homologação</option>
             <option value="producao"{% if amb=='producao' %} selected{% endif %}>Produção</option>
           </select>
         </div>
+      </div>
+      <h3 class="Nfse_SecaoTitulo" style="margin-top:1.25rem">Numeração das notas</h3>
+      <p class="nfse-hint">Série e próximo número usados nas novas emissões. Padrão: série 1. Se outro ponto de emissão já usa a série 1, altere aqui (ex.: 2).</p>
+      <div class="nfse-grid nfse-grid-3">
+        <div class="Cl_FormCampo"><label>Série NFS-e (DPS)</label><input id="cfg_serie_dps" maxlength="5" inputmode="numeric" value="{{ emp.get('serie_dps') or '1' }}"></div>
+        <div class="Cl_FormCampo"><label>Próximo número NFS-e</label><input id="cfg_proximo_numero_dps" type="number" min="1" value="{{ emp.get('proximo_numero_dps') or 1 }}"></div>
+        <div class="Cl_FormCampo"></div>
+        <div class="Cl_FormCampo"><label>Série NF-e</label><input id="cfg_serie_nfe" type="number" min="1" value="{{ emp.get('serie_nfe') or 1 }}"></div>
+        <div class="Cl_FormCampo"><label>Próximo número NF-e</label><input id="cfg_proximo_numero_nfe" type="number" min="1" value="{{ emp.get('proximo_numero_nfe') or 1 }}"></div>
       </div>
       <p class="nfse-hint">O percentual é o total aproximado da alíquota do Simples (Lei 12.741). Na nota já emitida esse valor é 6,00. Vazio significa não informar.</p>
       <div class="nfse-checks">
@@ -150,5 +157,5 @@
 </div>
 {% endblock %}
 {% block page_js %}
-<script defer src="{{ url_for('nfse.static', filename='script/Snfse_parametros.js') }}?v=36"></script>
+<script defer src="{{ url_for('nfse.static', filename='script/Snfse_parametros.js') }}?v=37"></script>
 {% endblock %}
