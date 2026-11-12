@@ -11,6 +11,10 @@
   const ICO_EDIT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>';
   const ICO_PDF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h5"/></svg>';
   const ICO_X = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m15 9-6 6M9 9l6 6"/></svg>';
+  const ICO_TRASH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>';
+  function podeExcluir(status) {
+    return status === "rascunho" || status === "validado" || status === "rejeitada";
+  }
 
   function diaBrasilia(valor) {
     if (!valor) return null;
@@ -98,7 +102,11 @@
     );
     const sep = document.createElement("div");
     sep.className = "nfse-menu-sep";
-    menu.append(sep, itemMenu("cancelar", "Cancelar nota", ICO_X, true));
+    if (podeExcluir(nota.status)) {
+      menu.append(sep, itemMenu("excluir", "Excluir nota", ICO_TRASH, true));
+    } else {
+      menu.append(sep, itemMenu("cancelar", "Cancelar nota", ICO_X, true));
+    }
     document.body.appendChild(menu);
     posicionarMenu(menu, btn);
     btn.classList.add("is-on");
@@ -113,6 +121,7 @@
       if (acao === "ver" || acao === "editar") abrir(atual.id, atual.status);
       else if (acao === "danfse") gerarDanfse(atual);
       else if (acao === "cancelar") cancelarNota(atual);
+      else if (acao === "excluir") excluirNota(atual);
     });
   }
 
@@ -258,6 +267,35 @@
     }
     const blob = await resposta.blob();
     window.open(URL.createObjectURL(blob), "_blank");
+  }
+
+  async function excluirNota(nota) {
+    if (!podeExcluir(nota.status)) {
+      return GlobalUtils.swalFire(
+        "Exclusão não permitida",
+        "Só é possível excluir rascunhos, notas validadas ou rejeitadas. NFS-e autorizada deve ser cancelada.",
+        "info"
+      );
+    }
+    const dps = `${nota.numero_dps || "—"}/${nota.serie_dps || "—"}`;
+    const conf = await GlobalUtils.swalFire({
+      title: "Excluir nota?",
+      text: `A DPS ${dps} será removida definitivamente. Essa ação não pode ser desfeita.`,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Excluir",
+      cancelButtonText: "Voltar",
+    });
+    if (!conf?.isConfirmed) return;
+    const r = await GlobalUtils.requestJSON({
+      url: `/nfse/api/notas/${nota.id}`,
+      method: "DELETE",
+    });
+    if (!r?.ok) {
+      return GlobalUtils.swalFire("Exclusão não concluída", r?.json?.message || "Não foi possível excluir.", "error");
+    }
+    await GlobalUtils.swalFire("Nota excluída", r.json?.message || "Removida.", "success");
+    carregar();
   }
 
   async function cancelarNota(nota) {

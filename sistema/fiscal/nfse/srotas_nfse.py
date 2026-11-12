@@ -2003,6 +2003,60 @@ def api_nota_emitir(id_nota):
         conn.close()
 
 
+@nfse_bp.route("/api/notas/<int:id_nota>", methods=["DELETE"])
+@_nfse_autorizado
+def api_nota_excluir(id_nota):
+    """Exclui rascunho/validado/rejeitada. Notas autorizadas ou canceladas não podem ser apagadas."""
+    conn = Var_ConectarBanco()
+    try:
+        cur = db_execute(
+            conn,
+            """
+            SELECT status, numero_dps, serie_dps, chave_nfse
+              FROM tbl_nfse_nota
+             WHERE id=%s AND id_tenant=%s
+             FOR UPDATE
+            """,
+            (id_nota, _tenant()),
+        )
+        row = cur.fetchone()
+        if not row:
+            return jsonify({"success": False, "message": "Nota não encontrada."}), 404
+        status, numero_dps, serie_dps, chave = row[0], row[1], row[2], row[3]
+        if status not in {"rascunho", "validado", "rejeitada"}:
+            return jsonify({
+                "success": False,
+                "message": (
+                    "Só é possível excluir notas em rascunho, validadas ou rejeitadas. "
+                    "NFS-e autorizada deve ser cancelada na Sefin, não excluída."
+                ),
+            }), 409
+        if chave:
+            return jsonify({
+                "success": False,
+                "message": "Esta nota já tem chave de acesso e não pode ser excluída.",
+            }), 409
+        db_execute(
+            conn,
+            "DELETE FROM tbl_nfse_nota WHERE id=%s AND id_tenant=%s",
+            (id_nota, _tenant()),
+        )
+        _auditar(
+            conn,
+            "nota_excluida",
+            f"Nota DPS {numero_dps}/{serie_dps} excluída (status {status}).",
+            None,
+            {"id_nota": id_nota, "status": status, "numero_dps": numero_dps, "serie_dps": serie_dps},
+        )
+        conn.commit()
+        return jsonify({"success": True, "message": "Nota excluída."})
+    except Exception as exc:
+        conn.rollback()
+        return jsonify({"success": False, "message": str(exc)[:400]}), 500
+    finally:
+        conn.close()
+
+
 @nfse_bp.route("/api/notas/<int:id_nota>/liberar-emissao", methods=["POST"])
 @_nfse_autorizado
 def api_nota_liberar_emissao(id_nota):
