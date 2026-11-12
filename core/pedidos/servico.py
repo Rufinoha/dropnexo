@@ -2418,6 +2418,25 @@ def importar_pedido_ml(
     numero_ml = dados.get("numero_ml") or id_ml_pedido
     ids_criados: list[int] = []
 
+    # Defesa: limites reais de tbl_pedido (evita StringDataRightTruncation no INSERT).
+    def _cut(v, n: int) -> str | None:
+        if v is None:
+            return None
+        s = str(v).strip()
+        return s[:n] if s else None
+
+    cliente_nome = _cut(cliente.get("nome") or "Cliente Mercado Livre", 200) or "Cliente Mercado Livre"
+    cliente_email = _cut(cliente.get("email"), 200)
+    cliente_telefone = _cut(cliente.get("telefone"), 40)
+    cliente_documento = _cut(cliente.get("documento"), 20)
+    entrega_cep = _cut(entrega.get("cep"), 10)
+    entrega_logradouro = _cut(entrega.get("logradouro"), 200)
+    entrega_numero = _cut(entrega.get("numero"), 20)
+    entrega_complemento = _cut(entrega.get("complemento"), 100)
+    entrega_bairro = _cut(entrega.get("bairro"), 100)
+    entrega_cidade = _cut(entrega.get("cidade"), 100)
+    entrega_uf = _cut(entrega.get("uf"), 2)
+
     for id_forn, itens in por_fornecedor.items():
         existente = _pedido_ja_importado_ml(cur, id_vendedor, id_ml_pedido, id_forn)
         if existente:
@@ -2468,17 +2487,17 @@ def importar_pedido_ml(
                     id_forn,
                     STATUS_IMPORTADO,
                     STATUS_COMPRADOR_PAGO,
-                    cliente.get("nome") or "Cliente Mercado Livre",
-                    cliente.get("email"),
-                    cliente.get("telefone"),
-                    cliente.get("documento"),
-                    entrega.get("cep"),
-                    entrega.get("logradouro"),
-                    entrega.get("numero"),
-                    entrega.get("complemento"),
-                    entrega.get("bairro"),
-                    entrega.get("cidade"),
-                    entrega.get("uf"),
+                    cliente_nome,
+                    cliente_email,
+                    cliente_telefone,
+                    cliente_documento,
+                    entrega_cep,
+                    entrega_logradouro,
+                    entrega_numero,
+                    entrega_complemento,
+                    entrega_bairro,
+                    entrega_cidade,
+                    entrega_uf,
                     subtotal,
                     taxa,
                     _float(dados.get("valor_frete")),
@@ -2513,17 +2532,17 @@ def importar_pedido_ml(
                     id_vendedor,
                     id_forn,
                     STATUS_AGUARDANDO,
-                    cliente.get("nome") or "Cliente Mercado Livre",
-                    cliente.get("email"),
-                    cliente.get("telefone"),
-                    cliente.get("documento"),
-                    entrega.get("cep"),
-                    entrega.get("logradouro"),
-                    entrega.get("numero"),
-                    entrega.get("complemento"),
-                    entrega.get("bairro"),
-                    entrega.get("cidade"),
-                    entrega.get("uf"),
+                    cliente_nome,
+                    cliente_email,
+                    cliente_telefone,
+                    cliente_documento,
+                    entrega_cep,
+                    entrega_logradouro,
+                    entrega_numero,
+                    entrega_complemento,
+                    entrega_bairro,
+                    entrega_cidade,
+                    entrega_uf,
                     subtotal,
                     taxa,
                     _float(dados.get("valor_frete")),

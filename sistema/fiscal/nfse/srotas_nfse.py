@@ -1513,6 +1513,124 @@ def _payload_nfse_hub(nota: dict) -> dict:
     return _json_safe(payload)
 
 
+def _escopo_hub_empresas() -> str:
+    from api.fiscal.focus_nfe import token_configurado
+
+    return "nfe" if token_configurado(escopo="nfe") else "nfse"
+
+
+def _garantir_emitente_hub_nfse(conn, nota: dict, ambiente: str) -> None:
+    """Garante o CNPJ/A1 do tenant em /v2/empresas (emitente nunca é a H74)."""
+    import base64
+
+    from api.fiscal.focus_nfe import FocusNfeError, request_json, token_configurado
+    from sistema.fiscal.nfse.tenant_fiscal import carregar_empresa_fiscal
+
+    if not (token_configurado(escopo="nfe") or token_configurado(escopo="nfse")):
+        raise ValueError("Configure os tokens do Hub H74 antes de emitir.")
+
+    cnpj = somente_digitos(nota.get("prestador_cnpj"))
+    if len(cnpj) != 14:
+        raise ValueError("CNPJ do emitente (tenant) inválido.")
+    if not nota.get("conteudo_encriptado") or not nota.get("senha_encriptada"):
+        raise ValueError("Nenhum certificado A1 ativo. Envie em Parâmetros → Certificados A1.")
+
+    emp = carregar_empresa_fiscal(conn, _tenant())
+    ibge = somente_digitos(emp.get("municipio_ibge_codigo") or nota.get("municipio_ibge_codigo"))
+    if len(ibge) != 7:
+        raise ValueError(
+            "Informe o código IBGE do município (7 dígitos) em Parâmetros → Empresa fiscal."
+        )
+    uf = (emp.get("uf") or "").strip().upper()
+    if len(uf) != 2:
+        raise ValueError("Informe a UF do emitente em Parâmetros → Empresa fiscal.")
+    nome = (emp.get("razao_social") or nota.get("prestador_razao") or "").strip()
+    if not nome:
+        raise ValueError("Razão social do emitente ausente.")
+
+    regime = str(emp.get("regime_tributario") or "simples_nacional").strip().lower()
+    crt = 1 if regime in {"simples_nacional", "mei", "1"} else 3
+    pfx = descriptografar(nota["conteudo_encriptado"])
+    senha = descriptografar(nota["senha_encriptada"]).decode("utf-8")
+    body = {
+        "cnpj": cnpj,
+        "nome": nome[:160],
+        "nome_fantasia": (emp.get("nome_fantasia") or nome)[:160],
+        "inscricao_estadual": "ISENTO",
+        "inscricao_municipal": (emp.get("inscricao_municipal") or nota.get("inscricao_municipal") or "").strip() or None,
+        "regime_tributario": crt,
+        "optante_simples": bool(emp.get("optante_simples", True)),
+        "regime_especial_tributacao": (emp.get("regime_especial_tributacao") or "").strip() or None,
+        "percentual_tributos_sn": emp.get("percentual_tributos_sn") or None,
+        "email": (emp.get("email_comercial") or "").strip() or None,
+        "telefone": somente_digitos(emp.get("telefone_comercial") or "")[:14] or None,
+        "logradouro": (emp.get("logradouro") or "Nao informado")[:160],
+        "numero": (emp.get("numero") or "S/N")[:20],
+        "complemento": (emp.get("complemento") or "").strip() or None,
+        "bairro": (emp.get("bairro") or "Centro")[:120],
+        "cep": somente_digitos(emp.get("cep") or "")[:8] or "00000000",
+        "municipio": (emp.get("municipio_nome") or "")[:120],
+        "uf": uf,
+        "codigo_municipio": ibge,
+        "arquivo_certificado_base64": base64.b64encode(pfx).decode("ascii"),
+        "senha_certificado": senha,
+    }
+    if isinstance(body.get("percentual_tributos_sn"), str) and body["percentual_tributos_sn"]:
+        try:
+            body["percentual_tributos_sn"] = float(
+                str(body["percentual_tributos_sn"]).replace(",", ".")
+            )
+        except ValueError:
+            body["percentual_tributos_sn"] = None
+
+    escopo = _escopo_hub_empresas()
+    try:
+        _, lista = request_json(ambiente, "GET", "/v2/empresas", timeout=30, escopo=escopo)
+    except FocusNfeError as exc:
+        raise ValueError(f"Hub recusou listar empresas: {exc}") from exc
+
+    empresa_id = ""
+    itens = lista if isinstance(lista, list) else (
+        (lista.get("dados") or lista.get("empresas") or lista.get("items") or [])
+        if isinstance(lista, dict) else []
+    )
+    for item in itens:
+        if not isinstance(item, dict):
+            continue
+        if somente_digitos(item.get("cnpj")) != cnpj:
+            continue
+        amb_item = str(item.get("ambiente") or "").strip().lower()
+        if amb_item and amb_item != ambiente:
+            continue
+        empresa_id = str(item.get("id") or "").strip()
+        if empresa_id:
+            break
+
+    try:
+        if empresa_id:
+            request_json(
+                ambiente,
+                "PUT",
+                f"/v2/empresas/{empresa_id}",
+                json_body=body,
+                timeout=60,
+                escopo=escopo,
+            )
+        else:
+            request_json(
+                ambiente,
+                "POST",
+                "/v2/empresas",
+                json_body=body,
+                timeout=60,
+                escopo=escopo,
+            )
+    except FocusNfeError as exc:
+        raise ValueError(
+            f"Não foi possível cadastrar o emitente no hub (/v2/empresas): {exc}"
+        ) from exc
+
+
 def _emitir_nfse_via_hub(conn, nota: dict, id_nota: int):
     """Transmite a DPS pelo hub H74 (/v2/nfse). Assinatura e Sefin ficam no hub."""
     from api.fiscal.focus_nfe import FocusNfeError, baixar, request_json, token_configurado
@@ -1526,14 +1644,15 @@ def _emitir_nfse_via_hub(conn, nota: dict, id_nota: int):
     ref = f"dn-nfse-{int(id_nota)}"[:60]
     payload = _payload_nfse_hub(nota)
 
-    def _falha(mensagem: str, *, code: str = "HUB_NFSE", http: int = 422, incerto: bool = False):
-        novo_status = "processando" if incerto else "rejeitada"
+    def _falha(mensagem: str, *, code: str = "HUB_NFSE", http: int = 422, incerto: bool = False,
+               status_alvo: str | None = None):
+        novo_status = status_alvo or ("processando" if incerto else "rejeitada")
         db_execute(
             conn,
             """
             UPDATE tbl_nfse_nota SET status=%s, erro_codigo=%s, erro_mensagem=%s,
                    dt_atualizacao=NOW()
-             WHERE id=%s AND id_tenant=%s AND status='processando'
+             WHERE id=%s AND id_tenant=%s AND status IN ('processando','validado')
             """,
             (novo_status, code, (mensagem or "")[:500], id_nota, _tenant()),
         )
@@ -1554,6 +1673,16 @@ def _emitir_nfse_via_hub(conn, nota: dict, id_nota: int):
         }), http
 
     try:
+        try:
+            _garantir_emitente_hub_nfse(conn, nota, ambiente)
+        except ValueError as exc:
+            return jsonify({
+                "success": False,
+                "code": "EMITENTE_HUB",
+                "message": str(exc),
+                "resultado_incerto": False,
+            }), 422
+
         db_execute(
             conn,
             """

@@ -248,11 +248,13 @@ def _entrega_de_shipment(shipment: dict | None) -> dict[str, str]:
         bairro = addr.get("neighborhood") or ""
     return {
         "cep": _digitos(addr.get("zip_code") or addr.get("zipCode")),
+        # Limites alinhados a tbl_pedido (varchar): logradouro 200, numero 20,
+        # complemento/bairro/cidade 100. Truncar acima disso quebra o INSERT.
         "logradouro": (addr.get("street_name") or addr.get("address_line") or "").strip()[:200],
-        "numero": str(addr.get("street_number") or "S/N")[:40],
-        "complemento": (addr.get("comment") or "").strip()[:120],
-        "bairro": bairro.strip()[:120],
-        "cidade": str(cidade or "").strip()[:120],
+        "numero": str(addr.get("street_number") or "S/N")[:20],
+        "complemento": (addr.get("comment") or "").strip()[:100],
+        "bairro": bairro.strip()[:100],
+        "cidade": str(cidade or "").strip()[:100],
         "uf": uf_raw.replace("BR-", "").strip()[:2].upper(),
     }
 
