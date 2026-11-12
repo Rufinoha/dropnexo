@@ -112,6 +112,11 @@ def _json_safe(valor):
         return valor.isoformat()
     if isinstance(valor, Decimal):
         return float(valor)
+    if isinstance(valor, (bytes, bytearray, memoryview)):
+        try:
+            return bytes(valor).decode("utf-8")
+        except Exception:
+            return bytes(valor).hex()
     if isinstance(valor, dict):
         return {k: _json_safe(v) for k, v in valor.items()}
     if isinstance(valor, (list, tuple)):
@@ -666,9 +671,9 @@ def api_notas():
         if termo:
             where.append(
                 "(n.tomador_razao_social ILIKE %s OR coalesce(n.numero_nfse, '') ILIKE %s "
-                "OR coalesce(n.chave_nfse, '') ILIKE %s)"
+                "OR coalesce(n.chave_nfse, '') ILIKE %s OR cast(n.numero_dps as text) ILIKE %s)"
             )
-            params.extend([f"%{termo}%"] * 3)
+            params.extend([f"%{termo}%"] * 4)
         where_sql = " AND ".join(where)
         total = db_execute(
             conn, f"SELECT COUNT(*) FROM tbl_nfse_nota n WHERE {where_sql}", tuple(params)
@@ -682,7 +687,7 @@ def api_notas():
                    n.dt_criacao, n.dt_autorizacao
               FROM tbl_nfse_nota n
              WHERE {where_sql}
-             ORDER BY n.dt_autorizacao DESC NULLS LAST, n.id DESC
+             ORDER BY n.id DESC
              LIMIT %s OFFSET %s
             """,
             tuple(params + [limite, (pagina - 1) * limite]),
@@ -696,6 +701,18 @@ def api_notas():
                 "total": total,
             }
         )
+    except Exception as exc:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return jsonify(
+            {
+                "success": False,
+                "message": "Não foi possível listar as notas.",
+                "detalhe": str(exc)[:400],
+            }
+        ), 500
     finally:
         conn.close()
 

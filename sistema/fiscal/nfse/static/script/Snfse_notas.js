@@ -134,18 +134,57 @@
     }, 1200);
   }
 
+  function aguardarGlobalUtils(ms = 8000) {
+    if (window.GlobalUtils?.requestJSON) return Promise.resolve(true);
+    return new Promise((resolve) => {
+      const t0 = Date.now();
+      const id = setInterval(() => {
+        if (window.GlobalUtils?.requestJSON) {
+          clearInterval(id);
+          resolve(true);
+        } else if (Date.now() - t0 > ms) {
+          clearInterval(id);
+          resolve(false);
+        }
+      }, 25);
+    });
+  }
+
+  function mensagemLista(texto) {
+    listaNotas.innerHTML = `<tr><td colspan="8" class="Fin_Empty">${esc(texto)}</td></tr>`;
+  }
+
   async function carregar() {
     fecharMenu();
+    listaNotas.innerHTML = '<tr><td colspan="8" class="Fin_Empty">Carregando…</td></tr>';
+    if (!(await aguardarGlobalUtils())) {
+      mensagemLista("Não foi possível carregar os utilitários da página. Atualize (F5).");
+      return;
+    }
     const qs = new URLSearchParams({pagina, status: filtroStatus.value, termo: filtroTermo.value});
-    const r = await GlobalUtils.requestJSON({url: `/nfse/api/notas?${qs}`});
-    if (!r?.ok) return;
-    const j = r.json; totalPaginas = j.total_paginas; pagina = j.pagina;
+    let r;
+    try {
+      r = await GlobalUtils.requestJSON({url: `/nfse/api/notas?${qs}`});
+    } catch (e) {
+      mensagemLista(e?.message || "Falha ao consultar as notas.");
+      return;
+    }
+    if (!r) return;
+    if (!r.ok) {
+      const msg = r.json?.message || r.json?.detalhe || "Não foi possível listar as notas.";
+      mensagemLista(msg);
+      return;
+    }
+    const j = r.json || {};
+    const dados = Array.isArray(j.dados) ? j.dados : [];
+    totalPaginas = Number(j.total_paginas) || 1;
+    pagina = Number(j.pagina) || 1;
     notas.clear();
     listaNotas.replaceChildren();
-    if (!j.dados.length) {
-      listaNotas.innerHTML = '<tr><td colspan="8" class="Fin_Empty">Nenhuma nota encontrada.</td></tr>';
+    if (!dados.length) {
+      mensagemLista("Nenhuma nota encontrada.");
     } else {
-      j.dados.forEach(n => {
+      dados.forEach(n => {
         const id = Number(n.id);
         notas.set(id, n);
         const tr = document.createElement("tr");
@@ -153,11 +192,11 @@
         const copiar = chave
           ? `<span class="nfse-chave-linha"><small>${esc(chave)}</small><button type="button" class="nfse-copiar" data-copiar-chave="${esc(chave)}" title="Copiar chave" aria-label="Copiar chave de acesso">${ICO_COPY}</button></span>`
           : "";
-        tr.innerHTML = `<td>${esc(n.numero_dps || "—")}/${esc(n.serie_dps)}</td>
+        tr.innerHTML = `<td>${esc(n.numero_dps || "—")}/${esc(n.serie_dps || "—")}</td>
       <td class="nfse-quando">${dataBR(n.dt_criacao)}</td>
       <td class="nfse-quando">${dataHora(n.dt_autorizacao)}</td>
       <td class="nfse-chave"><strong>${esc(n.numero_nfse || "—")}</strong>${copiar}</td>
-      <td title="${esc(n.cliente)}">${esc(n.cliente)}</td>
+      <td title="${esc(n.cliente)}">${esc(n.cliente || "—")}</td>
       <td class="nfse-valor">R$ ${Number(n.valor_servico || 0).toLocaleString("pt-BR",{minimumFractionDigits:2})}</td>
       <td><span class="nfse-status ${esc(n.status)}">${esc(n.status)}</span></td>`;
         const td = document.createElement("td");
