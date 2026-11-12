@@ -1360,11 +1360,7 @@
           <xs:documentation>Código de tributação municipal do ISSQN</xs:documentation>
         </xs:annotation>
       </xs:element>
-      <xs:element name="xDescServ" type="TSDesc2000">
-        <xs:annotation>
-          <xs:documentation>Descrição completa do serviço prestado</xs:documentation>
-        </xs:annotation>
-      </xs:element>
+      <!-- NT 009 / schema 1.02 (produção restrita): cNBS antes de xDescServ. -->
       <xs:element name="cNBS" type="TSCodNBS" minOccurs="0">
         <xs:annotation>
           <xs:documentation>Código NBS correspondente ao serviço prestado, seguindo a versão 2.0, conforme Anexo B</xs:documentation>
@@ -1375,6 +1371,11 @@
           <xs:documentation>
             Código interno do contribuinte
           </xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="xDescServ" type="TSDesc2000">
+        <xs:annotation>
+          <xs:documentation>Descrição completa do serviço prestado</xs:documentation>
         </xs:annotation>
       </xs:element>
     </xs:sequence>

@@ -197,9 +197,16 @@ def construir_dps(nota: dict, tenant: dict, config: dict, agora: datetime | None
     texto = observacoes or descricao
     if len(texto) > 2000:
         raise ErroDPS("Descrição do serviço passa de 2000 caracteres.")
-    _add(cserv, "xDescServ", texto)
-    if nbs:
-        _add(cserv, "cNBS", nbs)
+    # NT 009 (homologação / schema 1.02): cTribNac → cTribMun? → cNBS? → … → xDescServ por último.
+    # Produção 1.01 ainda usa xDescServ antes de cNBS. Ordem errada → E1235 na Sefin.
+    if ambiente == "homologacao":
+        if nbs:
+            _add(cserv, "cNBS", nbs)
+        _add(cserv, "xDescServ", texto)
+    else:
+        _add(cserv, "xDescServ", texto)
+        if nbs:
+            _add(cserv, "cNBS", nbs)
 
     valores = _add(inf, "valores")
     vserv = _add(valores, "vServPrest")
