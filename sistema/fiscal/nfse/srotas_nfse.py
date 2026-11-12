@@ -224,6 +224,15 @@ def _adicionar_coluna(conn, tabela: str, coluna: str, tipo: str) -> None:
         )
 
 
+def _normalizar_ambiente(valor) -> str | None:
+    amb = str(valor or "").strip().lower()
+    if amb in {"producao", "produção"}:
+        return "producao"
+    if amb in {"homologacao", "homologação"}:
+        return "homologacao"
+    return None
+
+
 def _ambiente_nfse_tenant(conn, id_tenant: int | None = None) -> str:
     cur = db_execute(
         conn,
@@ -234,26 +243,127 @@ def _ambiente_nfse_tenant(conn, id_tenant: int | None = None) -> str:
         (int(id_tenant or _tenant()),),
     )
     row = cur.fetchone()
-    amb = (row[0] if row else "homologacao") or "homologacao"
-    amb = str(amb).strip().lower()
-    return "producao" if amb == "producao" else "homologacao"
+    return _normalizar_ambiente(row[0] if row else None) or "homologacao"
+
+
+def _ambiente_de_tpamb(tp_amb) -> str | None:
+    digito = str(tp_amb or "").strip()
+    if digito == "1":
+        return "producao"
+    if digito == "2":
+        return "homologacao"
+    return None
+
+
+def _ambiente_de_xml(xml_blob) -> str | None:
+    if not xml_blob:
+        return None
+    try:
+        root = etree.fromstring(
+            xml_blob if isinstance(xml_blob, (bytes, bytearray)) else str(xml_blob).encode("utf-8")
+        )
+    except Exception:
+        return None
+    for el in root.xpath("//*[local-name()='tpAmb']"):
+        amb = _ambiente_de_tpamb(el.text)
+        if amb:
+            return amb
+    return None
+
+
+def _ambiente_de_metadata(meta) -> str | None:
+    if isinstance(meta, str):
+        try:
+            meta = json.loads(meta)
+        except Exception:
+            return None
+    if not isinstance(meta, dict):
+        return None
+    for chave in ("ambiente", "tpAmb", "tipoAmbiente", "tipo_ambiente"):
+        if chave not in meta:
+            continue
+        amb = _normalizar_ambiente(meta.get(chave)) or _ambiente_de_tpamb(meta.get(chave))
+        if amb:
+            return amb
+    return None
+
+
+def _ambiente_historico_nota(conn, row: dict) -> str | None:
+    """Ambiente em que a nota foi emitida — nunca usa o tenant/Hub atuais."""
+    amb = _normalizar_ambiente((row or {}).get("ambiente"))
+    if amb:
+        return amb
+    amb = _ambiente_de_metadata((row or {}).get("resposta_metadata"))
+    if amb:
+        return amb
+    for col in ("xml_dps_encriptado", "xml_nfse_encriptado"):
+        blob = (row or {}).get(col)
+        if not blob:
+            continue
+        try:
+            amb = _ambiente_de_xml(descriptografar(blob))
+        except Exception:
+            amb = None
+        if amb:
+            return amb
+    return None
+
+
+def _corrigir_ambiente_notas(conn, rows: list[dict]) -> list[dict]:
+    """Congela o ambiente histórico por nota; preenche se estiver vazio."""
+    out = []
+    for row in rows or []:
+        item = dict(row or {})
+        amb = _normalizar_ambiente(item.get("ambiente"))
+        if amb:
+            item["ambiente"] = amb
+            out.append(item)
+            continue
+        if item.get("id") and not (
+            item.get("xml_dps_encriptado")
+            or item.get("xml_nfse_encriptado")
+            or item.get("resposta_metadata")
+        ):
+            try:
+                cur = db_execute(
+                    conn,
+                    """
+                    SELECT ambiente, xml_dps_encriptado, xml_nfse_encriptado, resposta_metadata
+                      FROM tbl_nfse_nota
+                     WHERE id=%s AND id_tenant=%s
+                     LIMIT 1
+                    """,
+                    (item.get("id"), _tenant()),
+                )
+                extra = _dict_rows(cur)
+                if extra:
+                    item.update({k: v for k, v in extra[0].items() if v is not None})
+            except Exception:
+                pass
+        amb = _ambiente_historico_nota(conn, item)
+        if amb and item.get("id"):
+            try:
+                db_execute(
+                    conn,
+                    """
+                    UPDATE tbl_nfse_nota
+                       SET ambiente=%s, dt_atualizacao=NOW()
+                     WHERE id=%s AND id_tenant=%s
+                       AND (ambiente IS NULL OR TRIM(COALESCE(ambiente, ''))='')
+                    """,
+                    (amb, item["id"], _tenant()),
+                )
+            except Exception:
+                pass
+        item["ambiente"] = amb
+        item.pop("xml_dps_encriptado", None)
+        item.pop("xml_nfse_encriptado", None)
+        out.append(item)
+    return out
 
 
 def _ambiente_emissao(conn, nota: dict | None = None) -> str:
-    """
-    Ambiente efetivo da emissão via Hub.
-    Prioridade: Hub H74 (Configurações) → ambiente da nota → Empresa fiscal.
-    """
-    from api.fiscal.focus_nfe import token_configurado
-    from api.fiscal.hub_nfe_config import obter_credenciais
-
-    if token_configurado(escopo="nfse") or token_configurado(escopo="nfe"):
-        amb = (obter_credenciais(conn).get("ambiente") or "").strip().lower()
-        if amb in {"homologacao", "producao"}:
-            return amb
-    amb = ((nota or {}).get("ambiente") or "").strip().lower()
-    if amb in {"homologacao", "producao"}:
-        return amb
+    """Ambiente efetivo da emissão: fonte única = aba Ambiente e numeração (tenant)."""
     return _ambiente_nfse_tenant(conn)
 
 
@@ -759,24 +869,23 @@ def api_notas():
             SELECT n.id, n.numero_dps, n.serie_dps, n.numero_nfse, n.chave_nfse,
                    n.tomador_razao_social AS cliente, n.competencia, n.valor_servico,
                    n.status, n.erro_codigo, n.erro_mensagem, n.resposta_metadata,
-                   n.dt_criacao, n.dt_autorizacao,
-                   CASE
-                     WHEN lower(coalesce(nullif(trim(n.ambiente), ''), nullif(trim(t.ambiente_nfse), ''), 'homologacao'))
-                          = 'producao' THEN 'producao'
-                     ELSE 'homologacao'
-                   END AS ambiente
+                   n.dt_criacao, n.dt_autorizacao, n.ambiente
               FROM tbl_nfse_nota n
-              JOIN tbl_tenant t ON t.id = n.id_tenant
              WHERE {where_sql}
              ORDER BY n.id DESC
              LIMIT %s OFFSET %s
             """,
             tuple(params + [limite, (pagina - 1) * limite]),
         )
+        rows = _corrigir_ambiente_notas(conn, _dict_rows(cur))
+        try:
+            conn.commit()
+        except Exception:
+            pass
         return jsonify(
             {
                 "success": True,
-                "dados": [_payload_row(r) for r in _dict_rows(cur)],
+                "dados": [_payload_row(r) for r in rows],
                 "pagina": pagina,
                 "total_paginas": max(1, (total + limite - 1) // limite),
                 "total": total,
@@ -1525,7 +1634,7 @@ def _validar_nota(conn, id_nota: int) -> list[str]:
                         CASE WHEN UPPER(COALESCE(t.tipo_pessoa,''))='J'
                              THEN NULLIF(TRIM(t.documento),'') END) AS prestador_cnpj,
                t.inscricao_municipal, t.municipio_ibge_codigo, t.uf,
-               COALESCE(NULLIF(TRIM(t.ambiente_nfse), ''), 'homologacao') AS ambiente,
+               COALESCE(NULLIF(TRIM(n.ambiente), ''), NULLIF(TRIM(t.ambiente_nfse), ''), 'homologacao') AS ambiente,
                COALESCE(NULLIF(TRIM(t.regime_tributario), ''), 'simples_nacional') AS regime_tributario,
                COALESCE(t.optante_simples, TRUE) AS optante_simples,
                t.regime_especial_tributacao,
@@ -1754,15 +1863,20 @@ def _emitir_nfse_via_hub(conn, nota: dict, id_nota: int):
             conn,
             """
             UPDATE tbl_nfse_nota
-               SET status='processando', id_dps=%s,
+               SET status='processando', id_dps=%s, ambiente=%s,
                    erro_codigo=NULL, erro_mensagem=NULL,
                    dt_inicio_processamento=NOW(), dt_ultima_tentativa=NOW(),
                    dt_atualizacao=NOW()
              WHERE id=%s AND id_tenant=%s
             """,
-            (ref, id_nota, _tenant()),
+            (ref, ambiente, id_nota, _tenant()),
         )
-        _auditar(conn, "emissao_iniciada", f"Emissão via hub H74 (ref={ref}).", id_nota)
+        _auditar(
+            conn,
+            "emissao_iniciada",
+            f"Emissão via hub H74 (ref={ref}, ambiente={ambiente}).",
+            id_nota,
+        )
         conn.commit()
 
         try:
@@ -1893,7 +2007,7 @@ def api_nota_emitir(id_nota):
                             CASE WHEN UPPER(COALESCE(t.tipo_pessoa,''))='J'
                                  THEN NULLIF(TRIM(t.documento),'') END) AS prestador_cnpj,
                    t.inscricao_municipal, t.municipio_ibge_codigo,
-                   COALESCE(NULLIF(TRIM(t.ambiente_nfse), ''), 'homologacao') AS ambiente,
+                   COALESCE(NULLIF(TRIM(n.ambiente), ''), NULLIF(TRIM(t.ambiente_nfse), ''), 'homologacao') AS ambiente,
                    COALESCE(NULLIF(TRIM(t.regime_tributario), ''), 'simples_nacional') AS regime_tributario,
                    COALESCE(t.optante_simples, TRUE) AS optante_simples,
                    t.regime_especial_tributacao, t.percentual_tributos_sn,
@@ -1969,15 +2083,26 @@ def api_nota_emitir(id_nota):
             conn,
             """
             UPDATE tbl_nfse_nota
-               SET status='processando', id_dps=%s, xml_dps_encriptado=%s,
+               SET status='processando', id_dps=%s, xml_dps_encriptado=%s, ambiente=%s,
                    erro_codigo=NULL, erro_mensagem=NULL,
                    dt_inicio_processamento=NOW(), dt_ultima_tentativa=NOW(),
                    dt_atualizacao=NOW()
              WHERE id=%s AND id_tenant=%s
             """,
-            (id_dps, criptografar(xml_assinado), id_nota, _tenant()),
+            (
+                id_dps,
+                criptografar(xml_assinado),
+                (nota.get("ambiente") or "homologacao"),
+                id_nota,
+                _tenant(),
+            ),
         )
-        _auditar(conn, "emissao_iniciada", "DPS marcada como processando antes da transmissão.", id_nota)
+        _auditar(
+            conn,
+            "emissao_iniciada",
+            f"DPS marcada como processando (ambiente={nota.get('ambiente') or 'homologacao'}).",
+            id_nota,
+        )
         conn.commit()
 
         resultado = adapter.emitir(xml_assinado, pfx, senha)
@@ -2519,7 +2644,7 @@ def api_nota_reconciliar(id_nota):
                    COALESCE(NULLIF(TRIM(t.cnpj), ''),
                             CASE WHEN UPPER(COALESCE(t.tipo_pessoa,''))='J'
                                  THEN NULLIF(TRIM(t.documento),'') END) AS prestador_cnpj,
-                   COALESCE(NULLIF(TRIM(t.ambiente_nfse), ''), 'homologacao') AS ambiente,
+                   COALESCE(NULLIF(TRIM(n.ambiente), ''), NULLIF(TRIM(t.ambiente_nfse), ''), 'homologacao') AS ambiente,
                    cert.conteudo_encriptado, cert.senha_encriptada
               FROM tbl_nfse_nota n
               JOIN tbl_tenant t ON t.id=n.id_tenant
@@ -2710,7 +2835,7 @@ def api_nota_cancelar(id_nota):
             conn,
             """
             SELECT n.id, n.status, n.chave_nfse, n.dt_autorizacao, n.resposta_metadata,
-                   COALESCE(NULLIF(TRIM(t.ambiente_nfse), ''), 'homologacao') AS ambiente,
+                   COALESCE(NULLIF(TRIM(n.ambiente), ''), NULLIF(TRIM(t.ambiente_nfse), ''), 'homologacao') AS ambiente,
                    COALESCE(NULLIF(TRIM(t.cnpj), ''),
                             CASE WHEN UPPER(COALESCE(t.tipo_pessoa,''))='J'
                                  THEN NULLIF(TRIM(t.documento),'') END) AS cnpj,

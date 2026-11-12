@@ -49,10 +49,13 @@
   function statusHtml(n) {
     const status = String(n?.status || "");
     const amb = String(n?.ambiente || "").toLowerCase();
-    const marcaHomolog = amb === "homologacao"
-      ? `<small class="nfse-amb-homolog">homologação</small>`
-      : "";
-    return `<span class="nfse-status ${esc(status)}">${esc(status)}</span>${marcaHomolog}`;
+    let marcaAmb = `<small class="nfse-amb-indefinido" title="Ambiente de emissão não gravado nesta nota">ambiente?</small>`;
+    if (amb === "homologacao") {
+      marcaAmb = `<small class="nfse-amb-homolog">homologação</small>`;
+    } else if (amb === "producao") {
+      marcaAmb = `<small class="nfse-amb-producao">produção</small>`;
+    }
+    return `<span class="nfse-status ${esc(status)}">${esc(status)}</span>${marcaAmb}`;
   }
 
   function fecharMenu() {
