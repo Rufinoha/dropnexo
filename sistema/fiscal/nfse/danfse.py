@@ -11,6 +11,8 @@ import qrcode
 from lxml import etree
 
 PRETO = (0, 0, 0)
+VERMELHO_HOMOLOG = (1, 0, 0)  # NT 008: M100/Y100
+CINZA_MARCA = (0.65, 0.65, 0.65)
 # Code 128, índices 0–105. O padrão de parada é acrescentado na hora de desenhar.
 _BARRAS = (
     "11011001100", "11001101100", "11001100110", "10010011000", "10010001100",
@@ -409,6 +411,8 @@ def _extrair(xml: bytes | None, nota: dict) -> dict:
         "inss": _moeda(_bruto(fed, "vRetCP")),
         "extra": _bruto(inf, "xOutInf"),
         "cancelada": str(nota.get("status") or "") == "cancelada",
+        "tp_amb": _bruto(dps, "tpAmb") or _bruto(inf, "tpAmb"),
+        "homologacao": _nota_homologacao(nota, _bruto(dps, "tpAmb") or _bruto(inf, "tpAmb")),
     }
 
 
@@ -527,11 +531,65 @@ def _rotulo(pagina, x, y, w, h, rotulo, valor, tamanho=7.5, fonte="helv", alinha
         pagina.insert_textbox(rect, texto, fontsize=6, fontname=fonte, color=PRETO, align=alinhar)
 
 
-def _centralizar(pagina, x, y, w, texto, tamanho, fonte="hebo"):
+def _centralizar(pagina, x, y, w, texto, tamanho, fonte="hebo", color=PRETO):
     if not texto:
         return
     largura = fitz.get_text_length(texto, fontname=fonte, fontsize=tamanho)
-    pagina.insert_text((x + max(0, (w - largura) / 2), y), texto, fontsize=tamanho, fontname=fonte, color=PRETO)
+    pagina.insert_text(
+        (x + max(0, (w - largura) / 2), y),
+        texto,
+        fontsize=tamanho,
+        fontname=fonte,
+        color=color,
+    )
+
+
+def _nota_homologacao(nota: dict | None, tp_amb: str = "") -> bool:
+    amb = str((nota or {}).get("ambiente") or "").strip().lower()
+    if amb in {"homologacao", "homologação"}:
+        return True
+    if amb in {"producao", "produção"}:
+        return False
+    return str(tp_amb or "").strip() == "2"
+
+
+def _marca_dagua_homologacao(pagina) -> None:
+    """Marca diagonal visível (além do texto obrigatório do cabeçalho na NT 008)."""
+    rect = pagina.rect
+    pagina.insert_text(
+        (rect.width * 0.12, rect.height * 0.58),
+        "NFS-e SEM VALIDADE JURÍDICA",
+        fontsize=28,
+        fontname="hebo",
+        color=CINZA_MARCA,
+        rotate=45,
+        overlay=True,
+    )
+
+
+def carimbar_danfse_homologacao(pdf: bytes) -> bytes:
+    """Garante o aviso de homologação em PDF baixado da ADN/Hub ou gerado localmente."""
+    if not pdf or not pdf.startswith(b"%PDF"):
+        return pdf
+    doc = fitz.open(stream=pdf, filetype="pdf")
+    try:
+        for pagina in doc:
+            texto = (pagina.get_text("text") or "").upper()
+            if "SEM VALIDADE JURÍDICA" in texto or "SEM VALOR FISCAL" in texto:
+                continue
+            # Cabeçalho: abaixo do título, conforme NT 008 §2.4.3.
+            pagina.insert_text(
+                (210, 48),
+                "NFS-e SEM VALIDADE JURÍDICA",
+                fontsize=9,
+                fontname="hebo",
+                color=VERMELHO_HOMOLOG,
+                overlay=True,
+            )
+            _marca_dagua_homologacao(pagina)
+        return doc.tobytes()
+    finally:
+        doc.close()
 
 
 def _canhoto(pagina, dados: dict, nota: dict, esq: float, direita: float):
@@ -632,12 +690,36 @@ def gerar_danfse(xml: bytes | None, nota: dict) -> bytes:
     meio_w = x_qr - x_meio
     _centralizar(pagina, x_meio, y + 12, meio_w, "DANFSe", 13)
     _centralizar(pagina, x_meio, y + 22, meio_w, "DOCUMENTO AUXILIAR DA NFS-e", 5.5, "helv")
+    # NT 008 §2.4.3: homologação (tpAmb=2) exige "NFS-e SEM VALIDADE JURÍDICA" em vermelho.
     if nota.get("modelo"):
-        _centralizar(pagina, x_meio, y + 31, meio_w, "MODELO - SEM VALOR FISCAL", 5.8)
+        _centralizar(pagina, x_meio, y + 31, meio_w, "MODELO - SEM VALOR FISCAL", 5.8, color=VERMELHO_HOMOLOG)
+    elif d.get("homologacao"):
+        _centralizar(
+            pagina,
+            x_meio,
+            y + 31,
+            meio_w,
+            "NFS-e SEM VALIDADE JURÍDICA",
+            7.2,
+            color=VERMELHO_HOMOLOG,
+        )
     elif d["cancelada"]:
         _centralizar(pagina, x_meio, y + 31, meio_w, "CANCELADA", 7)
     else:
         _centralizar(pagina, x_meio, y + 31, meio_w, d["municipio"], 6, "helv")
+    if d.get("homologacao") and not nota.get("modelo"):
+        _marca_dagua_homologacao(pagina)
+    if d["cancelada"] and not nota.get("modelo"):
+        # NT 008 §2.5.1 — marca d'água CANCELADA.
+        pagina.insert_text(
+            (pagina.rect.width * 0.28, pagina.rect.height * 0.55),
+            "CANCELADA",
+            fontsize=50,
+            fontname="hebo",
+            color=CINZA_MARCA,
+            rotate=45,
+            overlay=True,
+        )
     grade_y = y + 34
     campos_cab = (
         ("NFS-e", d["numero"], 0.85, 9),

@@ -28,7 +28,7 @@ from sistema.fiscal.nfse.crypto_certificado import (
     ler_pkcs12,
     validar_configuracao_criptografica,
 )
-from sistema.fiscal.nfse.danfse import gerar_danfse, gerar_danfse_modelo
+from sistema.fiscal.nfse.danfse import carimbar_danfse_homologacao, gerar_danfse, gerar_danfse_modelo
 from sistema.fiscal.nfse.importar_nfse import (
     avancar_cursor,
     chave_cancelamento,
@@ -2811,14 +2811,25 @@ def api_nota_danfse(id_nota):
             return jsonify({"success": False, "message": "DANFSe disponível somente para NFS-e autorizada ou cancelada."}), 404
         xml = descriptografar(nota["xml_nfse_encriptado"]) if nota.get("xml_nfse_encriptado") else None
         pdf = None
+        ambiente_nota = _normalizar_ambiente(nota.get("ambiente"))
+        if not ambiente_nota and xml:
+            try:
+                from sistema.fiscal.nfse.danfse import _extrair
+
+                ambiente_nota = "homologacao" if _extrair(xml, nota).get("homologacao") else "producao"
+            except Exception:
+                ambiente_nota = None
         if nota.get("chave_nfse") and nota.get("conteudo_encriptado"):
-            pdf = AdapterNacional(nota.get("ambiente") or "producao").baixar_danfse(
+            pdf = AdapterNacional(ambiente_nota or "producao").baixar_danfse(
                 nota["chave_nfse"],
                 descriptografar(nota["conteudo_encriptado"]),
                 descriptografar(nota["senha_encriptada"]).decode("utf-8"),
             )
         if not pdf:
             pdf = gerar_danfse(xml, nota)
+        # Homologação: NT 008 exige "NFS-e SEM VALIDADE JURÍDICA" (também carimba PDF da ADN).
+        if (ambiente_nota or "homologacao") == "homologacao":
+            pdf = carimbar_danfse_homologacao(pdf)
         nome = f"DANFSe-{nota.get('numero_nfse') or id_nota}.pdf"
         return Response(pdf, mimetype="application/pdf", headers={"Content-Disposition": f'inline; filename="{nome}"'})
     finally:
