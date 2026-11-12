@@ -42,6 +42,14 @@
   function emitida(status) {
     return status === "autorizada" || status === "cancelada";
   }
+  function statusHtml(n) {
+    const status = String(n?.status || "");
+    const amb = String(n?.ambiente || "").toLowerCase();
+    const marcaHomolog = amb === "homologacao"
+      ? `<small class="nfse-amb-homolog">homologação</small>`
+      : "";
+    return `<span class="nfse-status ${esc(status)}">${esc(status)}</span>${marcaHomolog}`;
+  }
 
   function fecharMenu() {
     if (!menuAberto) return;
@@ -198,7 +206,7 @@
       <td class="nfse-chave"><strong>${esc(n.numero_nfse || "—")}</strong>${copiar}</td>
       <td title="${esc(n.cliente)}">${esc(n.cliente || "—")}</td>
       <td class="nfse-valor">R$ ${Number(n.valor_servico || 0).toLocaleString("pt-BR",{minimumFractionDigits:2})}</td>
-      <td><span class="nfse-status ${esc(n.status)}">${esc(n.status)}</span></td>`;
+      <td class="nfse-status-cel">${statusHtml(n)}</td>`;
         const td = document.createElement("td");
         td.className = "Cl_TableActions";
         const btn = document.createElement("button");

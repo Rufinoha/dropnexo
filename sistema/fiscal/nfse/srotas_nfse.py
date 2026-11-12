@@ -224,11 +224,27 @@ def _adicionar_coluna(conn, tabela: str, coluna: str, tipo: str) -> None:
         )
 
 
+def _ambiente_nfse_tenant(conn, id_tenant: int | None = None) -> str:
+    cur = db_execute(
+        conn,
+        """
+        SELECT COALESCE(NULLIF(TRIM(ambiente_nfse), ''), 'homologacao')
+          FROM tbl_tenant WHERE id=%s
+        """,
+        (int(id_tenant or _tenant()),),
+    )
+    row = cur.fetchone()
+    amb = (row[0] if row else "homologacao") or "homologacao"
+    amb = str(amb).strip().lower()
+    return "producao" if amb == "producao" else "homologacao"
+
+
 def _garantir_partes_operacao(conn) -> None:
     for nome, tipo in (
         ("id_destinatario_empresa", "INTEGER NULL"),
         ("id_intermediario_empresa", "INTEGER NULL"),
         ("observacoes", "TEXT NULL"),
+        ("ambiente", "VARCHAR(20) NULL"),
     ):
         try:
             _adicionar_coluna(conn, "tbl_nfse_nota", nome, tipo)
@@ -715,6 +731,7 @@ def api_notas():
             )
             params.extend([f"%{termo}%"] * 4)
         where_sql = " AND ".join(where)
+        _garantir_partes_operacao(conn)
         total = db_execute(
             conn, f"SELECT COUNT(*) FROM tbl_nfse_nota n WHERE {where_sql}", tuple(params)
         ).fetchone()[0]
@@ -724,8 +741,14 @@ def api_notas():
             SELECT n.id, n.numero_dps, n.serie_dps, n.numero_nfse, n.chave_nfse,
                    n.tomador_razao_social AS cliente, n.competencia, n.valor_servico,
                    n.status, n.erro_codigo, n.erro_mensagem, n.resposta_metadata,
-                   n.dt_criacao, n.dt_autorizacao
+                   n.dt_criacao, n.dt_autorizacao,
+                   CASE
+                     WHEN lower(coalesce(nullif(trim(n.ambiente), ''), nullif(trim(t.ambiente_nfse), ''), 'homologacao'))
+                          = 'producao' THEN 'producao'
+                     ELSE 'homologacao'
+                   END AS ambiente
               FROM tbl_nfse_nota n
+              JOIN tbl_tenant t ON t.id = n.id_tenant
              WHERE {where_sql}
              ORDER BY n.id DESC
              LIMIT %s OFFSET %s
@@ -1349,11 +1372,12 @@ def api_nota_salvar():
                     codigo_tributacao_nacional=%s, codigo_nbs=%s, descricao_servico=%s,
                     incidencia_municipio_ibge=%s, iss_retido=%s, aliquota_iss=%s,
                     retencoes_json=%s::jsonb, ibs_cbs_json=%s::jsonb, observacoes=%s,
+                    ambiente=%s,
                     status='rascunho', erro_codigo=NULL, erro_mensagem=NULL, dt_atualizacao=NOW()
                  WHERE id=%s AND id_tenant=%s AND status IN ('rascunho','validado','rejeitada')
                  RETURNING id
                 """,
-                (*campos_tomador, id_nota, _tenant()),
+                (*campos_tomador, _ambiente_nfse_tenant(conn), id_nota, _tenant()),
             )
         else:
             from sistema.fiscal.nfse.tenant_fiscal import (
@@ -1374,7 +1398,7 @@ def api_nota_salvar():
                 (_tenant(),),
             ).fetchone()
             if not config:
-                return jsonify({"success": False, "message": "Tenant não encontrado.", "erros": ["config"]}), 400
+                return jsonify({"success": False, "message": "Empresa não encontrada.", "erros": ["config"]}), 400
             if config[2] != "J":
                 return jsonify({
                     "success": False,
@@ -1388,6 +1412,7 @@ def api_nota_salvar():
                     "message": "Complete a Empresa fiscal (CNPJ e razão social) antes de criar a DPS.",
                     "erros": ["config"],
                 }), 400
+            ambiente_nota = _ambiente_nfse_tenant(conn)
             cur = db_execute(
                 conn,
                 """
@@ -1399,10 +1424,10 @@ def api_nota_salvar():
                     tomador_cidade, tomador_uf, tomador_cep, tomador_telefone,
                     codigo_servico, codigo_tributacao_nacional, codigo_nbs, descricao_servico,
                     incidencia_municipio_ibge, iss_retido, aliquota_iss, retencoes_json,
-                    ibs_cbs_json, observacoes, criado_por
+                    ibs_cbs_json, observacoes, criado_por, ambiente
                 ) VALUES (
                     %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
-                    %s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s::jsonb,%s,%s
+                    %s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s::jsonb,%s,%s,%s
                 )
                 RETURNING id
                 """,
@@ -1417,6 +1442,7 @@ def api_nota_salvar():
                     local_ibge, perfil["iss_retido"], perfil["aliquota_iss"],
                     _json_dumps(retencoes), _json_dumps(perfil.get("ibs_cbs_json") or {}),
                     (dados.get("observacoes") or "").strip() or None, id_usuario,
+                    ambiente_nota,
                 ),
             )
             db_execute(
@@ -1749,6 +1775,7 @@ def _emitir_nfse_via_hub(conn, nota: dict, id_nota: int):
                 """
                 UPDATE tbl_nfse_nota SET status='autorizada', numero_nfse=%s, chave_nfse=%s,
                        xml_nfse_encriptado=%s, resposta_metadata=%s::jsonb,
+                       ambiente=%s,
                        erro_codigo=NULL, erro_mensagem=NULL, dt_autorizacao=NOW(),
                        dt_atualizacao=NOW()
                  WHERE id=%s AND id_tenant=%s AND status='processando'
@@ -1756,7 +1783,7 @@ def _emitir_nfse_via_hub(conn, nota: dict, id_nota: int):
                 (
                     numero, chave,
                     criptografar(xml_blob) if xml_blob else None,
-                    metadata, id_nota, _tenant(),
+                    metadata, ambiente, id_nota, _tenant(),
                 ),
             )
             _auditar(conn, "nfse_autorizada", "NFS-e autorizada via hub H74.", id_nota)
@@ -1933,13 +1960,16 @@ def api_nota_emitir(id_nota):
                 """
                 UPDATE tbl_nfse_nota SET status='autorizada', numero_nfse=%s, chave_nfse=%s,
                        xml_nfse_encriptado=%s, resposta_metadata=%s::jsonb,
+                       ambiente=%s,
                        erro_codigo=NULL, erro_mensagem=NULL, dt_autorizacao=NOW(),
                        dt_atualizacao=NOW()
                  WHERE id=%s AND id_tenant=%s AND status='processando'
                 """,
                 (
                     resultado.numero_nfse, resultado.chave_nfse,
-                    criptografar(resultado.xml_nfse), metadata, id_nota, _tenant(),
+                    criptografar(resultado.xml_nfse), metadata,
+                    (nota.get("ambiente") or "homologacao"),
+                    id_nota, _tenant(),
                 ),
             )
             _auditar(conn, "nfse_autorizada", "NFS-e autorizada pela API Nacional.", id_nota)
