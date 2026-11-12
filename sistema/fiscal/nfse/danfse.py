@@ -553,18 +553,25 @@ def _nota_homologacao(nota: dict | None, tp_amb: str = "") -> bool:
     return str(tp_amb or "").strip() == "2"
 
 
-def _marca_dagua_homologacao(pagina) -> None:
-    """Marca diagonal visível (além do texto obrigatório do cabeçalho na NT 008)."""
+def _marca_dagua_texto(pagina, texto: str, *, fontsize: float = 28) -> None:
+    """Marca d'água diagonal (PyMuPDF só gira 0/90/180/270 em rotate=; usamos morph)."""
     rect = pagina.rect
+    ponto = fitz.Point(rect.width * 0.18, rect.height * 0.62)
+    mat = fitz.Matrix(1, 1).prerotate(45)
     pagina.insert_text(
-        (rect.width * 0.12, rect.height * 0.58),
-        "NFS-e SEM VALIDADE JURÍDICA",
-        fontsize=28,
+        ponto,
+        texto,
+        fontsize=fontsize,
         fontname="hebo",
         color=CINZA_MARCA,
-        rotate=45,
+        morph=(ponto, mat),
         overlay=True,
     )
+
+
+def _marca_dagua_homologacao(pagina) -> None:
+    """Marca diagonal visível (além do texto obrigatório do cabeçalho na NT 008)."""
+    _marca_dagua_texto(pagina, "NFS-e SEM VALIDADE JURÍDICA", fontsize=26)
 
 
 def carimbar_danfse_homologacao(pdf: bytes) -> bytes:
@@ -711,15 +718,7 @@ def gerar_danfse(xml: bytes | None, nota: dict) -> bytes:
         _marca_dagua_homologacao(pagina)
     if d["cancelada"] and not nota.get("modelo"):
         # NT 008 §2.5.1 — marca d'água CANCELADA.
-        pagina.insert_text(
-            (pagina.rect.width * 0.28, pagina.rect.height * 0.55),
-            "CANCELADA",
-            fontsize=50,
-            fontname="hebo",
-            color=CINZA_MARCA,
-            rotate=45,
-            overlay=True,
-        )
+        _marca_dagua_texto(pagina, "CANCELADA", fontsize=50)
     grade_y = y + 34
     campos_cab = (
         ("NFS-e", d["numero"], 0.85, 9),
