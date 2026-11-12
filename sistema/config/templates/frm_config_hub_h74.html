@@ -9,10 +9,10 @@
 <div class="Cl_ContainerApoio cl-page-principal HsCfg_Wrap">
   <div class="cl-page-title HsCfg_TitleRow">
     <div>
-      <h2>Hub H74 · NF-e</h2>
+      <h2>Hub H74 · NF-e e NFS-e</h2>
       <p class="cl-page-desc">
-        Credenciais do DropNexo no Painel NF-e do H74. O token fica criptografado no banco
-        (prioridade sobre o <code>.env</code>).
+        Credenciais do DropNexo no Painel NF-e do H74. Tokens ficam criptografados no banco
+        (prioridade sobre o <code>.env</code>). O emitente é sempre o CNPJ do tenant.
       </p>
     </div>
     <div class="HsCfg_Acoes">
@@ -34,22 +34,34 @@
     <section class="HsCfg_Panel">
       <h3>Credenciais</h3>
       <p class="HsCfg_Hint" id="hn_dica">
-        No H74 Painel → HUB → Painel NF-e, crie/reutilize o sistema com código
-        <code>dropnexo</code> e cole o token aqui.
+        No H74 Painel → HUB → Painel NF-e, use o sistema <code>dropnexo</code> e copie
+        os dois tokens (NF-e e NFS-e).
       </p>
 
-      <label class="Cl_Label" for="hn_baseUrl">URL do Hub NF-e</label>
+      <label class="Cl_Label" for="hn_baseUrl">URL do Hub</label>
       <input type="url" id="hn_baseUrl" class="Cl_Input" placeholder="https://…/api ou http://127.0.0.1:5280" />
       <p class="HsCfg_Atual" id="hn_urlAtual"></p>
 
-      <label class="Cl_Label" for="hn_token">Token (HUB_NFE_TOKEN)</label>
+      <label class="Cl_Label" for="hn_token">Token NF-e (HUB_NFE_TOKEN)</label>
       <input type="password" id="hn_token" class="Cl_Input HsCfg_Segredo" autocomplete="new-password"
-             placeholder="Cole o token gerado no H74 (aparece uma vez)" />
+             placeholder="Token de NF-e gerado no H74 (aparece uma vez)" />
       <p class="HsCfg_Atual" id="hn_tokenAtual"></p>
+
+      <label class="Cl_Label" for="hn_tokenNfse">Token NFS-e (HUB_NFSE_TOKEN)</label>
+      <input type="password" id="hn_tokenNfse" class="Cl_Input HsCfg_Segredo" autocomplete="new-password"
+             placeholder="Token de NFS-e (outro valor; aparece uma vez)" />
+      <p class="HsCfg_Atual" id="hn_tokenNfseAtual"></p>
+
+      <label class="Cl_Label" for="hn_ambiente">Ambiente (X-Ambiente)</label>
+      <select id="hn_ambiente" class="Cl_Input">
+        <option value="homologacao">Homologação</option>
+        <option value="producao">Produção</option>
+      </select>
+      <p class="HsCfg_Hint" id="hn_ambienteAtual"></p>
 
       <p class="HsCfg_Hint">
         Header <code>X-Sistema</code>: <code id="hn_xSistema">dropnexo</code>.
-        Deixe o campo mascarado para manter o valor atual.
+        Deixe o campo mascarado para manter o valor atual. Produção só com autorização da H74.
       </p>
     </section>
 
@@ -57,13 +69,15 @@
       <h3>Como obter</h3>
       <ol class="HsCfg_Hint" style="margin:0;padding-left:1.2rem;line-height:1.55">
         <li>Abra o <strong>H74 Painel → HUB → Painel NF-e</strong>.</li>
-        <li>Em Sistemas, use código <code>dropnexo</code> e clique em <strong>Criar token</strong> / <strong>Novo token</strong>.</li>
-        <li>Cole a URL do hub e o token neste card e salve.</li>
-        <li>Use <strong>Testar conexão</strong> para validar autenticação.</li>
+        <li>Em Sistemas, use código <code>dropnexo</code> e gere <strong>dois</strong> tokens (NF-e e NFS-e).</li>
+        <li>Cadastre o emitente do tenant em <code>/v2/empresas</code> (CNPJ + A1 do tenant).</li>
+        <li>Cole URL e tokens neste card, escolha Homologação e salve.</li>
+        <li>Use <strong>Testar conexão</strong> para validar NF-e e NFS-e.</li>
       </ol>
       <p class="HsCfg_Hint" style="margin-top:1rem">
-        Fallback: se o banco estiver vazio, ainda lê <code>HUB_NFE_URL</code> e
-        <code>HUB_NFE_TOKEN</code> do <code>.env</code>.
+        Fallback: se o banco estiver vazio, lê <code>HUB_NFE_URL</code>,
+        <code>HUB_NFE_TOKEN</code>, <code>HUB_NFSE_TOKEN</code> e
+        <code>HUB_NFE_AMBIENTE</code> do <code>.env</code>.
       </p>
     </section>
   </div>
@@ -74,5 +88,5 @@
   "apiSalvar": url_for("config.hub_h74_salvar"),
   "apiTestar": url_for("config.hub_h74_testar")
 } | tojson }}</script>
-<script defer src="{{ url_for('config.static', filename='script/Sconfig_hub_h74.js') }}?v=1"></script>
+<script defer src="{{ url_for('config.static', filename='script/Sconfig_hub_h74.js') }}?v=2"></script>
 {% endblock %}

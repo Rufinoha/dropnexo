@@ -788,6 +788,25 @@
           </xs:documentation>
         </xs:annotation>
       </xs:element>
+      <!-- NT 009: finNFSe reposicionado para infDPS (antes de cLocEmi). -->
+      <xs:element name="finNFSe" type="TSRTCFinNFSe">
+        <xs:annotation>
+          <xs:documentation>
+            Indicador da finalidade da emissão de NFS-e:
+            0 - NFS-e regular; 1 - NFS-e de crédito; 2 - NFS-e de débito.
+          </xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element minOccurs="0" name="tpNFSeDebito" type="xs:string">
+        <xs:annotation>
+          <xs:documentation>Tipo de NFS-e de ajuste de débito (quando finNFSe = 2).</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element minOccurs="0" name="tpNFSeCredito" type="xs:string">
+        <xs:annotation>
+          <xs:documentation>Tipo de NFS-e de ajuste de crédito (quando finNFSe = 1).</xs:documentation>
+        </xs:annotation>
+      </xs:element>
       <xs:element minOccurs="0" name="chNFSeRej" type="TSChaveNFSe">
         <xs:annotation>
           <xs:documentation>

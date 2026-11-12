@@ -55,13 +55,16 @@
     box.classList.remove("is-ok", "is-warn", "is-err");
     if (d.configurado) {
       box.classList.add("is-ok");
-      txt.textContent = "Hub H74 configurado — URL e token definidos.";
-    } else if (d.url_configurada || d.token_configurado) {
+      txt.textContent =
+        "Hub H74 configurado — URL, tokens NF-e/NFS-e e ambiente definidos.";
+    } else if (d.url_configurada || d.token_configurado || d.token_nfse_configurado) {
       box.classList.add("is-warn");
-      txt.textContent = "Configuração incompleta — informe URL e token, depois salve.";
+      txt.textContent =
+        "Configuração incompleta — informe URL, token NF-e e token NFS-e, depois salve.";
     } else {
       box.classList.add("is-err");
-      txt.textContent = "Cole a URL e o token do H74 Painel NF-e e clique em Salvar.";
+      txt.textContent =
+        "Cole a URL e os dois tokens do H74 Painel NF-e e clique em Salvar.";
     }
   }
 
@@ -81,7 +84,20 @@
     document.getElementById("hn_baseUrl").value = d.base_url || "";
     if (d.x_sistema) document.getElementById("hn_xSistema").textContent = d.x_sistema;
     if (d.dica) document.getElementById("hn_dica").textContent = d.dica;
+    const amb = d.ambiente === "producao" ? "producao" : "homologacao";
+    const sel = document.getElementById("hn_ambiente");
+    if (sel) sel.value = amb;
+    const ambEl = document.getElementById("hn_ambienteAtual");
+    if (ambEl) {
+      ambEl.textContent =
+        "Atual: " +
+        (amb === "producao" ? "Produção" : "Homologação") +
+        " (" +
+        (d.fonte_ambiente || "?") +
+        ")";
+    }
     aplicarSegredo(document.getElementById("hn_token"), !!d.token_configurado);
+    aplicarSegredo(document.getElementById("hn_tokenNfse"), !!d.token_nfse_configurado);
     renderAtual(
       document.getElementById("hn_urlAtual"),
       !!d.url_configurada,
@@ -94,11 +110,20 @@
       d.token_mascara,
       d.fonte_token
     );
+    renderAtual(
+      document.getElementById("hn_tokenNfseAtual"),
+      !!d.token_nfse_configurado,
+      d.token_nfse_mascara,
+      d.fonte_token_nfse
+    );
     renderStatus(d);
   }
 
   async function carregar() {
-    const r = await fetch(cfg.apiDados, { credentials: "include", headers: { Accept: "application/json" } });
+    const r = await fetch(cfg.apiDados, {
+      credentials: "include",
+      headers: { Accept: "application/json" },
+    });
     const j = await r.json();
     if (!j.success) throw new Error(j.message || "Falha ao carregar");
     aplicarPainel(j);
@@ -108,6 +133,8 @@
     const payload = {
       base_url: (document.getElementById("hn_baseUrl")?.value || "").trim(),
       token: valorParaSalvar(document.getElementById("hn_token")),
+      token_nfse: valorParaSalvar(document.getElementById("hn_tokenNfse")),
+      ambiente: document.getElementById("hn_ambiente")?.value || "homologacao",
     };
     const r = await fetch(cfg.apiSalvar, {
       method: "POST",
@@ -149,15 +176,28 @@
 
   document.addEventListener("DOMContentLoaded", function () {
     bindSegredo(document.getElementById("hn_token"));
+    bindSegredo(document.getElementById("hn_tokenNfse"));
     document.getElementById("hn_btnSalvar")?.addEventListener("click", function () {
       salvar().catch(function (e) {
-        if (window.Swal) Swal.fire({ icon: "error", title: "Erro", text: e.message, confirmButtonColor: "#021F81" });
+        if (window.Swal)
+          Swal.fire({
+            icon: "error",
+            title: "Erro",
+            text: e.message,
+            confirmButtonColor: "#021F81",
+          });
         else alert(e.message);
       });
     });
     document.getElementById("hn_btnTestar")?.addEventListener("click", function () {
       testar().catch(function (e) {
-        if (window.Swal) Swal.fire({ icon: "error", title: "Erro", text: e.message, confirmButtonColor: "#021F81" });
+        if (window.Swal)
+          Swal.fire({
+            icon: "error",
+            title: "Erro",
+            text: e.message,
+            confirmButtonColor: "#021F81",
+          });
       });
     });
     carregar().catch(function (e) {

@@ -149,11 +149,22 @@ def construir_dps(nota: dict, tenant: dict, config: dict, agora: datetime | None
     root = etree.Element(f"{{{NS}}}DPS", nsmap={None: NS}, versao="1.01")
     inf = _add(root, "infDPS")
     inf.set("Id", id_dps)
-    for nome, valor in (
+    # NT 009 (produção restrita desde ~out/2026; produção a partir de 01/12/2026):
+    # finNFSe passa a ser filho direto de infDPS, obrigatório, antes de cLocEmi.
+    # 0 = NFS-e regular. Sem esse campo a Sefin rejeita com E1235.
+    cabecalho = [
         ("tpAmb", "2" if ambiente == "homologacao" else "1"),
-        ("dhEmi", dh_emi), ("verAplic", "H74-1.0"), ("serie", serie),
-        ("nDPS", numero), ("dCompet", competencia), ("tpEmit", "1"), ("cLocEmi", municipio),
-    ):
+        ("dhEmi", dh_emi),
+        ("verAplic", "DropNexo-1.0"),
+        ("serie", serie),
+        ("nDPS", numero),
+        ("dCompet", competencia),
+        ("tpEmit", "1"),
+    ]
+    if ambiente == "homologacao":
+        cabecalho.append(("finNFSe", "0"))
+    cabecalho.append(("cLocEmi", municipio))
+    for nome, valor in cabecalho:
         _add(inf, nome, valor)
 
     prest = _add(inf, "prest")

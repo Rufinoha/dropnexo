@@ -1432,6 +1432,177 @@ def api_nota_validar(id_nota):
         conn.close()
 
 
+def _payload_nfse_hub(nota: dict) -> dict:
+    competencia = nota.get("competencia")
+    if hasattr(competencia, "isoformat"):
+        competencia = competencia.isoformat()
+    else:
+        competencia = str(competencia or "")[:10]
+    payload = {
+        "cnpj_emitente": somente_digitos(nota.get("prestador_cnpj")),
+        "serie": str(nota.get("serie_dps") or "1"),
+        "numero": int(nota.get("numero_dps") or 0),
+        "competencia": competencia,
+        "tomador_cnpj_cpf": somente_digitos(nota.get("tomador_cnpj_cpf")),
+        "tomador_razao_social": (nota.get("tomador_razao_social") or "").strip(),
+        "descricao_servico": (nota.get("descricao_servico") or "").strip(),
+        "codigo_tributacao_nacional": somente_digitos(nota.get("codigo_tributacao_nacional")),
+        "codigo_servico": somente_digitos(nota.get("codigo_servico")),
+        "codigo_nbs": somente_digitos(nota.get("codigo_nbs")),
+        "valor_servico": str(nota.get("valor_servico") or ""),
+        "iss_retido": bool(nota.get("iss_retido")),
+        "aliquota_iss": nota.get("aliquota_iss") or 0,
+        "observacoes": (nota.get("observacoes") or "").strip() or None,
+        "optante_simples": bool(nota.get("optante_simples", True)),
+        "regime_tributario_nfse": nota.get("regime_tributario") or "simples_nacional",
+        "regime_especial_tributacao": nota.get("regime_especial_tributacao") or "0",
+        "percentual_tributos_sn": nota.get("percentual_tributos_sn"),
+    }
+    if nota.get("intermediario_cnpj_cpf"):
+        payload["intermediario_cnpj_cpf"] = somente_digitos(nota.get("intermediario_cnpj_cpf"))
+        payload["intermediario_razao_social"] = (nota.get("intermediario_razao_social") or "").strip()
+        payload["intermediario_fone"] = (nota.get("intermediario_fone") or "").strip() or None
+    return payload
+
+
+def _emitir_nfse_via_hub(conn, nota: dict, id_nota: int):
+    """Transmite a DPS pelo hub H74 (/v2/nfse). Assinatura e Sefin ficam no hub."""
+    from api.fiscal.focus_nfe import FocusNfeError, baixar, request_json, token_configurado
+
+    if not token_configurado(escopo="nfse"):
+        return None
+
+    ambiente = (nota.get("ambiente") or "homologacao").strip().lower()
+    if ambiente != "producao":
+        ambiente = "homologacao"
+    ref = f"dn-nfse-{int(id_nota)}"[:60]
+    payload = _payload_nfse_hub(nota)
+
+    db_execute(
+        conn,
+        """
+        UPDATE tbl_nfse_nota
+           SET status='processando', id_dps=%s,
+               erro_codigo=NULL, erro_mensagem=NULL,
+               dt_inicio_processamento=NOW(), dt_ultima_tentativa=NOW(),
+               dt_atualizacao=NOW()
+         WHERE id=%s AND id_tenant=%s
+        """,
+        (ref, id_nota, _tenant()),
+    )
+    _auditar(conn, "emissao_iniciada", f"Emissão via hub H74 (ref={ref}).", id_nota)
+    conn.commit()
+
+    try:
+        status_http, body = request_json(
+            ambiente,
+            "POST",
+            "/v2/nfse",
+            params={"ref": ref},
+            json_body=payload,
+            timeout=120,
+            escopo="nfse",
+        )
+    except FocusNfeError as exc:
+        db_execute(
+            conn,
+            """
+            UPDATE tbl_nfse_nota SET status='rejeitada', erro_codigo=%s, erro_mensagem=%s,
+                   dt_atualizacao=NOW()
+             WHERE id=%s AND id_tenant=%s AND status='processando'
+            """,
+            (str(getattr(exc, "status", "") or "HUB"), str(exc)[:500], id_nota, _tenant()),
+        )
+        _auditar(conn, "emissao_rejeitada", str(exc), id_nota, {"via": "hub"})
+        conn.commit()
+        return jsonify({
+            "success": False,
+            "code": "HUB_NFSE",
+            "message": str(exc),
+            "resultado_incerto": False,
+        }), (503 if getattr(exc, "status", 0) >= 500 else 422)
+
+    if not isinstance(body, dict):
+        body = {}
+    status_hub = (body.get("status") or "").strip().lower()
+    chave = (body.get("chave_nfse") or "").strip() or None
+    numero = (body.get("numero") or body.get("numero_nfse") or "").strip() or None
+    mensagem = (
+        body.get("mensagem_sefaz") or body.get("mensagem") or body.get("message") or ""
+    ).strip()
+    metadata = json.dumps({"via": "hub", "ref": ref, "http_status": status_http, **body}, default=str)
+
+    if status_hub == "autorizado" or (status_http in (200, 201) and chave):
+        xml_blob = None
+        try:
+            xml_blob = baixar(ambiente, f"/v2/nfse/{ref}.xml", escopo="nfse")
+        except FocusNfeError:
+            xml_blob = None
+        db_execute(
+            conn,
+            """
+            UPDATE tbl_nfse_nota SET status='autorizada', numero_nfse=%s, chave_nfse=%s,
+                   xml_nfse_encriptado=%s, resposta_metadata=%s::jsonb,
+                   erro_codigo=NULL, erro_mensagem=NULL, dt_autorizacao=NOW(),
+                   dt_atualizacao=NOW()
+             WHERE id=%s AND id_tenant=%s AND status='processando'
+            """,
+            (
+                numero, chave,
+                criptografar(xml_blob) if xml_blob else None,
+                metadata, id_nota, _tenant(),
+            ),
+        )
+        _auditar(conn, "nfse_autorizada", "NFS-e autorizada via hub H74.", id_nota)
+        conn.commit()
+        return jsonify({
+            "success": True,
+            "message": mensagem or "NFS-e autorizada.",
+            "numero_nfse": numero,
+            "chave_nfse": chave,
+            "ref": ref,
+        }), 201
+
+    if status_hub in {"processando_autorizacao", "processando"}:
+        db_execute(
+            conn,
+            """
+            UPDATE tbl_nfse_nota SET status='processando', erro_codigo=NULL,
+                   erro_mensagem=%s, resposta_metadata=%s::jsonb, dt_atualizacao=NOW()
+             WHERE id=%s AND id_tenant=%s AND status='processando'
+            """,
+            (mensagem[:500] or None, metadata, id_nota, _tenant()),
+        )
+        _auditar(conn, "emissao_incerta", mensagem or "Processando no hub.", id_nota, {"via": "hub"})
+        conn.commit()
+        return jsonify({
+            "success": False,
+            "code": "PROCESSANDO",
+            "message": mensagem or "Hub ainda processando a autorização.",
+            "resultado_incerto": True,
+            "ref": ref,
+        }), 503
+
+    db_execute(
+        conn,
+        """
+        UPDATE tbl_nfse_nota SET status='rejeitada', erro_codigo=%s, erro_mensagem=%s,
+               resposta_metadata=%s::jsonb, dt_atualizacao=NOW()
+         WHERE id=%s AND id_tenant=%s AND status='processando'
+        """,
+        (status_hub or "erro_autorizacao", mensagem[:500] or "Rejeitada pelo hub.", metadata, id_nota, _tenant()),
+    )
+    _auditar(conn, "emissao_rejeitada", mensagem or status_hub, id_nota, {"via": "hub"})
+    conn.commit()
+    return jsonify({
+        "success": False,
+        "code": status_hub or "erro_autorizacao",
+        "message": mensagem or "Emissão rejeitada pelo hub.",
+        "resultado_incerto": False,
+        "ref": ref,
+    }), 422
+
+
 @nfse_bp.route("/api/notas/<int:id_nota>/emitir", methods=["POST"])
 @_nfse_autorizado
 def api_nota_emitir(id_nota):
@@ -1482,8 +1653,20 @@ def api_nota_emitir(id_nota):
                     else f"Emissão bloqueada para nota em estado {nota['status']}."
                 ),
             }), 409
+
+        from api.fiscal.focus_nfe import token_configurado as _hub_nfse_ok
+
+        if _hub_nfse_ok(escopo="nfse"):
+            return _emitir_nfse_via_hub(conn, nota, id_nota)
+
         if not nota.get("conteudo_encriptado"):
-            return jsonify({"success": False, "message": "Nenhum certificado A1 ativo e válido."}), 400
+            return jsonify({
+                "success": False,
+                "message": (
+                    "Configure o Hub H74 (token NFS-e) em Configurações → Hub H74 "
+                    "ou mantenha um certificado A1 local ativo."
+                ),
+            }), 400
 
         try:
             adapter = AdapterNacional(nota["ambiente"])
