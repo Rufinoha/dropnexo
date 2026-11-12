@@ -53,7 +53,7 @@
     },
     {
       titulo: "Hub H74",
-      texto: "URL, tokens NF-e/NFS-e e ambiente (H74). Credenciais criptografadas no banco, com fallback do .env.",
+      texto: "URL e tokens NF-e/NFS-e (H74). Credenciais criptografadas no banco, com fallback do .env. Ambiente fica em NFS-e → Parâmetros.",
       rota: "/configuracoes/hub-h74",
       iconeTech: "nf_hub",
     },

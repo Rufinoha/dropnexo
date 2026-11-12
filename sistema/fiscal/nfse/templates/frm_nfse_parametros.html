@@ -15,7 +15,7 @@
     <div class="Nfse_SubAbas nfse-tabs" role="tablist">
       <button type="button" class="Nfse_SubAba is-on" data-tab="perfis">Perfis de nota</button>
       <button type="button" class="Nfse_SubAba" data-tab="empresa">Empresa fiscal</button>
-      <button type="button" class="Nfse_SubAba" data-tab="numeracao">Numeração</button>
+      <button type="button" class="Nfse_SubAba" data-tab="numeracao">Ambiente e numeração</button>
       <button type="button" class="Nfse_SubAba" data-tab="certificados">Certificados A1</button>
     </div>
 
@@ -49,7 +49,7 @@
         <div class="Cl_FormCampo"><label>Regime especial</label><input id="cfg_regime_especial_tributacao" value="{{ emp.get('regime_especial_tributacao') or '' }}"></div>
         <div class="Cl_FormCampo"><label>Tributos aproximados do Simples (%)</label><input id="cfg_percentual_tributos_sn" inputmode="decimal" placeholder="6,00" value="{{ emp.get('percentual_tributos_sn') or '' }}"></div>
       </div>
-      <p class="nfse-hint">O percentual é o total aproximado da alíquota do Simples (Lei 12.741). Na nota já emitida esse valor é 6,00. Vazio significa não informar. Ambiente (homologação/produção) fica na aba Numeração.</p>
+      <p class="nfse-hint">O percentual é o total aproximado da alíquota do Simples (Lei 12.741). Na nota já emitida esse valor é 6,00. Vazio significa não informar. Ambiente (homologação/produção) fica na aba Ambiente e numeração.</p>
       <div class="nfse-checks">
         <label class="Cl_Switch">
           <input type="checkbox" id="cfg_optante_simples"{% if emp.get('optante_simples', True) %} checked{% endif %}>

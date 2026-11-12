@@ -1124,7 +1124,7 @@ def api_config_salvar():
         salvos = salvar_empresa_fiscal(conn, _tenant(), dados)
         _salvar_series_nfe(conn, dados)
         salvos = _anexar_series_nfe(conn, salvos)
-        # Alinha o ambiente do Hub H74 ao da Empresa fiscal.
+        # Alinha o ambiente do Hub H74 ao definido em Ambiente e numeração.
         amb_salvo = (salvos.get("ambiente") or dados.get("ambiente") or "").strip().lower()
         if amb_salvo in {"homologacao", "producao"}:
             try:

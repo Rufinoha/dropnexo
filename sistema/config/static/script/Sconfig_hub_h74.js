@@ -56,7 +56,7 @@
     if (d.configurado) {
       box.classList.add("is-ok");
       txt.textContent =
-        "Hub H74 configurado — URL, tokens NF-e/NFS-e e ambiente definidos.";
+        "Hub H74 configurado — URL e tokens NF-e/NFS-e definidos.";
     } else if (d.url_configurada || d.token_configurado || d.token_nfse_configurado) {
       box.classList.add("is-warn");
       txt.textContent =
@@ -84,18 +84,6 @@
     document.getElementById("hn_baseUrl").value = d.base_url || "";
     if (d.x_sistema) document.getElementById("hn_xSistema").textContent = d.x_sistema;
     if (d.dica) document.getElementById("hn_dica").textContent = d.dica;
-    const amb = d.ambiente === "producao" ? "producao" : "homologacao";
-    const sel = document.getElementById("hn_ambiente");
-    if (sel) sel.value = amb;
-    const ambEl = document.getElementById("hn_ambienteAtual");
-    if (ambEl) {
-      ambEl.textContent =
-        "Atual: " +
-        (amb === "producao" ? "Produção" : "Homologação") +
-        " (" +
-        (d.fonte_ambiente || "?") +
-        ")";
-    }
     aplicarSegredo(document.getElementById("hn_token"), !!d.token_configurado);
     aplicarSegredo(document.getElementById("hn_tokenNfse"), !!d.token_nfse_configurado);
     renderAtual(
@@ -134,7 +122,6 @@
       base_url: (document.getElementById("hn_baseUrl")?.value || "").trim(),
       token: valorParaSalvar(document.getElementById("hn_token")),
       token_nfse: valorParaSalvar(document.getElementById("hn_tokenNfse")),
-      ambiente: document.getElementById("hn_ambiente")?.value || "homologacao",
     };
     const r = await fetch(cfg.apiSalvar, {
       method: "POST",

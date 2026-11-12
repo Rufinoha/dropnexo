@@ -52,16 +52,10 @@
              placeholder="Token de NFS-e (outro valor; aparece uma vez)" />
       <p class="HsCfg_Atual" id="hn_tokenNfseAtual"></p>
 
-      <label class="Cl_Label" for="hn_ambiente">Ambiente (X-Ambiente)</label>
-      <select id="hn_ambiente" class="Cl_Input">
-        <option value="homologacao">Homologação</option>
-        <option value="producao">Produção</option>
-      </select>
-      <p class="HsCfg_Hint" id="hn_ambienteAtual"></p>
-
       <p class="HsCfg_Hint">
         Header <code>X-Sistema</code>: <code id="hn_xSistema">dropnexo</code>.
-        Deixe o campo mascarado para manter o valor atual. Produção só com autorização da H74.
+        Deixe o campo mascarado para manter o valor atual.
+        Homologação/Produção fica em <strong>NFS-e → Parâmetros → Ambiente e numeração</strong>.
       </p>
     </section>
 
@@ -71,13 +65,12 @@
         <li>Abra o <strong>H74 Painel → HUB → Painel NF-e</strong>.</li>
         <li>Em Sistemas, use código <code>dropnexo</code> e gere <strong>dois</strong> tokens (NF-e e NFS-e).</li>
         <li>Ao salvar Empresa fiscal e o certificado A1 em NFS-e → Parâmetros, a sua empresa é enviada ao Hub automaticamente.</li>
-        <li>Cole URL e tokens neste card, escolha Homologação e salve.</li>
+        <li>Cole URL e tokens neste card e salve. O ambiente (homologação/produção) é definido só em <strong>Ambiente e numeração</strong>.</li>
         <li>Use <strong>Testar conexão</strong> para validar NF-e e NFS-e.</li>
       </ol>
       <p class="HsCfg_Hint" style="margin-top:1rem">
         Fallback: se o banco estiver vazio, lê <code>HUB_NFE_URL</code>,
-        <code>HUB_NFE_TOKEN</code>, <code>HUB_NFSE_TOKEN</code> e
-        <code>HUB_NFE_AMBIENTE</code> do <code>.env</code>.
+        <code>HUB_NFE_TOKEN</code> e <code>HUB_NFSE_TOKEN</code> do <code>.env</code>.
       </p>
     </section>
   </div>
@@ -88,5 +81,5 @@
   "apiSalvar": url_for("config.hub_h74_salvar"),
   "apiTestar": url_for("config.hub_h74_testar")
 } | tojson }}</script>
-<script defer src="{{ url_for('config.static', filename='script/Sconfig_hub_h74.js') }}?v=2"></script>
+<script defer src="{{ url_for('config.static', filename='script/Sconfig_hub_h74.js') }}?v=3"></script>
 {% endblock %}
