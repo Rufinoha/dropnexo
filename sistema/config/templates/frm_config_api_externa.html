@@ -73,13 +73,20 @@
     <div class="AeAdm_ModalBody">
       <input type="hidden" id="ae_editando" value="0" />
       <div class="filter-group" id="ae_busca_wrap">
-        <label for="ae_busca">Buscar tenant</label>
-        <input type="text" id="ae_busca" class="Cl_Input" placeholder="ID, nome, razão social ou documento" />
-        <div id="ae_sugestoes" class="AeAdm_Sug"></div>
-      </div>
-      <div class="filter-group" style="margin-top:10px">
-        <label for="ae_tenant">ID do tenant *</label>
-        <input type="number" id="ae_tenant" class="Cl_Input" min="1" placeholder="Ex.: 42" />
+        <label id="ae_tenant_combo_label" for="ae_tenant_combo_display">Tenant *</label>
+        <div id="ae_tenant_combo" class="Cl_SelectLike" role="combobox" aria-labelledby="ae_tenant_combo_label" aria-haspopup="listbox">
+          <input type="text" id="ae_tenant_combo_display" class="Cl_SelectDisplay" placeholder="Buscar tenant…" autocomplete="off" readonly />
+          <div class="Cl_Caret"></div>
+          <div class="Cl_ComboPanel" aria-hidden="true">
+            <div class="Cl_ComboSearch">
+              <input class="Cl_ComboSearchInput" placeholder="Digite 2 caracteres ou mais…" autocomplete="off" />
+            </div>
+            <div class="Cl_ComboStatus">Digite 2+ para pesquisar</div>
+            <div class="Cl_ComboLista"></div>
+          </div>
+        </div>
+        <input type="hidden" id="ae_tenant" />
+        <small class="CfgCup_Hint" style="display:block;margin-top:6px">Fornecedor / híbrido / armazém</small>
       </div>
       <div class="filter-group" style="margin-top:10px">
         <label for="ae_nome">Nome do parceiro</label>
@@ -105,5 +112,5 @@
 </div>
 {% endblock %}
 {% block page_js %}
-<script defer src="{{ url_for('config.static', filename='script/Sconfig_api_externa.js') }}?v=2"></script>
+<script defer src="{{ url_for('config.static', filename='script/Sconfig_api_externa.js') }}?v=3"></script>
 {% endblock %}

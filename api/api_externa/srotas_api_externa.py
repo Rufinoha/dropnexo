@@ -75,14 +75,44 @@ def admin_listar():
 @api_externa_bp.get("/api/configuracoes/api-externa/buscar-tenants")
 @login_obrigatorio()
 def admin_buscar_tenants():
+    """Compatível com busca antiga (?termo=) e combobox (?filtro=&limitar=)."""
     if (r := _exigir_dev()) is not None:
         return r
-    termo = (request.args.get("termo") or "").strip()
-    if len(termo) < 1:
-        return jsonify(success=True, dados=[])
+    termo = (request.args.get("filtro") or request.args.get("termo") or "").strip()
+    try:
+        limite = min(40, max(1, int(request.args.get("limitar") or 20)))
+    except (TypeError, ValueError):
+        limite = 20
     conn = Var_ConectarBanco()
     try:
-        return jsonify(success=True, dados=servico.buscar_tenants(conn, termo))
+        dados = servico.buscar_tenants(conn, termo, limitar=limite)
+        # Combobox personalizada espera {sucesso, dados}.
+        return jsonify(sucesso=True, success=True, dados=dados)
+    except Exception as exc:
+        return jsonify(sucesso=False, success=False, mensagem=str(exc), message=str(exc)), 500
+    finally:
+        conn.close()
+
+
+@api_externa_bp.get("/api/configuracoes/api-externa/combo-tenants")
+@login_obrigatorio()
+def admin_combo_tenants():
+    """Combobox personalizada BARACAT — GET ?filtro=&limitar= → {sucesso, dados}."""
+    if (r := _exigir_dev()) is not None:
+        return r
+    termo = (request.args.get("filtro") or "").strip()
+    try:
+        limite = min(40, max(1, int(request.args.get("limitar") or 20)))
+    except (TypeError, ValueError):
+        limite = 20
+    conn = Var_ConectarBanco()
+    try:
+        return jsonify(
+            sucesso=True,
+            dados=servico.buscar_tenants(conn, termo, limitar=limite),
+        )
+    except Exception as exc:
+        return jsonify(sucesso=False, mensagem=str(exc)), 500
     finally:
         conn.close()
 

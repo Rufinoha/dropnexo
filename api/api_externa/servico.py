@@ -408,30 +408,82 @@ def marcar_sync(conn, id_tenant: int, *, ok: bool, mensagem: str) -> None:
     )
 
 
-def buscar_tenants(conn, termo: str = "") -> list[dict]:
+def buscar_tenants(conn, termo: str = "", limitar: int = 20) -> list[dict]:
+    """Lista para combobox personalizada (padrão {sucesso,dados})."""
+    garantir_tabelas(conn)
     cur = conn.cursor()
-    like = f"%{(termo or '').strip()}%"
+    termo = (termo or "").strip()
+    try:
+        limite = min(40, max(1, int(limitar or 20)))
+    except (TypeError, ValueError):
+        limite = 20
+
+    params: list[Any] = []
+    where_extra = ""
+    if termo:
+        if termo.isdigit():
+            where_extra = """
+              AND (
+                    t.id = %s
+                 OR COALESCE(t.nome, '') ILIKE %s
+                 OR COALESCE(t.razao_social, '') ILIKE %s
+                 OR COALESCE(t.slug, '') ILIKE %s
+                 OR COALESCE(t.documento, '') ILIKE %s
+              )
+            """
+            like = f"%{termo}%"
+            params.extend([int(termo), like, like, like, like])
+        else:
+            where_extra = """
+              AND (
+                    COALESCE(t.nome, '') ILIKE %s
+                 OR COALESCE(t.razao_social, '') ILIKE %s
+                 OR COALESCE(t.slug, '') ILIKE %s
+                 OR COALESCE(t.documento, '') ILIKE %s
+              )
+            """
+            like = f"%{termo}%"
+            params.extend([like, like, like, like])
+
     cur.execute(
-        """
+        f"""
         SELECT t.id,
                COALESCE(NULLIF(TRIM(t.razao_social), ''), NULLIF(TRIM(t.nome), ''), 'Tenant') AS nome,
-               t.documento,
+               COALESCE(t.slug, '') AS slug,
+               COALESCE(NULLIF(TRIM(t.tipo_negocio), ''), 'fornecedor') AS tipo_negocio,
+               COALESCE(t.documento, '') AS documento,
                COALESCE(a.liberado, FALSE) AS liberado
           FROM tbl_tenant t
           LEFT JOIN tbl_integracao_api_externa a ON a.id_tenant = t.id
          WHERE COALESCE(t.ativo, TRUE) = TRUE
-           AND (
-                CAST(t.id AS TEXT) ILIKE %s
-             OR COALESCE(t.nome, '') ILIKE %s
-             OR COALESCE(t.razao_social, '') ILIKE %s
-             OR COALESCE(t.documento, '') ILIKE %s
-           )
-         ORDER BY t.id DESC
-         LIMIT 30
+           AND COALESCE(NULLIF(TRIM(t.tipo_negocio), ''), 'fornecedor')
+               IN ('fornecedor', 'hibrido', 'armazem')
+           {where_extra}
+         ORDER BY t.nome NULLS LAST, t.id
+         LIMIT %s
         """,
-        (like, like, like, like),
+        (*params, limite),
     )
-    return [
-        {"id": r[0], "nome": r[1], "documento": r[2], "liberado": bool(r[3])}
-        for r in cur.fetchall()
-    ]
+    out = []
+    for r in cur.fetchall():
+        tid = int(r[0])
+        nome = r[1] or f"Tenant #{tid}"
+        slug = r[2] or ""
+        tipo = str(r[3] or "fornecedor").lower()
+        doc = r[4] or ""
+        liberado = bool(r[5])
+        titulo = f"#{tid} — {nome}"
+        if liberado:
+            titulo += " (já liberado)"
+        out.append(
+            {
+                "id": tid,
+                "nome": nome,
+                "titulo": titulo,
+                "slug": slug,
+                "tipo_negocio": tipo,
+                "documento": doc,
+                "liberado": liberado,
+            }
+        )
+    return out

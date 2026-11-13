@@ -3,6 +3,7 @@
 
   const $ = (id) => document.getElementById(id);
   let cache = [];
+  let comboTenant = null;
 
   async function api(url, opts) {
     const r = await fetch(url, {
@@ -11,7 +12,9 @@
       ...(opts || {}),
     });
     const j = await r.json().catch(() => ({}));
-    if (!r.ok || j.success === false) throw new Error(j.message || "Falha na requisição");
+    if (!r.ok || j.success === false || j.sucesso === false) {
+      throw new Error(j.message || j.mensagem || "Falha na requisição");
+    }
     return j;
   }
 
@@ -34,22 +37,67 @@
     return '<span class="AeAdm_Badge AeAdm_Badge--ok">ativo</span>';
   }
 
+  function initComboTenant() {
+    if (comboTenant) return comboTenant;
+    if (!window.Util?.combobox_personalisado) {
+      console.warn("[API Externa] Util.combobox_personalisado ainda não carregou.");
+      return null;
+    }
+    try {
+      comboTenant = Util.combobox_personalisado({
+        seletor: "#ae_tenant_combo",
+        caracteres: 2,
+        rota: "/api/configuracoes/api-externa/combo-tenants",
+        limite: 20,
+        campoOcultoId: "ae_tenant",
+        col_l1: ["titulo", false],
+        col_l2: ["tipo_negocio", "Tipo"],
+        col_l3: ["slug", "Slug"],
+        onSelect: function (item) {
+          if ($("ae_tenant")) $("ae_tenant").value = item?.id ? String(item.id) : "";
+          if (item?.nome && !$("ae_nome").value) $("ae_nome").value = item.nome;
+        },
+      });
+    } catch (e) {
+      console.error("[API Externa] Falha ao iniciar combobox:", e);
+      return null;
+    }
+    return comboTenant;
+  }
+
+  function setComboTenant(item) {
+    initComboTenant();
+    if ($("ae_tenant")) $("ae_tenant").value = item?.id_tenant ? String(item.id_tenant) : "";
+    if ($("ae_tenant_combo_display")) {
+      $("ae_tenant_combo_display").value = item?.id_tenant
+        ? `#${item.id_tenant} — ${item.tenant_nome || item.nome_parceiro || "Tenant"}`
+        : "";
+    }
+  }
+
   function abrirModal(item) {
     const editando = !!(item && item.id_tenant);
     $("ae_editando").value = editando ? "1" : "0";
     $("ae_modal_titulo").textContent = editando ? "Editar liberação" : "Liberar tenant";
-    $("ae_busca_wrap").hidden = editando;
-    $("ae_tenant").value = item?.id_tenant || "";
-    $("ae_tenant").readOnly = editando;
+    $("ae_busca_wrap").hidden = false;
     $("ae_nome").value = item?.nome_parceiro || "";
     $("ae_contato").value = item?.contato_tecnico || "";
     $("ae_ambiente").value = item?.ambiente === "producao" ? "producao" : "homologacao";
-    $("ae_busca").value = "";
-    $("ae_sugestoes").innerHTML = "";
+    setComboTenant(editando ? item : null);
+    // Em edição o tenant fica fixo (não troca de conta).
+    const combo = $("ae_tenant_combo");
+    if (combo) combo.style.pointerEvents = editando ? "none" : "";
+    if ($("ae_tenant_combo_display")) $("ae_tenant_combo_display").style.opacity = editando ? "0.7" : "";
     $("ae_modal").hidden = false;
     document.body.style.overflow = "hidden";
-    if (!editando) $("ae_busca").focus();
-    else $("ae_nome").focus();
+    initComboTenant();
+    if (!editando) {
+      setTimeout(() => {
+        $("ae_tenant_combo")?.querySelector(".Cl_SelectDisplay")?.click();
+      }, 50);
+    } else {
+      $("ae_nome").focus();
+    }
   }
 
   function fecharModal() {
@@ -128,43 +176,6 @@
     renderLista(cache);
   }
 
-  let buscaTimer = null;
-  $("ae_busca")?.addEventListener("input", () => {
-    clearTimeout(buscaTimer);
-    buscaTimer = setTimeout(async () => {
-      const termo = ($("ae_busca").value || "").trim();
-      const box = $("ae_sugestoes");
-      if (!termo) {
-        box.innerHTML = "";
-        return;
-      }
-      try {
-        const j = await api(
-          "/api/configuracoes/api-externa/buscar-tenants?termo=" + encodeURIComponent(termo)
-        );
-        const itens = j.dados || [];
-        if (!itens.length) {
-          box.innerHTML = "<small>Nenhum tenant encontrado.</small>";
-          return;
-        }
-        box.innerHTML = itens
-          .map(
-            (t) =>
-              `<button type="button" class="ae-pick" data-id="${t.id}">#${t.id} — ${esc(t.nome)}${t.liberado ? " (já liberado)" : ""}</button>`
-          )
-          .join("");
-        box.querySelectorAll(".ae-pick").forEach((b) => {
-          b.addEventListener("click", () => {
-            $("ae_tenant").value = b.dataset.id;
-            box.innerHTML = "";
-          });
-        });
-      } catch (e) {
-        box.innerHTML = `<small>${esc(e.message)}</small>`;
-      }
-    }, 280);
-  });
-
   $("ae_btnNovo")?.addEventListener("click", () => abrirModal(null));
   $("ae_modal_fechar")?.addEventListener("click", fecharModal);
   $("ae_btnCancelar")?.addEventListener("click", fecharModal);
@@ -178,7 +189,7 @@
   $("ae_btnSalvar")?.addEventListener("click", async () => {
     try {
       const id_tenant = Number($("ae_tenant")?.value || 0);
-      if (!id_tenant) throw new Error("Informe o tenant.");
+      if (!id_tenant) throw new Error("Selecione o tenant na combobox.");
       await api("/api/configuracoes/api-externa/liberar", {
         method: "POST",
         body: JSON.stringify({
@@ -201,6 +212,16 @@
     clearTimeout(filtroTimer);
     filtroTimer = setTimeout(() => carregar().catch(() => {}), 250);
   });
+
+  // Garante init da combobox depois do global_utils.
+  function bootCombo() {
+    if (window.Util?.combobox_personalisado) {
+      initComboTenant();
+      return;
+    }
+    setTimeout(bootCombo, 120);
+  }
+  bootCombo();
 
   carregar().catch((e) => {
     $("ae_tbody").innerHTML = `<tr><td colspan="7" class="CfgCup_Hint">${esc(e.message)}</td></tr>`;
