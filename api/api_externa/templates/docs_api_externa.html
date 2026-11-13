@@ -259,5 +259,62 @@ X-Api-Key: &lt;TOKEN&gt;</pre>
   <footer class="AeDocs_Footer">
     {{ MARCA_NOME }} · API Externa · contrato alinhado ao catálogo e pedidos DropNexo
   </footer>
+
+  <script>
+  (function () {
+    const LINHAS = 5;
+    function wrap(pre) {
+      const texto = pre.textContent || "";
+      const linhas = texto.split(/\r?\n/).length;
+      if (linhas <= LINHAS) return;
+
+      const wrapEl = document.createElement("div");
+      wrapEl.className = "AeDocs_CodeWrap is-collapsed";
+
+      const bar = document.createElement("div");
+      bar.className = "AeDocs_CodeToolbar";
+
+      const btnCopy = document.createElement("button");
+      btnCopy.type = "button";
+      btnCopy.className = "AeDocs_CodeBtn";
+      btnCopy.textContent = "Copiar";
+
+      const btnToggle = document.createElement("button");
+      btnToggle.type = "button";
+      btnToggle.className = "AeDocs_CodeBtn";
+      btnToggle.textContent = "Expandir";
+
+      bar.appendChild(btnCopy);
+      bar.appendChild(btnToggle);
+
+      pre.parentNode.insertBefore(wrapEl, pre);
+      wrapEl.appendChild(bar);
+      wrapEl.appendChild(pre);
+
+      btnToggle.addEventListener("click", function () {
+        wrapEl.classList.toggle("is-collapsed");
+        const collapsed = wrapEl.classList.contains("is-collapsed");
+        btnToggle.textContent = collapsed ? "Expandir" : "Recolher";
+      });
+
+      btnCopy.addEventListener("click", async function () {
+        try {
+          await navigator.clipboard.writeText(texto);
+          btnCopy.textContent = "Copiado";
+          btnCopy.classList.add("is-ok");
+          setTimeout(function () {
+            btnCopy.textContent = "Copiar";
+            btnCopy.classList.remove("is-ok");
+          }, 1600);
+        } catch (e) {
+          btnCopy.textContent = "Falhou";
+          setTimeout(function () { btnCopy.textContent = "Copiar"; }, 1600);
+        }
+      });
+    }
+
+    document.querySelectorAll("pre.AeDocs_Code").forEach(wrap);
+  })();
+  </script>
 </body>
 </html>

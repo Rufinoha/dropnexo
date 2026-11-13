@@ -548,6 +548,6 @@ def docs_html():
         "docs_api_externa.html",
         versao=painel.get("versao") or "1.0",
         url_home=url_home,
-        css_url=url_for("api_externa.static", filename="style/docs_api_externa.css") + "?v=4",
+        css_url=url_for("api_externa.static", filename="style/docs_api_externa.css") + "?v=5",
         **docs.contexto_html(),
     )
