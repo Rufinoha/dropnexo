@@ -173,6 +173,81 @@ def admin_revogar():
         conn.close()
 
 
+@api_externa_bp.post("/api/configuracoes/api-externa/aprovar-producao")
+@login_obrigatorio()
+def admin_aprovar_producao():
+    if (r := _exigir_dev()) is not None:
+        return r
+    body = request.get_json(silent=True) or {}
+    try:
+        id_tenant = int(body.get("id_tenant") or 0)
+    except (TypeError, ValueError):
+        id_tenant = 0
+    if id_tenant <= 0:
+        return jsonify(success=False, message="Informe o tenant."), 400
+    conn = Var_ConectarBanco()
+    try:
+        cfg = servico.aprovar_producao(
+            conn,
+            id_tenant,
+            id_usuario=session.get("id_usuario"),
+            obs=body.get("obs") or "",
+        )
+        servico.registrar_log(
+            conn,
+            id_tenant,
+            evento="homolog.aprovado",
+            sucesso=True,
+            mensagem="Produção aprovada pelo admin.",
+            direcao="local",
+            detalhe={"obs": body.get("obs") or ""},
+        )
+        conn.commit()
+        return jsonify(success=True, message="Produção aprovada.", dados=_json_safe(cfg))
+    except Exception as exc:
+        conn.rollback()
+        return jsonify(success=False, message=str(exc)), 500
+    finally:
+        conn.close()
+
+
+@api_externa_bp.post("/api/configuracoes/api-externa/reprovar-producao")
+@login_obrigatorio()
+def admin_reprovar_producao():
+    if (r := _exigir_dev()) is not None:
+        return r
+    body = request.get_json(silent=True) or {}
+    try:
+        id_tenant = int(body.get("id_tenant") or 0)
+    except (TypeError, ValueError):
+        id_tenant = 0
+    if id_tenant <= 0:
+        return jsonify(success=False, message="Informe o tenant."), 400
+    conn = Var_ConectarBanco()
+    try:
+        cfg = servico.reprovar_producao(
+            conn,
+            id_tenant,
+            id_usuario=session.get("id_usuario"),
+            obs=body.get("obs") or "",
+        )
+        servico.registrar_log(
+            conn,
+            id_tenant,
+            evento="homolog.reprovado",
+            sucesso=False,
+            mensagem=body.get("obs") or "Produção reprovada.",
+            direcao="local",
+        )
+        conn.commit()
+        return jsonify(success=True, message="Solicitação reprovada.", dados=_json_safe(cfg))
+    except Exception as exc:
+        conn.rollback()
+        return jsonify(success=False, message=str(exc)), 500
+    finally:
+        conn.close()
+
+
 # ── Card do fornecedor ────────────────────────────────────────────────
 
 
@@ -311,6 +386,59 @@ def tenant_testar():
         conn.close()
 
 
+@api_externa_bp.post("/api/integracoes/api-externa/solicitar-producao")
+@login_obrigatorio()
+def tenant_solicitar_producao():
+    if (r := _exigir_fornecedor()) is not None:
+        return r
+    id_t = _id_tenant()
+    if not id_t:
+        return jsonify(success=False, message="Sessão inválida."), 403
+    conn = Var_ConectarBanco()
+    checklist = None
+    try:
+        cfg = servico.carregar(conn, id_t)
+        if not cfg.get("liberado"):
+            return jsonify(success=False, message="API Externa não liberada."), 403
+        checklist = cliente.checklist_homologacao(conn, id_t)
+        servico.registrar_log(
+            conn,
+            id_t,
+            evento="homolog.checklist",
+            sucesso=bool(checklist.get("ok")),
+            mensagem=checklist.get("message") or "",
+            direcao="pull",
+            detalhe={"checks": checklist.get("checks") or []},
+        )
+        cfg = servico.solicitar_producao(conn, id_t, checklist=checklist)
+        servico.registrar_log(
+            conn,
+            id_t,
+            evento="homolog.solicitado",
+            sucesso=True,
+            mensagem="Solicitação de produção enviada.",
+            direcao="local",
+        )
+        conn.commit()
+        return jsonify(
+            success=True,
+            message="Solicitação enviada. Aguarde a aprovação do DropNexo.",
+            checklist=checklist,
+            dados=_json_safe(cfg),
+        )
+    except ValueError as exc:
+        conn.rollback()
+        return jsonify(success=False, message=str(exc), checklist=checklist), 422
+    except PermissionError as exc:
+        conn.rollback()
+        return jsonify(success=False, message=str(exc)), 403
+    except Exception as exc:
+        conn.rollback()
+        return jsonify(success=False, message=str(exc)), 500
+    finally:
+        conn.close()
+
+
 @api_externa_bp.post("/api/integracoes/api-externa/sync/produtos")
 @login_obrigatorio()
 def tenant_sync_produtos():
@@ -420,5 +548,5 @@ def docs_html():
         "docs_api_externa.html",
         versao=painel.get("versao") or "1.0",
         url_home=url_home,
-        css_url=url_for("api_externa.static", filename="style/docs_api_externa.css") + "?v=1",
+        css_url=url_for("api_externa.static", filename="style/docs_api_externa.css") + "?v=2",
     )

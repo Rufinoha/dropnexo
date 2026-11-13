@@ -3,7 +3,7 @@
 {% block title %}API Externa — Integrações — {{ MARCA_NOME }}{% endblock %}
 {% block topbar_title %}API Externa{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('static', filename='style/Capi_externa_integracao.css') }}?v=4" />
+<link rel="stylesheet" href="{{ url_for('static', filename='style/Capi_externa_integracao.css') }}?v=6" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal Ae_Wrap">
@@ -38,58 +38,69 @@
       </div>
 
       <div class="Ae_FormCompact">
-        <section class="Ae_FormBlock">
-          <header class="Ae_FormBlockHead">
-            <strong>Acesso</strong>
-            <span>URL, autenticação e ambiente</span>
-          </header>
-          <div class="Ae_FormGrid">
-            <div class="filter-group Ae_Span2">
-              <label for="ae_base_url">URL base *</label>
-              <input id="ae_base_url" type="url" placeholder="https://api.seu-erp.com.br" />
+        <div class="Ae_FormColumns">
+          <section class="Ae_FormBlock">
+            <header class="Ae_FormBlockHead">
+              <strong>Acesso</strong>
+              <span>URL, autenticação e ambiente</span>
+            </header>
+            <div class="Ae_FormGrid">
+              <div class="filter-group Ae_Span2">
+                <label for="ae_base_url">URL base *</label>
+                <input id="ae_base_url" type="url" placeholder="https://api.seu-erp.com.br" />
+              </div>
+              <div class="filter-group">
+                <label for="ae_auth_tipo">Autenticação</label>
+                <select id="ae_auth_tipo">
+                  <option value="bearer">Bearer Token</option>
+                  <option value="api_key">X-Api-Key</option>
+                </select>
+              </div>
+              <div class="filter-group">
+                <label>Ambiente</label>
+                <div class="Ae_AmbienteBox" id="ae_ambiente_box">
+                  <span class="Ae_AmbienteBadge" id="ae_ambiente_badge">Homologação</span>
+                  <small class="Ae_FieldHint" id="ae_ambiente_hint">Teste aqui. Produção só após aprovação DropNexo.</small>
+                </div>
+                <input type="hidden" id="ae_ambiente" value="homologacao" />
+              </div>
+              <div class="filter-group Ae_Span2">
+                <label for="ae_token">Token da sua API</label>
+                <input id="ae_token" type="password" autocomplete="new-password" placeholder="Deixe mascarado para manter" />
+                <small id="ae_token_hint" class="Ae_FieldHint"></small>
+              </div>
             </div>
-            <div class="filter-group">
-              <label for="ae_auth_tipo">Autenticação</label>
-              <select id="ae_auth_tipo">
-                <option value="bearer">Bearer Token</option>
-                <option value="api_key">X-Api-Key</option>
-              </select>
-            </div>
-            <div class="filter-group">
-              <label for="ae_ambiente">Ambiente</label>
-              <select id="ae_ambiente">
-                <option value="homologacao">Homologação</option>
-                <option value="producao">Produção</option>
-              </select>
-            </div>
-            <div class="filter-group Ae_Span2">
-              <label for="ae_token">Token da sua API</label>
-              <input id="ae_token" type="password" autocomplete="new-password" placeholder="Deixe mascarado para manter" />
-              <small id="ae_token_hint" class="Ae_FieldHint"></small>
-            </div>
-          </div>
-        </section>
+          </section>
 
-        <section class="Ae_FormBlock">
-          <header class="Ae_FormBlockHead">
-            <strong>Webhook &amp; contato</strong>
-            <span>Pedidos, HMAC e suporte técnico</span>
-          </header>
-          <div class="Ae_FormGrid">
-            <div class="filter-group Ae_Span2">
-              <label for="ae_webhook">Webhook (pedidos/status)</label>
-              <input id="ae_webhook" type="url" placeholder="https://api.seu-erp.com.br/webhooks/dropnexo" />
+          <section class="Ae_FormBlock">
+            <header class="Ae_FormBlockHead">
+              <strong>Webhook &amp; contato</strong>
+              <span>Pedidos, HMAC e suporte técnico</span>
+            </header>
+            <div class="Ae_FormGrid Ae_FormGrid--stack">
+              <div class="filter-group">
+                <label for="ae_webhook">Webhook (pedidos/status)</label>
+                <input id="ae_webhook" type="url" placeholder="https://api.seu-erp.com.br/webhooks/dropnexo" />
+              </div>
+              <div class="filter-group">
+                <label for="ae_webhook_secret">Segredo HMAC</label>
+                <input id="ae_webhook_secret" type="password" autocomplete="new-password" placeholder="Opcional" />
+              </div>
+              <div class="filter-group">
+                <label for="ae_contato">Contato técnico</label>
+                <input id="ae_contato" type="text" placeholder="e-mail ou telefone" />
+              </div>
             </div>
-            <div class="filter-group">
-              <label for="ae_webhook_secret">Segredo HMAC</label>
-              <input id="ae_webhook_secret" type="password" autocomplete="new-password" placeholder="Opcional" />
-            </div>
-            <div class="filter-group">
-              <label for="ae_contato">Contato técnico</label>
-              <input id="ae_contato" type="text" placeholder="e-mail ou telefone" />
-            </div>
+          </section>
+        </div>
+
+        <div class="Ae_HomologBar" id="ae_homolog_bar">
+          <div>
+            <strong id="ae_homolog_titulo">Homologação</strong>
+            <p class="Ae_Hint" id="ae_homolog_txt">Configure, teste a conexão e sincronize. Depois solicite a produção.</p>
           </div>
-        </section>
+          <button type="button" class="Cl_botaoprimario" id="ae_btnSolicitarProd">Solicitar produção</button>
+        </div>
 
         <div class="Ae_Foot Ae_Foot--compact">
           <button type="button" class="Cl_botaoprimario" id="ae_btnSalvar">Salvar</button>
@@ -259,5 +270,5 @@
 </div>
 {% endblock %}
 {% block page_js %}
-<script defer src="{{ url_for('integracoes.static', filename='script/Sapi_externa_integracao.js') }}?v=4"></script>
+<script defer src="{{ url_for('integracoes.static', filename='script/Sapi_externa_integracao.js') }}?v=5"></script>
 {% endblock %}

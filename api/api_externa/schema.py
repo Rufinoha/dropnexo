@@ -2,6 +2,23 @@
 from __future__ import annotations
 
 
+def _add_column(cur, table: str, column: str, ddl: str) -> None:
+    cur.execute(
+        """
+        SELECT 1
+          FROM information_schema.columns
+         WHERE table_schema = 'public'
+           AND table_name = %s
+           AND column_name = %s
+         LIMIT 1
+        """,
+        (table, column),
+    )
+    if cur.fetchone():
+        return
+    cur.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
+
+
 def garantir_tabelas(conn) -> None:
     cur = conn.cursor()
     cur.execute(
@@ -40,6 +57,13 @@ def garantir_tabelas(conn) -> None:
         )
         """
     )
+    _add_column(cur, "tbl_integracao_api_externa", "homolog_status", "VARCHAR(30) NOT NULL DEFAULT 'pendente'")
+    _add_column(cur, "tbl_integracao_api_externa", "homolog_checklist", "JSONB NOT NULL DEFAULT '{}'::jsonb")
+    _add_column(cur, "tbl_integracao_api_externa", "homolog_solicitado_em", "TIMESTAMPTZ NULL")
+    _add_column(cur, "tbl_integracao_api_externa", "homolog_aprovado_em", "TIMESTAMPTZ NULL")
+    _add_column(cur, "tbl_integracao_api_externa", "homolog_aprovado_por", "INTEGER NULL")
+    _add_column(cur, "tbl_integracao_api_externa", "homolog_obs", "TEXT NULL")
+
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS tbl_integracao_api_externa_log (

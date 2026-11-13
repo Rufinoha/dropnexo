@@ -93,8 +93,15 @@ No card da integração o fornecedor liga/desliga:
 - Estoque: atualizar
 - Pedidos: enviar ao ERP / troca de status *(em expansão)*
 
+## Homologação → produção
+1. Começa sempre em **homologação**
+2. Configure URL + token, teste conexão e sincronize
+3. Clique em **Solicitar produção** (checklist automático: warehouses, products, stock)
+4. DropNexo analisa e **aprova** (produção) ou **reprova** (fica em homologação)
+5. O parceiro **não** promove sozinho para produção
+
 ## Webhook do parceiro (DropNexo → vocês)
-Informe a URL no card. Eventos previstos:
+Informe a URL no card. Eventos previstos *(em expansão)*:
 - `order.created`
 - `order.status_changed`
 - `order.canceled`
@@ -102,10 +109,10 @@ Informe a URL no card. Eventos previstos:
 Assinatura: header `X-DropNexo-Signature: sha256=<hmac>` com o segredo do webhook.
 
 ## Token DropNexo (vocês → DropNexo)
-Gerado no card (mostrar uma vez). Use para endpoints inbound futuros / confirmações.
+Gerado no card (valor completo só uma vez). Use para endpoints inbound futuros / confirmações.
 
 ## Boas práticas
-1. Ambiente de homologação antes de produção
+1. Homologação → checklist → aprovação DropNexo → produção
 2. Rate limit razoável e respostas JSON UTF-8
 3. Logs no seu lado com o SKU/pedido
 """
@@ -127,6 +134,7 @@ Implemente:
 8) Endpoint interno opcional para receber webhooks DropNexo (order.created / order.status_changed) com HMAC sha256
 
 Não invente campos obrigatórios além do guia. SKU é a chave. Variações usam sku_pai + atributos.
+Fluxo: homologação primeiro; produção só após checklist OK e aprovação DropNexo.
 Entregue: OpenAPI resumido + exemplos de response + checklist de testes com curl.
 """
 

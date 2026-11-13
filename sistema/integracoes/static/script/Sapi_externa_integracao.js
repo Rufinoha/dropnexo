@@ -134,12 +134,79 @@
     </tr>`;
   }
 
+  function renderAmbiente(cfg) {
+    const amb = cfg.ambiente === "producao" ? "producao" : "homologacao";
+    const st = String(cfg.homolog_status || "pendente").toLowerCase();
+    if ($("ae_ambiente")) $("ae_ambiente").value = amb;
+
+    const badge = $("ae_ambiente_badge");
+    const hint = $("ae_ambiente_hint");
+    const bar = $("ae_homolog_bar");
+    const titulo = $("ae_homolog_titulo");
+    const txt = $("ae_homolog_txt");
+    const btn = $("ae_btnSolicitarProd");
+
+    if (badge) {
+      badge.classList.remove("is-prod", "is-wait", "is-repro");
+      if (amb === "producao" || st === "aprovado") {
+        badge.textContent = "Produção";
+        badge.classList.add("is-prod");
+      } else if (st === "aguardando") {
+        badge.textContent = "Aguardando";
+        badge.classList.add("is-wait");
+      } else if (st === "reprovado") {
+        badge.textContent = "Reprovado";
+        badge.classList.add("is-repro");
+      } else {
+        badge.textContent = "Homologação";
+      }
+    }
+    if (hint) {
+      if (amb === "producao") hint.textContent = "Ambiente de produção liberado.";
+      else if (st === "aguardando") hint.textContent = "Solicitação em análise no DropNexo.";
+      else if (st === "reprovado") hint.textContent = cfg.homolog_obs || "Ajuste a API e solicite de novo.";
+      else hint.textContent = "Teste aqui. Produção só após aprovação DropNexo.";
+    }
+
+    if (bar) {
+      bar.classList.remove("is-prod", "is-wait", "is-repro");
+      if (amb === "producao" || st === "aprovado") bar.classList.add("is-prod");
+      else if (st === "aguardando") bar.classList.add("is-wait");
+      else if (st === "reprovado") bar.classList.add("is-repro");
+    }
+    if (titulo) {
+      if (amb === "producao" || st === "aprovado") titulo.textContent = "Produção liberada";
+      else if (st === "aguardando") titulo.textContent = "Aguardando aprovação";
+      else if (st === "reprovado") titulo.textContent = "Homologação reprovada";
+      else titulo.textContent = "Homologação";
+    }
+    if (txt) {
+      if (amb === "producao" || st === "aprovado") {
+        txt.textContent = "Sua API está autorizada a operar em produção.";
+      } else if (st === "aguardando") {
+        txt.textContent = "Recebemos os sinais do checklist. Em breve liberamos a produção.";
+      } else if (st === "reprovado") {
+        txt.textContent = cfg.homolog_obs || "Corrija os pontos do checklist e solicite novamente.";
+      } else {
+        txt.textContent = "Configure, teste a conexão e sincronize. Depois solicite a produção.";
+      }
+    }
+    if (btn) {
+      const pode = !!cfg.pode_solicitar_producao;
+      btn.hidden = amb === "producao" || st === "aprovado" || st === "aguardando";
+      btn.disabled = !pode && !btn.hidden;
+      btn.title = pode
+        ? "Roda checklist e envia para aprovação"
+        : "Salve URL + token e garanta testes OK antes de solicitar";
+    }
+  }
+
   function aplicar(cfg) {
     if (!cfg) return;
     tokenCfg = cfg;
     $("ae_base_url").value = cfg.base_url || "";
     $("ae_auth_tipo").value = cfg.auth_tipo || "bearer";
-    $("ae_ambiente").value = cfg.ambiente === "producao" ? "producao" : "homologacao";
+    renderAmbiente(cfg);
     $("ae_webhook").value = cfg.webhook_url || "";
     $("ae_contato").value = cfg.contato_tecnico || "";
     $("ae_ativo").checked = !!cfg.ativo;
@@ -331,6 +398,39 @@
       renderLogs(logs.dados || []);
     } catch (e) {
       toast("Erro", e.message, "error");
+    }
+  });
+
+  $("ae_btnSolicitarProd")?.addEventListener("click", async () => {
+    try {
+      await api("/api/integracoes/api-externa/salvar", {
+        method: "POST",
+        body: JSON.stringify(payloadSalvar()),
+      });
+      const ok = window.Swal
+        ? (
+            await Swal.fire({
+              icon: "question",
+              title: "Solicitar produção?",
+              text: "Vamos validar warehouses, produtos e estoque e enviar o resultado para o DropNexo.",
+              showCancelButton: true,
+              confirmButtonText: "Solicitar",
+              cancelButtonText: "Cancelar",
+              confirmButtonColor: "#021F81",
+            })
+          ).isConfirmed
+        : confirm("Solicitar produção?");
+      if (!ok) return;
+      const j = await api("/api/integracoes/api-externa/solicitar-producao", {
+        method: "POST",
+        body: "{}",
+      });
+      aplicar(j.dados || {});
+      toast("Enviado", j.message || "Solicitação enviada.", "success");
+      const logs = await api("/api/integracoes/api-externa/logs");
+      renderLogs(logs.dados || []);
+    } catch (e) {
+      toast("Não enviado", e.message, "error");
     }
   });
 

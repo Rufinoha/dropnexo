@@ -78,7 +78,9 @@ def carregar(conn, id_tenant: int) -> dict:
                webhook_url, webhook_secret_enc, dn_token_hash, dn_token_hint, dn_token_gerado_em,
                ativo, cap_produtos_cadastrar, cap_produtos_atualizar, cap_estoque_atualizar,
                cap_pedidos_enviar, cap_pedidos_status, status, ultima_sync_em, ultima_sync_ok,
-               ultima_mensagem, opcoes, dt_criacao, dt_atualizacao
+               ultima_mensagem, opcoes, dt_criacao, dt_atualizacao,
+               homolog_status, homolog_checklist, homolog_solicitado_em,
+               homolog_aprovado_em, homolog_aprovado_por, homolog_obs
           FROM tbl_integracao_api_externa
          WHERE id_tenant = %s
          LIMIT 1
@@ -93,6 +95,10 @@ def carregar(conn, id_tenant: int) -> dict:
             "ativo": False,
             "status": "desligado",
             "conectado": False,
+            "ambiente": "homologacao",
+            "homolog_status": "pendente",
+            "pode_solicitar_producao": False,
+            "pode_ir_producao": False,
         }
     cols = [
         "id", "id_tenant", "liberado", "liberado_em", "liberado_por", "nome_parceiro",
@@ -102,12 +108,25 @@ def carregar(conn, id_tenant: int) -> dict:
         "cap_produtos_atualizar", "cap_estoque_atualizar", "cap_pedidos_enviar",
         "cap_pedidos_status", "status", "ultima_sync_em", "ultima_sync_ok",
         "ultima_mensagem", "opcoes", "dt_criacao", "dt_atualizacao",
+        "homolog_status", "homolog_checklist", "homolog_solicitado_em",
+        "homolog_aprovado_em", "homolog_aprovado_por", "homolog_obs",
     ]
     d = dict(zip(cols, row))
     d["token_parceiro_configurado"] = bool(d.pop("token_parceiro_enc", None))
     d["webhook_secret_configurado"] = bool(d.pop("webhook_secret_enc", None))
     d["dn_token_configurado"] = bool(d.get("dn_token_hash"))
     d["conectado"] = bool(d.get("liberado") and d.get("ativo") and d.get("base_url"))
+    d["homolog_status"] = (d.get("homolog_status") or "pendente").strip().lower()
+    if not isinstance(d.get("homolog_checklist"), dict):
+        d["homolog_checklist"] = d.get("homolog_checklist") or {}
+    d["pode_ir_producao"] = d.get("homolog_status") == "aprovado" or d.get("ambiente") == "producao"
+    d["pode_solicitar_producao"] = bool(
+        d.get("liberado")
+        and d.get("ambiente") != "producao"
+        and d.get("homolog_status") not in ("aguardando", "aprovado")
+        and d.get("base_url")
+        and d.get("token_parceiro_configurado")
+    )
     return d
 
 
@@ -143,12 +162,16 @@ def listar_liberacoes(conn, termo: str = "") -> list[dict]:
         f"""
         SELECT a.id_tenant, a.nome_parceiro, a.contato_tecnico, a.ativo, a.status, a.ambiente,
                a.base_url, a.liberado_em, a.ultima_sync_em, a.ultima_sync_ok, a.ultima_mensagem,
+               a.homolog_status, a.homolog_solicitado_em, a.homolog_aprovado_em, a.homolog_obs,
                COALESCE(NULLIF(TRIM(t.razao_social), ''), NULLIF(TRIM(t.nome), ''), 'Tenant') AS tenant_nome,
                t.documento
           FROM tbl_integracao_api_externa a
           JOIN tbl_tenant t ON t.id = a.id_tenant
           {where}
-         ORDER BY a.dt_atualizacao DESC NULLS LAST, a.id_tenant
+         ORDER BY
+           CASE WHEN a.homolog_status = 'aguardando' THEN 0 ELSE 1 END,
+           a.dt_atualizacao DESC NULLS LAST,
+           a.id_tenant
          LIMIT 200
         """,
         tuple(params),
@@ -156,6 +179,7 @@ def listar_liberacoes(conn, termo: str = "") -> list[dict]:
     cols = [
         "id_tenant", "nome_parceiro", "contato_tecnico", "ativo", "status", "ambiente",
         "base_url", "liberado_em", "ultima_sync_em", "ultima_sync_ok", "ultima_mensagem",
+        "homolog_status", "homolog_solicitado_em", "homolog_aprovado_em", "homolog_obs",
         "tenant_nome", "documento",
     ]
     return [dict(zip(cols, r)) for r in cur.fetchall()]
@@ -173,26 +197,54 @@ def liberar_tenant(
     garantir_linha(conn, id_tenant)
     amb = "producao" if str(ambiente).lower() == "producao" else "homologacao"
     cur = conn.cursor()
-    cur.execute(
-        """
-        UPDATE tbl_integracao_api_externa
-           SET liberado = TRUE,
-               liberado_em = COALESCE(liberado_em, NOW()),
-               liberado_por = COALESCE(%s, liberado_por),
-               nome_parceiro = %s,
-               contato_tecnico = %s,
-               ambiente = %s,
-               dt_atualizacao = NOW()
-         WHERE id_tenant = %s
-        """,
-        (
-            id_usuario,
-            (nome_parceiro or "").strip() or None,
-            (contato_tecnico or "").strip() or None,
-            amb,
-            int(id_tenant),
-        ),
-    )
+    if amb == "producao":
+        cur.execute(
+            """
+            UPDATE tbl_integracao_api_externa
+               SET liberado = TRUE,
+                   liberado_em = COALESCE(liberado_em, NOW()),
+                   liberado_por = COALESCE(%s, liberado_por),
+                   nome_parceiro = %s,
+                   contato_tecnico = %s,
+                   ambiente = 'producao',
+                   homolog_status = 'aprovado',
+                   homolog_aprovado_em = COALESCE(homolog_aprovado_em, NOW()),
+                   homolog_aprovado_por = COALESCE(%s, homolog_aprovado_por),
+                   dt_atualizacao = NOW()
+             WHERE id_tenant = %s
+            """,
+            (
+                id_usuario,
+                (nome_parceiro or "").strip() or None,
+                (contato_tecnico or "").strip() or None,
+                id_usuario,
+                int(id_tenant),
+            ),
+        )
+    else:
+        cur.execute(
+            """
+            UPDATE tbl_integracao_api_externa
+               SET liberado = TRUE,
+                   liberado_em = COALESCE(liberado_em, NOW()),
+                   liberado_por = COALESCE(%s, liberado_por),
+                   nome_parceiro = %s,
+                   contato_tecnico = %s,
+                   ambiente = 'homologacao',
+                   homolog_status = CASE
+                     WHEN homolog_status IN ('aguardando', 'aprovado', 'reprovado') THEN homolog_status
+                     ELSE 'pendente'
+                   END,
+                   dt_atualizacao = NOW()
+             WHERE id_tenant = %s
+            """,
+            (
+                id_usuario,
+                (nome_parceiro or "").strip() or None,
+                (contato_tecnico or "").strip() or None,
+                int(id_tenant),
+            ),
+        )
     return carregar(conn, id_tenant)
 
 
@@ -292,7 +344,8 @@ def salvar_config_tenant(conn, id_tenant: int, payload: dict) -> dict:
     auth_tipo = str(payload.get("auth_tipo") or "bearer").strip().lower()
     if auth_tipo not in ("bearer", "api_key"):
         auth_tipo = "bearer"
-    ambiente = "producao" if str(payload.get("ambiente") or "").lower() == "producao" else "homologacao"
+    # Ambiente só muda por aprovação admin — o tenant não se promove sozinho.
+    ambiente = "producao" if cfg.get("ambiente") == "producao" else "homologacao"
     webhook_url = str(payload.get("webhook_url") or "").strip()
     contato = str(payload.get("contato_tecnico") or "").strip()
     nome = str(payload.get("nome_parceiro") or "").strip()
@@ -505,3 +558,82 @@ def buscar_tenants(conn, termo: str = "", limitar: int = 20) -> list[dict]:
             }
         )
     return out
+
+
+def _checklist_ok(checklist: dict | None) -> bool:
+    if not isinstance(checklist, dict):
+        return False
+    checks = checklist.get("checks") or []
+    if not checks:
+        return False
+    return all(bool(c.get("ok")) for c in checks if isinstance(c, dict))
+
+
+def solicitar_producao(conn, id_tenant: int, *, checklist: dict) -> dict:
+    """Parceiro pede promoção após checklist de homologação."""
+    import json
+
+    cfg = carregar(conn, id_tenant)
+    if not cfg.get("liberado"):
+        raise PermissionError("API Externa não liberada.")
+    if cfg.get("ambiente") == "producao" or cfg.get("homolog_status") == "aprovado":
+        raise ValueError("Este tenant já está em produção.")
+    if cfg.get("homolog_status") == "aguardando":
+        raise ValueError("Já existe uma solicitação aguardando aprovação.")
+    if not cfg.get("base_url") or not cfg.get("token_parceiro_configurado"):
+        raise ValueError("Configure URL base e token antes de solicitar.")
+    if not _checklist_ok(checklist):
+        raise ValueError("Checklist de homologação incompleto. Corrija os endpoints e tente de novo.")
+
+    cur = conn.cursor()
+    cur.execute(
+        """
+        UPDATE tbl_integracao_api_externa
+           SET homolog_status = 'aguardando',
+               homolog_checklist = %s::jsonb,
+               homolog_solicitado_em = NOW(),
+               homolog_obs = NULL,
+               dt_atualizacao = NOW()
+         WHERE id_tenant = %s
+        """,
+        (json.dumps(checklist, ensure_ascii=False), int(id_tenant)),
+    )
+    return carregar(conn, id_tenant)
+
+
+def aprovar_producao(conn, id_tenant: int, *, id_usuario: int | None, obs: str = "") -> dict:
+    garantir_linha(conn, id_tenant)
+    cur = conn.cursor()
+    cur.execute(
+        """
+        UPDATE tbl_integracao_api_externa
+           SET ambiente = 'producao',
+               homolog_status = 'aprovado',
+               homolog_aprovado_em = NOW(),
+               homolog_aprovado_por = %s,
+               homolog_obs = NULLIF(%s, ''),
+               dt_atualizacao = NOW()
+         WHERE id_tenant = %s
+        """,
+        (id_usuario, (obs or "").strip(), int(id_tenant)),
+    )
+    return carregar(conn, id_tenant)
+
+
+def reprovar_producao(conn, id_tenant: int, *, id_usuario: int | None, obs: str = "") -> dict:
+    garantir_linha(conn, id_tenant)
+    cur = conn.cursor()
+    cur.execute(
+        """
+        UPDATE tbl_integracao_api_externa
+           SET ambiente = 'homologacao',
+               homolog_status = 'reprovado',
+               homolog_aprovado_em = NULL,
+               homolog_aprovado_por = %s,
+               homolog_obs = NULLIF(%s, ''),
+               dt_atualizacao = NOW()
+         WHERE id_tenant = %s
+        """,
+        (id_usuario, (obs or "").strip() or "Reprovado na homologação.", int(id_tenant)),
+    )
+    return carregar(conn, id_tenant)

@@ -22,6 +22,7 @@
     </a>
     <nav class="AeDocs_Nav" aria-label="Documentação">
       <a href="#visao">Visão geral</a>
+      <a href="#homolog">Homologação</a>
       <a href="#auth">Auth</a>
       <a href="#endpoints">Endpoints</a>
       <a href="#webhooks">Webhooks</a>
@@ -59,6 +60,7 @@
       <aside class="AeDocs_Toc">
         <h2>Neste guia</h2>
         <a href="#visao">Como funciona</a>
+        <a href="#homolog">Homologação → produção</a>
         <a href="#auth">Autenticação</a>
         <a href="#endpoints">Endpoints</a>
         <a href="#webhooks">Webhooks</a>
@@ -84,12 +86,35 @@
             </div>
             <div class="AeDocs_Mini">
               <strong>Homologação</strong>
-              <span>Ambiente separado antes de produção, no card da integração.</span>
+              <span>Checklist + aprovação DropNexo antes de produção.</span>
             </div>
             <div class="AeDocs_Mini">
               <strong>Capacidades</strong>
               <span>O fornecedor liga/desliga cada tarefa no painel.</span>
             </div>
+          </div>
+        </section>
+
+        <section class="AeDocs_Section" id="homolog">
+          <h2>Homologação → produção</h2>
+          <p>
+            Todo parceiro começa em <strong>homologação</strong>. Vocês não mudam sozinhos para produção:
+            o DropNexo valida os sinais da API e aprova.
+          </p>
+          <ol class="AeDocs_List">
+            <li>Implemente os endpoints abaixo (HTTPS + auth).</li>
+            <li>No card <strong>API Externa</strong>, informe URL, token e teste a conexão.</li>
+            <li>Sincronize produtos/estoque em homologação.</li>
+            <li>Clique em <strong>Solicitar produção</strong> — o DropNexo roda um checklist automático
+              (<code>/v1/warehouses</code>, <code>/v1/products</code>, <code>/v1/stock</code>).</li>
+            <li>Se o checklist passar, a solicitação fica <strong>aguardando</strong>.</li>
+            <li>Após análise, o time DropNexo <strong>aprova</strong> (vai para produção) ou
+              <strong>reprova</strong> (permanece em homologação com o motivo).</li>
+          </ol>
+          <div class="AeDocs_BadgeRow">
+            <span class="AeDocs_Chip">Sem auto-promoção</span>
+            <span class="AeDocs_Chip">Checklist obrigatório</span>
+            <span class="AeDocs_Chip">Aprovação DropNexo</span>
           </div>
         </section>
 
@@ -201,21 +226,23 @@ X-Api-Key: &lt;TOKEN&gt;</pre>
         <section class="AeDocs_Section" id="webhooks">
           <h2>Webhook do parceiro</h2>
           <p>
-            Informe a URL no card. O DropNexo envia eventos com assinatura HMAC
-            no header <code>X-DropNexo-Signature: sha256=&lt;hmac&gt;</code>.
+            Informe a URL no card. O envio de pedidos/status pelo DropNexo está
+            <strong>em expansão</strong> — prepare o endpoint, mas a prioridade agora é o pull de
+            produtos/estoque. Assinatura prevista:
+            header <code>X-DropNexo-Signature: sha256=&lt;hmac&gt;</code>.
           </p>
           <ul class="AeDocs_List">
-            <li><code>order.created</code></li>
-            <li><code>order.status_changed</code></li>
-            <li><code>order.canceled</code></li>
+            <li><code>order.created</code> <em>(previsto)</em></li>
+            <li><code>order.status_changed</code> <em>(previsto)</em></li>
+            <li><code>order.canceled</code> <em>(previsto)</em></li>
           </ul>
         </section>
 
         <section class="AeDocs_Section" id="token">
           <h2>Token DropNexo</h2>
           <p>
-            Gerado no card da integração (mostrar uma vez). Use para endpoints inbound
-            futuros e confirmações. Guarde com o mesmo cuidado do token do ERP.
+            Gerado no card da integração (valor completo só uma vez; na tabela fica mascarado).
+            Use para endpoints inbound futuros e confirmações. Guarde com o mesmo cuidado do token do ERP.
           </p>
         </section>
 
@@ -226,7 +253,9 @@ X-Api-Key: &lt;TOKEN&gt;</pre>
             <li>Variação: informe <code>sku_pai</code> + <code>atributos</code>.</li>
             <li>Paginação com <code>next_cursor</code>; sync incremental com <code>updated_since</code>.</li>
             <li>Imagens em URL pública HTTPS.</li>
-            <li>Homologação antes de produção; logs no seu lado com SKU/pedido.</li>
+            <li>Mínimo para o checklist: warehouses + products com SKU + stock (ou estoque dentro do produto).</li>
+            <li>Homologação → solicitar → aprovação DropNexo → produção.</li>
+            <li>Logs no seu lado com SKU/pedido.</li>
           </ul>
         </section>
       </div>

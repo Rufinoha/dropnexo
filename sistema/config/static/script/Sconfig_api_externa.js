@@ -37,6 +37,21 @@
     return '<span class="AeAdm_Badge AeAdm_Badge--ok">ativo</span>';
   }
 
+  function badgeAmbiente(item) {
+    const amb = item.ambiente === "producao" ? "produção" : "homologação";
+    const hs = String(item.homolog_status || "pendente").toLowerCase();
+    if (hs === "aguardando") {
+      return `<span class="AeAdm_Badge AeAdm_Badge--warn">aguardando</span><br><small>${esc(amb)}</small>`;
+    }
+    if (hs === "reprovado") {
+      return `<span class="AeAdm_Badge AeAdm_Badge--err">reprovado</span><br><small>${esc(amb)}</small>`;
+    }
+    if (item.ambiente === "producao" || hs === "aprovado") {
+      return `<span class="AeAdm_Badge AeAdm_Badge--ok">produção</span>`;
+    }
+    return `<span class="AeAdm_Badge AeAdm_Badge--off">${esc(amb)}</span>`;
+  }
+
   function initComboTenant() {
     if (comboTenant) return comboTenant;
     if (!window.Util?.combobox_personalisado) {
@@ -116,14 +131,21 @@
         const sync = i.ultima_sync_em
           ? `${esc(i.ultima_sync_em)}<br><small>${esc(i.ultima_mensagem || "")}</small>`
           : "—";
+        const hs = String(i.homolog_status || "").toLowerCase();
+        const btnsAprov =
+          hs === "aguardando"
+            ? `<button type="button" class="Cl_botaoprimario ae-aprovar" data-id="${esc(i.id_tenant)}">Aprovar</button>
+               <button type="button" class="Cl_BtnCancelar ae-reprovar" data-id="${esc(i.id_tenant)}">Reprovar</button>`
+            : "";
         return `<tr>
           <td><strong>#${esc(i.id_tenant)}</strong><br><small>${esc(i.tenant_nome || "")}</small></td>
           <td>${esc(i.nome_parceiro || "—")}</td>
           <td>${esc(i.contato_tecnico || "—")}</td>
-          <td>${esc(i.ambiente || "—")}</td>
+          <td>${badgeAmbiente(i)}</td>
           <td>${badgeStatus(i)}</td>
           <td>${sync}</td>
           <td class="Cl_TableActions">
+            ${btnsAprov}
             <button type="button" class="Cl_BtnCancelar ae-editar" data-id="${esc(i.id_tenant)}">Editar</button>
             <button type="button" class="Cl_BtnCancelar ae-revogar" data-id="${esc(i.id_tenant)}">Revogar</button>
           </td>
@@ -136,6 +158,68 @@
         const id = Number(btn.dataset.id);
         const item = cache.find((x) => Number(x.id_tenant) === id);
         if (item) abrirModal(item);
+      });
+    });
+    tbody.querySelectorAll(".ae-aprovar").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const id = Number(btn.dataset.id);
+        const ok = window.Swal
+          ? (
+              await Swal.fire({
+                icon: "question",
+                title: "Aprovar produção?",
+                text: "O tenant passa de homologação para produção.",
+                showCancelButton: true,
+                confirmButtonText: "Aprovar",
+                cancelButtonText: "Cancelar",
+                confirmButtonColor: "#021F81",
+              })
+            ).isConfirmed
+          : confirm("Aprovar produção?");
+        if (!ok) return;
+        try {
+          await api("/api/configuracoes/api-externa/aprovar-producao", {
+            method: "POST",
+            body: JSON.stringify({ id_tenant: id }),
+          });
+          toast("Aprovado", "Tenant em produção.", "success");
+          await carregar();
+        } catch (e) {
+          toast("Erro", e.message, "error");
+        }
+      });
+    });
+    tbody.querySelectorAll(".ae-reprovar").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const id = Number(btn.dataset.id);
+        let obs = "";
+        if (window.Swal) {
+          const r = await Swal.fire({
+            icon: "warning",
+            title: "Reprovar?",
+            input: "text",
+            inputLabel: "Motivo (visível ao parceiro)",
+            inputPlaceholder: "Ex.: /v1/stock sem SKU",
+            showCancelButton: true,
+            confirmButtonText: "Reprovar",
+            cancelButtonText: "Cancelar",
+            confirmButtonColor: "#991b1b",
+          });
+          if (!r.isConfirmed) return;
+          obs = r.value || "";
+        } else if (!confirm("Reprovar solicitação?")) {
+          return;
+        }
+        try {
+          await api("/api/configuracoes/api-externa/reprovar-producao", {
+            method: "POST",
+            body: JSON.stringify({ id_tenant: id, obs }),
+          });
+          toast("Reprovado", "Parceiro permanece em homologação.", "success");
+          await carregar();
+        } catch (e) {
+          toast("Erro", e.message, "error");
+        }
       });
     });
     tbody.querySelectorAll(".ae-revogar").forEach((btn) => {

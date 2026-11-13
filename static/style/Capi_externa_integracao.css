@@ -178,16 +178,26 @@
 }
 
 .Ae_FormCompact {
-  width: min(720px, 100%);
+  width: 100%;
+  max-width: 1100px;
+}
+
+.Ae_FormColumns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+  gap: 0.9rem;
+  align-items: stretch;
 }
 
 .Ae_FormBlock {
-  margin-bottom: 0.9rem;
+  margin: 0;
+  height: 100%;
   padding: 1rem 1.05rem 1.1rem;
   border: 1px solid #e2e8f0;
   border-radius: 14px;
   background:
     linear-gradient(180deg, #ffffff 0%, #fbfcfe 100%);
+  box-sizing: border-box;
 }
 
 .Ae_FormBlockHead {
@@ -214,6 +224,10 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.75rem 0.9rem;
+}
+
+.Ae_FormGrid--stack {
+  grid-template-columns: 1fr;
 }
 
 .Ae_FormGrid .filter-group { margin: 0; min-width: 0; }
@@ -282,10 +296,96 @@
 }
 
 .Ae_Foot--compact {
-  margin-top: 0.35rem;
+  margin-top: 0.85rem;
   padding-top: 0.85rem;
-  width: min(720px, 100%);
+  width: 100%;
 }
+
+.Ae_AmbienteBox {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-height: 40px;
+  justify-content: center;
+}
+
+.Ae_AmbienteBadge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  background: #eef2ff;
+  color: #021f81;
+  border: 1px solid #c7d2fe;
+}
+
+.Ae_AmbienteBadge.is-prod {
+  background: #ecfdf5;
+  color: #047857;
+  border-color: #a7f3d0;
+}
+
+.Ae_AmbienteBadge.is-wait {
+  background: #fff7ed;
+  color: #c2410c;
+  border-color: #fed7aa;
+}
+
+.Ae_AmbienteBadge.is-repro {
+  background: #fef2f2;
+  color: #b91c1c;
+  border-color: #fecaca;
+}
+
+.Ae_HomologBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-top: 0.9rem;
+  padding: 0.95rem 1.05rem;
+  border-radius: 14px;
+  border: 1px dashed rgba(2, 31, 129, 0.28);
+  background: linear-gradient(135deg, #f8fafc 0%, #eef4ff 100%);
+}
+
+.Ae_HomologBar strong {
+  display: block;
+  color: #021f81;
+  margin-bottom: 0.2rem;
+}
+
+.Ae_HomologBar .Ae_Hint { margin: 0; }
+
+.Ae_HomologBar.is-wait {
+  border-style: solid;
+  border-color: #fdba74;
+  background: linear-gradient(135deg, #fffbeb, #fff7ed);
+}
+
+.Ae_HomologBar.is-wait strong { color: #c2410c; }
+
+.Ae_HomologBar.is-prod {
+  border-style: solid;
+  border-color: #86efac;
+  background: linear-gradient(135deg, #f0fdf4, #ecfdf5);
+}
+
+.Ae_HomologBar.is-prod strong { color: #047857; }
+
+.Ae_HomologBar.is-repro {
+  border-style: solid;
+  border-color: #fecaca;
+  background: linear-gradient(135deg, #fff5f5, #fef2f2);
+}
+
+.Ae_HomologBar.is-repro strong { color: #b91c1c; }
 
 .Ae_FootMeta {
   margin-left: auto;
@@ -632,7 +732,11 @@
   color: #94a3b8;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 980px) {
+  .Ae_FormColumns {
+    grid-template-columns: 1fr;
+  }
+
   .Ae_FormGrid,
   .Ae_Caps {
     grid-template-columns: 1fr;

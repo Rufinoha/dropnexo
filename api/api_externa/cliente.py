@@ -76,6 +76,90 @@ def testar_conexao(conn, id_tenant: int) -> dict:
     }
 
 
+def _amostra_lista(body: Any) -> list:
+    if isinstance(body, list):
+        return body
+    if isinstance(body, dict):
+        for key in ("data", "products", "stock", "itens", "warehouses"):
+            v = body.get(key)
+            if isinstance(v, list):
+                return v
+    return []
+
+
+def checklist_homologacao(conn, id_tenant: int) -> dict:
+    """Roda sinais mínimos: warehouses, products e stock. Usado na solicitação de produção."""
+    checks = []
+
+    def _check(nome: str, path: str, params: dict | None = None, *, exigir_sku: bool = False):
+        try:
+            body = _get(conn, id_tenant, path, params)
+            itens = _amostra_lista(body)
+            ok = True
+            detalhe = f"{len(itens)} item(ns)"
+            if exigir_sku:
+                com_sku = [i for i in itens if isinstance(i, dict) and (i.get("sku") or "").strip()]
+                if not com_sku:
+                    ok = False
+                    detalhe = "resposta sem SKU"
+                else:
+                    detalhe = f"{len(com_sku)} SKU(s)"
+            checks.append(
+                {
+                    "nome": nome,
+                    "endpoint": path,
+                    "ok": ok,
+                    "detalhe": detalhe,
+                    "http_status": 200,
+                }
+            )
+        except ApiExternaErro as exc:
+            checks.append(
+                {
+                    "nome": nome,
+                    "endpoint": path,
+                    "ok": False,
+                    "detalhe": str(exc),
+                    "http_status": exc.http_status,
+                }
+            )
+
+    _check("Depósitos", "/v1/warehouses")
+    _check("Produtos", "/v1/products", {"limit": 5}, exigir_sku=True)
+
+    # Estoque: aceita /v1/stock ou fallback via produtos (mesmo comportamento do sync).
+    try:
+        body = listar_estoque(conn, id_tenant)
+        itens = body.get("data") or []
+        com_sku = [i for i in itens if isinstance(i, dict) and (i.get("sku") or "").strip()]
+        checks.append(
+            {
+                "nome": "Estoque",
+                "endpoint": "/v1/stock",
+                "ok": bool(com_sku),
+                "detalhe": f"{len(com_sku)} SKU(s)" if com_sku else "sem SKU/estoque",
+                "http_status": 200,
+            }
+        )
+    except ApiExternaErro as exc:
+        checks.append(
+            {
+                "nome": "Estoque",
+                "endpoint": "/v1/stock",
+                "ok": False,
+                "detalhe": str(exc),
+                "http_status": exc.http_status,
+            }
+        )
+
+    ok = all(c["ok"] for c in checks)
+    return {
+        "ok": ok,
+        "checks": checks,
+        "message": "Checklist OK — pronto para solicitar produção." if ok else "Checklist com falhas — corrija e teste de novo.",
+    }
+
+
 def listar_produtos(conn, id_tenant: int, *, cursor: str | None = None, updated_since: str | None = None) -> dict:
     params: dict[str, Any] = {"limit": 100}
     if cursor:
