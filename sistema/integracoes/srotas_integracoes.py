@@ -60,6 +60,15 @@ CATEGORIAS_INTEGRACOES = [
                 "papel": "catalogo",
             },
             {"slug": "olist", "nome": "Olist", "descricao": "Importe produtos e fotos do Olist ERP para o catálogo.", "cor": "#6C2EB9", "iniciais": "OL", "modulos": _MOD_FORNECEDOR},
+            {
+                "slug": "api-externa",
+                "nome": "API Externa",
+                "descricao": "Conecte a API do seu ERP: produtos, estoque, webhook e documentação.",
+                "cor": "#021F81",
+                "iniciais": "API",
+                "modulos": _MOD_FORNECEDOR,
+                "requer_liberacao": True,
+            },
             {"slug": "conta-azul", "nome": "Conta Azul", "descricao": "Gestão financeira e emissão de notas.", "cor": "#0080FF", "iniciais": "CA", "modulos": _MOD_FORNECEDOR},
         ],
     },
@@ -219,11 +228,40 @@ def catalogo_com_urls(icones_base_url: str) -> list[dict]:
 
 def catalogo_integracoes_modulo(icones_base_url: str, modulo: str | None = None) -> list[dict]:
     mod = modulo or garantir_modulo_sessao()
+    api_ext_liberada = False
+    if mod in (MODULO_FORNECEDOR, MODULO_ARMAZEM):
+        tid = session.get("id_tenant")
+        if tid:
+            conn = None
+            try:
+                from api.api_externa.servico import liberado_para_tenant
+                from global_utils import Var_ConectarBanco
+
+                conn = Var_ConectarBanco()
+                api_ext_liberada = liberado_para_tenant(conn, int(tid))
+            except Exception:
+                api_ext_liberada = False
+            finally:
+                if conn is not None:
+                    try:
+                        conn.close()
+                    except Exception:
+                        pass
+        if session.get("eh_desenvolvedor") and not api_ext_liberada:
+            # Dev vê o card mesmo sem liberação, para testar a tela.
+            api_ext_liberada = True
+
     cats_out: list[dict] = []
     for cat in catalogo_com_urls(icones_base_url):
         if not _visivel_integracao_modulo(cat, mod):
             continue
-        itens = [i for i in cat.get("itens", []) if _visivel_integracao_modulo(i, mod)]
+        itens = []
+        for i in cat.get("itens", []):
+            if not _visivel_integracao_modulo(i, mod):
+                continue
+            if i.get("requer_liberacao") and not api_ext_liberada:
+                continue
+            itens.append(i)
         if not itens:
             continue
         c = dict(cat)
@@ -425,6 +463,32 @@ def pagina_mercadopago():
     )
 
 
+@integracoes_bp.get("/integracoes/api-externa")
+@login_obrigatorio()
+def pagina_api_externa():
+    if not _pode_ver_integracoes():
+        return _redir_hub("Sem permissão.")
+    mod = garantir_modulo_sessao()
+    if mod not in (MODULO_FORNECEDOR, MODULO_ARMAZEM) and not session.get("eh_desenvolvedor"):
+        return _redir_hub("API Externa disponível para fornecedor/armazém.")
+    id_tenant = session.get("id_tenant")
+    liberado = bool(session.get("eh_desenvolvedor"))
+    if id_tenant:
+        conn = Var_ConectarBanco()
+        try:
+            from api.api_externa.servico import liberado_para_tenant
+
+            liberado = liberado_para_tenant(conn, int(id_tenant)) or bool(session.get("eh_desenvolvedor"))
+        finally:
+            conn.close()
+    if not liberado:
+        return _redir_hub("API Externa não liberada para este tenant.")
+    return render_template(
+        "frm_api_externa_integracao.html",
+        nav_codigo="az_integracoes" if mod == MODULO_ARMAZEM else "integracoes",
+    )
+
+
 @integracoes_bp.get("/integracoes/pix-manual")
 @login_obrigatorio()
 def pagina_pix_manual():
@@ -594,6 +658,8 @@ def hub_status():
         mp_ok = False
         pix_ok = False
         olist_ok = False
+        api_ext_ok = False
+        api_ext_liberada = False
         conn = Var_ConectarBanco()
         try:
             cur = conn.cursor()
@@ -601,6 +667,7 @@ def hub_status():
                 from api.mercadopago.mercadopago import mp_conectado
                 from api.pix_manual.pix_manual import pix_manual_ativo
                 from api.olist.cliente import olist_conectado
+                from api.api_externa.servico import carregar as carregar_api_externa
 
                 try:
                     mp_ok = mp_conectado(cur, int(id_tenant))
@@ -614,6 +681,13 @@ def hub_status():
                     olist_ok = olist_conectado(cur, int(id_tenant))
                 except Exception:
                     olist_ok = False
+                try:
+                    ae = carregar_api_externa(conn, int(id_tenant))
+                    api_ext_liberada = bool(ae.get("liberado"))
+                    api_ext_ok = bool(ae.get("conectado"))
+                except Exception:
+                    api_ext_ok = False
+                    api_ext_liberada = False
         finally:
             conn.close()
         integracoes["bling"] = {
@@ -636,6 +710,13 @@ def hub_status():
             "config_url": url_for("integracoes.pagina_pix_manual"),
             "oauth_url": "",
         }
+        if api_ext_liberada or session.get("eh_desenvolvedor"):
+            integracoes["api-externa"] = {
+                "conectado": api_ext_ok,
+                "config_url": url_for("integracoes.pagina_api_externa"),
+                "oauth_url": "",
+                "liberado": True,
+            }
 
     if modulo == MODULO_VENDEDOR:
         me_ok = False

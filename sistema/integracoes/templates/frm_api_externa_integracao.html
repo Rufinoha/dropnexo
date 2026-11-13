@@ -1,0 +1,136 @@
+{% set nav_ativo = nav_codigo %}
+{% extends "frm_base.html" %}
+{% block title %}API Externa — Integrações — {{ MARCA_NOME }}{% endblock %}
+{% block topbar_title %}API Externa{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('static', filename='style/Cmercadopago_integracao.css') }}?v=3" />
+<style>
+  .Ae_Grid{display:grid;grid-template-columns:1.2fr .8fr;gap:16px}
+  .Ae_Card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:16px 18px}
+  .Ae_Card h3{margin:0 0 8px;font-size:1.05rem}
+  .Ae_Hint{color:#64748b;font-size:.9rem;margin:0 0 12px}
+  .Ae_Switch{display:flex;align-items:center;gap:8px;margin:8px 0;font-weight:600}
+  .Ae_Caps{display:grid;grid-template-columns:1fr 1fr;gap:8px 16px;margin:10px 0 14px}
+  .Ae_Status{display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:999px;background:#f1f5f9;font-weight:700;font-size:.85rem}
+  .Ae_Status.is-ativo{background:#dcfce7;color:#166534}
+  .Ae_Status.is-erro{background:#fee2e2;color:#991b1b}
+  .Ae_Status.is-atencao{background:#fff7ed;color:#9a3412}
+  .Ae_Log{max-height:280px;overflow:auto;font-size:.85rem}
+  .Ae_Log table{width:100%;border-collapse:collapse}
+  .Ae_Log th,.Ae_Log td{padding:6px 8px;border-bottom:1px solid #eef2f7;text-align:left;vertical-align:top}
+  .Ae_Doc{white-space:pre-wrap;font-family:ui-monospace,Consolas,monospace;font-size:.82rem;background:#0b1220;color:#e2e8f0;padding:14px;border-radius:10px;max-height:420px;overflow:auto}
+  .Ae_Actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+  @media(max-width:980px){.Ae_Grid,.Ae_Caps{grid-template-columns:1fr}}
+</style>
+{% endblock %}
+{% block content %}
+<div class="Cl_ContainerApoio cl-page-principal Mp_Wrap">
+  <div class="cl-page-title Mp_PageHead">
+    <div class="Mp_PageHeadMain">
+      <a href="{{ url_for('integracoes.pagina') }}" class="Mp_BackLink">← Integrações</a>
+      <div class="Mp_TitleRow">
+        <div class="Mp_Logo" style="background:#021F81;color:#fff" aria-hidden="true">API</div>
+        <div>
+          <h2>API Externa</h2>
+          <p class="cl-page-desc">Conecte a API do seu ERP para produtos, estoque e (em breve) pedidos.</p>
+        </div>
+      </div>
+    </div>
+    <div class="Ae_Status" id="ae_badge">Carregando…</div>
+  </div>
+
+  <div class="Ae_Grid">
+    <div>
+      <section class="Ae_Card">
+        <h3>Conexão com a sua API</h3>
+        <p class="Ae_Hint">O DropNexo chama a URL abaixo para puxar produtos e estoque.</p>
+        <div class="Mp_FormGrid">
+          <div class="filter-group Mp_FormGrid--full">
+            <label for="ae_base_url">URL base *</label>
+            <input id="ae_base_url" type="url" placeholder="https://api.seu-erp.com.br" />
+          </div>
+          <div class="filter-group">
+            <label for="ae_auth_tipo">Autenticação</label>
+            <select id="ae_auth_tipo">
+              <option value="bearer">Bearer Token</option>
+              <option value="api_key">X-Api-Key</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label for="ae_ambiente">Ambiente</label>
+            <select id="ae_ambiente">
+              <option value="homologacao">Homologação</option>
+              <option value="producao">Produção</option>
+            </select>
+          </div>
+          <div class="filter-group Mp_FormGrid--full">
+            <label for="ae_token">Token da sua API</label>
+            <input id="ae_token" type="password" autocomplete="new-password" placeholder="Deixe mascarado para manter" />
+            <small id="ae_token_hint" class="Ae_Hint"></small>
+          </div>
+          <div class="filter-group Mp_FormGrid--full">
+            <label for="ae_webhook">Webhook de vocês (pedidos/status)</label>
+            <input id="ae_webhook" type="url" placeholder="https://api.seu-erp.com.br/webhooks/dropnexo" />
+          </div>
+          <div class="filter-group Mp_FormGrid--full">
+            <label for="ae_webhook_secret">Segredo do webhook (HMAC)</label>
+            <input id="ae_webhook_secret" type="password" autocomplete="new-password" placeholder="Opcional" />
+          </div>
+          <div class="filter-group Mp_FormGrid--full">
+            <label for="ae_contato">Contato técnico</label>
+            <input id="ae_contato" type="text" placeholder="e-mail ou telefone" />
+          </div>
+        </div>
+
+        <h3 style="margin-top:1rem">Tarefas ativas</h3>
+        <div class="Ae_Caps">
+          <label class="Ae_Switch"><input type="checkbox" id="ae_cap_prod_cad" checked /> Produtos · Cadastrar</label>
+          <label class="Ae_Switch"><input type="checkbox" id="ae_cap_prod_upd" checked /> Produtos · Atualizar</label>
+          <label class="Ae_Switch"><input type="checkbox" id="ae_cap_est_upd" checked /> Estoque · Atualizar</label>
+          <label class="Ae_Switch"><input type="checkbox" id="ae_cap_ped_env" /> Pedidos · Enviar ao ERP</label>
+          <label class="Ae_Switch"><input type="checkbox" id="ae_cap_ped_st" /> Pedidos · Troca de status</label>
+        </div>
+        <label class="Ae_Switch"><input type="checkbox" id="ae_ativo" /> Ativar integração</label>
+
+        <div class="Ae_Actions">
+          <button type="button" class="Cl_botaoprimario" id="ae_btnSalvar">Salvar</button>
+          <button type="button" class="Cl_BtnCancelar" id="ae_btnTestar">Testar conexão</button>
+          <button type="button" class="Cl_BtnCancelar" id="ae_btnSyncProd">Sincronizar produtos</button>
+          <button type="button" class="Cl_BtnCancelar" id="ae_btnSyncEst">Sincronizar estoque</button>
+        </div>
+        <p class="Ae_Hint" id="ae_ultima" style="margin-top:10px"></p>
+      </section>
+
+      <section class="Ae_Card" style="margin-top:16px">
+        <h3>Token DropNexo (para vocês nos chamarem)</h3>
+        <p class="Ae_Hint">Gere e envie ao time técnico. Aparece só uma vez.</p>
+        <p id="ae_dn_hint" class="Ae_Hint"></p>
+        <div class="Ae_Actions">
+          <button type="button" class="Cl_BtnCancelar" id="ae_btnToken">Gerar novo token</button>
+        </div>
+        <pre id="ae_dn_token" class="Ae_Doc" hidden></pre>
+      </section>
+    </div>
+
+    <div>
+      <section class="Ae_Card">
+        <h3>Documentação</h3>
+        <p class="Ae_Hint">Endpoints, exemplos e prompt para a AI do parceiro.</p>
+        <div class="Ae_Actions">
+          <button type="button" class="Cl_BtnCancelar" id="ae_btnCopiarDoc">Copiar documentação</button>
+          <button type="button" class="Cl_BtnCancelar" id="ae_btnCopiarPrompt">Copiar prompt AI</button>
+        </div>
+        <pre class="Ae_Doc" id="ae_doc" style="margin-top:10px">Carregando…</pre>
+      </section>
+
+      <section class="Ae_Card" style="margin-top:16px">
+        <h3>Log recente</h3>
+        <div class="Ae_Log" id="ae_logs"><p class="Ae_Hint">Sem eventos ainda.</p></div>
+      </section>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block page_js %}
+<script defer src="{{ url_for('integracoes.static', filename='script/Sapi_externa_integracao.js') }}?v=1"></script>
+{% endblock %}

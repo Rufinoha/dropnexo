@@ -1,0 +1,60 @@
+{% extends "frm_base.html" %}
+{% block title %}API Externa — {{ MARCA_NOME }}{% endblock %}
+{% set nav_ativo = 'config' %}
+{% block topbar_title %}API Externa{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_hubsupport.css') }}?v=1" />
+{% endblock %}
+{% block content %}
+<div class="Cl_ContainerApoio cl-page-principal HsCfg_Wrap">
+  <div class="cl-page-title HsCfg_TitleRow">
+    <div>
+      <h2>API Externa · parceiros</h2>
+      <p class="cl-page-desc">
+        Liberar por tenant o card <strong>API Externa</strong> em Integrações.
+        O fornecedor configura a URL da API dele, tokens, capacidades e vê a documentação.
+      </p>
+    </div>
+  </div>
+
+  <p class="CfgCup_Aviso">
+    <a class="Cl_BtnLink" href="{{ url_for('config.configuracoes') }}">← Voltar às Configurações</a>
+  </p>
+
+  <div class="HsCfg_Grid">
+    <section class="HsCfg_Panel">
+      <h3>Liberar tenant</h3>
+      <label class="Cl_Label" for="ae_busca">Buscar tenant</label>
+      <input type="text" id="ae_busca" class="Cl_Input" placeholder="ID, nome, razão social ou documento" />
+      <div id="ae_sugestoes" class="HsCfg_Hint" style="margin-top:.5rem"></div>
+
+      <label class="Cl_Label" for="ae_tenant">ID do tenant</label>
+      <input type="number" id="ae_tenant" class="Cl_Input" min="1" placeholder="Ex.: 42" />
+
+      <label class="Cl_Label" for="ae_nome">Nome do parceiro (opcional)</label>
+      <input type="text" id="ae_nome" class="Cl_Input" placeholder="Ex.: Fornecedor XYZ" />
+
+      <label class="Cl_Label" for="ae_contato">Contato técnico (opcional)</label>
+      <input type="text" id="ae_contato" class="Cl_Input" placeholder="e-mail ou telefone" />
+
+      <label class="Cl_Label" for="ae_ambiente">Ambiente inicial</label>
+      <select id="ae_ambiente" class="Cl_Input">
+        <option value="homologacao">Homologação</option>
+        <option value="producao">Produção</option>
+      </select>
+
+      <div class="HsCfg_Acoes" style="margin-top:1rem;justify-content:flex-start">
+        <button type="button" class="Cl_botaoprimario" id="ae_btnLiberar">Liberar API Externa</button>
+      </div>
+    </section>
+
+    <section class="HsCfg_Panel">
+      <h3>Tenants liberados</h3>
+      <label class="Cl_Label" for="ae_filtro">Filtrar</label>
+      <input type="text" id="ae_filtro" class="Cl_Input" placeholder="Buscar na lista" />
+      <div id="ae_lista" style="margin-top:1rem;overflow:auto"></div>
+    </section>
+  </div>
+</div>
+<script defer src="{{ url_for('config.static', filename='script/Sconfig_api_externa.js') }}?v=1"></script>
+{% endblock %}

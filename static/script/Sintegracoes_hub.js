@@ -80,6 +80,7 @@
     if (item.slug === "tiktok") return st.config_url || "/integracoes/tiktok";
     if (item.slug === "amazon") return st.config_url || "/integracoes/amazon";
     if (item.slug === "olist") return st.config_url || "/integracoes/olist";
+    if (item.slug === "api-externa") return st.config_url || "/integracoes/api-externa";
     return st.config_url || `/integracoes/${item.slug}`;
   }
 
@@ -92,6 +93,7 @@
     "tiktok",
     "amazon",
     "olist",
+    "api-externa",
   ]);
 
   function seloEmBreveHtml() {
@@ -348,7 +350,8 @@
       slug === "mercado-livre" ||
       slug === "tiktok" ||
       slug === "amazon" ||
-      slug === "olist"
+      slug === "olist" ||
+      slug === "api-externa"
     ) {
       window.location.href = configUrlIntegracao(item);
       return;

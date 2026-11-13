@@ -3954,6 +3954,18 @@ def assinaturas_baixar_nf(id_fatura: int):
     return send_file(path, as_attachment=False, download_name=nome, mimetype="application/pdf")
 
 
+# --- API Externa (parceiros / fornecedores) ---
+API_EXTERNA_PREFIX = "/configuracoes/api-externa"
+
+
+@config_bp.get(API_EXTERNA_PREFIX)
+@login_obrigatorio()
+def api_externa_pagina():
+    if not session.get("eh_desenvolvedor"):
+        return redirect(url_for("dashboard.index"))
+    return render_template("frm_config_api_externa.html", nav_ativo="config")
+
+
 # --- Hub H74 (NF-e / Painel HUB) ---
 HUB_H74_PREFIX = "/configuracoes/hub-h74"
 

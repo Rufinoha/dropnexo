@@ -58,6 +58,12 @@
       iconeTech: "nf_hub",
     },
     {
+      titulo: "API Externa",
+      texto: "Liberar por tenant o card de integração com API do fornecedor (produtos, estoque, webhook e documentação).",
+      rota: "/configuracoes/api-externa",
+      iconeTech: "checklist",
+    },
+    {
       titulo: "Tarefas secundárias",
       texto: "Jobs agendados da plataforma (ex.: cache semanal de categorias do Mercado Livre) com status e log.",
       rota: "/configuracoes/tarefas-secundarias",
