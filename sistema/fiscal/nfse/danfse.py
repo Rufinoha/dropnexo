@@ -427,11 +427,61 @@ def _qr(chave: str) -> bytes:
     return buffer.getvalue()
 
 
-def _logo() -> bytes | None:
-    caminho = Path(__file__).resolve().parents[2] / "static" / "imge" / "logoh74.png"
-    if not caminho.is_file():
-        return None
-    return caminho.read_bytes()
+def _raizes_projeto() -> list[Path]:
+    """Projeto (DROPNEXO) e pasta sistema — logos podem estar em qualquer uma."""
+    aqui = Path(__file__).resolve()
+    return [aqui.parents[3], aqui.parents[2]]
+
+
+def _caminho_abs_logo(caminho_db: str | None) -> list[Path]:
+    if not caminho_db:
+        return []
+    rel = str(caminho_db).replace("\\", "/").strip().lstrip("/")
+    if ".." in rel.split("/"):
+        return []
+    if not rel.lower().startswith(("upload/tenant", "static/imge/imgtenant")):
+        return []
+    partes = Path(*rel.split("/"))
+    return [raiz / partes for raiz in _raizes_projeto()]
+
+
+def _logo(nota: dict | None = None) -> bytes | None:
+    """Logotipo do emissor (tenant). Fallback só para PDF modelo H74."""
+    candidatos: list[Path] = []
+    caminho_db = (nota or {}).get("logo_caminho") or (nota or {}).get("prestador_logo")
+    candidatos.extend(_caminho_abs_logo(caminho_db))
+
+    id_tenant = (nota or {}).get("id_tenant")
+    if id_tenant:
+        for raiz in _raizes_projeto():
+            pasta = raiz / "upload" / f"tenant{int(id_tenant)}" / "logotipo"
+            if not pasta.is_dir():
+                continue
+            for arq in sorted(pasta.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
+                if arq.is_file() and arq.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp"}:
+                    candidatos.append(arq)
+                    break
+
+    if (nota or {}).get("modelo"):
+        for raiz in _raizes_projeto():
+            candidatos.append(raiz / "static" / "imge" / "logoh74.png")
+            candidatos.append(raiz / "sistema" / "static" / "imge" / "logoh74.png")
+
+    vistos: set[str] = set()
+    for caminho in candidatos:
+        try:
+            chave = str(caminho.resolve())
+        except Exception:
+            chave = str(caminho)
+        if chave in vistos:
+            continue
+        vistos.add(chave)
+        if caminho.is_file():
+            try:
+                return caminho.read_bytes()
+            except Exception:
+                continue
+    return None
 
 
 def _bits_code128(chave: str) -> str:
@@ -668,31 +718,54 @@ def gerar_danfse(xml: bytes | None, nota: dict) -> bytes:
     _caixa(pagina, x_qr, y, direita - x_qr, 16, 0.8)
     _caixa(pagina, x_qr, y + 16, direita - x_qr, alt_cab - 16, 0.8)
 
-    logo = _logo()
+    box_w = x_meio - esq
+    pad = 6.0
+    texto_x = esq + pad
+    texto_w = box_w - pad * 2
+    logo = _logo(nota)
+    cursor = y + 8
     if logo:
-        pagina.insert_image(fitz.Rect(esq + 8, y + 5, esq + 168, y + 56), stream=logo, keep_proportion=True)
-    cursor = y + (62 if logo else 14)
+        logo_max_h = 34.0
+        logo_max_w = min(120.0, texto_w)
+        pagina.insert_image(
+            fitz.Rect(texto_x, cursor, texto_x + logo_max_w, cursor + logo_max_h),
+            stream=logo,
+            keep_proportion=True,
+        )
+        cursor += logo_max_h + 4
+
     cabecalho = [
-        d["prestador"],
-        _juntar(
-            f"CNPJ {d['prestador_doc']}" if d["prestador_doc"] else "",
-            f"IM {d['prestador_im']}" if d["prestador_im"] else "",
+        (d["prestador"], 7.2, "hebo"),
+        (
+            _juntar(
+                f"CNPJ {d['prestador_doc']}" if d["prestador_doc"] else "",
+                f"IM {d['prestador_im']}" if d["prestador_im"] else "",
+            ),
+            5.9,
+            "helv",
         ),
-        d["prestador_end"],
-        d["prestador_cidade"],
-        _juntar(
-            f"Fone {d['prestador_fone']}" if d["prestador_fone"] else "",
-            d["prestador_email"],
+        (d["prestador_end"], 5.7, "helv"),
+        (d["prestador_cidade"], 5.7, "helv"),
+        (
+            _juntar(
+                f"Fone {d['prestador_fone']}" if d["prestador_fone"] else "",
+                d["prestador_email"],
+            ),
+            5.7,
+            "helv",
         ),
     ]
-    for indice, linha in enumerate(parte for parte in cabecalho if parte):
-        pagina.insert_text(
-            (esq + 8, cursor + indice * 9),
-            linha,
-            fontsize=8 if indice == 0 else 6.3,
-            fontname="hebo" if indice == 0 else "helv",
-            color=PRETO,
+    limite_y = y + alt_cab - 2
+    for texto, tamanho, fonte in cabecalho:
+        if not texto or cursor >= limite_y - 4:
+            continue
+        rect = fitz.Rect(texto_x, cursor, texto_x + texto_w, limite_y)
+        sobra = pagina.insert_textbox(
+            rect, str(texto), fontsize=tamanho, fontname=fonte, color=PRETO, align=0
         )
+        if sobra < 0:
+            break
+        cursor = limite_y - sobra + 1.2
 
     meio_w = x_qr - x_meio
     _centralizar(pagina, x_meio, y + 12, meio_w, "DANFSe", 13)

@@ -2770,6 +2770,7 @@ def api_nota_danfse(id_nota):
             """
             SELECT n.*, t.razao_social AS prestador_razao, t.cnpj AS prestador_cnpj,
                    t.municipio_nome AS prestador_municipio,
+                   t.logo_caminho,
                    COALESCE(e.endereco, n.tomador_logradouro) AS tomador_logradouro,
                    COALESCE(e.numero, n.tomador_numero) AS tomador_numero,
                    COALESCE(e.complemento, n.tomador_complemento) AS tomador_complemento,
