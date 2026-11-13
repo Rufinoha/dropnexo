@@ -249,6 +249,32 @@ def tenant_gerar_token():
         conn.close()
 
 
+@api_externa_bp.post("/api/integracoes/api-externa/revogar-token")
+@login_obrigatorio()
+def tenant_revogar_token():
+    if (r := _exigir_fornecedor()) is not None:
+        return r
+    id_t = _id_tenant()
+    if not id_t:
+        return jsonify(success=False, message="Sessão inválida."), 403
+    conn = Var_ConectarBanco()
+    try:
+        cfg = servico.carregar(conn, id_t)
+        if not cfg.get("liberado"):
+            return jsonify(success=False, message="API Externa não liberada."), 403
+        cfg = servico.revogar_dn_token(conn, id_t)
+        servico.registrar_log(
+            conn, id_t, evento="token.revogado", sucesso=True, mensagem="Token DropNexo revogado.", direcao="local"
+        )
+        conn.commit()
+        return jsonify(success=True, message="Token revogado.", dados=_json_safe(cfg))
+    except Exception as exc:
+        conn.rollback()
+        return jsonify(success=False, message=str(exc)), 500
+    finally:
+        conn.close()
+
+
 @api_externa_bp.post("/api/integracoes/api-externa/testar")
 @login_obrigatorio()
 def tenant_testar():

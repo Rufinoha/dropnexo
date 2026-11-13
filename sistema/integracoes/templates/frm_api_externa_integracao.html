@@ -3,7 +3,7 @@
 {% block title %}API Externa — Integrações — {{ MARCA_NOME }}{% endblock %}
 {% block topbar_title %}API Externa{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('static', filename='style/Capi_externa_integracao.css') }}?v=1" />
+<link rel="stylesheet" href="{{ url_for('static', filename='style/Capi_externa_integracao.css') }}?v=4" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal Ae_Wrap">
@@ -36,47 +36,66 @@
         <h3>Conexão com a sua API</h3>
         <p class="Ae_Hint">O DropNexo chama a URL abaixo para puxar produtos e estoque.</p>
       </div>
-      <div class="Ae_FormGrid">
-        <div class="filter-group Ae_Full">
-          <label for="ae_base_url">URL base *</label>
-          <input id="ae_base_url" type="url" placeholder="https://api.seu-erp.com.br" />
+
+      <div class="Ae_FormCompact">
+        <section class="Ae_FormBlock">
+          <header class="Ae_FormBlockHead">
+            <strong>Acesso</strong>
+            <span>URL, autenticação e ambiente</span>
+          </header>
+          <div class="Ae_FormGrid">
+            <div class="filter-group Ae_Span2">
+              <label for="ae_base_url">URL base *</label>
+              <input id="ae_base_url" type="url" placeholder="https://api.seu-erp.com.br" />
+            </div>
+            <div class="filter-group">
+              <label for="ae_auth_tipo">Autenticação</label>
+              <select id="ae_auth_tipo">
+                <option value="bearer">Bearer Token</option>
+                <option value="api_key">X-Api-Key</option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <label for="ae_ambiente">Ambiente</label>
+              <select id="ae_ambiente">
+                <option value="homologacao">Homologação</option>
+                <option value="producao">Produção</option>
+              </select>
+            </div>
+            <div class="filter-group Ae_Span2">
+              <label for="ae_token">Token da sua API</label>
+              <input id="ae_token" type="password" autocomplete="new-password" placeholder="Deixe mascarado para manter" />
+              <small id="ae_token_hint" class="Ae_FieldHint"></small>
+            </div>
+          </div>
+        </section>
+
+        <section class="Ae_FormBlock">
+          <header class="Ae_FormBlockHead">
+            <strong>Webhook &amp; contato</strong>
+            <span>Pedidos, HMAC e suporte técnico</span>
+          </header>
+          <div class="Ae_FormGrid">
+            <div class="filter-group Ae_Span2">
+              <label for="ae_webhook">Webhook (pedidos/status)</label>
+              <input id="ae_webhook" type="url" placeholder="https://api.seu-erp.com.br/webhooks/dropnexo" />
+            </div>
+            <div class="filter-group">
+              <label for="ae_webhook_secret">Segredo HMAC</label>
+              <input id="ae_webhook_secret" type="password" autocomplete="new-password" placeholder="Opcional" />
+            </div>
+            <div class="filter-group">
+              <label for="ae_contato">Contato técnico</label>
+              <input id="ae_contato" type="text" placeholder="e-mail ou telefone" />
+            </div>
+          </div>
+        </section>
+
+        <div class="Ae_Foot Ae_Foot--compact">
+          <button type="button" class="Cl_botaoprimario" id="ae_btnSalvar">Salvar</button>
+          <button type="button" class="Cl_BtnCancelar" id="ae_btnTestar">Testar conexão</button>
+          <p class="Ae_FootMeta" id="ae_ultima"></p>
         </div>
-        <div class="filter-group">
-          <label for="ae_auth_tipo">Autenticação</label>
-          <select id="ae_auth_tipo">
-            <option value="bearer">Bearer Token</option>
-            <option value="api_key">X-Api-Key</option>
-          </select>
-        </div>
-        <div class="filter-group">
-          <label for="ae_ambiente">Ambiente</label>
-          <select id="ae_ambiente">
-            <option value="homologacao">Homologação</option>
-            <option value="producao">Produção</option>
-          </select>
-        </div>
-        <div class="filter-group Ae_Full">
-          <label for="ae_token">Token da sua API</label>
-          <input id="ae_token" type="password" autocomplete="new-password" placeholder="Deixe mascarado para manter" />
-          <small id="ae_token_hint" class="Ae_Hint" style="margin-top:0.35rem;display:block"></small>
-        </div>
-        <div class="filter-group Ae_Full">
-          <label for="ae_webhook">Webhook de vocês (pedidos/status)</label>
-          <input id="ae_webhook" type="url" placeholder="https://api.seu-erp.com.br/webhooks/dropnexo" />
-        </div>
-        <div class="filter-group Ae_Full">
-          <label for="ae_webhook_secret">Segredo do webhook (HMAC)</label>
-          <input id="ae_webhook_secret" type="password" autocomplete="new-password" placeholder="Opcional" />
-        </div>
-        <div class="filter-group Ae_Full">
-          <label for="ae_contato">Contato técnico</label>
-          <input id="ae_contato" type="text" placeholder="e-mail ou telefone" />
-        </div>
-      </div>
-      <div class="Ae_Foot">
-        <button type="button" class="Cl_botaoprimario" id="ae_btnSalvar">Salvar</button>
-        <button type="button" class="Cl_BtnCancelar" id="ae_btnTestar">Testar conexão</button>
-        <p class="Ae_FootMeta" id="ae_ultima"></p>
       </div>
     </div>
 
@@ -159,43 +178,67 @@
 
     {# ── Token ── #}
     <div class="Ae_Pane" id="ae_pane_token" data-ae-pane="token" hidden>
-      <div class="Ae_PaneHead">
-        <h3>Token DropNexo</h3>
-        <p class="Ae_Hint">Para o sistema de vocês nos chamar. O valor completo aparece só uma vez.</p>
-      </div>
-      <p id="ae_dn_hint" class="Ae_Hint"></p>
-      <div id="ae_dn_empty" class="Ae_TokenEmpty">Nenhum token gerado ainda.</div>
-      <pre id="ae_dn_token" class="Ae_TokenBox" hidden></pre>
-      <div class="Ae_Foot">
+      <div class="Ae_PaneHead Ae_PaneHead--row">
+        <div>
+          <h3>Token DropNexo</h3>
+          <p class="Ae_Hint">Para o sistema de vocês nos chamarem. O valor completo aparece só uma vez — depois só a dica mascarada.</p>
+        </div>
         <button type="button" class="Cl_botaoprimario" id="ae_btnToken">Gerar novo token</button>
-        <button type="button" class="Cl_BtnCancelar" id="ae_btnCopiarToken" hidden>Copiar token</button>
       </div>
+
+      <div class="Ae_Reveal" id="ae_dn_reveal" hidden>
+        <div class="Ae_RevealHead">
+          <strong>Copie agora</strong>
+          <span>Este valor não será exibido de novo.</span>
+        </div>
+        <code class="Ae_RevealCode" id="ae_dn_token_plain"></code>
+        <div class="Ae_RevealActions">
+          <button type="button" class="Cl_botaoprimario" id="ae_btnCopiarToken">Copiar token</button>
+          <button type="button" class="Cl_BtnCancelar" id="ae_btnFecharReveal">Ocultar</button>
+        </div>
+      </div>
+
+      <div class="Ae_TokenTableWrap">
+        <table class="Ae_TokenTable" id="ae_token_table">
+          <thead>
+            <tr>
+              <th>Token</th>
+              <th>Gerado em</th>
+              <th>Status</th>
+              <th class="Ae_ColAcoes">Ações</th>
+            </tr>
+          </thead>
+          <tbody id="ae_token_tbody">
+            <tr><td colspan="4" class="Ae_EmptyCell">Nenhum token gerado ainda.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="Ae_Menu" id="ae_token_menu" hidden role="menu">
+      <button type="button" role="menuitem" data-ae-token-acao="copiar" id="ae_menu_copiar">Copiar valor completo</button>
+      <button type="button" role="menuitem" data-ae-token-acao="gerar">Gerar novo token</button>
+      <button type="button" role="menuitem" data-ae-token-acao="revogar" class="is-perigo">Revogar token</button>
     </div>
 
     {# ── Documentação ── #}
     <div class="Ae_Pane" id="ae_pane_documentacao" data-ae-pane="documentacao" hidden>
-      <div class="Ae_PaneHead">
-        <h3>Documentação &amp; AI</h3>
-        <p class="Ae_Hint">Guia visual para o time técnico e prompt pronto para colar na AI do parceiro.</p>
-      </div>
-      <div class="Ae_DocHero">
-        <article class="Ae_DocCard Ae_DocCard--guide">
-          <h3>Guia da API</h3>
-          <p>Endpoints, autenticação, payloads e webhooks em uma página HTML pensada para o desenvolvedor do ERP.</p>
-          <a
-            class="Ae_BtnGhostLight"
-            id="ae_btnAbrirDoc"
-            href="{{ url_for('api_externa.docs_html') }}"
-            target="_blank"
-            rel="noopener"
-          >Abrir documentação</a>
-        </article>
-        <article class="Ae_DocCard">
+      <div class="Ae_PaneHead Ae_PaneHead--row">
+        <div>
           <h3>Prompt para AI</h3>
-          <p>Cole no ChatGPT / Cursor / Claude do parceiro para gerar a API no formato certo.</p>
-          <pre class="Ae_Prompt" id="ae_prompt">Carregando…</pre>
-          <button type="button" class="Cl_botaoprimario" id="ae_btnCopiarPrompt">Copiar prompt AI</button>
-        </article>
+          <p class="Ae_Hint">Cole no ChatGPT / Cursor / Claude do parceiro para gerar a API no formato certo.</p>
+        </div>
+        <a
+          class="Cl_BtnCancelar"
+          id="ae_btnAbrirDoc"
+          href="{{ url_for('api_externa.docs_html') }}"
+          target="_blank"
+          rel="noopener"
+        >Ver documentação</a>
+      </div>
+      <pre class="Ae_Prompt Ae_Prompt--full" id="ae_prompt">Carregando…</pre>
+      <div class="Ae_Foot">
+        <button type="button" class="Cl_botaoprimario" id="ae_btnCopiarPrompt">Copiar prompt AI</button>
       </div>
     </div>
 
@@ -216,5 +259,5 @@
 </div>
 {% endblock %}
 {% block page_js %}
-<script defer src="{{ url_for('integracoes.static', filename='script/Sapi_externa_integracao.js') }}?v=2"></script>
+<script defer src="{{ url_for('integracoes.static', filename='script/Sapi_externa_integracao.js') }}?v=4"></script>
 {% endblock %}

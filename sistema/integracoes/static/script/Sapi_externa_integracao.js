@@ -5,6 +5,8 @@
   const MASCARA = "****************";
   let docs = { markdown: "", prompt_ai: "" };
   let ultimoToken = "";
+  let tokenCfg = null;
+  let menuAbertoEm = 0;
 
   async function api(url, opts) {
     const r = await fetch(url, {
@@ -22,6 +24,27 @@
     else alert(title + (text ? "\n" + text : ""));
   }
 
+  function esc(s) {
+    return String(s ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function fmtData(iso) {
+    if (!iso) return "—";
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return String(iso);
+    return d.toLocaleString("pt-BR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+
   function setBadge(cfg) {
     const el = $("ae_badge");
     if (!el) return;
@@ -33,30 +56,87 @@
     el.textContent = cfg.ativo ? (cfg.status || "ativo") : "desligado";
   }
 
-  function mostrarToken(token) {
-    const pre = $("ae_dn_token");
-    const empty = $("ae_dn_empty");
-    const btn = $("ae_btnCopiarToken");
-    ultimoToken = token || "";
-    if (token) {
-      if (empty) empty.hidden = true;
-      if (pre) {
-        pre.hidden = false;
-        pre.textContent = token;
-      }
-      if (btn) btn.hidden = false;
-    } else {
-      if (pre) {
-        pre.hidden = true;
-        pre.textContent = "";
-      }
-      if (btn) btn.hidden = true;
-      if (empty) empty.hidden = false;
+  function fecharMenuToken() {
+    const menu = $("ae_token_menu");
+    if (menu) menu.hidden = true;
+    document.querySelectorAll(".Ae_MenuBtn[aria-expanded='true']").forEach((b) => {
+      b.setAttribute("aria-expanded", "false");
+    });
+  }
+
+  function posicionarMenu(menu, btn) {
+    const r = btn.getBoundingClientRect();
+    menu.hidden = false;
+    const mw = menu.offsetWidth || 210;
+    const mh = menu.offsetHeight || 120;
+    let left = r.right - mw;
+    let top = r.bottom + 6;
+    if (left < 8) left = 8;
+    if (left + mw > window.innerWidth - 8) left = window.innerWidth - mw - 8;
+    if (top + mh > window.innerHeight - 8) top = Math.max(8, r.top - mh - 6);
+    menu.style.left = `${left}px`;
+    menu.style.top = `${top}px`;
+    menuAbertoEm = Date.now();
+    btn.setAttribute("aria-expanded", "true");
+  }
+
+  function abrirMenuToken(btn) {
+    const menu = $("ae_token_menu");
+    const btnCopiar = $("ae_menu_copiar");
+    if (!menu) return;
+    if (btnCopiar) {
+      btnCopiar.disabled = !ultimoToken;
+      btnCopiar.title = ultimoToken
+        ? "Copia o valor gerado nesta sessão"
+        : "Valor completo só fica disponível logo após gerar";
     }
+    if (!menu.hidden && btn.getAttribute("aria-expanded") === "true") {
+      fecharMenuToken();
+      return;
+    }
+    fecharMenuToken();
+    posicionarMenu(menu, btn);
+  }
+
+  function mostrarReveal(token) {
+    ultimoToken = token || "";
+    const box = $("ae_dn_reveal");
+    const code = $("ae_dn_token_plain");
+    if (!box || !code) return;
+    if (!token) {
+      box.hidden = true;
+      code.textContent = "";
+      return;
+    }
+    code.textContent = token;
+    box.hidden = false;
+  }
+
+  function renderTokenTable(cfg) {
+    const tbody = $("ae_token_tbody");
+    if (!tbody) return;
+    if (!cfg || !cfg.dn_token_configurado) {
+      tbody.innerHTML = '<tr><td colspan="4" class="Ae_EmptyCell">Nenhum token gerado ainda.</td></tr>';
+      return;
+    }
+    const hint = cfg.dn_token_hint || "••••…••••";
+    tbody.innerHTML = `<tr>
+      <td><span class="Ae_TokenHint">${esc(hint)}</span></td>
+      <td><span class="Ae_TokenMeta">${esc(fmtData(cfg.dn_token_gerado_em))}</span></td>
+      <td><span class="Ae_TokenStatus">Ativo</span></td>
+      <td class="Ae_ColAcoes">
+        <div class="Ae_Acoes">
+          <button type="button" class="Ae_MenuBtn" data-ae-token-menu="1" aria-label="Ações do token" aria-haspopup="menu" aria-expanded="false" title="Ações">
+            <span></span><span></span><span></span>
+          </button>
+        </div>
+      </td>
+    </tr>`;
   }
 
   function aplicar(cfg) {
     if (!cfg) return;
+    tokenCfg = cfg;
     $("ae_base_url").value = cfg.base_url || "";
     $("ae_auth_tipo").value = cfg.auth_tipo || "bearer";
     $("ae_ambiente").value = cfg.ambiente === "producao" ? "producao" : "homologacao";
@@ -77,21 +157,10 @@
     }
     if (cfg.webhook_secret_configurado) $("ae_webhook_secret").value = MASCARA;
     else $("ae_webhook_secret").value = "";
-    $("ae_dn_hint").textContent = cfg.dn_token_configurado
-      ? "Token atual: " + (cfg.dn_token_hint || "••••") + (cfg.dn_token_gerado_em ? " · gerado em " + cfg.dn_token_gerado_em : "")
-      : "Nenhum token gerado ainda.";
-    if (!ultimoToken) {
-      const empty = $("ae_dn_empty");
-      if (empty) {
-        empty.hidden = !!cfg.dn_token_configurado;
-        empty.textContent = cfg.dn_token_configurado
-          ? "Token já gerado (valor completo oculto). Gere um novo se precisar reenviar."
-          : "Nenhum token gerado ainda.";
-      }
-    }
     $("ae_ultima").textContent = cfg.ultima_sync_em
       ? `Última sync: ${cfg.ultima_sync_em} — ${cfg.ultima_mensagem || ""}`
       : "Nenhuma sincronização ainda.";
+    renderTokenTable(cfg);
     setBadge(cfg);
   }
 
@@ -106,10 +175,10 @@
       .map((l) => {
         const ok = !!l.sucesso;
         return `<tr>
-        <td>${l.dt_criacao || ""}</td>
-        <td>${l.evento || ""}</td>
+        <td>${esc(l.dt_criacao || "")}</td>
+        <td>${esc(l.evento || "")}</td>
         <td><span class="${ok ? "Ae_LogOk" : "Ae_LogFail"}">${ok ? "OK" : "Falha"}</span></td>
-        <td>${(l.mensagem || "").replace(/</g, "&lt;")}</td>
+        <td>${esc(l.mensagem || "")}</td>
       </tr>`;
       })
       .join("")}</tbody></table>`;
@@ -122,6 +191,7 @@
     document.querySelectorAll("[data-ae-pane]").forEach((pane) => {
       pane.hidden = pane.getAttribute("data-ae-pane") !== nome;
     });
+    fecharMenuToken();
   }
 
   document.getElementById("ae_tabs")?.addEventListener("click", (ev) => {
@@ -168,6 +238,68 @@
     toast("Salvo", msgOk || j.message || "Configuração atualizada.", "success");
     const logs = await api("/api/integracoes/api-externa/logs");
     renderLogs(logs.dados || []);
+  }
+
+  async function gerarToken(confirmar) {
+    if (confirmar && tokenCfg && tokenCfg.dn_token_configurado) {
+      const ok = window.Swal
+        ? (
+            await Swal.fire({
+              icon: "warning",
+              title: "Gerar novo token?",
+              text: "O token atual deixa de valer imediatamente.",
+              showCancelButton: true,
+              confirmButtonText: "Gerar novo",
+              cancelButtonText: "Cancelar",
+              confirmButtonColor: "#021F81",
+            })
+          ).isConfirmed
+        : confirm("Gerar novo token? O atual deixa de valer.");
+      if (!ok) return;
+    }
+    const j = await api("/api/integracoes/api-externa/gerar-token", { method: "POST", body: "{}" });
+    aplicar(j.dados || {});
+    mostrarReveal(j.token || "");
+    toast("Token gerado", "Copie agora — não será exibido de novo.", "success");
+    const logs = await api("/api/integracoes/api-externa/logs");
+    renderLogs(logs.dados || []);
+  }
+
+  async function revogarToken() {
+    const ok = window.Swal
+      ? (
+          await Swal.fire({
+            icon: "warning",
+            title: "Revogar token?",
+            text: "Integrações que usam este token param de autenticar.",
+            showCancelButton: true,
+            confirmButtonText: "Revogar",
+            cancelButtonText: "Cancelar",
+            confirmButtonColor: "#991b1b",
+          })
+        ).isConfirmed
+      : confirm("Revogar token?");
+    if (!ok) return;
+    const j = await api("/api/integracoes/api-externa/revogar-token", { method: "POST", body: "{}" });
+    ultimoToken = "";
+    mostrarReveal("");
+    aplicar(j.dados || {});
+    toast("Revogado", "Token removido.", "success");
+    const logs = await api("/api/integracoes/api-externa/logs");
+    renderLogs(logs.dados || []);
+  }
+
+  async function copiarToken() {
+    if (!ultimoToken) {
+      toast("Indisponível", "O valor completo só aparece uma vez após gerar. Gere um novo se precisar.", "info");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(ultimoToken);
+      toast("Copiado", "Token copiado.", "success");
+    } catch {
+      toast("Atenção", "Não foi possível copiar automaticamente.", "warning");
+    }
   }
 
   $("ae_btnSalvar")?.addEventListener("click", async () => {
@@ -221,25 +353,49 @@
     sync("/api/integracoes/api-externa/sync/estoque", "Estoque")
   );
 
-  $("ae_btnToken")?.addEventListener("click", async () => {
-    try {
-      const j = await api("/api/integracoes/api-externa/gerar-token", { method: "POST", body: "{}" });
-      aplicar(j.dados || {});
-      mostrarToken(j.token || "");
-      toast("Token gerado", "Copie agora — não será exibido de novo.", "success");
-    } catch (e) {
-      toast("Erro", e.message, "error");
-    }
+  $("ae_btnToken")?.addEventListener("click", () => {
+    gerarToken(true).catch((e) => toast("Erro", e.message, "error"));
   });
 
-  $("ae_btnCopiarToken")?.addEventListener("click", async () => {
-    try {
-      await navigator.clipboard.writeText(ultimoToken || "");
-      toast("Copiado", "Token copiado.", "success");
-    } catch {
-      toast("Atenção", "Não foi possível copiar automaticamente.", "warning");
-    }
+  $("ae_btnCopiarToken")?.addEventListener("click", () => {
+    copiarToken().catch((e) => toast("Erro", e.message, "error"));
   });
+
+  $("ae_btnFecharReveal")?.addEventListener("click", () => {
+    mostrarReveal("");
+  });
+
+  document.addEventListener("click", (ev) => {
+    const menuBtn = ev.target.closest("[data-ae-token-menu]");
+    if (menuBtn) {
+      ev.stopPropagation();
+      abrirMenuToken(menuBtn);
+      return;
+    }
+    const acao = ev.target.closest("#ae_token_menu [data-ae-token-acao]");
+    if (acao) {
+      const tipo = acao.getAttribute("data-ae-token-acao");
+      fecharMenuToken();
+      if (tipo === "copiar") copiarToken().catch((e) => toast("Erro", e.message, "error"));
+      else if (tipo === "gerar") gerarToken(true).catch((e) => toast("Erro", e.message, "error"));
+      else if (tipo === "revogar") revogarToken().catch((e) => toast("Erro", e.message, "error"));
+      return;
+    }
+    if (!ev.target.closest("#ae_token_menu")) fecharMenuToken();
+  });
+
+  document.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape") fecharMenuToken();
+  });
+
+  window.addEventListener(
+    "scroll",
+    () => {
+      if (Date.now() - menuAbertoEm < 250) return;
+      fecharMenuToken();
+    },
+    true
+  );
 
   $("ae_btnCopiarPrompt")?.addEventListener("click", async () => {
     try {

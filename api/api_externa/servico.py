@@ -232,6 +232,24 @@ def gerar_dn_token(conn, id_tenant: int) -> tuple[dict, str]:
     return carregar(conn, id_tenant), token
 
 
+def revogar_dn_token(conn, id_tenant: int) -> dict:
+    """Remove o token DropNexo do tenant (hash/hint)."""
+    garantir_linha(conn, id_tenant)
+    cur = conn.cursor()
+    cur.execute(
+        """
+        UPDATE tbl_integracao_api_externa
+           SET dn_token_hash = NULL,
+               dn_token_hint = NULL,
+               dn_token_gerado_em = NULL,
+               dt_atualizacao = NOW()
+         WHERE id_tenant = %s
+        """,
+        (int(id_tenant),),
+    )
+    return carregar(conn, id_tenant)
+
+
 def token_parceiro_plain(conn, id_tenant: int) -> str:
     garantir_tabelas(conn)
     cur = conn.cursor()
