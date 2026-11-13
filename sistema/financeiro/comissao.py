@@ -657,18 +657,31 @@ def _lote_no_mes(cur, id_tenant: int, dia: date | None = None) -> bool:
     return cur.fetchone() is not None
 
 
-def _frase_topo(hoje: date, *, lote: bool, janela: bool, pix_ok: bool, tem_aberto: bool) -> str:
+def _frase_topo(
+    hoje: date,
+    *,
+    lote: bool,
+    janela: bool,
+    pix_ok: bool,
+    tem_aberto: bool,
+    bypass_janela: bool = False,
+) -> str:
     atual = _MESES[hoje.month]
     prox_data = _somar_meses(hoje.replace(day=1), 1)
     prox = _MESES[prox_data.month]
     if lote:
         return f"{atual.capitalize()} já foi faturado. O que ficou em aberto entra em {prox}."
-    if janela and not pix_ok:
+    if (janela or bypass_janela) and not pix_ok:
         return "Conecte o PIX Manual em Integrações para faturar até o dia 10."
-    if janela and not tem_aberto:
+    if (janela or bypass_janela) and not tem_aberto:
         return "Nada em aberto para faturar neste período."
     if janela:
         return "Feche até o dia 10. O vencimento deste lote é dia 20."
+    if bypass_janela:
+        return (
+            f"Fora da janela (1 a 10). Liberado para DEV — "
+            f"o fechamento regular seria de 1 a 10 de {prox}."
+        )
     return f"O próximo fechamento é de 1 a 10 de {prox}."
 
 
@@ -1102,7 +1115,13 @@ def _tem_coluna_comprovante(cur) -> bool:
 
 
 def painel_comissoes(
-    cur, id_tenant: int, *, ano: int | None = None, mes: int | None = None, ano_faturado: int | None = None
+    cur,
+    id_tenant: int,
+    *,
+    ano: int | None = None,
+    mes: int | None = None,
+    ano_faturado: int | None = None,
+    bypass_janela: bool = False,
 ) -> dict:
     id_tenant = int(id_tenant)
     hoje = hoje_sp()
@@ -1231,6 +1250,8 @@ def painel_comissoes(
     planos_ativos, inadimplentes = _linhas_ciclo(cur, id_tenant, cfg, ano_i, mes_i)
     lote = bool(_safe_cur(cur, "lote", lambda: _lote_no_mes(cur, id_tenant, hoje), False))
     janela = janela_fechamento(hoje)
+    bypass = bool(bypass_janela)
+    janela_efetiva = bool(janela or bypass)
     for f in faturados:
         st = (f.get("status") or "").strip().lower()
         f["editavel"] = st == "aguardando" and not bool(f.get("tem_comprovante"))
@@ -1242,10 +1263,16 @@ def painel_comissoes(
         "ativo": bool(cfg and cfg["ativo"]),
         "pai_nome": pai_nome,
         "janela_aberta": janela,
+        "bypass_janela": bypass,
         "lote_no_mes": lote,
-        "pode_faturar": bool(janela and pix.get("ok") and not lote),
+        "pode_faturar": bool(janela_efetiva and pix.get("ok") and not lote),
         "frase": _frase_topo(
-            hoje, lote=lote, janela=janela, pix_ok=bool(pix.get("ok")), tem_aberto=bool(abertos)
+            hoje,
+            lote=lote,
+            janela=janela,
+            pix_ok=bool(pix.get("ok")),
+            tem_aberto=bool(abertos),
+            bypass_janela=bypass,
         ),
         "hoje": hoje.isoformat(),
         "ano": ano_i,
@@ -1270,10 +1297,16 @@ def painel_comissoes(
 
 
 def fechar_comissoes(
-    cur, id_tenant: int, *, nf_nome: str, nf_caminho: str, ids: list[int]
+    cur,
+    id_tenant: int,
+    *,
+    nf_nome: str,
+    nf_caminho: str,
+    ids: list[int],
+    bypass_janela: bool = False,
 ) -> dict:
     hoje = hoje_sp()
-    if not janela_fechamento(hoje):
+    if not janela_fechamento(hoje) and not bypass_janela:
         raise ValueError("O fechamento fica disponível do dia 1 ao dia 10.")
     if _lote_no_mes(cur, int(id_tenant), hoje):
         prox = _MESES[_somar_meses(hoje.replace(day=1), 1).month]

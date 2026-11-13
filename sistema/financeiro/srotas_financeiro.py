@@ -479,6 +479,7 @@ def api_comissoes_painel():
             ano=request.args.get("ano", type=int),
             mes=request.args.get("mes", type=int),
             ano_faturado=request.args.get("ano_faturado", type=int),
+            bypass_janela=bool(session.get("eh_desenvolvedor")),
         )
         conn.commit()
         return jsonify(success=True, **data)
@@ -563,7 +564,14 @@ def api_comissoes_fechar():
             ids = []
         if not isinstance(ids, list):
             return jsonify(success=False, message="Seleção inválida."), 400
-        res = fechar_comissoes(cur, tid, nf_nome=nome, nf_caminho="pendente", ids=ids)
+        res = fechar_comissoes(
+            cur,
+            tid,
+            nf_nome=nome,
+            nf_caminho="pendente",
+            ids=ids,
+            bypass_janela=bool(session.get("eh_desenvolvedor")),
+        )
         destino = pasta / f"{res['id']}.pdf"
         arq.save(destino)
         rel = f"upload/tenant{tid}/comissoes/{destino.name}"

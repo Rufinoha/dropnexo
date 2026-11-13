@@ -25,7 +25,7 @@
       <a href="#homolog">Homologação</a>
       <a href="#auth">Auth</a>
       <a href="#endpoints">Endpoints</a>
-      <a href="#webhooks">Webhooks</a>
+      <a href="#webhooks">Pedidos</a>
       <a href="#regras">Regras</a>
     </nav>
   </header>
@@ -35,8 +35,8 @@
       <p class="AeDocs_Kicker">Integração · API Externa v{{ versao }}</p>
       <h1>{{ MARCA_NOME }} API Externa</h1>
       <p class="lead">
-        O DropNexo <strong>consulta a API de vocês</strong> para importar produtos e estoque.
-        Opcionalmente, envia eventos de pedidos para o webhook do ERP.
+        Contrato completo alinhado ao catálogo e aos pedidos do DropNexo.
+        Envie todos os campos que o ERP tiver — opcionais podem ser <code>null</code>.
       </p>
       <div class="AeDocs_Flow" aria-hidden="true">
         <div class="AeDocs_FlowNode">
@@ -62,18 +62,19 @@
         <a href="#visao">Como funciona</a>
         <a href="#homolog">Homologação → produção</a>
         <a href="#auth">Autenticação</a>
-        <a href="#endpoints">Endpoints</a>
-        <a href="#webhooks">Webhooks</a>
+        <a href="#endpoints">Produtos &amp; estoque</a>
+        <a href="#campos-produto">Campos de produto</a>
+        <a href="#webhooks">Pedidos (webhooks)</a>
         <a href="#token">Token DropNexo</a>
-        <a href="#regras">Regras &amp; boas práticas</a>
+        <a href="#regras">Regras</a>
       </aside>
 
       <div class="AeDocs_Article">
         <section class="AeDocs_Section" id="visao">
           <h2>Como funciona</h2>
           <p>
-            Vocês expõem endpoints REST HTTPS. O DropNexo faz pull periódico (e sob demanda)
-            de produtos e estoque. SKU é a chave estável. Pedidos entram via webhook (em expansão).
+            Vocês expõem endpoints REST HTTPS. O DropNexo faz pull de produtos e estoque.
+            Pedidos saem por webhook (contrato completo abaixo; envio automático em expansão).
           </p>
           <div class="AeDocs_Cards">
             <div class="AeDocs_Mini">
@@ -82,15 +83,15 @@
             </div>
             <div class="AeDocs_Mini">
               <strong>Push</strong>
-              <span>DropNexo → webhook de vocês (order.created / status).</span>
+              <span>DropNexo → webhook (order.created / status / canceled).</span>
             </div>
             <div class="AeDocs_Mini">
               <strong>Homologação</strong>
               <span>Checklist + aprovação DropNexo antes de produção.</span>
             </div>
             <div class="AeDocs_Mini">
-              <strong>Capacidades</strong>
-              <span>O fornecedor liga/desliga cada tarefa no painel.</span>
+              <strong>Completo</strong>
+              <span>JSON com todos os campos do catálogo e do pedido.</span>
             </div>
           </div>
         </section>
@@ -98,29 +99,19 @@
         <section class="AeDocs_Section" id="homolog">
           <h2>Homologação → produção</h2>
           <p>
-            Todo parceiro começa em <strong>homologação</strong>. Vocês não mudam sozinhos para produção:
-            o DropNexo valida os sinais da API e aprova.
+            Todo parceiro começa em <strong>homologação</strong>. Vocês não mudam sozinhos para produção.
           </p>
           <ol class="AeDocs_List">
-            <li>Implemente os endpoints abaixo (HTTPS + auth).</li>
-            <li>No card <strong>API Externa</strong>, informe URL, token e teste a conexão.</li>
-            <li>Sincronize produtos/estoque em homologação.</li>
-            <li>Clique em <strong>Solicitar produção</strong> — o DropNexo roda um checklist automático
-              (<code>/v1/warehouses</code>, <code>/v1/products</code>, <code>/v1/stock</code>).</li>
-            <li>Se o checklist passar, a solicitação fica <strong>aguardando</strong>.</li>
-            <li>Após análise, o time DropNexo <strong>aprova</strong> (vai para produção) ou
-              <strong>reprova</strong> (permanece em homologação com o motivo).</li>
+            <li>Implemente os endpoints (HTTPS + auth).</li>
+            <li>No card <strong>API Externa</strong>, informe URL, token e teste.</li>
+            <li>Sincronize produtos/estoque.</li>
+            <li><strong>Solicitar produção</strong> — checklist em warehouses, products e stock.</li>
+            <li>DropNexo <strong>aprova</strong> ou <strong>reprova</strong>.</li>
           </ol>
-          <div class="AeDocs_BadgeRow">
-            <span class="AeDocs_Chip">Sem auto-promoção</span>
-            <span class="AeDocs_Chip">Checklist obrigatório</span>
-            <span class="AeDocs_Chip">Aprovação DropNexo</span>
-          </div>
         </section>
 
         <section class="AeDocs_Section" id="auth">
           <h2>Autenticação</h2>
-          <p>HTTPS obrigatório. Escolha um dos modos no card da integração:</p>
           <pre class="AeDocs_Code">Authorization: Bearer &lt;TOKEN&gt;
 
 # ou
@@ -134,8 +125,8 @@ X-Api-Key: &lt;TOKEN&gt;</pre>
         </section>
 
         <section class="AeDocs_Section" id="endpoints">
-          <h2>Endpoints que o DropNexo chama</h2>
-          <p>Base URL configurada no card (ex.: <code>https://api.seu-erp.com.br</code>).</p>
+          <h2>Produtos &amp; estoque</h2>
+          <p>Base URL no card (ex.: <code>https://api.seu-erp.com.br</code>). Exemplos com <strong>todos</strong> os campos do catálogo DropNexo.</p>
 
           <article class="AeDocs_Endpoint">
             <div class="AeDocs_EpHead">
@@ -143,37 +134,8 @@ X-Api-Key: &lt;TOKEN&gt;</pre>
               <span class="AeDocs_Path">/v1/products</span>
             </div>
             <div class="AeDocs_EpBody">
-              <p>Query: <code>cursor</code>, <code>updated_since</code>, <code>limit</code>.</p>
-              <pre class="AeDocs_Code">{
-  "data": [
-    {
-      "sku": "ABC-001",
-      "external_id": "123",
-      "nome": "Produto Exemplo",
-      "descricao": "Texto",
-      "preco": 29.90,
-      "preco_promocional": null,
-      "preco_custo": 15.00,
-      "quantidade": 100,
-      "unidade": "UN",
-      "gtin": "789...",
-      "ncm": "12345678",
-      "origem_fiscal": "0",
-      "marca": "Marca",
-      "categoria": "Cat > Sub",
-      "peso_bruto_kg": 0.5,
-      "altura_cm": 10,
-      "largura_cm": 10,
-      "profundidade_cm": 10,
-      "publicado": true,
-      "imagens": ["https://cdn.../1.jpg"],
-      "atributos": {"Cor": "Azul"},
-      "warehouses": [{"code": "SP1", "quantidade": 80}],
-      "updated_at": "2026-11-12T15:30:00Z"
-    }
-  ],
-  "next_cursor": null
-}</pre>
+              <p>Query: <code>cursor</code>, <code>updated_since</code>, <code>limit</code>. Inclui produto com variação + produto simples.</p>
+              <pre class="AeDocs_Code">{{ json_products }}</pre>
             </div>
           </article>
 
@@ -183,7 +145,8 @@ X-Api-Key: &lt;TOKEN&gt;</pre>
               <span class="AeDocs_Path">/v1/products/{sku}</span>
             </div>
             <div class="AeDocs_EpBody">
-              <p>Retorna um produto no mesmo formato do item de <code>/v1/products</code>.</p>
+              <p>Um produto (objeto único), mesmo schema do item da lista.</p>
+              <pre class="AeDocs_Code">{{ json_product }}</pre>
             </div>
           </article>
 
@@ -194,17 +157,7 @@ X-Api-Key: &lt;TOKEN&gt;</pre>
             </div>
             <div class="AeDocs_EpBody">
               <p>Query: <code>cursor</code>, <code>updated_since</code>, <code>sku</code>.</p>
-              <pre class="AeDocs_Code">{
-  "data": [
-    {
-      "sku": "ABC-001",
-      "quantidade": 100,
-      "warehouses": [{"code": "SP1", "quantidade": 80}],
-      "updated_at": "2026-11-12T16:00:00Z"
-    }
-  ],
-  "next_cursor": null
-}</pre>
+              <pre class="AeDocs_Code">{{ json_stock }}</pre>
             </div>
           </article>
 
@@ -214,35 +167,76 @@ X-Api-Key: &lt;TOKEN&gt;</pre>
               <span class="AeDocs_Path">/v1/warehouses</span>
             </div>
             <div class="AeDocs_EpBody">
-              <pre class="AeDocs_Code">{
-  "data": [
-    {"code": "SP1", "nome": "CD São Paulo"}
-  ]
-}</pre>
+              <pre class="AeDocs_Code">{{ json_warehouses }}</pre>
             </div>
           </article>
         </section>
 
-        <section class="AeDocs_Section" id="webhooks">
-          <h2>Webhook do parceiro</h2>
-          <p>
-            Informe a URL no card. O envio de pedidos/status pelo DropNexo está
-            <strong>em expansão</strong> — prepare o endpoint, mas a prioridade agora é o pull de
-            produtos/estoque. Assinatura prevista:
-            header <code>X-DropNexo-Signature: sha256=&lt;hmac&gt;</code>.
+        <section class="AeDocs_Section" id="campos-produto">
+          <h2>Campos de produto</h2>
+          <p><strong>Esperados:</strong> <code>sku</code>, <code>nome</code>, <code>descricao</code>, <code>preco</code>, <code>unidade</code>, <code>ncm</code>, <code>origem_fiscal</code>, dimensões/peso bruto, imagens.</p>
+          <p><strong>Opcionais (envie se existir):</strong>
+            <code>sku_pai</code>, <code>nome_variacao</code>, <code>atributos</code>, <code>external_id</code>,
+            <code>preco_promocional</code>, <code>preco_custo</code>, <code>valor_atacado</code>, <code>valor_dropshipping</code>,
+            <code>quantidade</code>, <code>gtin</code>, <code>cest</code>, <code>condicao</code>, <code>marca</code>, <code>grupo</code>,
+            <code>categoria</code>, <code>peso_liquido_kg</code>, <code>peso_gramas</code>, <code>dimensao_caixa_cm</code>,
+            <code>volumes</code>, <code>moq</code>, <code>prazo_envio_dias</code>, <code>frete_gratis</code>,
+            <code>reposicao_estoque</code>, <code>producao</code>, <code>publicado</code>,
+            <code>garantia_tipo</code>, <code>garantia_tempo</code>, <code>video_youtube</code>,
+            <code>cfop</code>, <code>icms_situacao</code>, <code>pis_situacao</code>, <code>cofins_situacao</code>,
+            <code>warehouses[]</code>, <code>updated_at</code>.
           </p>
-          <ul class="AeDocs_List">
-            <li><code>order.created</code> <em>(previsto)</em></li>
-            <li><code>order.status_changed</code> <em>(previsto)</em></li>
-            <li><code>order.canceled</code> <em>(previsto)</em></li>
-          </ul>
+          <p>Variação: <code>sku_pai</code> + <code>atributos</code>. SKU é a chave estável.</p>
+        </section>
+
+        <section class="AeDocs_Section" id="webhooks">
+          <h2>Pedidos (webhooks)</h2>
+          <p>
+            <code>POST</code> JSON no webhook do card. Header
+            <code>X-DropNexo-Signature: sha256=&lt;hmac&gt;</code>. Responda <code>2xx</code>.
+          </p>
+          <p>
+            <strong>status_vendedor:</strong> {{ status_vendedor }}<br />
+            <strong>origem:</strong> {{ origens_pedido }}
+          </p>
+
+          <article class="AeDocs_Endpoint">
+            <div class="AeDocs_EpHead">
+              <span class="AeDocs_Method is-post">POST</span>
+              <span class="AeDocs_Path">order.created</span>
+            </div>
+            <div class="AeDocs_EpBody">
+              <p>Pedido completo: cliente, fiscal, entrega, itens, totais, pagamento, canais e anexos.</p>
+              <pre class="AeDocs_Code">{{ json_order_created }}</pre>
+            </div>
+          </article>
+
+          <article class="AeDocs_Endpoint">
+            <div class="AeDocs_EpHead">
+              <span class="AeDocs_Method is-post">POST</span>
+              <span class="AeDocs_Path">order.status_changed</span>
+            </div>
+            <div class="AeDocs_EpBody">
+              <pre class="AeDocs_Code">{{ json_order_status }}</pre>
+            </div>
+          </article>
+
+          <article class="AeDocs_Endpoint">
+            <div class="AeDocs_EpHead">
+              <span class="AeDocs_Method is-post">POST</span>
+              <span class="AeDocs_Path">order.canceled</span>
+            </div>
+            <div class="AeDocs_EpBody">
+              <pre class="AeDocs_Code">{{ json_order_canceled }}</pre>
+            </div>
+          </article>
         </section>
 
         <section class="AeDocs_Section" id="token">
           <h2>Token DropNexo</h2>
           <p>
-            Gerado no card da integração (valor completo só uma vez; na tabela fica mascarado).
-            Use para endpoints inbound futuros e confirmações. Guarde com o mesmo cuidado do token do ERP.
+            Gerado no card (valor completo só uma vez; na tabela fica mascarado).
+            Use para endpoints inbound futuros.
           </p>
         </section>
 
@@ -250,12 +244,12 @@ X-Api-Key: &lt;TOKEN&gt;</pre>
           <h2>Regras &amp; boas práticas</h2>
           <ul class="AeDocs_List">
             <li><strong>SKU</strong> é a chave estável — não pode mudar.</li>
-            <li>Variação: informe <code>sku_pai</code> + <code>atributos</code>.</li>
-            <li>Paginação com <code>next_cursor</code>; sync incremental com <code>updated_since</code>.</li>
+            <li>Variação: <code>sku_pai</code> + <code>atributos</code>.</li>
+            <li>Paginação com <code>next_cursor</code>; sync com <code>updated_since</code>.</li>
             <li>Imagens em URL pública HTTPS.</li>
-            <li>Mínimo para o checklist: warehouses + products com SKU + stock (ou estoque dentro do produto).</li>
+            <li>Checklist: warehouses + products com SKU + stock.</li>
             <li>Homologação → solicitar → aprovação DropNexo → produção.</li>
-            <li>Logs no seu lado com SKU/pedido.</li>
+            <li>Campos opcionais: envie <code>null</code> ou omita — não invente obrigatoriedade extra.</li>
           </ul>
         </section>
       </div>
@@ -263,7 +257,7 @@ X-Api-Key: &lt;TOKEN&gt;</pre>
   </main>
 
   <footer class="AeDocs_Footer">
-    {{ MARCA_NOME }} · API Externa · documentação para o time técnico do parceiro
+    {{ MARCA_NOME }} · API Externa · contrato alinhado ao catálogo e pedidos DropNexo
   </footer>
 </body>
 </html>

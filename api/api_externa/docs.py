@@ -1,12 +1,17 @@
 """Documentação e prompt exibidos no card da API Externa."""
 from __future__ import annotations
 
+from api.api_externa import exemplos_docs as ex
+
 
 def documentacao_markdown() -> str:
-    return """# API Externa DropNexo — guia do parceiro
+    return f"""# API Externa DropNexo — guia do parceiro
 
 O DropNexo **consulta a API de vocês** para importar/atualizar produtos e estoque.
 Opcionalmente, o DropNexo **envia eventos** (pedidos/status) para o webhook de vocês.
+
+Campos abaixo espelham o catálogo e pedidos do DropNexo. Envie todos que tiver;
+os não obrigatórios podem ser `null` ou omitidos.
 
 ## Autenticação
 - Preferencial: `Authorization: Bearer <TOKEN>`
@@ -16,134 +21,150 @@ Opcionalmente, o DropNexo **envia eventos** (pedidos/status) para o webhook de v
 ## Endpoints que o DropNexo chama (na sua API)
 
 ### `GET /v1/products`
-Query: `cursor`, `updated_since`, `limit`
+Query: `cursor`, `updated_since` (ISO-8601), `limit`
 
 ```json
-{
-  "data": [
-    {
-      "sku": "ABC-001",
-      "external_id": "123",
-      "nome": "Produto Exemplo",
-      "descricao": "Texto",
-      "preco": 29.90,
-      "preco_promocional": null,
-      "preco_custo": 15.00,
-      "quantidade": 100,
-      "unidade": "UN",
-      "gtin": "789...",
-      "ncm": "12345678",
-      "origem_fiscal": "0",
-      "marca": "Marca",
-      "categoria": "Cat > Sub",
-      "peso_bruto_kg": 0.5,
-      "altura_cm": 10,
-      "largura_cm": 10,
-      "profundidade_cm": 10,
-      "publicado": true,
-      "imagens": ["https://cdn.../1.jpg"],
-      "atributos": {"Cor": "Azul"},
-      "warehouses": [{"code": "SP1", "quantidade": 80}],
-      "updated_at": "2026-11-12T15:30:00Z"
-    }
-  ],
-  "next_cursor": null
-}
+{ex.dumps(ex.LISTA_PRODUTOS)}
 ```
 
-### `GET /v1/products/{sku}`
-Retorna um produto no mesmo formato do item acima.
+### `GET /v1/products/{{sku}}`
+Retorna **um** produto (objeto único) no mesmo formato do item.
+
+```json
+{ex.dumps(ex.PRODUTO_COMPLETO)}
+```
 
 ### `GET /v1/stock`
 Query: `cursor`, `updated_since`, `sku`
 
 ```json
-{
-  "data": [
-    {
-      "sku": "ABC-001",
-      "quantidade": 100,
-      "warehouses": [{"code": "SP1", "quantidade": 80}],
-      "updated_at": "2026-11-12T16:00:00Z"
-    }
-  ],
-  "next_cursor": null
-}
+{ex.dumps(ex.LISTA_ESTOQUE)}
 ```
 
 ### `GET /v1/warehouses`
 ```json
-{
-  "data": [
-    {"code": "SP1", "nome": "CD São Paulo"}
-  ]
-}
+{ex.dumps(ex.LISTA_WAREHOUSES)}
 ```
+
+## Campos de produto (referência)
+**Obrigatórios / fortemente esperados:** `sku`, `nome`, `descricao`, `preco`, `unidade`, `ncm`, `origem_fiscal`, `peso_bruto_kg`, `altura_cm`, `largura_cm`, `profundidade_cm`, imagens (lista ou URLs).
+
+**Opcionais (envie se existir no ERP):** `sku_pai`, `nome_variacao`, `atributos`, `external_id`, `preco_promocional`, `preco_custo`, `valor_atacado`, `valor_dropshipping`, `quantidade`, `gtin`, `cest`, `condicao`, `marca`, `grupo`, `categoria`, `peso_liquido_kg`, `peso_gramas`, `dimensao_caixa_cm`, `volumes`, `moq`, `prazo_envio_dias`, `frete_gratis`, `reposicao_estoque`, `producao`, `publicado`, `garantia_tipo`, `garantia_tempo`, `video_youtube`, `cfop`, `icms_situacao`, `pis_situacao`, `cofins_situacao`, `warehouses[]`, `updated_at`.
+
+**Variação:** `sku_pai` + `atributos` (objeto ou `Cor=Azul;Tamanho=M`).
 
 ## Regras
 - **SKU** é a chave estável (não pode mudar).
-- Variação: informe `sku_pai` + `atributos`.
-- Paginação com `next_cursor`.
-- Use `updated_since` para sync incremental.
+- Paginação com `next_cursor`; sync incremental com `updated_since`.
 - Imagens em URL pública HTTPS.
+- Homologação → checklist → aprovação DropNexo → produção.
 
 ## Capacidades no DropNexo
-No card da integração o fornecedor liga/desliga:
 - Produtos: cadastrar / atualizar
 - Estoque: atualizar
 - Pedidos: enviar ao ERP / troca de status *(em expansão)*
 
 ## Homologação → produção
-1. Começa sempre em **homologação**
-2. Configure URL + token, teste conexão e sincronize
-3. Clique em **Solicitar produção** (checklist automático: warehouses, products, stock)
-4. DropNexo analisa e **aprova** (produção) ou **reprova** (fica em homologação)
-5. O parceiro **não** promove sozinho para produção
+1. Começa em **homologação**
+2. Configure URL + token, teste e sincronize
+3. **Solicitar produção** (checklist: warehouses, products, stock)
+4. DropNexo **aprova** ou **reprova**
+5. Parceiro **não** promove sozinho
 
 ## Webhook do parceiro (DropNexo → vocês)
-Informe a URL no card. Eventos previstos *(em expansão)*:
-- `order.created`
-- `order.status_changed`
-- `order.canceled`
+`POST` JSON. Header `X-DropNexo-Signature: sha256=<hmac>`. Responda `2xx`.
 
-Assinatura: header `X-DropNexo-Signature: sha256=<hmac>` com o segredo do webhook.
+Status vendedor: {", ".join(ex.STATUS_VENDEDOR)}  
+Origens: {", ".join(ex.ORIGENS_PEDIDO)}
 
-## Token DropNexo (vocês → DropNexo)
-Gerado no card (valor completo só uma vez). Use para endpoints inbound futuros / confirmações.
+### `order.created`
+```json
+{ex.dumps(ex.ORDER_CREATED)}
+```
+
+### `order.status_changed`
+```json
+{ex.dumps(ex.ORDER_STATUS_CHANGED)}
+```
+
+### `order.canceled`
+```json
+{ex.dumps(ex.ORDER_CANCELED)}
+```
+
+## Token DropNexo
+Gerado no card (valor completo só uma vez).
 
 ## Boas práticas
-1. Homologação → checklist → aprovação DropNexo → produção
-2. Rate limit razoável e respostas JSON UTF-8
-3. Logs no seu lado com o SKU/pedido
+1. Homologação → checklist → aprovação → produção
+2. Rate limit razoável e JSON UTF-8
+3. Logs com SKU/pedido
 """
 
 
 def prompt_para_ai() -> str:
-    return """Você vai construir uma API REST para integrar o ERP/sistema do fornecedor com o DropNexo.
+    return f"""Você vai construir uma API REST para integrar o ERP do fornecedor com o DropNexo.
 
-Objetivo: o DropNexo consome (GET) produtos e estoque da nossa API; depois pode enviar pedidos/status via webhook nosso.
+Objetivo: DropNexo consome GET produtos/estoque; envia pedidos via webhook.
 
-Implemente:
-1) Auth Bearer token (ou X-Api-Key)
-2) GET /v1/products (paginado com cursor + updated_since)
-3) GET /v1/products/{sku}
-4) GET /v1/stock (paginado)
-5) GET /v1/warehouses
-6) Payload JSON conforme documentação DropNexo (sku obrigatório, preços numéricos, imagens URL, warehouses opcional)
-7) HTTPS, UTF-8, next_cursor
-8) Endpoint interno opcional para receber webhooks DropNexo (order.created / order.status_changed) com HMAC sha256
+Implemente endpoints e payloads EXATAMENTE no formato abaixo (todos os campos; opcionais podem ser null).
 
-Não invente campos obrigatórios além do guia. SKU é a chave. Variações usam sku_pai + atributos.
-Fluxo: homologação primeiro; produção só após checklist OK e aprovação DropNexo.
-Entregue: OpenAPI resumido + exemplos de response + checklist de testes com curl.
+### GET /v1/products
+{ex.dumps(ex.LISTA_PRODUTOS)}
+
+### GET /v1/products/{{sku}}
+{ex.dumps(ex.PRODUTO_COMPLETO)}
+
+### GET /v1/stock
+{ex.dumps(ex.LISTA_ESTOQUE)}
+
+### GET /v1/warehouses
+{ex.dumps(ex.LISTA_WAREHOUSES)}
+
+### Webhook order.created
+{ex.dumps(ex.ORDER_CREATED)}
+
+### Webhook order.status_changed
+{ex.dumps(ex.ORDER_STATUS_CHANGED)}
+
+### Webhook order.canceled
+{ex.dumps(ex.ORDER_CANCELED)}
+
+Auth: Bearer ou X-Api-Key. HTTPS. next_cursor. HMAC header X-DropNexo-Signature.
+SKU é chave. Variações: sku_pai + atributos.
+Homologação primeiro; produção só após checklist e aprovação DropNexo.
+Entregue OpenAPI + curl de teste.
 """
 
 
 def painel_docs() -> dict:
     return {
         "titulo": "Documentação API Externa",
-        "versao": "1.0",
+        "versao": "1.2",
         "markdown": documentacao_markdown(),
         "prompt_ai": prompt_para_ai(),
         "html_path": "/ajuda/api-externa",
+        "exemplos": {
+            "products": ex.LISTA_PRODUTOS,
+            "product": ex.PRODUTO_COMPLETO,
+            "stock": ex.LISTA_ESTOQUE,
+            "warehouses": ex.LISTA_WAREHOUSES,
+            "order_created": ex.ORDER_CREATED,
+            "order_status_changed": ex.ORDER_STATUS_CHANGED,
+            "order_canceled": ex.ORDER_CANCELED,
+        },
+    }
+
+
+def contexto_html() -> dict:
+    return {
+        "json_products": ex.dumps(ex.LISTA_PRODUTOS),
+        "json_product": ex.dumps(ex.PRODUTO_COMPLETO),
+        "json_stock": ex.dumps(ex.LISTA_ESTOQUE),
+        "json_warehouses": ex.dumps(ex.LISTA_WAREHOUSES),
+        "json_order_created": ex.dumps(ex.ORDER_CREATED),
+        "json_order_status": ex.dumps(ex.ORDER_STATUS_CHANGED),
+        "json_order_canceled": ex.dumps(ex.ORDER_CANCELED),
+        "status_vendedor": ", ".join(ex.STATUS_VENDEDOR),
+        "origens_pedido": ", ".join(ex.ORIGENS_PEDIDO),
     }

@@ -78,6 +78,7 @@ def _atributos(item: dict) -> str:
 
 
 def produto_para_valores(item: dict) -> dict[str, str]:
+    """Mapeia JSON do parceiro → dict do motor de importação (todos os campos do catálogo)."""
     sku = _txt(item.get("sku"))
     sku_pai = _txt(item.get("sku_pai") or item.get("parent_sku"))
     nome = _txt(item.get("nome") or item.get("name") or sku)
@@ -94,9 +95,12 @@ def produto_para_valores(item: dict) -> dict[str, str]:
         "quantidade": _qty_from_item(item) or "0",
         "gtin": _txt(item.get("gtin") or item.get("ean")),
         "ncm": _txt(item.get("ncm")),
+        "cest": _txt(item.get("cest")),
         "origem_fiscal": _txt(item.get("origem_fiscal") or "0") or "0",
+        "condicao": _txt(item.get("condicao") or item.get("condition")),
         "marca": _txt(item.get("marca") or item.get("brand")),
         "categoria": _txt(item.get("categoria") or item.get("category")),
+        "peso_liquido_kg": _txt(item.get("peso_liquido_kg") or item.get("net_weight_kg")),
         "peso_bruto_kg": _txt(item.get("peso_bruto_kg") or item.get("weight_kg") or "0.1") or "0.1",
         "altura_cm": _txt(item.get("altura_cm") or item.get("height_cm") or "1") or "1",
         "largura_cm": _txt(item.get("largura_cm") or item.get("width_cm") or "1") or "1",
@@ -108,6 +112,28 @@ def produto_para_valores(item: dict) -> dict[str, str]:
         "imagens": _imagens(item),
         "atributos": _atributos(item),
         "nome_variacao": _txt(item.get("nome_variacao") or item.get("variant_name")),
+        # Extras do cadálogo DropNexo (persistidos quando o motor/cadastro suportam)
+        "grupo": _txt(item.get("grupo") or item.get("group")),
+        "valor_atacado": _txt(item.get("valor_atacado") or item.get("wholesale_price")),
+        "valor_dropshipping": _txt(item.get("valor_dropshipping")),
+        "peso_gramas": _txt(item.get("peso_gramas") or item.get("weight_g")),
+        "dimensao_caixa_cm": _txt(item.get("dimensao_caixa_cm")),
+        "volumes": _txt(item.get("volumes")),
+        "moq": _txt(item.get("moq")),
+        "prazo_envio_dias": _txt(item.get("prazo_envio_dias") or item.get("lead_time_days")),
+        "frete_gratis": _bool_txt(item.get("frete_gratis"), "0") if "frete_gratis" in item else "",
+        "reposicao_estoque": _bool_txt(item.get("reposicao_estoque"), "0")
+        if "reposicao_estoque" in item
+        else "",
+        "producao": _bool_txt(item.get("producao"), "0") if "producao" in item else "",
+        "garantia_tipo": _txt(item.get("garantia_tipo")),
+        "garantia_tempo": _txt(item.get("garantia_tempo")),
+        "video_youtube": _txt(item.get("video_youtube")),
+        "cfop": _txt(item.get("cfop")),
+        "icms_situacao": _txt(item.get("icms_situacao")),
+        "pis_situacao": _txt(item.get("pis_situacao")),
+        "cofins_situacao": _txt(item.get("cofins_situacao")),
+        "external_id": _txt(item.get("external_id")),
     }
     return valores
 
