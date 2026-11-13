@@ -3,58 +3,107 @@
 {% set nav_ativo = 'config' %}
 {% block topbar_title %}API Externa{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_hubsupport.css') }}?v=1" />
+<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_cupons.css') }}?v=4" />
+<style>
+  .AeAdm_Modal{position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(15,23,42,.45)}
+  .AeAdm_Modal[hidden]{display:none!important}
+  .AeAdm_ModalWin{width:min(560px,96vw);max-height:92vh;overflow:auto;background:#fff;border-radius:12px;box-shadow:0 20px 40px rgba(15,23,42,.25)}
+  .AeAdm_ModalHead{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:#021f81;color:#fff;font-weight:700}
+  .AeAdm_ModalHead button{background:none;border:0;color:#fff;font-size:22px;cursor:pointer;line-height:1}
+  .AeAdm_ModalBody{padding:16px}
+  .AeAdm_Sug{margin:.35rem 0 0;max-height:160px;overflow:auto}
+  .AeAdm_Sug button{display:block;width:100%;text-align:left;margin:.15rem 0;padding:6px 8px;border:1px solid #e2e8f0;border-radius:8px;background:#f8fafc;cursor:pointer}
+  .AeAdm_Sug button:hover{background:#eef2ff}
+  .AeAdm_Actions{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
+  .AeAdm_Badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:.75rem;font-weight:700}
+  .AeAdm_Badge--ok{background:#dcfce7;color:#166534}
+  .AeAdm_Badge--off{background:#e2e8f0;color:#475569}
+  .AeAdm_Badge--err{background:#fee2e2;color:#991b1b}
+  .AeAdm_Badge--warn{background:#ffedd5;color:#9a3412}
+</style>
 {% endblock %}
 {% block content %}
-<div class="Cl_ContainerApoio cl-page-principal HsCfg_Wrap">
-  <div class="cl-page-title HsCfg_TitleRow">
-    <div>
-      <h2>API Externa · parceiros</h2>
-      <p class="cl-page-desc">
-        Liberar por tenant o card <strong>API Externa</strong> em Integrações.
-        O fornecedor configura a URL da API dele, tokens, capacidades e vê a documentação.
-      </p>
-    </div>
+<div class="Cl_ContainerApoio cl-page-principal CfgCup_Wrap">
+  <div class="cl-page-title">
+    <h2>API Externa · parceiros</h2>
+    <p class="cl-page-desc">
+      Liberar por tenant o card <strong>API Externa</strong> em Integrações.
+      O fornecedor configura a URL da API dele, tokens, capacidades e vê a documentação.
+    </p>
   </div>
-
   <p class="CfgCup_Aviso">
     <a class="Cl_BtnLink" href="{{ url_for('config.configuracoes') }}">← Voltar às Configurações</a>
   </p>
 
-  <div class="HsCfg_Grid">
-    <section class="HsCfg_Panel">
-      <h3>Liberar tenant</h3>
-      <label class="Cl_Label" for="ae_busca">Buscar tenant</label>
-      <input type="text" id="ae_busca" class="Cl_Input" placeholder="ID, nome, razão social ou documento" />
-      <div id="ae_sugestoes" class="HsCfg_Hint" style="margin-top:.5rem"></div>
-
-      <label class="Cl_Label" for="ae_tenant">ID do tenant</label>
-      <input type="number" id="ae_tenant" class="Cl_Input" min="1" placeholder="Ex.: 42" />
-
-      <label class="Cl_Label" for="ae_nome">Nome do parceiro (opcional)</label>
-      <input type="text" id="ae_nome" class="Cl_Input" placeholder="Ex.: Fornecedor XYZ" />
-
-      <label class="Cl_Label" for="ae_contato">Contato técnico (opcional)</label>
-      <input type="text" id="ae_contato" class="Cl_Input" placeholder="e-mail ou telefone" />
-
-      <label class="Cl_Label" for="ae_ambiente">Ambiente inicial</label>
-      <select id="ae_ambiente" class="Cl_Input">
-        <option value="homologacao">Homologação</option>
-        <option value="producao">Produção</option>
-      </select>
-
-      <div class="HsCfg_Acoes" style="margin-top:1rem;justify-content:flex-start">
-        <button type="button" class="Cl_botaoprimario" id="ae_btnLiberar">Liberar API Externa</button>
-      </div>
-    </section>
-
-    <section class="HsCfg_Panel">
+  <section class="CfgCup_Card">
+    <div class="CfgCup_CardHead">
       <h3>Tenants liberados</h3>
-      <label class="Cl_Label" for="ae_filtro">Filtrar</label>
-      <input type="text" id="ae_filtro" class="Cl_Input" placeholder="Buscar na lista" />
-      <div id="ae_lista" style="margin-top:1rem;overflow:auto"></div>
-    </section>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <input type="text" id="ae_filtro" class="Cl_Input" placeholder="Filtrar lista…" style="min-width:220px" />
+        <button type="button" class="Cl_botaoprimario" id="ae_btnNovo">Liberar tenant</button>
+      </div>
+    </div>
+    <div class="CfgCup_TabelaWrap">
+      <table class="Cl_TabelaPrincipal CfgCup_Tabela">
+        <thead>
+          <tr>
+            <th>Tenant</th>
+            <th>Parceiro</th>
+            <th>Contato</th>
+            <th>Ambiente</th>
+            <th>Status</th>
+            <th>Última sync</th>
+            <th class="Cl_TableActions">Ações</th>
+          </tr>
+        </thead>
+        <tbody id="ae_tbody">
+          <tr><td colspan="7" class="CfgCup_Hint">Carregando…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+<div class="AeAdm_Modal" id="ae_modal" hidden>
+  <div class="AeAdm_ModalWin" role="dialog" aria-modal="true" aria-labelledby="ae_modal_titulo">
+    <div class="AeAdm_ModalHead">
+      <span id="ae_modal_titulo">Liberar tenant</span>
+      <button type="button" id="ae_modal_fechar" aria-label="Fechar">×</button>
+    </div>
+    <div class="AeAdm_ModalBody">
+      <input type="hidden" id="ae_editando" value="0" />
+      <div class="filter-group" id="ae_busca_wrap">
+        <label for="ae_busca">Buscar tenant</label>
+        <input type="text" id="ae_busca" class="Cl_Input" placeholder="ID, nome, razão social ou documento" />
+        <div id="ae_sugestoes" class="AeAdm_Sug"></div>
+      </div>
+      <div class="filter-group" style="margin-top:10px">
+        <label for="ae_tenant">ID do tenant *</label>
+        <input type="number" id="ae_tenant" class="Cl_Input" min="1" placeholder="Ex.: 42" />
+      </div>
+      <div class="filter-group" style="margin-top:10px">
+        <label for="ae_nome">Nome do parceiro</label>
+        <input type="text" id="ae_nome" class="Cl_Input" placeholder="Ex.: Fornecedor XYZ" />
+      </div>
+      <div class="filter-group" style="margin-top:10px">
+        <label for="ae_contato">Contato técnico</label>
+        <input type="text" id="ae_contato" class="Cl_Input" placeholder="e-mail ou telefone" />
+      </div>
+      <div class="filter-group" style="margin-top:10px">
+        <label for="ae_ambiente">Ambiente</label>
+        <select id="ae_ambiente" class="Cl_Input">
+          <option value="homologacao">Homologação</option>
+          <option value="producao">Produção</option>
+        </select>
+      </div>
+      <div class="AeAdm_Actions">
+        <button type="button" class="Cl_BtnCancelar" id="ae_btnCancelar">Cancelar</button>
+        <button type="button" class="Cl_botaoprimario" id="ae_btnSalvar">Salvar</button>
+      </div>
+    </div>
   </div>
 </div>
-<script defer src="{{ url_for('config.static', filename='script/Sconfig_api_externa.js') }}?v=1"></script>
+{% endblock %}
+{% block page_js %}
+<script defer src="{{ url_for('config.static', filename='script/Sconfig_api_externa.js') }}?v=2"></script>
 {% endblock %}

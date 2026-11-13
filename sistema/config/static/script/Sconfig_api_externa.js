@@ -2,6 +2,7 @@
   "use strict";
 
   const $ = (id) => document.getElementById(id);
+  let cache = [];
 
   async function api(url, opts) {
     const r = await fetch(url, {
@@ -19,41 +20,100 @@
     else alert(title + (text ? "\n" + text : ""));
   }
 
+  function esc(v) {
+    return String(v ?? "").replace(/[&<>"']/g, (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])
+    );
+  }
+
+  function badgeStatus(item) {
+    if (!item.ativo) return '<span class="AeAdm_Badge AeAdm_Badge--off">desligado</span>';
+    const st = String(item.status || "ativo");
+    if (st === "erro") return '<span class="AeAdm_Badge AeAdm_Badge--err">erro</span>';
+    if (st === "atencao") return '<span class="AeAdm_Badge AeAdm_Badge--warn">atenção</span>';
+    return '<span class="AeAdm_Badge AeAdm_Badge--ok">ativo</span>';
+  }
+
+  function abrirModal(item) {
+    const editando = !!(item && item.id_tenant);
+    $("ae_editando").value = editando ? "1" : "0";
+    $("ae_modal_titulo").textContent = editando ? "Editar liberação" : "Liberar tenant";
+    $("ae_busca_wrap").hidden = editando;
+    $("ae_tenant").value = item?.id_tenant || "";
+    $("ae_tenant").readOnly = editando;
+    $("ae_nome").value = item?.nome_parceiro || "";
+    $("ae_contato").value = item?.contato_tecnico || "";
+    $("ae_ambiente").value = item?.ambiente === "producao" ? "producao" : "homologacao";
+    $("ae_busca").value = "";
+    $("ae_sugestoes").innerHTML = "";
+    $("ae_modal").hidden = false;
+    document.body.style.overflow = "hidden";
+    if (!editando) $("ae_busca").focus();
+    else $("ae_nome").focus();
+  }
+
+  function fecharModal() {
+    $("ae_modal").hidden = true;
+    document.body.style.overflow = "";
+  }
+
   function renderLista(itens) {
-    const box = $("ae_lista");
-    if (!box) return;
+    const tbody = $("ae_tbody");
     if (!itens.length) {
-      box.innerHTML = '<p class="HsCfg_Hint">Nenhum tenant liberado ainda.</p>';
+      tbody.innerHTML = '<tr><td colspan="7" class="CfgCup_Hint">Nenhum tenant liberado ainda.</td></tr>';
       return;
     }
-    box.innerHTML = `
-      <table class="Fin_Table" style="width:100%;font-size:.9rem">
-        <thead><tr>
-          <th>Tenant</th><th>Parceiro</th><th>Status</th><th>Ambiente</th><th></th>
-        </tr></thead>
-        <tbody>
-          ${itens
-            .map(
-              (i) => `<tr>
-            <td>#${i.id_tenant} — ${i.tenant_nome || ""}</td>
-            <td>${i.nome_parceiro || "—"}</td>
-            <td>${i.ativo ? i.status || "ativo" : "desligado"}</td>
-            <td>${i.ambiente || "—"}</td>
-            <td><button type="button" class="Cl_BtnCancelar ae-revogar" data-id="${i.id_tenant}">Revogar</button></td>
-          </tr>`
-            )
-            .join("")}
-        </tbody>
-      </table>`;
-    box.querySelectorAll(".ae-revogar").forEach((btn) => {
+    tbody.innerHTML = itens
+      .map((i) => {
+        const sync = i.ultima_sync_em
+          ? `${esc(i.ultima_sync_em)}<br><small>${esc(i.ultima_mensagem || "")}</small>`
+          : "—";
+        return `<tr>
+          <td><strong>#${esc(i.id_tenant)}</strong><br><small>${esc(i.tenant_nome || "")}</small></td>
+          <td>${esc(i.nome_parceiro || "—")}</td>
+          <td>${esc(i.contato_tecnico || "—")}</td>
+          <td>${esc(i.ambiente || "—")}</td>
+          <td>${badgeStatus(i)}</td>
+          <td>${sync}</td>
+          <td class="Cl_TableActions">
+            <button type="button" class="Cl_BtnCancelar ae-editar" data-id="${esc(i.id_tenant)}">Editar</button>
+            <button type="button" class="Cl_BtnCancelar ae-revogar" data-id="${esc(i.id_tenant)}">Revogar</button>
+          </td>
+        </tr>`;
+      })
+      .join("");
+
+    tbody.querySelectorAll(".ae-editar").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const id = Number(btn.dataset.id);
+        const item = cache.find((x) => Number(x.id_tenant) === id);
+        if (item) abrirModal(item);
+      });
+    });
+    tbody.querySelectorAll(".ae-revogar").forEach((btn) => {
       btn.addEventListener("click", async () => {
+        const id = Number(btn.dataset.id);
+        const ok = window.Swal
+          ? (
+              await Swal.fire({
+                icon: "warning",
+                title: "Revogar?",
+                text: "O card some das Integrações deste tenant.",
+                showCancelButton: true,
+                confirmButtonText: "Revogar",
+                cancelButtonText: "Cancelar",
+                confirmButtonColor: "#991b1b",
+              })
+            ).isConfirmed
+          : confirm("Revogar liberação?");
+        if (!ok) return;
         try {
           await api("/api/configuracoes/api-externa/revogar", {
             method: "POST",
-            body: JSON.stringify({ id_tenant: Number(btn.dataset.id) }),
+            body: JSON.stringify({ id_tenant: id }),
           });
-          toast("Revogado", "Card removido das Integrações do tenant.", "success");
-          carregar();
+          toast("Revogado", "Liberação removida.", "success");
+          await carregar();
         } catch (e) {
           toast("Erro", e.message, "error");
         }
@@ -64,7 +124,8 @@
   async function carregar() {
     const termo = ($("ae_filtro")?.value || "").trim();
     const j = await api("/api/configuracoes/api-externa/listar?termo=" + encodeURIComponent(termo));
-    renderLista(j.dados || []);
+    cache = j.dados || [];
+    renderLista(cache);
   }
 
   let buscaTimer = null;
@@ -74,7 +135,7 @@
       const termo = ($("ae_busca").value || "").trim();
       const box = $("ae_sugestoes");
       if (!termo) {
-        box.textContent = "";
+        box.innerHTML = "";
         return;
       }
       try {
@@ -83,30 +144,41 @@
         );
         const itens = j.dados || [];
         if (!itens.length) {
-          box.textContent = "Nenhum tenant encontrado.";
+          box.innerHTML = "<small>Nenhum tenant encontrado.</small>";
           return;
         }
         box.innerHTML = itens
           .map(
             (t) =>
-              `<button type="button" class="Cl_BtnLink ae-pick" data-id="${t.id}" style="display:block;margin:.25rem 0">#${t.id} — ${t.nome}${t.liberado ? " (já liberado)" : ""}</button>`
+              `<button type="button" class="ae-pick" data-id="${t.id}">#${t.id} — ${esc(t.nome)}${t.liberado ? " (já liberado)" : ""}</button>`
           )
           .join("");
         box.querySelectorAll(".ae-pick").forEach((b) => {
           b.addEventListener("click", () => {
             $("ae_tenant").value = b.dataset.id;
-            box.textContent = "";
+            box.innerHTML = "";
           });
         });
       } catch (e) {
-        box.textContent = e.message;
+        box.innerHTML = `<small>${esc(e.message)}</small>`;
       }
-    }, 300);
+    }, 280);
   });
 
-  $("ae_btnLiberar")?.addEventListener("click", async () => {
+  $("ae_btnNovo")?.addEventListener("click", () => abrirModal(null));
+  $("ae_modal_fechar")?.addEventListener("click", fecharModal);
+  $("ae_btnCancelar")?.addEventListener("click", fecharModal);
+  $("ae_modal")?.addEventListener("click", (ev) => {
+    if (ev.target === $("ae_modal")) fecharModal();
+  });
+  document.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape" && !$("ae_modal").hidden) fecharModal();
+  });
+
+  $("ae_btnSalvar")?.addEventListener("click", async () => {
     try {
       const id_tenant = Number($("ae_tenant")?.value || 0);
+      if (!id_tenant) throw new Error("Informe o tenant.");
       await api("/api/configuracoes/api-externa/liberar", {
         method: "POST",
         body: JSON.stringify({
@@ -116,13 +188,21 @@
           ambiente: $("ae_ambiente")?.value || "homologacao",
         }),
       });
-      toast("Liberado", "O card API Externa aparece em Integrações desse tenant.", "success");
-      carregar();
+      fecharModal();
+      toast("Salvo", "Tenant liberado / atualizado.", "success");
+      await carregar();
     } catch (e) {
       toast("Erro", e.message, "error");
     }
   });
 
-  $("ae_filtro")?.addEventListener("change", () => carregar().catch(() => {}));
-  carregar().catch((e) => toast("Erro", e.message, "error"));
+  let filtroTimer = null;
+  $("ae_filtro")?.addEventListener("input", () => {
+    clearTimeout(filtroTimer);
+    filtroTimer = setTimeout(() => carregar().catch(() => {}), 250);
+  });
+
+  carregar().catch((e) => {
+    $("ae_tbody").innerHTML = `<tr><td colspan="7" class="CfgCup_Hint">${esc(e.message)}</td></tr>`;
+  });
 })();

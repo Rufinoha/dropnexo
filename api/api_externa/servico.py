@@ -141,8 +141,8 @@ def listar_liberacoes(conn, termo: str = "") -> list[dict]:
         params.extend([like, like, like, like])
     cur.execute(
         f"""
-        SELECT a.id_tenant, a.nome_parceiro, a.ativo, a.status, a.ambiente, a.base_url,
-               a.ultima_sync_em, a.ultima_sync_ok, a.ultima_mensagem,
+        SELECT a.id_tenant, a.nome_parceiro, a.contato_tecnico, a.ativo, a.status, a.ambiente,
+               a.base_url, a.liberado_em, a.ultima_sync_em, a.ultima_sync_ok, a.ultima_mensagem,
                COALESCE(NULLIF(TRIM(t.razao_social), ''), NULLIF(TRIM(t.nome), ''), 'Tenant') AS tenant_nome,
                t.documento
           FROM tbl_integracao_api_externa a
@@ -154,8 +154,9 @@ def listar_liberacoes(conn, termo: str = "") -> list[dict]:
         tuple(params),
     )
     cols = [
-        "id_tenant", "nome_parceiro", "ativo", "status", "ambiente", "base_url",
-        "ultima_sync_em", "ultima_sync_ok", "ultima_mensagem", "tenant_nome", "documento",
+        "id_tenant", "nome_parceiro", "contato_tecnico", "ativo", "status", "ambiente",
+        "base_url", "liberado_em", "ultima_sync_em", "ultima_sync_ok", "ultima_mensagem",
+        "tenant_nome", "documento",
     ]
     return [dict(zip(cols, r)) for r in cur.fetchall()]
 
@@ -178,13 +179,19 @@ def liberar_tenant(
            SET liberado = TRUE,
                liberado_em = COALESCE(liberado_em, NOW()),
                liberado_por = COALESCE(%s, liberado_por),
-               nome_parceiro = COALESCE(NULLIF(TRIM(%s), ''), nome_parceiro),
-               contato_tecnico = COALESCE(NULLIF(TRIM(%s), ''), contato_tecnico),
+               nome_parceiro = %s,
+               contato_tecnico = %s,
                ambiente = %s,
                dt_atualizacao = NOW()
          WHERE id_tenant = %s
         """,
-        (id_usuario, nome_parceiro or "", contato_tecnico or "", amb, int(id_tenant)),
+        (
+            id_usuario,
+            (nome_parceiro or "").strip() or None,
+            (contato_tecnico or "").strip() or None,
+            amb,
+            int(id_tenant),
+        ),
     )
     return carregar(conn, id_tenant)
 
