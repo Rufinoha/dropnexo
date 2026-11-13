@@ -137,4 +137,5 @@ def painel_docs() -> dict:
         "versao": "1.0",
         "markdown": documentacao_markdown(),
         "prompt_ai": prompt_para_ai(),
+        "html_path": "/ajuda/api-externa",
     }

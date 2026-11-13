@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from flask import Blueprint, jsonify, request, session
+from flask import Blueprint, jsonify, render_template, request, session, url_for
 
 from api.api_externa import cliente, docs, servico, sync
 from global_utils import Var_ConectarBanco, login_obrigatorio
@@ -14,6 +14,7 @@ api_externa_bp = Blueprint(
     "api_externa",
     __name__,
     root_path=str(_MOD),
+    template_folder="templates",
     static_folder="static",
     static_url_path="/static/api/api_externa",
 )
@@ -379,3 +380,19 @@ def tenant_docs():
     if (r := _exigir_fornecedor()) is not None:
         return r
     return jsonify(success=True, **docs.painel_docs())
+
+
+@api_externa_bp.get("/ajuda/api-externa")
+def docs_html():
+    """Documentação HTML pública para o time técnico do parceiro."""
+    painel = docs.painel_docs()
+    try:
+        url_home = url_for("public.home")
+    except Exception:
+        url_home = "/"
+    return render_template(
+        "docs_api_externa.html",
+        versao=painel.get("versao") or "1.0",
+        url_home=url_home,
+        css_url=url_for("api_externa.static", filename="style/docs_api_externa.css") + "?v=1",
+    )

@@ -4,6 +4,7 @@
   const $ = (id) => document.getElementById(id);
   const MASCARA = "****************";
   let docs = { markdown: "", prompt_ai: "" };
+  let ultimoToken = "";
 
   async function api(url, opts) {
     const r = await fetch(url, {
@@ -32,6 +33,28 @@
     el.textContent = cfg.ativo ? (cfg.status || "ativo") : "desligado";
   }
 
+  function mostrarToken(token) {
+    const pre = $("ae_dn_token");
+    const empty = $("ae_dn_empty");
+    const btn = $("ae_btnCopiarToken");
+    ultimoToken = token || "";
+    if (token) {
+      if (empty) empty.hidden = true;
+      if (pre) {
+        pre.hidden = false;
+        pre.textContent = token;
+      }
+      if (btn) btn.hidden = false;
+    } else {
+      if (pre) {
+        pre.hidden = true;
+        pre.textContent = "";
+      }
+      if (btn) btn.hidden = true;
+      if (empty) empty.hidden = false;
+    }
+  }
+
   function aplicar(cfg) {
     if (!cfg) return;
     $("ae_base_url").value = cfg.base_url || "";
@@ -57,6 +80,15 @@
     $("ae_dn_hint").textContent = cfg.dn_token_configurado
       ? "Token atual: " + (cfg.dn_token_hint || "••••") + (cfg.dn_token_gerado_em ? " · gerado em " + cfg.dn_token_gerado_em : "")
       : "Nenhum token gerado ainda.";
+    if (!ultimoToken) {
+      const empty = $("ae_dn_empty");
+      if (empty) {
+        empty.hidden = !!cfg.dn_token_configurado;
+        empty.textContent = cfg.dn_token_configurado
+          ? "Token já gerado (valor completo oculto). Gere um novo se precisar reenviar."
+          : "Nenhum token gerado ainda.";
+      }
+    }
     $("ae_ultima").textContent = cfg.ultima_sync_em
       ? `Última sync: ${cfg.ultima_sync_em} — ${cfg.ultima_mensagem || ""}`
       : "Nenhuma sincronização ainda.";
@@ -65,26 +97,43 @@
 
   function renderLogs(itens) {
     const box = $("ae_logs");
+    if (!box) return;
     if (!itens || !itens.length) {
-      box.innerHTML = '<p class="Ae_Hint">Sem eventos ainda.</p>';
+      box.innerHTML = '<div class="Ae_Empty">Sem eventos ainda.</div>';
       return;
     }
-    box.innerHTML = `<table><thead><tr><th>Quando</th><th>Evento</th><th>OK</th><th>Mensagem</th></tr></thead><tbody>${itens
-      .map(
-        (l) => `<tr>
+    box.innerHTML = `<table><thead><tr><th>Quando</th><th>Evento</th><th>Status</th><th>Mensagem</th></tr></thead><tbody>${itens
+      .map((l) => {
+        const ok = !!l.sucesso;
+        return `<tr>
         <td>${l.dt_criacao || ""}</td>
         <td>${l.evento || ""}</td>
-        <td>${l.sucesso ? "sim" : "não"}</td>
+        <td><span class="${ok ? "Ae_LogOk" : "Ae_LogFail"}">${ok ? "OK" : "Falha"}</span></td>
         <td>${(l.mensagem || "").replace(/</g, "&lt;")}</td>
-      </tr>`
-      )
+      </tr>`;
+      })
       .join("")}</tbody></table>`;
   }
+
+  function ativarAba(nome) {
+    document.querySelectorAll(".Ae_Tab").forEach((btn) => {
+      btn.classList.toggle("is-active", btn.getAttribute("data-ae-tab") === nome);
+    });
+    document.querySelectorAll("[data-ae-pane]").forEach((pane) => {
+      pane.hidden = pane.getAttribute("data-ae-pane") !== nome;
+    });
+  }
+
+  document.getElementById("ae_tabs")?.addEventListener("click", (ev) => {
+    const btn = ev.target.closest("[data-ae-tab]");
+    if (!btn) return;
+    ativarAba(btn.getAttribute("data-ae-tab"));
+  });
 
   async function carregar() {
     const j = await api("/api/integracoes/api-externa/status");
     docs = j.docs || {};
-    $("ae_doc").textContent = docs.markdown || "";
+    if ($("ae_prompt")) $("ae_prompt").textContent = docs.prompt_ai || "";
     aplicar(j.dados || {});
     const logs = await api("/api/integracoes/api-externa/logs");
     renderLogs(logs.dados || []);
@@ -110,16 +159,28 @@
     };
   }
 
+  async function salvar(msgOk) {
+    const j = await api("/api/integracoes/api-externa/salvar", {
+      method: "POST",
+      body: JSON.stringify(payloadSalvar()),
+    });
+    aplicar(j.dados || {});
+    toast("Salvo", msgOk || j.message || "Configuração atualizada.", "success");
+    const logs = await api("/api/integracoes/api-externa/logs");
+    renderLogs(logs.dados || []);
+  }
+
   $("ae_btnSalvar")?.addEventListener("click", async () => {
     try {
-      const j = await api("/api/integracoes/api-externa/salvar", {
-        method: "POST",
-        body: JSON.stringify(payloadSalvar()),
-      });
-      aplicar(j.dados || {});
-      toast("Salvo", j.message || "Configuração atualizada.", "success");
-      const logs = await api("/api/integracoes/api-externa/logs");
-      renderLogs(logs.dados || []);
+      await salvar("Conexão atualizada.");
+    } catch (e) {
+      toast("Erro", e.message, "error");
+    }
+  });
+
+  $("ae_btnSalvarTarefas")?.addEventListener("click", async () => {
+    try {
+      await salvar("Tarefas atualizadas.");
     } catch (e) {
       toast("Erro", e.message, "error");
     }
@@ -164,30 +225,40 @@
     try {
       const j = await api("/api/integracoes/api-externa/gerar-token", { method: "POST", body: "{}" });
       aplicar(j.dados || {});
-      const pre = $("ae_dn_token");
-      pre.hidden = false;
-      pre.textContent = j.token || "";
+      mostrarToken(j.token || "");
       toast("Token gerado", "Copie agora — não será exibido de novo.", "success");
     } catch (e) {
       toast("Erro", e.message, "error");
     }
   });
 
-  async function copiar(texto, okMsg) {
+  $("ae_btnCopiarToken")?.addEventListener("click", async () => {
     try {
-      await navigator.clipboard.writeText(texto || "");
-      toast("Copiado", okMsg, "success");
+      await navigator.clipboard.writeText(ultimoToken || "");
+      toast("Copiado", "Token copiado.", "success");
     } catch {
       toast("Atenção", "Não foi possível copiar automaticamente.", "warning");
     }
-  }
+  });
 
-  $("ae_btnCopiarDoc")?.addEventListener("click", () =>
-    copiar(docs.markdown || $("ae_doc").textContent, "Documentação copiada.")
-  );
-  $("ae_btnCopiarPrompt")?.addEventListener("click", () =>
-    copiar(docs.prompt_ai || "", "Prompt para AI copiado.")
-  );
+  $("ae_btnCopiarPrompt")?.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(docs.prompt_ai || $("ae_prompt")?.textContent || "");
+      toast("Copiado", "Prompt para AI copiado.", "success");
+    } catch {
+      toast("Atenção", "Não foi possível copiar automaticamente.", "warning");
+    }
+  });
+
+  $("ae_btnRefreshLogs")?.addEventListener("click", async () => {
+    try {
+      const logs = await api("/api/integracoes/api-externa/logs");
+      renderLogs(logs.dados || []);
+      toast("Logs", "Atualizado.", "success");
+    } catch (e) {
+      toast("Erro", e.message, "error");
+    }
+  });
 
   carregar().catch((e) => toast("Erro", e.message, "error"));
 })();

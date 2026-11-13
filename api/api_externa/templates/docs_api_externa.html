@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Documentação da API Externa DropNexo — autenticação, produtos, estoque e webhooks para o ERP do parceiro." />
+  <title>API Externa · {{ MARCA_NOME }}</title>
+  {% include "partials/marca_favicon.html" %}
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Sora:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="{{ css_url }}" />
+</head>
+<body class="AeDocs">
+  <header class="AeDocs_Header">
+    <a class="AeDocs_Brand" href="{{ url_home }}">
+      {% if marca_logo_nome_url %}
+      <img src="{{ marca_logo_nome_url }}" alt="{{ MARCA_NOME }}" />
+      {% else %}
+      <strong>{{ MARCA_NOME }}</strong>
+      {% endif %}
+    </a>
+    <nav class="AeDocs_Nav" aria-label="Documentação">
+      <a href="#visao">Visão geral</a>
+      <a href="#auth">Auth</a>
+      <a href="#endpoints">Endpoints</a>
+      <a href="#webhooks">Webhooks</a>
+      <a href="#regras">Regras</a>
+    </nav>
+  </header>
+
+  <main class="AeDocs_Main">
+    <header class="AeDocs_Hero">
+      <p class="AeDocs_Kicker">Integração · API Externa v{{ versao }}</p>
+      <h1>{{ MARCA_NOME }} API Externa</h1>
+      <p class="lead">
+        O DropNexo <strong>consulta a API de vocês</strong> para importar produtos e estoque.
+        Opcionalmente, envia eventos de pedidos para o webhook do ERP.
+      </p>
+      <div class="AeDocs_Flow" aria-hidden="true">
+        <div class="AeDocs_FlowNode">
+          <strong>ERP de vocês</strong>
+          <span>GET /v1/*</span>
+        </div>
+        <div class="AeDocs_FlowArrow">→</div>
+        <div class="AeDocs_FlowNode">
+          <strong>DropNexo</strong>
+          <span>sync + catálogo</span>
+        </div>
+        <div class="AeDocs_FlowArrow">→</div>
+        <div class="AeDocs_FlowNode">
+          <strong>Webhook</strong>
+          <span>pedidos / status</span>
+        </div>
+      </div>
+    </header>
+
+    <div class="AeDocs_Grid">
+      <aside class="AeDocs_Toc">
+        <h2>Neste guia</h2>
+        <a href="#visao">Como funciona</a>
+        <a href="#auth">Autenticação</a>
+        <a href="#endpoints">Endpoints</a>
+        <a href="#webhooks">Webhooks</a>
+        <a href="#token">Token DropNexo</a>
+        <a href="#regras">Regras &amp; boas práticas</a>
+      </aside>
+
+      <div class="AeDocs_Article">
+        <section class="AeDocs_Section" id="visao">
+          <h2>Como funciona</h2>
+          <p>
+            Vocês expõem endpoints REST HTTPS. O DropNexo faz pull periódico (e sob demanda)
+            de produtos e estoque. SKU é a chave estável. Pedidos entram via webhook (em expansão).
+          </p>
+          <div class="AeDocs_Cards">
+            <div class="AeDocs_Mini">
+              <strong>Pull</strong>
+              <span>DropNexo → API de vocês (produtos / estoque / depósitos).</span>
+            </div>
+            <div class="AeDocs_Mini">
+              <strong>Push</strong>
+              <span>DropNexo → webhook de vocês (order.created / status).</span>
+            </div>
+            <div class="AeDocs_Mini">
+              <strong>Homologação</strong>
+              <span>Ambiente separado antes de produção, no card da integração.</span>
+            </div>
+            <div class="AeDocs_Mini">
+              <strong>Capacidades</strong>
+              <span>O fornecedor liga/desliga cada tarefa no painel.</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="AeDocs_Section" id="auth">
+          <h2>Autenticação</h2>
+          <p>HTTPS obrigatório. Escolha um dos modos no card da integração:</p>
+          <pre class="AeDocs_Code">Authorization: Bearer &lt;TOKEN&gt;
+
+# ou
+
+X-Api-Key: &lt;TOKEN&gt;</pre>
+          <div class="AeDocs_BadgeRow">
+            <span class="AeDocs_Chip">UTF-8 JSON</span>
+            <span class="AeDocs_Chip">TLS 1.2+</span>
+            <span class="AeDocs_Chip">Rate limit amigável</span>
+          </div>
+        </section>
+
+        <section class="AeDocs_Section" id="endpoints">
+          <h2>Endpoints que o DropNexo chama</h2>
+          <p>Base URL configurada no card (ex.: <code>https://api.seu-erp.com.br</code>).</p>
+
+          <article class="AeDocs_Endpoint">
+            <div class="AeDocs_EpHead">
+              <span class="AeDocs_Method is-get">GET</span>
+              <span class="AeDocs_Path">/v1/products</span>
+            </div>
+            <div class="AeDocs_EpBody">
+              <p>Query: <code>cursor</code>, <code>updated_since</code>, <code>limit</code>.</p>
+              <pre class="AeDocs_Code">{
+  "data": [
+    {
+      "sku": "ABC-001",
+      "external_id": "123",
+      "nome": "Produto Exemplo",
+      "descricao": "Texto",
+      "preco": 29.90,
+      "preco_promocional": null,
+      "preco_custo": 15.00,
+      "quantidade": 100,
+      "unidade": "UN",
+      "gtin": "789...",
+      "ncm": "12345678",
+      "origem_fiscal": "0",
+      "marca": "Marca",
+      "categoria": "Cat > Sub",
+      "peso_bruto_kg": 0.5,
+      "altura_cm": 10,
+      "largura_cm": 10,
+      "profundidade_cm": 10,
+      "publicado": true,
+      "imagens": ["https://cdn.../1.jpg"],
+      "atributos": {"Cor": "Azul"},
+      "warehouses": [{"code": "SP1", "quantidade": 80}],
+      "updated_at": "2026-11-12T15:30:00Z"
+    }
+  ],
+  "next_cursor": null
+}</pre>
+            </div>
+          </article>
+
+          <article class="AeDocs_Endpoint">
+            <div class="AeDocs_EpHead">
+              <span class="AeDocs_Method is-get">GET</span>
+              <span class="AeDocs_Path">/v1/products/{sku}</span>
+            </div>
+            <div class="AeDocs_EpBody">
+              <p>Retorna um produto no mesmo formato do item de <code>/v1/products</code>.</p>
+            </div>
+          </article>
+
+          <article class="AeDocs_Endpoint">
+            <div class="AeDocs_EpHead">
+              <span class="AeDocs_Method is-get">GET</span>
+              <span class="AeDocs_Path">/v1/stock</span>
+            </div>
+            <div class="AeDocs_EpBody">
+              <p>Query: <code>cursor</code>, <code>updated_since</code>, <code>sku</code>.</p>
+              <pre class="AeDocs_Code">{
+  "data": [
+    {
+      "sku": "ABC-001",
+      "quantidade": 100,
+      "warehouses": [{"code": "SP1", "quantidade": 80}],
+      "updated_at": "2026-11-12T16:00:00Z"
+    }
+  ],
+  "next_cursor": null
+}</pre>
+            </div>
+          </article>
+
+          <article class="AeDocs_Endpoint">
+            <div class="AeDocs_EpHead">
+              <span class="AeDocs_Method is-get">GET</span>
+              <span class="AeDocs_Path">/v1/warehouses</span>
+            </div>
+            <div class="AeDocs_EpBody">
+              <pre class="AeDocs_Code">{
+  "data": [
+    {"code": "SP1", "nome": "CD São Paulo"}
+  ]
+}</pre>
+            </div>
+          </article>
+        </section>
+
+        <section class="AeDocs_Section" id="webhooks">
+          <h2>Webhook do parceiro</h2>
+          <p>
+            Informe a URL no card. O DropNexo envia eventos com assinatura HMAC
+            no header <code>X-DropNexo-Signature: sha256=&lt;hmac&gt;</code>.
+          </p>
+          <ul class="AeDocs_List">
+            <li><code>order.created</code></li>
+            <li><code>order.status_changed</code></li>
+            <li><code>order.canceled</code></li>
+          </ul>
+        </section>
+
+        <section class="AeDocs_Section" id="token">
+          <h2>Token DropNexo</h2>
+          <p>
+            Gerado no card da integração (mostrar uma vez). Use para endpoints inbound
+            futuros e confirmações. Guarde com o mesmo cuidado do token do ERP.
+          </p>
+        </section>
+
+        <section class="AeDocs_Section" id="regras">
+          <h2>Regras &amp; boas práticas</h2>
+          <ul class="AeDocs_List">
+            <li><strong>SKU</strong> é a chave estável — não pode mudar.</li>
+            <li>Variação: informe <code>sku_pai</code> + <code>atributos</code>.</li>
+            <li>Paginação com <code>next_cursor</code>; sync incremental com <code>updated_since</code>.</li>
+            <li>Imagens em URL pública HTTPS.</li>
+            <li>Homologação antes de produção; logs no seu lado com SKU/pedido.</li>
+          </ul>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <footer class="AeDocs_Footer">
+    {{ MARCA_NOME }} · API Externa · documentação para o time técnico do parceiro
+  </footer>
+</body>
+</html>
