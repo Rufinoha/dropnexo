@@ -15,7 +15,12 @@
       ...(opts || {}),
     });
     const j = await r.json().catch(() => ({}));
-    if (!r.ok || j.success === false) throw new Error(j.message || "Falha na requisição");
+    if (!r.ok || j.success === false) {
+      const err = new Error(j.message || "Falha na requisição");
+      err.payload = j;
+      err.checklist = j.checklist || null;
+      throw err;
+    }
     return j;
   }
 
@@ -228,7 +233,49 @@
       ? `Última sync: ${cfg.ultima_sync_em} — ${cfg.ultima_mensagem || ""}`
       : "Nenhuma sincronização ainda.";
     renderTokenTable(cfg);
+    renderChecklist(cfg);
     setBadge(cfg);
+  }
+
+  function fmtChecklistDetalhe(detalhe) {
+    if (!detalhe) return "";
+    let checks = [];
+    if (Array.isArray(detalhe)) checks = detalhe;
+    else if (typeof detalhe === "object") checks = detalhe.checks || [];
+    if (!checks.length) return "";
+    return `<div style="margin-top:6px">${checks
+      .map((c) => {
+        const ok = !!c.ok;
+        return `<div><span class="${ok ? "Ae_LogOk" : "Ae_LogFail"}">${ok ? "OK" : "Falha"}</span> <code>${esc(c.endpoint || c.nome || "")}</code> — ${esc(c.detalhe || "")}</div>`;
+      })
+      .join("")}</div>`;
+  }
+
+  function renderChecklist(cfg, checklistOverride) {
+    const box = $("ae_checklist");
+    if (!box) return;
+    const cl = checklistOverride || cfg?.homolog_checklist || {};
+    const checks = Array.isArray(cl.checks) ? cl.checks : [];
+    if (!checks.length) {
+      box.hidden = true;
+      box.innerHTML = "";
+      return;
+    }
+    box.hidden = false;
+    box.innerHTML = `<div class="Ae_ChecklistHead">Resultado do checklist de homologação</div>
+      <table><thead><tr><th>Teste</th><th>Endpoint</th><th>Status</th><th>Detalhe</th></tr></thead><tbody>
+      ${checks
+        .map((c) => {
+          const ok = !!c.ok;
+          return `<tr>
+            <td>${esc(c.nome || "")}</td>
+            <td><code>${esc(c.endpoint || "")}</code></td>
+            <td><span class="${ok ? "Ae_LogOk" : "Ae_LogFail"}">${ok ? "OK" : "Falha"}</span></td>
+            <td>${esc(c.detalhe || "")}</td>
+          </tr>`;
+        })
+        .join("")}
+      </tbody></table>`;
   }
 
   function renderLogs(itens) {
@@ -241,11 +288,12 @@
     box.innerHTML = `<table><thead><tr><th>Quando</th><th>Evento</th><th>Status</th><th>Mensagem</th></tr></thead><tbody>${itens
       .map((l) => {
         const ok = !!l.sucesso;
+        const extra = fmtChecklistDetalhe(l.detalhe);
         return `<tr>
         <td>${esc(l.dt_criacao || "")}</td>
         <td>${esc(l.evento || "")}</td>
         <td><span class="${ok ? "Ae_LogOk" : "Ae_LogFail"}">${ok ? "OK" : "Falha"}</span></td>
-        <td>${esc(l.mensagem || "")}</td>
+        <td>${esc(l.mensagem || "")}${extra}</td>
       </tr>`;
       })
       .join("")}</tbody></table>`;
@@ -426,10 +474,13 @@
         body: "{}",
       });
       aplicar(j.dados || {});
+      renderChecklist(j.dados || {}, j.checklist || null);
       toast("Enviado", j.message || "Solicitação enviada.", "success");
       const logs = await api("/api/integracoes/api-externa/logs");
       renderLogs(logs.dados || []);
+      ativarAba("logs");
     } catch (e) {
+      if (e && e.checklist) renderChecklist(tokenCfg || {}, e.checklist);
       toast("Não enviado", e.message, "error");
     }
   });

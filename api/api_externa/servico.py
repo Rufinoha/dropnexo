@@ -162,7 +162,8 @@ def listar_liberacoes(conn, termo: str = "") -> list[dict]:
         f"""
         SELECT a.id_tenant, a.nome_parceiro, a.contato_tecnico, a.ativo, a.status, a.ambiente,
                a.base_url, a.liberado_em, a.ultima_sync_em, a.ultima_sync_ok, a.ultima_mensagem,
-               a.homolog_status, a.homolog_solicitado_em, a.homolog_aprovado_em, a.homolog_obs,
+               a.homolog_status, a.homolog_checklist, a.homolog_solicitado_em,
+               a.homolog_aprovado_em, a.homolog_obs,
                COALESCE(NULLIF(TRIM(t.razao_social), ''), NULLIF(TRIM(t.nome), ''), 'Tenant') AS tenant_nome,
                t.documento
           FROM tbl_integracao_api_externa a
@@ -179,10 +180,17 @@ def listar_liberacoes(conn, termo: str = "") -> list[dict]:
     cols = [
         "id_tenant", "nome_parceiro", "contato_tecnico", "ativo", "status", "ambiente",
         "base_url", "liberado_em", "ultima_sync_em", "ultima_sync_ok", "ultima_mensagem",
-        "homolog_status", "homolog_solicitado_em", "homolog_aprovado_em", "homolog_obs",
+        "homolog_status", "homolog_checklist", "homolog_solicitado_em",
+        "homolog_aprovado_em", "homolog_obs",
         "tenant_nome", "documento",
     ]
-    return [dict(zip(cols, r)) for r in cur.fetchall()]
+    out = []
+    for r in cur.fetchall():
+        d = dict(zip(cols, r))
+        if not isinstance(d.get("homolog_checklist"), dict):
+            d["homolog_checklist"] = d.get("homolog_checklist") or {}
+        out.append(d)
+    return out
 
 
 def liberar_tenant(

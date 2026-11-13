@@ -3,7 +3,7 @@
 {% block title %}API Externa — Integrações — {{ MARCA_NOME }}{% endblock %}
 {% block topbar_title %}API Externa{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('static', filename='style/Capi_externa_integracao.css') }}?v=6" />
+<link rel="stylesheet" href="{{ url_for('static', filename='style/Capi_externa_integracao.css') }}?v=8" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio cl-page-principal Ae_Wrap">
@@ -101,6 +101,7 @@
           </div>
           <button type="button" class="Cl_botaoprimario" id="ae_btnSolicitarProd">Solicitar produção</button>
         </div>
+        <div class="Ae_Checklist" id="ae_checklist" hidden></div>
 
         <div class="Ae_Foot Ae_Foot--compact">
           <button type="button" class="Cl_botaoprimario" id="ae_btnSalvar">Salvar</button>
@@ -234,22 +235,20 @@
 
     {# ── Documentação ── #}
     <div class="Ae_Pane" id="ae_pane_documentacao" data-ae-pane="documentacao" hidden>
-      <div class="Ae_PaneHead Ae_PaneHead--row">
-        <div>
-          <h3>Prompt para AI</h3>
-          <p class="Ae_Hint">Cole no ChatGPT / Cursor / Claude do parceiro para gerar a API no formato certo.</p>
-        </div>
+      <div class="Ae_PaneHead">
+        <h3>Prompt para AI</h3>
+        <p class="Ae_Hint">Cole no ChatGPT / Cursor / Claude do parceiro para gerar a API no formato certo.</p>
+      </div>
+      <pre class="Ae_Prompt Ae_Prompt--full" id="ae_prompt">Carregando…</pre>
+      <div class="Ae_Foot">
+        <button type="button" class="Cl_botaoprimario" id="ae_btnCopiarPrompt">Copiar prompt AI</button>
         <a
-          class="Cl_BtnCancelar"
+          class="Cl_botaoprimario"
           id="ae_btnAbrirDoc"
           href="{{ url_for('api_externa.docs_html') }}"
           target="_blank"
           rel="noopener"
         >Ver documentação</a>
-      </div>
-      <pre class="Ae_Prompt Ae_Prompt--full" id="ae_prompt">Carregando…</pre>
-      <div class="Ae_Foot">
-        <button type="button" class="Cl_botaoprimario" id="ae_btnCopiarPrompt">Copiar prompt AI</button>
       </div>
     </div>
 
@@ -270,5 +269,5 @@
 </div>
 {% endblock %}
 {% block page_js %}
-<script defer src="{{ url_for('integracoes.static', filename='script/Sapi_externa_integracao.js') }}?v=5"></script>
+<script defer src="{{ url_for('integracoes.static', filename='script/Sapi_externa_integracao.js') }}?v=6"></script>
 {% endblock %}

@@ -52,6 +52,24 @@
     return `<span class="AeAdm_Badge AeAdm_Badge--off">${esc(amb)}</span>`;
   }
 
+  function htmlChecklist(item) {
+    const checks = item?.homolog_checklist?.checks;
+    if (!Array.isArray(checks) || !checks.length) return "<p class='CfgCup_Hint'>Sem checklist gravado.</p>";
+    return `<table style="width:100%;border-collapse:collapse;font-size:.9rem">
+      <thead><tr><th align="left">Teste</th><th align="left">Endpoint</th><th align="left">Status</th><th align="left">Detalhe</th></tr></thead>
+      <tbody>${checks
+        .map((c) => {
+          const ok = !!c.ok;
+          return `<tr>
+            <td>${esc(c.nome || "")}</td>
+            <td><code>${esc(c.endpoint || "")}</code></td>
+            <td>${ok ? "OK" : "Falha"}</td>
+            <td>${esc(c.detalhe || "")}</td>
+          </tr>`;
+        })
+        .join("")}</tbody></table>`;
+  }
+
   function initComboTenant() {
     if (comboTenant) return comboTenant;
     if (!window.Util?.combobox_personalisado) {
@@ -137,6 +155,10 @@
             ? `<button type="button" class="Cl_botaoprimario ae-aprovar" data-id="${esc(i.id_tenant)}">Aprovar</button>
                <button type="button" class="Cl_BtnCancelar ae-reprovar" data-id="${esc(i.id_tenant)}">Reprovar</button>`
             : "";
+        const btnChecklist =
+          i.homolog_checklist && Array.isArray(i.homolog_checklist.checks) && i.homolog_checklist.checks.length
+            ? `<button type="button" class="Cl_BtnCancelar ae-checklist" data-id="${esc(i.id_tenant)}">Ver testes</button>`
+            : "";
         return `<tr>
           <td><strong>#${esc(i.id_tenant)}</strong><br><small>${esc(i.tenant_nome || "")}</small></td>
           <td>${esc(i.nome_parceiro || "—")}</td>
@@ -145,6 +167,7 @@
           <td>${badgeStatus(i)}</td>
           <td>${sync}</td>
           <td class="Cl_TableActions">
+            ${btnChecklist}
             ${btnsAprov}
             <button type="button" class="Cl_BtnCancelar ae-editar" data-id="${esc(i.id_tenant)}">Editar</button>
             <button type="button" class="Cl_BtnCancelar ae-revogar" data-id="${esc(i.id_tenant)}">Revogar</button>
@@ -153,6 +176,25 @@
       })
       .join("");
 
+    tbody.querySelectorAll(".ae-checklist").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const id = Number(btn.dataset.id);
+        const item = cache.find((x) => Number(x.id_tenant) === id);
+        if (!item) return;
+        if (window.Swal) {
+          Swal.fire({
+            title: `Checklist #${id}`,
+            html: htmlChecklist(item),
+            width: 720,
+            confirmButtonText: "Fechar",
+            confirmButtonColor: "#021F81",
+          });
+        } else {
+          alert("Veja o checklist no console.");
+          console.log(item.homolog_checklist);
+        }
+      });
+    });
     tbody.querySelectorAll(".ae-editar").forEach((btn) => {
       btn.addEventListener("click", () => {
         const id = Number(btn.dataset.id);
