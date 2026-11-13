@@ -370,14 +370,19 @@ body.AeDocs {
 .AeDocs_Code {
   margin: 0;
   padding: 0.9rem 1rem;
-  border-radius: 0;
-  background: transparent;
+  border-radius: 12px;
+  background: #0b1220;
   color: #dbe7ff;
   font-family: var(--mono);
   font-size: 0.78rem;
   line-height: 1.5;
   overflow: auto;
   white-space: pre;
+}
+
+.AeDocs_CodeWrap .AeDocs_Code {
+  border-radius: 0;
+  background: transparent;
 }
 
 .AeDocs_CodeWrap.is-collapsed .AeDocs_Code {
