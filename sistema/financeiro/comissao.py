@@ -1117,33 +1117,49 @@ def _linhas_ciclo_interno(
     return planos_ativos, inadimplentes
 
 
-def garantir_colunas_comprovante(cur) -> None:
-    """Garante colunas de comprovante no fechamento (bancos antigos podem não ter)."""
+def _colunas_comprovante_existentes(cur) -> set[str]:
     cur.execute(
         """
-        ALTER TABLE tbl_comissao_fechamento
-          ADD COLUMN IF NOT EXISTS comprovante_caminho TEXT,
-          ADD COLUMN IF NOT EXISTS comprovante_nome VARCHAR(180)
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'tbl_comissao_fechamento'
+          AND column_name IN ('comprovante_caminho', 'comprovante_nome')
         """
     )
+    return {str(r[0]) for r in cur.fetchall()}
+
+
+def garantir_colunas_comprovante(cur) -> bool:
+    """Garante colunas de comprovante. Usa SAVEPOINT para não abortar a transação."""
+    cols = _colunas_comprovante_existentes(cur)
+    for nome, tipo in (
+        ("comprovante_caminho", "TEXT"),
+        ("comprovante_nome", "VARCHAR(180)"),
+    ):
+        if nome in cols:
+            continue
+        sp = f"sp_add_{nome}"
+        try:
+            cur.execute(f"SAVEPOINT {sp}")
+            cur.execute(
+                f"ALTER TABLE tbl_comissao_fechamento "
+                f"ADD COLUMN IF NOT EXISTS {nome} {tipo}"
+            )
+            cur.execute(f"RELEASE SAVEPOINT {sp}")
+            cols.add(nome)
+        except Exception:
+            log.exception("falha ao adicionar coluna %s em tbl_comissao_fechamento", nome)
+            try:
+                cur.execute(f"ROLLBACK TO SAVEPOINT {sp}")
+            except Exception:
+                pass
+    return "comprovante_caminho" in cols
 
 
 def _tem_coluna_comprovante(cur) -> bool:
-    try:
-        garantir_colunas_comprovante(cur)
-        return True
-    except Exception:
-        log.exception("falha ao garantir colunas de comprovante")
-        cur.execute(
-            """
-            SELECT 1
-            FROM information_schema.columns
-            WHERE table_schema = current_schema()
-              AND table_name = 'tbl_comissao_fechamento'
-              AND column_name = 'comprovante_caminho'
-            """
-        )
-        return cur.fetchone() is not None
+    """Só consulta o catálogo — não faz ALTER (evita zerar o painel via _safe_cur)."""
+    return "comprovante_caminho" in _colunas_comprovante_existentes(cur)
 
 
 def painel_comissoes(
@@ -1156,6 +1172,7 @@ def painel_comissoes(
     bypass_janela: bool = False,
 ) -> dict:
     id_tenant = int(id_tenant)
+    _safe_cur(cur, "garantir_comp", lambda: garantir_colunas_comprovante(cur) or True, True)
     hoje = hoje_sp()
     ano_i, mes_i = _periodo_valido(ano, mes)
     try:
@@ -1433,6 +1450,7 @@ def _fechamento_editavel(status: str, tem_comprovante: bool = False) -> bool:
 
 
 def _assert_fechamento_editavel(cur, id_tenant: int, id_fechamento: int) -> dict:
+    garantir_colunas_comprovante(cur)
     tem_comp_col = _tem_coluna_comprovante(cur)
     col_comp = (
         "COALESCE(NULLIF(TRIM(comprovante_caminho), ''), '') <> ''"
@@ -1579,6 +1597,7 @@ def _iso(v) -> str:
 
 
 def detalhe_fechamento(cur, id_tenant: int, id_fechamento: int) -> dict | None:
+    garantir_colunas_comprovante(cur)
     tem_comp_col = _tem_coluna_comprovante(cur)
     if tem_comp_col:
         cur.execute(
