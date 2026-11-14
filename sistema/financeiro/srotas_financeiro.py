@@ -645,6 +645,97 @@ def api_comissoes_nf(id_fechamento: int):
     return send_file(path, as_attachment=False, download_name=nome, mimetype="application/pdf")
 
 
+_COMPROVANTE_EXT = {".pdf", ".jpg", ".jpeg", ".png"}
+_COMPROVANTE_MIME = {
+    ".pdf": "application/pdf",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+}
+
+
+@financeiro_bp.get("/api/comissoes/fechamento/<int:id_fechamento>/comprovante")
+@login_obrigatorio()
+def api_comissoes_comprovante_get(id_fechamento: int):
+    if not _pode_comissoes() and not session.get("eh_desenvolvedor"):
+        return jsonify(success=False, message="Sem permissão."), 403
+    tid = _id_tenant()
+    if session.get("eh_desenvolvedor"):
+        alt = request.args.get("tenant")
+        if alt and str(alt).isdigit():
+            tid = int(alt)
+    if not tid:
+        return jsonify(success=False, message="Sessão inválida."), 403
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        from sistema.financeiro.comissao import caminho_comprovante_fechamento
+
+        achou = caminho_comprovante_fechamento(cur, id_fechamento, int(tid))
+    finally:
+        conn.close()
+    if not achou:
+        return jsonify(success=False, message="Comprovante não encontrado."), 404
+    rel, nome = achou
+    path = _MOD.parents[2] / rel
+    if not path.is_file():
+        return jsonify(success=False, message="Arquivo do comprovante não encontrado."), 404
+    ext = path.suffix.lower()
+    mime = _COMPROVANTE_MIME.get(ext, "application/octet-stream")
+    return send_file(path, as_attachment=False, download_name=nome, mimetype=mime)
+
+
+@financeiro_bp.post("/api/comissoes/fechamento/<int:id_fechamento>/comprovante")
+@login_obrigatorio()
+def api_comissoes_comprovante_post(id_fechamento: int):
+    if not _pode_comissoes():
+        return jsonify(success=False, message="Sem permissão."), 403
+    tid = _id_tenant()
+    if not tid:
+        return jsonify(success=False, message="Sessão inválida."), 403
+    arq = request.files.get("comprovante")
+    if arq is None or not (arq.filename or "").strip():
+        return jsonify(success=False, message="Anexe o comprovante de pagamento."), 400
+    nome_orig = Path(arq.filename or "comprovante").name
+    ext = Path(nome_orig).suffix.lower()
+    if ext not in _COMPROVANTE_EXT:
+        return jsonify(success=False, message="Comprovante deve ser PDF, JPG ou PNG."), 400
+    pasta = _MOD.parents[2] / "upload" / f"tenant{tid}" / "comissoes"
+    pasta.mkdir(parents=True, exist_ok=True)
+    destino = pasta / f"{int(id_fechamento)}_comprovante{ext}"
+    caminho_db = f"upload/tenant{tid}/comissoes/{destino.name}"
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        from sistema.financeiro.comissao import dar_baixa_fechamento, gravar_comprovante_fechamento
+
+        arq.save(destino)
+        gravar_comprovante_fechamento(
+            cur, int(id_fechamento), nome_orig, caminho_db, id_tenant=int(tid)
+        )
+        dar_baixa_fechamento(cur, int(tid), int(id_fechamento))
+        conn.commit()
+        return jsonify(success=True, message="Pagamento confirmado.")
+    except ValueError as e:
+        conn.rollback()
+        if destino.is_file():
+            try:
+                destino.unlink()
+            except OSError:
+                pass
+        return jsonify(success=False, message=str(e)), 400
+    except Exception as e:
+        conn.rollback()
+        if destino.is_file():
+            try:
+                destino.unlink()
+            except OSError:
+                pass
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
 @financeiro_bp.post("/api/comissoes/fechamento/<int:id_fechamento>/cancelar")
 @login_obrigatorio()
 def api_comissoes_cancelar(id_fechamento: int):

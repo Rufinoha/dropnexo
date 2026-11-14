@@ -507,31 +507,47 @@ def listar_baixas_comissao(cur, status: str) -> dict:
     }
 
 
-def gravar_comprovante_fechamento(cur, id_fechamento: int, nome: str, caminho: str) -> int:
-    cur.execute(
-        """
+def gravar_comprovante_fechamento(
+    cur, id_fechamento: int, nome: str, caminho: str, id_tenant: int | None = None
+) -> int:
+    sql = """
         UPDATE tbl_comissao_fechamento
         SET comprovante_nome = %s, comprovante_caminho = %s
         WHERE id = %s AND status = 'aguardando'
-        RETURNING id_tenant_fornecedor
-        """,
-        ((nome or "comprovante")[:180], caminho, int(id_fechamento)),
-    )
+    """
+    params: list = [(nome or "comprovante")[:180], caminho, int(id_fechamento)]
+    if id_tenant is not None:
+        sql += " AND id_tenant_fornecedor = %s"
+        params.append(int(id_tenant))
+    sql += " RETURNING id_tenant_fornecedor"
+    cur.execute(sql, tuple(params))
     row = cur.fetchone()
     if not row:
         raise ValueError("Fechamento não encontrado ou já pago.")
     return int(row[0])
 
 
-def caminho_comprovante_fechamento(cur, id_fechamento: int) -> tuple[str, str] | None:
-    cur.execute(
-        """
-        SELECT comprovante_caminho, comprovante_nome
-        FROM tbl_comissao_fechamento
-        WHERE id = %s
-        """,
-        (int(id_fechamento),),
-    )
+def caminho_comprovante_fechamento(
+    cur, id_fechamento: int, id_tenant: int | None = None
+) -> tuple[str, str] | None:
+    if id_tenant is not None:
+        cur.execute(
+            """
+            SELECT comprovante_caminho, comprovante_nome
+            FROM tbl_comissao_fechamento
+            WHERE id = %s AND id_tenant_fornecedor = %s
+            """,
+            (int(id_fechamento), int(id_tenant)),
+        )
+    else:
+        cur.execute(
+            """
+            SELECT comprovante_caminho, comprovante_nome
+            FROM tbl_comissao_fechamento
+            WHERE id = %s
+            """,
+            (int(id_fechamento),),
+        )
     row = cur.fetchone()
     if not row or not (row[0] or "").strip():
         return None
@@ -1254,8 +1270,8 @@ def painel_comissoes(
     janela_efetiva = bool(janela or bypass)
     for f in faturados:
         st = (f.get("status") or "").strip().lower()
-        f["editavel"] = st == "aguardando" and not bool(f.get("tem_comprovante"))
-        f["status_label"] = "Pago" if st == "pago" else "Aguardando pagamento"
+        f["editavel"] = _fechamento_editavel(st, bool(f.get("tem_comprovante")))
+        f["status_label"] = "Pago" if st == "pago" else "Aguardando"
     pai_nome = ""
     if pai:
         pai_nome = _safe_cur(cur, "pai_nome", lambda: _nome(cur, pai), "") or ""
@@ -1394,8 +1410,10 @@ def caminho_nf_fechamento(cur, id_fechamento: int, id_tenant: int) -> tuple[str,
     return row[0], row[1] or "nota.pdf"
 
 
-def _fechamento_editavel(status: str, tem_comprovante: bool) -> bool:
-    return (status or "").strip().lower() == "aguardando" and not bool(tem_comprovante)
+def _fechamento_editavel(status: str, tem_comprovante: bool = False) -> bool:
+    # tem_comprovante mantido na assinatura por compat; editável = ainda aguardando pagamento
+    _ = tem_comprovante
+    return (status or "").strip().lower() == "aguardando"
 
 
 def _assert_fechamento_editavel(cur, id_tenant: int, id_fechamento: int) -> dict:
@@ -1415,7 +1433,7 @@ def _assert_fechamento_editavel(cur, id_tenant: int, id_fechamento: int) -> dict
     st = (row[1] or "").strip().lower()
     if st == "cancelado":
         raise ValueError("Este fechamento já foi cancelado.")
-    if st == "pago" or bool(row[2]):
+    if st == "pago":
         raise ValueError("Após o pagamento com comprovante, o fechamento não pode mais ser alterado.")
     if st != "aguardando":
         raise ValueError("Este fechamento não pode ser alterado.")
@@ -1534,7 +1552,8 @@ def detalhe_fechamento(cur, id_tenant: int, id_fechamento: int) -> dict | None:
     cur.execute(
         """
         SELECT id, valor_centavos, vencimento_em, status, criado_em, nf_nome, pago_em,
-               COALESCE(NULLIF(TRIM(comprovante_caminho), ''), '') <> ''
+               COALESCE(NULLIF(TRIM(comprovante_caminho), ''), '') <> '',
+               COALESCE(comprovante_nome, '')
         FROM tbl_comissao_fechamento
         WHERE id = %s AND id_tenant_fornecedor = %s
           AND status IN ('aguardando', 'pago')
@@ -1583,6 +1602,7 @@ def detalhe_fechamento(cur, id_tenant: int, id_fechamento: int) -> dict | None:
         "nf_nome": cab[5] or "",
         "pago_em": cab[6].isoformat() if cab[6] else "",
         "tem_comprovante": tem_comp,
+        "comprovante_nome": (cab[8] or "").strip() or ("comprovante" if tem_comp else ""),
         "editavel": _fechamento_editavel(st, tem_comp),
         "itens": itens,
     }

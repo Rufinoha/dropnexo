@@ -159,20 +159,15 @@
 
   function htmlFaturado() {
     const rows = (dados.faturados || []).map((f) => {
-      const pago = f.status === "pago" || f.tem_comprovante;
+      const pago = f.status === "pago";
       const badge = pago
         ? `<span class="Fin_Badge Fin_Badge--ok">Pago</span>`
         : `<span class="Fin_Badge Fin_Badge--warn">Aguardando</span>`;
-      const acoes = f.editavel
-        ? `<button type="button" class="Fin_ComLink" data-lote-acao="alterar" data-lote="${Number(f.id)}">Alterar NF</button>
-           <button type="button" class="Fin_ComLink" data-lote-acao="cancelar" data-lote="${Number(f.id)}">Cancelar</button>`
-        : `<span class="Fin_Meta">${pago ? "Bloqueado" : "—"}</span>`;
-      return `<tr class="Fin_Lote" data-lote="${Number(f.id)}" tabindex="0">
+      return `<tr class="Fin_Lote" data-lote="${Number(f.id)}" tabindex="0" title="Abrir lote">
         <td>${dataBr(f.criado_em)}</td>
         <td>${dataBr(f.vencimento_em)}</td>
         <td>${brl(f.valor_centavos)}</td>
         <td>${badge}</td>
-        <td class="Fin_Acoes" onclick="event.stopPropagation()">${acoes}</td>
       </tr>`;
     });
     const vazio = Number(dados.ano_faturado)
@@ -180,8 +175,8 @@
       : "Nenhum lote nos últimos 12 meses.";
     return (
       htmlFiltroAno() +
-      `<p class="Fin_Meta Fin_FiltroNota">Após anexar o comprovante de pagamento, o lote não pode mais ser alterado.</p>` +
-      tabela(["Fechado em", "Vencimento", "Valor", "Situação", "Ações"], rows, vazio)
+      `<p class="Fin_Meta Fin_FiltroNota">Clique no lote para gerenciar. Após confirmar o pagamento com comprovante, o lote fica bloqueado.</p>` +
+      tabela(["Fechado em", "Vencimento", "Valor", "Situação"], rows, vazio)
     );
   }
 
@@ -310,6 +305,8 @@
     const r = await fetch(`/api/comissoes/fechamento/${id}`, { credentials: "same-origin" });
     const j = await r.json().catch(() => ({}));
     if (!r.ok || !j.success) throw new Error(j.message || "Falha ao abrir o lote.");
+    const pago = j.status === "pago";
+    const editavel = !!j.editavel && !pago;
     const linhas = (j.itens || [])
       .map((i) => {
         const via = i.via ? ` <span class="Fin_Meta">via ${esc(i.via)}</span>` : "";
@@ -319,38 +316,113 @@
     const corpo = linhas
       ? `<div class="Fin_TableWrap"><table class="Fin_Table"><thead><tr><th>Vendedor</th><th>Pago em</th><th>Mensalidade</th><th>Comissão</th></tr></thead><tbody>${linhas}</tbody></table></div>`
       : `<p class="Fin_Empty">Este lote não tem itens.</p>`;
-    const nota = j.nf_nome
-      ? `<p class="Fin_ContaSub"><a href="/api/comissoes/fechamento/${id}/nf" target="_blank" rel="noopener">${esc(j.nf_nome)}</a></p>`
-      : `<p class="Fin_ContaSub">Sem nota anexada.</p>`;
-    const situacao = j.status === "pago" || j.tem_comprovante ? "Pago" : "Aguardando";
-    const bloqueio = j.editavel
-      ? ""
-      : `<p class="Fin_ContaSub">Lote bloqueado após comprovante/pagamento.</p>`;
+    const badge = pago
+      ? `<span class="Fin_Badge Fin_Badge--ok">Pago</span>`
+      : `<span class="Fin_Badge Fin_Badge--warn">Aguardando</span>`;
+    const docs = [];
+    if (j.nf_nome) {
+      docs.push(
+        `<a class="Fin_ComLink" href="/api/comissoes/fechamento/${id}/nf" target="_blank" rel="noopener">Nota: ${esc(j.nf_nome)}</a>`
+      );
+    } else {
+      docs.push(`<span class="Fin_Meta">Sem nota anexada</span>`);
+    }
+    if (pago && (j.tem_comprovante || j.comprovante_nome)) {
+      docs.push(
+        `<a class="Fin_ComLink" href="/api/comissoes/fechamento/${id}/comprovante" target="_blank" rel="noopener">Comprovante: ${esc(j.comprovante_nome || "arquivo")}</a>`
+      );
+    }
+    const acoes = editavel
+      ? `<div class="Fin_LoteAcoes">
+          <button type="button" class="Fin_LoteBtn Fin_LoteBtn--sec" data-lote-modal="alterar">Alterar nota</button>
+          <button type="button" class="Fin_LoteBtn Fin_LoteBtn--ok" data-lote-modal="pagar">Confirmar pagamento</button>
+          <button type="button" class="Fin_LoteBtn Fin_LoteBtn--danger" data-lote-modal="cancelar">Cancelar fatura</button>
+        </div>`
+      : `<p class="Fin_ContaSub">Lote bloqueado após confirmação do pagamento.</p>`;
+    let acaoModal = null;
     const result = await Swal.fire({
       title: brl(j.valor_centavos),
-      html: `<p class="Fin_ContaSub">Fechado em ${dataBr(j.criado_em)} · vence ${dataBr(j.vencimento_em)} · ${situacao}</p>${nota}${bloqueio}${corpo}`,
-      showDenyButton: !!j.editavel,
-      showCancelButton: !!j.editavel,
+      html: `<p class="Fin_ContaSub">Fechado em ${dataBr(j.criado_em)} · vence ${dataBr(j.vencimento_em)} · ${badge}${pago && j.pago_em ? ` · pago em ${dataBr(j.pago_em)}` : ""}</p>
+        <p class="Fin_LoteDocs">${docs.join(" · ")}</p>
+        ${corpo}
+        ${acoes}`,
+      showConfirmButton: true,
       confirmButtonText: "Fechar",
-      denyButtonText: "Alterar NF",
-      cancelButtonText: "Cancelar lote",
       confirmButtonColor: "#021F81",
-      denyButtonColor: "#021F81",
-      cancelButtonColor: "#b42318",
-      width: 640,
+      width: 680,
+      didOpen: (popup) => {
+        popup.querySelectorAll("[data-lote-modal]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            acaoModal = btn.getAttribute("data-lote-modal");
+            Swal.close();
+          });
+        });
+      },
     });
-    if (result.isDenied) {
+    if (result.isConfirmed || !editavel) return;
+    if (acaoModal === "alterar") {
       await alterarNf(id);
       return;
     }
-    if (result.dismiss === Swal.DismissReason.cancel && j.editavel) {
+    if (acaoModal === "pagar") {
+      await confirmarPagamento(id);
+      return;
+    }
+    if (acaoModal === "cancelar") {
       await cancelarLote(id);
     }
   }
 
+  async function confirmarPagamento(id) {
+    const { value: file } = await Swal.fire({
+      title: "Confirmar pagamento",
+      html: `<p class="Fin_ContaSub">Anexe o comprovante (PDF, JPG ou PNG). O lote passará para <strong>Pago</strong> e não poderá mais ser alterado.</p>
+        <input type="file" id="com_comp" accept="application/pdf,.pdf,image/jpeg,.jpg,.jpeg,image/png,.png" class="swal2-file" />`,
+      showCancelButton: true,
+      confirmButtonText: "Confirmar pagamento",
+      cancelButtonText: "Voltar",
+      confirmButtonColor: "#021F81",
+      preConfirm: () => {
+        const inp = document.getElementById("com_comp");
+        const f = inp?.files?.[0];
+        if (!f) {
+          Swal.showValidationMessage("Selecione o comprovante.");
+          return false;
+        }
+        const nome = (f.name || "").toLowerCase();
+        if (!/\.(pdf|jpe?g|png)$/.test(nome)) {
+          Swal.showValidationMessage("Use PDF, JPG ou PNG.");
+          return false;
+        }
+        return f;
+      },
+    });
+    if (!file) {
+      await abrirLote(id);
+      return;
+    }
+    const fd = new FormData();
+    fd.append("comprovante", file);
+    Swal.fire({ title: "Confirmando…", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    const r = await fetch(`/api/comissoes/fechamento/${id}/comprovante`, {
+      method: "POST",
+      credentials: "same-origin",
+      body: fd,
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.success) throw new Error(j.message || "Falha ao confirmar pagamento.");
+    await carregar();
+    await Swal.fire({
+      icon: "success",
+      title: "Pagamento confirmado",
+      text: j.message || "",
+      confirmButtonColor: "#021F81",
+    });
+  }
+
   async function alterarNf(id) {
     const { value: file } = await Swal.fire({
-      title: "Nova nota fiscal",
+      title: "Alterar nota",
       html: `<input type="file" id="com_alt_nf" accept="application/pdf,.pdf" class="swal2-file" />`,
       showCancelButton: true,
       confirmButtonText: "Salvar",
@@ -366,7 +438,10 @@
         return f;
       },
     });
-    if (!file) return;
+    if (!file) {
+      await abrirLote(id);
+      return;
+    }
     const fd = new FormData();
     fd.append("nf", file);
     Swal.fire({ title: "Salvando…", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
@@ -379,19 +454,23 @@
     if (!r.ok || !j.success) throw new Error(j.message || "Falha ao alterar.");
     await carregar();
     await Swal.fire({ icon: "success", title: "Nota atualizada", confirmButtonColor: "#021F81" });
+    await abrirLote(id);
   }
 
   async function cancelarLote(id) {
     const conf = await Swal.fire({
       icon: "warning",
-      title: "Cancelar este fechamento?",
-      text: "Os itens voltam para Em aberto e o lote deixa de valer.",
+      title: "Cancelar esta fatura?",
+      text: "As comissões voltam para Em aberto e o lote deixa de valer. Não é possível cancelar se já estiver pago.",
       showCancelButton: true,
-      confirmButtonText: "Cancelar lote",
+      confirmButtonText: "Cancelar fatura",
       cancelButtonText: "Manter",
       confirmButtonColor: "#b42318",
     });
-    if (!conf.isConfirmed) return;
+    if (!conf.isConfirmed) {
+      await abrirLote(id);
+      return;
+    }
     Swal.fire({ title: "Cancelando…", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
     const r = await fetch(`/api/comissoes/fechamento/${id}/cancelar`, {
       method: "POST",
@@ -403,7 +482,7 @@
     await carregar();
     await Swal.fire({
       icon: "success",
-      title: "Fechamento cancelado",
+      title: "Fatura cancelada",
       text: j.message || "",
       confirmButtonColor: "#021F81",
     });
@@ -491,15 +570,6 @@
     render();
   });
   painel?.addEventListener("click", (ev) => {
-    const acaoBtn = ev.target.closest("[data-lote-acao]");
-    if (acaoBtn) {
-      ev.stopPropagation();
-      const id = Number(acaoBtn.dataset.lote);
-      const acao = acaoBtn.dataset.loteAcao;
-      if (acao === "cancelar") cancelarLote(id).catch((e) => Swal.fire("Erro", e.message, "error"));
-      else if (acao === "alterar") alterarNf(id).catch((e) => Swal.fire("Erro", e.message, "error"));
-      return;
-    }
     const prev = ev.target.closest("[data-prev]");
     if (prev) {
       abrirDetalhe(planosAtivos()[Number(prev.dataset.prev)]);
@@ -510,7 +580,7 @@
       abrirDetalhe((dados?.abertos || [])[Number(link.dataset.idx)]);
       return;
     }
-    const lote = ev.target.closest("[data-lote]");
+    const lote = ev.target.closest("tr.Fin_Lote[data-lote]");
     if (lote) {
       abrirLote(Number(lote.dataset.lote)).catch((e) => Swal.fire("Erro", e.message, "error"));
       return;

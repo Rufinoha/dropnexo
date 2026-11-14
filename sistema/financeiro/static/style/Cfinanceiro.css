@@ -280,6 +280,32 @@
 .Fin_Badge--muted { background: #f1f5f9; color: #64748b; }
 
 .Fin_Acoes { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.Fin_LoteDocs { margin: 0.35rem 0 0.75rem; font-size: 0.85rem; }
+.Fin_LoteAcoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #e2e8f0;
+  justify-content: flex-end;
+}
+.Fin_LoteBtn {
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 0.45rem 0.85rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  background: #f8fafc;
+  color: #0f172a;
+}
+.Fin_LoteBtn--sec { border-color: #cbd5e1; background: #fff; color: #021F81; }
+.Fin_LoteBtn--sec:hover { background: #f1f5f9; }
+.Fin_LoteBtn--ok { background: #021F81; color: #fff; }
+.Fin_LoteBtn--ok:hover { background: #1636a8; }
+.Fin_LoteBtn--danger { background: #fff; border-color: #fecaca; color: #b42318; }
+.Fin_LoteBtn--danger:hover { background: #fef2f2; }
 .Fin_Pag { margin: 0.75rem 0 0; font-size: 0.85rem; color: #64748b; }
 
 .Fin_Resumo {
