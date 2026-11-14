@@ -1117,17 +1117,33 @@ def _linhas_ciclo_interno(
     return planos_ativos, inadimplentes
 
 
-def _tem_coluna_comprovante(cur) -> bool:
+def garantir_colunas_comprovante(cur) -> None:
+    """Garante colunas de comprovante no fechamento (bancos antigos podem não ter)."""
     cur.execute(
         """
-        SELECT 1
-        FROM information_schema.columns
-        WHERE table_schema = current_schema()
-          AND table_name = 'tbl_comissao_fechamento'
-          AND column_name = 'comprovante_caminho'
+        ALTER TABLE tbl_comissao_fechamento
+          ADD COLUMN IF NOT EXISTS comprovante_caminho TEXT,
+          ADD COLUMN IF NOT EXISTS comprovante_nome VARCHAR(180)
         """
     )
-    return cur.fetchone() is not None
+
+
+def _tem_coluna_comprovante(cur) -> bool:
+    try:
+        garantir_colunas_comprovante(cur)
+        return True
+    except Exception:
+        log.exception("falha ao garantir colunas de comprovante")
+        cur.execute(
+            """
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_schema = current_schema()
+              AND table_name = 'tbl_comissao_fechamento'
+              AND column_name = 'comprovante_caminho'
+            """
+        )
+        return cur.fetchone() is not None
 
 
 def painel_comissoes(
@@ -1417,10 +1433,16 @@ def _fechamento_editavel(status: str, tem_comprovante: bool = False) -> bool:
 
 
 def _assert_fechamento_editavel(cur, id_tenant: int, id_fechamento: int) -> dict:
+    tem_comp_col = _tem_coluna_comprovante(cur)
+    col_comp = (
+        "COALESCE(NULLIF(TRIM(comprovante_caminho), ''), '') <> ''"
+        if tem_comp_col
+        else "FALSE"
+    )
     cur.execute(
-        """
+        f"""
         SELECT id, status,
-               COALESCE(NULLIF(TRIM(comprovante_caminho), ''), '') <> '',
+               {col_comp},
                nf_caminho, nf_nome, valor_centavos
         FROM tbl_comissao_fechamento
         WHERE id = %s AND id_tenant_fornecedor = %s
@@ -1548,18 +1570,39 @@ def alterar_fechamento(
     return detalhe_fechamento(cur, tid, fid) or {"id": fid}
 
 
+def _iso(v) -> str:
+    if v is None:
+        return ""
+    if hasattr(v, "isoformat"):
+        return v.isoformat()
+    return str(v)
+
+
 def detalhe_fechamento(cur, id_tenant: int, id_fechamento: int) -> dict | None:
-    cur.execute(
-        """
-        SELECT id, valor_centavos, vencimento_em, status, criado_em, nf_nome, pago_em,
-               COALESCE(NULLIF(TRIM(comprovante_caminho), ''), '') <> '',
-               COALESCE(comprovante_nome, '')
-        FROM tbl_comissao_fechamento
-        WHERE id = %s AND id_tenant_fornecedor = %s
-          AND status IN ('aguardando', 'pago')
-        """,
-        (int(id_fechamento), int(id_tenant)),
-    )
+    tem_comp_col = _tem_coluna_comprovante(cur)
+    if tem_comp_col:
+        cur.execute(
+            """
+            SELECT id, valor_centavos, vencimento_em, status, criado_em, nf_nome, pago_em,
+                   COALESCE(NULLIF(TRIM(comprovante_caminho), ''), '') <> '',
+                   COALESCE(comprovante_nome, '')
+            FROM tbl_comissao_fechamento
+            WHERE id = %s AND id_tenant_fornecedor = %s
+              AND status IN ('aguardando', 'pago')
+            """,
+            (int(id_fechamento), int(id_tenant)),
+        )
+    else:
+        cur.execute(
+            """
+            SELECT id, valor_centavos, vencimento_em, status, criado_em, nf_nome, pago_em,
+                   FALSE, ''
+            FROM tbl_comissao_fechamento
+            WHERE id = %s AND id_tenant_fornecedor = %s
+              AND status IN ('aguardando', 'pago')
+            """,
+            (int(id_fechamento), int(id_tenant)),
+        )
     cab = cur.fetchone()
     if not cab:
         return None
@@ -1586,7 +1629,7 @@ def detalhe_fechamento(cur, id_tenant: int, id_fechamento: int) -> dict | None:
             "plano": r[2] or "",
             "valor_pago_centavos": int(r[3] or 0),
             "valor_comissao_centavos": int(r[4] or 0),
-            "pago_em": r[5].isoformat() if r[5] else "",
+            "pago_em": _iso(r[5]),
             "origem": r[6] or "",
             "vendedor": r[7] or "",
             "via": r[8] or "",
@@ -1596,11 +1639,11 @@ def detalhe_fechamento(cur, id_tenant: int, id_fechamento: int) -> dict | None:
     return {
         "id": int(cab[0]),
         "valor_centavos": int(cab[1] or 0),
-        "vencimento_em": cab[2].isoformat() if cab[2] else "",
+        "vencimento_em": _iso(cab[2]),
         "status": st,
-        "criado_em": cab[4].isoformat() if cab[4] else "",
+        "criado_em": _iso(cab[4]),
         "nf_nome": cab[5] or "",
-        "pago_em": cab[6].isoformat() if cab[6] else "",
+        "pago_em": _iso(cab[6]),
         "tem_comprovante": tem_comp,
         "comprovante_nome": (cab[8] or "").strip() or ("comprovante" if tem_comp else ""),
         "editavel": _fechamento_editavel(st, tem_comp),

@@ -609,6 +609,10 @@ def api_comissoes_fechamento(id_fechamento: int):
         from sistema.financeiro.comissao import detalhe_fechamento
 
         data = detalhe_fechamento(cur, int(tid), id_fechamento)
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e) or "Falha ao abrir o lote."), 500
     finally:
         conn.close()
     if not data:
@@ -707,8 +711,13 @@ def api_comissoes_comprovante_post(id_fechamento: int):
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
-        from sistema.financeiro.comissao import dar_baixa_fechamento, gravar_comprovante_fechamento
+        from sistema.financeiro.comissao import (
+            dar_baixa_fechamento,
+            garantir_colunas_comprovante,
+            gravar_comprovante_fechamento,
+        )
 
+        garantir_colunas_comprovante(cur)
         arq.save(destino)
         gravar_comprovante_fechamento(
             cur, int(id_fechamento), nome_orig, caminho_db, id_tenant=int(tid)
