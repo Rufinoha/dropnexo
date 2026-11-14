@@ -1641,8 +1641,8 @@ def detalhe_fechamento(cur, id_tenant: int, id_fechamento: int) -> dict | None:
         """,
         (int(id_fechamento), int(id_tenant)),
     )
-    itens = [
-        {
+    def _item_row(r, no_lote: bool) -> dict:
+        return {
             "id": int(r[0]),
             "referencia": r[1] or "",
             "plano": r[2] or "",
@@ -1652,9 +1652,30 @@ def detalhe_fechamento(cur, id_tenant: int, id_fechamento: int) -> dict | None:
             "origem": r[6] or "",
             "vendedor": r[7] or "",
             "via": r[8] or "",
+            "no_lote": no_lote,
         }
-        for r in cur.fetchall()
-    ]
+
+    itens = [_item_row(r, True) for r in cur.fetchall()]
+    disponiveis: list[dict] = []
+    editavel = _fechamento_editavel(st, tem_comp)
+    if editavel:
+        cur.execute(
+            """
+            SELECT i.id, i.referencia, i.plano_slug, i.valor_pago_centavos, i.valor_comissao_centavos,
+                   i.pago_em, i.origem,
+                   COALESCE(NULLIF(TRIM(tv.nome_fantasia), ''), NULLIF(TRIM(tv.nome), ''), 'Vendedor'),
+                   COALESCE(NULLIF(TRIM(to2.nome_fantasia), ''), NULLIF(TRIM(to2.nome), ''), '')
+            FROM tbl_comissao_item i
+            JOIN tbl_tenant tv ON tv.id = i.id_tenant_vendedor
+            LEFT JOIN tbl_tenant to2 ON to2.id = i.id_tenant_origem AND i.origem = 'indicado'
+            WHERE i.id_tenant_beneficiario = %s
+              AND i.status = 'aberto'
+              AND i.id_fechamento IS NULL
+            ORDER BY i.pago_em DESC, i.id DESC
+            """,
+            (int(id_tenant),),
+        )
+        disponiveis = [_item_row(r, False) for r in cur.fetchall()]
     return {
         "id": int(cab[0]),
         "valor_centavos": int(cab[1] or 0),
@@ -1665,8 +1686,9 @@ def detalhe_fechamento(cur, id_tenant: int, id_fechamento: int) -> dict | None:
         "pago_em": _iso(cab[6]),
         "tem_comprovante": tem_comp,
         "comprovante_nome": (cab[8] or "").strip() or ("comprovante" if tem_comp else ""),
-        "editavel": _fechamento_editavel(st, tem_comp),
+        "editavel": editavel,
         "itens": itens,
+        "disponiveis": disponiveis,
     }
 
 

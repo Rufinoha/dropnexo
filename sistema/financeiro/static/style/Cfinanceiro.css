@@ -280,32 +280,197 @@
 .Fin_Badge--muted { background: #f1f5f9; color: #64748b; }
 
 .Fin_Acoes { display: flex; flex-wrap: wrap; gap: 0.35rem; }
-.Fin_LoteDocs { margin: 0.35rem 0 0.75rem; font-size: 0.85rem; }
-.Fin_LoteAcoes {
+
+.Fin_Modal[hidden] { display: none !important; }
+.Fin_Modal {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: rgba(15, 23, 42, 0.48);
   display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem;
+}
+.Fin_ModalBox {
+  width: min(980px, 100%);
+  max-height: min(860px, 94vh);
+  background: #fff;
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.3);
+}
+.Fin_ModalBox--lote { width: min(1080px, 100%); }
+.Fin_ModalHead {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+  padding: 1rem 1.2rem;
+  background: #021F81;
+  color: #fff;
+}
+.Fin_ModalHeadText h3 { margin: 0; font-size: 1.08rem; font-weight: 700; }
+.Fin_ModalHeadText span { display: block; margin-top: 0.25rem; font-size: 0.82rem; color: #c7d2fe; }
+.Fin_ModalHeadMeta {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex-shrink: 0;
+}
+.Fin_ModalHeadMeta strong {
+  font-size: 1.15rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+.Fin_ModalHeadMeta .Fin_Badge { background: rgba(255,255,255,.16); color: #fff; }
+.Fin_ModalHeadMeta .Fin_Badge--ok { background: #16a34a; }
+.Fin_ModalHeadMeta .Fin_Badge--warn { background: #d97706; }
+.Fin_ModalClose {
+  border: none;
+  background: transparent;
+  color: #fff;
+  font-size: 1.55rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 0.15rem;
+}
+.Fin_ModalBody { padding: 1rem 1.15rem; overflow: auto; flex: 1; }
+.Fin_ModalFoot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
   flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-top: 1rem;
-  padding-top: 0.75rem;
+  padding: 0.85rem 1.15rem;
   border-top: 1px solid #e2e8f0;
-  justify-content: flex-end;
+  background: #f8fafc;
+}
+.Fin_ModalFootRight { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-left: auto; }
+
+.Fin_LoteGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(260px, 0.9fr);
+  gap: 1rem;
+}
+.Fin_LoteCol { min-width: 0; }
+.Fin_LoteSecHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin-bottom: 0.55rem;
+}
+.Fin_LoteSecHead h4,
+.Fin_LoteDocCard h4 {
+  margin: 0;
+  font-size: 0.92rem;
+  color: #0f172a;
+}
+.Fin_LoteTabelaWrap {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  overflow: auto;
+  max-height: min(420px, 48vh);
+  background: #fff;
+}
+.Fin_LoteTabela {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.84rem;
+}
+.Fin_LoteTabela th {
+  text-align: left;
+  padding: 0.55rem 0.65rem;
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.Fin_LoteTabela td {
+  padding: 0.55rem 0.65rem;
+  border-top: 1px solid #eef2f7;
+  vertical-align: middle;
+}
+.Fin_LoteTabela tr.is-off td { opacity: 0.55; background: #fafafa; }
+.Fin_LoteTabela tr.is-disp td { background: #f8fafc; }
+.Fin_LoteGrupo {
+  padding: 0.45rem 0.65rem;
+  background: #eef2ff;
+  color: #021F81;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.Fin_LoteDocCard {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 0.9rem;
+  background: #fff;
+  margin-bottom: 0.75rem;
+}
+.Fin_LoteDocCard .Fin_Meta { margin: 0.35rem 0 0.7rem; }
+.Fin_LoteFile {
+  min-height: 1.2rem;
+  margin-bottom: 0.55rem;
+  font-size: 0.86rem;
+}
+.Fin_LoteFile a { color: #021F81; font-weight: 600; text-decoration: none; }
+.Fin_LoteFile a:hover { text-decoration: underline; }
+.Fin_LoteDrop {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  align-items: flex-start;
+  border: 1.5px dashed #cbd5e1;
+  border-radius: 10px;
+  padding: 0.85rem 0.9rem;
+  background: #f8fafc;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.Fin_LoteDrop:hover,
+.Fin_LoteDrop.is-drag {
+  border-color: #021F81;
+  background: #eef2ff;
+}
+.Fin_LoteDrop strong { font-size: 0.86rem; color: #021F81; }
+.Fin_LoteDrop span { font-size: 0.78rem; color: #64748b; }
+.Fin_LoteDrop.has-file {
+  border-style: solid;
+  border-color: #86efac;
+  background: #f0fdf4;
 }
 .Fin_LoteBtn {
   border: 1px solid transparent;
   border-radius: 8px;
-  padding: 0.45rem 0.85rem;
+  padding: 0.5rem 0.95rem;
   font-size: 0.85rem;
   font-weight: 600;
   cursor: pointer;
   background: #f8fafc;
   color: #0f172a;
 }
+.Fin_LoteBtn:disabled { opacity: 0.45; cursor: not-allowed; }
 .Fin_LoteBtn--sec { border-color: #cbd5e1; background: #fff; color: #021F81; }
-.Fin_LoteBtn--sec:hover { background: #f1f5f9; }
+.Fin_LoteBtn--sec:hover:not(:disabled) { background: #f1f5f9; }
 .Fin_LoteBtn--ok { background: #021F81; color: #fff; }
-.Fin_LoteBtn--ok:hover { background: #1636a8; }
+.Fin_LoteBtn--ok:hover:not(:disabled) { background: #1636a8; }
 .Fin_LoteBtn--danger { background: #fff; border-color: #fecaca; color: #b42318; }
-.Fin_LoteBtn--danger:hover { background: #fef2f2; }
+.Fin_LoteBtn--danger:hover:not(:disabled) { background: #fef2f2; }
+
+@media (max-width: 860px) {
+  .Fin_LoteGrid { grid-template-columns: 1fr; }
+  .Fin_ModalHead { flex-direction: column; }
+  .Fin_ModalHeadMeta { width: 100%; justify-content: space-between; }
+}
 .Fin_Pag { margin: 0.75rem 0 0; font-size: 0.85rem; color: #64748b; }
 
 .Fin_Resumo {

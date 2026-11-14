@@ -2,7 +2,7 @@
 {% block title %}Comissões — {{ MARCA_NOME }}{% endblock %}
 {% block topbar_title %}Comissões{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('financeiro.static', filename='style/Cfinanceiro.css') }}?v=10" />
+<link rel="stylesheet" href="{{ url_for('financeiro.static', filename='style/Cfinanceiro.css') }}?v=11" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ContainerApoio Cl_PainelPagina Fin_Page">
@@ -43,11 +43,66 @@
   <div class="Fin_Card Fin_CardTabela">
     <div id="com_painel"></div>
   </div>
+
+  <div class="Fin_Modal" id="com_lote_modal" hidden>
+    <div class="Fin_ModalBox Fin_ModalBox--lote" role="dialog" aria-modal="true" aria-labelledby="com_lote_titulo">
+      <header class="Fin_ModalHead">
+        <div class="Fin_ModalHeadText">
+          <h3 id="com_lote_titulo">Lote de comissões</h3>
+          <span id="com_lote_sub">—</span>
+        </div>
+        <div class="Fin_ModalHeadMeta">
+          <strong id="com_lote_valor">R$ 0,00</strong>
+          <span id="com_lote_badge" class="Fin_Badge Fin_Badge--warn">Aguardando</span>
+          <button type="button" class="Fin_ModalClose" id="com_lote_fechar_x" aria-label="Fechar">×</button>
+        </div>
+      </header>
+      <div class="Fin_ModalBody Fin_LoteGrid">
+        <section class="Fin_LoteCol Fin_LoteCol--itens" aria-label="Comissões do lote">
+          <div class="Fin_LoteSecHead">
+            <h4>Comissões</h4>
+            <span id="com_lote_sel_info" class="Fin_Meta">0 selecionadas</span>
+          </div>
+          <div class="Fin_LoteTabelaWrap" id="com_lote_itens"></div>
+        </section>
+        <aside class="Fin_LoteCol Fin_LoteCol--docs" aria-label="Documentos do lote">
+          <div class="Fin_LoteDocCard" id="com_lote_nf_card">
+            <h4>Nota fiscal</h4>
+            <p class="Fin_Meta" id="com_lote_nf_hint">PDF da nota enviada ao faturar.</p>
+            <div class="Fin_LoteFile" id="com_lote_nf_atual"></div>
+            <label class="Fin_LoteDrop" id="com_lote_nf_drop" hidden>
+              <input type="file" id="com_lote_nf" accept="application/pdf,.pdf" hidden />
+              <strong>Trocar nota (PDF)</strong>
+              <span>Clique ou solte o arquivo aqui</span>
+            </label>
+          </div>
+          <div class="Fin_LoteDocCard" id="com_lote_comp_card">
+            <h4>Comprovante de pagamento</h4>
+            <p class="Fin_Meta" id="com_lote_comp_hint">Obrigatório para marcar o lote como pago.</p>
+            <div class="Fin_LoteFile" id="com_lote_comp_atual"></div>
+            <label class="Fin_LoteDrop" id="com_lote_comp_drop" hidden>
+              <input type="file" id="com_lote_comp" accept="application/pdf,.pdf,image/jpeg,.jpg,.jpeg,image/png,.png" hidden />
+              <strong>Anexar comprovante</strong>
+              <span>PDF, JPG ou PNG</span>
+            </label>
+          </div>
+        </aside>
+      </div>
+      <footer class="Fin_ModalFoot" id="com_lote_foot">
+        <button type="button" class="Fin_LoteBtn Fin_LoteBtn--danger" id="com_lote_cancelar" hidden>Cancelar fatura</button>
+        <div class="Fin_ModalFootRight">
+          <button type="button" class="Fin_LoteBtn Fin_LoteBtn--sec" id="com_lote_fechar">Fechar</button>
+          <button type="button" class="Fin_LoteBtn Fin_LoteBtn--sec" id="com_lote_salvar" hidden>Salvar alterações</button>
+          <button type="button" class="Fin_LoteBtn Fin_LoteBtn--ok" id="com_lote_pagar" hidden>Confirmar pagamento</button>
+        </div>
+      </footer>
+    </div>
+  </div>
   {% endif %}
 </div>
 {% endblock %}
 {% block page_js %}
 {% if not sem_acesso and not comissao_off %}
-<script defer src="{{ url_for('financeiro.static', filename='script/Scomissoes.js') }}?v=10"></script>
+<script defer src="{{ url_for('financeiro.static', filename='script/Scomissoes.js') }}?v=11"></script>
 {% endif %}
 {% endblock %}

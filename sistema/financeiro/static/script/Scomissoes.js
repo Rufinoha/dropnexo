@@ -4,10 +4,14 @@
   let ano = 0;
   let mes = 0;
   let anoFaturado = 0;
+  let loteAtual = null;
+  let loteNfFile = null;
+  let loteCompFile = null;
 
   const MESES = ["", "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
   const painel = document.getElementById("com_painel");
   const tabs = document.getElementById("com_tabs");
+  const loteModal = document.getElementById("com_lote_modal");
 
   function brl(cents) {
     return (Number(cents || 0) / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -300,184 +304,272 @@
     });
   }
 
+  function fecharLoteModal() {
+    if (loteModal) loteModal.hidden = true;
+    loteAtual = null;
+    loteNfFile = null;
+    loteCompFile = null;
+    const nf = document.getElementById("com_lote_nf");
+    const comp = document.getElementById("com_lote_comp");
+    if (nf) nf.value = "";
+    if (comp) comp.value = "";
+  }
+
+  function idsMarcadosLote() {
+    return [...(loteModal?.querySelectorAll(".com_lote_item:checked") || [])].map((cb) => Number(cb.dataset.id));
+  }
+
+  function atualizarResumoLote() {
+    const boxes = [...(loteModal?.querySelectorAll(".com_lote_item") || [])];
+    const on = boxes.filter((cb) => cb.checked);
+    const cents = on.reduce((s, b) => s + Number(b.dataset.valor || 0), 0);
+    const info = document.getElementById("com_lote_sel_info");
+    const valor = document.getElementById("com_lote_valor");
+    if (info) {
+      info.textContent = on.length
+        ? `${on.length} selecionada${on.length > 1 ? "s" : ""} · ${brl(cents)}`
+        : "Nenhuma selecionada";
+    }
+    if (valor && loteAtual?.editavel) valor.textContent = brl(cents || loteAtual.valor_centavos);
+    boxes.forEach((cb) => cb.closest("tr")?.classList.toggle("is-off", !cb.checked));
+  }
+
+  function linhaItemLote(i, editavel, marcado) {
+    const via = i.via ? ` <span class="Fin_Meta">via ${esc(i.via)}</span>` : "";
+    const check = editavel
+      ? `<input type="checkbox" class="com_lote_item" data-id="${Number(i.id)}" data-valor="${Number(i.valor_comissao_centavos || 0)}" ${marcado ? "checked" : ""} />`
+      : "";
+    const cls = i.no_lote === false || (!marcado && editavel) ? "is-disp" : "";
+    return `<tr class="${cls}">
+      <td>${check}</td>
+      <td>${esc(i.vendedor)}${via}</td>
+      <td>${dataBr(i.pago_em)}</td>
+      <td>${brl(i.valor_pago_centavos)}</td>
+      <td>${brl(i.valor_comissao_centavos)}</td>
+    </tr>`;
+  }
+
+  function pintarItensLote(j) {
+    const editavel = !!j.editavel && j.status !== "pago";
+    const noLote = j.itens || [];
+    const disp = j.disponiveis || [];
+    let html = "";
+    if (noLote.length) {
+      html += `<div class="Fin_LoteGrupo">No lote</div>
+        <table class="Fin_LoteTabela"><thead><tr>
+          <th style="width:36px"></th><th>Vendedor</th><th>Pago em</th><th>Mensalidade</th><th>Comissão</th>
+        </tr></thead><tbody>
+        ${noLote.map((i) => linhaItemLote({ ...i, no_lote: true }, editavel, true)).join("")}
+        </tbody></table>`;
+    }
+    if (editavel && disp.length) {
+      html += `<div class="Fin_LoteGrupo">Em aberto — incluir no lote</div>
+        <table class="Fin_LoteTabela"><thead><tr>
+          <th style="width:36px"></th><th>Vendedor</th><th>Pago em</th><th>Mensalidade</th><th>Comissão</th>
+        </tr></thead><tbody>
+        ${disp.map((i) => linhaItemLote({ ...i, no_lote: false }, true, false)).join("")}
+        </tbody></table>`;
+    }
+    if (!html) html = `<p class="Fin_Empty">Este lote não tem itens.</p>`;
+    const box = document.getElementById("com_lote_itens");
+    if (box) box.innerHTML = html;
+    atualizarResumoLote();
+  }
+
+  function pintarDocsLote(j) {
+    const id = Number(j.id);
+    const editavel = !!j.editavel && j.status !== "pago";
+    const pago = j.status === "pago";
+    const nfAtual = document.getElementById("com_lote_nf_atual");
+    const compAtual = document.getElementById("com_lote_comp_atual");
+    const nfDrop = document.getElementById("com_lote_nf_drop");
+    const compDrop = document.getElementById("com_lote_comp_drop");
+    const nfHint = document.getElementById("com_lote_nf_hint");
+    const compHint = document.getElementById("com_lote_comp_hint");
+
+    if (nfAtual) {
+      nfAtual.innerHTML = j.nf_nome
+        ? `<a href="/api/comissoes/fechamento/${id}/nf" target="_blank" rel="noopener">${esc(j.nf_nome)}</a>`
+        : `<span class="Fin_Meta">Nenhuma nota anexada</span>`;
+    }
+    if (compAtual) {
+      if (pago && (j.tem_comprovante || j.comprovante_nome)) {
+        compAtual.innerHTML = `<a href="/api/comissoes/fechamento/${id}/comprovante" target="_blank" rel="noopener">${esc(j.comprovante_nome || "comprovante")}</a>`;
+      } else if (loteCompFile) {
+        compAtual.innerHTML = `<span>${esc(loteCompFile.name)}</span>`;
+      } else {
+        compAtual.innerHTML = `<span class="Fin_Meta">Ainda sem comprovante</span>`;
+      }
+    }
+    if (nfDrop) {
+      nfDrop.hidden = !editavel;
+      nfDrop.classList.toggle("has-file", !!loteNfFile);
+      const strong = nfDrop.querySelector("strong");
+      if (strong) strong.textContent = loteNfFile ? loteNfFile.name : "Trocar nota (PDF)";
+    }
+    if (compDrop) {
+      compDrop.hidden = !editavel;
+      compDrop.classList.toggle("has-file", !!loteCompFile);
+      const strong = compDrop.querySelector("strong");
+      if (strong) strong.textContent = loteCompFile ? loteCompFile.name : "Anexar comprovante";
+    }
+    if (nfHint) {
+      nfHint.textContent = editavel
+        ? "Pode trocar o PDF antes de confirmar o pagamento."
+        : "Nota fiscal do fechamento.";
+    }
+    if (compHint) {
+      compHint.textContent = editavel
+        ? "Anexe o comprovante e use Confirmar pagamento."
+        : pago
+          ? `Pago em ${dataBr(j.pago_em)}.`
+          : "Comprovante do depósito.";
+    }
+  }
+
+  function pintarCabecalhoLote(j) {
+    const pago = j.status === "pago";
+    const sub = document.getElementById("com_lote_sub");
+    const valor = document.getElementById("com_lote_valor");
+    const badge = document.getElementById("com_lote_badge");
+    if (sub) {
+      sub.textContent = `Fechado em ${dataBr(j.criado_em)} · vence ${dataBr(j.vencimento_em)}${pago && j.pago_em ? ` · pago em ${dataBr(j.pago_em)}` : ""}`;
+    }
+    if (valor) valor.textContent = brl(j.valor_centavos);
+    if (badge) {
+      badge.textContent = pago ? "Pago" : "Aguardando";
+      badge.className = `Fin_Badge ${pago ? "Fin_Badge--ok" : "Fin_Badge--warn"}`;
+    }
+    const editavel = !!j.editavel && !pago;
+    ["com_lote_salvar", "com_lote_pagar", "com_lote_cancelar"].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.hidden = !editavel;
+    });
+  }
+
   async function abrirLote(id) {
-    Swal.fire({ title: "Carregando…", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
     const r = await fetch(`/api/comissoes/fechamento/${id}`, { credentials: "same-origin" });
     const j = await r.json().catch(() => ({}));
     if (!r.ok || !j.success) throw new Error(j.message || "Falha ao abrir o lote.");
-    const pago = j.status === "pago";
-    const editavel = !!j.editavel && !pago;
-    const linhas = (j.itens || [])
-      .map((i) => {
-        const via = i.via ? ` <span class="Fin_Meta">via ${esc(i.via)}</span>` : "";
-        return `<tr><td>${esc(i.vendedor)}${via}</td><td>${dataBr(i.pago_em)}</td><td>${brl(i.valor_pago_centavos)}</td><td>${brl(i.valor_comissao_centavos)}</td></tr>`;
-      })
-      .join("");
-    const corpo = linhas
-      ? `<div class="Fin_TableWrap"><table class="Fin_Table"><thead><tr><th>Vendedor</th><th>Pago em</th><th>Mensalidade</th><th>Comissão</th></tr></thead><tbody>${linhas}</tbody></table></div>`
-      : `<p class="Fin_Empty">Este lote não tem itens.</p>`;
-    const badge = pago
-      ? `<span class="Fin_Badge Fin_Badge--ok">Pago</span>`
-      : `<span class="Fin_Badge Fin_Badge--warn">Aguardando</span>`;
-    const docs = [];
-    if (j.nf_nome) {
-      docs.push(
-        `<a class="Fin_ComLink" href="/api/comissoes/fechamento/${id}/nf" target="_blank" rel="noopener">Nota: ${esc(j.nf_nome)}</a>`
-      );
-    } else {
-      docs.push(`<span class="Fin_Meta">Sem nota anexada</span>`);
-    }
-    if (pago && (j.tem_comprovante || j.comprovante_nome)) {
-      docs.push(
-        `<a class="Fin_ComLink" href="/api/comissoes/fechamento/${id}/comprovante" target="_blank" rel="noopener">Comprovante: ${esc(j.comprovante_nome || "arquivo")}</a>`
-      );
-    }
-    const acoes = editavel
-      ? `<div class="Fin_LoteAcoes">
-          <button type="button" class="Fin_LoteBtn Fin_LoteBtn--sec" data-lote-modal="alterar">Alterar nota</button>
-          <button type="button" class="Fin_LoteBtn Fin_LoteBtn--ok" data-lote-modal="pagar">Confirmar pagamento</button>
-          <button type="button" class="Fin_LoteBtn Fin_LoteBtn--danger" data-lote-modal="cancelar">Cancelar fatura</button>
-        </div>`
-      : `<p class="Fin_ContaSub">Lote bloqueado após confirmação do pagamento.</p>`;
-    let acaoModal = null;
-    const result = await Swal.fire({
-      title: brl(j.valor_centavos),
-      html: `<p class="Fin_ContaSub">Fechado em ${dataBr(j.criado_em)} · vence ${dataBr(j.vencimento_em)} · ${badge}${pago && j.pago_em ? ` · pago em ${dataBr(j.pago_em)}` : ""}</p>
-        <p class="Fin_LoteDocs">${docs.join(" · ")}</p>
-        ${corpo}
-        ${acoes}`,
-      showConfirmButton: true,
-      confirmButtonText: "Fechar",
-      confirmButtonColor: "#021F81",
-      width: 680,
-      didOpen: (popup) => {
-        popup.querySelectorAll("[data-lote-modal]").forEach((btn) => {
-          btn.addEventListener("click", () => {
-            acaoModal = btn.getAttribute("data-lote-modal");
-            Swal.close();
-          });
-        });
-      },
-    });
-    if (result.isConfirmed || !editavel) return;
-    if (acaoModal === "alterar") {
-      await alterarNf(id);
-      return;
-    }
-    if (acaoModal === "pagar") {
-      await confirmarPagamento(id);
-      return;
-    }
-    if (acaoModal === "cancelar") {
-      await cancelarLote(id);
-    }
+    loteAtual = j;
+    loteNfFile = null;
+    loteCompFile = null;
+    const nf = document.getElementById("com_lote_nf");
+    const comp = document.getElementById("com_lote_comp");
+    if (nf) nf.value = "";
+    if (comp) comp.value = "";
+    pintarCabecalhoLote(j);
+    pintarItensLote(j);
+    pintarDocsLote(j);
+    if (loteModal) loteModal.hidden = false;
   }
 
-  async function confirmarPagamento(id) {
-    const { value: file } = await Swal.fire({
-      title: "Confirmar pagamento",
-      html: `<p class="Fin_ContaSub">Anexe o comprovante (PDF, JPG ou PNG). O lote passará para <strong>Pago</strong> e não poderá mais ser alterado.</p>
-        <input type="file" id="com_comp" accept="application/pdf,.pdf,image/jpeg,.jpg,.jpeg,image/png,.png" class="swal2-file" />`,
-      showCancelButton: true,
-      confirmButtonText: "Confirmar pagamento",
-      cancelButtonText: "Voltar",
-      confirmButtonColor: "#021F81",
-      preConfirm: () => {
-        const inp = document.getElementById("com_comp");
-        const f = inp?.files?.[0];
-        if (!f) {
-          Swal.showValidationMessage("Selecione o comprovante.");
-          return false;
-        }
-        const nome = (f.name || "").toLowerCase();
-        if (!/\.(pdf|jpe?g|png)$/.test(nome)) {
-          Swal.showValidationMessage("Use PDF, JPG ou PNG.");
-          return false;
-        }
-        return f;
-      },
-    });
-    if (!file) {
-      await abrirLote(id);
+  async function salvarLote() {
+    if (!loteAtual?.editavel) return;
+    const ids = idsMarcadosLote();
+    if (!ids.length) {
+      await Swal.fire("Atenção", "Selecione ao menos uma comissão no lote.", "warning");
       return;
     }
     const fd = new FormData();
-    fd.append("comprovante", file);
-    Swal.fire({ title: "Confirmando…", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-    const r = await fetch(`/api/comissoes/fechamento/${id}/comprovante`, {
-      method: "POST",
-      credentials: "same-origin",
-      body: fd,
-    });
-    const j = await r.json().catch(() => ({}));
-    if (!r.ok || !j.success) throw new Error(j.message || "Falha ao confirmar pagamento.");
-    await carregar();
-    await Swal.fire({
-      icon: "success",
-      title: "Pagamento confirmado",
-      text: j.message || "",
-      confirmButtonColor: "#021F81",
-    });
+    fd.append("ids", JSON.stringify(ids));
+    if (loteNfFile) fd.append("nf", loteNfFile);
+    const btn = document.getElementById("com_lote_salvar");
+    if (btn) btn.disabled = true;
+    try {
+      const r = await fetch(`/api/comissoes/fechamento/${loteAtual.id}/alterar`, {
+        method: "POST",
+        credentials: "same-origin",
+        body: fd,
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.success) throw new Error(j.message || "Falha ao salvar.");
+      await carregar();
+      await abrirLote(loteAtual.id);
+      await Swal.fire({ icon: "success", title: "Lote atualizado", confirmButtonColor: "#021F81" });
+    } finally {
+      if (btn) btn.disabled = false;
+    }
   }
 
-  async function alterarNf(id) {
-    const { value: file } = await Swal.fire({
-      title: "Alterar nota",
-      html: `<input type="file" id="com_alt_nf" accept="application/pdf,.pdf" class="swal2-file" />`,
-      showCancelButton: true,
-      confirmButtonText: "Salvar",
-      cancelButtonText: "Voltar",
-      confirmButtonColor: "#021F81",
-      preConfirm: () => {
-        const inp = document.getElementById("com_alt_nf");
-        const f = inp?.files?.[0];
-        if (!f) {
-          Swal.showValidationMessage("Selecione um PDF.");
-          return false;
-        }
-        return f;
-      },
-    });
-    if (!file) {
-      await abrirLote(id);
+  async function confirmarPagamentoLote() {
+    if (!loteAtual?.editavel) return;
+    if (!loteCompFile) {
+      await Swal.fire("Atenção", "Anexe o comprovante de pagamento (PDF, JPG ou PNG).", "warning");
       return;
     }
-    const fd = new FormData();
-    fd.append("nf", file);
-    Swal.fire({ title: "Salvando…", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-    const r = await fetch(`/api/comissoes/fechamento/${id}/alterar`, {
-      method: "POST",
-      credentials: "same-origin",
-      body: fd,
+    const ids = idsMarcadosLote();
+    if (!ids.length) {
+      await Swal.fire("Atenção", "Selecione ao menos uma comissão no lote.", "warning");
+      return;
+    }
+    const conf = await Swal.fire({
+      icon: "question",
+      title: "Confirmar pagamento?",
+      text: "O lote será marcado como Pago e não poderá mais ser alterado.",
+      showCancelButton: true,
+      confirmButtonText: "Confirmar",
+      cancelButtonText: "Voltar",
+      confirmButtonColor: "#021F81",
     });
-    const j = await r.json().catch(() => ({}));
-    if (!r.ok || !j.success) throw new Error(j.message || "Falha ao alterar.");
-    await carregar();
-    await Swal.fire({ icon: "success", title: "Nota atualizada", confirmButtonColor: "#021F81" });
-    await abrirLote(id);
+    if (!conf.isConfirmed) return;
+
+    const btn = document.getElementById("com_lote_pagar");
+    if (btn) btn.disabled = true;
+    try {
+      // Salva itens/NF pendentes antes da baixa
+      const fdAlt = new FormData();
+      fdAlt.append("ids", JSON.stringify(ids));
+      if (loteNfFile) fdAlt.append("nf", loteNfFile);
+      const rAlt = await fetch(`/api/comissoes/fechamento/${loteAtual.id}/alterar`, {
+        method: "POST",
+        credentials: "same-origin",
+        body: fdAlt,
+      });
+      const jAlt = await rAlt.json().catch(() => ({}));
+      if (!rAlt.ok || !jAlt.success) throw new Error(jAlt.message || "Falha ao salvar o lote.");
+
+      const fd = new FormData();
+      fd.append("comprovante", loteCompFile);
+      const r = await fetch(`/api/comissoes/fechamento/${loteAtual.id}/comprovante`, {
+        method: "POST",
+        credentials: "same-origin",
+        body: fd,
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.success) throw new Error(j.message || "Falha ao confirmar pagamento.");
+      fecharLoteModal();
+      await carregar();
+      await Swal.fire({
+        icon: "success",
+        title: "Pagamento confirmado",
+        text: j.message || "",
+        confirmButtonColor: "#021F81",
+      });
+    } finally {
+      if (btn) btn.disabled = false;
+    }
   }
 
-  async function cancelarLote(id) {
+  async function cancelarLote() {
+    if (!loteAtual?.editavel) return;
     const conf = await Swal.fire({
       icon: "warning",
       title: "Cancelar esta fatura?",
-      text: "As comissões voltam para Em aberto e o lote deixa de valer. Não é possível cancelar se já estiver pago.",
+      text: "As comissões voltam para Em aberto e o lote deixa de valer.",
       showCancelButton: true,
       confirmButtonText: "Cancelar fatura",
       cancelButtonText: "Manter",
       confirmButtonColor: "#b42318",
     });
-    if (!conf.isConfirmed) {
-      await abrirLote(id);
-      return;
-    }
-    Swal.fire({ title: "Cancelando…", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-    const r = await fetch(`/api/comissoes/fechamento/${id}/cancelar`, {
+    if (!conf.isConfirmed) return;
+    const r = await fetch(`/api/comissoes/fechamento/${loteAtual.id}/cancelar`, {
       method: "POST",
       credentials: "same-origin",
     });
     const j = await r.json().catch(() => ({}));
     if (!r.ok || !j.success) throw new Error(j.message || "Falha ao cancelar.");
+    fecharLoteModal();
     aba = "aberto";
     await carregar();
     await Swal.fire({
@@ -485,6 +577,44 @@
       title: "Fatura cancelada",
       text: j.message || "",
       confirmButtonColor: "#021F81",
+    });
+  }
+
+  function bindDrop(dropId, inputId, kind) {
+    const drop = document.getElementById(dropId);
+    const input = document.getElementById(inputId);
+    if (!drop || !input) return;
+    const apply = (file) => {
+      if (!file) return;
+      if (kind === "nf") {
+        if (!/\.pdf$/i.test(file.name || "")) {
+          Swal.fire("Atenção", "A nota fiscal deve ser PDF.", "warning");
+          return;
+        }
+        loteNfFile = file;
+      } else {
+        if (!/\.(pdf|jpe?g|png)$/i.test(file.name || "")) {
+          Swal.fire("Atenção", "Comprovante deve ser PDF, JPG ou PNG.", "warning");
+          return;
+        }
+        loteCompFile = file;
+      }
+      if (loteAtual) pintarDocsLote(loteAtual);
+    };
+    drop.addEventListener("click", (ev) => {
+      if (ev.target === input) return;
+      input.click();
+    });
+    input.addEventListener("change", () => apply(input.files?.[0]));
+    drop.addEventListener("dragover", (ev) => {
+      ev.preventDefault();
+      drop.classList.add("is-drag");
+    });
+    drop.addEventListener("dragleave", () => drop.classList.remove("is-drag"));
+    drop.addEventListener("drop", (ev) => {
+      ev.preventDefault();
+      drop.classList.remove("is-drag");
+      apply(ev.dataTransfer?.files?.[0]);
     });
   }
 
@@ -612,6 +742,29 @@
     if (!lote) return;
     abrirLote(Number(lote.dataset.lote)).catch((e) => Swal.fire("Erro", e.message, "error"));
   });
+
+  loteModal?.addEventListener("change", (ev) => {
+    if (ev.target.classList.contains("com_lote_item")) atualizarResumoLote();
+  });
+  loteModal?.addEventListener("click", (ev) => {
+    if (ev.target === loteModal) fecharLoteModal();
+  });
+  document.getElementById("com_lote_fechar")?.addEventListener("click", fecharLoteModal);
+  document.getElementById("com_lote_fechar_x")?.addEventListener("click", fecharLoteModal);
+  document.getElementById("com_lote_salvar")?.addEventListener("click", () => {
+    salvarLote().catch((e) => Swal.fire("Erro", e.message, "error"));
+  });
+  document.getElementById("com_lote_pagar")?.addEventListener("click", () => {
+    confirmarPagamentoLote().catch((e) => Swal.fire("Erro", e.message, "error"));
+  });
+  document.getElementById("com_lote_cancelar")?.addEventListener("click", () => {
+    cancelarLote().catch((e) => Swal.fire("Erro", e.message, "error"));
+  });
+  document.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape" && loteModal && !loteModal.hidden) fecharLoteModal();
+  });
+  bindDrop("com_lote_nf_drop", "com_lote_nf", "nf");
+  bindDrop("com_lote_comp_drop", "com_lote_comp", "comp");
 
   carregar().catch((e) => Swal.fire("Erro", e.message, "error"));
 })();
