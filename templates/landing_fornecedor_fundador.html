@@ -38,7 +38,7 @@
           <p class="FfHero__eyebrow">Programa de abertura</p>
           <div class="FfHero__head">
             <h1 id="ff-hero-title">Seja um Fornecedor Fundador</h1>
-            <svg class="FfStamp" viewBox="20 0 380 300" role="img" aria-label="Grátis para sempre. Só 10 fornecedores nesta rodada.">
+            <svg class="FfStamp" viewBox="20 0 380 300" role="img" aria-label="Grátis para sempre. Só {{ programa.vagas_max }} fornecedores nesta rodada.">
               <defs>
                 <radialGradient id="ffSealGold" cx="34%" cy="28%" r="78%">
                   <stop offset="0%" stop-color="#fff6c4"/>
@@ -69,7 +69,7 @@
               <path fill="#1e3a8a" d="M362 196 L384 214 L362 214 Z"/>
               <path fill="#1e3a8a" d="M362 232 L384 214 L362 214 Z"/>
               <path fill="url(#ffRibbon)" d="M52 192 H368 L384 214 L368 236 H52 L36 214 Z"/>
-              <text x="210" y="220" text-anchor="middle" fill="#fff" font-family="Outfit, sans-serif" font-size="13" font-weight="800" letter-spacing="0.6">SÓ 10 FORNECEDORES NESTA RODADA</text>
+              <text x="210" y="220" text-anchor="middle" fill="#fff" font-family="Outfit, sans-serif" font-size="12.5" font-weight="800" letter-spacing="0.5">SÓ {{ programa.vagas_max }} FORNECEDORES NESTA RODADA</text>
             </svg>
           </div>
           <p class="FfHero__pitch">
@@ -182,7 +182,7 @@
 
       <div class="FfStory">
         <article>
-          <h3>Por que só 10?</h3>
+          <h3>Por que só {{ programa.vagas_max }}?</h3>
           <p>
             Queremos acompanhar de perto a implantação, integração e o dia a dia.
             Com poucas empresas, conseguimos ouvir, ajustar e entregar o que a operação precisa —
@@ -375,7 +375,7 @@
             {% if programa.aberto %}
             Restam {{ programa.vagas_restantes }} vaga(s) de Fornecedor Fundador
             {% else %}
-            As 10 vagas desta rodada estão preenchidas
+            As {{ programa.vagas_max }} vagas desta rodada estão preenchidas
             {% endif %}
           </h2>
           <p>

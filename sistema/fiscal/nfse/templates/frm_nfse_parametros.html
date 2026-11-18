@@ -138,7 +138,22 @@
               </div>
               {% endfor %}
             </div>
-            <div class="Cl_FormCampo"><label>Extensões IBS/CBS (JSON)</label><textarea id="pf_ibs_cbs_json" rows="3">{}</textarea></div>
+            <p class="nfse-hint">IBS/CBS: informe CST, cClassTrib e cIndOp da tabela oficial para a DPS incluir o grupo IBSCBS.</p>
+            <div class="nfse-grid nfse-grid-3">
+              <div class="Cl_FormCampo"><label>CST IBS/CBS</label><input id="pf_ibs_cst" inputmode="numeric" maxlength="3" placeholder="000"></div>
+              <div class="Cl_FormCampo"><label>cClassTrib</label><input id="pf_ibs_c_class_trib" inputmode="numeric" maxlength="6" placeholder="000001"></div>
+              <div class="Cl_FormCampo"><label>cIndOp</label><input id="pf_ibs_c_ind_op" inputmode="numeric" maxlength="6" placeholder="100301"></div>
+              <div class="Cl_FormCampo"><label>indDest</label>
+                <select id="pf_ibs_ind_dest">
+                  <option value="0">0 — tomador destinatário</option>
+                  <option value="1">1 — destinatário distinto</option>
+                </select>
+              </div>
+              <div class="Cl_FormCampo"><label>finNFSe</label><input id="pf_ibs_fin_nfse" value="0" maxlength="1"></div>
+            </div>
+            <details class="nfse-hint"><summary>JSON avançado IBS/CBS</summary>
+              <div class="Cl_FormCampo"><textarea id="pf_ibs_cbs_json" rows="3">{}</textarea></div>
+            </details>
             <label><input type="checkbox" id="pf_ativo" checked> Perfil ativo</label>
             <div class="nfse-actions">
               <button type="button" class="Cl_BtnCancelar" id="btnCancelarPerfil">Cancelar</button>

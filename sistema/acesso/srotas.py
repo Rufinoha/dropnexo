@@ -56,11 +56,12 @@ def para_fornecedores():
     """Landing focada na oportunidade Fornecedor Fundador (não vitrine de planos)."""
     planos_home = catalogo_planos_home()
     programa = planos_home.get("programa_fundador") or {
-        "vagas_max": 10,
+        "vagas_max": 15,
         "vagas_usadas": 0,
-        "vagas_restantes": 10,
+        "vagas_restantes": 15,
         "aberto": True,
     }
+    vagas_txt = int(programa.get("vagas_max") or 15)
     faq = [
         (
             "Isso é um plano pago?",
@@ -72,7 +73,7 @@ def para_fornecedores():
             "Não. Nunca percentual sobre faturamento. A relação comercial com o vendedor é sua.",
         ),
         (
-            "O que acontece quando as 10 vagas acabarem?",
+            f"O que acontece quando as {vagas_txt} vagas acabarem?",
             "O programa desta rodada fecha. Quem já é Fundador mantém o benefício. "
             "Novos interessados entram na lista de espera.",
         ),
@@ -100,9 +101,9 @@ def para_fornecedores():
     cta_label = "Quero ser Fundador" if programa.get("aberto") else "Lista de espera"
     return render_template(
         "landing_fornecedor_fundador.html",
-        page_title="Fornecedor Fundador — DropNexo | até 10 vagas",
+        page_title=f"Fornecedor Fundador — DropNexo | até {vagas_txt} vagas",
         meta_description=(
-            "Seja um dos 10 Fornecedores Fundadores da DropNexo: acesso completo vitalício, "
+            f"Seja um dos {vagas_txt} Fornecedores Fundadores da DropNexo: acesso completo vitalício, "
             "selo na rede, voz no produto e suporte direto. Sem cartão. Sem comissão sobre vendas."
         ),
         programa=programa,

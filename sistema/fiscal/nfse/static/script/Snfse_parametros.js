@@ -249,8 +249,36 @@
     $("pf_id").value=p.id||"";
     ["nome","codigo_servico","codigo_tributacao_nacional","codigo_nbs","descricao_servico"].forEach(c=>$(`pf_${c}`).value=p[c]||"");
     ["iss","pis","cofins","inss","ir","csll"].forEach(t=>{$(`pf_${t}_retido`).checked=!!p[`${t}_retido`];$(`pf_aliquota_${t}`).value=p[`aliquota_${t}`]||0});
-    $("pf_ibs_cbs_json").value=JSON.stringify(p.ibs_cbs_json||{},null,2);$("pf_ativo").checked=p.ativo!==false;
+    const ibs=p.ibs_cbs_json&&typeof p.ibs_cbs_json==="object"?p.ibs_cbs_json:{};
+    $("pf_ibs_cst").value=ibs.cst||ibs.CST||"";
+    $("pf_ibs_c_class_trib").value=ibs.c_class_trib||ibs.cClassTrib||"";
+    $("pf_ibs_c_ind_op").value=ibs.c_ind_op||ibs.cIndOp||"";
+    $("pf_ibs_ind_dest").value=String(ibs.ind_dest??ibs.indDest??"0");
+    $("pf_ibs_fin_nfse").value=String(ibs.fin_nfse??ibs.finNFSe??"0");
+    $("pf_ibs_cbs_json").value=JSON.stringify(ibs,null,2);
+    $("pf_ativo").checked=p.ativo!==false;
     abrirModalPerfil();
+  }
+  function montarIbsCbs(){
+    let extra={};
+    const bruto=($("pf_ibs_cbs_json").value||"").trim();
+    if(bruto){
+      try{extra=JSON.parse(bruto);if(!extra||typeof extra!=="object")extra={};}
+      catch(err){throw new Error("JSON avançado de IBS/CBS inválido.");}
+    }
+    const cst=($("pf_ibs_cst").value||"").replace(/\D/g,"");
+    const cClass=($("pf_ibs_c_class_trib").value||"").replace(/\D/g,"");
+    const cInd=($("pf_ibs_c_ind_op").value||"").replace(/\D/g,"");
+    const out={...extra};
+    if(cst){out.cst=cst;out.CST=cst;}else{delete out.cst;delete out.CST;}
+    if(cClass){out.c_class_trib=cClass;out.cClassTrib=cClass;}else{delete out.c_class_trib;delete out.cClassTrib;}
+    if(cInd){out.c_ind_op=cInd;out.cIndOp=cInd;}else{delete out.c_ind_op;delete out.cIndOp;}
+    out.ind_dest=$("pf_ibs_ind_dest").value||"0";
+    out.indDest=out.ind_dest;
+    out.fin_nfse=($("pf_ibs_fin_nfse").value||"0").replace(/\D/g,"")||"0";
+    out.finNFSe=out.fin_nfse;
+    if(!out.cst&&!out.c_class_trib&&!out.c_ind_op)return {};
+    return out;
   }
   function fecharMenusPerfis(){
     document.querySelectorAll(".Fin_MenuLista").forEach(n=>n.remove());
@@ -306,7 +334,8 @@
     e.preventDefault();const p={id:$("pf_id").value||null,ativo:$("pf_ativo").checked};
     ["nome","codigo_servico","codigo_tributacao_nacional","codigo_nbs","descricao_servico"].forEach(c=>p[c]=$(`pf_${c}`).value);
     ["iss","pis","cofins","inss","ir","csll"].forEach(t=>{p[`${t}_retido`]=$(`pf_${t}_retido`).checked;p[`aliquota_${t}`]=$(`pf_aliquota_${t}`).value});
-    p.ibs_cbs_json=$("pf_ibs_cbs_json").value;
+    try{p.ibs_cbs_json=montarIbsCbs();}
+    catch(err){return msg("Erro",err.message||"IBS/CBS inválido.","error");}
     const r=await req("/nfse/api/perfis/salvar","POST",p);if(!r?.ok)return msg("Erro",r?.json?.message||"Falha ao salvar.","error");
     fecharModalPerfil();await carregarPerfis();msg("Perfil salvo",r.json.message,"success");
   };

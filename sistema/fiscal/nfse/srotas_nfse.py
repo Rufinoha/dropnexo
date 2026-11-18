@@ -1798,6 +1798,24 @@ def _payload_nfse_hub(nota: dict) -> dict:
         payload["intermediario_cnpj_cpf"] = somente_digitos(nota.get("intermediario_cnpj_cpf"))
         payload["intermediario_razao_social"] = (nota.get("intermediario_razao_social") or "").strip()
         payload["intermediario_fone"] = (nota.get("intermediario_fone") or "").strip() or None
+    ibs = nota.get("ibs_cbs_json") or nota.get("ibs_cbs") or {}
+    if isinstance(ibs, str):
+        try:
+            ibs = json.loads(ibs or "{}")
+        except Exception:
+            ibs = {}
+    if isinstance(ibs, dict) and ibs:
+        cst = somente_digitos(ibs.get("cst") or ibs.get("CST") or "")
+        cclass = somente_digitos(ibs.get("c_class_trib") or ibs.get("cClassTrib") or "")
+        cind = somente_digitos(ibs.get("c_ind_op") or ibs.get("cIndOp") or "")
+        if cst and cclass and cind:
+            payload["ibs_cbs"] = {
+                "cst": cst,
+                "c_class_trib": cclass,
+                "c_ind_op": cind,
+                "ind_dest": str(ibs.get("ind_dest") or ibs.get("indDest") or "0"),
+                "fin_nfse": str(ibs.get("fin_nfse") or ibs.get("finNFSe") or "0"),
+            }
     return _json_safe(payload)
 
 

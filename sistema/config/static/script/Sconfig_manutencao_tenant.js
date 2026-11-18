@@ -342,8 +342,8 @@
       if (!j.success) throw new Error(j.message || "Erro");
       const st = j.status || {};
       if (el.fundadorStatus) {
-        const sistemaMax = st.vagas_sistema_max || st.vagas_max || 10;
-        const divulgadas = st.vagas_divulgadas || st.vagas_max || 10;
+        const sistemaMax = st.vagas_sistema_max || st.vagas_max || 15;
+        const divulgadas = st.vagas_divulgadas || st.vagas_max || 15;
         const restoSistema =
           st.vagas_sistema_restantes != null ? st.vagas_sistema_restantes : st.vagas_restantes || 0;
         el.fundadorStatus.textContent =

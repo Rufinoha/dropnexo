@@ -9,7 +9,7 @@ from typing import Any
 _log = logging.getLogger(__name__)
 
 # Divulgação pública (landing / copy) vs teto real do sistema (buffer operacional).
-VAGAS_DIVULGADAS = 10
+VAGAS_DIVULGADAS = 15
 VAGAS_MAX = max(VAGAS_DIVULGADAS, int(os.getenv("FUNDADOR_VAGAS_MAX", "15") or "15"))
 PLANO_HUB = "enterprise"
 EMAIL_ESPERA = "hazael@h74.com.br"
@@ -97,7 +97,7 @@ def status_programa(cur) -> dict[str, Any]:
     resto_sistema = max(0, VAGAS_MAX - usados)
     resto_divulgadas = max(0, VAGAS_DIVULGADAS - usados)
     return {
-        # Campos públicos (landing): meta divulgada de 10.
+        # Campos públicos (landing): meta divulgada.
         "vagas_max": VAGAS_DIVULGADAS,
         "vagas_usadas": usados,
         "vagas_restantes": resto_divulgadas,
@@ -560,7 +560,7 @@ def plano_fundador_vitrine() -> dict[str, Any]:
         "slug": SLUG_VITRINE,
         "nome": "Fornecedor Fundador",
         "preco_mensal": 0,
-        "destaque": "Vitalício · 10 vagas · acesso Hub completo",
+        "destaque": f"Vitalício · {VAGAS_DIVULGADAS} vagas · acesso Hub completo",
         "featured": True,
         "tag": "Programa fundador",
         "cta_gratis": True,
