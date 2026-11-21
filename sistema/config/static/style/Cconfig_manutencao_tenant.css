@@ -770,18 +770,19 @@ button.CfgMt_KpiMini:hover {
 }
 .CfgMt_TabelaFundador col.is-id { width: 3.5%; }
 .CfgMt_TabelaFundador col.is-nome { width: 14%; }
-.CfgMt_TabelaFundador col.is-fase { width: 8%; }
-.CfgMt_TabelaFundador col.is-contato { width: 11%; }
-.CfgMt_TabelaFundador col.is-cadastro { width: 8%; }
+.CfgMt_TabelaFundador col.is-fase { width: 7.5%; }
+.CfgMt_TabelaFundador col.is-contato { width: 10%; }
+.CfgMt_TabelaFundador col.is-prazo { width: 7%; }
+.CfgMt_TabelaFundador col.is-cadastro { width: 7.5%; }
 .CfgMt_TabelaFundador col.is-ativo { width: 4%; }
-.CfgMt_TabelaFundador col.is-erp { width: 6%; }
-.CfgMt_TabelaFundador col.is-prod { width: 6%; }
-.CfgMt_TabelaFundador col.is-pedidos { width: 7%; }
-.CfgMt_TabelaFundador col.is-wa { width: 9%; }
-.CfgMt_TabelaFundador col.is-aguard { width: 6%; }
-.CfgMt_TabelaFundador col.is-conect { width: 6%; }
-.CfgMt_TabelaFundador col.is-comped { width: 6%; }
-.CfgMt_TabelaFundador col.is-acoes { width: 5%; }
+.CfgMt_TabelaFundador col.is-erp { width: 5.5%; }
+.CfgMt_TabelaFundador col.is-prod { width: 5.5%; }
+.CfgMt_TabelaFundador col.is-pedidos { width: 6.5%; }
+.CfgMt_TabelaFundador col.is-wa { width: 8%; }
+.CfgMt_TabelaFundador col.is-aguard { width: 5.5%; }
+.CfgMt_TabelaFundador col.is-conect { width: 5.5%; }
+.CfgMt_TabelaFundador col.is-comped { width: 5.5%; }
+.CfgMt_TabelaFundador col.is-acoes { width: 4.5%; }
 .CfgMt_TabelaFundador th,
 .CfgMt_TabelaFundador td {
   white-space: nowrap;
@@ -794,33 +795,49 @@ button.CfgMt_KpiMini:hover {
   font-variant-numeric: tabular-nums;
   color: #64748b;
 }
-.CfgMt_TabelaFundador th:nth-child(6),
-.CfgMt_TabelaFundador td:nth-child(6),
-.CfgMt_TabelaFundador th:nth-child(8),
-.CfgMt_TabelaFundador td:nth-child(8),
+.CfgMt_TabelaFundador th:nth-child(7),
+.CfgMt_TabelaFundador td:nth-child(7),
 .CfgMt_TabelaFundador th:nth-child(9),
 .CfgMt_TabelaFundador td:nth-child(9),
-.CfgMt_TabelaFundador th:nth-child(11),
-.CfgMt_TabelaFundador td:nth-child(11),
+.CfgMt_TabelaFundador th:nth-child(10),
+.CfgMt_TabelaFundador td:nth-child(10),
 .CfgMt_TabelaFundador th:nth-child(12),
 .CfgMt_TabelaFundador td:nth-child(12),
 .CfgMt_TabelaFundador th:nth-child(13),
-.CfgMt_TabelaFundador td:nth-child(13) {
-  text-align: center;
-}
+.CfgMt_TabelaFundador td:nth-child(13),
 .CfgMt_TabelaFundador th:nth-child(14),
 .CfgMt_TabelaFundador td:nth-child(14) {
+  text-align: center;
+}
+.CfgMt_TabelaFundador th:nth-child(15),
+.CfgMt_TabelaFundador td:nth-child(15) {
   overflow: visible;
   text-align: right;
   text-overflow: clip;
 }
 .CfgMt_TabelaFundador td.is-fase,
-.CfgMt_TabelaFundador td.is-contato {
+.CfgMt_TabelaFundador td.is-contato,
+.CfgMt_TabelaFundador td.is-prazo {
   white-space: normal;
   overflow: visible;
   text-overflow: clip;
   vertical-align: middle;
 }
+.CfgMt_PrazoBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.18rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.2;
+  background: #e2e8f0;
+  color: #475569;
+}
+.CfgMt_PrazoBadge.is-prazo-verde { background: #d1fae5; color: #047857; }
+.CfgMt_PrazoBadge.is-prazo-amarelo { background: #fef3c7; color: #b45309; }
+.CfgMt_PrazoBadge.is-prazo-vermelho { background: #fee2e2; color: #b91c1c; }
+.CfgMt_PrazoBadge.is-prazo-neutro { background: #f1f5f9; color: #94a3b8; font-weight: 500; }
 .CfgMt_FundadorFiltros {
   margin: 0.65rem 0 0.85rem;
 }

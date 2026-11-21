@@ -506,7 +506,7 @@
     const lista = filtrarFundadores(itens);
     if (!lista.length) {
       el.fundadorLista.innerHTML =
-        '<tr><td colspan="14">Nenhum Fundador neste filtro.</td></tr>';
+        '<tr><td colspan="15">Nenhum Fundador neste filtro.</td></tr>';
       return;
     }
     el.fundadorLista.innerHTML = lista
@@ -536,6 +536,7 @@
             <td class="is-nome">${celNome}</td>
             <td class="is-fase">${badgeFase(t.fase, t.fase_rotulo)}</td>
             <td class="is-contato">${celulaUltimoContato(t.ultimo_contato)}</td>
+            <td class="is-prazo">${celulaPrazo(t)}</td>
             <td>${formatarDataHora(t.criado_em)}</td>
             <td>${ativo}</td>
             <td>${esc(t.sistema_erp || "—")}</td>
@@ -558,7 +559,7 @@
 
   async function carregarFundadores() {
     if (!el.fundadorLista) return;
-    el.fundadorLista.innerHTML = '<tr><td colspan="14">Carregando…</td></tr>';
+    el.fundadorLista.innerHTML = '<tr><td colspan="15">Carregando…</td></tr>';
     try {
       const r = await fetch(BASE + "/fundador", { credentials: "same-origin" });
       const j = await r.json();
@@ -576,13 +577,21 @@
       popularFiltroFase(fundadorFasesCache);
       fundadorItensCache = j.itens || [];
       if (!fundadorItensCache.length) {
-        el.fundadorLista.innerHTML = '<tr><td colspan="14">Nenhum Fundador cadastrado.</td></tr>';
+        el.fundadorLista.innerHTML = '<tr><td colspan="15">Nenhum Fundador cadastrado.</td></tr>';
         return;
       }
       pintarFundadores(fundadorItensCache);
     } catch (err) {
-      el.fundadorLista.innerHTML = `<tr><td colspan="14">${esc(err.message || "Erro")}</td></tr>`;
+      el.fundadorLista.innerHTML = `<tr><td colspan="15">${esc(err.message || "Erro")}</td></tr>`;
     }
+  }
+
+  function celulaPrazo(t) {
+    const rotulo = t.prazo_ativacao_rotulo || "—";
+    const cor = t.prazo_ativacao_cor || "neutro";
+    const pub = t.produtos_publicados ?? 0;
+    const title = `Prazo de ativação · ${pub}/20 produtos publicados`;
+    return `<span class="CfgMt_PrazoBadge is-prazo-${esc(cor)}" title="${esc(title)}">${esc(rotulo)}</span>`;
   }
 
   async function toggleFundador(id, ativo) {
