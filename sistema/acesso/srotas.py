@@ -1466,6 +1466,7 @@ def pagina_cadastro():
         titulo_tipo=titulos.get(tipo, "Conta"),
         programa_fundador=programa_fundador,
         url_lista_espera_fundador=url_for("cadastro.pagina_lista_espera_fundador"),
+        url_cadastro_vendedor=url_for("cadastro.pagina_cadastro", tipo="vendedor"),
     )
 
 
@@ -1666,6 +1667,11 @@ def api_cadastro_novo():
                     fundador_res = tentar_reservar_no_cadastro(
                         cur, id_tenant, sistema_erp=sistema_erp, whatsapp=whatsapp
                     )
+                    from sistema.planos.fornecedor_acompanhamento import (
+                        salvar_triagem_e_fase_cadastro,
+                    )
+
+                    salvar_triagem_e_fase_cadastro(cur, id_tenant, dados.get("triagem"))
                 conn.commit()
                 notificar_se_novo_fundador(cur, fundador_res)
                 ok, msg = _enviar_email_nova_conta_vinculada(
@@ -1693,6 +1699,11 @@ def api_cadastro_novo():
                 fundador_res = tentar_reservar_no_cadastro(
                     cur, id_tenant, sistema_erp=sistema_erp, whatsapp=whatsapp
                 )
+                from sistema.planos.fornecedor_acompanhamento import (
+                    salvar_triagem_e_fase_cadastro,
+                )
+
+                salvar_triagem_e_fase_cadastro(cur, id_tenant, dados.get("triagem"))
             conn.commit()
             notificar_se_novo_fundador(cur, fundador_res)
             link = f"{obter_base_url()}/definir-senha?token={raw}"
@@ -1739,6 +1750,11 @@ def api_cadastro_novo():
             fundador_res = tentar_reservar_no_cadastro(
                 cur, id_tenant, sistema_erp=sistema_erp, whatsapp=whatsapp
             )
+            from sistema.planos.fornecedor_acompanhamento import (
+                salvar_triagem_e_fase_cadastro,
+            )
+
+            salvar_triagem_e_fase_cadastro(cur, id_tenant, dados.get("triagem"))
         conn.commit()
         notificar_se_novo_fundador(cur, fundador_res)
 

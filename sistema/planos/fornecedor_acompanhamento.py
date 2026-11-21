@@ -227,33 +227,145 @@ def ultimo_contato(cur, id_tenant: int) -> dict[str, Any] | None:
     return itens[0] if itens else None
 
 
+def normalizar_triagem(dados: dict | None) -> dict[str, Any] | None:
+    """Valida e normaliza respostas da triagem pré-cadastro."""
+    if not isinstance(dados, dict):
+        return None
+    fabrica = str(dados.get("fabrica") or dados.get("estoque_proprio") or "").strip().lower()
+    skus = str(dados.get("skus") or dados.get("qtd_skus") or "").strip().lower()
+    revende = str(dados.get("revende") or dados.get("vende_revendedores") or "").strip().lower()
+    mapa_sim = {"sim": "sim", "s": "sim", "true": "sim", "1": "sim"}
+    mapa_nao = {"nao": "nao", "não": "nao", "n": "nao", "false": "nao", "0": "nao"}
+    if fabrica in mapa_sim:
+        fabrica = "sim"
+    elif fabrica in mapa_nao:
+        fabrica = "nao"
+    else:
+        fabrica = ""
+    skus_norm = {
+        "ate_10": "ate_10",
+        "ate10": "ate_10",
+        "até_10": "ate_10",
+        "11_50": "11_50",
+        "11-50": "11_50",
+        "51_200": "51_200",
+        "51-200": "51_200",
+        "mais_200": "mais_200",
+        "mais200": "mais_200",
+        ">200": "mais_200",
+    }.get(skus, "")
+    if revende in mapa_sim:
+        revende = "sim"
+    elif revende in mapa_nao:
+        revende = "nao"
+    else:
+        revende = ""
+    if not fabrica or not skus_norm or not revende:
+        return None
+    if skus_norm not in ("ate_10", "11_50", "51_200", "mais_200"):
+        return None
+    return {
+        "fabrica": fabrica,
+        "skus": skus_norm,
+        "revende": revende,
+        "mesmo_assim_fornecedor": bool(dados.get("mesmo_assim_fornecedor")),
+    }
+
+
+def triagem_rotulo(triagem: dict | None) -> str:
+    if not triagem:
+        return ""
+    skus_lbl = {
+        "ate_10": "até 10",
+        "11_50": "11–50",
+        "51_200": "51–200",
+        "mais_200": "mais de 200",
+    }
+    partes = [
+        f"fabrica/estoque: {triagem.get('fabrica') or '—'}",
+        f"SKUs: {skus_lbl.get(triagem.get('skus') or '', triagem.get('skus') or '—')}",
+        f"revende: {triagem.get('revende') or '—'}",
+    ]
+    if triagem.get("mesmo_assim_fornecedor"):
+        partes.append("insistiu fornecedor")
+    return " · ".join(partes)
+
+
+def salvar_triagem_e_fase_cadastro(
+    cur,
+    id_tenant: int,
+    triagem: dict | None,
+) -> None:
+    """Grava triagem (se houver), define fase cadastrado e registra contato automático."""
+    tid = int(id_tenant)
+    tri = normalizar_triagem(triagem) if triagem else None
+    if _tem_coluna_tenant(cur, "fornecedor_triagem") and tri is not None:
+        import json
+
+        cur.execute(
+            "UPDATE tbl_tenant SET fornecedor_triagem = %s::jsonb WHERE id = %s",
+            (json.dumps(tri, ensure_ascii=False), tid),
+        )
+    if _tem_tabela_contato(cur):
+        registrar_contato(
+            cur,
+            tid,
+            canal="outro",
+            direcao="enviado",
+            resumo="Cadastro concluído",
+            fase_apos="cadastrado",
+            autor="Sistema",
+            aplicar_fase=True,
+        )
+    elif _tem_coluna_tenant(cur, "fornecedor_fase"):
+        definir_fase(
+            cur,
+            tid,
+            "cadastrado",
+            autor="Sistema",
+            motivo="Cadastro concluído",
+            registrar_historico=False,
+        )
+
+
 def enriquecer_fundadores_com_acompanhamento(cur, itens: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Anexa fase / último contato aos itens de listar_fundadores()."""
     if not itens:
         return itens
     tem_fase = _tem_coluna_tenant(cur, "fornecedor_fase")
     tem_contato = _tem_tabela_contato(cur)
-    if not tem_fase and not tem_contato:
+    tem_triagem = _tem_coluna_tenant(cur, "fornecedor_triagem")
+    if not tem_fase and not tem_contato and not tem_triagem:
         for it in itens:
             it.setdefault("fase", None)
             it.setdefault("fase_em", None)
             it.setdefault("fase_rotulo", "")
             it.setdefault("ultimo_contato", None)
+            it.setdefault("triagem", None)
+            it.setdefault("triagem_rotulo", "")
         return itens
 
     ids = [int(i["id"]) for i in itens if i.get("id")]
     fase_map: dict[int, tuple[str | None, Any]] = {}
-    if tem_fase and ids:
+    triagem_map: dict[int, Any] = {}
+    if (tem_fase or tem_triagem) and ids:
+        cols = ["id"]
+        if tem_fase:
+            cols.extend(["fornecedor_fase", "fornecedor_fase_em"])
+        if tem_triagem:
+            cols.append("fornecedor_triagem")
         cur.execute(
-            """
-            SELECT id, fornecedor_fase, fornecedor_fase_em
-              FROM tbl_tenant
-             WHERE id = ANY(%s)
-            """,
+            f"SELECT {', '.join(cols)} FROM tbl_tenant WHERE id = ANY(%s)",
             (ids,),
         )
         for r in cur.fetchall():
-            fase_map[int(r[0])] = (r[1], r[2])
+            tid = int(r[0])
+            idx = 1
+            if tem_fase:
+                fase_map[tid] = (r[idx], r[idx + 1])
+                idx += 2
+            if tem_triagem:
+                triagem_map[tid] = r[idx]
 
     contato_map: dict[int, dict[str, Any]] = {}
     if tem_contato and ids:
@@ -285,4 +397,12 @@ def enriquecer_fundadores_com_acompanhamento(cur, itens: list[dict[str, Any]]) -
         it["fase_em"] = fase_em.isoformat() if fase_em else None
         it["fase_rotulo"] = FASE_ROTULO.get(fase or "", "") if fase else ""
         it["ultimo_contato"] = contato_map.get(tid)
+        raw_tri = triagem_map.get(tid)
+        if isinstance(raw_tri, dict):
+            it["triagem"] = raw_tri
+        elif raw_tri:
+            it["triagem"] = raw_tri
+        else:
+            it["triagem"] = None
+        it["triagem_rotulo"] = triagem_rotulo(it["triagem"] if isinstance(it["triagem"], dict) else None)
     return itens

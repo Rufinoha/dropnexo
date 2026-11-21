@@ -520,12 +520,17 @@
             ? `<div class="CfgMt_PedidosCell"><strong>${qtdPed}</strong><span>${ultPed}</span></div>`
             : `<div class="CfgMt_PedidosCell"><strong>0</strong><span>—</span></div>`;
         const indicadoPor = String(t.indicado_por || "").trim();
-        const celNome = indicadoPor
-          ? `<div class="CfgMt_NomeCell" title="${esc(t.nome)} · Indicado por: ${esc(indicadoPor)}">
+        const triagemRot = String(t.triagem_rotulo || "").trim();
+        const extras = [];
+        if (indicadoPor) extras.push(`Indicado por: ${esc(indicadoPor)}`);
+        if (triagemRot) extras.push(`Triagem: ${esc(triagemRot)}`);
+        const titleBits = [t.nome, indicadoPor ? `Indicado por: ${indicadoPor}` : "", triagemRot ? `Triagem: ${triagemRot}` : ""]
+          .filter(Boolean)
+          .join(" · ");
+        const celNome = `<div class="CfgMt_NomeCell" title="${esc(titleBits)}">
                 <strong>${esc(t.nome)}</strong>
-                <span>Indicado por: ${esc(indicadoPor)}</span>
-              </div>`
-          : `<div class="CfgMt_NomeCell" title="${esc(t.nome)}"><strong>${esc(t.nome)}</strong></div>`;
+                ${extras.map((x) => `<span>${x}</span>`).join("")}
+              </div>`;
         return `<tr>
             <td>${t.id}</td>
             <td class="is-nome">${celNome}</td>

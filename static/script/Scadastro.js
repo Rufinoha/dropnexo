@@ -11,6 +11,90 @@
   const inpDoc = document.getElementById("documento");
   const inpCep = document.getElementById("cep");
   const inpWhatsapp = form.querySelector('[name="whatsapp"]');
+  let triagemState = {
+    fabrica: "",
+    skus: "",
+    revende: "",
+    mesmo_assim_fornecedor: false,
+  };
+
+  function lerTriagemRadios() {
+    const fabrica = document.querySelector('input[name="triagem_fabrica"]:checked')?.value || "";
+    const skus = document.querySelector('input[name="triagem_skus"]:checked')?.value || "";
+    const revende = document.querySelector('input[name="triagem_revende"]:checked')?.value || "";
+    return { fabrica, skus, revende };
+  }
+
+  function atualizarHintTriagem() {
+    const hint = document.getElementById("triagem-vendedor-hint");
+    const actions = document.getElementById("triagem-actions");
+    const vals = lerTriagemRadios();
+    const mostrar = vals.fabrica === "nao";
+    if (hint) hint.hidden = !mostrar;
+    if (actions) actions.hidden = mostrar && !triagemState.mesmo_assim_fornecedor;
+  }
+
+  function aplicarTriagemNoForm() {
+    const f = document.getElementById("triagem_fabrica_val");
+    const s = document.getElementById("triagem_skus_val");
+    const r = document.getElementById("triagem_revende_val");
+    const m = document.getElementById("triagem_mesmo_assim_val");
+    if (f) f.value = triagemState.fabrica;
+    if (s) s.value = triagemState.skus;
+    if (r) r.value = triagemState.revende;
+    if (m) m.value = triagemState.mesmo_assim_fornecedor ? "1" : "0";
+  }
+
+  function liberarFormularioAposTriagem(mesmoAssim) {
+    const vals = lerTriagemRadios();
+    const erro = document.getElementById("triagem-erro");
+    if (!vals.fabrica || !vals.skus || !vals.revende) {
+      if (erro) {
+        erro.hidden = false;
+        erro.textContent = "Responda as três perguntas para continuar.";
+      }
+      return false;
+    }
+    if (vals.fabrica === "nao" && !mesmoAssim && !triagemState.mesmo_assim_fornecedor) {
+      if (erro) {
+        erro.hidden = false;
+        erro.textContent = "Se não tem estoque próprio, o perfil indicado é Vendedor.";
+      }
+      atualizarHintTriagem();
+      return false;
+    }
+    if (erro) erro.hidden = true;
+    triagemState = {
+      fabrica: vals.fabrica,
+      skus: vals.skus,
+      revende: vals.revende,
+      mesmo_assim_fornecedor: !!(mesmoAssim || triagemState.mesmo_assim_fornecedor),
+    };
+    aplicarTriagemNoForm();
+    const box = document.getElementById("triagem-fornecedor");
+    if (box) box.hidden = true;
+    form.hidden = false;
+    form.scrollIntoView({ behavior: "smooth", block: "start" });
+    return true;
+  }
+
+  if (ehFornecedor) {
+    document.querySelectorAll('input[name="triagem_fabrica"], input[name="triagem_skus"], input[name="triagem_revende"]').forEach((inp) => {
+      inp.addEventListener("change", () => {
+        triagemState.mesmo_assim_fornecedor = false;
+        atualizarHintTriagem();
+        const erro = document.getElementById("triagem-erro");
+        if (erro) erro.hidden = true;
+      });
+    });
+    document.getElementById("triagem-btn-continuar")?.addEventListener("click", () => {
+      liberarFormularioAposTriagem(false);
+    });
+    document.getElementById("triagem-btn-mesmo-assim")?.addEventListener("click", () => {
+      triagemState.mesmo_assim_fornecedor = true;
+      liberarFormularioAposTriagem(true);
+    });
+  }
 
   const MSG_SUCESSO_FORNECEDOR =
     "Cadastro realizado com sucesso! Você receberá um e-mail para finalizar o cadastro e poderá efetuar login na plataforma após definir sua senha.";
@@ -351,6 +435,14 @@
         uf: String(fd.get("uf") || "").trim().toUpperCase(),
         ids_segmentos_nichos: [parseInt(idSegmento, 10)],
         sistema_erp: String(fd.get("sistema_erp") || "").trim(),
+        triagem: {
+          fabrica: String(fd.get("triagem_fabrica") || triagemState.fabrica || "").trim(),
+          skus: String(fd.get("triagem_skus") || triagemState.skus || "").trim(),
+          revende: String(fd.get("triagem_revende") || triagemState.revende || "").trim(),
+          mesmo_assim_fornecedor:
+            String(fd.get("triagem_mesmo_assim") || "") === "1" ||
+            !!triagemState.mesmo_assim_fornecedor,
+        },
       };
 
       const btn = document.getElementById("btn-cadastrar");
