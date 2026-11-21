@@ -22,6 +22,16 @@ def _ip() -> str:
     return xf or (request.remote_addr or "")
 
 
+def _int_arg(nome: str, padrao):
+    bruto = request.args.get(nome)
+    if bruto in (None, ""):
+        return padrao
+    try:
+        return int(bruto)
+    except (TypeError, ValueError):
+        raise ValueError(f"Parâmetro inválido: {nome}.") from None
+
+
 def _com_auth(id_tenant_alvo: int | None = None):
     """Autentica, devolve (conn, token_row) ou response de erro."""
     conn = Var_ConectarBanco()
@@ -73,19 +83,20 @@ def api_listar():
         return err
     try:
         cur = conn.cursor()
-        fundador = request.args.get("fundador")
-        indicado = request.args.get("indicado")
         data = servico.listar_fornecedores(
             cur,
-            page=int(request.args.get("page") or 1),
-            per_page=int(request.args.get("per_page") or 50),
-            fundador=int(fundador) if fundador not in (None, "") else None,
+            page=_int_arg("page", 1),
+            per_page=_int_arg("per_page", 50),
+            fundador=_int_arg("fundador", None),
             fase=(request.args.get("fase") or "").strip() or None,
-            indicado=int(indicado) if indicado not in (None, "") else None,
+            indicado=_int_arg("indicado", None),
             desde=(request.args.get("desde") or "").strip() or None,
         )
         _fechar(conn, token, status=200)
         return jsonify(success=True, **data)
+    except ValueError as e:
+        _fechar(conn, token, status=400)
+        return jsonify(servico.erro_generico(str(e))), 400
     except Exception:
         _log.exception("assistente listar")
         _fechar(conn, token, status=500)
@@ -122,14 +133,17 @@ def api_produtos(id_tenant: int):
             cur,
             id_tenant,
             status=(request.args.get("status") or "").strip() or None,
-            page=int(request.args.get("page") or 1),
-            per_page=int(request.args.get("per_page") or 50),
+            page=_int_arg("page", 1),
+            per_page=_int_arg("per_page", 50),
         )
         _fechar(conn, token, status=200, id_tenant_alvo=id_tenant)
         return jsonify(success=True, **data)
-    except ValueError as e:
+    except LookupError as e:
         _fechar(conn, token, status=404, id_tenant_alvo=id_tenant)
         return jsonify(servico.erro_generico(str(e))), 404
+    except ValueError as e:
+        _fechar(conn, token, status=400, id_tenant_alvo=id_tenant)
+        return jsonify(servico.erro_generico(str(e))), 400
     except Exception:
         _log.exception("assistente produtos")
         _fechar(conn, token, status=500, id_tenant_alvo=id_tenant)
@@ -149,11 +163,14 @@ def api_pedidos(id_tenant: int):
             status=(request.args.get("status") or "").strip() or None,
             atrasados=1 if request.args.get("atrasados") in ("1", "true", "True") else 0,
             desde=(request.args.get("desde") or "").strip() or None,
-            page=int(request.args.get("page") or 1),
-            per_page=int(request.args.get("per_page") or 50),
+            page=_int_arg("page", 1),
+            per_page=_int_arg("per_page", 50),
         )
         _fechar(conn, token, status=200, id_tenant_alvo=id_tenant)
         return jsonify(success=True, **data)
+    except LookupError as e:
+        _fechar(conn, token, status=404, id_tenant_alvo=id_tenant)
+        return jsonify(servico.erro_generico(str(e))), 404
     except ValueError as e:
         _fechar(conn, token, status=400, id_tenant_alvo=id_tenant)
         return jsonify(servico.erro_generico(str(e))), 400
@@ -197,6 +214,10 @@ def api_contato(id_tenant: int):
         conn.rollback()
         _fechar(conn, token, status=403, id_tenant_alvo=id_tenant)
         return jsonify(servico.erro_generico(str(e))), 403
+    except LookupError as e:
+        conn.rollback()
+        _fechar(conn, token, status=404, id_tenant_alvo=id_tenant)
+        return jsonify(servico.erro_generico(str(e))), 404
     except ValueError as e:
         conn.rollback()
         _fechar(conn, token, status=400, id_tenant_alvo=id_tenant)
@@ -226,6 +247,10 @@ def api_fase(id_tenant: int):
         conn.rollback()
         _fechar(conn, token, status=403, id_tenant_alvo=id_tenant)
         return jsonify(servico.erro_generico(str(e))), 403
+    except LookupError as e:
+        conn.rollback()
+        _fechar(conn, token, status=404, id_tenant_alvo=id_tenant)
+        return jsonify(servico.erro_generico(str(e))), 404
     except ValueError as e:
         conn.rollback()
         _fechar(conn, token, status=400, id_tenant_alvo=id_tenant)

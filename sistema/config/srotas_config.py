@@ -4560,7 +4560,7 @@ def manutencao_assistente_token_status():
         return jsonify(success=True, **assistente_servico.status_token(conn))
     except Exception as e:
         _log.exception("assistente token status")
-        return jsonify(success=False, message=str(e)), 500
+        return jsonify(success=False, message="Não foi possível carregar (migração sql/24 aplicada?)."), 500
     finally:
         conn.close()
 
@@ -4590,7 +4590,7 @@ def manutencao_assistente_token_gerar():
     except Exception as e:
         conn.rollback()
         _log.exception("assistente token gerar")
-        return jsonify(success=False, message=str(e)), 500
+        return jsonify(success=False, message="Não foi possível gerar o token (migração sql/24 aplicada?)."), 500
     finally:
         conn.close()
 
@@ -4610,7 +4610,7 @@ def manutencao_assistente_token_revogar():
     except Exception as e:
         conn.rollback()
         _log.exception("assistente token revogar")
-        return jsonify(success=False, message=str(e)), 500
+        return jsonify(success=False, message="Não foi possível revogar o token."), 500
     finally:
         conn.close()
 

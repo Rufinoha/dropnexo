@@ -25,10 +25,49 @@ def _hash_token(token: str) -> str:
 
 
 def _hint(token: str) -> str:
+    """Dica do token: primeiros 4 … últimos 4 caracteres."""
     t = token or ""
-    if len(t) < 10:
-        return t[:4] + "…"
-    return f"{t[:8]}…{t[-4:]}"
+    if len(t) < 12:
+        return "••••"
+    return f"{t[:4]}…{t[-4:]}"
+
+
+def _tem_coluna_tenant(cur, coluna: str) -> bool:
+    from sistema.planos.fornecedor_acompanhamento import _tem_coluna_tenant as _f
+
+    return _f(cur, coluna)
+
+
+def _tentar(cur, fn, padrao):
+    """Executa fn() dentro de SAVEPOINT; em erro devolve `padrao` sem abortar a transação."""
+    try:
+        cur.execute("SAVEPOINT assist_sp")
+    except Exception:
+        return padrao
+    try:
+        out = fn()
+        cur.execute("RELEASE SAVEPOINT assist_sp")
+        return out
+    except Exception:
+        try:
+            cur.execute("ROLLBACK TO SAVEPOINT assist_sp")
+        except Exception:
+            pass
+        return padrao
+
+
+def _parse_desde(valor: str) -> str:
+    try:
+        return datetime.fromisoformat(str(valor).strip().replace("Z", "+00:00")).isoformat()
+    except ValueError:
+        raise ValueError("Parâmetro 'desde' inválido (use ISO 8601).") from None
+
+
+def _centavos(v) -> int:
+    try:
+        return int(round(float(v or 0) * 100))
+    except (TypeError, ValueError):
+        return 0
 
 
 def erro_generico(msg: str = "Não foi possível concluir a solicitação.") -> dict:
@@ -193,21 +232,6 @@ def eh_indicado(cur, id_tenant: int) -> bool:
     return bool(cur.fetchone())
 
 
-def _indicado_por_nome(cur, id_tenant: int) -> str:
-    cur.execute(
-        """
-        SELECT COALESCE(NULLIF(TRIM(tp.nome_fantasia), ''), NULLIF(TRIM(tp.nome), ''), '')
-          FROM tbl_comissao_indicacao i
-          JOIN tbl_tenant tp ON tp.id = i.id_tenant_pai
-         WHERE i.id_tenant_indicado = %s
-         LIMIT 1
-        """,
-        (int(id_tenant),),
-    )
-    row = cur.fetchone()
-    return (row[0] or "").strip() if row else ""
-
-
 def _ultimo_acesso_dono(cur, id_tenant: int):
     cur.execute(
         """
@@ -288,14 +312,18 @@ def _contar_atrasados(cur, id_tenant: int) -> int:
         SELECT COUNT(*)::int
           FROM tbl_pedido ped
          WHERE ped.id_tenant_fornecedor = %s
-           AND COALESCE(ped.{col_st}, '') IN ('pago', 'em_expedicao', 'aguardando_confirmacao')
-           AND ped.criado_em < NOW() - INTERVAL '48 hours'
-           AND COALESCE(ped.{col_st}, '') NOT IN ('expedido', 'enviado', 'entregue', 'cancelado')
+           AND {_sql_atrasado(col_st)}
         """,
         (int(id_tenant),),
     )
     row = cur.fetchone()
     return int(row[0] or 0) if row else 0
+
+
+def _sql_fase_cols(tem_fase: bool, tem_tri: bool) -> str:
+    fase = "t.fornecedor_fase, t.fornecedor_fase_em" if tem_fase else "NULL::text, NULL::timestamptz"
+    tri = "t.fornecedor_triagem" if tem_tri else "NULL::jsonb"
+    return f"{fase}, {tri}"
 
 
 def listar_fornecedores(
@@ -316,27 +344,35 @@ def listar_fornecedores(
         where.append("COALESCE(t.eh_fornecedor_fundador, FALSE) = TRUE")
     elif fundador == 0:
         where.append("COALESCE(t.eh_fornecedor_fundador, FALSE) = FALSE")
+    tem_fase = _tem_coluna_tenant(cur, "fornecedor_fase")
+    tem_tri = _tem_coluna_tenant(cur, "fornecedor_triagem")
     if fase:
-        where.append("t.fornecedor_fase = %s")
-        params.append(fase)
+        if fase not in FASE_ROTULO:
+            raise ValueError("Fase inválida.")
+        if tem_fase:
+            where.append("t.fornecedor_fase = %s")
+            params.append(fase)
+        else:
+            where.append("FALSE")
     if indicado == 1:
         where.append("EXISTS (SELECT 1 FROM tbl_comissao_indicacao i WHERE i.id_tenant_indicado = t.id)")
     elif indicado == 0:
         where.append("NOT EXISTS (SELECT 1 FROM tbl_comissao_indicacao i WHERE i.id_tenant_indicado = t.id)")
     if desde:
         where.append("t.criado_em >= %s::timestamptz")
-        params.append(desde)
+        params.append(_parse_desde(desde))
     wh = " AND ".join(where)
     cur.execute(f"SELECT COUNT(*)::int FROM tbl_tenant t WHERE {wh}", params)
     total = int((cur.fetchone() or (0,))[0] or 0)
     offset = (page - 1) * per_page
+    fase_sql = _sql_fase_cols(tem_fase, tem_tri)
     cur.execute(
         f"""
         SELECT t.id, t.nome, t.documento, t.cidade, t.uf, t.criado_em, t.plano,
                COALESCE(t.eh_fornecedor_fundador, FALSE),
                COALESCE(t.fornecedor_fundador_ativo, FALSE),
                t.fornecedor_fundador_em, t.sistema_erp,
-               t.fornecedor_fase, t.fornecedor_fase_em, t.fornecedor_triagem
+               {fase_sql}
           FROM tbl_tenant t
          WHERE {wh}
          ORDER BY t.criado_em DESC NULLS LAST, t.id DESC
@@ -376,7 +412,7 @@ def listar_fornecedores(
                 "prazo_ativacao": prazo.get("prazo_em"),
                 "prazo_ativacao_cor": prazo.get("prazo_cor"),
                 "sistema_erp": r[10] or "",
-                "indicado_por": _indicado_por_nome(cur, tid) or None,
+                "indicado": eh_indicado(cur, tid),
                 "fase": r[11],
                 "fase_em": r[12].isoformat() if r[12] else None,
                 "fase_rotulo": FASE_ROTULO.get(r[11] or "", ""),
@@ -397,106 +433,101 @@ def listar_fornecedores(
     }
 
 
-def _motivos_produto(cur, id_produto: int, row: tuple) -> list[str]:
-    """row: sku, nome, preco, id_categoria, descricao, peso_bruto, altura, largura, profundidade, publicado."""
-    motivos = []
-    preco = row[2]
-    if preco is None or float(preco or 0) <= 0:
-        motivos.append("preço zerado" if preco is not None and float(preco or 0) == 0 else "sem preço")
-    if not row[3]:
-        motivos.append("sem categoria")
-    desc = (row[4] or "").strip()
-    if len(desc) < 10:
-        motivos.append("sem descrição curta")
-    if not row[5] or float(row[5] or 0) <= 0:
-        motivos.append("sem peso/dimensões")
-    elif not (row[6] and row[7] and row[8]):
-        motivos.append("sem peso/dimensões")
-    cur.execute(
-        "SELECT 1 FROM tbl_produto_imagem WHERE id_produto = %s LIMIT 1",
-        (int(id_produto),),
-    )
-    if not cur.fetchone():
-        motivos.append("sem foto")
-    cur.execute(
-        """
-        SELECT COALESCE(SUM(pe.quantidade), 0)
-          FROM tbl_produto_estoque pe
-         WHERE pe.id_produto = %s
-        """,
-        (int(id_produto),),
-    )
-    est = cur.fetchone()
-    try:
-        qtd = float(est[0] or 0) if est else 0
-    except Exception:
-        qtd = 0
-    if qtd <= 0:
-        # variantes?
-        cur.execute(
-            """
-            SELECT COALESCE(SUM(ve.quantidade), 0)
-              FROM tbl_produto_variante v
-              JOIN tbl_produto_variante_estoque ve ON ve.id_variante = v.id
-             WHERE v.id_produto = %s
-            """,
-            (int(id_produto),),
-        )
-        est2 = cur.fetchone()
-        try:
-            qtd2 = float(est2[0] or 0) if est2 else 0
-        except Exception:
-            qtd2 = 0
-        if qtd2 <= 0:
-            motivos.append("sem estoque")
-    cur.execute(
-        "SELECT COUNT(*)::int FROM tbl_produto_variante WHERE id_produto = %s",
-        (int(id_produto),),
-    )
-    # se formato sugere variação e não há — best effort skip
-    return motivos
+# Flags de incompletude calculadas no SQL (1 consulta, sem N+1).
+_SQL_FLAGS_PRODUTO = """
+    (COALESCE(p.preco, 0) <= 0 AND COALESCE(p.valor_drop, 0) <= 0) AS f_preco,
+    (p.id_categoria IS NULL) AS f_categoria,
+    (LENGTH(TRIM(COALESCE(p.descricao, ''))) < 10) AS f_descricao,
+    (
+      (COALESCE(p.peso_bruto_kg, 0) <= 0 AND COALESCE(p.peso_liquido_kg, 0) <= 0
+        AND COALESCE(p.peso_gramas, 0) <= 0)
+      OR COALESCE(p.altura_cm, 0) <= 0 OR COALESCE(p.largura_cm, 0) <= 0
+      OR COALESCE(p.profundidade_cm, 0) <= 0
+    ) AS f_peso_dim,
+    (
+      COALESCE(NULLIF(TRIM(p.imagem_url), ''), '') = ''
+      AND NOT EXISTS (SELECT 1 FROM tbl_produto_imagem im WHERE im.id_produto = p.id)
+    ) AS f_foto,
+    (
+      COALESCE((SELECT SUM(GREATEST(COALESCE(ve.quantidade, 0) - COALESCE(ve.reservado, 0), 0))
+                  FROM tbl_produto_variante v
+                  JOIN tbl_produto_variante_estoque ve ON ve.id_variante = v.id
+                 WHERE v.id_produto = p.id), 0)
+      + COALESCE((SELECT SUM(GREATEST(COALESCE(pe.quantidade, 0) - COALESCE(pe.reservado, 0), 0))
+                    FROM tbl_produto_estoque pe WHERE pe.id_produto = p.id), 0)
+    ) <= 0 AS f_estoque,
+    (NOT EXISTS (SELECT 1 FROM tbl_produto_variante v WHERE v.id_produto = p.id)) AS f_variacao
+"""
+
+_MOTIVOS = (
+    ("sem preço", 7),
+    ("sem categoria", 8),
+    ("sem descrição", 9),
+    ("sem peso/dimensões", 10),
+    ("sem foto", 11),
+    ("sem estoque", 12),
+    ("sem variação cadastrada", 13),
+)
+# Colunas: 0 id, 1 sku, 2 nome, 3 preco, 4 publicado, 5 atualizado_em, 6 estoque, 7.. flags
+
+
+def _motivos_de_linha(r) -> list[str]:
+    return [txt for txt, idx in _MOTIVOS if r[idx]]
+
+
+_SQL_PRODUTO_SEL = (
+    "SELECT p.id, p.sku, p.nome, p.preco, COALESCE(p.publicado, FALSE), p.atualizado_em,\n"
+    "       COALESCE((SELECT SUM(GREATEST(COALESCE(ve.quantidade, 0) - COALESCE(ve.reservado, 0), 0))\n"
+    "                   FROM tbl_produto_variante v\n"
+    "                   JOIN tbl_produto_variante_estoque ve ON ve.id_variante = v.id\n"
+    "                  WHERE v.id_produto = p.id), 0)::numeric AS estoque,\n"
+    + _SQL_FLAGS_PRODUTO
+    + "\n  FROM tbl_produto p\n"
+)
+
+_ANY_FLAG = "(f_preco OR f_categoria OR f_descricao OR f_peso_dim OR f_foto OR f_estoque OR f_variacao)"
+
+
+def _item_produto(r) -> dict[str, Any]:
+    return {
+        "id": int(r[0]),
+        "sku": r[1] or "",
+        "nome": r[2] or "",
+        "preco": float(r[3] or 0),
+        "estoque": float(r[6] or 0),
+        "publicado": bool(r[4]),
+        "motivos": _motivos_de_linha(r),
+        "atualizado_em": r[5].isoformat() if r[5] else None,
+    }
 
 
 def _fixar_produtos_incompletos(cur, id_tenant: int) -> dict[str, Any]:
+    tid = int(id_tenant)
     cur.execute(
-        """
-        SELECT id, sku, nome, preco, id_categoria, descricao,
-               peso_bruto_kg, altura_cm, largura_cm, profundidade_cm, COALESCE(publicado, FALSE)
-          FROM tbl_produto
-         WHERE id_tenant = %s
-         ORDER BY id DESC
-         LIMIT 500
-        """,
-        (int(id_tenant),),
+        "SELECT * FROM (" + _SQL_PRODUTO_SEL + " WHERE p.id_tenant = %s) x ORDER BY x.id DESC",
+        (tid,),
     )
-    rows = cur.fetchall()
-    incompletos = []
     contagem: dict[str, int] = {}
-    for r in rows:
-        motivos = _motivos_produto(cur, int(r[0]), r[1:])
+    incompletos: list[dict[str, Any]] = []
+    total = pub = inc_total = 0
+    for r in cur.fetchall():
+        total += 1
+        if r[4]:
+            pub += 1
+        motivos = _motivos_de_linha(r)
         if not motivos:
             continue
+        inc_total += 1
         for m in motivos:
             contagem[m] = contagem.get(m, 0) + 1
-        incompletos.append(
-            {"id": int(r[0]), "sku": r[1] or "", "nome": r[2] or "", "motivos": motivos}
-        )
-    cur.execute(
-        """
-        SELECT COUNT(*)::int,
-               COUNT(*) FILTER (WHERE COALESCE(publicado, FALSE))=TRUE,
-               COUNT(*) FILTER (WHERE COALESCE(publicado, FALSE))=FALSE
-          FROM tbl_produto WHERE id_tenant = %s
-        """,
-        (int(id_tenant),),
-    )
-    tot, pub, ina = cur.fetchone() or (0, 0, 0)
+        if len(incompletos) < 50:
+            incompletos.append({"id": int(r[0]), "sku": r[1] or "", "nome": r[2] or "", "motivos": motivos})
     return {
-        "total": int(tot or 0),
-        "publicados": int(pub or 0),
-        "inativos": int(ina or 0),
-        "incompletos": incompletos[:50],
-        "incompletos_total": len(incompletos),
+        "total": total,
+        "publicados": pub,
+        "inativos": total - pub,
+        "incompletos": incompletos,
+        "incompletos_total": inc_total,
         "contagem_motivos": contagem,
     }
 
@@ -505,13 +536,16 @@ def detalhe_fornecedor(cur, id_tenant: int) -> dict[str, Any] | None:
     if not _eh_fornecedor(cur, id_tenant):
         return None
     tid = int(id_tenant)
+    fase_sql = _sql_fase_cols(
+        _tem_coluna_tenant(cur, "fornecedor_fase"), _tem_coluna_tenant(cur, "fornecedor_triagem")
+    )
     cur.execute(
-        """
+        f"""
         SELECT t.id, t.nome, t.documento, t.cidade, t.uf, t.criado_em, t.plano,
                COALESCE(t.eh_fornecedor_fundador, FALSE),
                COALESCE(t.fornecedor_fundador_ativo, FALSE),
                t.fornecedor_fundador_em, t.sistema_erp,
-               t.fornecedor_fase, t.fornecedor_fase_em, t.fornecedor_triagem,
+               {fase_sql},
                t.ativo
           FROM tbl_tenant t WHERE t.id = %s
         """,
@@ -568,7 +602,7 @@ def detalhe_fornecedor(cur, id_tenant: int) -> dict[str, Any] | None:
             "fundador_em": r[9].isoformat() if r[9] else None,
             "prazo_ativacao": prazo,
             "sistema_erp": r[10] or "",
-            "indicado_por": _indicado_por_nome(cur, tid) or None,
+            "indicado": eh_indicado(cur, tid),
             "fase": r[11],
             "fase_em": r[12].isoformat() if r[12] else None,
             "whatsapp": dono["whatsapp"],
@@ -592,6 +626,54 @@ def detalhe_fornecedor(cur, id_tenant: int) -> dict[str, Any] | None:
     }
 
 
+_STATUS_PEDIDO_ABERTO_FORN = "('pago', 'aguardando_confirmacao', 'em_expedicao')"
+_ATRASO_HORAS = 48
+
+
+def _sql_atrasado(col_st: str) -> str:
+    """Pedido pago/aguardando confirmação (ou em expedição sem envio) parado há mais de 48h."""
+    return (
+        f"((COALESCE(ped.{col_st}, '') IN ('pago', 'aguardando_confirmacao') "
+        f"   OR (COALESCE(ped.{col_st}, '') = 'em_expedicao' AND ped.expedido_em IS NULL)) "
+        f" AND COALESCE(ped.pago_em, ped.confirmado_em, ped.criado_em) < NOW() - INTERVAL '{_ATRASO_HORAS} hours')"
+    )
+
+
+def _horas_atraso(ref) -> int:
+    if not ref:
+        return 0
+    if ref.tzinfo is None:
+        ref = ref.replace(tzinfo=timezone.utc)
+    horas = int((datetime.now(timezone.utc) - ref).total_seconds() // 3600)
+    return max(0, horas - _ATRASO_HORAS)
+
+
+def _item_pedido(r) -> dict[str, Any]:
+    """Sem dados do comprador final nem do vendedor."""
+    return {
+        "id": int(r[0]),
+        "numero": r[1] or "",
+        "criado_em": r[2].isoformat() if r[2] else None,
+        "status": r[3] or "",
+        "status_pagamento": r[4] or "",
+        "valor_centavos": _centavos(r[5]),
+        "pago_em": r[6].isoformat() if r[6] else None,
+        "expedido_em": r[7].isoformat() if r[7] else None,
+        "entregue_em": r[8].isoformat() if r[8] else None,
+        "atrasado": bool(r[9]),
+        "horas_em_atraso": _horas_atraso(r[10]) if r[9] else 0,
+    }
+
+
+_SQL_PEDIDO_SEL = """
+    SELECT ped.id, ped.numero, ped.criado_em, COALESCE(ped.{col_st}, ''), ped.status_pagamento,
+           ped.valor_total, ped.pago_em, ped.expedido_em, ped.entregue_em,
+           {atrasado} AS atrasado,
+           COALESCE(ped.pago_em, ped.confirmado_em, ped.criado_em) AS ref_em
+      FROM tbl_pedido ped
+"""
+
+
 def _bloco_pedidos(cur, id_tenant: int) -> dict[str, Any]:
     from core.pedidos.servico import col_status_vendedor
 
@@ -601,7 +683,7 @@ def _bloco_pedidos(cur, id_tenant: int) -> dict[str, Any]:
     def _por_status(dias: int) -> dict[str, int]:
         cur.execute(
             f"""
-            SELECT COALESCE(ped.{col_st}, 'sem_status'), COUNT(*)::int
+            SELECT COALESCE(NULLIF(ped.{col_st}, ''), 'sem_status'), COUNT(*)::int
               FROM tbl_pedido ped
              WHERE ped.id_tenant_fornecedor = %s
                AND ped.criado_em >= NOW() - (%s || ' days')::interval
@@ -609,48 +691,21 @@ def _bloco_pedidos(cur, id_tenant: int) -> dict[str, Any]:
             """,
             (tid, str(dias)),
         )
-        return {str(a or "sem_status"): int(b or 0) for a, b in cur.fetchall()}
+        return {str(a): int(b or 0) for a, b in cur.fetchall()}
 
-    atrasados = []
-    try:
-        cur.execute(
-            f"""
-            SELECT ped.id, ped.numero, ped.criado_em, COALESCE(ped.{col_st}, ''),
-                   COALESCE(ped.total_centavos, 0)
-              FROM tbl_pedido ped
-             WHERE ped.id_tenant_fornecedor = %s
-               AND COALESCE(ped.{col_st}, '') IN ('pago', 'em_expedicao', 'aguardando_confirmacao')
-               AND ped.criado_em < NOW() - INTERVAL '48 hours'
-             ORDER BY ped.criado_em ASC
-             LIMIT 50
-            """,
-            (tid,),
-        )
-        now = datetime.now(timezone.utc)
-        for row in cur.fetchall():
-            criado = row[2]
-            if criado and criado.tzinfo is None:
-                criado = criado.replace(tzinfo=timezone.utc)
-            horas = int((now - criado).total_seconds() // 3600) if criado else 0
-            atrasados.append(
-                {
-                    "id": int(row[0]),
-                    "numero": row[1] or "",
-                    "criado_em": row[2].isoformat() if row[2] else None,
-                    "status": row[3] or "",
-                    "horas_em_atraso": max(0, horas - 48),
-                    "valor_centavos": int(row[4] or 0),
-                    "cidade": "",
-                    "uf": "",
-                }
-            )
-    except Exception:
-        atrasados = []
-        try:
-            cur.connection.rollback()
-        except Exception:
-            pass
-
+    cur.execute(
+        _SQL_PEDIDO_SEL.format(col_st=col_st, atrasado=_sql_atrasado(col_st))
+        + """
+     WHERE ped.id_tenant_fornecedor = %s
+       AND """
+        + _sql_atrasado(col_st)
+        + """
+     ORDER BY ped.criado_em ASC
+     LIMIT 50
+        """,
+        (tid,),
+    )
+    atrasados = [_item_pedido(r) for r in cur.fetchall()]
     cur.execute(
         f"""
         SELECT COUNT(*)::int FROM tbl_pedido ped
@@ -679,8 +734,7 @@ def _bloco_desempenho(cur, id_tenant: int) -> dict[str, Any]:
     def _agg(dias: int) -> dict[str, Any]:
         cur.execute(
             f"""
-            SELECT COUNT(*)::int,
-                   COALESCE(SUM(COALESCE(ped.total_centavos, 0)), 0)::bigint
+            SELECT COUNT(*)::int, COALESCE(SUM(COALESCE(ped.valor_total, 0)), 0)
               FROM tbl_pedido ped
              WHERE ped.id_tenant_fornecedor = %s
                AND ped.criado_em >= NOW() - (%s || ' days')::interval
@@ -690,15 +744,39 @@ def _bloco_desempenho(cur, id_tenant: int) -> dict[str, Any]:
         )
         n, fat = cur.fetchone() or (0, 0)
         n = int(n or 0)
-        fat = int(fat or 0)
+        fat_c = _centavos(fat)
         return {
             "pedidos": n,
-            "faturamento_centavos": fat,
-            "ticket_medio_centavos": int(fat / n) if n else 0,
+            "faturamento_centavos": fat_c,
+            "ticket_medio_centavos": int(fat_c / n) if n else 0,
         }
 
     a30 = _agg(30)
     a90 = _agg(90)
+    cur.execute(
+        f"""
+        SELECT COUNT(*) FILTER (WHERE COALESCE(ped.{col_st}, '') = 'cancelado')::int,
+               COUNT(*) FILTER (WHERE COALESCE(ped.{col_st}, '') <> 'rascunho')::int
+          FROM tbl_pedido ped
+         WHERE ped.id_tenant_fornecedor = %s
+           AND ped.criado_em >= NOW() - INTERVAL '30 days'
+        """,
+        (tid,),
+    )
+    c, t = cur.fetchone() or (0, 0)
+    taxa = round(100.0 * (c or 0) / t, 1) if t else None
+    cur.execute(
+        """
+        SELECT AVG(EXTRACT(EPOCH FROM (ped.expedido_em - ped.pago_em)) / 3600.0)
+          FROM tbl_pedido ped
+         WHERE ped.id_tenant_fornecedor = %s
+           AND ped.pago_em IS NOT NULL AND ped.expedido_em IS NOT NULL
+           AND ped.expedido_em >= ped.pago_em
+           AND ped.criado_em >= NOW() - INTERVAL '90 days'
+        """,
+        (tid,),
+    )
+    tm = (cur.fetchone() or (None,))[0]
     cur.execute(
         f"""
         SELECT MAX(ped.criado_em) FROM tbl_pedido ped
@@ -708,24 +786,48 @@ def _bloco_desempenho(cur, id_tenant: int) -> dict[str, Any]:
         (tid,),
     )
     ult = cur.fetchone()
+    top = _tentar(
+        cur,
+        lambda: _top_produtos_30d(cur, tid, col_st),
+        [],
+    )
     return {
         "30d": a30,
         "90d": a90,
-        "taxa_cancelamento_30d": None,
-        "tempo_medio_pago_expedido_horas": None,
+        "taxa_cancelamento_30d": taxa,
+        "tempo_medio_pago_expedido_horas": round(float(tm), 1) if tm is not None else None,
         "ultimo_pedido_em": ult[0].isoformat() if ult and ult[0] else None,
-        "top_produtos_30d": [],
+        "top_produtos_30d": top,
     }
 
 
+def _top_produtos_30d(cur, tid: int, col_st: str) -> list[dict[str, Any]]:
+    cur.execute(
+        f"""
+        SELECT COALESCE(it.sku, ''), COALESCE(it.nome_produto, ''), SUM(it.quantidade)::int
+          FROM tbl_pedido_item it
+          JOIN tbl_pedido ped ON ped.id = it.id_pedido
+         WHERE ped.id_tenant_fornecedor = %s
+           AND ped.criado_em >= NOW() - INTERVAL '30 days'
+           AND COALESCE(ped.{col_st}, '') NOT IN ('rascunho', 'cancelado')
+         GROUP BY 1, 2
+         ORDER BY 3 DESC
+         LIMIT 5
+        """,
+        (tid,),
+    )
+    return [{"sku": a, "nome": b, "quantidade": int(c or 0)} for a, b, c in cur.fetchall()]
+
+
 def _bloco_rede(cur, id_tenant: int) -> dict[str, Any]:
+    """Somente contagens — nunca identifica vendedores."""
     tid = int(id_tenant)
     cur.execute(
         """
         SELECT
           COUNT(*) FILTER (WHERE status = 'ativo')::int,
           COUNT(*) FILTER (WHERE status = 'aguardando')::int,
-          MIN(criado_em) FILTER (WHERE status = 'aguardando')
+          MIN(solicitado_em) FILTER (WHERE status = 'aguardando')
           FROM tbl_vinculo_vendedor_fornecedor
          WHERE id_tenant_fornecedor = %s
         """,
@@ -734,11 +836,10 @@ def _bloco_rede(cur, id_tenant: int) -> dict[str, Any]:
     row = cur.fetchone() or (0, 0, None)
     dias_espera = None
     if row[2]:
-        agora = datetime.now(timezone.utc)
         cri = row[2]
         if cri.tzinfo is None:
             cri = cri.replace(tzinfo=timezone.utc)
-        dias_espera = max(0, int((agora - cri).total_seconds() // 86400))
+        dias_espera = max(0, int((datetime.now(timezone.utc) - cri).total_seconds() // 86400))
     from core.pedidos.servico import col_status_vendedor
 
     col_st = col_status_vendedor(cur)
@@ -762,96 +863,83 @@ def _bloco_rede(cur, id_tenant: int) -> dict[str, Any]:
     }
 
 
+_INTEGRACOES = (
+    ("tbl_integracao_bling", "Bling"),
+    ("tbl_integracao_mercado_livre", "Mercado Livre"),
+    ("tbl_integracao_melhor_envio", "Melhor Envio"),
+    ("tbl_integracao_mercadopago", "Mercado Pago"),
+)
+
+
 def _bloco_integracoes(cur, id_tenant: int) -> list[dict[str, Any]]:
-    out = []
+    """Best-effort: status e último erro (sem tokens)."""
+    out: list[dict[str, Any]] = []
     tid = int(id_tenant)
-    for tabela, nome in (
-        ("tbl_integracao_bling", "Bling"),
-        ("tbl_integracao_olist", "Tiny/Olist"),
-    ):
-        try:
+    fila = _tentar(
+        cur,
+        lambda: _fila_imagens_pendentes(cur, tid),
+        0,
+    )
+    for tabela, nome in _INTEGRACOES:
+
+        def _ler(tabela=tabela):
             cur.execute(
-                f"""
-                SELECT ativo, ultima_sync_em, ultima_mensagem
-                  FROM {tabela}
-                 WHERE id_tenant = %s
-                 LIMIT 1
-                """,
+                f"SELECT status, atualizado_em, ultimo_erro FROM {tabela} WHERE id_tenant = %s LIMIT 1",
                 (tid,),
             )
-            row = cur.fetchone()
-            if row:
-                out.append(
-                    {
-                        "nome": nome,
-                        "ligado": bool(row[0]),
-                        "ultima_sincronizacao": row[1].isoformat() if row[1] else None,
-                        "ultimo_erro": (row[2] or "")[:200] if row[2] else "",
-                        "fila_imagens_pendentes": 0,
-                    }
-                )
-        except Exception:
-            try:
-                cur.connection.rollback()
-            except Exception:
-                pass
+            return cur.fetchone()
+
+        row = _tentar(cur, _ler, None)
+        if not row:
+            continue
+        out.append(
+            {
+                "nome": nome,
+                "ligado": (row[0] or "").lower() in ("conectado", "ativo", "ok", "connected"),
+                "status": row[0] or "",
+                "ultima_sincronizacao": row[1].isoformat() if row[1] else None,
+                "ultimo_erro": (row[2] or "")[:200],
+                "fila_imagens_pendentes": fila if nome == "Bling" else 0,
+            }
+        )
     return out
+
+
+def _fila_imagens_pendentes(cur, tid: int) -> int:
+    cur.execute(
+        "SELECT COUNT(*)::int FROM tbl_produto_imagem_download_fila "
+        "WHERE id_tenant = %s AND status IN ('pendente', 'processando')",
+        (tid,),
+    )
+    return int((cur.fetchone() or (0,))[0] or 0)
 
 
 def listar_produtos_pagina(
     cur, id_tenant: int, *, status: str | None = None, page: int = 1, per_page: int = 50
 ) -> dict[str, Any]:
     if not _eh_fornecedor(cur, id_tenant):
-        raise ValueError("Fornecedor não encontrado.")
+        raise LookupError("Fornecedor não encontrado.")
     page = max(1, int(page or 1))
     per_page = max(1, min(int(per_page or 50), 100))
-    where = ["p.id_tenant = %s"]
-    params: list[Any] = [int(id_tenant)]
     st = (status or "").strip().lower()
+    if st not in ("", "publicado", "inativo", "incompleto"):
+        raise ValueError("Status inválido.")
+    filtro = ""
     if st == "publicado":
-        where.append("COALESCE(p.publicado, FALSE) = TRUE")
+        filtro = "WHERE x.publicado = TRUE"
     elif st == "inativo":
-        where.append("COALESCE(p.publicado, FALSE) = FALSE")
-    wh = " AND ".join(where)
-    cur.execute(f"SELECT COUNT(*)::int FROM tbl_produto p WHERE {wh}", params)
+        filtro = "WHERE x.publicado = FALSE"
+    elif st == "incompleto":
+        filtro = "WHERE " + _ANY_FLAG.replace("f_", "x.f_")
+    base = "(" + _SQL_PRODUTO_SEL + " WHERE p.id_tenant = %s) x"
+    cur.execute(f"SELECT COUNT(*)::int FROM {base} {filtro}", (int(id_tenant),))
     total = int((cur.fetchone() or (0,))[0] or 0)
     cur.execute(
-        f"""
-        SELECT p.id, p.sku, p.nome, p.preco, COALESCE(p.publicado, FALSE), p.atualizado_em,
-               p.id_categoria, p.descricao, p.peso_bruto_kg, p.altura_cm, p.largura_cm, p.profundidade_cm
-          FROM tbl_produto p
-         WHERE {wh}
-         ORDER BY p.id DESC
-         LIMIT %s OFFSET %s
-        """,
-        (*params, per_page, (page - 1) * per_page),
+        f"SELECT x.* FROM {base} {filtro} ORDER BY x.id DESC LIMIT %s OFFSET %s",
+        (int(id_tenant), per_page, (page - 1) * per_page),
     )
-    itens = []
-    for r in cur.fetchall():
-        motivos = _motivos_produto(cur, int(r[0]), (r[1], r[2], r[3], r[6], r[7], r[8], r[9], r[10], r[11], r[4]))
-        if st == "incompleto" and not motivos:
-            continue
-        itens.append(
-            {
-                "id": int(r[0]),
-                "sku": r[1] or "",
-                "nome": r[2] or "",
-                "preco": float(r[3] or 0),
-                "estoque": None,
-                "publicado": bool(r[4]),
-                "motivos": motivos,
-                "atualizado_em": r[5].isoformat() if r[5] else None,
-            }
-        )
-    if st == "incompleto":
-        # re-filter path already handled; recount roughly
-        pass
-    return {
-        "itens": itens,
-        "page": page,
-        "per_page": per_page,
-        "total": total if st != "incompleto" else len(itens),
-    }
+    itens = [_item_produto(r) for r in cur.fetchall()]
+    return {"itens": itens, "page": page, "per_page": per_page, "total": total}
 
 
 def listar_pedidos_pagina(
@@ -865,7 +953,7 @@ def listar_pedidos_pagina(
     per_page: int = 50,
 ) -> dict[str, Any]:
     if not _eh_fornecedor(cur, id_tenant):
-        raise ValueError("Fornecedor não encontrado.")
+        raise LookupError("Fornecedor não encontrado.")
     from core.pedidos.servico import col_status_vendedor
 
     col_st = col_status_vendedor(cur)
@@ -875,66 +963,47 @@ def listar_pedidos_pagina(
     params: list[Any] = [int(id_tenant)]
     if status:
         where.append(f"COALESCE(ped.{col_st}, '') = %s")
-        params.append(status)
+        params.append(status.strip().lower())
     if atrasados:
-        where.append(f"COALESCE(ped.{col_st}, '') IN ('pago', 'em_expedicao', 'aguardando_confirmacao')")
-        where.append("ped.criado_em < NOW() - INTERVAL '48 hours'")
+        where.append(_sql_atrasado(col_st))
     if desde:
         where.append("ped.criado_em >= %s::timestamptz")
-        params.append(desde)
+        params.append(_parse_desde(desde))
     wh = " AND ".join(where)
-    try:
-        cur.execute(f"SELECT COUNT(*)::int FROM tbl_pedido ped WHERE {wh}", params)
-        total = int((cur.fetchone() or (0,))[0] or 0)
-        cur.execute(
-            f"""
-            SELECT ped.id, ped.numero, ped.criado_em, COALESCE(ped.{col_st}, ''),
-                   COALESCE(ped.total_centavos, 0),
-                   COALESCE(ped.cidade_entrega, ''), COALESCE(ped.uf_entrega, '')
-              FROM tbl_pedido ped
-             WHERE {wh}
-             ORDER BY ped.criado_em DESC
-             LIMIT %s OFFSET %s
-            """,
-            (*params, per_page, (page - 1) * per_page),
-        )
-        itens = []
-        now = datetime.now(timezone.utc)
-        for row in cur.fetchall():
-            criado = row[2]
-            if criado and criado.tzinfo is None:
-                criado = criado.replace(tzinfo=timezone.utc)
-            horas = int((now - criado).total_seconds() // 3600) if criado else 0
-            itens.append(
-                {
-                    "id": int(row[0]),
-                    "numero": row[1] or "",
-                    "criado_em": row[2].isoformat() if row[2] else None,
-                    "status": row[3] or "",
-                    "horas_em_atraso": max(0, horas - 48) if atrasados else None,
-                    "valor_centavos": int(row[4] or 0),
-                    "cidade": row[5] or "",
-                    "uf": row[6] or "",
-                }
-            )
-        return {"itens": itens, "page": page, "per_page": per_page, "total": total}
-    except Exception as e:
-        raise ValueError("Falha ao listar pedidos.") from e
+    cur.execute(f"SELECT COUNT(*)::int FROM tbl_pedido ped WHERE {wh}", params)
+    total = int((cur.fetchone() or (0,))[0] or 0)
+    cur.execute(
+        _SQL_PEDIDO_SEL.format(col_st=col_st, atrasado=_sql_atrasado(col_st))
+        + f" WHERE {wh} ORDER BY ped.criado_em DESC LIMIT %s OFFSET %s",
+        (*params, per_page, (page - 1) * per_page),
+    )
+    itens = [_item_pedido(r) for r in cur.fetchall()]
+    return {"itens": itens, "page": page, "per_page": per_page, "total": total}
 
 
 def painel_resumo(cur) -> dict[str, Any]:
-    from sistema.planos.fornecedor_fundador import status_programa
+    from core.pedidos.servico import col_status_vendedor
+    from sistema.planos.fornecedor_fundador import (
+        VAGAS_DIVULGADAS,
+        contar_fundadores_ativos,
+    )
 
+    col_st = col_status_vendedor(cur)
+    col_fase = (
+        "COALESCE(fornecedor_fase, 'sem_fase')"
+        if _tem_coluna_tenant(cur, "fornecedor_fase")
+        else "'sem_fase'"
+    )
     cur.execute(
-        """
-        SELECT COALESCE(fornecedor_fase, 'sem_fase'), COUNT(*)::int
+        f"""
+        SELECT {col_fase}, COUNT(*)::int
           FROM tbl_tenant
          WHERE tipo_negocio IN ('fornecedor', 'hibrido')
          GROUP BY 1
         """
     )
     por_fase = {str(a): int(b or 0) for a, b in cur.fetchall()}
-    st = status_programa(cur)
+    usados = contar_fundadores_ativos(cur)
     cur.execute(
         """
         SELECT COUNT(*)::int FROM tbl_tenant t
@@ -956,22 +1025,32 @@ def painel_resumo(cur) -> dict[str, Any]:
         """
     )
     aguard = int((cur.fetchone() or (0,))[0] or 0)
+    cur.execute(
+        f"""
+        SELECT COUNT(*)::int
+          FROM tbl_pedido ped
+          JOIN tbl_tenant t ON t.id = ped.id_tenant_fornecedor
+         WHERE t.tipo_negocio IN ('fornecedor', 'hibrido')
+           AND {_sql_atrasado(col_st)}
+        """
+    )
+    atras = int((cur.fetchone() or (0,))[0] or 0)
     return {
         "por_fase": por_fase,
         "fundadores": {
-            "ativos": st.get("vagas_usadas"),
-            "vagas_max": st.get("vagas_max"),
-            "vagas_restantes": st.get("vagas_restantes"),
+            "ativos": usados,
+            "vagas_max": VAGAS_DIVULGADAS,
+            "vagas_restantes": max(0, VAGAS_DIVULGADAS - usados),
         },
         "fornecedores_catalogo_lt_20": cat_baixo,
         "fornecedores_com_vendedores_aguardando": aguard,
-        "pedidos_atrasados_total": None,
+        "pedidos_atrasados_total": atras,
     }
 
 
 def post_contato(cur, id_tenant: int, body: dict, *, aprovado_por: str | None = None) -> dict:
     if not _eh_fornecedor(cur, id_tenant):
-        raise ValueError("Fornecedor não encontrado.")
+        raise LookupError("Fornecedor não encontrado.")
     if eh_indicado(cur, id_tenant):
         raise PermissionError("Fornecedor indicado por parceiro: contato não permitido pelo assistente")
     autor = "Assistente"
@@ -991,7 +1070,7 @@ def post_contato(cur, id_tenant: int, body: dict, *, aprovado_por: str | None = 
 
 def post_fase(cur, id_tenant: int, body: dict, *, aprovado_por: str | None = None) -> dict:
     if not _eh_fornecedor(cur, id_tenant):
-        raise ValueError("Fornecedor não encontrado.")
+        raise LookupError("Fornecedor não encontrado.")
     if eh_indicado(cur, id_tenant):
         raise PermissionError("Fornecedor indicado por parceiro: contato não permitido pelo assistente")
     autor = "Assistente"
