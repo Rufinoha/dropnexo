@@ -4553,18 +4553,122 @@ def manutencao_tenant_reativacao_testar_email():
 def manutencao_tenant_fundador_lista():
     if (r := _exigir_dev()) is not None:
         return r
+    from sistema.planos.fornecedor_acompanhamento import (
+        FASE_ROTULO,
+        FASES,
+        enriquecer_fundadores_com_acompanhamento,
+    )
     from sistema.planos.fornecedor_fundador import listar_fundadores, status_programa
 
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
+        itens = enriquecer_fundadores_com_acompanhamento(cur, listar_fundadores(cur))
         return jsonify(
             success=True,
             status=status_programa(cur),
-            itens=listar_fundadores(cur),
+            itens=itens,
+            fases=[{"id": f, "rotulo": FASE_ROTULO[f]} for f in FASES],
         )
     except Exception as e:
         _log.exception("manutencao fundador lista")
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
+@config_bp.post(f"{MANUTENCAO_TENANT_PREFIX}/fundador/fase")
+@login_obrigatorio()
+def manutencao_tenant_fundador_fase():
+    if (r := _exigir_dev()) is not None:
+        return r
+    from sistema.planos.fornecedor_acompanhamento import definir_fase
+
+    body = request.get_json(silent=True) or {}
+    try:
+        id_tenant = int(body.get("id") or 0)
+    except (TypeError, ValueError):
+        return jsonify(success=False, message="Tenant inválido."), 400
+    if not id_tenant:
+        return jsonify(success=False, message="Informe o fornecedor."), 400
+    autor = (session.get("nome") or session.get("email") or "DEV").strip() or "DEV"
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        res = definir_fase(
+            cur,
+            id_tenant,
+            body.get("fase"),
+            autor=autor,
+            motivo=(body.get("motivo") or "").strip() or None,
+        )
+        conn.commit()
+        return jsonify(success=True, **res)
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 400
+    except Exception as e:
+        conn.rollback()
+        _log.exception("manutencao fundador fase")
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
+@config_bp.post(f"{MANUTENCAO_TENANT_PREFIX}/fundador/contato")
+@login_obrigatorio()
+def manutencao_tenant_fundador_contato():
+    if (r := _exigir_dev()) is not None:
+        return r
+    from sistema.planos.fornecedor_acompanhamento import registrar_contato
+
+    body = request.get_json(silent=True) or {}
+    try:
+        id_tenant = int(body.get("id") or 0)
+    except (TypeError, ValueError):
+        return jsonify(success=False, message="Tenant inválido."), 400
+    if not id_tenant:
+        return jsonify(success=False, message="Informe o fornecedor."), 400
+    autor = (body.get("autor") or session.get("nome") or session.get("email") or "DEV").strip()
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        res = registrar_contato(
+            cur,
+            id_tenant,
+            canal=body.get("canal") or "whatsapp",
+            direcao=body.get("direcao") or "enviado",
+            resumo=body.get("resumo") or "",
+            fase_apos=body.get("fase_apos"),
+            autor=autor,
+            aplicar_fase=True,
+        )
+        conn.commit()
+        return jsonify(success=True, contato=res)
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(success=False, message=str(e)), 400
+    except Exception as e:
+        conn.rollback()
+        _log.exception("manutencao fundador contato")
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
+@config_bp.get(f"{MANUTENCAO_TENANT_PREFIX}/fundador/<int:id_tenant>/contatos")
+@login_obrigatorio()
+def manutencao_tenant_fundador_contatos(id_tenant: int):
+    if (r := _exigir_dev()) is not None:
+        return r
+    from sistema.planos.fornecedor_acompanhamento import listar_contatos
+
+    conn = Var_ConectarBanco()
+    try:
+        cur = conn.cursor()
+        return jsonify(success=True, itens=listar_contatos(cur, id_tenant))
+    except Exception as e:
+        _log.exception("manutencao fundador contatos")
         return jsonify(success=False, message=str(e)), 500
     finally:
         conn.close()

@@ -44,6 +44,8 @@
     btnTestarEmailReativacao: document.getElementById("cfgmt_btnTestarEmailReativacao"),
     fundadorLista: document.getElementById("cfgmt_fundador_lista"),
     fundadorStatus: document.getElementById("cfgmt_fundador_status"),
+    filtroFase: document.getElementById("cfgmt_filtroFase"),
+    filtroNaoIndicados: document.getElementById("cfgmt_filtroNaoIndicados"),
     btnMigrarForn: document.getElementById("cfgmt_btnMigrarForn"),
     btnTestarEmail: document.getElementById("cfgmt_btnTestarEmail"),
     migrarBox: document.getElementById("cfgmt_migrar_box"),
@@ -53,6 +55,19 @@
     btnMigrarCancelar: document.getElementById("cfgmt_btnMigrarCancelar"),
   };
   if (!el.lista) return;
+
+  let fundadorItensCache = [];
+  let fundadorFasesCache = [];
+  const FASE_CLS = {
+    cadastrado: "is-fase-cadastrado",
+    boas_vindas: "is-fase-boas",
+    cadastrando: "is-fase-cadastrando",
+    lembrete: "is-fase-lembrete",
+    ativo: "is-fase-ativo",
+    eh_vendedor: "is-fase-vendedor",
+    sem_resposta: "is-fase-sem",
+    desistiu: "is-fase-desistiu",
+  };
 
   let tenantsCarregados = false;
   let metricasCarregadas = false;
@@ -104,43 +119,52 @@
     const id = parseInt(btn.getAttribute("data-id") || "0", 10);
     const nome = btn.getAttribute("data-nome") || "";
     const ativo = btn.getAttribute("data-ativo") === "1";
+    const faseAtual = btn.getAttribute("data-fase") || "";
     const box = document.createElement("div");
     box.className = "CfgMt_MenuLista";
 
-    const itemToggle = document.createElement("button");
-    itemToggle.type = "button";
-    itemToggle.textContent = ativo ? "Desativar" : "Ativar";
-    itemToggle.addEventListener("click", async () => {
-      fecharMenusAcoes();
-      try {
-        const j = await toggleFundador(id, !ativo);
-        if (j?.cancelled) return;
-        await carregarFundadores();
-        if (!ativo) {
+    const addItem = (label, fn, cls) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      if (cls) b.className = cls;
+      b.textContent = label;
+      b.addEventListener("click", async () => {
+        fecharMenusAcoes();
+        try {
+          await fn();
+        } catch (err) {
           await Swal.fire({
-            icon: "success",
-            title: "Fundador ativado",
-            text: j?.email?.ok ? j.email.message : j?.message || "Benefício liberado.",
+            icon: "error",
+            title: "Erro",
+            text: err.message || "Erro",
             confirmButtonColor: "#021F81",
           });
         }
-      } catch (err) {
+      });
+      box.appendChild(b);
+    };
+
+    addItem("Mudar fase", () => mudarFaseFundador(id, nome, faseAtual));
+    addItem("Registrar contato", () => registrarContatoFundador(id, nome, faseAtual));
+    addItem("Ver histórico", () => verHistoricoFundador(id, nome));
+
+    addItem(ativo ? "Desativar" : "Ativar", async () => {
+      const j = await toggleFundador(id, !ativo);
+      if (j?.cancelled) return;
+      await carregarFundadores();
+      if (!ativo) {
         await Swal.fire({
-          icon: "error",
-          title: "Erro",
-          text: err.message || "Erro",
+          icon: "success",
+          title: "Fundador ativado",
+          text: j?.email?.ok ? j.email.message : j?.message || "Benefício liberado.",
           confirmButtonColor: "#021F81",
         });
       }
     });
 
-    const itemExcluir = document.createElement("button");
-    itemExcluir.type = "button";
-    itemExcluir.className = "is-danger";
-    itemExcluir.textContent = "Excluir do programa";
-    itemExcluir.addEventListener("click", async () => {
-      fecharMenusAcoes();
-      try {
+    addItem(
+      "Excluir do programa",
+      async () => {
         const j = await excluirDoPrograma(id, nome);
         if (j?.cancelled) return;
         await carregarFundadores();
@@ -150,19 +174,124 @@
           text: j.message || "A conta saiu do Fornecedor Fundador.",
           confirmButtonColor: "#021F81",
         });
-      } catch (err) {
-        await Swal.fire({
-          icon: "error",
-          title: "Erro",
-          text: err.message || "Erro",
-          confirmButtonColor: "#021F81",
-        });
-      }
-    });
+      },
+      "is-danger"
+    );
 
-    box.appendChild(itemToggle);
-    box.appendChild(itemExcluir);
     posicionarMenuAcoes(btn, box);
+  }
+
+  function opcoesFaseHtml(selecionada) {
+    const opts = ['<option value="">— Sem fase —</option>'].concat(
+      fundadorFasesCache.map(
+        (f) =>
+          `<option value="${esc(f.id)}"${f.id === selecionada ? " selected" : ""}>${esc(f.rotulo)}</option>`
+      )
+    );
+    return opts.join("");
+  }
+
+  async function mudarFaseFundador(id, nome, faseAtual) {
+    const ask = await Swal.fire({
+      title: "Mudar fase",
+      html:
+        `<p style="margin:0 0 10px;text-align:left">Fornecedor: <strong>${esc(nome)}</strong></p>` +
+        `<label style="display:block;text-align:left;font-size:0.85rem;margin-bottom:4px">Nova fase</label>` +
+        `<select id="sw_fase" class="swal2-select" style="width:100%">${opcoesFaseHtml(faseAtual)}</select>` +
+        `<label style="display:block;text-align:left;font-size:0.85rem;margin:10px 0 4px">Motivo (opcional)</label>` +
+        `<input id="sw_motivo" class="swal2-input" style="width:100%;margin:0" maxlength="500" placeholder="Ex.: Enviamos boas-vindas" />`,
+      showCancelButton: true,
+      confirmButtonText: "Salvar",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#021F81",
+      preConfirm: () => ({
+        fase: document.getElementById("sw_fase")?.value || "",
+        motivo: document.getElementById("sw_motivo")?.value || "",
+      }),
+    });
+    if (!ask.isConfirmed) return;
+    const r = await fetch(BASE + "/fundador/fase", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ id, fase: ask.value.fase || null, motivo: ask.value.motivo }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.success) throw new Error(j.message || "Falha ao mudar a fase.");
+    await carregarFundadores();
+  }
+
+  async function registrarContatoFundador(id, nome, faseAtual) {
+    const ask = await Swal.fire({
+      title: "Registrar contato",
+      html:
+        `<p style="margin:0 0 10px;text-align:left">Fornecedor: <strong>${esc(nome)}</strong></p>` +
+        `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;text-align:left">` +
+        `<div><label style="font-size:0.85rem">Canal</label>` +
+        `<select id="sw_canal" class="swal2-select" style="width:100%"><option value="whatsapp">WhatsApp</option><option value="email">E-mail</option><option value="telefone">Telefone</option><option value="outro">Outro</option></select></div>` +
+        `<div><label style="font-size:0.85rem">Direção</label>` +
+        `<select id="sw_dir" class="swal2-select" style="width:100%"><option value="enviado">Enviado</option><option value="recebido">Recebido</option></select></div>` +
+        `</div>` +
+        `<label style="display:block;text-align:left;font-size:0.85rem;margin:10px 0 4px">Resumo (até 500)</label>` +
+        `<textarea id="sw_resumo" class="swal2-textarea" style="width:100%;margin:0" maxlength="500" rows="3" placeholder="Ex.: Pedimos para publicar os primeiros produtos"></textarea>` +
+        `<label style="display:block;text-align:left;font-size:0.85rem;margin:10px 0 4px">Nova fase (opcional)</label>` +
+        `<select id="sw_fase_apos" class="swal2-select" style="width:100%">${opcoesFaseHtml(faseAtual)}</select>`,
+      showCancelButton: true,
+      confirmButtonText: "Registrar",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#021F81",
+      preConfirm: () => {
+        const resumo = (document.getElementById("sw_resumo")?.value || "").trim();
+        if (!resumo) {
+          Swal.showValidationMessage("Informe o resumo do contato.");
+          return false;
+        }
+        return {
+          canal: document.getElementById("sw_canal")?.value || "whatsapp",
+          direcao: document.getElementById("sw_dir")?.value || "enviado",
+          resumo,
+          fase_apos: document.getElementById("sw_fase_apos")?.value || null,
+        };
+      },
+    });
+    if (!ask.isConfirmed) return;
+    const r = await fetch(BASE + "/fundador/contato", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ id, ...ask.value }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.success) throw new Error(j.message || "Falha ao registrar o contato.");
+    await carregarFundadores();
+  }
+
+  async function verHistoricoFundador(id, nome) {
+    Swal.fire({ title: "Carregando…", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    const r = await fetch(BASE + `/fundador/${id}/contatos`, { credentials: "same-origin" });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.success) throw new Error(j.message || "Falha ao carregar o histórico.");
+    const itens = j.itens || [];
+    const lista = itens.length
+      ? `<ul class="CfgMt_HistList">${itens
+          .map((c) => {
+            const quando = formatarDataHora(c.criado_em);
+            const fase = c.fase_apos_rotulo || c.fase_apos || "";
+            return `<li>
+              <div class="CfgMt_HistMeta">${esc(quando)} · ${esc(c.canal)} · ${esc(c.direcao)}${fase ? ` → ${esc(fase)}` : ""}</div>
+              <div class="CfgMt_HistResumo">${esc(c.resumo)}</div>
+              <div class="CfgMt_HistAutor">${esc(c.autor || "—")}</div>
+            </li>`;
+          })
+          .join("")}</ul>`
+      : `<p style="margin:0;color:#64748b">Nenhum contato registrado.</p>`;
+    await Swal.fire({
+      title: "Histórico de contatos",
+      html: `<p style="margin:0 0 12px;text-align:left"><strong>${esc(nome)}</strong></p>${lista}`,
+      width: 560,
+      confirmButtonText: "Fechar",
+      confirmButtonColor: "#021F81",
+    });
   }
 
   function badgeStatusReativacao(status, label) {
@@ -333,9 +462,98 @@
     if (id === "fundador") carregarFundadores();
   }
 
+  function popularFiltroFase(fases) {
+    if (!el.filtroFase) return;
+    const atual = el.filtroFase.value || "";
+    el.filtroFase.innerHTML =
+      '<option value="">Todas</option>' +
+      (fases || [])
+        .map((f) => `<option value="${esc(f.id)}">${esc(f.rotulo)}</option>`)
+        .join("");
+    if (atual) el.filtroFase.value = atual;
+  }
+
+  function badgeFase(fase, rotulo) {
+    if (!fase) return '<span class="CfgMt_FaseBadge is-fase-vazia">—</span>';
+    const cls = FASE_CLS[fase] || "";
+    return `<span class="CfgMt_FaseBadge ${cls}">${esc(rotulo || fase)}</span>`;
+  }
+
+  function celulaUltimoContato(uc) {
+    if (!uc || !uc.criado_em) {
+      return '<div class="CfgMt_ContatoCell"><span class="is-empty">—</span></div>';
+    }
+    const resumo = String(uc.resumo || "").trim();
+    const curto = resumo.length > 48 ? resumo.slice(0, 48) + "…" : resumo;
+    return `<div class="CfgMt_ContatoCell" title="${esc(resumo)}">
+      <strong>${esc(formatarDataCurta(uc.criado_em))}</strong>
+      <span>${esc(curto || "—")}</span>
+    </div>`;
+  }
+
+  function filtrarFundadores(itens) {
+    const fase = (el.filtroFase?.value || "").trim();
+    const soNaoInd = !!el.filtroNaoIndicados?.checked;
+    return (itens || []).filter((t) => {
+      if (fase && (t.fase || "") !== fase) return false;
+      if (soNaoInd && String(t.indicado_por || "").trim()) return false;
+      return true;
+    });
+  }
+
+  function pintarFundadores(itens) {
+    if (!el.fundadorLista) return;
+    const lista = filtrarFundadores(itens);
+    if (!lista.length) {
+      el.fundadorLista.innerHTML =
+        '<tr><td colspan="14">Nenhum Fundador neste filtro.</td></tr>';
+      return;
+    }
+    el.fundadorLista.innerHTML = lista
+      .map((t) => {
+        const ativoProg = !!t.fornecedor_fundador_ativo;
+        const ativo = ativoProg ? "Sim" : "Não";
+        const qtdPed = Number(t.pedidos_qtd || 0);
+        const ultPed = formatarDataCurta(t.ultimo_pedido_em);
+        const celPedidos =
+          qtdPed > 0
+            ? `<div class="CfgMt_PedidosCell"><strong>${qtdPed}</strong><span>${ultPed}</span></div>`
+            : `<div class="CfgMt_PedidosCell"><strong>0</strong><span>—</span></div>`;
+        const indicadoPor = String(t.indicado_por || "").trim();
+        const celNome = indicadoPor
+          ? `<div class="CfgMt_NomeCell" title="${esc(t.nome)} · Indicado por: ${esc(indicadoPor)}">
+                <strong>${esc(t.nome)}</strong>
+                <span>Indicado por: ${esc(indicadoPor)}</span>
+              </div>`
+          : `<div class="CfgMt_NomeCell" title="${esc(t.nome)}"><strong>${esc(t.nome)}</strong></div>`;
+        return `<tr>
+            <td>${t.id}</td>
+            <td class="is-nome">${celNome}</td>
+            <td class="is-fase">${badgeFase(t.fase, t.fase_rotulo)}</td>
+            <td class="is-contato">${celulaUltimoContato(t.ultimo_contato)}</td>
+            <td>${formatarDataHora(t.criado_em)}</td>
+            <td>${ativo}</td>
+            <td>${esc(t.sistema_erp || "—")}</td>
+            <td>${t.produtos_publicados ?? 0}</td>
+            <td>${celPedidos}</td>
+            <td>${celulaWhatsapp(t.whatsapp)}</td>
+            <td title="Vendedores aguardando conexão">${t.vendedores_aguardando ?? 0}</td>
+            <td title="Vendedores conectados">${t.vendedores_conectados ?? 0}</td>
+            <td title="Vendedores que já colocaram pedidos">${t.vendedores_com_pedidos ?? 0}</td>
+            <td>
+              <button type="button" class="CfgMt_MenuBtn cfgmt-fundador-menu"
+                data-id="${t.id}" data-nome="${esc(t.nome)}" data-ativo="${ativoProg ? "1" : "0"}"
+                data-fase="${esc(t.fase || "")}"
+                aria-label="Ações">⋮</button>
+            </td>
+          </tr>`;
+      })
+      .join("");
+  }
+
   async function carregarFundadores() {
     if (!el.fundadorLista) return;
-    el.fundadorLista.innerHTML = '<tr><td colspan="12">Carregando…</td></tr>';
+    el.fundadorLista.innerHTML = '<tr><td colspan="14">Carregando…</td></tr>';
     try {
       const r = await fetch(BASE + "/fundador", { credentials: "same-origin" });
       const j = await r.json();
@@ -349,50 +567,16 @@
         el.fundadorStatus.textContent =
           `Sistema: ${st.vagas_usadas || 0}/${sistemaMax} · restantes: ${restoSistema} · divulgação: ${divulgadas}`;
       }
-      const itens = j.itens || [];
-      if (!itens.length) {
-        el.fundadorLista.innerHTML = '<tr><td colspan="12">Nenhum Fundador cadastrado.</td></tr>';
+      fundadorFasesCache = Array.isArray(j.fases) ? j.fases : [];
+      popularFiltroFase(fundadorFasesCache);
+      fundadorItensCache = j.itens || [];
+      if (!fundadorItensCache.length) {
+        el.fundadorLista.innerHTML = '<tr><td colspan="14">Nenhum Fundador cadastrado.</td></tr>';
         return;
       }
-      el.fundadorLista.innerHTML = itens
-        .map((t) => {
-          const ativoProg = !!t.fornecedor_fundador_ativo;
-          const ativo = ativoProg ? "Sim" : "Não";
-          const qtdPed = Number(t.pedidos_qtd || 0);
-          const ultPed = formatarDataCurta(t.ultimo_pedido_em);
-          const celPedidos =
-            qtdPed > 0
-              ? `<div class="CfgMt_PedidosCell"><strong>${qtdPed}</strong><span>${ultPed}</span></div>`
-              : `<div class="CfgMt_PedidosCell"><strong>0</strong><span>—</span></div>`;
-          const indicadoPor = String(t.indicado_por || "").trim();
-          const celNome = indicadoPor
-            ? `<div class="CfgMt_NomeCell" title="${esc(t.nome)} · Indicado por: ${esc(indicadoPor)}">
-                <strong>${esc(t.nome)}</strong>
-                <span>Indicado por: ${esc(indicadoPor)}</span>
-              </div>`
-            : `<div class="CfgMt_NomeCell" title="${esc(t.nome)}"><strong>${esc(t.nome)}</strong></div>`;
-          return `<tr>
-            <td>${t.id}</td>
-            <td class="is-nome">${celNome}</td>
-            <td>${formatarDataHora(t.criado_em)}</td>
-            <td>${ativo}</td>
-            <td>${esc(t.sistema_erp || "—")}</td>
-            <td>${t.produtos_publicados ?? 0}</td>
-            <td>${celPedidos}</td>
-            <td>${celulaWhatsapp(t.whatsapp)}</td>
-            <td title="Vendedores aguardando conexão">${t.vendedores_aguardando ?? 0}</td>
-            <td title="Vendedores conectados">${t.vendedores_conectados ?? 0}</td>
-            <td title="Vendedores que já colocaram pedidos">${t.vendedores_com_pedidos ?? 0}</td>
-            <td>
-              <button type="button" class="CfgMt_MenuBtn cfgmt-fundador-menu"
-                data-id="${t.id}" data-nome="${esc(t.nome)}" data-ativo="${ativoProg ? "1" : "0"}"
-                aria-label="Ações">⋮</button>
-            </td>
-          </tr>`;
-        })
-        .join("");
+      pintarFundadores(fundadorItensCache);
     } catch (err) {
-      el.fundadorLista.innerHTML = `<tr><td colspan="12">${esc(err.message || "Erro")}</td></tr>`;
+      el.fundadorLista.innerHTML = `<tr><td colspan="14">${esc(err.message || "Erro")}</td></tr>`;
     }
   }
 
@@ -497,6 +681,8 @@
     }
   }
 
+  el.filtroFase?.addEventListener("change", () => pintarFundadores(fundadorItensCache));
+  el.filtroNaoIndicados?.addEventListener("change", () => pintarFundadores(fundadorItensCache));
   el.btnMigrarForn?.addEventListener("click", () => {
     abrirMigrarBox();
   });

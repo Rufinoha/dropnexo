@@ -4,7 +4,7 @@
 {% block topbar_title %}Manutenção de tenant{% endblock %}
 {% block head_extra %}
 <link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_crud.css') }}?v=3" />
-<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_manutencao_tenant.css') }}?v=25" />
+<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_manutencao_tenant.css') }}?v=26" />
 {% endblock %}
 {% block content %}
 <div class="Cl_ConfigPage CfgMt_Page">
@@ -230,11 +230,29 @@
       </div>
       <p class="CfgMt_MigrarHint" id="cfgmt_migrar_hint">Lista apenas fornecedores que ainda não estão como Fundador ativo.</p>
     </div>
+    <div class="filter-panel CfgMt_FundadorFiltros">
+      <div class="filter-panel-fields">
+        <div class="filter-group">
+          <label for="cfgmt_filtroFase">Fase</label>
+          <select id="cfgmt_filtroFase">
+            <option value="">Todas</option>
+          </select>
+        </div>
+        <div class="filter-group filter-group--check">
+          <label class="CfgMt_CheckLabel" for="cfgmt_filtroNaoIndicados">
+            <input type="checkbox" id="cfgmt_filtroNaoIndicados" />
+            Só não indicados
+          </label>
+        </div>
+      </div>
+    </div>
     <div class="Cl_TabelaPrincipal Cat_TabelaScroll CfgMt_TabelaFundador">
       <table>
         <colgroup>
           <col class="is-id">
           <col class="is-nome">
+          <col class="is-fase">
+          <col class="is-contato">
           <col class="is-cadastro">
           <col class="is-ativo">
           <col class="is-erp">
@@ -250,6 +268,8 @@
           <tr>
             <th>ID</th>
             <th class="is-nome">Nome</th>
+            <th>Fase</th>
+            <th>Último contato</th>
             <th>Cadastro</th>
             <th>Ativo</th>
             <th>ERP</th>
@@ -263,7 +283,7 @@
           </tr>
         </thead>
         <tbody id="cfgmt_fundador_lista">
-          <tr><td colspan="12">Carregando…</td></tr>
+          <tr><td colspan="14">Carregando…</td></tr>
         </tbody>
       </table>
     </div>
@@ -326,5 +346,5 @@
 {% block page_js %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
-<script src="{{ url_for('config.static', filename='script/Sconfig_manutencao_tenant.js') }}?v=26"></script>
+<script src="{{ url_for('config.static', filename='script/Sconfig_manutencao_tenant.js') }}?v=27"></script>
 {% endblock %}

@@ -765,21 +765,23 @@ button.CfgMt_KpiMini:hover {
 .Cl_TabelaPrincipal.Cat_TabelaScroll.CfgMt_TabelaFundador table {
   table-layout: fixed;
   width: 100%;
-  min-width: 1280px;
+  min-width: 1480px;
   max-width: none;
 }
-.CfgMt_TabelaFundador col.is-id { width: 4%; }
-.CfgMt_TabelaFundador col.is-nome { width: 16%; }
-.CfgMt_TabelaFundador col.is-cadastro { width: 10%; }
-.CfgMt_TabelaFundador col.is-ativo { width: 5%; }
-.CfgMt_TabelaFundador col.is-erp { width: 7%; }
-.CfgMt_TabelaFundador col.is-prod { width: 7%; }
-.CfgMt_TabelaFundador col.is-pedidos { width: 8%; }
-.CfgMt_TabelaFundador col.is-wa { width: 10%; }
-.CfgMt_TabelaFundador col.is-aguard { width: 8%; }
-.CfgMt_TabelaFundador col.is-conect { width: 7%; }
-.CfgMt_TabelaFundador col.is-comped { width: 7%; }
-.CfgMt_TabelaFundador col.is-acoes { width: 6%; }
+.CfgMt_TabelaFundador col.is-id { width: 3.5%; }
+.CfgMt_TabelaFundador col.is-nome { width: 14%; }
+.CfgMt_TabelaFundador col.is-fase { width: 8%; }
+.CfgMt_TabelaFundador col.is-contato { width: 11%; }
+.CfgMt_TabelaFundador col.is-cadastro { width: 8%; }
+.CfgMt_TabelaFundador col.is-ativo { width: 4%; }
+.CfgMt_TabelaFundador col.is-erp { width: 6%; }
+.CfgMt_TabelaFundador col.is-prod { width: 6%; }
+.CfgMt_TabelaFundador col.is-pedidos { width: 7%; }
+.CfgMt_TabelaFundador col.is-wa { width: 9%; }
+.CfgMt_TabelaFundador col.is-aguard { width: 6%; }
+.CfgMt_TabelaFundador col.is-conect { width: 6%; }
+.CfgMt_TabelaFundador col.is-comped { width: 6%; }
+.CfgMt_TabelaFundador col.is-acoes { width: 5%; }
 .CfgMt_TabelaFundador th,
 .CfgMt_TabelaFundador td {
   white-space: nowrap;
@@ -792,26 +794,107 @@ button.CfgMt_KpiMini:hover {
   font-variant-numeric: tabular-nums;
   color: #64748b;
 }
-.CfgMt_TabelaFundador th:nth-child(4),
-.CfgMt_TabelaFundador td:nth-child(4),
 .CfgMt_TabelaFundador th:nth-child(6),
 .CfgMt_TabelaFundador td:nth-child(6),
-.CfgMt_TabelaFundador th:nth-child(7),
-.CfgMt_TabelaFundador td:nth-child(7),
+.CfgMt_TabelaFundador th:nth-child(8),
+.CfgMt_TabelaFundador td:nth-child(8),
 .CfgMt_TabelaFundador th:nth-child(9),
 .CfgMt_TabelaFundador td:nth-child(9),
-.CfgMt_TabelaFundador th:nth-child(10),
-.CfgMt_TabelaFundador td:nth-child(10),
 .CfgMt_TabelaFundador th:nth-child(11),
-.CfgMt_TabelaFundador td:nth-child(11) {
+.CfgMt_TabelaFundador td:nth-child(11),
+.CfgMt_TabelaFundador th:nth-child(12),
+.CfgMt_TabelaFundador td:nth-child(12),
+.CfgMt_TabelaFundador th:nth-child(13),
+.CfgMt_TabelaFundador td:nth-child(13) {
   text-align: center;
 }
-.CfgMt_TabelaFundador th:nth-child(12),
-.CfgMt_TabelaFundador td:nth-child(12) {
+.CfgMt_TabelaFundador th:nth-child(14),
+.CfgMt_TabelaFundador td:nth-child(14) {
   overflow: visible;
   text-align: right;
   text-overflow: clip;
 }
+.CfgMt_TabelaFundador td.is-fase,
+.CfgMt_TabelaFundador td.is-contato {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  vertical-align: middle;
+}
+.CfgMt_FundadorFiltros {
+  margin: 0.65rem 0 0.85rem;
+}
+.CfgMt_FundadorFiltros .filter-group--check {
+  display: flex;
+  align-items: flex-end;
+  padding-bottom: 0.35rem;
+}
+.CfgMt_CheckLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.88rem;
+  color: #334155;
+  cursor: pointer;
+  user-select: none;
+}
+.CfgMt_FaseBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.18rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.2;
+  background: #e2e8f0;
+  color: #334155;
+}
+.CfgMt_FaseBadge.is-fase-vazia { background: #f1f5f9; color: #94a3b8; font-weight: 500; }
+.CfgMt_FaseBadge.is-fase-cadastrado { background: #e2e8f0; color: #475569; }
+.CfgMt_FaseBadge.is-fase-boas { background: #dbeafe; color: #1d4ed8; }
+.CfgMt_FaseBadge.is-fase-cadastrando { background: #cffafe; color: #0e7490; }
+.CfgMt_FaseBadge.is-fase-lembrete { background: #fef3c7; color: #b45309; }
+.CfgMt_FaseBadge.is-fase-ativo { background: #d1fae5; color: #047857; }
+.CfgMt_FaseBadge.is-fase-vendedor { background: #ede9fe; color: #6d28d9; }
+.CfgMt_FaseBadge.is-fase-sem { background: #ffedd5; color: #c2410c; }
+.CfgMt_FaseBadge.is-fase-desistiu { background: #fee2e2; color: #b91c1c; }
+.CfgMt_ContatoCell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  line-height: 1.2;
+  white-space: normal;
+  min-width: 0;
+}
+.CfgMt_ContatoCell strong {
+  font-size: 0.82rem;
+  color: #0f172a;
+}
+.CfgMt_ContatoCell span {
+  font-size: 0.72rem;
+  color: #64748b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.CfgMt_ContatoCell .is-empty { color: #94a3b8; }
+.CfgMt_HistList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  text-align: left;
+  max-height: 360px;
+  overflow: auto;
+}
+.CfgMt_HistList li {
+  padding: 0.65rem 0;
+  border-top: 1px solid #e2e8f0;
+}
+.CfgMt_HistList li:first-child { border-top: 0; padding-top: 0; }
+.CfgMt_HistMeta { font-size: 0.78rem; color: #64748b; }
+.CfgMt_HistResumo { margin-top: 0.25rem; color: #0f172a; font-size: 0.9rem; }
+.CfgMt_HistAutor { margin-top: 0.2rem; font-size: 0.75rem; color: #94a3b8; }
 .CfgMt_TabelaFundador td.is-nome {
   white-space: normal;
   overflow: visible;
