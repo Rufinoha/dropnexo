@@ -52,7 +52,9 @@
     donoAcesso: document.getElementById("dono_acesso"),
     donoSuporte: document.getElementById("dono_suporte"),
     donoSuporteStatus: document.getElementById("dono_suporte_status"),
-    donoSuporteBtn: document.getElementById("dono_suporte_btn"),
+    donoSuporteSwitches: document.getElementById("dono_suporte_switches"),
+    donoAcessoSuporte: document.getElementById("dono_acesso_suporte"),
+    donoAcessoTenant: document.getElementById("dono_acesso_tenant"),
     donoConvite: document.getElementById("dono_convite"),
     donoConviteStatus: document.getElementById("dono_convite_status"),
     donoReenviar: document.getElementById("dono_reenviar"),
@@ -156,25 +158,28 @@
     if (!el.donoSuporte) return;
     el.donoSuporte.hidden = false;
     const dev = !!d.eh_desenvolvedor;
-    const ativo = !!d.acesso_suporte;
+    const suporte = !!d.acesso_suporte;
+    const tenant = !!d.acesso_tenant;
     if (el.donoSuporteStatus) {
       if (dev) {
         el.donoSuporteStatus.textContent =
           "Este usuário já é desenvolvedor e entra em qualquer conta.";
-      } else if (ativo) {
+      } else if (tenant || suporte) {
         el.donoSuporteStatus.textContent =
-          "Acesso de suporte ligado. No próximo login, o menu de todas as contas aparece.";
+          "Acessos especiais ligados. No próximo login o menu do header reflete estas opções.";
       } else {
         el.donoSuporteStatus.textContent =
-          "Acesso de suporte desligado. Esta pessoa só vê as contas dela.";
+          "Sem acessos especiais. Esta pessoa só vê as contas dela.";
       }
     }
-    if (el.donoSuporteBtn) {
-      el.donoSuporteBtn.hidden = dev;
-      el.donoSuporteBtn.textContent = ativo
-        ? "Desativar acesso de suporte"
-        : "Ativar acesso de suporte";
-      el.donoSuporteBtn.dataset.ativo = ativo ? "1" : "0";
+    if (el.donoSuporteSwitches) el.donoSuporteSwitches.hidden = !!dev;
+    if (el.donoAcessoSuporte) {
+      el.donoAcessoSuporte.checked = suporte;
+      el.donoAcessoSuporte.disabled = !!dev;
+    }
+    if (el.donoAcessoTenant) {
+      el.donoAcessoTenant.checked = tenant;
+      el.donoAcessoTenant.disabled = !!dev;
     }
   }
 
@@ -539,9 +544,18 @@
   el.btnDesativar?.addEventListener("click", () =>
     desativar().catch((e) => Swal.fire("Erro", e.message, "error"))
   );
-  el.donoSuporteBtn?.addEventListener("click", () =>
-    alternarSuporte().catch((e) => Swal.fire("Erro", e.message, "error"))
-  );
+  el.donoAcessoSuporte?.addEventListener("change", () => {
+    const ligar = !!el.donoAcessoSuporte.checked;
+    alternarAcesso("suporte", ligar, el.donoAcessoSuporte).catch((e) =>
+      Swal.fire("Erro", e.message, "error")
+    );
+  });
+  el.donoAcessoTenant?.addEventListener("change", () => {
+    const ligar = !!el.donoAcessoTenant.checked;
+    alternarAcesso("tenant", ligar, el.donoAcessoTenant).catch((e) =>
+      Swal.fire("Erro", e.message, "error")
+    );
+  });
   el.donoReenviar?.addEventListener("click", () =>
     reenviarConvite().catch((e) => Swal.fire("Erro", e.message, "error"))
   );
@@ -579,38 +593,63 @@
     });
   }
 
-  async function alternarSuporte() {
+  async function alternarAcesso(tipo, ligar, inputEl) {
     if (!idTenant) return;
-    const ligar = el.donoSuporteBtn?.dataset.ativo !== "1";
     const nome = (el.donoNome?.value || "Esta pessoa").trim();
+    const meta =
+      tipo === "tenant"
+        ? {
+            rota: "acesso-tenant",
+            tituloOn: "Ativar acesso ao tenant?",
+            tituloOff: "Desativar acesso ao tenant?",
+            textoOn: `${nome} passa a ver o menu Entrar no tenant no header (todas as contas). Ao entrar, trabalha como dono. Vale no próximo login.`,
+            textoOff: `${nome} deixa de ver o menu de todas as contas no próximo login.`,
+            okOn: "Acesso ao tenant ativado",
+            okOff: "Acesso ao tenant desativado",
+          }
+        : {
+            rota: "acesso-suporte",
+            tituloOn: "Ativar acesso de suporte?",
+            tituloOff: "Desativar acesso de suporte?",
+            textoOn: `${nome} fica com o selo Suporte no header e também vê o menu Entrar no tenant. Não vira desenvolvedor. Vale no próximo login.`,
+            textoOff: `${nome} perde o selo de suporte no próximo login (o menu só permanece se Acesso ao tenant estiver ligado).`,
+            okOn: "Acesso de suporte ativado",
+            okOff: "Acesso de suporte desativado",
+          };
     const conf = await Swal.fire({
       icon: "question",
-      title: ligar ? "Ativar acesso de suporte?" : "Desativar acesso de suporte?",
-      text: ligar
-        ? `${nome} passa a ver o menu de todas as contas. Ao entrar numa conta, trabalha como dono. Não vira desenvolvedor. Vale no próximo login.`
-        : `${nome} deixa de ver o menu de todas as contas no próximo login.`,
+      title: ligar ? meta.tituloOn : meta.tituloOff,
+      text: ligar ? meta.textoOn : meta.textoOff,
       showCancelButton: true,
       confirmButtonText: ligar ? "Ativar" : "Desativar",
       cancelButtonText: "Cancelar",
       confirmButtonColor: "#021F81",
     });
-    if (!conf.isConfirmed) return;
+    if (!conf.isConfirmed) {
+      if (inputEl) inputEl.checked = !ligar;
+      return;
+    }
     Swal.fire({ title: "Salvando…", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-    const r = await fetch(`${BASE}/${idTenant}/acesso-suporte`, {
-      method: "POST",
-      credentials: "same-origin",
-      headers: { Accept: "application/json", "Content-Type": "application/json" },
-      body: JSON.stringify({ ativo: ligar }),
-    });
-    const j = await r.json().catch(() => ({}));
-    if (!r.ok || !j.success) throw new Error(j.message || "Falha ao salvar o acesso.");
-    if (j.tenant) preencher(j.tenant);
-    await Swal.fire({
-      icon: "success",
-      title: ligar ? "Acesso ativado" : "Acesso desativado",
-      text: j.message || "Concluído.",
-      confirmButtonColor: "#021F81",
-    });
+    try {
+      const r = await fetch(`${BASE}/${idTenant}/${meta.rota}`, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { Accept: "application/json", "Content-Type": "application/json" },
+        body: JSON.stringify({ ativo: ligar }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.success) throw new Error(j.message || "Falha ao salvar o acesso.");
+      if (j.tenant) preencher(j.tenant);
+      await Swal.fire({
+        icon: "success",
+        title: ligar ? meta.okOn : meta.okOff,
+        text: j.message || "Concluído.",
+        confirmButtonColor: "#021F81",
+      });
+    } catch (e) {
+      if (inputEl) inputEl.checked = !ligar;
+      throw e;
+    }
   }
 
   async function redefinirSenha() {

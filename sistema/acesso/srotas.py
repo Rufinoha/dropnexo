@@ -264,23 +264,66 @@ from global_utils import (
 _log_auth = logging.getLogger(__name__)
 
 
-def expr_acesso_suporte(cur, alias: str = "u") -> str:
-    """Fragmento SQL. FALSE enquanto a coluna tbl_usuario.acesso_suporte não existir."""
-    if alias not in ("u",):
-        alias = "u"
+def garantir_colunas_acesso_usuario(cur) -> None:
+    """Garante flags de suporte / entrar em qualquer tenant em tbl_usuario."""
+    cur.execute(
+        """
+        ALTER TABLE tbl_usuario
+          ADD COLUMN IF NOT EXISTS acesso_suporte BOOLEAN NOT NULL DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS acesso_tenant BOOLEAN NOT NULL DEFAULT FALSE
+        """
+    )
+
+
+def _tem_coluna_usuario(cur, coluna: str) -> bool:
     cur.execute(
         """
         SELECT 1
         FROM information_schema.columns
         WHERE table_schema = 'public'
           AND table_name = 'tbl_usuario'
-          AND column_name = 'acesso_suporte'
+          AND column_name = %s
         LIMIT 1
-        """
+        """,
+        (coluna,),
     )
-    if cur.fetchone():
+    return bool(cur.fetchone())
+
+
+def expr_acesso_suporte(cur, alias: str = "u") -> str:
+    """Fragmento SQL. FALSE enquanto a coluna tbl_usuario.acesso_suporte não existir."""
+    if alias not in ("u",):
+        alias = "u"
+    try:
+        garantir_colunas_acesso_usuario(cur)
+    except Exception:
+        pass
+    if _tem_coluna_usuario(cur, "acesso_suporte"):
         return f"COALESCE({alias}.acesso_suporte, FALSE)"
     return "FALSE"
+
+
+def expr_acesso_tenant(cur, alias: str = "u") -> str:
+    """Fragmento SQL para acesso ao menu Entrar no tenant (todas as contas)."""
+    if alias not in ("u",):
+        alias = "u"
+    try:
+        garantir_colunas_acesso_usuario(cur)
+    except Exception:
+        pass
+    if _tem_coluna_usuario(cur, "acesso_tenant"):
+        return f"COALESCE({alias}.acesso_tenant, FALSE)"
+    return "FALSE"
+
+
+def pode_entrar_qualquer_tenant(sess: dict | None = None) -> bool:
+    """DEV, acesso_tenant ou acesso_suporte (legado) podem listar/entrar em qualquer conta."""
+    s = sess if sess is not None else session
+    return bool(
+        s.get("eh_desenvolvedor")
+        or s.get("acesso_tenant")
+        or s.get("acesso_suporte")
+    )
 
 
 def _aplicar_tenant_na_sessao(
@@ -298,6 +341,7 @@ def _aplicar_tenant_na_sessao(
     email: str | None = None,
     eh_desenvolvedor: bool | None = None,
     acesso_suporte: bool | None = None,
+    acesso_tenant: bool | None = None,
 ) -> None:
     session["id_usuario"] = id_usuario
     session["id_tenant"] = id_tenant
@@ -319,6 +363,8 @@ def _aplicar_tenant_na_sessao(
         session["eh_desenvolvedor"] = bool(eh_desenvolvedor)
     if acesso_suporte is not None:
         session["acesso_suporte"] = bool(acesso_suporte)
+    if acesso_tenant is not None:
+        session["acesso_tenant"] = bool(acesso_tenant)
     aplicar_permissoes_na_sessao(
         conn,
         id_perfil=id_perfil,
@@ -357,13 +403,15 @@ def api_login():
         conn = Var_ConectarBanco()
         cur = conn.cursor()
         expr_acesso = expr_acesso_suporte(cur)
+        expr_tenant = expr_acesso_tenant(cur)
         cur.execute(
             f"""
             SELECT u.id, u.senha_hash, u.ativo, u.nome, u.email, u.token_ativacao,
                    u.eh_desenvolvedor,
                    t.id, t.nome, t.slug, t.plano, t.tipo_negocio,
                    ut.id_perfil, pf.codigo, ut.id,
-                   {expr_acesso}
+                   {expr_acesso},
+                   {expr_tenant}
             FROM tbl_usuario u
             JOIN tbl_usuario_tenant ut ON ut.id_usuario = u.id AND ut.ativo = TRUE
             JOIN tbl_tenant t ON t.id = ut.id_tenant AND t.ativo = TRUE
@@ -433,6 +481,7 @@ def api_login():
             perfil_codigo,
             id_vinculo,
             acesso_suporte,
+            acesso_tenant,
         ) = row
 
         # Token sem senha = ativação pendente. Token com senha = redefinição em andamento (login ainda ok).
@@ -467,6 +516,7 @@ def api_login():
             email=email_db,
             eh_desenvolvedor=eh_desenvolvedor,
             acesso_suporte=bool(acesso_suporte),
+            acesso_tenant=bool(acesso_tenant),
         )
 
         cur.execute(
@@ -973,7 +1023,7 @@ def api_listar_tenants():
         conn = Var_ConectarBanco()
         cur = conn.cursor()
 
-        if eh_dev or session.get("acesso_suporte"):
+        if pode_entrar_qualquer_tenant():
             itens = _listar_tenants_dev(cur, id_tenant_atual)
             try:
                 conn.commit()
@@ -1054,12 +1104,14 @@ def api_trocar_tenant():
         conn = Var_ConectarBanco()
         cur = conn.cursor()
         expr_acesso = expr_acesso_suporte(cur)
+        expr_tenant = expr_acesso_tenant(cur)
         cur.execute(
             f"""
             SELECT u.nome, u.email, u.eh_desenvolvedor,
                    t.id, t.nome, t.slug, t.plano, t.tipo_negocio,
                    ut.id_perfil, pf.codigo, ut.id,
-                   {expr_acesso}
+                   {expr_acesso},
+                   {expr_tenant}
             FROM tbl_usuario u
             JOIN tbl_usuario_tenant ut ON ut.id_usuario = u.id AND ut.ativo = TRUE
             JOIN tbl_tenant t ON t.id = ut.id_tenant AND t.ativo = TRUE
@@ -1071,12 +1123,13 @@ def api_trocar_tenant():
         )
         row = cur.fetchone()
 
-        if not row and (session.get("eh_desenvolvedor") or session.get("acesso_suporte")):
+        if not row and pode_entrar_qualquer_tenant():
             cur.execute(
                 f"""
                 SELECT u.nome, u.email, u.eh_desenvolvedor,
                        t.id, t.nome, t.slug, t.plano, t.tipo_negocio,
-                       {expr_acesso}
+                       {expr_acesso},
+                       {expr_tenant}
                 FROM tbl_usuario u
                 CROSS JOIN tbl_tenant t
                 WHERE u.id = %s AND t.id = %s
@@ -1087,7 +1140,10 @@ def api_trocar_tenant():
             )
             row_dev = cur.fetchone()
             if row_dev:
-                nome, email, eh_dev, tid, tenant_nome, tenant_slug, plano, tipo_negocio, acesso_suporte = row_dev
+                (
+                    nome, email, eh_dev, tid, tenant_nome, tenant_slug, plano,
+                    tipo_negocio, acesso_suporte, acesso_tenant,
+                ) = row_dev
                 cur.execute("SELECT id FROM tbl_perfil WHERE codigo = 'dono' LIMIT 1")
                 perfil_row = cur.fetchone()
                 id_perfil = perfil_row[0] if perfil_row else 1
@@ -1106,6 +1162,7 @@ def api_trocar_tenant():
                     email=email,
                     eh_desenvolvedor=eh_dev,
                     acesso_suporte=bool(acesso_suporte),
+                    acesso_tenant=bool(acesso_tenant),
                 )
                 conn.commit()
                 return jsonify(success=True, redirect=redirect)
@@ -1126,6 +1183,7 @@ def api_trocar_tenant():
             perfil_codigo,
             id_vinculo,
             acesso_suporte,
+            acesso_tenant,
         ) = row
 
         _aplicar_tenant_na_sessao(
@@ -1142,6 +1200,7 @@ def api_trocar_tenant():
             email=email,
             eh_desenvolvedor=eh_dev,
             acesso_suporte=bool(acesso_suporte),
+            acesso_tenant=bool(acesso_tenant),
         )
 
         cur.execute(

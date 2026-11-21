@@ -1918,18 +1918,55 @@ def _emitir_nfse_via_hub(conn, nota: dict, id_nota: int):
             body = {}
         status_hub = str(body.get("status") or "").strip().lower()
         chave = str(body.get("chave_nfse") or "").strip() or None
-        numero = str(body.get("numero") or body.get("numero_nfse") or "").strip() or None
+        # Preferir numero_nfse do hub; "numero" no payload é o da DPS e não deve virar NFS-e.
+        numero = str(body.get("numero_nfse") or "").strip() or None
+        if not numero:
+            cand = str(body.get("numero") or "").strip()
+            dps_n = str(nota.get("numero_dps") or "").strip()
+            if cand and cand != dps_n:
+                numero = cand
         mensagem = str(
             body.get("mensagem_sefaz") or body.get("mensagem") or body.get("message") or ""
         ).strip()
         metadata = _json_dumps({"via": "hub", "ref": ref, "http_status": status_http, **body})
 
-        if status_hub == "autorizado" or (status_http in (200, 201) and chave):
+        # Critério alinhado à NF-e: só autorizada com status explícito do hub.
+        # HTTP 200/201 + chave isolados NÃO bastam (podia marcar falso positivo).
+        if status_hub == "autorizado" and status_http in (200, 201):
             xml_blob = None
             try:
                 xml_blob = baixar(ambiente, f"/v2/nfse/{ref}.xml", escopo="nfse")
             except FocusNfeError:
                 xml_blob = None
+            if not chave and not xml_blob:
+                db_execute(
+                    conn,
+                    """
+                    UPDATE tbl_nfse_nota SET status='processando', erro_codigo='HUB_SEM_PROVA',
+                           erro_mensagem=%s, resposta_metadata=%s::jsonb, dt_atualizacao=NOW()
+                     WHERE id=%s AND id_tenant=%s AND status='processando'
+                    """,
+                    (
+                        (mensagem or "Hub disse autorizado, mas sem chave nem XML. Reconcilie.")[:500],
+                        metadata, id_nota, _tenant(),
+                    ),
+                )
+                _auditar(
+                    conn, "emissao_incerta",
+                    "Hub status=autorizado sem chave/XML — mantida em processamento.",
+                    id_nota, {"via": "hub", "ref": ref},
+                )
+                conn.commit()
+                return jsonify({
+                    "success": False,
+                    "code": "HUB_SEM_PROVA",
+                    "message": (
+                        "Hub retornou autorizado, mas sem chave nem XML da NFS-e. "
+                        "A nota ficou em processamento — use Importar/Reconciliar."
+                    ),
+                    "resultado_incerto": True,
+                    "ref": ref,
+                }), 503
             db_execute(
                 conn,
                 """
@@ -1946,13 +1983,19 @@ def _emitir_nfse_via_hub(conn, nota: dict, id_nota: int):
                     metadata, ambiente, id_nota, _tenant(),
                 ),
             )
-            _auditar(conn, "nfse_autorizada", "NFS-e autorizada via hub H74.", id_nota)
+            _auditar(
+                conn, "nfse_autorizada",
+                "NFS-e autorizada via hub H74"
+                + (" com XML." if xml_blob else " (XML ainda não baixado)."),
+                id_nota,
+            )
             conn.commit()
             return jsonify({
                 "success": True,
                 "message": mensagem or "NFS-e autorizada.",
                 "numero_nfse": numero,
                 "chave_nfse": chave,
+                "xml_baixado": bool(xml_blob),
                 "ref": ref,
             }), 201
 
@@ -2716,10 +2759,40 @@ def api_nota_reconciliar(id_nota):
             except Exception as exc:
                 consulta_msg = str(exc)
 
+        # Fallback hub: tenta XML pela ref dn-nfse-{id} quando não há cert local / Sefin falhou.
+        if not xml_bytes:
+            try:
+                from api.fiscal.focus_nfe import baixar, token_configurado
+
+                if token_configurado(escopo="nfse"):
+                    ref_hub = (nota.get("id_dps") or "").strip() or f"dn-nfse-{int(id_nota)}"
+                    xml_hub = baixar(ambiente, f"/v2/nfse/{ref_hub}.xml", escopo="nfse")
+                    if xml_hub:
+                        xml_bytes = xml_hub
+                        consulta_ok = True
+                        consulta_msg = consulta_msg or "XML obtido via hub H74."
+            except Exception as exc:
+                if not consulta_msg:
+                    consulta_msg = str(exc)
+
+        if not consulta_ok or not xml_bytes:
+            return jsonify({
+                "success": False,
+                "code": "SEFIN_SEM_XML",
+                "message": (
+                    "Não foi possível confirmar a NFS-e na Sefin com esta chave"
+                    + (f": {consulta_msg}" if consulta_msg else ".")
+                    + " A nota NÃO foi marcada como autorizada. "
+                    "Confira a chave no portal (Emitidas) e tente de novo."
+                ),
+                "chave_nfse": chave,
+                "consulta_sefin": consulta_msg or None,
+            }), 422
+
         meta = json.dumps({
             "origem": "reconciliacao_manual",
             "chave": chave,
-            "xml_baixado": bool(xml_bytes),
+            "xml_baixado": True,
             "consulta_sefin": consulta_msg[:300] if consulta_msg else None,
         }, ensure_ascii=False)
 
@@ -2730,7 +2803,7 @@ def api_nota_reconciliar(id_nota):
                 status='autorizada',
                 chave_nfse=%s,
                 numero_nfse=COALESCE(%s, numero_nfse),
-                xml_nfse_encriptado=COALESCE(%s, xml_nfse_encriptado),
+                xml_nfse_encriptado=%s,
                 erro_codigo=NULL,
                 erro_mensagem=NULL,
                 resposta_metadata=%s::jsonb,
@@ -2742,7 +2815,7 @@ def api_nota_reconciliar(id_nota):
             (
                 chave,
                 str(numero) if numero else None,
-                criptografar(xml_bytes) if xml_bytes else None,
+                criptografar(xml_bytes),
                 meta,
                 id_nota,
                 _tenant(),
@@ -2750,28 +2823,17 @@ def api_nota_reconciliar(id_nota):
         )
         _auditar(
             conn, "nfse_reconciliada",
-            "Nota reconciliada com chave do portal"
-            + (" e XML baixado da Sefin." if xml_bytes else " (XML não disponível na consulta)."),
+            "Nota reconciliada com XML baixado da Sefin.",
             id_nota,
-            {"chave": chave, "numero": numero, "xml": bool(xml_bytes)},
+            {"chave": chave, "numero": numero, "xml": True},
         )
         conn.commit()
-        if consulta_ok:
-            mensagem = "Nota reconciliada com XML completo baixado da Sefin."
-        else:
-            mensagem = (
-                "Nota reconciliada com a chave"
-                + (f" e número {numero}." if numero else ".")
-                + " Não foi possível baixar o XML agora"
-                + (f": {consulta_msg}" if consulta_msg else ".")
-                + " A DANFSe usará os dados locais; tente reconciliar de novo depois."
-            )
         return jsonify({
             "success": True,
-            "message": mensagem,
+            "message": "Nota reconciliada com XML completo baixado da Sefin.",
             "chave_nfse": chave,
             "numero_nfse": numero,
-            "xml_baixado": bool(xml_bytes),
+            "xml_baixado": True,
         })
     finally:
         conn.close()

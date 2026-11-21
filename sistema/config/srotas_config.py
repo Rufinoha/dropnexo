@@ -1909,15 +1909,17 @@ def _tenant_payload(cur, id_tenant: int) -> dict | None:
         "ativo": None,
         "eh_desenvolvedor": False,
         "acesso_suporte": False,
+        "acesso_tenant": False,
         "perfil_codigo": "",
         "perfil_nome": "",
         "vinculo_ativo": None,
         "ultimo_acesso_em": None,
         "criado_em": None,
     }
-    from sistema.acesso.srotas import expr_acesso_suporte
+    from sistema.acesso.srotas import expr_acesso_suporte, expr_acesso_tenant
 
     expr_acesso = expr_acesso_suporte(cur)
+    expr_tenant = expr_acesso_tenant(cur)
     try:
         cur.execute(
             f"""
@@ -1925,7 +1927,8 @@ def _tenant_payload(cur, id_tenant: int) -> dict | None:
                    COALESCE(u.eh_desenvolvedor, FALSE),
                    LOWER(COALESCE(pf.codigo, '')), COALESCE(pf.nome, ''),
                    ut.ativo, ut.ultimo_acesso_em, u.criado_em,
-                   {expr_acesso}
+                   {expr_acesso},
+                   {expr_tenant}
             FROM tbl_usuario_tenant ut
             JOIN tbl_usuario u ON u.id = ut.id_usuario
             JOIN tbl_perfil pf ON pf.id = ut.id_perfil
@@ -1951,6 +1954,7 @@ def _tenant_payload(cur, id_tenant: int) -> dict | None:
                 "ultimo_acesso_em": row_dono[9].isoformat() if row_dono[9] else None,
                 "criado_em": row_dono[10].isoformat() if row_dono[10] else None,
                 "acesso_suporte": bool(row_dono[11]),
+                "acesso_tenant": bool(row_dono[12]),
             }
     except Exception:
         try:
@@ -1960,7 +1964,8 @@ def _tenant_payload(cur, id_tenant: int) -> dict | None:
                        COALESCE(u.eh_desenvolvedor, FALSE),
                        LOWER(COALESCE(pf.codigo, '')), COALESCE(pf.nome, ''),
                        ut.ativo, ut.ultimo_acesso_em,
-                       {expr_acesso}
+                       {expr_acesso},
+                       {expr_tenant}
                 FROM tbl_usuario_tenant ut
                 JOIN tbl_usuario u ON u.id = ut.id_usuario
                 JOIN tbl_perfil pf ON pf.id = ut.id_perfil
@@ -1986,6 +1991,7 @@ def _tenant_payload(cur, id_tenant: int) -> dict | None:
                     "ultimo_acesso_em": row_dono[9].isoformat() if row_dono[9] else None,
                     "criado_em": None,
                     "acesso_suporte": bool(row_dono[10]),
+                    "acesso_tenant": bool(row_dono[11]),
                 }
         except Exception:
             pass
@@ -2368,25 +2374,21 @@ def manutencao_tenant_bling_reconectar(id_tenant: int):
         conn.close()
 
 
-@config_bp.post(f"{MANUTENCAO_TENANT_PREFIX}/<int:id_tenant>/acesso-suporte")
-@login_obrigatorio()
-def manutencao_tenant_acesso_suporte(id_tenant: int):
+def _manutencao_toggle_acesso_dono(id_tenant: int, *, coluna: str, rotulo: str):
     if (r := _exigir_dev()) is not None:
         return r
     dados = request.get_json(silent=True) or {}
     if "ativo" not in dados:
         return jsonify(success=False, message="Informe se o acesso fica ligado."), 400
     ativo = bool(dados.get("ativo"))
+    if coluna not in ("acesso_suporte", "acesso_tenant"):
+        return jsonify(success=False, message="Tipo de acesso inválido."), 400
     conn = Var_ConectarBanco()
     try:
         cur = conn.cursor()
-        from sistema.acesso.srotas import expr_acesso_suporte
+        from sistema.acesso.srotas import garantir_colunas_acesso_usuario
 
-        if expr_acesso_suporte(cur) == "FALSE":
-            return jsonify(
-                success=False,
-                message="Falta criar a coluna acesso_suporte em tbl_usuario. Rode o SQL antes de usar este botão.",
-            ), 400
+        garantir_colunas_acesso_usuario(cur)
         tenant = _tenant_payload(cur, id_tenant)
         if not tenant:
             return jsonify(success=False, message="Tenant não encontrado."), 404
@@ -2400,21 +2402,37 @@ def manutencao_tenant_acesso_suporte(id_tenant: int):
                 message="Este usuário já é desenvolvedor e já entra em qualquer conta.",
             ), 400
         cur.execute(
-            "UPDATE tbl_usuario SET acesso_suporte = %s WHERE id = %s",
+            f"UPDATE tbl_usuario SET {coluna} = %s WHERE id = %s",
             (ativo, uid),
         )
         conn.commit()
         tenant = _tenant_payload(cur, id_tenant)
         if ativo:
-            message = "Acesso de suporte ativado. A pessoa precisa sair e entrar de novo."
+            message = f"{rotulo} ativado. A pessoa precisa sair e entrar de novo."
         else:
-            message = "Acesso de suporte desativado. Vale no próximo login."
+            message = f"{rotulo} desativado. Vale no próximo login."
         return jsonify(success=True, message=message, tenant=tenant)
     except Exception as e:
         conn.rollback()
         return jsonify(success=False, message=str(e)), 500
     finally:
         conn.close()
+
+
+@config_bp.post(f"{MANUTENCAO_TENANT_PREFIX}/<int:id_tenant>/acesso-suporte")
+@login_obrigatorio()
+def manutencao_tenant_acesso_suporte(id_tenant: int):
+    return _manutencao_toggle_acesso_dono(
+        id_tenant, coluna="acesso_suporte", rotulo="Acesso de suporte"
+    )
+
+
+@config_bp.post(f"{MANUTENCAO_TENANT_PREFIX}/<int:id_tenant>/acesso-tenant")
+@login_obrigatorio()
+def manutencao_tenant_acesso_tenant(id_tenant: int):
+    return _manutencao_toggle_acesso_dono(
+        id_tenant, coluna="acesso_tenant", rotulo="Acesso ao tenant"
+    )
 
 
 @config_bp.post(f"{MANUTENCAO_TENANT_PREFIX}/<int:id_tenant>/reenviar-convite")
