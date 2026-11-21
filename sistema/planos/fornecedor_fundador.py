@@ -488,7 +488,16 @@ def listar_fundadores(cur) -> list[dict[str, Any]]:
                 WHERE ped.id_tenant_fornecedor = t.id
                   AND ped.id_tenant_vendedor IS NOT NULL
                   AND COALESCE(ped.{col_st}, '') NOT IN ('rascunho', 'cancelado')
-               ) AS vendedores_com_pedidos
+               ) AS vendedores_com_pedidos,
+               (SELECT COALESCE(
+                         NULLIF(TRIM(tp.nome_fantasia), ''),
+                         NULLIF(TRIM(tp.nome), ''),
+                         ''
+                       )
+                FROM tbl_comissao_indicacao i
+                JOIN tbl_tenant tp ON tp.id = i.id_tenant_pai
+                WHERE i.id_tenant_indicado = t.id
+                LIMIT 1) AS indicado_por_nome
         FROM tbl_tenant t
         WHERE t.eh_fornecedor_fundador = TRUE
           AND t.tipo_negocio IN ('fornecedor', 'hibrido')
@@ -519,6 +528,7 @@ def listar_fundadores(cur) -> list[dict[str, Any]]:
                 "vendedores_aguardando": int(r[17] or 0),
                 "vendedores_conectados": int(r[18] or 0),
                 "vendedores_com_pedidos": int(r[19] or 0),
+                "indicado_por": (r[20] or "").strip() if len(r) > 20 and r[20] else "",
             }
         )
     return out

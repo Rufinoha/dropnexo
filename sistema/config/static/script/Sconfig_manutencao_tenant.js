@@ -364,9 +364,16 @@
             qtdPed > 0
               ? `<div class="CfgMt_PedidosCell"><strong>${qtdPed}</strong><span>${ultPed}</span></div>`
               : `<div class="CfgMt_PedidosCell"><strong>0</strong><span>—</span></div>`;
+          const indicadoPor = String(t.indicado_por || "").trim();
+          const celNome = indicadoPor
+            ? `<div class="CfgMt_NomeCell" title="${esc(t.nome)} · Indicado por: ${esc(indicadoPor)}">
+                <strong>${esc(t.nome)}</strong>
+                <span>Indicado por: ${esc(indicadoPor)}</span>
+              </div>`
+            : `<div class="CfgMt_NomeCell" title="${esc(t.nome)}"><strong>${esc(t.nome)}</strong></div>`;
           return `<tr>
             <td>${t.id}</td>
-            <td class="is-nome" title="${esc(t.nome)}">${esc(t.nome)}</td>
+            <td class="is-nome">${celNome}</td>
             <td>${formatarDataHora(t.criado_em)}</td>
             <td>${ativo}</td>
             <td>${esc(t.sistema_erp || "—")}</td>
