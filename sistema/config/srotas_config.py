@@ -4548,6 +4548,73 @@ def manutencao_tenant_reativacao_testar_email():
         conn.close()
 
 
+@config_bp.get(f"{MANUTENCAO_TENANT_PREFIX}/assistente/token")
+@login_obrigatorio()
+def manutencao_assistente_token_status():
+    if (r := _exigir_dev()) is not None:
+        return r
+    from api.assistente import servico as assistente_servico
+
+    conn = Var_ConectarBanco()
+    try:
+        return jsonify(success=True, **assistente_servico.status_token(conn))
+    except Exception as e:
+        _log.exception("assistente token status")
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
+@config_bp.post(f"{MANUTENCAO_TENANT_PREFIX}/assistente/token/gerar")
+@login_obrigatorio()
+def manutencao_assistente_token_gerar():
+    if (r := _exigir_dev()) is not None:
+        return r
+    from api.assistente import servico as assistente_servico
+
+    body = request.get_json(silent=True) or {}
+    conn = Var_ConectarBanco()
+    try:
+        cfg, token = assistente_servico.gerar_token(
+            conn,
+            id_usuario=session.get("id_usuario"),
+            nome=(body.get("nome") or "Assistente").strip() or "Assistente",
+        )
+        conn.commit()
+        return jsonify(
+            success=True,
+            token=token,
+            cfg=cfg,
+            message="Guarde o token agora — ele não será mostrado de novo.",
+        )
+    except Exception as e:
+        conn.rollback()
+        _log.exception("assistente token gerar")
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
+@config_bp.post(f"{MANUTENCAO_TENANT_PREFIX}/assistente/token/revogar")
+@login_obrigatorio()
+def manutencao_assistente_token_revogar():
+    if (r := _exigir_dev()) is not None:
+        return r
+    from api.assistente import servico as assistente_servico
+
+    conn = Var_ConectarBanco()
+    try:
+        st = assistente_servico.revogar_token(conn, id_usuario=session.get("id_usuario"))
+        conn.commit()
+        return jsonify(success=True, message="Token revogado.", **st)
+    except Exception as e:
+        conn.rollback()
+        _log.exception("assistente token revogar")
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+
 @config_bp.get(f"{MANUTENCAO_TENANT_PREFIX}/fundador")
 @login_obrigatorio()
 def manutencao_tenant_fundador_lista():

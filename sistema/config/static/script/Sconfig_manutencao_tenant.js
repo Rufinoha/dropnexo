@@ -459,7 +459,10 @@
     }
     if (id === "tenants" && !tenantsCarregados) carregar();
     if (id === "reativacao") carregarReativacoes();
-    if (id === "fundador") carregarFundadores();
+    if (id === "fundador") {
+      carregarFundadores();
+      carregarTokenAssistente();
+    }
   }
 
   function popularFiltroFase(fases) {
@@ -697,6 +700,81 @@
 
   el.filtroFase?.addEventListener("change", () => pintarFundadores(fundadorItensCache));
   el.filtroNaoIndicados?.addEventListener("change", () => pintarFundadores(fundadorItensCache));
+
+  async function carregarTokenAssistente() {
+    const st = document.getElementById("cfgmt_assistente_status");
+    if (!st) return;
+    try {
+      const r = await fetch(BASE + "/assistente/token", { credentials: "same-origin" });
+      const j = await r.json();
+      if (!j.success) throw new Error(j.message || "Erro");
+      if (j.ativo) {
+        st.textContent = `Ativo: ${j.ativo.token_hint} · criado ${formatarDataHora(j.ativo.criado_em)}`;
+      } else {
+        st.textContent = "Nenhum token ativo. Gere um para o Assistente (mostrado uma vez).";
+      }
+    } catch (err) {
+      st.textContent = err.message || "Falha ao carregar token.";
+    }
+  }
+
+  document.getElementById("cfgmt_btnAssistenteGerar")?.addEventListener("click", async () => {
+    const conf = await Swal.fire({
+      icon: "question",
+      title: "Gerar token do Assistente?",
+      text: "O token anterior será revogado. O novo aparece só agora.",
+      showCancelButton: true,
+      confirmButtonText: "Gerar",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#021F81",
+    });
+    if (!conf.isConfirmed) return;
+    try {
+      const r = await fetch(BASE + "/assistente/token/gerar", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ nome: "Assistente" }),
+      });
+      const j = await r.json();
+      if (!j.success) throw new Error(j.message || "Falha");
+      await Swal.fire({
+        icon: "success",
+        title: "Token gerado",
+        html: `<p style="text-align:left;margin:0 0 8px">Copie e guarde agora:</p>
+               <code style="display:block;text-align:left;word-break:break-all;background:#f1f5f9;padding:10px;border-radius:8px">${esc(j.token || "")}</code>`,
+        confirmButtonColor: "#021F81",
+      });
+      await carregarTokenAssistente();
+    } catch (err) {
+      await Swal.fire({ icon: "error", title: "Erro", text: err.message || "Erro", confirmButtonColor: "#021F81" });
+    }
+  });
+
+  document.getElementById("cfgmt_btnAssistenteRevogar")?.addEventListener("click", async () => {
+    const conf = await Swal.fire({
+      icon: "warning",
+      title: "Revogar token?",
+      showCancelButton: true,
+      confirmButtonText: "Revogar",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#dc2626",
+    });
+    if (!conf.isConfirmed) return;
+    try {
+      const r = await fetch(BASE + "/assistente/token/revogar", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { Accept: "application/json" },
+      });
+      const j = await r.json();
+      if (!j.success) throw new Error(j.message || "Falha");
+      await carregarTokenAssistente();
+    } catch (err) {
+      await Swal.fire({ icon: "error", title: "Erro", text: err.message || "Erro", confirmButtonColor: "#021F81" });
+    }
+  });
+
   el.btnMigrarForn?.addEventListener("click", () => {
     abrirMigrarBox();
   });

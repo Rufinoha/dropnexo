@@ -838,6 +838,19 @@ button.CfgMt_KpiMini:hover {
 .CfgMt_PrazoBadge.is-prazo-amarelo { background: #fef3c7; color: #b45309; }
 .CfgMt_PrazoBadge.is-prazo-vermelho { background: #fee2e2; color: #b91c1c; }
 .CfgMt_PrazoBadge.is-prazo-neutro { background: #f1f5f9; color: #94a3b8; font-weight: 500; }
+.CfgMt_AssistenteBox {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  margin: 0.75rem 0 0.35rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+.CfgMt_AssistenteBox strong { color: #0f172a; }
 .CfgMt_FundadorFiltros {
   margin: 0.65rem 0 0.85rem;
 }
