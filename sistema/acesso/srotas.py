@@ -99,6 +99,19 @@ def para_fornecedores():
         else (planos_home.get("url_espera_fundador") or "/lista-espera-fundador")
     )
     cta_label = "Quero ser Fundador" if programa.get("aberto") else "Lista de espera"
+    revendedores = {"texto": "Revendedores cadastrados na rede", "arredondado": 0, "total": 0}
+    try:
+        from sistema.planos.fornecedor_fundador import texto_revendedores_rede
+
+        conn_rv = Var_ConectarBanco()
+        try:
+            cur_rv = conn_rv.cursor()
+            revendedores = texto_revendedores_rede(cur_rv)
+            conn_rv.commit()
+        finally:
+            conn_rv.close()
+    except Exception:
+        pass
     return render_template(
         "landing_fornecedor_fundador.html",
         page_title=f"Fornecedor Fundador — DropNexo | até {vagas_txt} vagas",
@@ -107,6 +120,7 @@ def para_fornecedores():
             "selo na rede, voz no produto e suporte direto. Sem cartão. Sem comissão sobre vendas."
         ),
         programa=programa,
+        revendedores_rede=revendedores,
         faq=faq,
         url_home=url_for("public.home"),
         url_login=url_for("auth.pagina_login"),

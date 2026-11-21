@@ -3,7 +3,8 @@ from __future__ import annotations
 
 import logging
 import os
-from datetime import datetime
+import time
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 _log = logging.getLogger(__name__)
@@ -15,6 +16,14 @@ PLANO_HUB = "enterprise"
 EMAIL_ESPERA = "hazael@h74.com.br"
 EMAIL_TESTE = "hazael@h74.com.br"
 SLUG_VITRINE = "fundador"
+PRAZO_ATIVACAO_DIAS = 14
+PRAZO_ATIVACAO_PRODUTOS = 20
+TEXTO_PRAZO_ATIVACAO = (
+    "Para manter a vaga, publique pelo menos 20 produtos em até 14 dias "
+    "e atenda os pedidos recebidos."
+)
+
+_cache_revendedores: dict[str, Any] = {"em": 0.0, "total": 0, "arredondado": 0, "texto": ""}
 
 
 def garantir_colunas_fundador(cur) -> None:
@@ -108,6 +117,110 @@ def status_programa(cur) -> dict[str, Any]:
         "aberto": resto_sistema > 0,
         "plano_hub": PLANO_HUB,
         "slug_vitrine": SLUG_VITRINE,
+        "prazo_ativacao_dias": PRAZO_ATIVACAO_DIAS,
+        "prazo_ativacao_produtos": PRAZO_ATIVACAO_PRODUTOS,
+        "texto_prazo_ativacao": TEXTO_PRAZO_ATIVACAO,
+    }
+
+
+def contar_revendedores_ativos(cur) -> int:
+    """Vendedores (e híbridos) com conta ativa na rede."""
+    cur.execute(
+        """
+        SELECT COUNT(*)::int
+          FROM tbl_tenant
+         WHERE tipo_negocio IN ('vendedor', 'hibrido')
+           AND COALESCE(ativo, TRUE) = TRUE
+        """
+    )
+    row = cur.fetchone()
+    return int(row[0] or 0) if row else 0
+
+
+def texto_revendedores_rede(cur, *, cache_segundos: int = 3600) -> dict[str, Any]:
+    """Número real de revendedores, arredondado para baixo na centena (cache 1 h)."""
+    agora = time.time()
+    if (
+        _cache_revendedores.get("texto")
+        and agora - float(_cache_revendedores.get("em") or 0) < cache_segundos
+    ):
+        return {
+            "total": int(_cache_revendedores["total"]),
+            "arredondado": int(_cache_revendedores["arredondado"]),
+            "texto": str(_cache_revendedores["texto"]),
+        }
+    total = contar_revendedores_ativos(cur)
+    if total >= 100:
+        arred = (total // 100) * 100
+        num = f"{arred:,}".replace(",", ".")
+        texto = f"Mais de {num} revendedores cadastrados na rede"
+    elif total > 0:
+        arred = total
+        texto = f"Mais de {total} revendedores cadastrados na rede"
+    else:
+        arred = 0
+        texto = "Revendedores cadastrados na rede"
+    _cache_revendedores.update(
+        {"em": agora, "total": total, "arredondado": arred, "texto": texto}
+    )
+    return {"total": total, "arredondado": arred, "texto": texto}
+
+
+def prazo_ativacao_fundador(
+    fundador_em: datetime | str | None,
+    produtos_publicados: int,
+    *,
+    agora: datetime | None = None,
+) -> dict[str, Any]:
+    """Só exibição: prazo = fundador_em + 14 dias. Sem corte automático."""
+    if not fundador_em:
+        return {
+            "prazo_em": None,
+            "prazo_rotulo": "—",
+            "prazo_cor": "neutro",
+            "dias_restantes": None,
+            "produtos_meta": PRAZO_ATIVACAO_PRODUTOS,
+            "produtos_publicados": int(produtos_publicados or 0),
+        }
+    if isinstance(fundador_em, str):
+        try:
+            inicio = datetime.fromisoformat(fundador_em.replace("Z", "+00:00"))
+        except ValueError:
+            return {
+                "prazo_em": None,
+                "prazo_rotulo": "—",
+                "prazo_cor": "neutro",
+                "dias_restantes": None,
+                "produtos_meta": PRAZO_ATIVACAO_PRODUTOS,
+                "produtos_publicados": int(produtos_publicados or 0),
+            }
+    else:
+        inicio = fundador_em
+    if inicio.tzinfo is None:
+        inicio = inicio.replace(tzinfo=timezone.utc)
+    prazo = inicio + timedelta(days=PRAZO_ATIVACAO_DIAS)
+    now = agora or datetime.now(timezone.utc)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
+    pub = int(produtos_publicados or 0)
+    no_prazo = now <= prazo
+    meta_ok = pub >= PRAZO_ATIVACAO_PRODUTOS
+    if meta_ok:
+        cor = "verde"
+    elif no_prazo:
+        cor = "amarelo"
+    else:
+        cor = "vermelho"
+    dias = int((prazo - now).total_seconds() // 86400)
+    return {
+        "prazo_em": prazo.isoformat(),
+        "prazo_rotulo": prazo.strftime("%d/%m/%Y"),
+        "prazo_cor": cor,
+        "dias_restantes": dias,
+        "produtos_meta": PRAZO_ATIVACAO_PRODUTOS,
+        "produtos_publicados": pub,
+        "no_prazo": no_prazo,
+        "meta_ok": meta_ok,
     }
 
 
@@ -506,6 +619,9 @@ def listar_fundadores(cur) -> list[dict[str, Any]]:
     )
     out = []
     for r in cur.fetchall():
+        pub = int(r[11] or 0)
+        fund_em = r[8]
+        prazo = prazo_ativacao_fundador(fund_em, pub)
         out.append(
             {
                 "id": r[0],
@@ -516,10 +632,10 @@ def listar_fundadores(cur) -> list[dict[str, Any]]:
                 "plano": r[5],
                 "fornecedor_fundador_ativo": bool(r[6]),
                 "sistema_erp": r[7] or "",
-                "fornecedor_fundador_em": r[8].isoformat() if r[8] else None,
+                "fornecedor_fundador_em": fund_em.isoformat() if fund_em else None,
                 "fornecedor_fundador_obs": r[9] or "",
                 "criado_em": r[10].isoformat() if r[10] else None,
-                "produtos_publicados": int(r[11] or 0),
+                "produtos_publicados": pub,
                 "produtos_total": int(r[12] or 0),
                 "pedidos_qtd": int(r[13] or 0),
                 "ultimo_pedido_em": r[14].isoformat() if r[14] else None,
@@ -529,6 +645,10 @@ def listar_fundadores(cur) -> list[dict[str, Any]]:
                 "vendedores_conectados": int(r[18] or 0),
                 "vendedores_com_pedidos": int(r[19] or 0),
                 "indicado_por": (r[20] or "").strip() if len(r) > 20 and r[20] else "",
+                "prazo_ativacao": prazo.get("prazo_em"),
+                "prazo_ativacao_rotulo": prazo.get("prazo_rotulo"),
+                "prazo_ativacao_cor": prazo.get("prazo_cor"),
+                "prazo_ativacao_dias_restantes": prazo.get("dias_restantes"),
             }
         )
     return out

@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="{{ url_for('static', filename='style/public.css') }}?v=17" />
-  <link rel="stylesheet" href="{{ url_for('static', filename='style/Clanding_fundador.css') }}?v=12" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style/Clanding_fundador.css') }}?v=13" />
   {% include "partials/gtag_analytics.html" %}
 </head>
 <body class="public-site FfLand">
@@ -73,11 +73,12 @@
             </svg>
           </div>
           <p class="FfHero__pitch">
-            Mais de 700 revendedores ativos na rede.
+            {{ revendedores_rede.texto if revendedores_rede and revendedores_rede.texto else "Revendedores cadastrados na rede" }}.
             Você publica o catálogo, o vendedor pede vínculo e você aprova.
             O preço é o seu.
             Sem mensalidade e sem comissão, enquanto for Fornecedor Fundador ativo.
           </p>
+          <p class="FfHero__rule">{{ programa.texto_prazo_ativacao or "Para manter a vaga, publique pelo menos 20 produtos em até 14 dias e atenda os pedidos recebidos." }}</p>
 
           <ul class="FfHero__benefits">
             <li><strong>Você aprova</strong> quem revende</li>
@@ -98,6 +99,7 @@
           <article class="FfMockCard" aria-label="Exemplo de como o selo aparece na rede">
             <p class="FfMockCard__caption">Assim o vendedor te vê na rede</p>
             <div class="FfMockCard__body">
+              <span class="FfMockCard__exemplo">Exemplo</span>
               <img
                 class="FfMockCard__stamp"
                 src="{{ url_for('static', filename='imge/selo_fornecedor_fundador.png') }}"
