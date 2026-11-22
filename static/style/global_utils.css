@@ -1220,10 +1220,43 @@ body.home-page a {
   text-decoration: none;
 }
 
+/* Botões primários usados como <a> não herdam a cor de link (texto sumia no fundo). */
+body.public-body a.Cl_botaoprimario,
+body.app-body a.Cl_botaoprimario,
+body.home-page a.Cl_botaoprimario,
+body.public-body a.Cl_botaoFiltro,
+body.app-body a.Cl_botaoFiltro,
+body.home-page a.Cl_botaoFiltro,
+body.public-body a.Cl_BtnIncluir,
+body.app-body a.Cl_BtnIncluir,
+body.home-page a.Cl_BtnIncluir,
+body.public-body a.Cl_BtnSalvar,
+body.app-body a.Cl_BtnSalvar,
+body.home-page a.Cl_BtnSalvar {
+  color: #ffffff;
+  text-decoration: none;
+}
+
 body.public-body a:hover,
 body.app-body a:hover,
 body.home-page a:hover {
   text-decoration: underline;
+}
+
+body.public-body a.Cl_botaoprimario:hover,
+body.app-body a.Cl_botaoprimario:hover,
+body.home-page a.Cl_botaoprimario:hover,
+body.public-body a.Cl_botaoFiltro:hover,
+body.app-body a.Cl_botaoFiltro:hover,
+body.home-page a.Cl_botaoFiltro:hover,
+body.public-body a.Cl_BtnIncluir:hover,
+body.app-body a.Cl_BtnIncluir:hover,
+body.home-page a.Cl_BtnIncluir:hover,
+body.public-body a.Cl_BtnSalvar:hover,
+body.app-body a.Cl_BtnSalvar:hover,
+body.home-page a.Cl_BtnSalvar:hover {
+  color: #ffffff;
+  text-decoration: none;
 }
 
 body.public-body code,

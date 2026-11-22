@@ -202,6 +202,11 @@
   gap: 0.75rem 1rem;
 }
 
+.cadastro-triagem-hint-actions a.Cl_botaoprimario {
+  color: #ffffff;
+  text-decoration: none;
+}
+
 .cadastro-triagem-link {
   border: 0;
   background: transparent;
