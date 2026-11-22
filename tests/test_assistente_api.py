@@ -192,9 +192,14 @@ def test_item_pedido_sem_dados_pessoais():
     from api.assistente import servico
 
     agora = datetime.now(timezone.utc)
-    item = servico._item_pedido((1, "P-1", agora, "pago", "pago", 10.5, agora, None, None, True, agora))
-    assert not (set(item) & CAMPOS_PESSOAIS)
-    assert item["valor_centavos"] == 1050
+    item = servico._item_pedido(
+        (1, "P-1", agora, "pago", "pago", 10.5, agora, None, None, "Campinas", "SP", True, agora)
+    )
+    assert "valor_centavos" not in item
+    assert item["valor_total"] == 10.5
+    assert item["cidade"] == "Campinas" and item["uf"] == "SP"
+    # cidade/uf de entrega são ok; não pode haver chaves pessoais de vendedor/comprador
+    assert not (set(item) & {"email", "whatsapp", "telefone", "documento", "cliente_nome", "vendedor"})
 
 
 def test_rede_somente_contagens():
@@ -216,9 +221,12 @@ def test_rede_somente_contagens():
 
 def test_servico_nao_seleciona_dados_de_vendedor():
     src = SERVICO_SRC.read_text(encoding="utf-8")
+    # entrega_cidade/uf são colunas de endereço de entrega (ok); logradouro/CEP/nome não.
     for pat in (r"v\.email", r"cliente_nome", r"cliente_email", r"cliente_telefone",
-                r"cliente_documento", r"snapshot_vendedor", r"entrega_cidade", r"entrega_logradouro"):
+                r"cliente_documento", r"snapshot_vendedor", r"entrega_logradouro",
+                r"entrega_cep", r"entrega_bairro", r"entrega_numero"):
         assert not re.search(pat, src), f"Padrão suspeito na API: {pat}"
+    assert "entrega_cidade" in src and "entrega_uf" in src
 
 
 def test_escopo_somente_fornecedores():
@@ -264,7 +272,8 @@ def test_auditoria_registra_chamada(client, conn_mock):
     assert r.status_code == 200
     kw = aud.call_args.kwargs
     assert kw["rota"] == "/api/v1/assistente/resumo"
-    assert kw["ip"] == "1.2.3.4"
+    # Com ProxyFix, remote_addr já é o cliente; não ler X-Forwarded-For cru.
+    assert kw["ip"] == "127.0.0.1"
     assert kw["token_hint"] == "dn_a…wxyz"
     assert kw["http_status"] == 200
 

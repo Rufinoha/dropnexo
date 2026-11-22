@@ -3972,6 +3972,18 @@ def assinaturas_baixar_nf(id_fatura: int):
     return send_file(path, as_attachment=False, download_name=nome, mimetype="application/pdf")
 
 
+# --- API do Assistente ---
+ASSISTENTE_PREFIX = "/configuracoes/assistente"
+
+
+@config_bp.get(ASSISTENTE_PREFIX)
+@login_obrigatorio()
+def assistente_pagina():
+    if not session.get("eh_desenvolvedor"):
+        return redirect(url_for("dashboard.index"))
+    return render_template("frm_config_assistente.html", nav_ativo="config")
+
+
 # --- API Externa (parceiros / fornecedores) ---
 API_EXTERNA_PREFIX = "/configuracoes/api-externa"
 

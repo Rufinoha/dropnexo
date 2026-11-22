@@ -2,9 +2,10 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import secrets
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Any
 
 from sistema.planos.fornecedor_acompanhamento import (
@@ -38,21 +39,26 @@ def _tem_coluna_tenant(cur, coluna: str) -> bool:
     return _f(cur, coluna)
 
 
-def _tentar(cur, fn, padrao):
-    """Executa fn() dentro de SAVEPOINT; em erro devolve `padrao` sem abortar a transação."""
+def _tentar(cur, fn, padrao, *, aviso: str | None = None, avisos: list[str] | None = None):
+    """Executa fn() dentro de SAVEPOINT; em erro registra log/aviso e devolve `padrao`."""
     try:
         cur.execute("SAVEPOINT assist_sp")
     except Exception:
+        if avisos is not None and aviso:
+            avisos.append(aviso)
         return padrao
     try:
         out = fn()
         cur.execute("RELEASE SAVEPOINT assist_sp")
         return out
     except Exception:
+        _log.exception("assistente bloco falhou: %s", aviso or "desconhecido")
         try:
             cur.execute("ROLLBACK TO SAVEPOINT assist_sp")
         except Exception:
             pass
+        if avisos is not None and aviso:
+            avisos.append(aviso)
         return padrao
 
 
@@ -63,15 +69,18 @@ def _parse_desde(valor: str) -> str:
         raise ValueError("Parâmetro 'desde' inválido (use ISO 8601).") from None
 
 
-def _centavos(v) -> int:
+def _reais(v) -> float:
     try:
-        return int(round(float(v or 0) * 100))
+        return round(float(v or 0), 2)
     except (TypeError, ValueError):
-        return 0
+        return 0.0
 
 
 def erro_generico(msg: str = "Não foi possível concluir a solicitação.") -> dict:
     return {"success": False, "message": msg}
+
+
+_log = logging.getLogger(__name__)
 
 
 def autenticar(conn, authorization: str | None) -> tuple[dict | None, str | None]:
@@ -477,10 +486,13 @@ def _motivos_de_linha(r) -> list[str]:
 
 _SQL_PRODUTO_SEL = (
     "SELECT p.id, p.sku, p.nome, p.preco, COALESCE(p.publicado, FALSE), p.atualizado_em,\n"
-    "       COALESCE((SELECT SUM(GREATEST(COALESCE(ve.quantidade, 0) - COALESCE(ve.reservado, 0), 0))\n"
-    "                   FROM tbl_produto_variante v\n"
-    "                   JOIN tbl_produto_variante_estoque ve ON ve.id_variante = v.id\n"
-    "                  WHERE v.id_produto = p.id), 0)::numeric AS estoque,\n"
+    "       (COALESCE((SELECT SUM(GREATEST(COALESCE(ve.quantidade, 0) - COALESCE(ve.reservado, 0), 0))\n"
+    "                    FROM tbl_produto_variante v\n"
+    "                    JOIN tbl_produto_variante_estoque ve ON ve.id_variante = v.id\n"
+    "                   WHERE v.id_produto = p.id), 0)\n"
+    "        + COALESCE((SELECT SUM(GREATEST(COALESCE(pe.quantidade, 0) - COALESCE(pe.reservado, 0), 0))\n"
+    "                      FROM tbl_produto_estoque pe WHERE pe.id_produto = p.id), 0)\n"
+    "       )::numeric AS estoque,\n"
     + _SQL_FLAGS_PRODUTO
     + "\n  FROM tbl_produto p\n"
 )
@@ -580,13 +592,72 @@ def detalhe_fornecedor(cur, id_tenant: int) -> dict[str, Any] | None:
                 "ativo": bool(u[4] and u[5]),
             }
         )
-    produtos = _fixar_produtos_incompletos(cur, tid)
-    pedidos = _bloco_pedidos(cur, tid)
-    desempenho = _bloco_desempenho(cur, tid)
-    rede = _bloco_rede(cur, tid)
-    integracoes = _bloco_integracoes(cur, tid)
+    avisos: list[str] = []
+    produtos = _tentar(
+        cur,
+        lambda: _fixar_produtos_incompletos(cur, tid),
+        {
+            "total": 0,
+            "publicados": 0,
+            "inativos": 0,
+            "incompletos": [],
+            "incompletos_total": 0,
+            "contagem_motivos": {},
+        },
+        aviso="produtos indisponível",
+        avisos=avisos,
+    )
+    pedidos = _tentar(
+        cur,
+        lambda: _bloco_pedidos(cur, tid),
+        {
+            "por_status_30d": {},
+            "por_status_90d": {},
+            "atrasados": [],
+            "cancelados_30d": 0,
+            "devolvidos_30d": 0,
+        },
+        aviso="pedidos indisponível",
+        avisos=avisos,
+    )
+    desempenho = _tentar(
+        cur,
+        lambda: _bloco_desempenho(cur, tid),
+        {
+            "30d": {"pedidos": 0, "faturamento": 0.0, "ticket_medio": 0.0},
+            "90d": {"pedidos": 0, "faturamento": 0.0, "ticket_medio": 0.0},
+            "taxa_cancelamento_30d": None,
+            "tempo_medio_pago_expedido_horas": None,
+            "ultimo_pedido_em": None,
+            "top_produtos_30d": [],
+        },
+        aviso="desempenho indisponível",
+        avisos=avisos,
+    )
+    if isinstance(desempenho, dict) and desempenho.get("avisos"):
+        avisos.extend(desempenho.pop("avisos") or [])
+    rede = _tentar(
+        cur,
+        lambda: _bloco_rede(cur, tid),
+        {
+            "vendedores_conectados": 0,
+            "vendedores_aguardando": 0,
+            "aguardando_mais_antigo_dias": None,
+            "vendedores_com_pedido_30d": 0,
+        },
+        aviso="rede indisponível",
+        avisos=avisos,
+    )
+    integracoes = _tentar(
+        cur,
+        lambda: _bloco_integracoes(cur, tid, avisos=avisos),
+        [],
+        aviso="integracoes indisponível",
+        avisos=avisos,
+    )
     contatos = listar_contatos(cur, tid, limite=200)
     return {
+        "avisos": avisos,
         "cadastro": {
             "id": tid,
             "nome": r[1] or "",
@@ -626,16 +697,15 @@ def detalhe_fornecedor(cur, id_tenant: int) -> dict[str, Any] | None:
     }
 
 
-_STATUS_PEDIDO_ABERTO_FORN = "('pago', 'aguardando_confirmacao', 'em_expedicao')"
 _ATRASO_HORAS = 48
 
 
 def _sql_atrasado(col_st: str) -> str:
-    """Pedido pago/aguardando confirmação (ou em expedição sem envio) parado há mais de 48h."""
+    """Atrasado = pago ou em_expedicao há mais de 48h (início: pago_em, senão criado_em).
+    Não inclui aguardando_confirmacao (PIX ainda não confirmado)."""
     return (
-        f"((COALESCE(ped.{col_st}, '') IN ('pago', 'aguardando_confirmacao') "
-        f"   OR (COALESCE(ped.{col_st}, '') = 'em_expedicao' AND ped.expedido_em IS NULL)) "
-        f" AND COALESCE(ped.pago_em, ped.confirmado_em, ped.criado_em) < NOW() - INTERVAL '{_ATRASO_HORAS} hours')"
+        f"(COALESCE(ped.{col_st}, '') IN ('pago', 'em_expedicao') "
+        f" AND COALESCE(ped.pago_em, ped.criado_em) < NOW() - INTERVAL '{_ATRASO_HORAS} hours')"
     )
 
 
@@ -649,27 +719,30 @@ def _horas_atraso(ref) -> int:
 
 
 def _item_pedido(r) -> dict[str, Any]:
-    """Sem dados do comprador final nem do vendedor."""
+    """Sem dados do comprador final nem do vendedor (só cidade/UF de entrega)."""
     return {
         "id": int(r[0]),
         "numero": r[1] or "",
         "criado_em": r[2].isoformat() if r[2] else None,
         "status": r[3] or "",
         "status_pagamento": r[4] or "",
-        "valor_centavos": _centavos(r[5]),
+        "valor_total": _reais(r[5]),
         "pago_em": r[6].isoformat() if r[6] else None,
         "expedido_em": r[7].isoformat() if r[7] else None,
         "entregue_em": r[8].isoformat() if r[8] else None,
-        "atrasado": bool(r[9]),
-        "horas_em_atraso": _horas_atraso(r[10]) if r[9] else 0,
+        "cidade": (r[9] or "").strip(),
+        "uf": (r[10] or "").strip(),
+        "atrasado": bool(r[11]),
+        "horas_em_atraso": _horas_atraso(r[12]) if r[11] else 0,
     }
 
 
 _SQL_PEDIDO_SEL = """
     SELECT ped.id, ped.numero, ped.criado_em, COALESCE(ped.{col_st}, ''), ped.status_pagamento,
            ped.valor_total, ped.pago_em, ped.expedido_em, ped.entregue_em,
+           COALESCE(ped.entrega_cidade, ''), COALESCE(ped.entrega_uf, ''),
            {atrasado} AS atrasado,
-           COALESCE(ped.pago_em, ped.confirmado_em, ped.criado_em) AS ref_em
+           COALESCE(ped.pago_em, ped.criado_em) AS ref_em
       FROM tbl_pedido ped
 """
 
@@ -744,11 +817,11 @@ def _bloco_desempenho(cur, id_tenant: int) -> dict[str, Any]:
         )
         n, fat = cur.fetchone() or (0, 0)
         n = int(n or 0)
-        fat_c = _centavos(fat)
+        fat_r = _reais(fat)
         return {
             "pedidos": n,
-            "faturamento_centavos": fat_c,
-            "ticket_medio_centavos": int(fat_c / n) if n else 0,
+            "faturamento": fat_r,
+            "ticket_medio": round(fat_r / n, 2) if n else 0.0,
         }
 
     a30 = _agg(30)
@@ -777,6 +850,9 @@ def _bloco_desempenho(cur, id_tenant: int) -> dict[str, Any]:
         (tid,),
     )
     tm = (cur.fetchone() or (None,))[0]
+    avisos_local: list[str] = []
+    if tm is None:
+        avisos_local.append("tempo_medio_pago_expedido indisponível (sem pares pago_em/expedido_em)")
     cur.execute(
         f"""
         SELECT MAX(ped.criado_em) FROM tbl_pedido ped
@@ -790,8 +866,10 @@ def _bloco_desempenho(cur, id_tenant: int) -> dict[str, Any]:
         cur,
         lambda: _top_produtos_30d(cur, tid, col_st),
         [],
+        aviso="top_produtos_30d indisponível",
+        avisos=avisos_local,
     )
-    return {
+    out = {
         "30d": a30,
         "90d": a90,
         "taxa_cancelamento_30d": taxa,
@@ -799,12 +877,15 @@ def _bloco_desempenho(cur, id_tenant: int) -> dict[str, Any]:
         "ultimo_pedido_em": ult[0].isoformat() if ult and ult[0] else None,
         "top_produtos_30d": top,
     }
+    if avisos_local:
+        out["avisos"] = avisos_local
+    return out
 
 
 def _top_produtos_30d(cur, tid: int, col_st: str) -> list[dict[str, Any]]:
     cur.execute(
         f"""
-        SELECT COALESCE(it.sku, ''), COALESCE(it.nome_produto, ''), SUM(it.quantidade)::int
+        SELECT COALESCE(it.id_produto, 0), COALESCE(it.nome_produto, ''), SUM(it.quantidade)::int
           FROM tbl_pedido_item it
           JOIN tbl_pedido ped ON ped.id = it.id_pedido
          WHERE ped.id_tenant_fornecedor = %s
@@ -816,7 +897,10 @@ def _top_produtos_30d(cur, tid: int, col_st: str) -> list[dict[str, Any]]:
         """,
         (tid,),
     )
-    return [{"sku": a, "nome": b, "quantidade": int(c or 0)} for a, b, c in cur.fetchall()]
+    return [
+        {"id": int(a) or None, "nome": b, "quantidade": int(c or 0)}
+        for a, b, c in cur.fetchall()
+    ]
 
 
 def _bloco_rede(cur, id_tenant: int) -> dict[str, Any]:
@@ -863,43 +947,76 @@ def _bloco_rede(cur, id_tenant: int) -> dict[str, Any]:
     }
 
 
-_INTEGRACOES = (
-    ("tbl_integracao_bling", "Bling"),
-    ("tbl_integracao_mercado_livre", "Mercado Livre"),
-    ("tbl_integracao_melhor_envio", "Melhor Envio"),
-    ("tbl_integracao_mercadopago", "Mercado Pago"),
-)
-
-
-def _bloco_integracoes(cur, id_tenant: int) -> list[dict[str, Any]]:
-    """Best-effort: status e último erro (sem tokens)."""
+def _bloco_integracoes(
+    cur, id_tenant: int, *, avisos: list[str] | None = None
+) -> list[dict[str, Any]]:
+    """Bling e Tiny/Olist com colunas reais (status/conectado + sync do config)."""
     out: list[dict[str, Any]] = []
     tid = int(id_tenant)
     fila = _tentar(
         cur,
         lambda: _fila_imagens_pendentes(cur, tid),
         0,
+        aviso="fila de imagens indisponível",
+        avisos=avisos,
     )
-    for tabela, nome in _INTEGRACOES:
 
-        def _ler(tabela=tabela):
-            cur.execute(
-                f"SELECT status, atualizado_em, ultimo_erro FROM {tabela} WHERE id_tenant = %s LIMIT 1",
-                (tid,),
-            )
-            return cur.fetchone()
+    def _bling():
+        cur.execute(
+            """
+            SELECT b.status, b.conectado_em, b.ultimo_erro,
+                   GREATEST(c.ultima_sync_produtos, c.ultima_sync_estoque, c.ultima_sync_pedidos)
+              FROM tbl_integracao_bling b
+              LEFT JOIN tbl_integracao_bling_config c
+                ON c.id_tenant = b.id_tenant
+             WHERE b.id_tenant = %s
+             ORDER BY c.contexto NULLS LAST
+             LIMIT 1
+            """,
+            (tid,),
+        )
+        return cur.fetchone()
 
-        row = _tentar(cur, _ler, None)
-        if not row:
-            continue
+    row_b = _tentar(cur, _bling, None, aviso="integracao Bling indisponível", avisos=avisos)
+    if row_b:
+        sync = row_b[3] or row_b[1]
         out.append(
             {
-                "nome": nome,
-                "ligado": (row[0] or "").lower() in ("conectado", "ativo", "ok", "connected"),
-                "status": row[0] or "",
-                "ultima_sincronizacao": row[1].isoformat() if row[1] else None,
-                "ultimo_erro": (row[2] or "")[:200],
-                "fila_imagens_pendentes": fila if nome == "Bling" else 0,
+                "nome": "Bling",
+                "ligado": (row_b[0] or "").lower() == "conectado",
+                "status": row_b[0] or "",
+                "ultima_sincronizacao": sync.isoformat() if sync else None,
+                "ultimo_erro": (row_b[2] or "")[:200],
+                "fila_imagens_pendentes": fila,
+            }
+        )
+
+    def _olist():
+        cur.execute(
+            """
+            SELECT o.status, o.conectado_em, o.ultimo_erro,
+                   GREATEST(c.ultima_sync_produtos, c.ultima_sync_estoque, c.ultima_sync_pedidos)
+              FROM tbl_integracao_olist o
+              LEFT JOIN tbl_integracao_olist_config c
+                ON c.id_tenant = o.id_tenant AND c.contexto = 'fornecedor'
+             WHERE o.id_tenant = %s
+             LIMIT 1
+            """,
+            (tid,),
+        )
+        return cur.fetchone()
+
+    row_o = _tentar(cur, _olist, None, aviso="integracao Tiny/Olist indisponível", avisos=avisos)
+    if row_o:
+        sync = row_o[3] or row_o[1]
+        out.append(
+            {
+                "nome": "Tiny/Olist",
+                "ligado": (row_o[0] or "").lower() == "conectado",
+                "status": row_o[0] or "",
+                "ultima_sincronizacao": sync.isoformat() if sync else None,
+                "ultimo_erro": (row_o[2] or "")[:200],
+                "fila_imagens_pendentes": 0,
             }
         )
     return out
@@ -1035,6 +1152,22 @@ def painel_resumo(cur) -> dict[str, Any]:
         """
     )
     atras = int((cur.fetchone() or (0,))[0] or 0)
+    cur.execute(
+        f"""
+        SELECT t.id, t.nome, COUNT(*)::int AS qtd
+          FROM tbl_pedido ped
+          JOIN tbl_tenant t ON t.id = ped.id_tenant_fornecedor
+         WHERE t.tipo_negocio IN ('fornecedor', 'hibrido')
+           AND {_sql_atrasado(col_st)}
+         GROUP BY t.id, t.nome
+         ORDER BY qtd DESC, t.nome
+         LIMIT 50
+        """
+    )
+    com_atraso = [
+        {"id": int(a), "nome": b or "", "atrasados": int(c or 0)}
+        for a, b, c in cur.fetchall()
+    ]
     return {
         "por_fase": por_fase,
         "fundadores": {
@@ -1045,6 +1178,7 @@ def painel_resumo(cur) -> dict[str, Any]:
         "fornecedores_catalogo_lt_20": cat_baixo,
         "fornecedores_com_vendedores_aguardando": aguard,
         "pedidos_atrasados_total": atras,
+        "fornecedores_com_atraso": com_atraso,
     }
 
 

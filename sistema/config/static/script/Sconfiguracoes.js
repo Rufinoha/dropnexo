@@ -64,6 +64,12 @@
       iconeTech: "checklist",
     },
     {
+      titulo: "API do Assistente",
+      texto: "Token dn_assist_… para o assistente de IA acompanhar fornecedores (fase, contatos e saúde). Só desenvolvedor.",
+      rota: "/configuracoes/assistente",
+      iconeTech: "life-buoy",
+    },
+    {
       titulo: "Tarefas secundárias",
       texto: "Jobs agendados da plataforma (ex.: cache semanal de categorias do Mercado Livre) com status e log.",
       rota: "/configuracoes/tarefas-secundarias",

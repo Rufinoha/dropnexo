@@ -18,8 +18,8 @@ def init_app(app):
 
 
 def _ip() -> str:
-    xf = (request.headers.get("X-Forwarded-For") or "").split(",")[0].strip()
-    return xf or (request.remote_addr or "")
+    # Com ProxyFix no app, remote_addr já é o cliente real.
+    return request.remote_addr or ""
 
 
 def _int_arg(nome: str, padrao):
@@ -33,24 +33,32 @@ def _int_arg(nome: str, padrao):
 
 
 def _com_auth(id_tenant_alvo: int | None = None):
-    """Autentica, devolve (conn, token_row) ou response de erro."""
+    """Autentica, devolve (conn, token_row) ou response de erro. Sempre fecha conn no erro."""
     conn = Var_ConectarBanco()
     try:
         token_row, err = servico.autenticar(conn, request.headers.get("Authorization"))
         if err:
             status = 429 if "Limite" in err else 401
-            servico.auditar(
-                conn,
-                rota=request.path,
-                metodo=request.method,
-                ip=_ip(),
-                token_hint=None,
-                http_status=status,
-                id_tenant_alvo=id_tenant_alvo,
-            )
+            try:
+                servico.auditar(
+                    conn,
+                    rota=request.path,
+                    metodo=request.method,
+                    ip=_ip(),
+                    token_hint=None,
+                    http_status=status,
+                    id_tenant_alvo=id_tenant_alvo,
+                )
+            except Exception:
+                _log.exception("assistente auditar (auth falhou)")
+            try:
+                conn.close()
+            except Exception:
+                pass
             return None, None, (jsonify(servico.erro_generico(err)), status)
         return conn, token_row, None
     except Exception:
+        _log.exception("assistente auth")
         try:
             conn.close()
         except Exception:

@@ -1,0 +1,153 @@
+{% extends "frm_base.html" %}
+{% block title %}API do Assistente — {{ MARCA_NOME }}{% endblock %}
+{% set nav_ativo = 'config' %}
+{% block topbar_title %}API do Assistente{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('config.static', filename='style/Cconfig_cupons.css') }}?v=4" />
+<style>
+  .AsAdm_Box{display:flex;flex-wrap:wrap;gap:1rem;align-items:flex-start;justify-content:space-between;padding:1rem 1.15rem;border:1px solid #e2e8f0;border-radius:12px;background:#f8fafc}
+  .AsAdm_Meta{margin:.35rem 0 0;color:#64748b;font-size:.9rem}
+  .AsAdm_Actions{display:flex;flex-wrap:wrap;gap:.55rem}
+  .AsAdm_Code{display:block;margin-top:.75rem;padding:.75rem .9rem;border-radius:8px;background:#0f172a;color:#e2e8f0;font-size:.82rem;word-break:break-all}
+  .AsAdm_Hint{margin-top:1rem;color:#475569;font-size:.88rem;line-height:1.45}
+</style>
+{% endblock %}
+{% block content %}
+<div class="Cl_ContainerApoio cl-page-principal CfgCup_Wrap">
+  <div class="cl-page-title">
+    <h2>API do Assistente</h2>
+    <p class="cl-page-desc">
+      Token <code>dn_assist_…</code> para o assistente de IA acompanhar fornecedores
+      (fase, contatos e saúde da conta). Só desenvolvedor / H74.
+    </p>
+  </div>
+  <p class="CfgCup_Aviso">
+    <a class="Cl_BtnLink" href="{{ url_for('config.configuracoes') }}">← Voltar às Configurações</a>
+    · <a class="Cl_BtnLink" href="{{ url_for('config.static', filename='../docs') }}" hidden>docs</a>
+    <span class="AsAdm_Hint" style="display:inline;margin:0">Documentação: <code>docs/api_assistente.md</code> · Base <code>/api/v1/assistente</code></span>
+  </p>
+
+  <section class="CfgCup_Card">
+    <div class="CfgCup_CardHead">
+      <h3>Token</h3>
+    </div>
+    <div class="AsAdm_Box">
+      <div>
+        <strong id="as_status_titulo">Carregando…</strong>
+        <p class="AsAdm_Meta" id="as_status_meta"></p>
+        <code class="AsAdm_Code" id="as_token_plain" hidden></code>
+      </div>
+      <div class="AsAdm_Actions">
+        <button type="button" class="Cl_botaoprimario" id="as_btnGerar">Gerar token</button>
+        <button type="button" class="Cl_BtnExcluir" id="as_btnRevogar">Revogar</button>
+      </div>
+    </div>
+    <p class="AsAdm_Hint">
+      O token é mostrado <strong>uma única vez</strong>. Header:
+      <code>Authorization: Bearer dn_assist_…</code>. Escrita só em fase/contato;
+      fornecedor indicado → 403. Rate limit ~60 req/min.
+    </p>
+  </section>
+</div>
+{% endblock %}
+{% block page_js %}
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script>
+(function () {
+  const BASE = "/configuracoes/manutencao-tenant/assistente/token";
+  const elTitulo = document.getElementById("as_status_titulo");
+  const elMeta = document.getElementById("as_status_meta");
+  const elPlain = document.getElementById("as_token_plain");
+
+  function esc(s) {
+    return String(s || "").replace(/[&<>"']/g, (c) => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+    }[c]));
+  }
+
+  async function carregar() {
+    elTitulo.textContent = "Carregando…";
+    elMeta.textContent = "";
+    elPlain.hidden = true;
+    try {
+      const r = await fetch(BASE, { credentials: "same-origin" });
+      const j = await r.json();
+      if (!j.success) throw new Error(j.message || "Falha");
+      if (j.ativo) {
+        elTitulo.textContent = "Token ativo";
+        elMeta.textContent = `Hint: ${j.ativo.token_hint} · criado ${j.ativo.criado_em || "—"}`;
+      } else {
+        elTitulo.textContent = "Nenhum token ativo";
+        elMeta.textContent = "Gere um token para o Assistente usar a API.";
+      }
+    } catch (e) {
+      elTitulo.textContent = "Erro";
+      elMeta.textContent = e.message || "Não foi possível carregar.";
+    }
+  }
+
+  document.getElementById("as_btnGerar")?.addEventListener("click", async () => {
+    const conf = await Swal.fire({
+      icon: "question",
+      title: "Gerar token?",
+      text: "O token anterior será revogado. O novo aparece só agora.",
+      showCancelButton: true,
+      confirmButtonText: "Gerar",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#021F81",
+    });
+    if (!conf.isConfirmed) return;
+    try {
+      const r = await fetch(BASE + "/gerar", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ nome: "Assistente" }),
+      });
+      const j = await r.json();
+      if (!j.success) throw new Error(j.message || "Falha");
+      elPlain.hidden = false;
+      elPlain.textContent = j.token || "";
+      await Swal.fire({
+        icon: "success",
+        title: "Token gerado",
+        html: `<p style="text-align:left">Copie agora:</p><code style="display:block;word-break:break-all;text-align:left;background:#f1f5f9;padding:10px;border-radius:8px">${esc(j.token)}</code>`,
+        confirmButtonColor: "#021F81",
+      });
+      await carregar();
+      elPlain.hidden = false;
+      elPlain.textContent = j.token || "";
+    } catch (e) {
+      await Swal.fire({ icon: "error", title: "Erro", text: e.message || "Erro", confirmButtonColor: "#021F81" });
+    }
+  });
+
+  document.getElementById("as_btnRevogar")?.addEventListener("click", async () => {
+    const conf = await Swal.fire({
+      icon: "warning",
+      title: "Revogar token?",
+      showCancelButton: true,
+      confirmButtonText: "Revogar",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#dc2626",
+    });
+    if (!conf.isConfirmed) return;
+    try {
+      const r = await fetch(BASE + "/revogar", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { Accept: "application/json" },
+      });
+      const j = await r.json();
+      if (!j.success) throw new Error(j.message || "Falha");
+      elPlain.hidden = true;
+      await carregar();
+    } catch (e) {
+      await Swal.fire({ icon: "error", title: "Erro", text: e.message || "Erro", confirmButtonColor: "#021F81" });
+    }
+  });
+
+  carregar();
+})();
+</script>
+{% endblock %}
