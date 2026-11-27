@@ -41,5 +41,5 @@ OLD/
 # SQL manual (migrações locais — não versionar)
 *.sql
 __doc/sql/
-
+sql/*.sql
 # Documentação interna (__doc/) — demais arquivos podem ser versionados

@@ -313,11 +313,12 @@ _NOME_CONTA = "COALESCE(NULLIF(TRIM(t.nome_fantasia), ''), NULLIF(TRIM(t.nome), 
 
 
 def _operador_suporte(cur, id_usuario: int, id_tenant: int) -> bool:
-    """Dono de fornecedor/híbrido com o interruptor ligado vê os chamados de todas as contas.
+    """Fornecedor/híbrido com acesso_chamados vê os chamados de todas as contas.
 
-    Usa o banco (perfil + tipo do tenant + flag) como fonte de verdade — a sessão
-    sozinha falhava às vezes (perfil_codigo ausente / tipo desatualizado) e a lista
-    sumia para o operador.
+    Aceita:
+    - dono real com vínculo em tbl_usuario_tenant; ou
+    - DEV / Acesso suporte / Acesso ao tenant que entrou nessa conta (sessão
+      sintética), para o menu/lista não sumirem ao usar \"Entrar no tenant\".
     """
     try:
         from flask import has_request_context
@@ -328,6 +329,11 @@ def _operador_suporte(cur, id_usuario: int, id_tenant: int) -> bool:
         return False
     if int(session.get("id_tenant") or 0) != int(id_tenant):
         return False
+    from sistema.financeiro.comissao import acesso_chamados_ativo
+
+    if not acesso_chamados_ativo(cur, id_tenant):
+        return False
+
     cur.execute(
         """
         SELECT 1
@@ -341,11 +347,26 @@ def _operador_suporte(cur, id_usuario: int, id_tenant: int) -> bool:
         """,
         (int(id_usuario), int(id_tenant)),
     )
-    if not cur.fetchone():
-        return False
-    from sistema.financeiro.comissao import acesso_chamados_ativo
+    if cur.fetchone():
+        return True
 
-    return acesso_chamados_ativo(cur, id_tenant)
+    # Entrou via switcher (DEV / acesso_suporte / acesso_tenant) sem vínculo real.
+    if not (
+        session.get("eh_desenvolvedor")
+        or session.get("acesso_suporte")
+        or session.get("acesso_tenant")
+    ):
+        return False
+    cur.execute(
+        """
+        SELECT 1 FROM tbl_tenant
+         WHERE id = %s
+           AND lower(COALESCE(tipo_negocio, '')) IN ('fornecedor', 'hibrido')
+         LIMIT 1
+        """,
+        (int(id_tenant),),
+    )
+    return bool(cur.fetchone())
 
 
 def _chamado_autorizado(conn, id_usuario: int, id_tenant: int, external_id: str) -> bool:
@@ -806,8 +827,14 @@ def responder_chamado(
     garantir_provisionamento(conn, id_usuario, id_tenant)
     usuario = _carregar_usuario(conn, id_usuario)
     client = HubSupportClient(conn=conn)
-    operador = _operador_suporte(conn.cursor(), id_usuario, id_tenant)
-    nome_autor = NOME_SUPORTE if operador else ((usuario.get("nome") or "").strip() or "Você")
+    cur_op = conn.cursor()
+    operador = _operador_suporte(cur_op, id_usuario, id_tenant)
+    if operador:
+        from sistema.financeiro.comissao import nome_suporte_tenant
+
+        nome_autor = nome_suporte_tenant(cur_op, id_tenant, fallback=NOME_SUPORTE)
+    else:
+        nome_autor = (usuario.get("nome") or "").strip() or "Você"
     tipo_autor = "agente" if operador else "cliente"
 
     if corpo:

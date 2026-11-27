@@ -429,6 +429,11 @@ def navs_header_liberados(
 ) -> set[str]:
     """Header = mesmos hdr_* da tbl_menu, só se liberados no nível de acesso do usuário."""
     garantir_menus_header(cur)
+    # Dono/DEV: acesso total primeiro — override do usuário logado (ex.: DEV
+    # entrando no tenant) não pode esconder Chamados do header.
+    if acesso_total:
+        return {n[0] for n in MENUS_HEADER_PADRAO}
+
     cur.execute(
         """
         SELECT COUNT(*)::int FROM tbl_usuario_tenant_menu
@@ -452,9 +457,6 @@ def navs_header_liberados(
             (id_usuario, id_tenant),
         )
         return {(r[0] or "").strip() for r in cur.fetchall() if r[0]}
-
-    if acesso_total:
-        return {n[0] for n in MENUS_HEADER_PADRAO}
 
     # Sem override e sem acesso total: defaults de novo usuário
     return {n[0] for n in MENUS_HEADER_PADRAO if _nav_default_ligado(n[0])}

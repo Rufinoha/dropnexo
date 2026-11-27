@@ -34,4 +34,4 @@ CREATE INDEX IF NOT EXISTS idx_assistente_token_ativo
 COMMENT ON TABLE tbl_assistente_token IS
   'Tokens dn_assist_… (só hash). Gerados por DEV/H74 na manutenção.';
 COMMENT ON TABLE tbl_assistente_auditoria IS
-  'Auditoria de chamadas da API /api/v1/assistente/*.';
+  'Auditoria de chamadas da API do Assistente.';

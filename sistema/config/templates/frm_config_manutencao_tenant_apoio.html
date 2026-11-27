@@ -126,7 +126,11 @@
         <span class="Cl_SwitchSlider"></span>
         <span>Acesso aos chamados de todas as contas</span>
       </label>
-      <p class="CfgMt_MigrarHint">Somente o usuário dono desta conta vê e responde. A resposta aparece como Suporte DropNexo.</p>
+      <div class="Cl_FormCampo" style="margin:0.65rem 0 0.35rem;max-width:28rem">
+        <label for="com_nome_suporte">Nome exibido nas respostas de suporte</label>
+        <input type="text" id="com_nome_suporte" maxlength="80" placeholder="Ex.: Ana — Suporte DropNexo" />
+      </div>
+      <p class="CfgMt_MigrarHint">Somente o dono desta conta (ou quem entrar nela com Acesso suporte/tenant/DEV) vê e responde. O cliente vê o nome acima; se vazio, usa <strong>Suporte DropNexo</strong>.</p>
       <div id="com_corpo">
         <div class="CfgApoio_Grid CfgApoio_Grid--3">
           <div class="Cl_FormCampo">
@@ -231,7 +235,7 @@
               <span>Acesso ao tenant</span>
             </label>
           </div>
-          <p class="CfgMt_MigrarHint">Acesso ao tenant libera o menu <strong>Entrar no tenant</strong> no header (todas as contas). Vale no próximo login.</p>
+          <p class="CfgMt_MigrarHint">Acesso ao tenant libera o menu <strong>Entrar no tenant</strong> no header (todas as contas). Vale no próximo login. O nome que o cliente vê nas respostas do chamado fica na aba <strong>Comissão</strong> (campo junto de “Acesso aos chamados”).</p>
         </div>
         <div class="CfgMt_Convite" id="dono_convite" hidden>
           <div class="CfgMt_ConviteTopo">
@@ -253,6 +257,6 @@
 
   <script src="{{ url_for('static', filename='script/global_utils.js') }}"></script>
   <script src="{{ url_for('config.static', filename='script/Sconfig_manutencao_tenant_apoio.js') }}?v=16"></script>
-  <script src="{{ url_for('config.static', filename='script/Sconfig_comissao_tenant.js') }}?v=4"></script>
+  <script src="{{ url_for('config.static', filename='script/Sconfig_comissao_tenant.js') }}?v=5"></script>
 </body>
 </html>
