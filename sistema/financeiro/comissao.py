@@ -411,6 +411,11 @@ def salvar_config_comissao(cur, id_tenant: int, body: dict) -> None:
     nome_suporte = (body.get("nome_suporte") or "").strip()[:80] or None
     if acesso and not tem_acesso:
         raise ValueError("A coluna de acesso aos chamados ainda não existe neste banco.")
+    if nome_suporte is not None and not tem_nome:
+        raise ValueError(
+            "A coluna nome_suporte ainda não existe neste banco. "
+            "Aplique sql/25_comissao_nome_suporte.sql e tente de novo."
+        )
     valores = (
         id_tenant,
         ativo and not pai,
